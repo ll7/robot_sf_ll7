@@ -1,40 +1,55 @@
-import numpy as np
 import math
 import json
-import matplotlib.pyplot as plt
-from datetime import datetime
 import os
-import sys
 import random
+from datetime import datetime
+from dataclasses import dataclass
+from typing import List, Protocol
 
-#test
+import numpy as np
+import matplotlib.pyplot as plt
+
+from robot_sf.map import BinaryOccupancyGrid
+
+
+@dataclass
+class Range(Protocol):
+    lower: float
+    upper: float
+
+
+@dataclass
+class LidarScannerSettings:
+    lidar_range: int
+    visualization_angle_portion: float
+    lidar_n_rays: int
+
+    # TODO: pre-compute the properties in __post_init__ constructor
+
+    @property
+    def scan_range(self) -> Range:
+        return Range(0, self.lidar_range)
+
+    @property
+    def angle_opening(self) -> Range:
+        return Range(-np.pi * self.visualization_angle_portion,
+                      np.pi * self.visualization_angle_portion)
+
+    @property
+    def angle_increment(self) -> float:
+        return (self.angle_opening.upper - self.angle_opening.lower) / (self.lidar_n_rays - 1)
 
 
 class LiDARscanner():
     """The following class is responsible of creating a LiDAR scanner object"""
-    def __init__(self,scan_range = [0.1, 1],angle_opening = [-np.pi, np.pi], angle_increment = 0.0174532925199):
-        '''range: list containing minimum and maximum range values for the scanner
-           angle_opening: list containing minimum and maximum opening of the scan laser
-           angle_increment: resolution of the laser
-           '''
 
-        
-        if not isinstance(scan_range,list) and not isinstance(scan_range,np.ndarray):
-            raise ValueError('Input argument for range must be a list or a numpy array')
-        if isinstance(scan_range,np.ndarray):
-            if not range.shape[0] == 2:
-                raise ValueError('Input argument for range must be of size 2')
-        
-        if not isinstance(angle_opening,list) and not isinstance(angle_opening,np.ndarray):
-            raise ValueError('Input argument for angle_opening must be a list or a numpy array')
-        if isinstance(angle_opening,np.ndarray):
-            if not angle_opening.shape[0] == 2:
-                raise ValueError('Input argument for angle_opening must be of size 2')
-        
-    
+    def __init__(self, settings: LidarScannerSettings):
+        scan_range = [settings.scan_range.lower, settings.scan_range.upper]
+        angle_opening = [settings.angle_opening.lower, settings.angle_opening.upper]
+
         self.range = scan_range
         self.angle_opening = angle_opening
-        self.angle_increment = angle_increment
+        self.angle_increment = settings.angle_increment
         self.distance_noise = 0
         self.angle_noise = 0
         self.num_readings = 0
@@ -42,29 +57,15 @@ class LiDARscanner():
         self.scan_structure['properties'] = dict()
         self.scan_structure['data'] = dict()
 
-        self.emptyScanStructure()
-        """
-        self.scan_structure['properties']['range'] = self.range
-        self.scan_structure['properties']['angle_opening'] = self.angle_opening
-        self.scan_structure['properties']['angle_increment'] = self.angle_increment
-        self.scan_structure['properties']['distance_noise'] = self.distance_noise
+        self.empty_scan_structure()
 
-        # original angles calculation edited
-        self.__original_angles = np.arange(self.angle_opening[0],self.angle_opening[1]+self.angle_increment,self.angle_increment).tolist()
-        self.num_readings = len(self.__original_angles)
-        """
-
-
-
-    def getScan(self,x,y,orient,input_map , scan_noise = None):
+    def get_scan(self, x: float, y: float, orient: float, input_map: BinaryOccupancyGrid, scan_noise: List[float] = None):
         ''' This method takes in input the state of the robot
         and an input map (map object) and returns a data structure
         containing the sensor readings'''
-        self.emptyScanStructure()
+        self.empty_scan_structure()
         start_pt = [x,y]
         self.scan_structure['data']['pose'] = [x,y,orient]
-
-        #scan_length = len(self.scan_structure['data']['angles'])
         scan_length = self.num_readings
 
         if scan_noise is not None:
@@ -73,7 +74,6 @@ class LiDARscanner():
         else:
             lost_scans = []
             corrupt_scans = []
-
 
         for i in range(scan_length):
             #Transform orientation from laser frame to grid frame
@@ -84,47 +84,40 @@ class LiDARscanner():
             end_pt.append(start_pt[0] + self.range[1]*math.cos(grid_orient))
             end_pt.append(start_pt[1] + self.range[1]*math.sin(grid_orient))
             try:
+                # TODO: find out why an exception might occur -> fix it and remove this try/catch block
                 ray_index = input_map.raycast(np.array([start_pt]),np.array([end_pt]))
-                flag,intercept_grid,intercept = input_map.doesRayCollide(ray_index)
+                flag, intercept_grid, intercept = input_map.does_ray_collide(ray_index)
                 # added intercept grid for debugging purpose
             except Exception:
                 flag = False
-            
-            if flag and not i in lost_scans:
-                #Ray collided with obstacle! Compute distance
-                #print('entering')
+
+            if flag and i not in lost_scans:
+                # ray collided with obstacle! Compute distance
                 self.scan_structure['data']['ranges'][i] = \
                     math.sqrt((intercept[0] - start_pt[0])**2 + (intercept[1] - start_pt[1])**2)
-                
+
                 self.scan_structure['data']['cartesian'][i,0] = intercept[0]
                 self.scan_structure['data']['cartesian'][i,1] = intercept[1]
-                
                 self.scan_structure['data']['grid'][i] = intercept_grid
                 # added intercept grid for debugging purpose
 
-            if scan_noise is not None:
+            if scan_noise is not None and i in corrupt_scans and i not in lost_scans:
+                scanned_distance = random.random()*self.range[1]
+                self.scan_structure['data']['ranges'][i] = scanned_distance
 
-                if i in corrupt_scans and not i in lost_scans:
-                    scanned_distance = random.random()*self.range[1]
-                    self.scan_structure['data']['ranges'][i] = scanned_distance
-                    
-                    intercept = [0,0]                
-                    intercept[0] = start_pt[0] + scanned_distance*math.cos(grid_orient)
-                    intercept[1] = start_pt[1] + scanned_distance*math.sin(grid_orient)
-                
-                    self.scan_structure['data']['cartesian'][i,0] = intercept[0]
-                    self.scan_structure['data']['cartesian'][i,1] = intercept[1]
-                
-                    self.scan_structure['data']['grid'][i] = input_map.convert_world_to_grid_no_error(np.array([intercept]))
+                intercept = [0,0]                
+                intercept[0] = start_pt[0] + scanned_distance*math.cos(grid_orient)
+                intercept[1] = start_pt[1] + scanned_distance*math.sin(grid_orient)
 
-        #self.applyAngleNoise()
-        #self.applyDistanceNoise()
+                self.scan_structure['data']['cartesian'][i,0] = intercept[0]
+                self.scan_structure['data']['cartesian'][i,1] = intercept[1]
+                self.scan_structure['data']['grid'][i] = input_map.convert_world_to_grid_no_error(np.array([intercept]))
 
         return self.scan_structure
 
             
 
-    def emptyScanStructure(self):
+    def empty_scan_structure(self):
         '''This method empty the scan data structure and repopulate
         it, according to new properties if they have changed'''
 
@@ -144,12 +137,12 @@ class LiDARscanner():
         # added intercept grid for debugging purpose
         self.scan_structure['data']['grid'] = np.zeros((self.num_readings,2), dtype = int)
 
-    def applyDistanceNoise(self):
+    def apply_distance_noise(self):
         ranges = np.array(self.scan_structure['data']['ranges'],dtype=float)
         new_ranges = self.distance_noise*np.random.randn(ranges.shape[0]) + ranges
         self.scan_structure['data']['ranges'] = new_ranges.tolist()
 
-    def applyAngleNoise(self):
+    def apply_angle_noise(self):
         angles = np.array(self.scan_structure['data']['angles'],dtype=float)
         new_angles = self.angle_noise*np.random.randn(angles.shape[0]) + angles
         self.scan_structure['data']['angles'] = new_angles.tolist()
@@ -157,11 +150,9 @@ class LiDARscanner():
     def show(self, map_entry=None):
         '''This method plots the rays'''
         tmp = np.zeros((len(self.scan_structure['data']['angles']),2), dtype=float)
-        ranges_filtered = self.removeInvalidData(self.scan_structure['data']['ranges'])
+        ranges_filtered = self.remove_invalid_data(self.scan_structure['data']['ranges'])
         tmp[:,0] = self.scan_structure['data']['angles']
         tmp[:,1] = ranges_filtered
-        #print(tmp)
-        #Remove all rows which contains nan values, i.e. the ray didn't encounter an obstacle
         tmp[~np.isnan(tmp).any(axis=1)]
 
         if tmp.size==0:
@@ -179,9 +170,7 @@ class LiDARscanner():
 
             #Transform data from scanner frame to world frame
             tmp = np.array([pts_x, pts_y])
-            #pts_transformed = np.dot(np.transpose(R),tmp)
-            pts_transformed = np.dot(R,tmp)
-            #print(tmp)
+            pts_transformed = np.dot(R, tmp)
 
             pts_transformed[0,:] += self.scan_structure['data']['pose'][0]
             pts_transformed[1,:] += self.scan_structure['data']['pose'][1]
@@ -193,16 +182,10 @@ class LiDARscanner():
 
             plt.plot(self.scan_structure['data']['pose'][0],self.scan_structure['data']['pose'][1],'o',color='black')
             plt.text(self.scan_structure['data']['pose'][0],self.scan_structure['data']['pose'][1],'G')
-            #plt.scatter(pts_transformed[0,:],pts_transformed[1,:],marker='.',color='blue')
             pts = np.array(self.scan_structure['data']['cartesian'])
-            #....
-            #....
-            #....
-            #print(pts)
             plt.scatter(pts[:,0], pts[:,1], marker = '.', color = 'blue')
             plt.axis('equal')
             plt.show()
-
 
     def save(self,filename):
         ''' This method will save the scan data structure into a json file
@@ -214,38 +197,25 @@ class LiDARscanner():
         copied_scan['info']['created'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         #Add path for saving json file
-        filename,extension = os.path.splitext(filename)
-        dir,name = os.path.split(filename)
+        filename, _ = os.path.splitext(filename)
+        directory, name = os.path.split(filename)
 
-        if not dir:
+        if not directory:
             #relative path
             home = os.getcwd()
-            platform = sys.platform
-            platform = sys.platform
-
-            if platform == 'win32':
-                path = home + '\\data\\scans\\' + name +'.json'
-            elif platform == 'linux':
-                path = home + '/data/scans/' + name + '.json'
-            else:
-                raise NameError('Platform not supported!')
+            path = os.path.join(home, 'data', 'scans', f'{name}.json')
         else:
             #absolute path
             path = filename + '.json'
-
 
         with open(path,'w') as f:
             json.dump(self.scan_structure,f)
             print('Scan saved at:' + path)
 
-
-
-    def removeInvalidData(self,range_list):
+    def remove_invalid_data(self,range_list):
         '''This method removes invalid data from the ranges array,
         i.e. data which is below of range lower limit'''
         tmp = np.array(range_list, dtype=float)
         with np.errstate(invalid='ignore'):
-            tmp[tmp<self.range[0]] = np.nan
+            tmp[tmp < self.range[0]] = np.nan
         return tmp
-
-

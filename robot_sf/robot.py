@@ -1,351 +1,236 @@
+from math import sin, cos
+from dataclasses import dataclass
+from typing import List
+
 import numpy as np
-import math
-import json
-from .map import *
-from .range_sensor import *
+
+from .map import BinaryOccupancyGrid, fill_surrounding
+from .range_sensor import LiDARscanner, LidarScannerSettings
 from .utils.utilities import wrap2pi
 
 
+@dataclass
+class Vec2D:
+    x: float
+    y: float
 
-class DifferentialDrive():
-    """This class create an object representing a differential drive robot"""
+
+@dataclass
+class SpeedState:
+    """Representing directed movement as 2D polar coords"""
+    dist: float
+    orient: float
+
+    @property
+    def vector(self) -> Vec2D:
+        return Vec2D(self.dist * cos(self.orient), self.dist * sin(self.orient))
 
 
-    def __init__(self, wheel_rad = 0.05, interaxis = 0.3, rob_collision_radius = 0.7):
-        #wheel_rad is the radius of the wheels
-        #interaxis is the distance between the two wheels
-        self.wheel_radius = wheel_rad
-        self.interaxis_lenght = interaxis
-        self.last_speed = dict()
-        self.last_speed['linear'] = dict()
-        self.last_speed['angular'] = dict()
-        self.last_speed['linear']['x'] = 0
-        self.last_speed['linear']['y'] = 0
-        self.last_speed['linear']['z'] = 0
-        self.last_speed['angular']['x'] = 0
-        self.last_speed['angular']['y'] = 0
-        self.last_speed['angular']['z'] = 0
+@dataclass
+class RobotPose:
+    pos: Vec2D
+    orient: float
 
-        self.current_speed = self.last_speed
-        self.last_pose = dict()
-        self.last_pose['position'] = dict()
-        self.last_pose['orientation'] = dict()
-        self.last_pose['position']['x'] = 0
-        self.last_pose['position']['y'] = 0
-        self.last_pose['position']['z'] = 0
-        self.last_pose['orientation']['x'] = 0
-        self.last_pose['orientation']['y'] = 0
-        self.last_pose['orientation']['z'] = 0
+    @property
+    def coords(self) -> List[float]:
+        return [self.pos.x, self.pos.y]
 
-        self.current_pose = self.last_pose
 
-        self.last_wheels_speed = dict()
-        self.last_wheels_speed['left'] = 0
-        self.last_wheels_speed['right'] = 0
+@dataclass
+class WheelSpeedState:
+    left: float
+    right: float
 
+
+@dataclass
+class RobotSettings:
+    max_linear_speed: float
+    max_angular_speed: float
+    rob_collision_radius: float = 0.7
+    wheel_radius: float = 0.05
+    interaxis_length: float = 0.3
+
+
+@dataclass
+class Range:
+    lower: float
+    upper: float
+
+
+class DifferentialDriveRobot():
+    """Representing a robot with differential driving behavior"""
+
+    def __init__(self,
+            spawn_pose: RobotPose,
+            robot_settings: RobotSettings,
+            lidar_settings: LidarScannerSettings,
+            robot_map: BinaryOccupancyGrid = None):
+        self.config = robot_settings
+        self.lidar_config = lidar_settings
+        self.map = robot_map if robot_map else BinaryOccupancyGrid()
+        self.scanner = LiDARscanner(lidar_settings)
+
+        # transform this into (dist, orient) tuple representing directed 2D movement
+        self.current_speed = SpeedState(0, 0)
+
+        self.current_pose = spawn_pose
+        self.last_pose = spawn_pose
+        self.robot_occupancy = self.get_robot_occupancy()
+
+        self.last_wheels_speed = WheelSpeedState(0, 0)
         self.wheels_speed = self.last_wheels_speed
 
-        #Set wheels speed limit
-        self.max_linear_speed = float('inf')
-        self.max_angular_speed = float('inf')
-
-
-        #Initialize Laser Scanner
-        self.scanner = None
-        self.scan_list_history = dict()
-
-        #Initialize map
-        self.map = None
-
-        #Initialize controller
-        self.controller = None
-
-        self.initializePIDcontroller()
-        
-        self.rob_collision_radius = rob_collision_radius
-
-
-
-
-    def resetOdometry(self):
-        for key in self.last_pose.keys():
-            self.last_pose[key] = 0
-            self.current_pose[key] = 0
-                
-        self.clearOldvar()
-
-
-    def setMaxSpeed(self, linear, angular):
-        self.max_linear_speed = linear
-        self.max_angular_speed = angular
-        
-
-    def getWheelsSpeed(self):
-        return self.wheels_speed
-
-
-    def printMaxSpeed(self):
-        print('Robot''s max linear speed is: ' + str(self.max_linear_speed))
-        print('Robot''s max angular speed is: ' + str(self.max_angular_speed))
-
-            
-    def getMaxSpeed(self):
-        return self.max_linear_speed, self.max_angular_speed
-
-
-    def stop(self):
-        for key in self.current_speed.keys():
-            for sub_key in self.current_speed[key].keys():
-                self.current_speed[key][sub_key] = 0
-
-
-    def setPosition(self, x, y, orient):
-        self.current_pose['position']['x'] = x
-        self.current_pose['position']['y'] = y
-        self.current_pose['orientation']['z'] = orient
-        self.last_pose = self.current_pose
-        self.clearOldvar()
-        self.updateRobotOccupancy()
-
-
-    def updateRobotSpeed(self, dot_x, dot_orient):
-        if dot_x > self.max_linear_speed or dot_x < -self.max_linear_speed:
-            dot_x = np.sign(dot_x)*self.max_linear_speed
-
-        if dot_orient > self.max_angular_speed or dot_orient < -self.max_angular_speed:
-            dot_orient = np.sign(dot_orient)*self.max_angular_speed
-
-        #Compute Kinematics
-        self.wheels_speed['left'] = (dot_x - self.interaxis_lenght*dot_orient/2)/self.wheel_radius
-        self.last_wheels_speed['right'] = (dot_x + self.interaxis_lenght*dot_orient/2)/self.wheel_radius
-
-        #Update current speed
-        self.current_speed['linear']['x'] = dot_x
-        self.current_speed['angular']['z'] = dot_orient
-
-    def getOdom(self):
+    @property
+    def get_current_pose(self) -> RobotPose:
         return self.current_pose
 
-    def computeOdometry(self,Ts):
-        new_orient = self.last_pose['orientation']['z'] + self.wheel_radius/self.interaxis_lenght*(-(self.last_wheels_speed['left'] \
-            + self.wheels_speed['left'])/2 + (self.last_wheels_speed['right'] \
-            + self.wheels_speed['right'])/2)*Ts
+    def set_robot_pose(self, pose: RobotPose):
+        # TODO: pose computation should be self-contained -> move it inside this class
+        self.current_pose = pose
+        self.last_pose = self.current_pose
+        self.clear_old_var()
+        self.update_robot_occupancy()
 
-        new_x_local = self.wheel_radius/2*((self.last_wheels_speed['left'] + self.wheels_speed['left'])/2 \
-            + (self.last_wheels_speed['right'] + self.wheels_speed['right'])/2)*Ts
+    def update_robot_speed(self, dot_x: float, dot_orient: float):
+        # TODO: velocity computation should be self-contained -> move it inside this class
+        if dot_x > self.config.max_linear_speed or dot_x < -self.config.max_linear_speed:
+            dot_x = np.sign(dot_x) * self.config.max_linear_speed
 
+        if dot_orient > self.config.max_angular_speed or dot_orient < -self.config.max_angular_speed:
+            dot_orient = np.sign(dot_orient) * self.config.max_angular_speed
 
-        self.current_pose['position']['x'] += new_x_local*math.cos((new_orient + self.last_pose['orientation']['z'])/2)
-        self.current_pose['position']['y'] += new_x_local*math.sin((new_orient + self.last_pose['orientation']['z'])/2)
-        self.current_pose['orientation']['z'] = new_orient
+        # compute Kinematics
+        self.wheels_speed.left = (dot_x - self.config.interaxis_length * dot_orient / 2) / self.config.wheel_radius
+        self.last_wheels_speed.right = (dot_x + self.config.interaxis_length * dot_orient / 2) / self.config.wheel_radius
 
-        #Update old values
+        # update current speed
+        self.current_speed.linear.x = dot_x
+        self.current_speed.angular.z = dot_orient
+
+    def compute_odometry(self, t_s: float):
+        # TODO: odometry computation should be self-contained -> move it inside this class
+        right_left_diff = -(self.last_wheels_speed.left + self.wheels_speed.left) / 2 \
+            + (self.last_wheels_speed.right + self.wheels_speed.right) / 2
+        new_orient = self.last_pose.orient \
+            + self.config.wheel_radius / self.config.interaxis_length * right_left_diff * t_s
+
+        new_x_local = self.config.wheel_radius / 2 * ((self.last_wheels_speed.left + self.wheels_speed.left) / 2 \
+            + (self.last_wheels_speed.right + self.wheels_speed.right) / 2) * t_s
+
+        self.current_pose.pos.x += new_x_local * cos((new_orient + self.last_pose.orient) / 2)
+        self.current_pose.pos.y += new_x_local * sin((new_orient + self.last_pose.orient) / 2)
+        self.current_pose.orient = new_orient
+
+        # update old values
         self.last_pose = self.current_pose
         self.last_wheels_speed = self.wheels_speed
-        
+
         # update robot occupancy map
-        self.updateRobotOccupancy()
+        self.update_robot_occupancy()
 
+    def clear_old_var(self):
+        self.last_wheels_speed = WheelSpeedState(0, 0)
+        self.wheels_speed = WheelSpeedState(0, 0)
 
-    def clearOldvar(self):
-        for key in self.last_wheels_speed.keys():  #_last_wheels_speed previously..
-            self.last_wheels_speed[key] = 0
-            self.wheels_speed[key] = 0
+    def get_scan(self, scan_noise: List[float]):
+        return self.scanner.get_scan(
+            self.current_pose.pos.x,
+            self.current_pose.pos.y,
+            self.current_pose.orient,
+            self.map,
+            scan_noise)
 
-    def initializeMap(self, ext_map = None):
-        #Initialize default empty map
-        if ext_map is None:
-            self.map = BinaryOccupancyGrid()
-        else:
-            self.map = ext_map
-            
-    def getCurrentPosition(self):
-        return [self.current_pose['position']['x'] , self.current_pose['position']['y'], self.current_pose['orientation']['z'] ]
-            
-    def getMap(self):
-        return self.map
-
-    def loadMap(self,filename):
-        self.map.loadMap(filename)
-        return True
-
-    def showMap(self):
-        self.map.show()
-
-    def initializeScanner(self, **kwargs):
-        #Initialize default scanner
-        self.scanner = LiDARscanner(**kwargs)
-
-    def getScan(self, scan_noise = None):
-        scan = self.scanner.getScan(self.current_pose['position']['x'],\
-            self.current_pose['position']['y'],self.current_pose['orientation']['z'],self.map, scan_noise = scan_noise)
-            
-        self.__udpateScanList(scan)
-        return scan
-
-    def initializePIDcontroller(self):
-        pid = dict()
-        pid['kp'] = 1
-        pid['kd'] = 1
-        pid['ki'] = 1
-
-        direction = dict()
-        direction['x'] = pid
-        direction['y'] = pid
-        direction['z'] = pid
-
-        self.controller = dict()
-        self.controller['linear'] = direction
-        self.controller['angular'] = direction
-
-    def moveToGoal(self,goal):
-        '''This method aims at moving the robot towards a target point'''
-
-
-    def checkOutOfBounds(self, margin = 0):
+    def check_out_of_bounds(self, margin = 0):
         """checks if robot went out of bounds """
-        if not self.map.check_if_valid_world_coordinates(self.getCurrentPosition()[:2], margin).any():
-            return True
-        else:
-            return False
-            
+        return not self.map.check_if_valid_world_coordinates(
+            self.current_pose.coords, margin).any()
 
-    def getPedsDistances(self):
-        # returns vector with distances of all pedestrians from robot    
-        idx_x, idx_y = np.where( self.map.OccupancyRaw == True)
-        idxs_peds = np.concatenate( ( idx_x[:,np.newaxis] , idx_y[:,np.newaxis]  ) , axis = 1)
-        
+    def get_peds_distances(self):
+        """returns vector with distances of all pedestrians from robot"""
+        idx_x, idx_y = np.where(self.map.OccupancyRaw == True)
+        idxs_peds = np.concatenate((idx_x[:,np.newaxis], idx_y[:, np.newaxis]), axis=1)
         world_coords_peds = self.map.convert_grid_to_world(idxs_peds)
-        
-        return np.sqrt(np.sum((world_coords_peds - self.getCurrentPosition()[:2])**2, axis = 1))
+        return np.sqrt(np.sum((world_coords_peds - self.current_pose.coords)**2, axis=1))
 
+    def get_distances_and_angles(self, peds_only: bool=False):
+        """returns vector with distances of all pedestrians from robot"""
+        occpuancy = self.map.OccupancyRaw if peds_only \
+            else np.logical_or(self.map.OccupancyRaw, self.map.OccupancyFixedRaw)
+        idx_x, idx_y = np.where(occpuancy)
 
-    def getDistancesAndAngles(self, peds_only = False):
-        # returns vector with distances of all pedestrians from robot    
-        if peds_only:
-            idx_x, idx_y = np.where( self.map.OccupancyRaw  )
-        else:
-            idx_x, idx_y = np.where( np.logical_or(self.map.OccupancyRaw , self.map.OccupancyFixedRaw ) )
-
-        idxs_objs = np.concatenate( ( idx_x[:,np.newaxis] , idx_y[:,np.newaxis]  ) , axis = 1)
-        
+        idxs_objs = np.concatenate((idx_x[:,np.newaxis], idx_y[:,np.newaxis]), axis=1)
         world_coords_objs = self.map.convert_grid_to_world(idxs_objs)
-        
-        #Compute angles
-        
-        pos = self.getCurrentPosition()
-        dst =  np.sqrt(np.sum((world_coords_objs - pos[:2])**2, axis = 1))
-        
-        alphas = np.arctan2(world_coords_objs[:,1] - pos[1], world_coords_objs[:,0] - pos[0]) - pos[2]
-        
+
+        # compute angles
+        pose = self.current_pose
+        dst =  np.sqrt(np.sum((world_coords_objs - pose[:2])**2, axis = 1))
+        x_offsets = world_coords_objs[:,0] - pose.pos.x
+        y_offsets = world_coords_objs[:,1] - pose.pos.y
+        alphas = np.arctan2(y_offsets, x_offsets) - pose.orient
         alphas = wrap2pi(alphas)
-        
-        return (alphas, dst) #list(zip(alphas, dst))
-    
-    
-    def chunk(self, n_sections, peds_only = False):
-        alphas, dst = self.getDistancesAndAngles(peds_only)
-        
-        #section = np.linspace(-np.pi,np.pi, n_sections+1)
-        bins = np.pi*(2*np.arange(0,n_sections+1)/n_sections-1)
+
+        return (alphas, dst)
+
+    def chunk(self, n_sections, peds_only=False):
+        alphas, dst = self.get_distances_and_angles(peds_only)
+        bins = np.pi * (2 * np.arange(0, n_sections + 1) / n_sections - 1)
         sector_id = np.arange(0,n_sections-1)
-        distances = n_sections*[1.]
+        distances = n_sections * [1.] # TODO: is this for casting as float array?!
 
         inds = np.digitize(alphas, bins)
-        
         for j in range(len(sector_id)):
             if j in inds:
-                distances[j] = min(1.0,round(min(dst[np.where(inds == j)])/self.scanner.range[1],2))
-
+                distances[j] = min(1.0, round(min(dst[np.where(inds == j)]) / self.scanner.range[1], 2))
+        # TODO: rewrite this for loop as list comprehension
         return distances
-    
 
-    def updateRobotOccupancy(self):
+    def update_robot_occupancy(self):
         # internal update only uses attribut collision distance
-        self.robot_occupancy = self.getRobotOccupancy()
-        
-    def getRobotOccupancy(self,*coll_distance):
-        
-        try:
-            coll_distance = coll_distance[0]
-        except Exception:
-            coll_distance = self.rob_collision_radius
-        
-        x0 = self.current_pose['position']['x']
-        y0 = self.current_pose['position']['y']
-        
-        rob_matrix = np.zeros(self.map.Occupancy.shape,dtype = bool)
-        idx = self.map.convert_world_to_grid_no_error(np.array([x0,y0])[np.newaxis,:])
-        
+        self.robot_occupancy = self.get_robot_occupancy()
+
+    def get_robot_occupancy(self, coll_distance: float=None) -> np.ndarray:
+        # TODO: figure out whether this function occasionally throws an exception
+
+        coll_distance = coll_distance if coll_distance else self.config.rob_collision_radius
+
+        rob_matrix = np.zeros(self.map.Occupancy.shape, dtype=bool)
+        idx = self.map.convert_world_to_grid_no_error(
+            np.array(self.current_pose.coords)[np.newaxis, :])
         self.robot_idx = idx
-        
-        int_radius_step = round(self.map.map_resolution*coll_distance)
-        return fill_surrounding(rob_matrix,int_radius_step,idx) #[0,0],idx[0,1]) 
-        
+        int_radius_step = round(self.map.map_resolution * coll_distance)
+        return fill_surrounding(rob_matrix, int_radius_step, idx)
 
-    def check_obstacle_collision(self, *coll_distance):
-        if self.map is not None:
-            if coll_distance:
-                try:
-                    return np.logical_and(self.map.OccupancyFixed,self.getRobotOccupancy(coll_distance[0])).any() 
-                except Exception:
-                    pass
-            return np.logical_and(self.map.OccupancyFixed,self.robot_occupancy).any()
-        return False
-        
+    def check_obstacle_collision(self, collision_distance: float=None) -> bool:
+        if self.map is None:
+            return False
+        occupancy = self.get_robot_occupancy(collision_distance) \
+            if collision_distance else self.robot_occupancy
+        return np.logical_and(self.map.OccupancyFixed, occupancy).any()
 
-    def check_pedestrians_collision(self, *coll_distance):
-        if self.map is not None:
-            if coll_distance:
-                try:
-                    return np.logical_and(self.map.Occupancy,self.getRobotOccupancy(coll_distance[0])).any()
-                except Exception:
-                    pass
-            return np.logical_and(self.map.Occupancy,self.robot_occupancy).any()
+    def check_pedestrians_collision(self, collision_distance: float=None) -> bool:
+        if self.map is None:
+            return False
+        occupancy = self.get_robot_occupancy(collision_distance) \
+            if collision_distance else self.robot_occupancy
+        return np.logical_and(self.map.Occupancy, occupancy).any()
 
-        return False
-
-
-    def check_collision(self, *coll_distance):
+    def check_collision(self, collision_distance: float=None):
         # check for collision with map objects (when distance from robots is less than radius)
-        if self.map is not None:
-            if coll_distance is None:
-                return self.check_pedestrians_collision() or self.check_obstacle_collision()
-            else:
-                return self.check_pedestrians_collision(coll_distance[0]) or self.check_obstacle_collision(coll_distance[0])
-        return False
-    
+        if self.map is None:
+            return False
+        return self.check_pedestrians_collision(collision_distance) \
+            or self.check_obstacle_collision(collision_distance)
 
-    def target_rel_position(self, target_coordinates, current_pose = None):
-        
-        if current_pose is None:
-            x0 = self.current_pose['position']['x']
-            y0 = self.current_pose['position']['y']
-            theta0 = self.current_pose['orientation']['z']
-        else:
-            x0,y0, theta0 = current_pose
-        
-        dist  = np.linalg.norm(target_coordinates - np.array([x0,y0]))
-        
-        angl_tmp = np.arctan2(target_coordinates[1]-y0, target_coordinates[0]-x0)
-        angl_corrected = angl_tmp - theta0
+    def target_rel_position(self, target_coordinates, current_pose: RobotPose=None):
+        current_pose = current_pose if current_pose else self.current_pose
 
-        angle = wrap2pi(angl_corrected )
-        
-        return dist, angle
+        dists = np.linalg.norm(target_coordinates - np.array(current_pose.coords))
+        x_offsets = target_coordinates[1] - current_pose.pos.y
+        y_offsets = target_coordinates[0] - current_pose.pos.x
+        angles = np.arctan2(y_offsets, x_offsets) - current_pose.orient
+        norm_angles = wrap2pi(angles)
 
-    def check_target_reach(self, target_coordinates ,tolerance = 0.2):
-        # check if target is reached
+        return dists, norm_angles
+
+    def check_target_reach(self, target_coordinates, tolerance = 0.2):
         return self.target_rel_position(target_coordinates)[0] <= tolerance
-
-
-    def __udpateScanList(self,scan):
-        if not self.scan_list_history.keys():
-            self.scan_list_history['scan_1'] = scan
-        else:
-            key_list = list(self.scan_list_history.keys())  #edited: in Python3 'dict_keys' object are not subscriptable
-            name = 'scan_'+ str(int(key_list[-1].replace('scan_','')) + 1)
-            self.scan_list_history[name] = scan
-
-
-

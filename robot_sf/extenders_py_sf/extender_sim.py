@@ -16,8 +16,8 @@ import copy
 from natsort import natsorted
 import warnings
 
-from torch._C import dtype
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+# from torch._C import dtype
+# warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 import numpy as np
@@ -124,7 +124,7 @@ class ExtdSimulator(psf.Simulator):
         #self.current_groups = self.get_pedestrians_groups()
         self.active_peds_update()
         
-        self.setPedSparsity()
+        self.set_ped_sparsity()
        
         
         """ Memory for pedestrians and groups target direction """
@@ -330,7 +330,7 @@ class ExtdSimulator(psf.Simulator):
         self.forces = self.make_forces(self.config)
         
         
-    def setPedSparsity(self,new_ped_sparsity=None):
+    def set_ped_sparsity(self,new_ped_sparsity=None):
         """ This method updates the variables related to peds sparsity. If arg is given, overrides default value"""
             
         if new_ped_sparsity is not None:

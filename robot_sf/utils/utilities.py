@@ -5,21 +5,19 @@ Created on Wed Aug 26 11:23:20 2020
 @author: Enrico Regolin
 """
 
-import math, random
 import numpy as np
 from pysocialforce.utils import stateutils
-import matplotlib.pyplot as plt
 
 
+def linspace(start: float, end: float, size: int):
+    # TODO: think of using np.linspace() instead
+    return start + (end - start) * np.arange(size) / (size - 1)
 
-def linspace(a,b,n):
-    return a+(b-a)*np.arange(n)/(n-1)
 
-def wrap2pi(angles):
-    
-    new_angles = (angles + np.pi) % (2*np.pi) -np.pi
-    
-    return new_angles
+def wrap2pi(angles: np.ndarray) -> np.ndarray:
+    '''Normalize angles between [0, 2*pi)'''
+    return (angles + np.pi) % (2*np.pi) -np.pi
+
 
 #####################################
 # functions used to change directions
@@ -33,32 +31,34 @@ def line_segment(p0, p1):
 
 
 # check vectorization of these functions
-def lines_intersection(L1, L2, p0_L1, p1_L1, p0_L2, p1_L2):
-    x_min_L1 = np.tile(np.minimum(p0_L1[:,0],p1_L1[:,0])[:,np.newaxis],(1,L2.shape[0]))
-    x_max_L1 = np.tile(np.maximum(p0_L1[:,0],p1_L1[:,0])[:,np.newaxis],(1,L2.shape[0]))
+def lines_intersection(l_1, l_2, p0_l1, p1_l1, p0_l2, p1_l2):
+    x_min_l1 = np.tile(np.minimum(p0_l1[:,0],p1_l1[:,0])[:,np.newaxis],(1,l_2.shape[0]))
+    x_max_l1 = np.tile(np.maximum(p0_l1[:,0],p1_l1[:,0])[:,np.newaxis],(1,l_2.shape[0]))
 
-    y_min_L1 = np.tile(np.minimum(p0_L1[:,1],p1_L1[:,1])[:,np.newaxis],(1,L2.shape[0]))
-    y_max_L1 = np.tile(np.maximum(p0_L1[:,1],p1_L1[:,1])[:,np.newaxis],(1,L2.shape[0]))
+    y_min_l1 = np.tile(np.minimum(p0_l1[:,1],p1_l1[:,1])[:,np.newaxis],(1,l_2.shape[0]))
+    y_max_l1 = np.tile(np.maximum(p0_l1[:,1],p1_l1[:,1])[:,np.newaxis],(1,l_2.shape[0]))
 
+    x_min_l2 = np.tile(np.minimum(p0_l2[:,0],p1_l2[:,0])[np.newaxis,:],(l_1.shape[0],1))
+    x_max_l2 = np.tile(np.maximum(p0_l2[:,0],p1_l2[:,0])[np.newaxis,:],(l_1.shape[0],1))
 
-    x_min_L2 = np.tile(np.minimum(p0_L2[:,0],p1_L2[:,0])[np.newaxis,:],(L1.shape[0],1))
-    x_max_L2 = np.tile(np.maximum(p0_L2[:,0],p1_L2[:,0])[np.newaxis,:],(L1.shape[0],1))
+    y_min_l2 = np.tile(np.minimum(p0_l2[:,1],p1_l2[:,1])[np.newaxis,:],(l_1.shape[0],1))
+    y_max_l2 = np.tile(np.maximum(p0_l2[:,1],p1_l2[:,1])[np.newaxis,:],(l_1.shape[0],1))
 
-    y_min_L2 = np.tile(np.minimum(p0_L2[:,1],p1_L2[:,1])[np.newaxis,:],(L1.shape[0],1))
-    y_max_L2 = np.tile(np.maximum(p0_L2[:,1],p1_L2[:,1])[np.newaxis,:],(L1.shape[0],1))
-    
-    D  = L1[:,0][:,np.newaxis] * L2[:,1][np.newaxis,:] - L1[:,1][:,np.newaxis] * L2[:,0][np.newaxis,:]
-    Dx = L1[:,2][:,np.newaxis] * L2[:,1][np.newaxis,:] - L1[:,1][:,np.newaxis] * L2[:,2][np.newaxis,:]
-    Dy = L1[:,0][:,np.newaxis] * L2[:,2][np.newaxis,:] - L1[:,2][:,np.newaxis] * L2[:,0][np.newaxis,:]
-    #if (D!=0).all():
-    with np.errstate(divide='ignore', invalid='ignore'): # np.errstate(invalid='ignore'):
-        x = Dx / D
-        y = Dy / D
-        nan_mask = np.logical_or.reduce(( (x<x_min_L1), (x>x_max_L1), (y<y_min_L1) , (y>y_max_L1) , (x<x_min_L2) , (x>x_max_L2) , (y<y_min_L2) , (y>y_max_L2)   ))
-    
+    d   = l_1[:,0][:,np.newaxis] * l_2[:,1][np.newaxis,:] - l_1[:,1][:,np.newaxis] * l_2[:,0][np.newaxis,:]
+    d_x = l_1[:,2][:,np.newaxis] * l_2[:,1][np.newaxis,:] - l_1[:,1][:,np.newaxis] * l_2[:,2][np.newaxis,:]
+    d_y = l_1[:,0][:,np.newaxis] * l_2[:,2][np.newaxis,:] - l_1[:,2][:,np.newaxis] * l_2[:,0][np.newaxis,:]
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        x = d_x / d
+        y = d_y / d
+        nan_mask = np.logical_or.reduce((
+            (x < x_min_l1), (x > x_max_l1), (y < y_min_l1), (y > y_max_l1),
+            (x < x_min_l2), (x > x_max_l2), (y < y_min_l2), (y > y_max_l2)))
+
+    # TODO: why NaN??? this causes numeric errors
     x[nan_mask] = np.NAN
     y[nan_mask] = np.NAN
-    
+
     return x,y
 
 

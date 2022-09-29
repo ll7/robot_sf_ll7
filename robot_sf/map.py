@@ -283,19 +283,18 @@ class BinaryOccupancyGrid():
             indexes[:,1] = x
             return indexes
 
-
-    def doesRayCollide(self,ray_indexes):
+    def does_ray_collide(self,ray_indexes):
         ''' This method checks if a given input ray
         intercept an obstacle present in the map'''
 
         #Input ray must be the output of the previous function!
         #so a (m,2) numpy array of ints
-        
-        intersections = self.OccupancyOverall[ray_indexes[:,0],ray_indexes[:,1]]
+
+        intersections = self.OccupancyOverall[ray_indexes[:, 0], ray_indexes[:, 1]]
         if intersections.any():
             idx = np.where(intersections)[0][0]
-            return  True, ray_indexes[idx,:],  [self.X[0,ray_indexes[idx,1]], self.Y[ray_indexes[idx,0],0]]
-        return (False,None, None)
+            return  True, ray_indexes[idx,:], [self.X[0, ray_indexes[idx, 1]], self.Y[ray_indexes[idx, 0], 0]]
+        return (False, None, None)
     
     
 
@@ -495,45 +494,29 @@ class BinaryOccupancyGrid():
         self.OccupancyFixed = self.Occupancy
         in_image.close()
 
-
-#%%
-
-###########################################################################################################
 def fill_surrounding(matrix,int_radius_step,coords, add_noise = False):
 
-    def n_closest_fill(x,n,d ,new_fill):
+    def n_closest_fill(x: np.ndarray, n, d, new_fill):
         x_copy = x.copy()
-        x_copy [ n[0]-d:n[0]+d+1,n[1]-d:n[1]+d+1 ] = new_fill
+        x_copy [n[0]-d:n[0]+d+1,n[1]-d:n[1]+d+1] = new_fill
         x = np.logical_or(x,x_copy)
         return x
 
-    window = np.arange(-int_radius_step,int_radius_step+1)
-    msh_grid = np.stack(np.meshgrid(window,window),axis=2)
-    bool_subm = np.sqrt(np.square(msh_grid).sum(axis=2))<int_radius_step
-    
-    N = 2*int_radius_step+1
-    p = np.round(np.exp(-(np.square(msh_grid)/15).sum(axis=2)),3)    #matrix_store = matrix.copy()
-    
-    
-    
-    #inner_instances=border_instances=0
+    window = np.arange(-int_radius_step, int_radius_step + 1)
+    msh_grid = np.stack(np.meshgrid(window, window), axis=2)
+    bool_subm = np.sqrt(np.square(msh_grid).sum(axis=2)) < int_radius_step
+
+    N = 2 * int_radius_step + 1
+    p = np.round(np.exp(-(np.square(msh_grid) / 15).sum(axis=2)), 3)
+
     for i in np.arange(coords.shape[0]):
         if (coords[i,:]>int_radius_step).all() and (coords[i,:]<matrix.shape[0] - int_radius_step).all():
-            if add_noise:
-                r = np.random.random(size=(N, N))
-                bool_subm_i = r < p 
-            else:
-                bool_subm_i = bool_subm
+            bool_subm_i = np.random.random(size=(N, N)) < p if add_noise else bool_subm
             matrix = n_closest_fill(matrix, coords[i,:],int_radius_step, bool_subm_i) 
-            #inner_instances +=1
         else:
             matrix_filled = fill_surrounding_brute(matrix.copy(),int_radius_step,coords[i,0],coords[i,1])
-            #border_instances +=1
             matrix = np.logical_or(matrix,matrix_filled)
-        #print(f'total positives = {matrix.sum()}')    
-        
-    #print(f'inner_instances = {inner_instances}')
-    #print(f'border_instances = {border_instances}')
+
     return matrix
         
 

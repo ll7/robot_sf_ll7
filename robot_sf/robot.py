@@ -51,12 +51,6 @@ class RobotSettings:
     interaxis_length: float = 0.3
 
 
-@dataclass
-class Range:
-    lower: float
-    upper: float
-
-
 class DifferentialDriveRobot():
     """Representing a robot with differential driving behavior"""
 
@@ -104,8 +98,8 @@ class DifferentialDriveRobot():
         self.last_wheels_speed.right = (dot_x + self.config.interaxis_length * dot_orient / 2) / self.config.wheel_radius
 
         # update current speed
-        self.current_speed.linear.x = dot_x
-        self.current_speed.angular.z = dot_orient
+        self.current_speed.dist = dot_x
+        self.current_speed.orient = dot_orient
 
     def compute_odometry(self, t_s: float):
         # TODO: odometry computation should be self-contained -> move it inside this class
@@ -163,7 +157,7 @@ class DifferentialDriveRobot():
 
         # compute angles
         pose = self.current_pose
-        dst =  np.sqrt(np.sum((world_coords_objs - pose[:2])**2, axis = 1))
+        dst =  np.sqrt(np.sum((world_coords_objs - pose.coords)**2, axis = 1))
         x_offsets = world_coords_objs[:,0] - pose.pos.x
         y_offsets = world_coords_objs[:,1] - pose.pos.y
         alphas = np.arctan2(y_offsets, x_offsets) - pose.orient

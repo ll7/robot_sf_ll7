@@ -4,7 +4,7 @@ import os
 import random
 from datetime import datetime
 from dataclasses import dataclass
-from typing import List, Protocol
+from typing import List
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ from robot_sf.map import BinaryOccupancyGrid
 
 
 @dataclass
-class Range(Protocol):
+class Range:
     lower: float
     upper: float
 

@@ -123,7 +123,8 @@ class RobotEnv(Env):
     def _step(self, action):
         info = {}
         saturate_input = False
-        self.robot.map.peds_sim_env.addRobot(self.robot.get_current_pose())
+        coords_with_direction = self.robot.current_pose.coords + [self.robot.current_pose.orient]
+        self.robot.map.peds_sim_env.addRobot(coords_with_direction)
 
         # initial distance
         dist_0 = self.robot.target_rel_position(self.target_coordinates[:2])[0]
@@ -211,7 +212,7 @@ class RobotEnv(Env):
                 self.robot.target_rel_position(self.target_coordinates[:2])[0] < (high_bound[0]-low_bound[0]) / 2 :
 
             init_coordinates = np.random.uniform(low = low_bound, high = high_bound,size=3)
-            self.robot.set_robot_pose(init_coordinates[0], init_coordinates[1], init_coordinates[2])
+            self.robot.set_robot_pose(RobotPose(Vec2D(init_coordinates[0], init_coordinates[1]), init_coordinates[2]))
 
         # initialize Scan to get dimension of state (depends on ray cast) 
         self.distance_init = self.robot.target_rel_position(self.target_coordinates[:2])[0]

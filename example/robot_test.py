@@ -1,24 +1,27 @@
-import os
-from robot_sf.utils.utilities import clear_pycache
 from robot_sf.robot_env import RobotEnv
 
 
 def main():
+    total_steps = 1000
     env = RobotEnv(difficulty=2)
-    env.reset()
+    obs = env.reset()
 
-    print(env.robot.map.peds_sim_env.max_population_for_new_individual)
-    print(env.robot.map.peds_sim_env.max_population_for_new_group)
+    peds_sim = env.robot.map.peds_sim_env
+    print(peds_sim.max_population_for_new_individual)
+    print(peds_sim.max_population_for_new_group)
 
-    for _ in range(600):
-        print(env.robot.map.peds_sim_env.peds.size())
-        env.step([0,0])
+    episode = 0
+    ep_rewards = 0
+    for step in range(total_steps):
+        rand_action = env.action_space.sample()
+        obs, reward, done, _ = env.step(rand_action)
+        ep_rewards += reward
+        print(f'step {step}, reward {reward} (peds: {peds_sim.peds.size()})')
 
-    env.robot.map.peds_sim_env.peds.ped_states
-    env.render(mode = 'plot').show()
-    
-    current_folder = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    clear_pycache(current_folder)
+        if done:
+            episode += 1
+            print(f'end of episode {episode}, total rewards {ep_rewards}')
+            obs = env.reset()
  
 
 if __name__ == "__main__":

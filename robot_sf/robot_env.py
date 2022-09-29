@@ -9,7 +9,7 @@ from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 def initialize_robot(
         visualization_angle_portion: float,
         lidar_range: int,
-        lidar_n_rays,
+        lidar_n_rays: int,
         init_state,
         robot_collision_radius,
         peds_sparsity,
@@ -108,23 +108,17 @@ class RobotEnv(Env):
     def get_max_iterations(self):
         return int(round(self.sim_length / self.dt))
 
-    # def get_actions_structure(self):
-    #     pass
-
     def get_observations_structure(self):
         return [self.lidar_n_rays, (self.n_observations - self.lidar_n_rays)]
 
-    # def get_controller_input(self):
-    #     pass
-
     def step(self, action):
-        self._step(action)
+        return self._step(action)
 
     def render(self, mode = 'human', iter_params = (0, 0, 0)):
         pass # nothing to do here ...
 
     def reset(self):
-        self._reset()
+        return self._reset()
 
     def _step(self, action):
         info = {}
@@ -148,7 +142,7 @@ class RobotEnv(Env):
             self.robot_state_history = np.array([[dot_x, dot_orient]])
         else:
             self.robot_state_history = np.append(self.robot_state_history, np.array([[dot_x, dot_orient]]), axis = 0)
-        
+
         self.robot.map.peds_sim_env.step(1)
         self.robot.map.update_from_peds_sim() 
         self.robot.update_robot_speed(dot_x, dot_orient)

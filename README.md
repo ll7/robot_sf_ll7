@@ -1,4 +1,3 @@
-
 # robot-sf
 
 ## About
@@ -19,3 +18,8 @@ cd robot-sf
 ```sh
 python3 robot_test.py
 ```
+
+## Original Repository
+This repository is a fork of https://github.com/EnricoReg/robot-sf.
+Thank you for providing the initial inspiration and technical
+implementation to the project.

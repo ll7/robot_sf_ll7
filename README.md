@@ -14,14 +14,8 @@ git clone https://github.com/EnricoReg/robot-sf
 cd robot-sf
 ```
 
-2) Install the Package with PIP
+2) Run the Simulation
 
 ```sh
-pip install .
-```
-
-3) Run the Simulation
-
-```sh
-python3 example/robot_test.py
+python3 robot_test.py
 ```

@@ -141,15 +141,15 @@ class DifferentialDriveRobot():
 
     def get_peds_distances(self):
         """returns vector with distances of all pedestrians from robot"""
-        idx_x, idx_y = np.where(self.map.OccupancyRaw == True)
+        idx_x, idx_y = np.where(self.map.occupancy_raw == True)
         idxs_peds = np.concatenate((idx_x[:,np.newaxis], idx_y[:, np.newaxis]), axis=1)
         world_coords_peds = self.map.convert_grid_to_world(idxs_peds)
         return np.sqrt(np.sum((world_coords_peds - self.current_pose.coords)**2, axis=1))
 
     def get_distances_and_angles(self, peds_only: bool=False):
         """returns vector with distances of all pedestrians from robot"""
-        occpuancy = self.map.OccupancyRaw if peds_only \
-            else np.logical_or(self.map.OccupancyRaw, self.map.OccupancyFixedRaw)
+        occpuancy = self.map.occupancy_raw if peds_only \
+            else np.logical_or(self.map.occupancy_raw, self.map.occupancy_fixed_raw)
         idx_x, idx_y = np.where(occpuancy)
 
         idxs_objs = np.concatenate((idx_x[:,np.newaxis], idx_y[:,np.newaxis]), axis=1)
@@ -187,7 +187,7 @@ class DifferentialDriveRobot():
 
         coll_distance = coll_distance if coll_distance else self.config.rob_collision_radius
 
-        rob_matrix = np.zeros(self.map.Occupancy.shape, dtype=bool)
+        rob_matrix = np.zeros(self.map.occupancy.shape, dtype=bool)
         idx = self.map.convert_world_to_grid_no_error(
             np.array(self.current_pose.coords)[np.newaxis, :])
         self.robot_idx = idx
@@ -199,14 +199,14 @@ class DifferentialDriveRobot():
             return False
         occupancy = self.get_robot_occupancy(collision_distance) \
             if collision_distance else self.robot_occupancy
-        return np.logical_and(self.map.OccupancyFixed, occupancy).any()
+        return np.logical_and(self.map.occupancy_fixed, occupancy).any()
 
     def check_pedestrians_collision(self, collision_distance: float=None) -> bool:
         if self.map is None:
             return False
         occupancy = self.get_robot_occupancy(collision_distance) \
             if collision_distance else self.robot_occupancy
-        return np.logical_and(self.map.Occupancy, occupancy).any()
+        return np.logical_and(self.map.occupancy, occupancy).any()
 
     def check_collision(self, collision_distance: float=None):
         # check for collision with map objects (when distance from robots is less than radius)

@@ -124,7 +124,7 @@ class RobotEnv(Env):
         info = {}
         saturate_input = False
         coords_with_direction = self.robot.current_pose.coords + [self.robot.current_pose.orient]
-        self.robot.map.peds_sim_env.addRobot(coords_with_direction)
+        self.robot.map.peds_sim_env.add_robot(coords_with_direction)
 
         # initial distance
         dist_0 = self.robot.target_rel_position(self.target_coordinates[:2])[0]
@@ -201,7 +201,7 @@ class RobotEnv(Env):
         min_distance = (high_bound[0] - low_bound[0]) / 20
         while True:
             self.target_coordinates = np.random.uniform(low = np.array(low_bound), high = np.array(high_bound),size=3)
-            if np.amin(np.sqrt(np.sum((self.robot.map.obstaclesCoordinates - self.target_coordinates[:2])**2, axis = 1))) > min_distance:
+            if np.amin(np.sqrt(np.sum((self.robot.map.obstacles_coordinates - self.target_coordinates[:2])**2, axis = 1))) > min_distance:
                 break
             count +=1
             if count >= 100:
@@ -235,8 +235,8 @@ class RobotEnv(Env):
         y_idx_min = round(margin * self.robot.map.grid_size['y'])
         y_idx_max = round((1 - margin) * self.robot.map.grid_size['y'])
 
-        low_bound  = [self.robot.map.X[0, x_idx_min], self.robot.map.Y[y_idx_min, 0], -np.pi]
-        high_bound = [self.robot.map.X[0, x_idx_max], self.robot.map.Y[y_idx_max, 0],  np.pi]
+        low_bound  = [self.robot.map.x[0, x_idx_min], self.robot.map.y[y_idx_min, 0], -np.pi]
+        high_bound = [self.robot.map.x[0, x_idx_max], self.robot.map.y[y_idx_max, 0],  np.pi]
         return low_bound, high_bound
 
     def _get_obs(self):

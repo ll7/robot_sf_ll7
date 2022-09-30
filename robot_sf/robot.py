@@ -4,9 +4,9 @@ from typing import List
 
 import numpy as np
 
-from .map import BinaryOccupancyGrid, fill_surrounding
-from .range_sensor import LiDARscanner, LidarScannerSettings
-from .utils.utilities import wrap2pi
+from robot_sf.map import BinaryOccupancyGrid, fill_surrounding
+from robot_sf.range_sensor import LiDARscanner, LidarScannerSettings
+from robot_sf.utils.utilities import norm_angles
 
 
 @dataclass
@@ -161,7 +161,7 @@ class DifferentialDriveRobot():
         x_offsets = world_coords_objs[:,0] - pose.pos.x
         y_offsets = world_coords_objs[:,1] - pose.pos.y
         alphas = np.arctan2(y_offsets, x_offsets) - pose.orient
-        alphas = wrap2pi(alphas)
+        alphas = norm_angles(alphas)
 
         return (alphas, dst)
 
@@ -222,9 +222,9 @@ class DifferentialDriveRobot():
         x_offsets = target_coordinates[1] - current_pose.pos.y
         y_offsets = target_coordinates[0] - current_pose.pos.x
         angles = np.arctan2(y_offsets, x_offsets) - current_pose.orient
-        norm_angles = wrap2pi(angles)
+        angles = norm_angles(angles)
 
-        return dists, norm_angles
+        return dists, angles
 
     def check_target_reach(self, target_coordinates, tolerance = 0.2):
         return self.target_rel_position(target_coordinates)[0] <= tolerance

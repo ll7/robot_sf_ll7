@@ -32,7 +32,7 @@ from .extender_scene import PedState
 from .extender_force import DesiredForce, GroupRepulsiveForce, PedRobotForce
 
 from ..utils.utilities import fill_state, fun_reduce_index #check_peds_validity
-from ..utils.poly import Polygon
+from ..utils.poly import load_polygon, random_polygon, PolygonCreationSettings
 
 
 #%%Simulator Class Definition
@@ -1331,35 +1331,27 @@ class ExtdSimulator(psf.Simulator):
                         state[group, 2:4] = [dot_x_x, dot_x_y]
                 
                 #Check for state validity
-                obs_recreated = Polygon()
+                obs_recreated = random_polygon(PolygonCreationSettings(5, irregularity=0, spikeness=0))
             for i in range(n_peds):
                 #Check if initial position is valid
                 state[i, :2] = np.random.uniform(-self.box_size, self.box_size, (1,2))
-                
-                
-                while True:
-                        
-                    for iter_num, ob in enumerate(map_structure['Obstacles'].keys()):
-                            #Compute safety radius for each obstacle
 
-                        obs_recreated.load(map_structure['Obstacles'][ob]['Vertex'])
-                        
+                while True:
+                    for iter_num, ob in enumerate(map_structure['Obstacles'].keys()):
+                        #Compute safety radius for each obstacle
+                        obs_recreated = load_polygon(map_structure['Obstacles'][ob]['Vertex'])
                         vert = np.array(map_structure['Obstacles'][ob]['Vertex'])
-                        radius = max(np.linalg.norm(vert - obs_recreated.centre, axis = 1)) +1
-                        
-                        
-                     
-                        if np.linalg.norm(state[i, :2] - obs_recreated.centre) < radius:
+                        radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1
+
+                        if np.linalg.norm(state[i, :2] - obs_recreated.centroid.coords) < radius:
                             #Generate new point, break and restart the for loop check
-                                
                             state[i, :2] = np.random.uniform(-self.box_size, self.box_size, (1,2))
                             break
-                        
+
                         #Break the endless loop and let i-index increase
                     if iter_num == len(map_structure['Obstacles'].keys())-1:
-                        
                         break
-                
+
                 #Generate target
                 if data['simulator']['flags']['random_initial_population']:
                     #print("Generate target")

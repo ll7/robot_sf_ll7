@@ -129,6 +129,8 @@ class DesiredForce(forces.Force):
         if self.obstacle_avoidance:
         # in case of correction of direction, some "memory" has to be used on the direction of the pedestrians in order to reduce "chattering"
             forces_intensities = np.linalg.norm(force,axis=-1)
+
+            # TODO: fix division bug
             previous_directions = vel / np.tile(np.linalg.norm(vel,axis=-1),(2,1)).T
             previous_directions = np.nan_to_num(previous_directions)
             #print(previous_directions)

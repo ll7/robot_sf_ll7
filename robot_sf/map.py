@@ -1,16 +1,15 @@
-import numpy as np
 import os
 import sys
 import json
-import matplotlib.pyplot as plt
 from PIL import Image
 
-#%%
+import numpy as np
+import matplotlib.pyplot as plt
 
-from .extenders_py_sf.extender_sim import ExtdSimulator
-from .utils.utilities import linspace
+from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
+from robot_sf.utils.utilities import linspace
 
-#%%
+
 class BinaryOccupancyGrid():
     """The class is responsible of creating an object representing a discrete map of the environment"""
     def __init__(self, map_height = 1, map_length = 1, map_resolution = 10, peds_sim_env = None):

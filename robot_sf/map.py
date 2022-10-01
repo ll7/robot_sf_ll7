@@ -1,6 +1,6 @@
-import os
-import sys
-import json
+# import os
+# import sys
+# import json
 
 import numpy as np
 
@@ -13,18 +13,16 @@ class BinaryOccupancyGrid():
     representing a discrete map of the environment"""
 
     def __init__(self, map_height=1, map_length=1, map_resolution=10, peds_sim_env=None):
-        #If no arguments passed create default map. Use this if you plan to load an
-        #existing map from file
-        ''' map_height: height of the map in meters
-            map_length: lenght of the map in meters
-            map_resolution: number of cells per meters
-            grid_size: number of cells along x and y axis
-            cell_size: dimension of a single cell expressed in meters'''
+        # If no arguments passed create default map.
+        # Use this if you plan to load an existing map from file
+        """map_height: height of the map in meters
+           map_length: lenght of the map in meters
+           map_resolution: number of cells per meters
+           grid_size: number of cells along x and y axis
+           cell_size: dimension of a single cell expressed in meters"""
 
-        if peds_sim_env == None:
-            self.peds_sim_env = ExtdSimulator(np.zeros((1,7)) )                  
-        else:
-            self.peds_sim_env = peds_sim_env        
+        # TODO: make all constructor calls provide a peds_sim_env
+        self.peds_sim_env = ExtdSimulator(np.zeros((1, 7))) if peds_sim_env is None else peds_sim_env
 
         self.map_height = map_height
         self.map_length = map_length
@@ -37,59 +35,59 @@ class BinaryOccupancyGrid():
         self.cell_size['x'] = self.map_length/(self.grid_size['x'])
         self.cell_size['y'] = self.map_height/(self.grid_size['y'])
 
-        x = linspace(0 + self.cell_size['x']/2, self.map_length - self.cell_size['x']/2, self.grid_size['x'])
-        y = linspace(0 + self.cell_size['y']/2, self.map_height - self.cell_size['y']/2, self.grid_size['y'])
+        x = linspace(0 + self.cell_size['x'] / 2, self.map_length - self.cell_size['x'] / 2, self.grid_size['x'])
+        y = linspace(0 + self.cell_size['y'] / 2, self.map_height - self.cell_size['y'] / 2, self.grid_size['y'])
         y = np.flip(y)
 
-        self.x,self.y = np.meshgrid(x,y);
-        self.min_val = np.array( [self.x[0,0] - self.cell_size['x']/2 ,  self.y[-1,0] - self.cell_size['y']/2 ])
-        self.max_val = np.array([  self.x[0,-1] + self.cell_size['x']/2 ,   self.y[0,0] + self.cell_size['y']/2 ])
+        self.x,self.y = np.meshgrid(x, y)
+        self.min_val = np.array([self.x[0,  0] - self.cell_size['x'] / 2, self.y[-1, 0] - self.cell_size['y'] / 2])
+        self.max_val = np.array([self.x[0, -1] + self.cell_size['x'] / 2, self.y[ 0, 0] + self.cell_size['y'] / 2])
 
-        self.occupancy = np.zeros((self.grid_size['y'],self.grid_size['x']), dtype = bool)
+        self.occupancy = np.zeros((self.grid_size['y'], self.grid_size['x']), dtype = bool)
         self.occupancy_raw = self.occupancy.copy()
         self.occupancy_fixed = self.occupancy.copy()
         self.occupancy_robot = self.occupancy.copy()
         self.occupancy_fixed_raw = self.occupancy.copy()
         self.occupancy_overall = self.occupancy.copy()
 
-        self.grid_origin = [0,0]
+        self.grid_origin = [0, 0]
         self.add_noise = True
 
-    def save_map(self, filename):
-        #Check validity of input filename
-        filename, _ = os.path.splitext(filename)
-        directory, name = os.path.split(filename)
+    # def save_map(self, filename):
+    #     #Check validity of input filename
+    #     filename, _ = os.path.splitext(filename)
+    #     directory, name = os.path.split(filename)
 
-        if not directory:
-            #relative path
-            home = os.getcwd()
-            platform = sys.platform
-            if platform == 'win32':
-                path = home + '\\data\\maps\\' + name +'.json'
-            elif platform == 'linux':
-                path = home + '/data/maps/' + name + '.json'
-            else:
-                raise NameError('Platform not supported!')
-        else:
-            #absolute path
-            path = filename + '.json'
+    #     if not directory:
+    #         #relative path
+    #         home = os.getcwd()
+    #         platform = sys.platform
+    #         if platform == 'win32':
+    #             path = home + '\\data\\maps\\' + name + '.json'
+    #         elif platform == 'linux':
+    #             path = home + '/data/maps/' + name + '.json'
+    #         else:
+    #             raise NameError('Platform not supported!')
+    #     else:
+    #         #absolute path
+    #         path = filename + '.json'
 
-        map = dict()
-        map['properties'] = dict()
-        map['properties']['height'] = self.map_height
-        map['properties']['lenght'] = self.map_length
-        map['properties']['resolution'] = self.map_resolution
-        map['properties']['grid_size'] = self.grid_size
-        map['properties']['cell_size'] = self.cell_size
-        map['data'] = dict()
-        map['data']['x'] = self.x.tolist()
-        map['data']['y'] = self.y.tolist()
-        map['data']['occupancy'] = self.occupancy.tolist()
-        map['data']['occupancyFixed'] = self.occupancy_fixed.tolist()
+    #     map = dict()
+    #     map['properties'] = dict()
+    #     map['properties']['height'] = self.map_height
+    #     map['properties']['lenght'] = self.map_length
+    #     map['properties']['resolution'] = self.map_resolution
+    #     map['properties']['grid_size'] = self.grid_size
+    #     map['properties']['cell_size'] = self.cell_size
+    #     map['data'] = dict()
+    #     map['data']['x'] = self.x.tolist()
+    #     map['data']['y'] = self.y.tolist()
+    #     map['data']['occupancy'] = self.occupancy.tolist()
+    #     map['data']['occupancyFixed'] = self.occupancy_fixed.tolist()
 
-        with open(path,'w') as f:
-            json.dump(map,f)
-            print('Map saved at:' + path)
+    #     with open(path,'w') as f:
+    #         json.dump(map,f)
+    #         print('Map saved at:' + path)
 
     # def load_map(self,filename):
     #     filename, extension = os.path.splitext(filename)
@@ -156,7 +154,7 @@ class BinaryOccupancyGrid():
     #             values.append(self.occupancy[idx[i,0],idx[i,1]])
     #     return values
 
-    def set_occupancy(self, pair, val, system_type = 'world', fixedObjectsMap = False):
+    def set_occupancy(self, pair, val, system_type = 'world', fixed_objects_map = False):
          #pair must be a (m,2) list or numpy array
         #system type must be either 'world' or 'grid'
 
@@ -186,7 +184,7 @@ class BinaryOccupancyGrid():
                 raise ValueError('Invalid grid indices with the current map!')
             idx = pair
 
-        if fixedObjectsMap:        
+        if fixed_objects_map:        
             for i in range(idx.shape[0]):
                 self.occupancy_fixed[idx[i,0],idx[i,1]] = val[i]
 
@@ -343,25 +341,25 @@ class BinaryOccupancyGrid():
                                np.abs(self.x[0,:][:,np.newaxis] - pair[:,0].T).argmin(axis = 0)[:,np.newaxis]), axis = 1)
 
     #update map from pedestrians simulation environment
-    def update_from_peds_sim(self, map_margin = 1.5, fixedObjectsMap = False):
+    def update_from_peds_sim(self, map_margin = 1.5, fixed_objects_map = False):
         # shift peds sim map to top-left quadrant if necessary
         if self.x[0,0] == self.cell_size['x']/2:
             maps_alignment_offset = map_margin*self.peds_sim_env.box_size
         else:
             maps_alignment_offset = 0
-            
-        if fixedObjectsMap:
+
+        if fixed_objects_map:
             # assign fixed obstacles to map
-            tmp = [item for item in self.peds_sim_env.env.obstacles if not item.size==0 ]
+            tmp = [item for item in self.peds_sim_env.env.obstacles if item.size != 0]
             obs_coordinates = np.concatenate(tmp)
-            new_obs_coordinates = obs_coordinates + np.ones((obs_coordinates.shape[0],2))*maps_alignment_offset
+            new_obs_coordinates = obs_coordinates + np.ones((obs_coordinates.shape[0], 2)) * maps_alignment_offset
             # reset occupancy map
             self.occupancy_fixed = np.zeros(self.occupancy_fixed.shape,dtype = bool)
-            self.set_occupancy(new_obs_coordinates, np.ones((obs_coordinates.shape[0],1),dtype = bool), fixedObjectsMap = fixedObjectsMap)   
+            self.set_occupancy(new_obs_coordinates, np.ones((obs_coordinates.shape[0],1),dtype = bool), fixed_objects_map = fixed_objects_map)   
             zeros_mat = np.zeros(self.occupancy_fixed.shape, dtype = bool)
-            zeros_mat[::2,::2]=True
+            zeros_mat[::2, ::2] = True
             self.occupancy_fixed_raw = np.logical_and(self.occupancy_fixed.copy(), zeros_mat)
-            self.inflate(.3, fixed_objects_map=fixedObjectsMap)
+            self.inflate(.3, fixed_objects_map=fixed_objects_map)
         else:
             # get peds states
             peds_pos = self.peds_sim_env.current_positions
@@ -375,7 +373,7 @@ class BinaryOccupancyGrid():
             self.occupancy_raw =self.occupancy.copy()
             self.inflate(.4) # inflate pedestrians only
 
-    def move_map_frame(self,new_position):
+    def move_map_frame(self, new_position):
         ''' This method will change the position of the grid 
             origin. By default when constructing '''
         self.x = self.x - new_position[0]
@@ -445,6 +443,7 @@ class BinaryOccupancyGrid():
     #     self.OccupancyFixed = self.Occupancy
     #     in_image.close()
 
+
 def fill_surrounding(matrix,int_radius_step,coords, add_noise = False):
 
     def n_closest_fill(x: np.ndarray, n, d, new_fill):
@@ -474,6 +473,6 @@ def fill_surrounding(matrix,int_radius_step,coords, add_noise = False):
 def fill_surrounding_brute(matrix: np.ndarray, int_radius_step, i, j):
     row_eval = np.unique(np.minimum(matrix.shape[0] - 1, np.maximum(0, np.arange(i - int_radius_step, i + 1 + int_radius_step))))
     col_eval = np.unique(np.minimum(matrix.shape[1] - 1, np.maximum(0, np.arange(j - int_radius_step, j + 1 + int_radius_step))))
-    eval_indices = np.sqrt((row_eval-i)[:,np.newaxis]**2+(col_eval-j)[np.newaxis,:]**2)<int_radius_step
-    matrix[row_eval[0]:row_eval[-1]+1,col_eval[0]:col_eval[-1]+1] = eval_indices
+    eval_indices = np.sqrt((row_eval-i)[:,np.newaxis]**2 + (col_eval-j)[np.newaxis,:]**2) < int_radius_step
+    matrix[row_eval[0]:row_eval[-1]+1, col_eval[0]:col_eval[-1]+1] = eval_indices
     return matrix

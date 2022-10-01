@@ -5,17 +5,15 @@ Created on Sat Dec  5 12:56:00 2020
 @author: Matteo Caruso, Enrico Regolin
 """
 
-# required if current directory is not found
-#%%Module loading list
-
 import os
 import toml
 import json
 import copy
-from natsort import natsorted
-
-import numpy as np
 import random
+from typing import List
+
+from natsort import natsorted
+import numpy as np
 
 import pysocialforce as psf
 from pysocialforce import forces
@@ -28,8 +26,6 @@ from ..utils.utilities import fill_state, fun_reduce_index
 from ..utils.poly import load_polygon, random_polygon, PolygonCreationSettings
 
 
-#%%Simulator Class Definition
-# extension of Class "Simulator"
 class ExtdSimulator(psf.Simulator):
     def __init__(self,config_file=None, path_to_config = None, difficulty = 0):
         self.tmp = None
@@ -68,7 +64,7 @@ class ExtdSimulator(psf.Simulator):
 
         """Parameters for the addition of new agents"""
         self.new_peds_params = dict()
-        state, groups, obstacles = self.loadConfig(path_to_filename=path_to_config)
+        state, groups, obstacles = self.load_config(path_to_filename=path_to_config)
         self.tmp = obstacles
         self.groups_vect_idxs = []
 
@@ -101,29 +97,32 @@ class ExtdSimulator(psf.Simulator):
     def make_forces(self, force_configs): 
         """Construct forces"""
         if self.obstacle_avoidance_params == None:
-            forceDes = forces.DesiredForce()
+            force_des = forces.DesiredForce()
         else:
-            forceDes = DesiredForce(obstacle_avoidance= True,
-                                           angles = self.obstacle_avoidance_params[0],
-                                           p0 = self.obstacle_avoidance_params[1],
-                                           p1 = self.obstacle_avoidance_params[2],
-                                           view_distance = self.obstacle_avoidance_params[3],
-                                           forgetting_factor = self.obstacle_avoidance_params[4])
+            force_des = DesiredForce(
+                obstacle_avoidance= True,
+                angles = self.obstacle_avoidance_params[0],
+                p0 = self.obstacle_avoidance_params[1],
+                p1 = self.obstacle_avoidance_params[2],
+                view_distance = self.obstacle_avoidance_params[3],
+                forgetting_factor = self.obstacle_avoidance_params[4])
 
-        ped_rob_force = PedRobotForce(self.sim_config_user['simulator']['robot']['robot_radius'], self.sim_config_user['simulator']['robot']['activation_threshold'],\
+        ped_rob_force = PedRobotForce(
+            self.sim_config_user['simulator']['robot']['robot_radius'],
+            self.sim_config_user['simulator']['robot']['activation_threshold'],
             self.sim_config_user['simulator']['robot']['force_multiplier'])
-        ped_rob_force.updateRobotState(np.array([[self.robot['x'],self.robot['y']]],dtype=float))
+        ped_rob_force.updateRobotState(np.array([[self.robot['x'], self.robot['y']]], dtype=float))
 
         if self.sim_config_user['simulator']['flags']['activate_ped_robot_force']:
-            force_list = [
-                forceDes,
+            force_list: List[forces.Force] = [
+                force_des,
                 forces.SocialForce(),
                 forces.ObstacleForce(),
                 ped_rob_force,
             ]
         else:
-            force_list = [
-                forceDes,
+            force_list: List[forces.Force] = [
+                force_des,
                 forces.SocialForce(),
                 forces.ObstacleForce(),
             ]
@@ -206,10 +205,11 @@ class ExtdSimulator(psf.Simulator):
 
         # mask of pedestrians to drop because they reached their target outside of the square
         #Row of booleans indicating which pedestrian is out of bound (True) and which is still valid (False)
-        drop_out_of_bounds = np.any(np.absolute(self.peds.state[:,:2]) > box_size * 1.2, axis = 1)
+        drop_out_of_bounds: np.ndarray = np.any(
+            np.absolute(self.peds.state[:, :2]) > box_size * 1.2, axis=1)
 
         #Find row indices of pedestrians out of bounds: (Needed to update groups)
-        drop_zeroes = (self.peds.state[:,:2]==[0,0]).all(axis = 1) #Da capire ancora
+        drop_zeroes = (self.peds.state[:, :2]==[0, 0]).all(axis=1) #Da capire ancora
 
         #Initialize mask all to true
         mask = np.ones(drop_out_of_bounds.shape, dtype = bool)
@@ -224,7 +224,7 @@ class ExtdSimulator(psf.Simulator):
 
         #Remove indexes of removed pedestrians from groups
         index_drop = np.where(~mask)[0]
-        mask2 = np.ones(self._stopped_peds.shape, dtype = bool)
+        mask2 = np.ones(self._stopped_peds.shape, dtype=bool)
         mask2[index_drop] = False
 
         #Clean pedestrians memory
@@ -270,19 +270,19 @@ class ExtdSimulator(psf.Simulator):
                 idx.append(i)
         return idx
 
-    def remove_pedestrians_from_groups(self, pedestrian_indexes): #(TESTED!)
-        """ This method removes pedestrians indexes from existing groups if
-        belonging to any"""
-        if not pedestrian_indexes:
-            return False
-        else:
-            for index in pedestrian_indexes:
-                #Check if pedestrian index belongs to any group
-                if self.peds.which_group(index) != -1:
-                    #Remove pedestrian from group
-                    group_idx = self.peds.which_group(index)
-                    self.peds.groups[group_idx].remove(index)
-            return True
+    # def remove_pedestrians_from_groups(self, pedestrian_indexes): #(TESTED!)
+    #     """ This method removes pedestrians indexes from existing groups if
+    #     belonging to any"""
+    #     if not pedestrian_indexes:
+    #         return False
+    #     else:
+    #         for index in pedestrian_indexes:
+    #             #Check if pedestrian index belongs to any group
+    #             if self.peds.which_group(index) != -1:
+    #                 #Remove pedestrian from group
+    #                 group_idx = self.peds.which_group(index)
+    #                 self.peds.groups[group_idx].remove(index)
+    #         return True
 
     def add_standalone_to_existing_group(self, pedestrian_idx = None, destination_group = None): #(TESTED!)
         """This method adds a standalone pedestrian to an existig group inheriting
@@ -641,7 +641,7 @@ class ExtdSimulator(psf.Simulator):
 
         #Set new group pedestrian target
         if self.__enable_rendezvous_centroid:
-            new_target = self.peds.computeCentroidGroup(group_index)
+            new_target = self.peds.compute_centroid_group(group_index)
         else:
             new_target = self.peds.state[tmp_ped_idx, :2]
 
@@ -898,73 +898,58 @@ class ExtdSimulator(psf.Simulator):
         #randomize initial speeds
         random_speeds = np.repeat((self.new_peds_params['average_speed'] + np.random.randn(new_peds_directions.shape[0])/speed_variance_red)[np.newaxis,:],2,axis=0).T
         new_pedestrians_states[:,2:4] = np.multiply(new_peds_directions, random_speeds)
-        
         new_pedestrians_states = np.concatenate((self.peds.state, new_pedestrians_states), axis = 0)
-        
-        
+
         #Update stopped peds array with the new pedestrians
         self._stopped_peds = np.concatenate((self._stopped_peds, np.zeros((new_pedestrians,), dtype = bool)))
         self._last_known_ped_target = np.concatenate((self._last_known_ped_target, np.zeros((new_pedestrians, 2))))
         self._timer_stopped_peds = np.hstack((self._timer_stopped_peds, new_pedestrians*[False]))
         
         self.peds.update(new_pedestrians_states, self.peds.groups)
-        
-        
         return True
-            
-    
-    def _updateGroupsInfo(self):
-        """ This method helps on keeping stored groups informations, needed for 
-        example in group stopping"""
+
+    # def _updateGroupsInfo(self):
+    #     """ This method helps on keeping stored groups informations, needed for 
+    #     example in group stopping"""
         
-        print("TO DO!")
-        
-        
-    def allowDynamicGrouping(self, flag):
-        if not isinstance(flag, bool):
-            return False
-        else:
-            self.__dynamic_grouping = flag
-        
-    
-    def allowMaxStepsStop(self, flag):
-        if not isinstance(flag, bool):
-            return False
-        else:
-            self.__enable_max_steps_stop = flag
-            
-    def sortGroups(self):
-        for i in range(len(self.peds.groups)):
-            self.peds.groups[i].sort()
-        
-    def loadConfig(self, path_to_filename = None):
+    #     print("TO DO!")
+
+    # def allowDynamicGrouping(self, flag):
+    #     if not isinstance(flag, bool):
+    #         return False
+    #     else:
+    #         self.__dynamic_grouping = flag
+
+    # def allowMaxStepsStop(self, flag):
+    #     if not isinstance(flag, bool):
+    #         return False
+    #     else:
+    #         self.__enable_max_steps_stop = flag
+ 
+    # def sortGroups(self):
+    #     for i in range(len(self.peds.groups)):
+    #         self.peds.groups[i].sort()
+
+    def load_config(self, path_to_filename = None):
         if path_to_filename is None:
             try:
                 dirname = os.path.dirname(__file__)
                 parent = os.path.split(dirname)[0]
                 filename = os.path.join(parent, "utils", "config", "map_config.toml")
                 data = toml.load(filename)
-                
-            except:
+            except Exception:
                 raise ValueError("Cannot load valid config toml file")
-        
         else:
             if not isinstance(path_to_filename, str):
                 raise ValueError("invalid input filename")
-                
             else:
                 try:
-                    
                     data = toml.load(path_to_filename)
-                
-                except:
+                except Exception:
                     raise ValueError("Cannot load valid config toml file at specified path:" + path_to_filename)
-        
-        #Start populating class structures and attributes if no errors occured
-        
-        self.__backup_config_data = data
-        
 
+        #Start populating class structures and attributes if no errors occured
+        # self.__backup_config_data = data
         maps_config_path = os.path.join ( os.path.dirname(os.path.dirname(os.path.realpath(__file__))) , 'utils', 'maps')
         path_to_map = None
         

@@ -27,7 +27,7 @@ def initialize_robot(
     map_length = 2 * sim_env.box_size
     robot_map = BinaryOccupancyGrid(map_height, map_length, peds_sim_env=sim_env)
     robot_map.center_map_frame()
-    robot_map.update_from_peds_sim(fixedObjectsMap = True)
+    robot_map.update_from_peds_sim(fixed_objects_map = True)
     robot_map.update_from_peds_sim()
 
     # initialize robot with map

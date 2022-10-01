@@ -33,10 +33,10 @@ def lines_intersection(l_1, l_2, p0_l1, p1_l1, p0_l2, p1_l2):
     x_max_l1 = np.tile(np.maximum(p0_l1[:, 0],p1_l1[:, 0])[:, np.newaxis], (1, l_2.shape[0]))
     y_min_l1 = np.tile(np.minimum(p0_l1[:, 1],p1_l1[:, 1])[:, np.newaxis], (1, l_2.shape[0]))
     y_max_l1 = np.tile(np.maximum(p0_l1[:, 1],p1_l1[:, 1])[:, np.newaxis], (1, l_2.shape[0]))
-    x_min_l2 = np.tile(np.minimum(p0_l2[:, 0],p1_l2[:, 0])[np.newaxis, :], (l_1.shape[0] ,1))
-    x_max_l2 = np.tile(np.maximum(p0_l2[:, 0],p1_l2[:, 0])[np.newaxis, :], (l_1.shape[0] ,1))
-    y_min_l2 = np.tile(np.minimum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0] ,1))
-    y_max_l2 = np.tile(np.maximum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0] ,1))
+    x_min_l2 = np.tile(np.minimum(p0_l2[:, 0],p1_l2[:, 0])[np.newaxis, :], (l_1.shape[0], 1))
+    x_max_l2 = np.tile(np.maximum(p0_l2[:, 0],p1_l2[:, 0])[np.newaxis, :], (l_1.shape[0], 1))
+    y_min_l2 = np.tile(np.minimum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0], 1))
+    y_max_l2 = np.tile(np.maximum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0], 1))
 
     d   = l_1[:, 0][:, np.newaxis] * l_2[:, 1][np.newaxis, :] - l_1[:, 1][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
     d_x = l_1[:, 2][:, np.newaxis] * l_2[:, 1][np.newaxis, :] - l_1[:, 1][:, np.newaxis] * l_2[:, 2][np.newaxis, :]
@@ -72,151 +72,151 @@ def rotate_segment(origin, point, angle):
 
 def change_direction(p0, p1, current_positions, destinations, view_distance, angles, direction, desired_directions):
     #1. find pedestrians who are headed towards an obstacle (within horizon defined by view_distance)
-    L_directions = line_segment(current_positions, destinations)
-    L_obstacles  = line_segment(p0, p1)
+    l_directions = line_segment(current_positions, destinations)
+    l_obstacles  = line_segment(p0, p1)
 
-    R = lines_intersection(L_directions, L_obstacles, current_positions, destinations, p0, p1)
-    intersections_coordinates = np.stack((R[0],R[1]))
+    R = lines_intersection(l_directions, l_obstacles, current_positions, destinations, p0, p1)
+    intersections_coordinates = np.stack((R[0], R[1]))
 
-    distances = intersections_coordinates -  (np.repeat(current_positions.T[:,:,None], intersections_coordinates.shape[2], axis=2))
+    distances = intersections_coordinates - (np.repeat(current_positions.T[:, :, None], intersections_coordinates.shape[2], axis=2))
     with np.errstate(invalid='ignore'):
-        peds_collision_indices = (np.sqrt((distances**2).sum(axis = 0)) < view_distance).any(axis = 1)
+        peds_collision_indices = (np.sqrt((distances**2).sum(axis = 0)) < view_distance).any(axis=1)
 
-    #2. only for these, evaluate trajectories which deviate from original directions, by changing angles (within predefined angular and distance ranges)
-    #3. select obstacle-free direction with least angular deviation, or (if not available) angle with most distant obstacle  
+    #2. only for these, evaluate trajectories which deviate from original directions,
+    #   by changing angles (within predefined angular and distance ranges)
 
-    collision_states = current_positions[peds_collision_indices]
-    close_targets = collision_states + view_distance * desired_directions[peds_collision_indices]
+    #3. select obstacle-free direction with least angular deviation,
+    #   or (if not available) angle with most distant obstacle  
 
-    if collision_states.shape[0]==1:
+    collision_states: np.ndarray = current_positions[peds_collision_indices]
+    close_targets: np.ndarray = collision_states + view_distance * desired_directions[peds_collision_indices]
+
+    if collision_states.shape[0] == 1:
         # generate array of possible destinations, based on angles considered
         wide_scope = rotate_segment(collision_states.reshape(2), close_targets.reshape(2), angles)
-        wide_scope__ = np.stack((wide_scope[0],wide_scope[1]),axis = 1)  # vectorize it
+        wide_scope__ = np.stack((wide_scope[0],wide_scope[1]), axis=1)  # vectorize it
 
         # get all intersections of new array with existing objects
-        L_eval_dirs = line_segment(collision_states.reshape(1,2), wide_scope__)
-        R = lines_intersection(L_eval_dirs, L_obstacles, collision_states.reshape(1,2), wide_scope__, p0, p1)
-        intersections_coordinates = np.stack((R[0],R[1]))
+        l_eval_dirs = line_segment(collision_states.reshape(1, 2), wide_scope__)
+        R = lines_intersection(l_eval_dirs, l_obstacles, collision_states.reshape(1, 2), wide_scope__, p0, p1)
+        intersections_coordinates = np.stack((R[0], R[1]))
 
         ### calculate distances from intersections
-        dist_0 = intersections_coordinates[0]-collision_states.reshape(2)[0]
-        dist_1 = intersections_coordinates[1]-collision_states.reshape(2)[1]
-        my_dist = np.sqrt((np.stack((dist_0,dist_1))**2).sum(axis = 0))
-        my_dist = np.minimum(view_distance,my_dist)
+        dist_0 = intersections_coordinates[0] - collision_states.reshape(2)[0]
+        dist_1 = intersections_coordinates[1] - collision_states.reshape(2)[1]
+        my_dist = np.sqrt((np.stack((dist_0, dist_1))**2).sum(axis=0))
+        my_dist = np.minimum(view_distance, my_dist)
 
         ### choose angles without intersections
-        idxs_nan = np.where(np.isnan(my_dist).all(axis = 1))[0]  #generated as tuple
-        idx_used =  np.argmin(np.absolute(idxs_nan - len(angles)/2))
-
+        idxs_nan = np.where(np.isnan(my_dist).all(axis=1))[0]  #generated as tuple
+        idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
         ped_idx = np.where(peds_collision_indices)[0] # indices of directions to be changed
 
         #generate new destinations
-        new_goal = rotate_segment(collision_states.reshape(2), destinations[ped_idx][0,:], angles[idx_used] )
-        new_direction = ([new_goal[0], new_goal[1] ]- collision_states.reshape(2))/np.linalg.norm(new_goal - collision_states)
+        new_goal = rotate_segment(collision_states.reshape(2), destinations[ped_idx][0, :], angles[idx_used])
+        new_direction = ([new_goal[0], new_goal[1]] - collision_states.reshape(2)) / np.linalg.norm(new_goal - collision_states)
         direction[ped_idx] = new_direction
 
         ### same as above, iteratively
-    elif collision_states.shape[0]>1:
+    elif collision_states.shape[0] > 1:
         for i in range(collision_states.shape[0]): 
             wide_scope = rotate_segment(collision_states[i].reshape(2), close_targets[i].reshape(2), angles)
             wide_scope__ = np.stack((wide_scope[0],wide_scope[1]),axis = 1)
 
-            L_eval_dirs = line_segment(collision_states[i][np.newaxis,:], wide_scope__)
-            R = lines_intersection(L_eval_dirs, L_obstacles, collision_states[i][np.newaxis,:], wide_scope__, p0, p1)
-            intersections_coordinates = np.stack((R[0],R[1]))
-            dist_0 = intersections_coordinates[0]-collision_states[i][0]
-            dist_1 = intersections_coordinates[1]-collision_states[i][1]
-            my_dist = np.sqrt((np.stack((dist_0,dist_1))**2).sum(axis = 0))
-            my_dist = np.minimum(view_distance,my_dist)
+            l_eval_dirs = line_segment(collision_states[i][np.newaxis, :], wide_scope__)
+            R = lines_intersection(l_eval_dirs, l_obstacles, collision_states[i][np.newaxis,:], wide_scope__, p0, p1)
+            intersections_coordinates = np.stack((R[0], R[1]))
+            dist_0 = intersections_coordinates[0] - collision_states[i][0]
+            dist_1 = intersections_coordinates[1] - collision_states[i][1]
+            my_dist = np.sqrt((np.stack((dist_0, dist_1))**2).sum(axis=0))
+            my_dist = np.minimum(view_distance, my_dist)
 
             idxs_nan = np.where(np.isnan(my_dist).all(axis = 1))[0]  #generated as tuple
-
             # TODO: figure out why argmin occasionally receives empty sequences as argument
-            idx_used =  np.argmin(np.absolute(idxs_nan - len(angles)/2))
-
+            idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
             ped_idx = np.where(peds_collision_indices)[0][i]
 
-            new_goal = rotate_segment(collision_states[i].reshape(2), destinations[ped_idx], angles[idx_used] )
-            new_direction = (new_goal - collision_states[i])/np.linalg.norm(new_goal - collision_states[i])
+            new_goal = rotate_segment(collision_states[i].reshape(2), destinations[ped_idx], angles[idx_used])
+            new_direction = (new_goal - collision_states[i]) / np.linalg.norm(new_goal - collision_states[i])
             direction[ped_idx] = new_direction
 
     return direction, peds_collision_indices
 
 
 def fill_state(coordinate_a, coordinate_b, origin,box_size):
+    distance = box_size * 1.1 if origin else box_size * 1.6
 
-    if origin:
-        distance = box_size *1.1
-    else:
-        distance = box_size *1.6
-        
-    if isinstance(coordinate_b,np.ndarray):
-        dim = len(coordinate_b)
-        return build_coordinates_array(coordinate_a, coordinate_b, dim, distance)
+    if isinstance(coordinate_b, np.ndarray):
+        return build_coordinates_array(coordinate_a, coordinate_b, len(coordinate_b), distance)
     else:
         return build_coordinates_scalar(coordinate_a, coordinate_b, distance)
 
 
 def build_coordinates_array(coordinate_a, coordinate_b, dim, distance):
     if coordinate_a == 0:
-        return np.concatenate( (-distance*np.ones([dim,1]),coordinate_b[:, np.newaxis]) , axis = 1 )
+        return np.concatenate((-distance * np.ones([dim, 1]), coordinate_b[:, np.newaxis]) , axis=1)
     elif coordinate_a == 1:
-        return np.concatenate( (coordinate_b[:, np.newaxis] , -distance*np.ones([dim,1]) ), axis = 1 )
+        return np.concatenate((coordinate_b[:, np.newaxis], -distance * np.ones([dim, 1])), axis=1)
     elif coordinate_a == 2:
-        return np.concatenate( (distance*np.ones([dim,1]),coordinate_b[:, np.newaxis] ), axis = 1 )
+        return np.concatenate((distance * np.ones([dim, 1]), coordinate_b[:, np.newaxis]), axis=1)
     elif coordinate_a == 3:
-        return np.concatenate( (coordinate_b[:, np.newaxis] , distance*np.ones([dim,1]) ), axis = 1 )
+        return np.concatenate((coordinate_b[:, np.newaxis], distance * np.ones([dim, 1])), axis=1)
 
-               
+
 def build_coordinates_scalar(coordinate_a, coordinate_b, distance):
     if coordinate_a == 0:
-        return np.array([-distance ,coordinate_b])
+        return np.array([-distance, coordinate_b])
     elif coordinate_a == 1:
-        return np.array([coordinate_b , -distance])
+        return np.array([coordinate_b, -distance])
     elif coordinate_a == 2:
-        return np.array([distance ,coordinate_b])
+        return np.array([distance, coordinate_b])
     elif coordinate_a == 3:
-        return np.array([coordinate_b , distance])
+        return np.array([coordinate_b, distance])
 
 
 # function used to correctly update groups indices after states are removed
 def fun_reduce_index(list_of_lists, num):
-    for idx_out,a_list in enumerate(list_of_lists):
-        for idx,item in enumerate(a_list):
-            if item>num:
+    for idx_out, a_list in enumerate(list_of_lists):
+        for idx, item in enumerate(a_list):
+            if item > num:
                 a_list[idx] = item-1
         list_of_lists[idx_out] = a_list        
     return list_of_lists
 
 
-def add_new_group(box_size, max_grp_size, n_pedestrians_actual, group_width_max, group_width_min, tau, average_speed, speed_variance_red):
+def add_new_group(box_size, max_grp_size, n_pedestrians_actual, group_width_max,
+                  group_width_min, tau, average_speed, speed_variance_red):
     # generate states of new group
-    square_dim = box_size +1
+    square_dim = box_size + 1
 
     #Initialize new random new group size
-    new_grp_size = np.random.randint(2,max_grp_size)
-
-    group_origin_a = np.random.randint(0,4) #0:left, 1:bottom, 2:right, 3:top
+    new_grp_size = np.random.randint(2, max_grp_size)
+    group_origin_a = np.random.randint(0, 4) #0:left, 1:bottom, 2:right, 3:top
     group_width = (group_width_max-group_width_min)*np.random.random_sample()+ group_width_min
 
     #Generate pedestrians group position
-    group_origin_b = np.random.randint(-square_dim,square_dim) + group_width*np.random.random_sample(new_grp_size)-group_width/2
+    group_origin_b = np.random.randint(-square_dim, square_dim) \
+        + group_width * np.random.random_sample(new_grp_size) - group_width / 2
 
     #Choose random destination and delete the origin
     group_destination_a = np.random.choice(np.delete(np.array([0, 1, 2, 3]), group_origin_a))
-    group_destination_b = np.random.randint(-square_dim,square_dim)*np.ones((new_grp_size,))                                        
+    group_destination_b = np.random.randint(-square_dim, square_dim) * np.ones((new_grp_size,))                                        
 
-    origin_states      = fill_state(group_origin_a, group_origin_b, True , box_size)
-    destination_states = fill_state(group_destination_a, group_destination_b, False,box_size)
+    origin_states      = fill_state(group_origin_a, group_origin_b, True, box_size)
+    destination_states = fill_state(group_destination_a, group_destination_b, False, box_size)
  
-    new_group_states = np.concatenate((origin_states, np.zeros(origin_states.shape), destination_states, tau * np.ones((origin_states.shape[0], 1))), axis=1)
+    new_group_states = np.concatenate((
+            origin_states,
+            np.zeros(origin_states.shape),
+            destination_states,
+            tau * np.ones((origin_states.shape[0], 1))
+        ), axis=1)
     # define initial speeds of group
     new_group_directions = stateutils.desired_directions(new_group_states)[0]
-    random_speeds = np.repeat((average_speed+np.random.randn(new_group_directions.shape[0])/speed_variance_red)[np.newaxis,:],2,axis=0).T
-    new_group_states[:,2:4] = np.multiply(new_group_directions, random_speeds)
+    random_speeds = np.repeat((average_speed + np.random.randn(new_group_directions.shape[0]) / speed_variance_red)[np.newaxis, :], 2, axis=0).T
+    new_group_states[:, 2:4] = np.multiply(new_group_directions, random_speeds)
     # new group indices
     new_group = n_pedestrians_actual+np.arange(new_grp_size)
-
     return new_group_states, new_group
 
 

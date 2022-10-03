@@ -5,7 +5,7 @@ from typing import List, Tuple
 import numpy as np
 
 from robot_sf.vector import Vec2D
-from robot_sf.map import BinaryOccupancyGrid, fill_surrounding
+from robot_sf.map import BinaryOccupancyGrid
 from robot_sf.range_sensor import LiDARscanner, LidarScannerSettings
 from robot_sf.utils.utilities import norm_angles
 
@@ -69,19 +69,6 @@ class RobotState:
     last_pose: RobotPose
     last_wheels_speed: WheelSpeedState
     wheels_speed: WheelSpeedState
-    robot_occupancy: BinaryOccupancyGrid = field(init=False)
-
-    def __post_init__(self):
-        self.robot_occupancy = self.get_robot_occupancy()
-
-    def get_robot_occupancy(self, coll_distance: float=None) -> np.ndarray:
-        # TODO: figure out whether this function occasionally throws an exception
-        coll_distance = coll_distance if coll_distance else self.config.rob_collision_radius
-        return self.map.get_robot_occupancy(self.current_pose.pos, coll_distance)
-
-    def update_robot_occupancy(self):
-        # internal update only uses attribute collision distance
-        self.robot_occupancy = self.get_robot_occupancy()
 
 
 @dataclass
@@ -139,9 +126,6 @@ class DifferentialDriveRobot():
         self.state.last_pose = self.state.current_pose
         self.state.last_wheels_speed = self.state.wheels_speed
 
-        # update robot occupancy map
-        self._update_robot_occupancy() # TODO: why?!
-
     def clear_old_var(self):
         self.state.last_wheels_speed = WheelSpeedState(0, 0)
         self.state.wheels_speed = WheelSpeedState(0, 0)
@@ -158,9 +142,6 @@ class DifferentialDriveRobot():
         """checks if robot went out of bounds """
         return not self.map.check_if_valid_world_coordinates(
             self.state.current_pose.coords, margin).any()
-
-    def _update_robot_occupancy(self):
-        self.state.update_robot_occupancy()
 
     def check_collision(self, collision_distance: float):
         # check for collision with map objects (when distance from robots is less than radius)

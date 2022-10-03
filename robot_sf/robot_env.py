@@ -54,68 +54,62 @@ class RobotEnv(Env):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
-        self.n_chunk_sections = n_chunk_sections
+        # self.n_chunk_sections = n_chunk_sections
         sparsity_levels = [500, 200, 100, 50, 20]
 
         self.peds_speed_mult = peds_speed_mult
-        self.peds_sparsity = sparsity_levels[difficulty]
         self._difficulty = difficulty
-
         self.scan_noise = scan_noise if scan_noise else [0.005, 0.002]
-        self.data_render = []
 
-        self.robot = []
-        self.lidar_n_rays = lidar_n_rays
-        self.collision_distance = collision_distance
+        self.robot = [] # TODO: init this properly
         self.target_coordinates = [] # TODO: init this properly
-        self.visualization_angle_portion = visualization_angle_portion
         self.lidar_range = lidar_range
-
         self.closest_obstacle = self.lidar_range
+
         self.sim_length = sim_length  # maximum simulation length (in seconds)
         self.env_type = 'RobotEnv'
         self.rewards = rewards if rewards else [1, 100, 40]
         self.normalize_obs_state = normalize_obs_state
 
-        self.max_v_x_delta = max_v_x_delta
-        self.max_v_rot_delta = max_v_rot_delta
-
         self.linear_max =  v_linear_max
         self.angular_max = v_angular_max
 
         self.target_distance_max = []
-        self.action_space = []
         self.observation_space = []
-
-        self.dt = dt
         self.initial_margin = initial_margin
 
         sim_env_test = ExtdSimulator()
         self.target_distance_max = np.sqrt(2) * (sim_env_test.box_size * 2)
 
-        self.action_low  = np.array([-self.max_v_x_delta, -self.max_v_rot_delta])
-        self.action_high = np.array([ self.max_v_x_delta,  self.max_v_rot_delta])
-        self.action_space = spaces.Box(low=self.action_low, high=self.action_high, dtype=np.float64)
+        action_low  = np.array([-max_v_x_delta, -max_v_rot_delta])
+        action_high = np.array([ max_v_x_delta,  max_v_rot_delta])
+        self.action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
 
         state_max = np.concatenate((
-                self.lidar_range * np.ones((self.lidar_n_rays,)),
+                self.lidar_range * np.ones((lidar_n_rays,)),
                 np.array([self.linear_max, self.angular_max, self.target_distance_max, np.pi])
             ), axis=0)
         state_min = np.concatenate((
-                np.zeros((self.lidar_n_rays,)),
+                np.zeros((lidar_n_rays,)),
                 np.array([0, -self.angular_max, 0, -np.pi])
             ), axis=0)
         self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
-        self.n_observations = self.observation_space.shape[0]
 
         # aligning peds_sim_env and robot step_width
-        self.dt = sim_env_test.peds.step_width if self.dt is None else self.dt
+        self.dt = sim_env_test.peds.step_width if dt is None else dt
 
-    def get_max_iterations(self):
-        return int(round(self.sim_length / self.dt))
+        self.simulator_factory = lambda: initialize_simulator(
+            sparsity_levels[difficulty], difficulty)
 
-    def get_observations_structure(self):
-        return [self.lidar_n_rays, (self.n_observations - self.lidar_n_rays)]
+        self.robot_factory = lambda robot_map, robot_pose: initialize_robot(
+            robot_map,
+            visualization_angle_portion,
+            self.lidar_range,
+            lidar_n_rays,
+            robot_pose,
+            collision_distance,
+            self.linear_max,
+            self.angular_max)
 
     def step(self, action):
         return self._step(action)
@@ -193,18 +187,11 @@ class RobotEnv(Env):
         self.robot_state_history = np.empty((1, 2))
 
         # TODO: think of initializing the simulator / map within the constructor's scope
-        sim_env = initialize_simulator(self.peds_sparsity, self._difficulty)
+        sim_env = self.simulator_factory()
         robot_map = initialize_map(sim_env)
-
-        self.target_coordinates, robot_pose = self._pick_robot_spawn_and_target_pos(robot_map)
-        self.robot = initialize_robot(
-            robot_map,
-            self.visualization_angle_portion,
-            self.lidar_range,
-            self.lidar_n_rays,
-            robot_pose,
-            self.collision_distance,
-            self.linear_max, self.angular_max)
+        self.target_coordinates, robot_pose = \
+            self._pick_robot_spawn_and_target_pos(robot_map)
+        self.robot = self.robot_factory(robot_map, robot_pose)
 
         # initialize Scan to get dimension of state (depends on ray cast) 
         self.distance_init = self.robot.target_rel_position(self.target_coordinates)[0]

@@ -20,7 +20,7 @@ from pysocialforce.utils import stateutils
 import numpy as np
 
 
-def normalize(vecs):
+def normalize(vecs: np.ndarray):
     """Normalize nx2 array along the second axis
     input: [n,2] ndarray
     output: (normalized vectors, norm factors)

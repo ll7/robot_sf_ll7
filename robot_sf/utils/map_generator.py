@@ -62,7 +62,7 @@ class MapGenerator:
     def reset(self):
         self.obstacles_list = []
         self.obstacles = dict()
-        
+
     # def save(self,filename = None):
     #     if not filename:
     #         i = 0
@@ -81,7 +81,7 @@ class MapGenerator:
     #     elif filename is not None:
     #         with open(filename,'w') as f:
     #             json.dump(self.obstacles, f)
-                
+
     def prepare_for_serialization(self):
         self.obstacles['Obstacles'] = dict()
         for i in range(len(self.obstacles_list)):

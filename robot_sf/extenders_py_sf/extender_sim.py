@@ -27,7 +27,7 @@ from ..utils.poly import load_polygon, random_polygon, PolygonCreationSettings
 
 
 class ExtdSimulator(psf.Simulator):
-    def __init__(self,config_file=None, path_to_config = None, difficulty = 0):
+    def __init__(self,config_file=None, path_to_config=None, difficulty=0):
         self.tmp = None
         self.difficulty = difficulty #Added difficulty
         self.box_size = None   #Implemented in load config
@@ -908,28 +908,7 @@ class ExtdSimulator(psf.Simulator):
         self.peds.update(new_pedestrians_states, self.peds.groups)
         return True
 
-    # def _updateGroupsInfo(self):
-    #     """ This method helps on keeping stored groups informations, needed for 
-    #     example in group stopping"""
-        
-    #     print("TO DO!")
-
-    # def allowDynamicGrouping(self, flag):
-    #     if not isinstance(flag, bool):
-    #         return False
-    #     else:
-    #         self.__dynamic_grouping = flag
-
-    # def allowMaxStepsStop(self, flag):
-    #     if not isinstance(flag, bool):
-    #         return False
-    #     else:
-    #         self.__enable_max_steps_stop = flag
- 
-    # def sortGroups(self):
-    #     for i in range(len(self.peds.groups)):
-    #         self.peds.groups[i].sort()
-
+    # TODO: model the toml file as a simulator settings class
     def load_config(self, path_to_filename = None):
         if path_to_filename is None:
             try:
@@ -1224,16 +1203,14 @@ class ExtdSimulator(psf.Simulator):
                         index_action = ped_generations_action['actions'].index(action)
                         del ped_generations_action['actions'][index_action]
                         val = ped_generations_action['probabilities'][index_action]/len(ped_generations_action['actions'])
-                        
                         del ped_generations_action['probabilities'][index_action]
-                        
                         for i in range(len(ped_generations_action['probabilities'])):
                             ped_generations_action['probabilities'][i] += val
             elif action == 'both':
                 if self.peds.size() < self.max_population_for_new_individual:
-                    success = self.add_new_individuals()
+                    self.add_new_individuals()
                 if self.peds.size() < self.max_population_for_new_group:
-                    success = self.add_new_group()
+                    self.add_new_group()
                 break
             else:
                 break

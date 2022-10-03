@@ -1,9 +1,11 @@
 # import os
 # import sys
 # import json
+from typing import List
 
 import numpy as np
 
+from robot_sf.vector import Vec2D
 from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 from robot_sf.utils.utilities import linspace
 
@@ -52,6 +54,36 @@ class BinaryOccupancyGrid():
 
         self.grid_origin = [0, 0]
         self.add_noise = True
+
+    def get_robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
+        rob_matrix = np.zeros(self.occupancy.shape, dtype=bool)
+        idx = self.convert_world_to_grid_no_error(np.array(robot_pos.as_list)[np.newaxis, :])
+        int_radius_step = round(self.map_resolution * coll_distance)
+        return fill_surrounding(rob_matrix, int_radius_step, idx)
+
+    def position_bounds(self, margin: float):
+        # TODO: move this into the map class
+        x_idx_min = round(margin * self.grid_size['x'])
+        x_idx_max = round((1 - margin) * self.grid_size['x'])
+
+        y_idx_min = round(margin * self.grid_size['y'])
+        y_idx_max = round((1 - margin) * self.grid_size['y'])
+
+        low_bound  = [self.x[0, x_idx_min], self.y[y_idx_min, 0], -np.pi]
+        high_bound = [self.x[0, x_idx_max], self.y[y_idx_max, 0],  np.pi]
+        return low_bound, high_bound
+
+    def check_collision(self, robot_pos: Vec2D, collision_distance: float):
+        return self.check_pedestrians_collision(robot_pos, collision_distance) \
+            or self.check_obstacle_collision(robot_pos, collision_distance)
+
+    def check_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
+        occupancy = self.get_robot_occupancy(robot_pos, collision_distance)
+        return np.logical_and(self.occupancy_fixed, occupancy).any()
+
+    def check_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
+        occupancy = self.get_robot_occupancy(robot_pos, collision_distance)
+        return np.logical_and(self.occupancy, occupancy).any()
 
     # def save_map(self, filename):
     #     #Check validity of input filename
@@ -200,8 +232,8 @@ class BinaryOccupancyGrid():
             self.update_overall_occupancy()
 
     def get_obstacles_coordinates(self):
-        return np.concatenate([self.x[self.occupancy_fixed][:,np.newaxis],
-            self.y[self.occupancy_fixed][:,np.newaxis] ], axis = 1)
+        return np.concatenate([self.x[self.occupancy_fixed][:, np.newaxis],
+            self.y[self.occupancy_fixed][:, np.newaxis]], axis=1)
 
     def update_overall_occupancy(self):
         self.occupancy_overall = np.logical_or(self.occupancy, self.occupancy_fixed)
@@ -227,7 +259,7 @@ class BinaryOccupancyGrid():
         if d_row == 0 and d_col == 0:
             #Start and end points are coincident
             return idx_start
-        elif d_row == 0 and not d_col == 0:
+        elif d_row == 0 and d_col != 0:
             #Handle division by zero
             col_idx = linspace(idx_start[0,0],idx_end[0,0],d_col + 1)
             tmp = np.ones((col_idx.shape[0],2), dtype = int)
@@ -241,19 +273,18 @@ class BinaryOccupancyGrid():
             m = (idx_end[0,0] - idx_start[0,0])/(idx_end[0,1] - idx_start[0,1])
 
             #Get indexes of intercepting ray
-            
             if abs(m) <= 1:
-                x = linspace(idx_start[0,1], idx_end[0,1], d_row + 1).astype(int) #columns index
-                y = np.floor(m*(x - idx_start[0,1]) + idx_start[0,0]).astype(int)
-                y[y>self.occupancy.shape[0]-1] = self.occupancy.shape[0]-1
+                x = linspace(idx_start[0, 1], idx_end[0, 1], d_row + 1).astype(int) #columns index
+                y = np.floor(m * (x - idx_start[0, 1]) + idx_start[0, 0]).astype(int)
+                y[y > self.occupancy.shape[0] - 1] = self.occupancy.shape[0] - 1
             elif abs(m) > 1:
-                y = linspace(idx_start[0,0], idx_end[0,0],d_col + 1).astype(int) #rows index
-                x = np.floor((y - idx_start[0,0])/m + idx_start[0,1]).astype(int)
-                x[x>self.occupancy.shape[1]-1] = self.occupancy.shape[1]-1
+                y = linspace(idx_start[0,0], idx_end[0, 0], d_col + 1).astype(int) #rows index
+                x = np.floor((y - idx_start[0, 0]) / m + idx_start[0, 1]).astype(int)
+                x[x > self.occupancy.shape[1] - 1] = self.occupancy.shape[1] - 1
 
-            indexes = np.zeros((x.shape[0],2), dtype = int)
-            indexes[:,0] = y
-            indexes[:,1] = x
+            indexes = np.zeros((x.shape[0], 2), dtype=int)
+            indexes[:, 0] = y
+            indexes[:, 1] = x
             return indexes
 
     def does_ray_collide(self,ray_indexes):
@@ -287,7 +318,7 @@ class BinaryOccupancyGrid():
     #         raise ValueError('Pose not in map!')
     #     return False
 
-    def inflate(self,radius, fixed_objects_map = False):
+    def inflate(self, radius, fixed_objects_map = False):
         ''' Grow in size the obstacles'''
         #create a copy of the occupancy matrix
         int_radius_step = round(self.map_resolution*radius)

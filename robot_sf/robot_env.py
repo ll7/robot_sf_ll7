@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 from gym import Env, spaces
 
@@ -7,21 +9,30 @@ from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 
 
 def initialize_robot(
+        robot_map: BinaryOccupancyGrid,
         visualization_angle_portion: float,
         lidar_range: int,
         lidar_n_rays: int,
-        init_state,
+        spawn_pos: RobotPose,
         robot_collision_radius,
-        peds_sparsity,
-        diff,
         wheel_max_linear_speed: float,
         wheel_max_angular_speed: float):
 
-    # TODO: don't initialize the environment here ...
-    #       -> create separate functions to init env / map
+    # initialize robot with map
+    robot_settings = RobotSettings(
+        wheel_max_linear_speed, wheel_max_angular_speed, robot_collision_radius)
+    lidar_settings = LidarScannerSettings(lidar_range, visualization_angle_portion, lidar_n_rays)
+    robot = DifferentialDriveRobot(spawn_pos, robot_settings, lidar_settings, robot_map)
+    return robot
+
+
+def initialize_simulator(peds_sparsity, diff) -> ExtdSimulator:
     sim_env = ExtdSimulator(difficulty=diff)
     sim_env.set_ped_sparsity(peds_sparsity)
+    return sim_env
 
+
+def initialize_map(sim_env: ExtdSimulator) -> BinaryOccupancyGrid:
     # initialize map
     map_height = 2 * sim_env.box_size
     map_length = 2 * sim_env.box_size
@@ -29,14 +40,7 @@ def initialize_robot(
     robot_map.center_map_frame()
     robot_map.update_from_peds_sim(fixed_objects_map = True)
     robot_map.update_from_peds_sim()
-
-    # initialize robot with map
-    robot_settings = RobotSettings(
-        wheel_max_linear_speed, wheel_max_angular_speed, robot_collision_radius)
-    lidar_settings = LidarScannerSettings(lidar_range, visualization_angle_portion, lidar_n_rays)
-    spawn_pos = RobotPose(Vec2D(init_state[0], init_state[1]), init_state[2])
-    robot = DifferentialDriveRobot(spawn_pos, robot_settings, lidar_settings, robot_map)
-    return robot
+    return robot_map
 
 
 class RobotEnv(Env):
@@ -48,6 +52,8 @@ class RobotEnv(Env):
                  initial_margin = .3, max_v_rot_delta = .5, dt = None, normalize_obs_state = True,
                  sim_length = 200, difficulty = 0, scan_noise = None, n_chunk_sections = 18, peds_speed_mult = 1.3):
 
+        # TODO: get rid of most of these instance variables
+        #       -> encapsulate statefulness inside a "state" object
         self.n_chunk_sections = n_chunk_sections
         sparsity_levels = [500, 200, 100, 50, 20]
 
@@ -61,7 +67,7 @@ class RobotEnv(Env):
         self.robot = []
         self.lidar_n_rays = lidar_n_rays
         self.collision_distance = collision_distance
-        self.target_coordinates = []
+        self.target_coordinates = [] # TODO: init this properly
         self.visualization_angle_portion = visualization_angle_portion
         self.lidar_range = lidar_range
 
@@ -121,28 +127,27 @@ class RobotEnv(Env):
         return self._reset()
 
     def _step(self, action):
+        # TODO: perform the robot's movement inside the robot class
         info = {}
         saturate_input = False
-        coords_with_direction = self.robot.current_pose.coords + [self.robot.current_pose.orient]
+        coords_with_direction = self.robot.state.current_pose.coords_with_orient
         self.robot.map.peds_sim_env.add_robot(coords_with_direction)
 
         # initial distance
-        dist_0 = self.robot.target_rel_position(self.target_coordinates[:2])[0]
-        dot_x = self.robot.current_speed.dist + action[0]
-        dot_orient = self.robot.current_speed.orient + action[1]
+        dist_0 = self.robot.target_rel_position(self.target_coordinates)[0]
+        dot_x = self.robot.state.current_speed.dist + action[0]
+        dot_orient = self.robot.state.current_speed.orient + action[1]
 
         if dot_x < 0 or dot_x > self.linear_max:
             dot_x = np.clip(dot_x, 0, self.linear_max) 
             saturate_input = True
 
-        if abs(dot_orient)> self.angular_max:
+        if abs(dot_orient) > self.angular_max:
             saturate_input = True
-            dot_orient = np.clip( dot_orient ,-self.angular_max , self.angular_max)
+            dot_orient = np.clip(dot_orient, -self.angular_max, self.angular_max)
 
-        if self.robot_state_history is None:
-            self.robot_state_history = np.array([[dot_x, dot_orient]])
-        else:
-            self.robot_state_history = np.append(self.robot_state_history, np.array([[dot_x, dot_orient]]), axis = 0)
+        self.robot_state_history = np.append(
+            self.robot_state_history, np.array([[dot_x, dot_orient]]), axis = 0)
 
         self.robot.map.peds_sim_env.step(1)
         self.robot.map.update_from_peds_sim() 
@@ -151,19 +156,20 @@ class RobotEnv(Env):
         ranges, rob_state = self._get_obs()
 
         # new distance
-        dist_1 = self.robot.target_rel_position(self.target_coordinates[:2])[0]
+        dist_1 = self.robot.target_rel_position(self.target_coordinates)[0]
         self.robot.get_scan(scan_noise = self.scan_noise)
         self.rotation_counter += np.abs(dot_orient * self.dt)
 
         # if pedestrian / obstacle is hit or time expired
-        if self.robot.check_pedestrians_collision(.8) or self.robot.check_obstacle_collision() or \
-            self.robot.check_out_of_bounds(margin = 0.01) or self.duration > self.sim_length :
+        if self.robot.check_pedestrians_collision(.8) or \
+                self.robot.check_obstacle_collision(self.robot.config.rob_collision_radius) or \
+                self.robot.check_out_of_bounds(margin = 0.01) or self.duration > self.sim_length:
             final_distance_bonus = np.clip((self.distance_init - dist_1) / self.target_distance_max , -1, 1)
             reward = -self.rewards[1] * (1 - final_distance_bonus)
             done = True
 
         # if target is reached
-        elif self.robot.check_target_reach(self.target_coordinates[:2], tolerance=1):
+        elif self.robot.check_target_reached(self.target_coordinates, tolerance=1):
             cum_rotations = (self.rotation_counter/(2*np.pi))
             rotations_penalty = self.rewards[2] * cum_rotations / (1e-5+self.duration)
 
@@ -177,45 +183,31 @@ class RobotEnv(Env):
                 - int(saturate_input) + (1 - min(ranges)) * (dot_x / self.linear_max) * int(dist_0 > dist_1))
             done = False
 
-        info['robot_map'] = self.robot.chunk(self.n_chunk_sections)
+        # metadata is not required, only slows the simulation down
+        # info['robot_map'] = self.robot.chunk(self.n_chunk_sections)
         return (ranges, rob_state), reward, done, info
 
     def _reset(self):
         self.duration = 0
         self.rotation_counter = 0
-        self.robot_state_history = None
+        self.robot_state_history = np.empty((1, 2))
 
+        # TODO: think of initializing the simulator / map within the constructor's scope
+        sim_env = initialize_simulator(self.peds_sparsity, self._difficulty)
+        robot_map = initialize_map(sim_env)
+
+        self.target_coordinates, robot_pose = self._pick_robot_spawn_and_target_pos(robot_map)
         self.robot = initialize_robot(
+            robot_map,
             self.visualization_angle_portion,
             self.lidar_range,
             self.lidar_n_rays,
-            [0, 0, 0],
+            robot_pose,
             self.collision_distance,
-            self.peds_sparsity,
-            self._difficulty,
             self.linear_max, self.angular_max)
 
-        low_bound, high_bound = self._get_position_bounds()
-
-        count = 0
-        min_distance = (high_bound[0] - low_bound[0]) / 20
-        while True:
-            self.target_coordinates = np.random.uniform(low = np.array(low_bound), high = np.array(high_bound),size=3)
-            if np.amin(np.sqrt(np.sum((self.robot.map.obstacles_coordinates - self.target_coordinates[:2])**2, axis = 1))) > min_distance:
-                break
-            count +=1
-            if count >= 100:
-                raise ValueError('suitable initial coordinates not found')
-
-        # if initial condition is too close (1.5m) to obstacle, pedestrians or target, generate new initial condition
-        while self.robot.check_collision(1.5) or self.robot.check_out_of_bounds(margin = 0.2) or \
-                self.robot.target_rel_position(self.target_coordinates[:2])[0] < (high_bound[0]-low_bound[0]) / 2 :
-
-            init_coordinates = np.random.uniform(low = low_bound, high = high_bound,size=3)
-            self.robot.set_robot_pose(RobotPose(Vec2D(init_coordinates[0], init_coordinates[1]), init_coordinates[2]))
-
         # initialize Scan to get dimension of state (depends on ray cast) 
-        self.distance_init = self.robot.target_rel_position(self.target_coordinates[:2])[0]
+        self.distance_init = self.robot.target_rel_position(self.target_coordinates)[0]
 
         # if step time externally defined, align peds sim env
         if self.dt != self.robot.map.peds_sim_env.peds.step_width:
@@ -226,33 +218,49 @@ class RobotEnv(Env):
 
         return self._get_obs()
 
-    def _get_position_bounds(self):
-        # define bounds for initial and target position of robot (margin = margin from map limit)
-        margin = self.initial_margin
-        x_idx_min = round(margin * self.robot.map.grid_size['x'])
-        x_idx_max = round((1 - margin) * self.robot.map.grid_size['x'])
+    def _pick_robot_spawn_and_target_pos(self, map: BinaryOccupancyGrid) -> Tuple[np.ndarray, RobotPose]:
+        low_bound, high_bound = map.position_bounds(self.initial_margin)
+        count = 0
+        min_distance = (high_bound[0] - low_bound[0]) / 20 # TODO: why divide by 20?????
+        while True:
+            target_coords = np.random.uniform(
+                low=np.array(low_bound)[:2], high=np.array(high_bound)[:2], size=2)
+            # ensure that the target is not occupied by obstacles
+            dists = np.sqrt(np.sum((map.obstacles_coordinates - target_coords)**2, axis=1))
+            if np.amin(dists) > min_distance:
+                break
+            count +=1
+            # TODO: rather exhaustively check if the map is ok on environment creation
+            if count >= 100:
+                raise ValueError('suitable initial coordinates not found')
 
-        y_idx_min = round(margin * self.robot.map.grid_size['y'])
-        y_idx_max = round((1 - margin) * self.robot.map.grid_size['y'])
+        check_out_of_bounds = lambda coords: not map.check_if_valid_world_coordinates(coords, margin=0.2).any()
+        robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
+        robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
 
-        low_bound  = [self.robot.map.x[0, x_idx_min], self.robot.map.y[y_idx_min, 0], -np.pi]
-        high_bound = [self.robot.map.x[0, x_idx_max], self.robot.map.y[y_idx_max, 0],  np.pi]
-        return low_bound, high_bound
+        # if initial condition is too close (1.5m) to obstacle,
+        # pedestrians or target, generate new initial condition
+        while map.check_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
+                robot_pose.target_rel_position(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
+            robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
+            robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
+
+        return target_coords, robot_pose
 
     def _get_obs(self):
         ranges = self.robot.scanner.scan_structure['data']['ranges']
         ranges_np = np.nan_to_num(np.array(ranges), nan=self.lidar_range)
-        speed_x = self.robot.current_speed.dist
-        speed_rot = self.robot.current_speed.orient
+        speed_x = self.robot.state.current_speed.dist
+        speed_rot = self.robot.state.current_speed.orient
 
-        target_coords = self.target_coordinates[:2]
+        target_coords = self.target_coordinates
         target_distance, target_angle = self.robot.target_rel_position(target_coords)
         self.closest_obstacle = np.amin(ranges_np)
 
         if self.normalize_obs_state:
             ranges_np /= self.lidar_range
             speed_x /= self.linear_max
-            speed_rot = speed_rot/self.angular_max
+            speed_rot = speed_rot / self.angular_max
             target_distance /= self.target_distance_max
             target_angle = target_angle / np.pi
 

@@ -69,7 +69,7 @@ class ExtdSimulator(psf.Simulator):
         self.groups_vect_idxs = []
 
         obs_filtered = [sublist for sublist in obstacles if not (sublist[0]==sublist[1] and sublist[2]==sublist[3])]
-        self.add_robot([1e5, 1e5, 0])
+        self.move_robot([1e5, 1e5, 0])
 
         super().__init__(state, groups, obs_filtered, config_file)
 
@@ -191,7 +191,7 @@ class ExtdSimulator(psf.Simulator):
         self.robot['y'] = coordinates[1]
         self.robot['orient'] = coordinates[2]
 
-    def add_robot(self, coordinates, new_action_radius=None):
+    def move_robot(self, coordinates, new_action_radius=None):
         if new_action_radius is None:
             self.robot['radius'] = self.sim_config_user['simulator']['robot']['robot_radius']
         else:

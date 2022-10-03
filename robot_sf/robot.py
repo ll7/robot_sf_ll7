@@ -11,7 +11,7 @@ from robot_sf.utils.utilities import norm_angles
 
 
 @dataclass
-class SpeedState:
+class Movement:
     """Representing directed movement as 2D polar coords"""
     dist: float
     orient: float
@@ -64,7 +64,7 @@ class RobotSettings:
 class RobotState:
     config: RobotSettings
     map: BinaryOccupancyGrid
-    current_speed: SpeedState
+    current_speed: Movement
     current_pose: RobotPose
     last_pose: RobotPose
     last_wheels_speed: WheelSpeedState
@@ -86,7 +86,7 @@ class DifferentialDriveRobot():
         self.state = RobotState(
             self.config,
             self.map,
-            SpeedState(0, 0),
+            Movement(0, 0),
             self.spawn_pose,
             self.spawn_pose,
             WheelSpeedState(0, 0),

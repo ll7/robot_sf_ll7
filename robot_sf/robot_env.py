@@ -44,18 +44,18 @@ def initialize_map(sim_env: ExtdSimulator) -> BinaryOccupancyGrid:
 
 
 class RobotEnv(Env):
+    """Representing a OpenAI Gym environment wrapper for
+    training a robot with reinforcement leanring"""
 
     # TODO: transform this into cohesive data structures
     def __init__(self, lidar_n_rays: int=135,
                  collision_distance = 0.7, visualization_angle_portion = 0.5, lidar_range = 10,
                  v_linear_max = 1, v_angular_max = 1, rewards = None, max_v_x_delta = .5, 
                  initial_margin = .3, max_v_rot_delta = .5, dt = None, normalize_obs_state = True,
-                 sim_length = 200, difficulty = 0, scan_noise = None, n_chunk_sections = 18, peds_speed_mult = 1.3):
+                 sim_length = 200, difficulty = 0, scan_noise = None, peds_speed_mult = 1.3):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
-        # self.n_chunk_sections = n_chunk_sections
-        sparsity_levels = [500, 200, 100, 50, 20]
 
         self.peds_speed_mult = peds_speed_mult
         self._difficulty = difficulty
@@ -73,10 +73,6 @@ class RobotEnv(Env):
 
         self.linear_max =  v_linear_max
         self.angular_max = v_angular_max
-
-        self.target_distance_max = []
-        self.observation_space = []
-        self.initial_margin = initial_margin
 
         sim_env_test = ExtdSimulator()
         self.target_distance_max = np.sqrt(2) * (sim_env_test.box_size * 2)
@@ -98,6 +94,9 @@ class RobotEnv(Env):
         # aligning peds_sim_env and robot step_width
         self.dt = sim_env_test.peds.step_width if dt is None else dt
 
+        self.map_boundaries_factory = lambda map: map.position_bounds(initial_margin)
+
+        sparsity_levels = [500, 200, 100, 50, 20]
         self.simulator_factory = lambda: initialize_simulator(
             sparsity_levels[difficulty], difficulty)
 
@@ -111,21 +110,14 @@ class RobotEnv(Env):
             self.linear_max,
             self.angular_max)
 
-    def step(self, action):
-        return self._step(action)
-
     def render(self, mode = 'human', iter_params = (0, 0, 0)):
         pass # nothing to do here ...
 
-    def reset(self):
-        return self._reset()
-
-    def _step(self, action):
+    def step(self, action):
         # TODO: perform the robot's movement inside the robot class
-        info = {}
         saturate_input = False
         coords_with_direction = self.robot.state.current_pose.coords_with_orient
-        self.robot.map.peds_sim_env.add_robot(coords_with_direction)
+        self.robot.map.peds_sim_env.move_robot(coords_with_direction)
 
         # initial distance
         dist_0 = self.robot.target_rel_position(self.target_coordinates)[0]
@@ -154,6 +146,10 @@ class RobotEnv(Env):
         self.robot.get_scan(scan_noise = self.scan_noise)
         self.rotation_counter += np.abs(dot_orient * self.dt)
 
+        reward, done = self._reward(dist_0, dist_1, dot_x, ranges, saturate_input)
+        return (ranges, rob_state), reward, done, None
+
+    def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
         # if pedestrian / obstacle is hit or time expired
         if self.robot.check_pedestrians_collision(.8) or \
                 self.robot.check_obstacle_collision(self.robot.config.rob_collision_radius) or \
@@ -177,11 +173,9 @@ class RobotEnv(Env):
                 - int(saturate_input) + (1 - min(ranges)) * (dot_x / self.linear_max) * int(dist_0 > dist_1))
             done = False
 
-        # metadata is not required, only slows the simulation down
-        # info['robot_map'] = self.robot.chunk(self.n_chunk_sections)
-        return (ranges, rob_state), reward, done, info
+        return reward, done
 
-    def _reset(self):
+    def reset(self):
         self.duration = 0
         self.rotation_counter = 0
         self.robot_state_history = np.empty((1, 2))
@@ -206,7 +200,7 @@ class RobotEnv(Env):
         return self._get_obs()
 
     def _pick_robot_spawn_and_target_pos(self, map: BinaryOccupancyGrid) -> Tuple[np.ndarray, RobotPose]:
-        low_bound, high_bound = map.position_bounds(self.initial_margin)
+        low_bound, high_bound = self.map_boundaries_factory(map)
         count = 0
         min_distance = (high_bound[0] - low_bound[0]) / 20 # TODO: why divide by 20?????
         while True:

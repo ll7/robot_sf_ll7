@@ -11,7 +11,7 @@ from robot_sf.utils.utilities import norm_angles
 
 
 @dataclass
-class Movement:
+class MovementVec2D:
     """Representing directed movement as 2D polar coords"""
     dist: float
     orient: float
@@ -64,7 +64,7 @@ class RobotSettings:
 class RobotState:
     config: RobotSettings
     map: BinaryOccupancyGrid
-    current_speed: Movement
+    current_speed: MovementVec2D
     current_pose: RobotPose
     last_pose: RobotPose
     last_wheels_speed: WheelSpeedState
@@ -86,7 +86,7 @@ class DifferentialDriveRobot():
         self.state = RobotState(
             self.config,
             self.map,
-            Movement(0, 0),
+            MovementVec2D(0, 0),
             self.spawn_pose,
             self.spawn_pose,
             WheelSpeedState(0, 0),
@@ -154,50 +154,7 @@ class DifferentialDriveRobot():
     def check_pedestrians_collision(self, collision_distance: float) -> bool:
         return self.map.check_pedestrians_collision(self.state.current_pose.pos, collision_distance)
 
-    def target_rel_position(self, target_coordinates):
-        return self.state.current_pose.target_rel_position(target_coordinates)
-
-    def check_target_reached(self, target_coordinates, tolerance=0.2):
+    def check_target_reached(self, target_coordinates:np.ndarray, tolerance: float):
+        # TODO: think about whether the robot should know his goal's coords
+        #       -> maybe model this as a class "NagivationRequest" or similar
         return self.state.current_pose.target_rel_position(target_coordinates)[0] <= tolerance
-
-    # ==============================================================================
-    #         debug information, not required to run the simulation
-    # ==============================================================================
-
-    # def get_peds_distances(self):
-    #     """returns vector with distances of all pedestrians from robot"""
-    #     idx_x, idx_y = np.where(self.map.occupancy_raw == True)
-    #     idxs_peds = np.concatenate((idx_x[:,np.newaxis], idx_y[:, np.newaxis]), axis=1)
-    #     world_coords_peds = self.map.convert_grid_to_world(idxs_peds)
-    #     return np.sqrt(np.sum((world_coords_peds - self.state.current_pose.coords)**2, axis=1))
-
-    # def get_distances_and_angles(self, peds_only: bool=False):
-    #     """returns vector with distances of all pedestrians from robot"""
-    #     occpuancy = self.map.occupancy_raw if peds_only \
-    #         else np.logical_or(self.map.occupancy_raw, self.map.occupancy_fixed_raw)
-    #     idx_x, idx_y = np.where(occpuancy)
-
-    #     idxs_objs = np.concatenate((idx_x[:,np.newaxis], idx_y[:,np.newaxis]), axis=1)
-    #     world_coords_objs = self.map.convert_grid_to_world(idxs_objs)
-
-    #     # compute angles
-    #     pose = self.state.current_pose
-    #     dst =  np.sqrt(np.sum((world_coords_objs - pose.coords)**2, axis = 1))
-    #     x_offsets = world_coords_objs[:,0] - pose.pos.x
-    #     y_offsets = world_coords_objs[:,1] - pose.pos.y
-    #     alphas = np.arctan2(y_offsets, x_offsets) - pose.orient
-    #     alphas = norm_angles(alphas)
-
-    #     return (alphas, dst)
-
-    # def chunk(self, n_sections, peds_only=False):
-    #     alphas, dst = self.get_distances_and_angles(peds_only)
-    #     bins = np.pi * (2 * np.arange(0, n_sections + 1) / n_sections - 1)
-    #     sector_id = np.arange(0, n_sections - 1)
-    #     distances = n_sections * [1.] # TODO: is this for casting as float array?!
-
-    #     inds = np.digitize(alphas, bins)
-    #     for j in range(len(sector_id)):
-    #         if j in inds:
-    #             distances[j] = min(1.0, round(min(dst[np.where(inds == j)]) / self.scanner.range[1], 2))
-    #     return distances

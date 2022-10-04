@@ -1,0 +1,6 @@
+version: "2"
+services:
+  sonarqube:
+    image: sonarqube:9.6.1-community
+    ports:
+      - 9000:9000

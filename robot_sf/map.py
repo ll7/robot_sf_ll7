@@ -1,8 +1,3 @@
-# import os
-# import sys
-# import json
-from typing import List
-
 import numpy as np
 
 from robot_sf.vector import Vec2D
@@ -40,23 +35,22 @@ class BinaryOccupancyGrid():
         x = linspace(0 + self.cell_size['x'] / 2, self.map_length - self.cell_size['x'] / 2, self.grid_size['x'])
         y = linspace(0 + self.cell_size['y'] / 2, self.map_height - self.cell_size['y'] / 2, self.grid_size['y'])
         y = np.flip(y)
-
-        self.x,self.y = np.meshgrid(x, y)
+        self.x, self.y = np.meshgrid(x, y)
         self.min_val = np.array([self.x[0,  0] - self.cell_size['x'] / 2, self.y[-1, 0] - self.cell_size['y'] / 2])
         self.max_val = np.array([self.x[0, -1] + self.cell_size['x'] / 2, self.y[ 0, 0] + self.cell_size['y'] / 2])
 
-        self.occupancy = np.zeros((self.grid_size['y'], self.grid_size['x']), dtype = bool)
-        self.occupancy_raw = self.occupancy.copy()
-        self.occupancy_fixed = self.occupancy.copy()
-        self.occupancy_robot = self.occupancy.copy()
-        self.occupancy_fixed_raw = self.occupancy.copy()
-        self.occupancy_overall = self.occupancy.copy()
+        self.occupancy_moving_objects = np.zeros((self.grid_size['y'], self.grid_size['x']), dtype = bool)
+        self.occupancy_moving_objects_raw = self.occupancy_moving_objects.copy()
+        self.occupancy_static_objects = self.occupancy_moving_objects.copy()
+        self.occupancy_robot = self.occupancy_moving_objects.copy()
+        self.occupancy_static_objects_raw = self.occupancy_moving_objects.copy()
+        self.occupancy_overall = self.occupancy_moving_objects.copy()
 
         self.grid_origin = [0, 0]
         self.add_noise = True
 
     def get_robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
-        rob_matrix = np.zeros(self.occupancy.shape, dtype=bool)
+        rob_matrix = np.zeros(self.occupancy_moving_objects.shape, dtype=bool)
         idx = self.convert_world_to_grid_no_error(np.array(robot_pos.as_list)[np.newaxis, :])
         int_radius_step = round(self.map_resolution * coll_distance)
         return fill_surrounding(rob_matrix, int_radius_step, idx)
@@ -79,112 +73,11 @@ class BinaryOccupancyGrid():
 
     def check_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         occupancy = self.get_robot_occupancy(robot_pos, collision_distance)
-        return np.logical_and(self.occupancy_fixed, occupancy).any()
+        return np.logical_and(self.occupancy_static_objects, occupancy).any()
 
     def check_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         occupancy = self.get_robot_occupancy(robot_pos, collision_distance)
-        return np.logical_and(self.occupancy, occupancy).any()
-
-    # def save_map(self, filename):
-    #     #Check validity of input filename
-    #     filename, _ = os.path.splitext(filename)
-    #     directory, name = os.path.split(filename)
-
-    #     if not directory:
-    #         #relative path
-    #         home = os.getcwd()
-    #         platform = sys.platform
-    #         if platform == 'win32':
-    #             path = home + '\\data\\maps\\' + name + '.json'
-    #         elif platform == 'linux':
-    #             path = home + '/data/maps/' + name + '.json'
-    #         else:
-    #             raise NameError('Platform not supported!')
-    #     else:
-    #         #absolute path
-    #         path = filename + '.json'
-
-    #     map = dict()
-    #     map['properties'] = dict()
-    #     map['properties']['height'] = self.map_height
-    #     map['properties']['lenght'] = self.map_length
-    #     map['properties']['resolution'] = self.map_resolution
-    #     map['properties']['grid_size'] = self.grid_size
-    #     map['properties']['cell_size'] = self.cell_size
-    #     map['data'] = dict()
-    #     map['data']['x'] = self.x.tolist()
-    #     map['data']['y'] = self.y.tolist()
-    #     map['data']['occupancy'] = self.occupancy.tolist()
-    #     map['data']['occupancyFixed'] = self.occupancy_fixed.tolist()
-
-    #     with open(path,'w') as f:
-    #         json.dump(map,f)
-    #         print('Map saved at:' + path)
-
-    # def load_map(self,filename):
-    #     filename, extension = os.path.splitext(filename)
-    #     if not extension == '.json':
-    #         raise NameError('Invalid map format')
-
-    #     fullpath = filename + extension
-    #     with open(fullpath,'r') as f:
-    #         data = json.load(f)
-
-    #     #Check integrity and validity of input file
-    #     if 'properties' in data and 'data' in data:
-    #         #First layer ok
-    #         if 'height' in data['properties'] and 'lenght' in data['properties'] and 'resolution' in data['properties'] and \
-    #             'grid_size' in data['properties'] and 'cell_size' in data['properties'] and 'x' in data['data'] and \
-    #             'y' in data['data'] and 'occupancy' in data['data']:
-    #             self.map_height = data['properties']['height']
-    #             self.map_length = data['properties']['lenght']
-    #             self.map_resolution = data['properties']['resolution']
-    #             self.grid_size = data['properties']['grid_size']
-    #             self.cell_size = data['properties']['cell_size']
-    #             self.x = np.array(data['data']['x'])
-    #             self.y = np.array(data['data']['y'])
-    #             self.occupancy = np.array(data['data']['occupancy'])
-    #             self.occupancy_fixed = self.occupancy
-    #         else:
-    #             raise NameError('Data Missing')
-    #     else:
-    #         raise NameError('Data Missing')
-
-    # def get_pair_occupancy(self, pair, system_type = 'world', fixed_objects_map = False):
-    #     ''' This method returns the occupancy value of the map
-    #         given a pair and a system_type'''
-    #     #pair must be a (m,2) list or numpy array
-    #     #system type must be either 'world' or 'grid'
-
-    #     if system_type == 'world':
-    #         pair = np.array(pair) #float is good
-    #     elif system_type == 'grid':
-    #         pair = np.array(pair,dtype=int) #pair must be casted to int
-    #     else:
-    #         raise NameError('Invalid System type')
-
-    #     if system_type == 'world':
-    #         #Need to search in world coordinates!
-    #         #First check if input is valid
-    #         pair =  self.check_if_valid_world_coordinates(pair)
-    #         if not pair.any():
-    #             raise ValueError('Invalid world coordinates with the current map!')
-
-    #         #Now if pair is valid start searching the indexes of the corrisponding x and y values
-    #         idx = self.convert_world_to_grid(pair)
-    #     else:
-    #         if not self.check_if_valid_grid_index(pair):
-    #             raise ValueError('Invalid grid indices with the current map!')
-    #         idx = pair
-
-    #     values = list()
-    #     if fixed_objects_map:
-    #         for i in range(idx.shape[0]):
-    #             values.append(self.fixedObjectsMap[idx[i,0],idx[i,1]])
-    #     else:
-    #         for i in range(idx.shape[0]):
-    #             values.append(self.occupancy[idx[i,0],idx[i,1]])
-    #     return values
+        return np.logical_and(self.occupancy_moving_objects, occupancy).any()
 
     def set_occupancy(self, pair, val, system_type = 'world', fixed_objects_map = False):
          #pair must be a (m,2) list or numpy array
@@ -218,32 +111,25 @@ class BinaryOccupancyGrid():
 
         if fixed_objects_map:        
             for i in range(idx.shape[0]):
-                self.occupancy_fixed[idx[i,0],idx[i,1]] = val[i]
+                self.occupancy_static_objects[idx[i,0],idx[i,1]] = val[i]
 
             self.obstacles_coordinates = self.get_obstacles_coordinates()
-            self.occupancy_fixed[:,0] = True
-            self.occupancy_fixed[:,-1] = True
-            self.occupancy_fixed[0,:] = True
-            self.occupancy_fixed[-1,:] = True
-            self.occupancy_overall = self.occupancy_fixed
+            self.occupancy_static_objects[:,0] = True
+            self.occupancy_static_objects[:,-1] = True
+            self.occupancy_static_objects[0,:] = True
+            self.occupancy_static_objects[-1,:] = True
+            self.occupancy_overall = self.occupancy_static_objects
         else:
             for i in range(idx.shape[0]):
-                self.occupancy[idx[i,0],idx[i,1]] = val[i]
+                self.occupancy_moving_objects[idx[i,0],idx[i,1]] = val[i]
             self.update_overall_occupancy()
 
     def get_obstacles_coordinates(self):
-        return np.concatenate([self.x[self.occupancy_fixed][:, np.newaxis],
-            self.y[self.occupancy_fixed][:, np.newaxis]], axis=1)
+        return np.concatenate([self.x[self.occupancy_static_objects][:, np.newaxis],
+            self.y[self.occupancy_static_objects][:, np.newaxis]], axis=1)
 
     def update_overall_occupancy(self):
-        self.occupancy_overall = np.logical_or(self.occupancy, self.occupancy_fixed)
-
-    # def show(self):
-    #     plt.imshow(self.OccupancyOverall,\
-    #         cmap = 'Greys', extent = [-self.grid_origin[0], -self.grid_origin[0] \
-    #         + self.map_length, -self.grid_origin[1], -self.grid_origin[1] + self.map_height])
-    #     plt.show()
-    #     #Da sistemare
+        self.occupancy_overall = np.logical_or(self.occupancy_moving_objects, self.occupancy_static_objects)
 
     def raycast(self, start_pt, end_pt):
         ''' Here it will be developed the easiest 
@@ -269,18 +155,17 @@ class BinaryOccupancyGrid():
             return tmp
 
         else:
-            #m = d_col/d_row
             m = (idx_end[0,0] - idx_start[0,0])/(idx_end[0,1] - idx_start[0,1])
 
             #Get indexes of intercepting ray
             if abs(m) <= 1:
                 x = linspace(idx_start[0, 1], idx_end[0, 1], d_row + 1).astype(int) #columns index
                 y = np.floor(m * (x - idx_start[0, 1]) + idx_start[0, 0]).astype(int)
-                y[y > self.occupancy.shape[0] - 1] = self.occupancy.shape[0] - 1
+                y[y > self.occupancy_moving_objects.shape[0] - 1] = self.occupancy_moving_objects.shape[0] - 1
             elif abs(m) > 1:
                 y = linspace(idx_start[0,0], idx_end[0, 0], d_col + 1).astype(int) #rows index
                 x = np.floor((y - idx_start[0, 0]) / m + idx_start[0, 1]).astype(int)
-                x[x > self.occupancy.shape[1] - 1] = self.occupancy.shape[1] - 1
+                x[x > self.occupancy_moving_objects.shape[1] - 1] = self.occupancy_moving_objects.shape[1] - 1
 
             indexes = np.zeros((x.shape[0], 2), dtype=int)
             indexes[:, 0] = y
@@ -300,35 +185,17 @@ class BinaryOccupancyGrid():
             return  True, ray_indexes[idx,:], [self.x[0, ray_indexes[idx, 1]], self.y[ray_indexes[idx, 0], 0]]
         return (False, None, None)
 
-    # def insertScan(self,scan, pose):
-    #     ''' This method adds occupied value to the occupancy matrix
-    #     given a ray input matrix
-
-    #         pose: must be a (1,3) array containing (x,y,orientation)
-    #         scan: must be a data structure with the following structure
-
-    #             -properties: -range
-    #                          -angle_opening
-    #                          -angle_increment
-
-    #             -data:       -ranges
-    #                          -angles
-    #                          -intensities'''
-    #     if not self.check_if_valid_world_coordinates([pose[0], pose[1]]).any() :
-    #         raise ValueError('Pose not in map!')
-    #     return False
-
     def inflate(self, radius, fixed_objects_map = False):
         ''' Grow in size the obstacles'''
         #create a copy of the occupancy matrix
         int_radius_step = round(self.map_resolution*radius)
         if fixed_objects_map:  # problem here!!!!
-            eval_points = np.asarray(np.where(self.occupancy_fixed)).T
-            self.occupancy_fixed = fill_surrounding(self.occupancy_fixed,int_radius_step,eval_points)
+            eval_points = np.asarray(np.where(self.occupancy_static_objects)).T
+            self.occupancy_static_objects = fill_surrounding(self.occupancy_static_objects,int_radius_step,eval_points)
             self.update_overall_occupancy()
         else:
-            eval_points = np.asarray(np.where(self.occupancy)).T
-            self.occupancy = fill_surrounding(self.occupancy,int_radius_step,eval_points, add_noise = self.add_noise)
+            eval_points = np.asarray(np.where(self.occupancy_moving_objects)).T
+            self.occupancy_moving_objects = fill_surrounding(self.occupancy_moving_objects,int_radius_step,eval_points, add_noise = self.add_noise)
             self.update_overall_occupancy()
 
     def check_if_valid_world_coordinates(self,pair, margin = 0):
@@ -385,11 +252,11 @@ class BinaryOccupancyGrid():
             obs_coordinates = np.concatenate(tmp)
             new_obs_coordinates = obs_coordinates + np.ones((obs_coordinates.shape[0], 2)) * maps_alignment_offset
             # reset occupancy map
-            self.occupancy_fixed = np.zeros(self.occupancy_fixed.shape,dtype = bool)
+            self.occupancy_static_objects = np.zeros(self.occupancy_static_objects.shape,dtype = bool)
             self.set_occupancy(new_obs_coordinates, np.ones((obs_coordinates.shape[0],1),dtype = bool), fixed_objects_map = fixed_objects_map)   
-            zeros_mat = np.zeros(self.occupancy_fixed.shape, dtype = bool)
+            zeros_mat = np.zeros(self.occupancy_static_objects.shape, dtype = bool)
             zeros_mat[::2, ::2] = True
-            self.occupancy_fixed_raw = np.logical_and(self.occupancy_fixed.copy(), zeros_mat)
+            self.occupancy_static_objects_raw = np.logical_and(self.occupancy_static_objects.copy(), zeros_mat)
             self.inflate(.3, fixed_objects_map=fixed_objects_map)
         else:
             # get peds states
@@ -398,10 +265,10 @@ class BinaryOccupancyGrid():
             n_pedestrians = peds_pos.shape[0]
             peds_new_coordinates = peds_pos + np.ones((n_pedestrians,2))*maps_alignment_offset
             # reset occupancy map
-            self.occupancy = np.zeros(self.occupancy.shape,dtype = bool)
+            self.occupancy_moving_objects = np.zeros(self.occupancy_moving_objects.shape,dtype = bool)
             # assign pedestrians positions to robotMap
             self.set_occupancy(peds_new_coordinates, np.ones((n_pedestrians,1)))
-            self.occupancy_raw =self.occupancy.copy()
+            self.occupancy_moving_objects_raw =self.occupancy_moving_objects.copy()
             self.inflate(.4) # inflate pedestrians only
 
     def move_map_frame(self, new_position):
@@ -416,63 +283,6 @@ class BinaryOccupancyGrid():
 
     def center_map_frame(self):
         self.move_map_frame([self.map_length / 2, self.map_height / 2])
-
-    # def load_from_image(self, filename, resolution):
-    #     ''' This method loads a map from a figure'''
-
-    #     if not isinstance(resolution,int) or resolution <= 0:
-    #         raise ValueError('Resolution must be a positive integer!')
-
-    #     in_image = Image.open(filename,'r').convert('L')
-    #     lenght, height = in_image.size #Number of cells
-
-    #     #Initialize attributes
-    #     self.map_length = lenght/resolution
-    #     self.map_height = height/resolution
-    #     self.map_resolution = resolution
-    #     self.grid_size['x'] = lenght
-    #     self.grid_size['y'] = height
-
-    #     self.cell_size['x'] = self.map_length/(self.grid_size['x'])
-    #     self.cell_size['y'] = self.map_height/(self.grid_size['y'])
-
-    #     x = linspace(0 + self.cell_size['x']/2, self.map_length - self.cell_size['x']/2, self.grid_size['x'])
-    #     y = linspace(0 + self.cell_size['y']/2, self.map_height - self.cell_size['y']/2, self.grid_size['y'])
-    #     y = np.flip(y)
-
-    #     #Initializing matrices
-    #     self.X = np.zeros((self.grid_size['y'], self.grid_size['x']))
-    #     for i in range(self.X.shape[0]):
-    #         self.X[i,:] = x
-
-    #     self.Y = np.zeros((self.grid_size['y'], self.grid_size['x']))
-    #     for i in range(self.Y.shape[1]):
-    #         self.Y[:,i] = y
-
-    #     self.Occupancy = np.zeros((height,lenght), dtype = bool)
-
-    #     self.grid_origin = [0,0]
-
-    #     #get pixel object
-    #     pix_obj = in_image.load()
-
-    #     #Apply mask to pixel object and assign values to 
-    #     #Occupancy matrix
-
-    #     for i in range(in_image.size[0]):
-    #         for j in range(in_image.size[1]):
-    #             if pix_obj[i,j] > 0 and pix_obj[i,j] < 255:
-    #                 pix_obj[i,j] = 0
-
-    #             if pix_obj[i,j] == 0:
-    #                 #cell is occupied
-    #                 self.Occupancy[j,i] = True
-    #             elif pix_obj[i,j] == 255:
-    #                 #cell is free
-    #                 self.Occupancy[j,i] = False
-
-    #     self.OccupancyFixed = self.Occupancy
-    #     in_image.close()
 
 
 def fill_surrounding(matrix,int_radius_step,coords, add_noise = False):

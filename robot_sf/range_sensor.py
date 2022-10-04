@@ -1,13 +1,9 @@
 import math
-# import json
-# import os
 import random
-# from datetime import datetime
 from dataclasses import dataclass
 from typing import List
 
 import numpy as np
-# import matplotlib.pyplot as plt
 
 from robot_sf.map import BinaryOccupancyGrid
 
@@ -40,6 +36,7 @@ class LidarScannerSettings:
         return (self.angle_opening.upper - self.angle_opening.lower) / (self.lidar_n_rays - 1)
 
 
+# TODO: for some strange reasons, this class isn't used at all ...
 class LiDARscanner():
     """The following class is responsible of creating a LiDAR scanner object"""
 
@@ -136,86 +133,3 @@ class LiDARscanner():
         self.scan_structure['data']['cartesian'] = np.zeros((self.num_readings, 2), dtype=float)
         # added intercept grid for debugging purpose
         self.scan_structure['data']['grid'] = np.zeros((self.num_readings, 2), dtype=int)
-
-    # def apply_distance_noise(self):
-    #     ranges = np.array(self.scan_structure['data']['ranges'], dtype=float)
-    #     new_ranges = self.distance_noise * np.random.randn(ranges.shape[0]) + ranges
-    #     self.scan_structure['data']['ranges'] = new_ranges.tolist()
-
-    # def apply_angle_noise(self):
-    #     angles = np.array(self.scan_structure['data']['angles'], dtype=float)
-    #     new_angles = self.angle_noise * np.random.randn(angles.shape[0]) + angles
-    #     self.scan_structure['data']['angles'] = new_angles.tolist()
-
-    # def show(self, map_entry=None):
-    #     '''This method plots the rays'''
-    #     tmp = np.zeros((len(self.scan_structure['data']['angles']), 2), dtype=float)
-    #     ranges_filtered = self.remove_invalid_data(self.scan_structure['data']['ranges'])
-    #     tmp[:, 0] = self.scan_structure['data']['angles']
-    #     tmp[:, 1] = ranges_filtered
-    #     tmp[~np.isnan(tmp).any(axis=1)]
-
-    #     if tmp.size == 0:
-    #         #No rays to plot
-    #         plt.plot(self.scan_structure['data']['pose'][0], self.scan_structure['data']['pose'][1])
-    #         plt.text(self.scan_structure['data']['pose'][0], self.scan_structure['data']['pose'][1], 'G')
-    #         plt.show()
-    #     else:
-    #         #define rotation_matrix
-    #         pts_x = np.multiply(tmp[:,1],np.cos(tmp[:,0]))
-    #         pts_y = np.multiply(tmp[:,1],np.sin(tmp[:,0]))
-
-    #         theta = self.scan_structure['data']['pose'][2]
-    #         R = np.array([[math.cos(theta), -math.sin(theta)],[math.sin(theta),math.cos(theta)]])
-
-    #         #Transform data from scanner frame to world frame
-    #         tmp = np.array([pts_x, pts_y])
-    #         pts_transformed = np.dot(R, tmp)
-
-    #         pts_transformed[0,:] += self.scan_structure['data']['pose'][0]
-    #         pts_transformed[1,:] += self.scan_structure['data']['pose'][1]
-
-    #         if map_entry:
-    #             plt.imshow(map_entry.Occupancy,cmap = 'Greys',\
-    #                 extent=[-map_entry.grid_origin[0], -map_entry.grid_origin[0] + map_entry.map_length, \
-    #                 -map_entry.grid_origin[1], -map_entry.grid_origin[1] + map_entry.map_height])
-
-    #         plt.plot(self.scan_structure['data']['pose'][0],self.scan_structure['data']['pose'][1],'o',color='black')
-    #         plt.text(self.scan_structure['data']['pose'][0],self.scan_structure['data']['pose'][1],'G')
-    #         pts = np.array(self.scan_structure['data']['cartesian'])
-    #         plt.scatter(pts[:,0], pts[:,1], marker = '.', color = 'blue')
-    #         plt.axis('equal')
-    #         plt.show()
-
-    # def save(self,filename):
-    #     ''' This method will save the scan data structure into a json file
-    #     specified by filename'''
-    #     copied_scan = self.scan_structure
-    #     copied_scan['info'] = dict()
-    #     copied_scan['info']['author'] = 'Matteo Caruso'
-    #     copied_scan['info']['email'] = 'matteo.caruso@phd.units.it'
-    #     copied_scan['info']['created'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    #     #Add path for saving json file
-    #     filename, _ = os.path.splitext(filename)
-    #     directory, name = os.path.split(filename)
-
-    #     if not directory:
-    #         #relative path
-    #         home = os.getcwd()
-    #         path = os.path.join(home, 'data', 'scans', f'{name}.json')
-    #     else:
-    #         #absolute path
-    #         path = filename + '.json'
-
-    #     with open(path,'w') as f:
-    #         json.dump(self.scan_structure,f)
-    #         print('Scan saved at:' + path)
-
-    # def remove_invalid_data(self,range_list):
-    #     '''This method removes invalid data from the ranges array,
-    #     i.e. data which is below of range lower limit'''
-    #     tmp = np.array(range_list, dtype=float)
-    #     with np.errstate(invalid='ignore'):
-    #         tmp[tmp < self.range[0]] = np.nan
-    #     return tmp

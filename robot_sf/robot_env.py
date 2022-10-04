@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 from gym import Env, spaces
@@ -39,22 +39,22 @@ def initialize_map(sim_env: ExtdSimulator) -> BinaryOccupancyGrid:
     map_height = 2 * sim_env.box_size
     map_length = 2 * sim_env.box_size
     robot_map = BinaryOccupancyGrid(map_height, map_length, peds_sim_env=sim_env)
-    robot_map.center_map_frame()
+    robot_map.move_map_frame([robot_map.map_length / 2, robot_map.map_height / 2])
     robot_map.update_from_peds_sim(fixed_objects_map = True)
     robot_map.update_from_peds_sim()
     return robot_map
 
 
 class RobotEnv(Env):
-    """Representing a OpenAI Gym environment wrapper for
+    """Representing an OpenAI Gym environment wrapper for
     training a robot with reinforcement leanring"""
 
     # TODO: transform this into cohesive data structures
     def __init__(self, lidar_n_rays: int=135,
-                 collision_distance = 0.7, visualization_angle_portion = 0.5, lidar_range = 10,
-                 v_linear_max = 1, v_angular_max = 1, rewards = None, max_v_x_delta = .5, 
-                 initial_margin = .3, max_v_rot_delta = .5, dt = None, normalize_obs_state = True,
-                 sim_length = 200, difficulty = 0, peds_speed_mult = 1.3):
+                 collision_distance: float=0.7, visualization_angle_portion: float=0.5, lidar_range: int=10,
+                 v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None, max_v_x_delta: float=.5, 
+                 initial_margin: float=.3, max_v_rot_delta: float=.5, dt: float=None, normalize_obs_state: bool=True,
+                 sim_length: int=200, difficulty: int=0, peds_speed_mult: float=1.3):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
@@ -76,6 +76,7 @@ class RobotEnv(Env):
         # TODO: don't initialize the entire simulator just for retrieving some settings
         sim_env_test = ExtdSimulator()
         self.target_distance_max = np.sqrt(2) * (sim_env_test.box_size * 2)
+        self.dt = sim_env_test.peds.step_width if dt is None else dt
 
         action_low  = np.array([-max_v_x_delta, -max_v_rot_delta])
         action_high = np.array([ max_v_x_delta,  max_v_rot_delta])
@@ -91,8 +92,6 @@ class RobotEnv(Env):
             ), axis=0)
         self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
 
-        # aligning peds_sim_env and robot step_width
-        self.dt = sim_env_test.peds.step_width if dt is None else dt
         self.map_boundaries_factory = lambda map: map.position_bounds(initial_margin)
 
         sparsity_levels = [500, 200, 100, 50, 20]

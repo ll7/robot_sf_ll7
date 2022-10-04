@@ -4,21 +4,10 @@ from typing import List, Tuple
 
 import numpy as np
 
-from robot_sf.vector import Vec2D
+from robot_sf.vector import Vec2D, MovementVec2D
 from robot_sf.map import BinaryOccupancyGrid
 from robot_sf.range_sensor import LiDARscanner, LidarScannerSettings
 from robot_sf.utils.utilities import norm_angles
-
-
-@dataclass
-class MovementVec2D:
-    """Representing directed movement as 2D polar coords"""
-    dist: float
-    orient: float
-
-    @property
-    def vector(self) -> Vec2D:
-        return Vec2D(self.dist * cos(self.orient), self.dist * sin(self.orient))
 
 
 @dataclass
@@ -154,7 +143,7 @@ class DifferentialDriveRobot():
     def check_pedestrians_collision(self, collision_distance: float) -> bool:
         return self.map.check_pedestrians_collision(self.state.current_pose.pos, collision_distance)
 
-    def check_target_reached(self, target_coordinates:np.ndarray, tolerance: float):
+    def check_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
         # TODO: think about whether the robot should know his goal's coords
         #       -> maybe model this as a class "NagivationRequest" or similar
         return self.state.current_pose.target_rel_position(target_coordinates)[0] <= tolerance

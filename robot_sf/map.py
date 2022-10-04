@@ -1,8 +1,13 @@
+from typing import Tuple
+
 import numpy as np
 
 from robot_sf.vector import Vec2D
 from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 from robot_sf.utils.utilities import linspace
+
+
+# TODO: figure out how the raycast is done here and why the range_sensor.py is unused
 
 
 class BinaryOccupancyGrid():
@@ -80,8 +85,10 @@ class BinaryOccupancyGrid():
         return np.logical_and(self.occupancy_moving_objects, occupancy).any()
 
     def set_occupancy(self, pair, val, system_type = 'world', fixed_objects_map = False):
-         #pair must be a (m,2) list or numpy array
-        #system type must be either 'world' or 'grid'
+        # pair must be a (m,2) list or numpy array
+        # system type must be either 'world' or 'grid'
+
+        # TODO: why are there 2 map types? -> 2 classes with same interface ?!
 
         if system_type == 'world':
             pair = np.array(pair)
@@ -281,16 +288,16 @@ class BinaryOccupancyGrid():
         self.min_val = np.array([self.x[0,  0] - self.cell_size['x'] / 2, self.y[-1, 0] - self.cell_size['y'] / 2])
         self.max_val = np.array([self.x[0, -1] + self.cell_size['x'] / 2, self.y[ 0, 0] + self.cell_size['y'] / 2])
 
-    def center_map_frame(self):
-        self.move_map_frame([self.map_length / 2, self.map_height / 2])
 
+def fill_surrounding(matrix, int_radius_step, coords: np.ndarray, add_noise = False):
 
-def fill_surrounding(matrix,int_radius_step,coords, add_noise = False):
-
-    def n_closest_fill(x: np.ndarray, n, d, new_fill):
+    def n_closest_fill(x: np.ndarray, pos: Tuple[float, float], d: int, new_fill):
         x_copy = x.copy()
-        x_copy [n[0]-d:n[0]+d+1,n[1]-d:n[1]+d+1] = new_fill
-        x = np.logical_or(x,x_copy)
+        n_x, n_y = pos
+        x_copy[n_x-d:n_x+d+1, n_y-d:n_y+d+1] = new_fill
+        # bitwise OR means set bits never get cleaned up
+        # TODO: think about whether this is actually the desired behavior
+        x = np.logical_or(x, x_copy)
         return x
 
     window = np.arange(-int_radius_step, int_radius_step + 1)
@@ -301,9 +308,9 @@ def fill_surrounding(matrix,int_radius_step,coords, add_noise = False):
     p = np.round(np.exp(-(np.square(msh_grid) / 15).sum(axis=2)), 3)
 
     for i in np.arange(coords.shape[0]):
-        if (coords[i,:]>int_radius_step).all() and (coords[i,:]<matrix.shape[0] - int_radius_step).all():
+        if (coords[i, :] > int_radius_step).all() and (coords[i, :] < matrix.shape[0] - int_radius_step).all():
             bool_subm_i = np.random.random(size=(N, N)) < p if add_noise else bool_subm
-            matrix = n_closest_fill(matrix, coords[i,:],int_radius_step, bool_subm_i) 
+            matrix = n_closest_fill(matrix, coords[i, :], int_radius_step, bool_subm_i) 
         else:
             matrix_filled = fill_surrounding_brute(matrix.copy(),int_radius_step,coords[i,0],coords[i,1])
             matrix = np.logical_or(matrix,matrix_filled)

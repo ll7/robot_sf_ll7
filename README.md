@@ -6,39 +6,46 @@ in a pedestrian-filled space.
 
 ## Quickstart
 
-1) Clone Source Code
+### 1. Clone Source Code
 
 ```sh
 git clone https://git.rz.uni-augsburg.de/troestma/scoomatic-pysocialforce
 cd robot-sf
 ```
 
-2) Install Dependencies
+### 2. Install Dependencies
 
 ```sh
 python3 -m pip install pip --upgrade
 python3 -m pip install -r requirements.txt
 ```
 
-3) Run Linter / Tests / Code Analysis
+### 3. Run Linter / Tests / Code Analysis
 
-3.1) Pylint / Pytest
+#### 3.1. Pylint / Pytest
 
 ```sh
 python3 -m pytest
 python3 -m pylint robot_sf --fail-under=9.5
 ```
 
-3.2) SonarLint / SonarQube with VSCode
+#### 3.2. SonarLint / SonarQube with VSCode
+
+Initial VSCode Setup
 
 ```sh
 sudo snap install code --classic
 code --install-extension sonarsource.sonarlint-vscode
 ```
 
+Launch Local SonarQube Service Instance
+
 ```sh
 docker-compose -f sonarqube-compose.yml up -d
+firefox http://localhost:9000
 ```
+
+Run Analysis / Gather Feedback
 
 ```sh
 sonar-scanner \
@@ -49,7 +56,7 @@ sonar-scanner \
   -Dsonar.login=<your-sonarqube-token>
 ```
 
-4) Run Simulation Benchmark
+### 4. Run Simulation Benchmark
 
 ```sh
 python3 simulation_benchmark_zero_load.py

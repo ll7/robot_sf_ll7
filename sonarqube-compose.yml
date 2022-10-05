@@ -4,3 +4,12 @@ services:
     image: sonarqube:9.6.1-community
     ports:
       - 9000:9000
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-logs:/opt/sonarqube/logs
+      - sonarqube-extensions:/opt/sonarqube/extensions
+
+volumes:
+  sonarqube-data:
+  sonarqube-logs:
+  sonarqube-extensions:

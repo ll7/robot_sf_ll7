@@ -20,10 +20,25 @@ python3 -m pip install pip --upgrade
 python3 -m pip install -r requirements.txt
 ```
 
-3) Run Simulation
+3) Run Linter / Tests
+
+3.1) Pylint / Pytest
 
 ```sh
-python3 robot_test.py
+python3 -m pytest
+python3 -m pylint robot_sf --fail-under=9.5
+```
+
+3.2) SonarLint / SonarQube
+
+```sh
+docker-compose -f sonarqube-compose.yml up -d
+```
+
+4) Run Simulation Benchmark
+
+```sh
+python3 simulation_benchmark_zero_load.py
 ```
 
 ## Original Repository

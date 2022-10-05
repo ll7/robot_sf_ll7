@@ -9,7 +9,7 @@ in a pedestrian-filled space.
 1) Clone Source Code
 
 ```sh
-git clone https://github.com/EnricoReg/robot-sf
+git clone https://git.rz.uni-augsburg.de/troestma/scoomatic-pysocialforce
 cd robot-sf
 ```
 
@@ -43,6 +43,7 @@ docker-compose -f sonarqube-compose.yml up -d
 ```sh
 sonar-scanner \
   -Dsonar.projectKey=scoomatic-pysocialforce \
+  -Dsonar.python.version=3.8 \
   -Dsonar.sources=. \
   -Dsonar.host.url=http://localhost:9000 \
   -Dsonar.login=<your-sonarqube-token>

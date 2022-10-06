@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 
@@ -141,6 +141,9 @@ class BinaryOccupancyGrid():
     def raycast(self, start_pt, end_pt):
         ''' Here it will be developed the easiest 
         implementation for a raycasting algorithm'''
+
+        # TODO: vectorize the raycast to process multiple rays at once
+
         #Start point must belong to the map!
         idx_start = self.convert_world_to_grid(start_pt)
         #End point can also not belong to the map. We access to the last available
@@ -179,7 +182,7 @@ class BinaryOccupancyGrid():
             indexes[:, 1] = x
             return indexes
 
-    def does_ray_collide(self,ray_indexes):
+    def does_ray_collide(self, ray_indexes) -> Tuple[bool, List[float]]:
         ''' This method checks if a given input ray
         intercept an obstacle present in the map'''
 
@@ -189,8 +192,8 @@ class BinaryOccupancyGrid():
         intersections = self.occupancy_overall[ray_indexes[:, 0], ray_indexes[:, 1]]
         if intersections.any():
             idx = np.where(intersections)[0][0]
-            return  True, ray_indexes[idx,:], [self.x[0, ray_indexes[idx, 1]], self.y[ray_indexes[idx, 0], 0]]
-        return (False, None, None)
+            return  True, [self.x[0, ray_indexes[idx, 1]], self.y[ray_indexes[idx, 0], 0]]
+        return False, None
 
     def inflate(self, radius, fixed_objects_map = False):
         ''' Grow in size the obstacles'''

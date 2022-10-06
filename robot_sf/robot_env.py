@@ -4,7 +4,8 @@ import numpy as np
 from gym import Env, spaces
 
 from robot_sf.map import BinaryOccupancyGrid
-from robot_sf.robot import DifferentialDriveRobot, LidarScannerSettings, MovementVec2D, RobotPose, RobotSettings, Vec2D
+from robot_sf.vector import RobotPose, Vec2D, MovementVec2D
+from robot_sf.robot import DifferentialDriveRobot, LidarScannerSettings, RobotSettings
 from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 
 
@@ -54,11 +55,11 @@ class RobotEnv(Env):
                  collision_distance: float=0.7, visualization_angle_portion: float=0.5, lidar_range: int=10,
                  v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None, max_v_x_delta: float=.5, 
                  initial_margin: float=.3, max_v_rot_delta: float=.5, dt: float=None, normalize_obs_state: bool=True,
-                 sim_length: int=200, difficulty: int=0, peds_speed_mult: float=1.3):
+                 sim_length: int=200, difficulty: int=0, scan_noise: List[float]=None, peds_speed_mult: float=1.3):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
-        # self.scan_noise = scan_noise if scan_noise else [0.005, 0.002]
+        self.scan_noise = scan_noise if scan_noise else [0.005, 0.002]
 
         self.robot = [] # TODO: init this properly
         self.target_coords = [] # TODO: init this properly
@@ -116,21 +117,19 @@ class RobotEnv(Env):
         action = MovementVec2D(action_np[0], action_np[1])
 
         # TODO: perform the robot's movement inside the robot class
-        saturate_input = False
+        dist_to_goal_before_action, _ = self.robot.state.current_pose.target_rel_position(self.target_coords)
         coords_with_direction = self.robot.state.current_pose.coords_with_orient
         self.robot.map.peds_sim_env.move_robot(coords_with_direction)
 
         # initial distance
-        dist_to_goal_before_action = self.robot.state.current_pose.target_rel_position(self.target_coords)[0]
         dot_x = self.robot.state.current_speed.dist + action.dist
         dot_orient = self.robot.state.current_speed.orient + action.orient
 
         # clip action into a valid range
         # TODO: this shouldn't be necessary, all actions from the action space are valid by definition!!!
+        saturate_input = dot_x < 0 or dot_x > self.linear_max or abs(dot_orient) > self.angular_max
         dot_x = np.clip(dot_x, 0, self.linear_max)
-        saturate_input = dot_x < 0 or dot_x > self.linear_max
         dot_orient = np.clip(dot_orient, -self.angular_max, self.angular_max)
-        saturate_input = saturate_input or abs(dot_orient) > self.angular_max
 
         self.robot.map.peds_sim_env.step(1)
         # TODO: the map shouldn't know about the simulator at all
@@ -138,10 +137,11 @@ class RobotEnv(Env):
         self.robot.map.update_from_peds_sim()
         self.robot.update_robot_speed(dot_x, dot_orient)
         self.robot.compute_odometry(self.dt)
-        ranges, rob_state = self._get_obs()
 
         # new distance
-        dist_to_goal_after_action = self.robot.state.current_pose.target_rel_position(self.target_coords)[0]
+        ranges = self.robot.get_scan(scan_noise = self.scan_noise)
+        ranges, rob_state = self._get_obs(ranges)
+        dist_to_goal_after_action, _ = self.robot.state.current_pose.target_rel_position(self.target_coords)
         self.rotation_counter += np.abs(dot_orient * self.dt)
 
         reward, done = self._reward(dist_to_goal_before_action, dist_to_goal_after_action, dot_x, ranges, saturate_input)
@@ -191,7 +191,8 @@ class RobotEnv(Env):
         # initialize Scan to get dimension of state (depends on ray cast)
         dist_to_goal, _ = robot_pose.target_rel_position(self.target_coords)
         self.distance_init = dist_to_goal
-        return self._get_obs()
+        ranges = self.robot.get_scan(scan_noise = self.scan_noise)
+        return self._get_obs(ranges)
 
     def _pick_robot_spawn_and_target_pos(self, map: BinaryOccupancyGrid) -> Tuple[np.ndarray, RobotPose]:
         low_bound, high_bound = self.map_boundaries_factory(map)
@@ -201,7 +202,7 @@ class RobotEnv(Env):
             target_coords = np.random.uniform(
                 low=np.array(low_bound)[:2], high=np.array(high_bound)[:2], size=2)
             # ensure that the target is not occupied by obstacles
-            dists = np.sqrt(np.sum((map.obstacles_coordinates - target_coords)**2, axis=1))
+            dists = np.linalg.norm(map.obstacles_coordinates - target_coords)
             if np.amin(dists) > min_distance:
                 break
             count +=1
@@ -222,9 +223,7 @@ class RobotEnv(Env):
 
         return target_coords, robot_pose
 
-    def _get_obs(self):
-        ranges = self.robot.scanner.scan_structure['data']['ranges']
-        ranges_np = np.nan_to_num(np.array(ranges), nan=self.lidar_range)
+    def _get_obs(self, ranges_np: np.ndarray):
         speed_x = self.robot.state.current_speed.dist
         speed_rot = self.robot.state.current_speed.orient
 

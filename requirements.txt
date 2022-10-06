@@ -1,4 +1,4 @@
-PySocialForce==0.2.1
+PySocialForce==1.1.2
 numpy==1.19.2
 toml==0.10.1
 gym==0.17.3

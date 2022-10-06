@@ -1,0 +1,4 @@
+[MASTER]
+disable=C0114, C0115, C0116, R0903, C0301, W0511
+# disable missing docstring warnings C0114, C0115, C0116 (re-enable later)
+# disable line-too-long and dangling ToDo C0301, W0511

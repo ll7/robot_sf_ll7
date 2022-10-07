@@ -1,10 +1,10 @@
 from math import sin, cos
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 
-from robot_sf.vector import RobotPose, MovementVec2D
+from robot_sf.vector import RobotPose, MovementVec2D, Vec2D
 from robot_sf.map import BinaryOccupancyGrid
 from robot_sf.range_sensor import LiDARscanner, LidarScannerSettings
 
@@ -36,8 +36,20 @@ class RobotState:
 
     # TODO: think of adding a markdown file describing what's happening here
 
-    def update_robot_speed(self, dot_x: float, dot_orient: float):
+    def resulting_movement(self, action: MovementVec2D) -> Tuple[MovementVec2D, bool]:
+        dot_x = self.current_speed.dist + action.dist
+        dot_orient = self.current_speed.orient + action.orient
+        clipped = dot_x < 0 or dot_x > self.config.max_linear_speed or \
+            abs(dot_orient) > self.config.max_angular_speed
+
+        dot_x = np.clip(dot_x, 0, self.config.max_linear_speed)
+        angular_max = self.config.max_angular_speed
+        dot_orient = np.clip(dot_orient, -angular_max, angular_max)
+        return MovementVec2D(dot_x, dot_orient), clipped
+
+    def update_robot_speed(self, movement: MovementVec2D):
         # compute Kinematics
+        dot_x, dot_orient = movement.dist, movement.orient
         diff = self.config.interaxis_length * dot_orient / 2 # TODO: rename this
         self.wheels_speed.left = (dot_x - diff) / self.config.wheel_radius
         self.last_wheels_speed.right = (dot_x + diff) / self.config.wheel_radius
@@ -89,32 +101,35 @@ class DifferentialDriveRobot():
             WheelSpeedState(0, 0),
             WheelSpeedState(0, 0))
 
-    def update_robot_speed(self, dot_x: float, dot_orient: float):
-        self.state.update_robot_speed(dot_x, dot_orient)
+    @property
+    def pos(self) -> Vec2D:
+        return self.state.current_pose.pos
 
-    def compute_odometry(self, t_s: float):
-        self.state.compute_odometry(t_s)
+    @property
+    def pose(self) -> RobotPose:
+        return self.state.current_pose
+
+    def apply_action(self, action: MovementVec2D, d_t: float) -> Tuple[MovementVec2D, bool]:
+        movement, clipped = self.state.resulting_movement(action)
+        self.state.update_robot_speed(movement)
+        self.state.compute_odometry(d_t)
+        return movement, clipped
 
     def get_scan(self, scan_noise: List[float]):
-        return self.scanner.get_scan(
-            self.state.current_pose.pos.x,
-            self.state.current_pose.pos.y,
-            self.state.current_pose.orient,
-            self.map,
-            scan_noise)
+        return self.scanner.get_scan(self.state.current_pose, self.map, scan_noise)
 
-    def check_out_of_bounds(self, margin = 0):
+    def is_out_of_bounds(self, margin = 0):
         """checks if robot went out of bounds """
         return not self.map.check_if_valid_world_coordinates(
             self.state.current_pose.coords, margin).any()
 
-    def check_obstacle_collision(self, collision_distance: float) -> bool:
-        return self.map.check_obstacle_collision(self.state.current_pose.pos, collision_distance)
+    def is_obstacle_collision(self, collision_distance: float) -> bool:
+        return self.map.is_obstacle_collision(self.state.current_pose.pos, collision_distance)
 
-    def check_pedestrians_collision(self, collision_distance: float) -> bool:
-        return self.map.check_pedestrians_collision(self.state.current_pose.pos, collision_distance)
+    def is_pedestrians_collision(self, collision_distance: float) -> bool:
+        return self.map.is_pedestrians_collision(self.state.current_pose.pos, collision_distance)
 
-    def check_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
+    def is_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
         # TODO: think about whether the robot should know his goal's coords
         #       -> maybe model this as a class "NagivationRequest" or similar
         return self.state.current_pose.target_rel_position(target_coordinates)[0] <= tolerance

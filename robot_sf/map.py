@@ -72,15 +72,15 @@ class BinaryOccupancyGrid():
         high_bound = [self.x[0, x_idx_max], self.y[y_idx_max, 0],  np.pi]
         return low_bound, high_bound
 
-    def check_collision(self, robot_pos: Vec2D, collision_distance: float):
-        return self.check_pedestrians_collision(robot_pos, collision_distance) \
-            or self.check_obstacle_collision(robot_pos, collision_distance)
+    def is_collision(self, robot_pos: Vec2D, collision_distance: float):
+        return self.is_pedestrians_collision(robot_pos, collision_distance) \
+            or self.is_obstacle_collision(robot_pos, collision_distance)
 
-    def check_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
+    def is_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         occupancy = self.get_robot_occupancy(robot_pos, collision_distance)
         return np.logical_and(self.occupancy_static_objects, occupancy).any()
 
-    def check_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
+    def is_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         occupancy = self.get_robot_occupancy(robot_pos, collision_distance)
         return np.logical_and(self.occupancy_moving_objects, occupancy).any()
 

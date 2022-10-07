@@ -1,3 +1,4 @@
+from math import dist
 from typing import Tuple, List
 
 import numpy as np
@@ -115,28 +116,16 @@ class RobotEnv(Env):
         pass
 
     def step(self, action_np: np.ndarray):
-        action = MovementVec2D(action_np[0], action_np[1])
-
-        dist_to_goal_before_action, _ = self.robot.state.current_pose.target_rel_position(self.target_coords)
-        coords_with_direction = self.robot.state.current_pose.coords_with_orient
+        coords_with_direction = self.robot.pose.coords_with_orient
         self.robot.map.peds_sim_env.move_robot(coords_with_direction)
-
-        # apply movement delta to existing movement
-        dot_x = self.robot.state.current_speed.dist + action.dist
-        dot_orient = self.robot.state.current_speed.orient + action.orient
-
-        # clip action into a valid range
-        saturate_input = dot_x < 0 or dot_x > self.linear_max or abs(dot_orient) > self.angular_max
-        dot_x = np.clip(dot_x, 0, self.linear_max)
-        dot_orient = np.clip(dot_orient, -self.angular_max, self.angular_max)
-
         self.robot.map.peds_sim_env.step(1)
-        # TODO: the map shouldn't know about the simulator at all
-        #       -> just pass in the pedestrians' new positions, that's it
         self.robot.map.update_moving_objects()
-        self.robot.update_robot_speed(dot_x, dot_orient)
-        self.robot.compute_odometry(self.dt)
-        dist_to_goal_after_action, _ = self.robot.state.current_pose.target_rel_position(self.target_coords)
+
+        dist_before = dist(self.robot.pos.as_list, self.target_coords)
+        action = MovementVec2D(action_np[0], action_np[1])
+        movement, saturate_input = self.robot.apply_action(action, self.dt)
+        dot_x, dot_orient = movement.dist, movement.orient
+        dist_after = dist(self.robot.pos.as_list, self.target_coords)
 
         # scan for collisions with LiDAR sensor, generate new observation
         ranges = self.robot.get_scan(scan_noise = self.scan_noise)
@@ -145,22 +134,24 @@ class RobotEnv(Env):
 
         # determine the reward and whether the episode is done
         reward, done = self._reward(
-            dist_to_goal_before_action,
-            dist_to_goal_after_action,
+            dist_before,
+            dist_after,
             dot_x, norm_ranges, saturate_input)
         return (norm_ranges, rob_state), reward, done, None
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
+        # TODO: figure out why the reward is sometimes NaN
+
         # if pedestrian / obstacle is hit or time expired
-        if self.robot.check_pedestrians_collision(.8) or \
-                self.robot.check_obstacle_collision(self.robot.config.rob_collision_radius) or \
-                self.robot.check_out_of_bounds(margin = 0.01) or self.duration > self.sim_length:
+        if self.robot.is_pedestrians_collision(.8) or \
+                self.robot.is_obstacle_collision(self.robot.config.rob_collision_radius) or \
+                self.robot.is_out_of_bounds(margin = 0.01) or self.duration > self.sim_length:
             final_distance_bonus = np.clip((self.distance_init - dist_1) / self.target_distance_max , -1, 1)
             reward = -self.rewards[1] * (1 - final_distance_bonus)
             done = True
 
         # if target is reached
-        elif self.robot.check_target_reached(self.target_coords, tolerance=1):
+        elif self.robot.is_target_reached(self.target_coords, tolerance=1):
             cum_rotations = (self.rotation_counter/(2*np.pi))
             rotations_penalty = self.rewards[2] * cum_rotations / (1e-5+self.duration)
 
@@ -219,7 +210,7 @@ class RobotEnv(Env):
 
         # if initial condition is too close (1.5m) to obstacle,
         # pedestrians or target, generate new initial condition
-        while map.check_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
+        while map.is_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
                 robot_pose.target_rel_position(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
             robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
             robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])

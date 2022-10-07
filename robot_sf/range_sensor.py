@@ -1,5 +1,3 @@
-import math
-import random
 from dataclasses import dataclass, field
 from typing import List
 
@@ -7,7 +5,7 @@ import numpy as np
 
 from robot_sf.map import BinaryOccupancyGrid
 from robot_sf.utils.utilities import norm_angles
-from robot_sf.vector import RobotPose, Vec2D
+from robot_sf.vector import RobotPose
 
 
 @dataclass

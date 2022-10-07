@@ -1,6 +1,6 @@
 from math import sin, cos
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 
@@ -37,15 +37,10 @@ class RobotState:
     # TODO: think of adding a markdown file describing what's happening here
 
     def update_robot_speed(self, dot_x: float, dot_orient: float):
-        if dot_x > self.config.max_linear_speed or dot_x < -self.config.max_linear_speed:
-            dot_x = np.sign(dot_x) * self.config.max_linear_speed
-
-        if dot_orient > self.config.max_angular_speed or dot_orient < -self.config.max_angular_speed:
-            dot_orient = np.sign(dot_orient) * self.config.max_angular_speed
-
         # compute Kinematics
-        self.wheels_speed.left = (dot_x - self.config.interaxis_length * dot_orient / 2) / self.config.wheel_radius
-        self.last_wheels_speed.right = (dot_x + self.config.interaxis_length * dot_orient / 2) / self.config.wheel_radius
+        diff = self.config.interaxis_length * dot_orient / 2 # TODO: rename this
+        self.wheels_speed.left = (dot_x - diff) / self.config.wheel_radius
+        self.last_wheels_speed.right = (dot_x + diff) / self.config.wheel_radius
 
         # update current speed
         self.current_speed.dist = dot_x
@@ -56,13 +51,16 @@ class RobotState:
             + (self.last_wheels_speed.right + self.wheels_speed.right) / 2
 
         new_orient = self.last_pose.orient \
-            + self.config.wheel_radius / self.config.interaxis_length * right_left_diff * t_s
+            + self.config.wheel_radius / self.config.interaxis_length \
+                * right_left_diff * t_s
 
-        new_x_local = self.config.wheel_radius / 2 * ((self.last_wheels_speed.left + self.wheels_speed.left) / 2 \
+        new_x_local = self.config.wheel_radius / 2 \
+                * ((self.last_wheels_speed.left + self.wheels_speed.left) / 2 \
             + (self.last_wheels_speed.right + self.wheels_speed.right) / 2) * t_s
 
-        self.current_pose.pos.x += new_x_local * cos((new_orient + self.last_pose.orient) / 2)
-        self.current_pose.pos.y += new_x_local * sin((new_orient + self.last_pose.orient) / 2)
+        rel_rotation = (new_orient + self.last_pose.orient) / 2
+        self.current_pose.pos.x += new_x_local * cos(rel_rotation)
+        self.current_pose.pos.y += new_x_local * sin(rel_rotation)
         self.current_pose.orient = new_orient
 
         # update old values

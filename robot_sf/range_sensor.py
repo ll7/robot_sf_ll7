@@ -55,13 +55,13 @@ class LiDARscanner():
             self.angle_increment).tolist()
         self.num_readings = len(self._cached_angles)
 
-    def get_scan(self, x: float, y: float, orient: float,
-                 input_map: BinaryOccupancyGrid, scan_noise: List[float]=None) -> np.ndarray:
+    def get_scan(self, pose: RobotPose, input_map: BinaryOccupancyGrid,
+                 scan_noise: List[float]=None) -> np.ndarray:
         """This method takes in input the state of the robot
         and an input map (map object) and returns a data structure
         containing the sensor readings"""
 
-        start_pt = np.array([x, y])
+        start_pt = np.array(pose.coords)
         scan_length = self.num_readings
         scan_noise = scan_noise if scan_noise else [0, 0]
 
@@ -69,7 +69,7 @@ class LiDARscanner():
         corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
 
         # TODO: don't rotate by robot orientation, use pre-computed angles / offsets
-        angles = norm_angles(np.array([phi + orient for phi in self._cached_angles]))
+        angles = norm_angles(np.array([phi + pose.orient for phi in self._cached_angles]))
         offset_vecs = np.column_stack((np.cos(angles), np.sin(angles)))
         end_pts = offset_vecs + start_pt
 

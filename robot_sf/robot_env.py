@@ -41,8 +41,9 @@ def initialize_map(sim_env: ExtdSimulator) -> BinaryOccupancyGrid:
     map_length = 2 * sim_env.box_size
     robot_map = BinaryOccupancyGrid(map_height, map_length, peds_sim_env=sim_env)
     robot_map.move_map_frame([robot_map.map_length / 2, robot_map.map_height / 2])
-    robot_map.update_from_peds_sim(fixed_objects_map = True)
-    robot_map.update_from_peds_sim()
+    # TODO: initialize objects in the BinaryOccupancyGrid constructor
+    robot_map.initialize_static_objects()
+    robot_map.update_moving_objects()
     return robot_map
 
 
@@ -116,17 +117,15 @@ class RobotEnv(Env):
     def step(self, action_np: np.ndarray):
         action = MovementVec2D(action_np[0], action_np[1])
 
-        # TODO: perform the robot's movement inside the robot class
         dist_to_goal_before_action, _ = self.robot.state.current_pose.target_rel_position(self.target_coords)
         coords_with_direction = self.robot.state.current_pose.coords_with_orient
         self.robot.map.peds_sim_env.move_robot(coords_with_direction)
 
-        # initial distance
+        # apply movement delta to existing movement
         dot_x = self.robot.state.current_speed.dist + action.dist
         dot_orient = self.robot.state.current_speed.orient + action.orient
 
         # clip action into a valid range
-        # TODO: this shouldn't be necessary, all actions from the action space are valid by definition!!!
         saturate_input = dot_x < 0 or dot_x > self.linear_max or abs(dot_orient) > self.angular_max
         dot_x = np.clip(dot_x, 0, self.linear_max)
         dot_orient = np.clip(dot_orient, -self.angular_max, self.angular_max)
@@ -134,18 +133,22 @@ class RobotEnv(Env):
         self.robot.map.peds_sim_env.step(1)
         # TODO: the map shouldn't know about the simulator at all
         #       -> just pass in the pedestrians' new positions, that's it
-        self.robot.map.update_from_peds_sim()
+        self.robot.map.update_moving_objects()
         self.robot.update_robot_speed(dot_x, dot_orient)
         self.robot.compute_odometry(self.dt)
-
-        # new distance
-        ranges = self.robot.get_scan(scan_noise = self.scan_noise)
-        ranges, rob_state = self._get_obs(ranges)
         dist_to_goal_after_action, _ = self.robot.state.current_pose.target_rel_position(self.target_coords)
+
+        # scan for collisions with LiDAR sensor, generate new observation
+        ranges = self.robot.get_scan(scan_noise = self.scan_noise)
+        norm_ranges, rob_state = self._get_obs(ranges)
         self.rotation_counter += np.abs(dot_orient * self.dt)
 
-        reward, done = self._reward(dist_to_goal_before_action, dist_to_goal_after_action, dot_x, ranges, saturate_input)
-        return (ranges, rob_state), reward, done, None
+        # determine the reward and whether the episode is done
+        reward, done = self._reward(
+            dist_to_goal_before_action,
+            dist_to_goal_after_action,
+            dot_x, norm_ranges, saturate_input)
+        return (norm_ranges, rob_state), reward, done, None
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
         # if pedestrian / obstacle is hit or time expired

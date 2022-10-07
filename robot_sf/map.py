@@ -248,38 +248,43 @@ class BinaryOccupancyGrid():
         return np.concatenate((np.abs(self.y[:,0][:,np.newaxis] - pair[:,1].T).argmin(axis = 0)[:,np.newaxis], \
                                np.abs(self.x[0,:][:,np.newaxis] - pair[:,0].T).argmin(axis = 0)[:,np.newaxis]), axis = 1)
 
+    def initialize_static_objects(self, map_margin = 1.5):
+        if self.x[0,0] == self.cell_size['x']/2:
+            maps_alignment_offset = map_margin*self.peds_sim_env.box_size
+        else:
+            maps_alignment_offset = 0
+
+        # assign fixed obstacles to map
+        tmp = [item for item in self.peds_sim_env.env.obstacles if item.size != 0]
+        obs_coordinates = np.concatenate(tmp)
+        new_obs_coordinates = obs_coordinates + np.ones((obs_coordinates.shape[0], 2)) * maps_alignment_offset
+        # reset occupancy map
+        self.occupancy_static_objects = np.zeros(self.occupancy_static_objects.shape, dtype=bool)
+        self.set_occupancy(new_obs_coordinates, np.ones((obs_coordinates.shape[0], 1), dtype=bool), fixed_objects_map=True)   
+        zeros_mat = np.zeros(self.occupancy_static_objects.shape, dtype=bool)
+        zeros_mat[::2, ::2] = True
+        self.occupancy_static_objects_raw = np.logical_and(self.occupancy_static_objects.copy(), zeros_mat)
+        self.inflate(radius=.3, fixed_objects_map=True)
+
     #update map from pedestrians simulation environment
-    def update_from_peds_sim(self, map_margin = 1.5, fixed_objects_map = False):
+    def update_moving_objects(self, map_margin = 1.5):
         # shift peds sim map to top-left quadrant if necessary
         if self.x[0,0] == self.cell_size['x']/2:
             maps_alignment_offset = map_margin*self.peds_sim_env.box_size
         else:
             maps_alignment_offset = 0
 
-        if fixed_objects_map:
-            # assign fixed obstacles to map
-            tmp = [item for item in self.peds_sim_env.env.obstacles if item.size != 0]
-            obs_coordinates = np.concatenate(tmp)
-            new_obs_coordinates = obs_coordinates + np.ones((obs_coordinates.shape[0], 2)) * maps_alignment_offset
-            # reset occupancy map
-            self.occupancy_static_objects = np.zeros(self.occupancy_static_objects.shape,dtype = bool)
-            self.set_occupancy(new_obs_coordinates, np.ones((obs_coordinates.shape[0],1),dtype = bool), fixed_objects_map = fixed_objects_map)   
-            zeros_mat = np.zeros(self.occupancy_static_objects.shape, dtype = bool)
-            zeros_mat[::2, ::2] = True
-            self.occupancy_static_objects_raw = np.logical_and(self.occupancy_static_objects.copy(), zeros_mat)
-            self.inflate(.3, fixed_objects_map=fixed_objects_map)
-        else:
-            # get peds states
-            peds_pos = self.peds_sim_env.current_positions
-            # add offset to pedestrians maps (it can also have negative coordinates values)
-            n_pedestrians = peds_pos.shape[0]
-            peds_new_coordinates = peds_pos + np.ones((n_pedestrians,2))*maps_alignment_offset
-            # reset occupancy map
-            self.occupancy_moving_objects = np.zeros(self.occupancy_moving_objects.shape,dtype = bool)
-            # assign pedestrians positions to robotMap
-            self.set_occupancy(peds_new_coordinates, np.ones((n_pedestrians,1)))
-            self.occupancy_moving_objects_raw =self.occupancy_moving_objects.copy()
-            self.inflate(.4) # inflate pedestrians only
+        # get peds states
+        peds_pos = self.peds_sim_env.current_positions
+        # add offset to pedestrians maps (it can also have negative coordinates values)
+        n_pedestrians = peds_pos.shape[0]
+        peds_new_coordinates = peds_pos + np.ones((n_pedestrians, 2)) * maps_alignment_offset
+        # reset occupancy map
+        self.occupancy_moving_objects = np.zeros(self.occupancy_moving_objects.shape,dtype = bool)
+        # assign pedestrians positions to robotMap
+        self.set_occupancy(peds_new_coordinates, np.ones((n_pedestrians,1)))
+        self.occupancy_moving_objects_raw =self.occupancy_moving_objects.copy()
+        self.inflate(radius=.4) # inflate pedestrians only
 
     def move_map_frame(self, new_position):
         ''' This method will change the position of the grid 

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from math import pi, sin, cos, ceil
+from math import pi, sin, cos
 from typing import List, Tuple
 
 import numpy as np
@@ -43,8 +43,9 @@ class LidarScannerSettings:
              np.pi * self.visual_angle_portion)
 
 
-@numba.njit(parallel=True, fastmath=True)
-def bresenham_line(p1: GridPoint, p2: GridPoint) -> Tuple[np.ndarray, np.ndarray]:
+@numba.njit(fastmath=True)
+def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
+                   p1: GridPoint, p2: GridPoint) -> int:
     """Jack Bresenham's algorithm (1962) to draw a line with 0/1 pixels
     between the given points p1 and p2 on a 2D grid of given size."""
 
@@ -56,11 +57,11 @@ def bresenham_line(p1: GridPoint, p2: GridPoint) -> Tuple[np.ndarray, np.ndarray
     diff_y = -abs(y_1 - y_0)
     error = diff_x + diff_y
 
-    # TODO: remove this alloc
-    out_x, out_y = [], []
+    i = 0
     while True:
-        out_x.append(x_0)
-        out_y.append(y_0)
+        out_x[i] = x_0
+        out_y[i] = y_0
+        i += 1
         if x_0 == x_1 and y_0 == y_1:
             break
         e_2 = 2 * error
@@ -76,7 +77,7 @@ def bresenham_line(p1: GridPoint, p2: GridPoint) -> Tuple[np.ndarray, np.ndarray
             error = error + diff_x
             y_0 = y_0 + sign_y
 
-    return np.array(out_x), np.array(out_y)
+    return i
 
 
 def grid_cell_of(x: float, y: float) -> GridPoint:
@@ -126,9 +127,8 @@ def compute_distances_cache(width: int, height: int, resolution: int) -> np.ndar
     return dists
 
 
-# @numba.njit(parallel=True, fastmath=True)
-@numba.jit()
-def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_, cached_end_pos: np.ndarray,
+@numba.njit(parallel=True, fastmath=True)
+def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_pos: np.ndarray,
                    cached_distances: np.ndarray, scan_length: int, lidar_n_rays: int,
                    scanner_position: np.ndarray, max_scan_dist: float) -> np.ndarray:
 
@@ -137,22 +137,26 @@ def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_, cached_end_p
     offset = np.array([width + 1 - x, height + 1 - y])
     distances = cached_distances[offset[0]:offset[0]+width, offset[1]:offset[1]+height]
     end_pos = cached_end_pos - offset
+    ray_x, ray_y = np.zeros((width), dtype=np.int64), np.zeros((height), dtype=np.int64)
 
     ranges = np.zeros((scan_length))
     for i in range(scan_length):
         angle_id = (first_ray_id + i) % lidar_n_rays
-        ray_x, ray_y = bresenham_line(scanner_position, end_pos[angle_id])
-        collisions_mask = occupancy[ray_x, ray_y]
-        hits = np.where(collisions_mask)
-        collision_dists = distances[ray_x[hits], ray_y[hits]]
-        ranges[i] = min(np.min(collision_dists), max_scan_dist)
+        num_points = bresenham_line(ray_x, ray_y, scanner_position, end_pos[angle_id])
+        temp_range = max_scan_dist
+        for j in range(num_points):
+            x, y = ray_x[j], ray_y[j]
+            if occupancy[x, y]:
+                collision_distance = distances[x, y]
+                temp_range = min(temp_range, collision_distance)
+        ranges[i] = temp_range
 
     return ranges
 
 
 @numba.njit(parallel=True, fastmath=True)
 def range_postprocessing(ranges: np.ndarray, scan_length: int,
-                         scan_noise: List[float], max_scan_dist: float) -> np.ndarray:
+                         scan_noise: np.ndarray, max_scan_dist: float) -> np.ndarray:
     not_lost_scans = np.where(np.random.random(scan_length) >= scan_noise[0], 1, 0)
     corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
     ranges = np.where(not_lost_scans, ranges, max_scan_dist)
@@ -195,7 +199,7 @@ class LidarScanner():
 
         start_pt = np.squeeze(self.robot_map.convert_world_to_grid_no_error(
             np.expand_dims(np.array(pose.coords), axis=0)))
-        scan_noise = self.settings.scan_noise
+        scan_noise = np.array(self.settings.scan_noise)
         scan_length = self.settings.scan_length
 
         # perform raycast

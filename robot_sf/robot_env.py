@@ -22,6 +22,7 @@ def initialize_lidar(
     lidar_sensor = LidarScanner(lidar_settings, robot_map)
     return lidar_sensor
 
+
 def initialize_robot(
         robot_map: BinaryOccupancyGrid,
         lidar_sensor: LidarScanner,

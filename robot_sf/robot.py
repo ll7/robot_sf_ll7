@@ -4,9 +4,9 @@ from typing import List, Tuple
 
 import numpy as np
 
-from robot_sf.vector import RobotPose, MovementVec2D, Vec2D
+from robot_sf.vector import RobotPose, PolarVec2D, Vec2D
 from robot_sf.map import BinaryOccupancyGrid
-from robot_sf.range_sensor import LiDARscanner, LidarScannerSettings
+from robot_sf.range_sensor import LidarScanner, LidarScannerSettings
 
 
 @dataclass
@@ -28,7 +28,7 @@ class RobotSettings:
 class RobotState:
     config: RobotSettings
     map: BinaryOccupancyGrid
-    current_speed: MovementVec2D
+    current_speed: PolarVec2D
     current_pose: RobotPose
     last_pose: RobotPose
     last_wheels_speed: WheelSpeedState
@@ -36,7 +36,7 @@ class RobotState:
 
     # TODO: think of adding a markdown file describing what's happening here
 
-    def resulting_movement(self, action: MovementVec2D) -> Tuple[MovementVec2D, bool]:
+    def resulting_movement(self, action: PolarVec2D) -> Tuple[PolarVec2D, bool]:
         dot_x = self.current_speed.dist + action.dist
         dot_orient = self.current_speed.orient + action.orient
         clipped = dot_x < 0 or dot_x > self.config.max_linear_speed or \
@@ -45,9 +45,9 @@ class RobotState:
         dot_x = np.clip(dot_x, 0, self.config.max_linear_speed)
         angular_max = self.config.max_angular_speed
         dot_orient = np.clip(dot_orient, -angular_max, angular_max)
-        return MovementVec2D(dot_x, dot_orient), clipped
+        return PolarVec2D(dot_x, dot_orient), clipped
 
-    def update_robot_speed(self, movement: MovementVec2D):
+    def update_robot_speed(self, movement: PolarVec2D):
         # compute Kinematics
         dot_x, dot_orient = movement.dist, movement.orient
         diff = self.config.interaxis_length * dot_orient / 2 # TODO: rename this
@@ -85,17 +85,15 @@ class DifferentialDriveRobot():
     """Representing a robot with differential driving behavior"""
     spawn_pose: RobotPose
     config: RobotSettings
-    lidar_settings: LidarScannerSettings
-    map: BinaryOccupancyGrid
-    scanner: LiDARscanner = field(init=False)
+    scanner: LidarScanner
+    _map: BinaryOccupancyGrid
     state: RobotState = field(init=False)
 
     def __post_init__(self):
-        self.scanner = LiDARscanner(self.lidar_settings)
         self.state = RobotState(
             self.config,
-            self.map,
-            MovementVec2D(0, 0),
+            self._map,
+            PolarVec2D(0, 0),
             self.spawn_pose,
             self.spawn_pose,
             WheelSpeedState(0, 0),
@@ -109,27 +107,27 @@ class DifferentialDriveRobot():
     def pose(self) -> RobotPose:
         return self.state.current_pose
 
-    def apply_action(self, action: MovementVec2D, d_t: float) -> Tuple[MovementVec2D, bool]:
+    def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
         movement, clipped = self.state.resulting_movement(action)
         self.state.update_robot_speed(movement)
         self.state.compute_odometry(d_t)
         return movement, clipped
 
-    def get_scan(self, scan_noise: List[float]):
-        return self.scanner.get_scan(self.state.current_pose, self.map, scan_noise)
+    def get_scan(self):
+        return self.scanner.get_scan(self.state.current_pose)
 
     def is_out_of_bounds(self, margin = 0):
         """checks if robot went out of bounds """
-        return not self.map.check_if_valid_world_coordinates(
+        return not self._map.check_if_valid_world_coordinates(
             self.state.current_pose.coords, margin).any()
 
     def is_obstacle_collision(self, collision_distance: float) -> bool:
-        return self.map.is_obstacle_collision(self.state.current_pose.pos, collision_distance)
+        return self._map.is_obstacle_collision(self.state.current_pose.pos, collision_distance)
 
     def is_pedestrians_collision(self, collision_distance: float) -> bool:
-        return self.map.is_pedestrians_collision(self.state.current_pose.pos, collision_distance)
+        return self._map.is_pedestrians_collision(self.state.current_pose.pos, collision_distance)
 
     def is_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
-        # TODO: think about whether the robot should know his goal's coords
+        # TODO: think about whether the robot should know its goal
         #       -> maybe model this as a class "NagivationRequest" or similar
         return self.state.current_pose.target_rel_position(target_coordinates)[0] <= tolerance

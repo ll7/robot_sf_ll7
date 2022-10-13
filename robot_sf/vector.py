@@ -17,7 +17,7 @@ class Vec2D:
 
 
 @dataclass
-class MovementVec2D:
+class PolarVec2D:
     """Representing directed movement as 2D polar coords"""
     dist: float
     orient: float

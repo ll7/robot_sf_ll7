@@ -6,7 +6,7 @@ def main():
     env = RobotEnv(difficulty=2)
     obs = env.reset()
 
-    peds_sim = env.robot.map.peds_sim_env
+    peds_sim = env.sim_env
     print(peds_sim.max_population_for_new_individual)
     print(peds_sim.max_population_for_new_group)
 

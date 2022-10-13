@@ -66,14 +66,16 @@ class BinaryOccupancyGrid():
         return fill_surrounding(rob_matrix, int_radius_step, idx)
 
     def position_bounds(self, margin: float):
-        # TODO: what was this code supposed to achieve
-        # x_idx_min = round(margin * self.grid_size['x'])
-        # x_idx_max = round((1 - margin) * self.grid_size['x'])
-        # y_idx_min = round(margin * self.grid_size['y'])
-        # y_idx_max = round((1 - margin) * self.grid_size['y'])
+        # TODO: figure out what this does
 
-        low_bound  = [-self.box_size, -self.box_size, -np.pi]
-        high_bound = [ self.box_size,  self.box_size,  np.pi]
+        x_idx_min = round(margin * self.grid_size['x'])
+        x_idx_max = round((1 - margin) * self.grid_size['x'])
+
+        y_idx_min = round(margin * self.grid_size['y'])
+        y_idx_max = round((1 - margin) * self.grid_size['y'])
+
+        low_bound  = [self.x[0, x_idx_min], self.y[y_idx_min, 0], -np.pi]
+        high_bound = [self.x[0, x_idx_max], self.y[y_idx_max, 0],  np.pi]
         return low_bound, high_bound
 
     def is_collision(self, robot_pos: Vec2D, collision_distance: float):

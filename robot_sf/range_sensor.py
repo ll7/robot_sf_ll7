@@ -3,6 +3,7 @@ from math import pi, sin, cos, ceil
 from typing import List, Tuple
 
 import numpy as np
+import numba
 
 from robot_sf.map import BinaryOccupancyGrid
 from robot_sf.vector import RobotPose
@@ -42,11 +43,11 @@ class LidarScannerSettings:
              np.pi * self.visual_angle_portion)
 
 
-def bresenham_line(grid_width: int, grid_height: int, p1: GridPoint, p2: GridPoint) -> np.ndarray:
+@numba.njit(parallel=True, fastmath=True)
+def bresenham_line(p1: GridPoint, p2: GridPoint) -> Tuple[np.ndarray, np.ndarray]:
     """Jack Bresenham's algorithm (1962) to draw a line with 0/1 pixels
     between the given points p1 and p2 on a 2D grid of given size."""
 
-    occupancy = np.zeros((grid_width, grid_height), dtype=bool)
     (x_0, y_0), (x_1, y_1) = p1, p2
 
     sign_x = 1 if x_0 < x_1 else -1
@@ -55,8 +56,11 @@ def bresenham_line(grid_width: int, grid_height: int, p1: GridPoint, p2: GridPoi
     diff_y = -abs(y_1 - y_0)
     error = diff_x + diff_y
 
+    # TODO: remove this alloc
+    out_x, out_y = [], []
     while True:
-        occupancy[x_0, y_0] = 1
+        out_x.append(x_0)
+        out_y.append(y_0)
         if x_0 == x_1 and y_0 == y_1:
             break
         e_2 = 2 * error
@@ -72,7 +76,7 @@ def bresenham_line(grid_width: int, grid_height: int, p1: GridPoint, p2: GridPoi
             error = error + diff_x
             y_0 = y_0 + sign_y
 
-    return occupancy
+    return np.array(out_x), np.array(out_y)
 
 
 def grid_cell_of(x: float, y: float) -> GridPoint:
@@ -109,39 +113,6 @@ def grid_boundary_hit(start_point: GridPoint, orient: float,
     return grid_cell_of(x, y)
 
 
-def compute_ray_cache(width: int, height: int, resolution: int, lidar_n_rays: int) -> np.ndarray:
-    """Precompute a given amount of ray occupancies for a map of given size.
-
-    IMPORTANT: lidar_n_rays needs to be divisible by 4.
-    WARNING: This might allocate several GiB of memory, depending on
-    the grid's size, resolution and the amount of rays.
-
-    This implementation makes use of the fact that quadrants can be easily
-    distinguished by x/y comparison, so it initializes 4 rays per cache,
-    each shifted by 90 degrees. Thus, there are lidar_n_rays / 4 outgoing caches
-    of shape (width * resolution * 2 + 1, height * resolution * 2 + 1)."""
-
-    grid_width, grid_height = width * resolution * 2 + 1, height * resolution * 2 + 1
-    rays_per_quadrant = ceil(lidar_n_rays / 4)
-    shape = (rays_per_quadrant, grid_width, grid_height)
-    ray_caches = np.zeros(shape, dtype=bool)
-
-    middle = (grid_width // 2 + 1, grid_height // 2 + 1)
-    for i, phi in enumerate(np.linspace(0, pi/2, rays_per_quadrant + 1)[:-1]):
-        end_point_q1 = grid_boundary_hit(middle, phi,            grid_width, grid_height)
-        end_point_q2 = grid_boundary_hit(middle, phi + pi * 0.5, grid_width, grid_height)
-        end_point_q3 = grid_boundary_hit(middle, phi + pi,       grid_width, grid_height)
-        end_point_q4 = grid_boundary_hit(middle, phi + pi * 1.5, grid_width, grid_height)
-        ray_q1 = bresenham_line(grid_width, grid_height, middle, end_point_q1)
-        ray_q2 = bresenham_line(grid_width, grid_height, middle, end_point_q2)
-        ray_q3 = bresenham_line(grid_width, grid_height, middle, end_point_q3)
-        ray_q4 = bresenham_line(grid_width, grid_height, middle, end_point_q4)
-        ray_caches[i] = np.bitwise_and(ray_q1, np.bitwise_and(
-            ray_q2, np.bitwise_and(ray_q3, ray_q4)))
-
-    return ray_caches
-
-
 def compute_distances_cache(width: int, height: int, resolution: int) -> np.ndarray:
     """Precompute the distances of grid cells from the middle (width+1, height+1).
 
@@ -153,6 +124,41 @@ def compute_distances_cache(width: int, height: int, resolution: int) -> np.ndar
     xy = np.stack((y, x), axis=2)
     dists = np.power((xy[:, :, 0] / resolution)**2 + (xy[:, :, 1] / resolution)**2, 0.5)
     return dists
+
+
+# @numba.njit(parallel=True, fastmath=True)
+@numba.jit()
+def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_, cached_end_pos: np.ndarray,
+                   cached_distances: np.ndarray, scan_length: int, lidar_n_rays: int,
+                   scanner_position: np.ndarray, max_scan_dist: float) -> np.ndarray:
+
+    width, height = occupancy.shape
+    x, y = scanner_position
+    offset = np.array([width + 1 - x, height + 1 - y])
+    distances = cached_distances[offset[0]:offset[0]+width, offset[1]:offset[1]+height]
+    end_pos = cached_end_pos - offset
+
+    ranges = np.zeros((scan_length))
+    for i in range(scan_length):
+        angle_id = (first_ray_id + i) % lidar_n_rays
+        ray_x, ray_y = bresenham_line(scanner_position, end_pos[angle_id])
+        collisions_mask = occupancy[ray_x, ray_y]
+        hits = np.where(collisions_mask)
+        collision_dists = distances[ray_x[hits], ray_y[hits]]
+        ranges[i] = min(np.min(collision_dists), max_scan_dist)
+
+    return ranges
+
+
+@numba.njit(parallel=True, fastmath=True)
+def range_postprocessing(ranges: np.ndarray, scan_length: int,
+                         scan_noise: List[float], max_scan_dist: float) -> np.ndarray:
+    not_lost_scans = np.where(np.random.random(scan_length) >= scan_noise[0], 1, 0)
+    corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
+    ranges = np.where(not_lost_scans, ranges, max_scan_dist)
+    corrupt_scans_mask = np.bitwise_and(corrupt_scans, not_lost_scans)
+    ranges = np.where(corrupt_scans_mask, ranges * np.random.random(scan_length), ranges)
+    return ranges
 
 
 @dataclass
@@ -167,11 +173,13 @@ class LidarScanner():
                     * self.settings.lidar_n_rays > 5e8:
             print("WARNING: The ray cache will allocate more than 500 MB of memory!")
 
-        self.cached_rays = compute_ray_cache(
-            self.robot_map.map_width, self.robot_map.map_height,
-            self.robot_map.map_resolution, self.settings.lidar_n_rays)
         self.cached_distances = compute_distances_cache(
             self.robot_map.map_width, self.robot_map.map_height, self.robot_map.map_resolution)
+        self.cached_angles = np.linspace(0, 2*pi, self.settings.lidar_n_rays + 1)[:-1]
+        middle = (self.robot_map.map_width + 1, self.robot_map.map_width + 1)
+        w, h = self.robot_map.map_width * 2 + 1, self.robot_map.map_width * 2 + 1
+        self.cached_end_pos = np.array([grid_boundary_hit(middle, phi, w, h)
+                                        for phi in self.cached_angles])
 
         self.get_object_occupancy = lambda: self.robot_map.occupancy_overall_xy
 
@@ -190,44 +198,13 @@ class LidarScanner():
         scan_noise = self.settings.scan_noise
         scan_length = self.settings.scan_length
 
-        # perform vectorized raycast
-        min_angle = pose.orient + self.settings.angle_opening.lower
-        max_angle = pose.orient + self.settings.angle_opening.upper
-        first_ray_id, last_ray_id = self.angle_id(min_angle), self.angle_id(max_angle)
-        all_ranges = self.batched_raycast(start_pt, self.settings.max_scan_dist)
-        if last_ray_id < first_ray_id:
-            ranges = np.concatenate((all_ranges[first_ray_id:], all_ranges[:last_ray_id]))
-        else:
-            ranges = all_ranges[first_ray_id:last_ray_id]
+        # perform raycast
+        first_ray_id = self.angle_id(pose.orient + self.settings.angle_opening.lower)
+        occupancy = self.get_object_occupancy()
+        ranges = simple_raycast(first_ray_id, occupancy, self.cached_end_pos, self.cached_distances,
+                                scan_length, self.settings.lidar_n_rays,
+                                start_pt, self.settings.max_scan_dist)
 
         # simulate lost scans and signal noise
-        not_lost_scans = np.where(np.random.random(scan_length) >= scan_noise[0], 1, 0)
-        corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
-        ranges = np.where(not_lost_scans, ranges, self.settings.max_scan_dist)
-        corrupt_scans_mask = np.bitwise_and(corrupt_scans, not_lost_scans)
-        ranges = np.where(corrupt_scans_mask, ranges * np.random.random(scan_length), ranges)
+        ranges = range_postprocessing(ranges, scan_length, scan_noise, self.settings.max_scan_dist)
         return ranges
-
-    def batched_raycast(self, scanner_position: List[float], max_scan_dist: float) -> np.ndarray:
-        # shift the occupancy such that the robot's
-        # position is at the middle of a 2x bigger grid
-        x, y = scanner_position
-        orig_occupancy = self.get_object_occupancy()
-        width, height = orig_occupancy.shape
-        offset = (width + 1 - x, height + 1 - y)
-        occupancy = np.zeros((width * 2 + 1, height * 2 + 1), dtype=bool)
-        occupancy[offset[0]:offset[0]+width, offset[1]:offset[1]+height] = orig_occupancy
-
-        # apply the cached ray masks by bitwise AND, then retrieve distances
-        collisions_mask = np.bitwise_and(self.cached_rays, occupancy)
-        collision_dists = np.where(collisions_mask, self.cached_distances, max_scan_dist)
-
-        # evaluate the minimal distance per ray (one ray per quadrant)
-        ranges_q1 = np.min(np.min(collision_dists[:, width+1:2*width+1, 0:height+1], axis=1), axis=1)
-        ranges_q2 = np.min(np.min(collision_dists[:, 0:width+1, 0:height+1], axis=1), axis=1)
-        ranges_q3 = np.min(np.min(collision_dists[:, 0:width+1, height+1:2*height+1], axis=1), axis=1)
-        ranges_q4 = np.min(np.min(collision_dists[:, width+1:2*width+1, height+1:2*height+1], axis=1), axis=1)
-        ranges_all = np.concatenate((ranges_q1, ranges_q2, ranges_q3, ranges_q4))
-
-        # cap range distances at max scan range
-        return np.where(ranges_all > max_scan_dist, max_scan_dist, ranges_all)

@@ -61,27 +61,27 @@ def generate_polygon_points(config: PolygonCreationSettings) -> List[Tuple[float
 
 
 def normalize(vertices: np.ndarray) -> np.ndarray:
-        xlim = [0, 1]
-        ylim = [0, 1]
-        xmax = vertices[:, 0].max()
-        xmin = vertices[:, 0].min()
-        ymax = vertices[:, 1].max()
-        ymin = vertices[:, 1].min()
+    xlim, ylim = [0, 1], [0, 1]
+    xmin, xmax = vertices[:, 0].min(), vertices[:, 0].max()
+    ymin, ymax = vertices[:, 1].min(), vertices[:, 1].max()
 
-        for i in range(vertices.shape[0]):
-            vertices[i, 0] = (xlim[1] - xlim[0]) * (vertices[i, 0] - xmin) / (xmax - xmin) + xlim[0]
-            vertices[i, 1] = (ylim[1] - ylim[0]) * (vertices[i, 1] - ymin) / (ymax - ymin) + ylim[0]
+    for i in range(vertices.shape[0]):
+        vertices[i, 0] = (xlim[1] - xlim[0]) * (vertices[i, 0] - xmin) / (xmax - xmin) + xlim[0]
+        vertices[i, 1] = (ylim[1] - ylim[0]) * (vertices[i, 1] - ymin) / (ymax - ymin) + ylim[0]
 
-        return vertices
+    return vertices
 
 
 def random_polygon(config: PolygonCreationSettings) -> Polygon:
     points = generate_polygon_points(config)
-    vertex = np.array(points)
-    # TODO: what does this step do???
-    vertex = np.concatenate((vertex, np.reshape(vertex[0, :], (1, 2))), axis=0)
-    vertex = normalize(vertex)
-    return Polygon(vertex)
+    vertices = np.array(points)
+
+    # TODO: figure out if shapely Polygon handles this already
+    last = np.reshape(vertices[0, :], (1, 2))
+    vertices = np.concatenate((vertices, last), axis=0)
+
+    vertices = normalize(vertices)
+    return Polygon(vertices)
 
 
 def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:
@@ -98,7 +98,6 @@ def move_polygon(poly: Polygon, offset: Tuple[float, float]) -> Polygon:
     return Polygon(vertex)
 
 
-# # TODO: figure out if this can be replaced by shapely's Polygon class
 # class MyPolygon:
 #     def __init__(self, n_vert=5, irregularity=0, spikeness=0):
 #         normalized_in = True

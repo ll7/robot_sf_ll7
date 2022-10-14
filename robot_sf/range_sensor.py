@@ -228,8 +228,8 @@ class LidarScanner():
         first_ray_id = self.angle_id(pose.orient + self.settings.angle_opening.lower)
         occupancy = self.get_object_occupancy()
         ranges = raycast(first_ray_id, occupancy, self.cached_end_pos, self.cached_distances,
-                                scan_length, self.settings.lidar_n_rays,
-                                start_pt, self.settings.max_scan_dist)
+                         scan_length, self.settings.lidar_n_rays,
+                         start_pt, self.settings.max_scan_dist)
 
         # simulate lost scans and signal noise
         ranges = range_postprocessing(ranges, scan_length, scan_noise, self.settings.max_scan_dist)

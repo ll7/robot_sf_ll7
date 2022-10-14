@@ -34,7 +34,6 @@ def initialize_robot(
     # initialize robot with map
     robot_settings = RobotSettings(
         wheel_max_linear_speed, wheel_max_angular_speed, robot_collision_radius)
-
     robot = DifferentialDriveRobot(spawn_pos, robot_settings, lidar_sensor, robot_map)
     return robot
 
@@ -42,7 +41,7 @@ def initialize_robot(
 def initialize_simulator(peds_sparsity, difficulty, dt, peds_speed_mult) -> ExtdSimulator:
     sim_env = ExtdSimulator(difficulty=difficulty)
     sim_env.set_ped_sparsity(peds_sparsity)
-    sim_env.peds.step_width = dt
+    sim_env.peds.step_width = dt if dt else sim_env.peds.step_width
     sim_env.peds.max_speed_multiplier = peds_speed_mult
     return sim_env
 
@@ -87,33 +86,15 @@ class RobotEnv(Env):
         self.linear_max =  v_linear_max
         self.angular_max = v_angular_max
 
-        # TODO: don't initialize the entire simulator just for retrieving some settings
-        sim_env_test = ExtdSimulator()
-        self.target_distance_max = np.sqrt(2) * (sim_env_test.box_size * 2)
-        self.dt = sim_env_test.peds.step_width if dt is None else dt
-
-        action_low  = np.array([-max_v_x_delta, -max_v_rot_delta])
-        action_high = np.array([ max_v_x_delta,  max_v_rot_delta])
-        self.action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
-
-        state_max = np.concatenate((
-                self.lidar_range * np.ones((lidar_n_rays,)),
-                np.array([self.linear_max, self.angular_max, self.target_distance_max, np.pi])
-            ), axis=0)
-        state_min = np.concatenate((
-                np.zeros((lidar_n_rays,)),
-                np.array([0, -self.angular_max, 0, -np.pi])
-            ), axis=0)
-        self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
-
         self.map_boundaries_factory = lambda robot_map: \
             robot_map.position_bounds(initial_margin)
 
         sparsity_levels = [500, 200, 100, 50, 20]
         self.sim_env = initialize_simulator(
-            sparsity_levels[difficulty], difficulty, self.dt, peds_speed_mult)
+            sparsity_levels[difficulty], difficulty, dt, peds_speed_mult)
+        self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2)
+        self.dt = self.sim_env.peds.step_width
 
-        # TODO: generate a couple of maps on environment startup and pick randomly from them
         self.robot_map = initialize_map(self.sim_env)
         lidar_sensor = initialize_lidar(
             self.robot_map,
@@ -129,6 +110,20 @@ class RobotEnv(Env):
             collision_distance,
             self.linear_max,
             self.angular_max)
+
+        action_low  = np.array([-max_v_x_delta, -max_v_rot_delta])
+        action_high = np.array([ max_v_x_delta,  max_v_rot_delta])
+        self.action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
+
+        state_max = np.concatenate((
+                self.lidar_range * np.ones((lidar_n_rays,)),
+                np.array([self.linear_max, self.angular_max, self.target_distance_max, np.pi])
+            ), axis=0)
+        state_min = np.concatenate((
+                np.zeros((lidar_n_rays,)),
+                np.array([0, -self.angular_max, 0, -np.pi])
+            ), axis=0)
+        self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
 
     def render(self, mode='human'):
         # TODO: visualize the game state with something like e.g. pygame

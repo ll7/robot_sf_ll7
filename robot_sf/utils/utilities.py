@@ -15,7 +15,7 @@ def linspace(start: float, end: float, size: int) -> np.ndarray:
 
 
 def norm_angles(angles: np.ndarray) -> np.ndarray:
-    """Normalize angles between [0, 2*pi)"""
+    """Normalize angles between [-pi, pi)"""
     return (angles + np.pi) % (2 * np.pi) -np.pi
 
 

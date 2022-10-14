@@ -128,15 +128,33 @@ def compute_distances_cache(width: int, height: int, resolution: int) -> np.ndar
 
 
 @numba.njit(parallel=True, fastmath=True)
-def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_pos: np.ndarray,
-                   cached_distances: np.ndarray, scan_length: int, lidar_n_rays: int,
-                   scanner_position: np.ndarray, max_scan_dist: float) -> np.ndarray:
+def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_pos: np.ndarray,
+            cached_distances: np.ndarray, scan_length: int, lidar_n_rays: int,
+            scanner_position: np.ndarray, max_scan_dist: float) -> np.ndarray:
+    """Perform a given amount of radial ray casts in a 2D plane
+    for a fixed amount of equally distributed, discrete directions.
+    The scan angles are constrained by the first_ray_id and the scan_length.
+
+    All scan directions are defined as a line between a twice bigger grid's
+    center and a point at the grid's boundary (coordinates are pre-computed).
+    Considering the scanner's position within the world's grid, the bigger
+    grid's middle is shifted to the scanner position by subtracting an offset.
+    Also the distances from the middle to any point of the of the twice bigger
+    grid are cached, so they only need to be looked up.
+
+    As scan procedure, Bresenham's line algorithm yields the grid coordinates
+    occupied by the ray (line between the scanner's position and the grid bounds).
+    It's critical to the algorithm's performance that the coordinates are
+    exchanged in a sparse format as (x, y) coordinates. Next, the occupancy
+    is simply looked up at the ray's coordinates; if it's a hit, the distance
+    is also just looked up from the distances cache. For each ray, the distance
+    to a collision or 
+    """
 
     width, height = occupancy.shape
     x, y = scanner_position
-    offset = np.array([width + 1 - x, height + 1 - y])
-    distances = cached_distances[offset[0]:offset[0]+width, offset[1]:offset[1]+height]
-    end_pos = cached_end_pos - offset
+    x_offset, y_offset = width + 1 - x, height + 1 - y
+    end_pos = cached_end_pos - np.array([x_offset, y_offset])
     ray_x, ray_y = np.zeros((width), dtype=np.int64), np.zeros((height), dtype=np.int64)
 
     ranges = np.zeros((scan_length))
@@ -146,9 +164,12 @@ def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached
         temp_range = max_scan_dist
         for j in range(num_points):
             x, y = ray_x[j], ray_y[j]
+            if not 0 <= x < width or not 0 <= y < height:
+                break
             if occupancy[x, y]:
-                collision_distance = distances[x, y]
-                temp_range = min(temp_range, collision_distance)
+                coll_dist = cached_distances[x + x_offset, y + y_offset]
+                temp_range = min(coll_dist, max_scan_dist)
+                break
         ranges[i] = temp_range
 
     return ranges
@@ -157,6 +178,7 @@ def simple_raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached
 @numba.njit(parallel=True, fastmath=True)
 def range_postprocessing(ranges: np.ndarray, scan_length: int,
                          scan_noise: np.ndarray, max_scan_dist: float) -> np.ndarray:
+    """Postprocess the raycast results to simulate a noisy scan result."""
     not_lost_scans = np.where(np.random.random(scan_length) >= scan_noise[0], 1, 0)
     corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
     ranges = np.where(not_lost_scans, ranges, max_scan_dist)
@@ -205,7 +227,7 @@ class LidarScanner():
         # perform raycast
         first_ray_id = self.angle_id(pose.orient + self.settings.angle_opening.lower)
         occupancy = self.get_object_occupancy()
-        ranges = simple_raycast(first_ray_id, occupancy, self.cached_end_pos, self.cached_distances,
+        ranges = raycast(first_ray_id, occupancy, self.cached_end_pos, self.cached_distances,
                                 scan_length, self.settings.lidar_n_rays,
                                 start_pt, self.settings.max_scan_dist)
 

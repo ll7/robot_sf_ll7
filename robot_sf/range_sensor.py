@@ -147,8 +147,8 @@ def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_po
     It's critical to the algorithm's performance that the coordinates are
     exchanged in a sparse format as (x, y) coordinates. Next, the occupancy
     is simply looked up at the ray's coordinates; if it's a hit, the distance
-    is also just looked up from the distances cache. For each ray, the distance
-    to a collision or 
+    is also just looked up from the distances cache. Finally, the scanned
+    distances are capped by the maximum scan range.
     """
 
     width, height = occupancy.shape

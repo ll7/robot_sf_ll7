@@ -64,9 +64,9 @@ class RobotEnv(Env):
     def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
                  visual_angle_portion: float=0.5, lidar_range: int=10,
                  v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None,
-                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, initial_margin: float=.3,
-                 dt: float=None, normalize_obs_state: bool=True, sim_length: int=200,
-                 difficulty: int=0, scan_noise: List[float]=None, peds_speed_mult: float=1.3):
+                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, dt: float=None,
+                 normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
+                 scan_noise: List[float]=None, peds_speed_mult: float=1.3):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
@@ -86,9 +86,6 @@ class RobotEnv(Env):
 
         self.linear_max =  v_linear_max
         self.angular_max = v_angular_max
-
-        self.map_boundaries_factory = lambda robot_map: \
-            robot_map.position_bounds(initial_margin)
 
         sparsity_levels = [500, 200, 100, 50, 20]
         self.sim_env = initialize_simulator(
@@ -158,7 +155,7 @@ class RobotEnv(Env):
         # if pedestrian / obstacle is hit or time expired
         if self.robot.is_pedestrians_collision(.8) or \
                 self.robot.is_obstacle_collision(self.robot.config.rob_collision_radius) or \
-                self.robot.is_out_of_bounds(margin = 0.01) or self.duration > self.sim_length:
+                self.robot.is_out_of_bounds or self.duration > self.sim_length:
             final_distance_bonus = np.clip((self.distance_init - dist_1) / self.target_distance_max , -1, 1)
             reward = -self.rewards[1] * (1 - final_distance_bonus)
             done = True
@@ -196,7 +193,7 @@ class RobotEnv(Env):
 
     def _pick_robot_spawn_and_target_pos(
             self, robot_map: BinaryOccupancyGrid) -> Tuple[np.ndarray, RobotPose]:
-        low_bound, high_bound = self.map_boundaries_factory(robot_map)
+        low_bound, high_bound = robot_map.position_bounds()
         count = 0
         min_distance = (high_bound[0] - low_bound[0]) / 20 # TODO: why divide by 20?????
         while True:
@@ -211,7 +208,7 @@ class RobotEnv(Env):
             if count >= 100:
                 raise ValueError('suitable initial coordinates not found')
 
-        check_out_of_bounds = lambda coords: not robot_map.check_if_valid_world_coordinates(coords, margin=0.2).any()
+        check_out_of_bounds = lambda coords: not robot_map.is_in_bounds(coords[0], coords[1])
         robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
         robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
 

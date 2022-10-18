@@ -52,13 +52,14 @@ class BinaryOccupancyGrid():
         occupancy = self._get_robot_occupancy(robot_pos, collision_distance)
         return np.logical_and(self.occupancy_moving_objects, occupancy).any()
 
-    def position_bounds(self, margin: float) -> Tuple[List[float], List[float]]:
+    def position_bounds(self) -> Tuple[List[float], List[float]]:
         # TODO: figure out what "margin" is supposed to achieve
         low_bound  = [-self.box_size, -self.box_size, -np.pi]
         high_bound = [self.box_size, self.box_size,  np.pi]
         return low_bound, high_bound
 
-    def update_moving_objects(self, map_margin: float=1.5):
+    def update_moving_objects(self):
+        # TODO: think about computing this on demand as property
         self.occupancy_moving_objects = self._compute_moving_objects_occupancy()
 
     def _world_coords_to_grid_cell(self, x: float, y: float) -> Tuple[int, int]:
@@ -81,16 +82,16 @@ class BinaryOccupancyGrid():
         world_y = (y + 0.5) / self.grid_height * 2 * self.box_size - self.box_size
         return world_x, world_y
 
-    def _is_in_bounds(self, x: float, y: float) -> bool:
-        # TODO: add a more sophisticated approach to this
-        return -self.box_size <= x < self.box_size \
-            and -self.box_size <= y < self.box_size
+    def is_in_bounds(self, x: float, y: float) -> bool:
+        return -self.box_size <= x <= self.box_size \
+            and -self.box_size <= y <= self.box_size
 
     def _get_robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
-        rob_matrix = np.zeros(self.occupancy_moving_objects.shape, dtype=bool)
-        idx = self.convert_world_to_grid_no_error(np.array(robot_pos.as_list)[np.newaxis, :])
+        rob_matrix = np.zeros_like(self.occupancy_static_objects, dtype=bool)
+        world_x, world_y = robot_pos.as_list
+        x, y = self._world_coords_to_grid_cell(world_x, world_y)
         int_radius_step = round(self.map_resolution * coll_distance)
-        return fill_surrounding(rob_matrix, int_radius_step, idx)
+        return fill_surrounding(rob_matrix, int_radius_step, np.expand_dims([x, y], axis=0))
 
     def _initialize_static_objects(self) -> Tuple[np.ndarray, np.ndarray]:
         occ_shape = (self.grid_width, self.grid_height)
@@ -98,7 +99,7 @@ class BinaryOccupancyGrid():
 
         all_coords = self.get_obstacle_coords()
         coords_in_bounds = [pos for pos in all_coords \
-                            if pos.size != 0 and self._is_in_bounds(pos[0], pos[1])]
+                            if pos.size != 0 and self.is_in_bounds(pos[0], pos[1])]
         grid_coords = [self._world_coords_to_grid_cell(pos[0], pos[1])
                        for pos in coords_in_bounds]
 
@@ -126,7 +127,7 @@ class BinaryOccupancyGrid():
         grid_coords = [
             self._world_coords_to_grid_cell(pos[0], pos[1])
             for pos in peds_pos
-            if pos.size != 0 and self._is_in_bounds(pos[0], pos[1])
+            if pos.size != 0 and self.is_in_bounds(pos[0], pos[1])
         ]
 
         for x, y in grid_coords:
@@ -138,51 +139,6 @@ class BinaryOccupancyGrid():
         occupancy = fill_surrounding(occupancy, int_radius_step, eval_points, add_noise=True)
 
         return occupancy
-
-    def check_if_valid_world_coordinates(self, pair, margin=0):
-        if isinstance(pair, list):
-            pair = np.array(pair)
-
-        if len(pair.shape) < 2:
-            pair = pair[np.newaxis, :]
-
-        offset = margin * np.array([self.map_width, self.map_height])
-        valid_pairs = np.bitwise_and(
-            (pair >= (self.min_val + offset)).all(axis = 1),
-            (pair <= (self.max_val - offset)).all(axis = 1))
-        if valid_pairs.all():
-            return pair
-        elif valid_pairs.any():
-            return pair[valid_pairs, :]
-        else:
-            return np.array(False)
-
-    def check_if_valid_grid_index(self,pair):
-        for i in range(pair.shape[0]):
-            if pair[i,0] < 0 or pair[i,0] > self.grid_size['y'] or pair[i,1] < 0 \
-                    or pair[i,1] > self.grid_size['x'] or not \
-                    issubclass(pair.dtype.type,np.integer):
-                return False
-        return True
-
-    def world_coords_to_grid_index(self, pair):
-        pair = self.check_if_valid_world_coordinates(pair)
-        return self.convert_world_to_grid_no_error(pair)
-
-    def grid_index_to_world_coords(self, pair):
-        if not self.check_if_valid_grid_index(pair):
-            raise ValueError('Invalid grid indices with the current map!')
-        val = np.zeros(pair.shape)
-        for i in range(pair.shape[0]):
-            val[i, 0] = self.x[0, pair[i, 1]]
-            val[i, 1] = self.y[pair[i, 0], 0]
-        return val
-
-    def convert_world_to_grid_no_error(self, pair):
-        # TODO: this is 100% BS, refactor!!!
-        return np.concatenate(
-            (np.abs(self.y[:, 0][:, np.newaxis] - pair[:, 1].T).argmin(axis=0)[:, np.newaxis],
-             np.abs(self.x[0, :][:, np.newaxis] - pair[:, 0].T).argmin(axis=0)[:, np.newaxis]), axis=1)
 
 
 def fill_surrounding(matrix, int_radius_step, coords: np.ndarray, add_noise = False):

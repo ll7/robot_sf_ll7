@@ -223,8 +223,8 @@ class LidarScanner():
         and an input map (map object) and returns a data structure
         containing the sensor readings"""
 
-        start_pt = np.squeeze(self.robot_map.convert_world_to_grid_no_error(
-            np.expand_dims(np.array(pose.coords), axis=0)))
+        x, y = pose.coords
+        start_pt = self.robot_map._world_coords_to_grid_cell(x, y)
         scan_noise = np.array(self.settings.scan_noise)
         scan_length = self.settings.scan_length
 

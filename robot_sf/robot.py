@@ -107,6 +107,12 @@ class DifferentialDriveRobot():
     def pose(self) -> RobotPose:
         return self.state.current_pose
 
+    @property
+    def is_out_of_bounds(self):
+        """checks if robot went out of bounds """
+        x, y = self.state.current_pose.coords
+        return not self._map.is_in_bounds(x, y)
+
     def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
         movement, clipped = self.state.resulting_movement(action)
         self.state.update_robot_speed(movement)
@@ -116,16 +122,13 @@ class DifferentialDriveRobot():
     def get_scan(self):
         return self.scanner.get_scan(self.state.current_pose)
 
-    def is_out_of_bounds(self, margin = 0):
-        """checks if robot went out of bounds """
-        return not self._map.check_if_valid_world_coordinates(
-            self.state.current_pose.coords, margin).any()
-
     def is_obstacle_collision(self, collision_distance: float) -> bool:
-        return self._map.is_obstacle_collision(self.state.current_pose.pos, collision_distance)
+        return self._map.is_obstacle_collision(
+            self.state.current_pose.pos, collision_distance)
 
     def is_pedestrians_collision(self, collision_distance: float) -> bool:
-        return self._map.is_pedestrians_collision(self.state.current_pose.pos, collision_distance)
+        return self._map.is_pedestrians_collision(
+            self.state.current_pose.pos, collision_distance)
 
     def is_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
         # TODO: think about whether the robot should know its goal

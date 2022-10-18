@@ -47,7 +47,12 @@ class LidarScannerSettings:
 def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
                    p1: GridPoint, p2: GridPoint) -> int:
     """Jack Bresenham's algorithm (1962) to draw a line with 0/1 pixels
-    between the given points p1 and p2 on a 2D grid of given size."""
+    between the given points p1 and p2 on a 2D grid of given size.
+
+    Note: In this implementation the output grid is sparsified such that
+    only the pixel coordinates are returned instead of a boolean grid.
+    For performance reasons, the output arrays are passed as parameters
+    such that the calling scope only needs to allocate once per entire scan."""
 
     (x_0, y_0), (x_1, y_1) = p1, p2
 
@@ -139,7 +144,7 @@ def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_po
     center and a point at the grid's boundary (coordinates are pre-computed).
     Considering the scanner's position within the world's grid, the bigger
     grid's middle is shifted to the scanner position by subtracting an offset.
-    Also the distances from the middle to any point of the of the twice bigger
+    Also the distances from the middle to any point of the twice bigger
     grid are cached, so they only need to be looked up.
 
     As scan procedure, Bresenham's line algorithm yields the grid coordinates
@@ -148,8 +153,7 @@ def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_po
     exchanged in a sparse format as (x, y) coordinates. Next, the occupancy
     is simply looked up at the ray's coordinates; if it's a hit, the distance
     is also just looked up from the distances cache. Finally, the scanned
-    distances are capped by the maximum scan range.
-    """
+    distances are capped by the maximum scan range."""
 
     width, height = occupancy.shape
     x, y = scanner_position

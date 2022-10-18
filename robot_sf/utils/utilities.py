@@ -9,11 +9,6 @@ import numpy as np
 from pysocialforce.utils import stateutils
 
 
-def linspace(start: float, end: float, size: int) -> np.ndarray:
-    # TODO: think of using np.linspace() instead
-    return start + (end - start) * np.arange(size) / (size - 1)
-
-
 def norm_angles(angles: np.ndarray) -> np.ndarray:
     """Normalize angles between [-pi, pi)"""
     return (angles + np.pi) % (2 * np.pi) -np.pi

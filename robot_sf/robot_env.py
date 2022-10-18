@@ -61,11 +61,12 @@ class RobotEnv(Env):
     training a robot with reinforcement leanring"""
 
     # TODO: transform this into cohesive data structures
-    def __init__(self, lidar_n_rays: int=272,
-                 collision_distance: float=0.7, visualization_angle_portion: float=0.5, lidar_range: int=10,
-                 v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None, max_v_x_delta: float=.5, 
-                 initial_margin: float=.3, max_v_rot_delta: float=.5, dt: float=None, normalize_obs_state: bool=True,
-                 sim_length: int=200, difficulty: int=0, scan_noise: List[float]=None, peds_speed_mult: float=1.3):
+    def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
+                 visual_angle_portion: float=0.5, lidar_range: int=10,
+                 v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None,
+                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, initial_margin: float=.3,
+                 dt: float=None, normalize_obs_state: bool=True, sim_length: int=200,
+                 difficulty: int=0, scan_noise: List[float]=None, peds_speed_mult: float=1.3):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
@@ -98,7 +99,7 @@ class RobotEnv(Env):
         self.robot_map = initialize_map(self.sim_env)
         lidar_sensor = initialize_lidar(
             self.robot_map,
-            visualization_angle_portion,
+            visual_angle_portion,
             self.lidar_range,
             lidar_n_rays,
             scan_noise)

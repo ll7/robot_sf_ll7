@@ -1,6 +1,7 @@
-from math import floor
+from math import floor, ceil
 from typing import Callable, Tuple, List
 
+import numba
 import numpy as np
 
 from robot_sf.vector import Vec2D
@@ -8,37 +9,26 @@ from robot_sf.vector import Vec2D
 
 class BinaryOccupancyGrid():
     """Representing a discretized 2D map keeping track of all
-    obstacles, pedestrians """
+    obstacles, pedestrians to simulate interactions with the robot."""
 
     def __init__(self, map_height: float, map_width: float,
                  map_resolution: float, box_size: float,
                  get_obstacle_coords: Callable[[], np.ndarray],
                  get_pedestrian_coords: Callable[[], np.ndarray]):
-        self.map_height = map_height
-        self.map_width = map_width
-        self.map_resolution = map_resolution
         self.box_size = box_size
         self.get_obstacle_coords = get_obstacle_coords
         self.get_pedestrian_coords = get_pedestrian_coords
 
-        self.grid_width = int(np.ceil(self.map_width * self.map_resolution))
-        self.grid_height = int(np.ceil(self.map_height * self.map_resolution))
+        self.grid_width = int(ceil(map_width * map_resolution))
+        self.grid_height = int(ceil(map_height * map_resolution))
 
         self.occupancy_static_objects, self.obstacle_coordinates = \
             self._initialize_static_objects()
-        occ_shape = (self.grid_width, self.grid_height)
-        self.occupancy_moving_objects = np.zeros(occ_shape, dtype=bool)
         self.update_moving_objects()
 
     @property
     def occupancy_overall(self) -> np.ndarray:
         return np.logical_or(self.occupancy_moving_objects, self.occupancy_static_objects)
-
-    @property
-    def occupancy_overall_xy(self) -> np.ndarray:
-        # info: swap (y, x) coordinates back to (x, y) coordinates
-        # TODO: remove this dirty hack once the class is refactored
-        return self.occupancy_overall[:, ::-1]
 
     def is_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         return self.is_pedestrians_collision(robot_pos, collision_distance) \
@@ -52,8 +42,11 @@ class BinaryOccupancyGrid():
         occupancy = self._get_robot_occupancy(robot_pos, collision_distance)
         return np.logical_and(self.occupancy_moving_objects, occupancy).any()
 
+    def is_in_bounds(self, x: float, y: float) -> bool:
+        return -self.box_size <= x <= self.box_size \
+            and -self.box_size <= y <= self.box_size
+
     def position_bounds(self) -> Tuple[List[float], List[float]]:
-        # TODO: figure out what "margin" is supposed to achieve
         low_bound  = [-self.box_size, -self.box_size, -np.pi]
         high_bound = [self.box_size, self.box_size,  np.pi]
         return low_bound, high_bound
@@ -82,16 +75,21 @@ class BinaryOccupancyGrid():
         world_y = (y + 0.5) / self.grid_height * 2 * self.box_size - self.box_size
         return world_x, world_y
 
-    def is_in_bounds(self, x: float, y: float) -> bool:
-        return -self.box_size <= x <= self.box_size \
-            and -self.box_size <= y <= self.box_size
+    def _world_length_to_grid_cell_span(self, length: float) -> Tuple[int, int]:
+        """Convert scalar world length to the corresponding,
+        rounded grid cells in x and y direction."""
+        rel_len = length / (2 * self.box_size)
+        return round(rel_len * self.grid_width), round(rel_len * self.grid_height)
 
     def _get_robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
-        rob_matrix = np.zeros_like(self.occupancy_static_objects, dtype=bool)
         world_x, world_y = robot_pos.as_list
         x, y = self._world_coords_to_grid_cell(world_x, world_y)
-        int_radius_step = round(self.map_resolution * coll_distance)
-        return fill_surrounding(rob_matrix, int_radius_step, np.expand_dims([x, y], axis=0))
+        x_step, y_step = self._world_length_to_grid_cell_span(coll_distance)
+
+        occ_shape = (self.grid_width, self.grid_height)
+        occupancy = np.zeros(occ_shape, dtype=bool)
+        fill_surrounding(occupancy, x, y, x_step, y_step)
+        return occupancy
 
     def _initialize_static_objects(self) -> Tuple[np.ndarray, np.ndarray]:
         occ_shape = (self.grid_width, self.grid_height)
@@ -112,10 +110,16 @@ class BinaryOccupancyGrid():
         occupancy[0, :] = 1
         occupancy[-1, :] = 1
 
+        # info: this is not really efficient, but don't worry about
+        #       performance, it's only executed once on map creation
         radius = 0.3
-        int_radius_step = round(self.map_resolution * radius)
-        eval_points = np.asarray(np.where(occupancy))
-        occupancy = fill_surrounding(occupancy, int_radius_step, eval_points)
+        x_step, y_step = self._world_length_to_grid_cell_span(radius)
+        x, y = np.where(occupancy)
+        eval_points = np.vstack((x, y)).T
+
+        for x, y in eval_points:
+            x, y = self._world_coords_to_grid_cell(x, y)
+            fill_surrounding(occupancy, x, y, x_step, y_step)
 
         return occupancy, np.array(coords_in_bounds)
 
@@ -130,51 +134,21 @@ class BinaryOccupancyGrid():
             if pos.size != 0 and self.is_in_bounds(pos[0], pos[1])
         ]
 
+        radius = 0.4
+        x_step, y_step = self._world_length_to_grid_cell_span(radius)
         for x, y in grid_coords:
-            occupancy[x, y] = 1
-
-        radius= 0.4
-        int_radius_step = round(self.map_resolution * radius)
-        x, y = np.where(occupancy)
-        eval_points = np.vstack((x, y)).T
-        occupancy = fill_surrounding(occupancy, int_radius_step, eval_points, add_noise=True)
+            # TODO: add noise to the signal
+            fill_surrounding(occupancy, x, y, x_step, y_step)
 
         return occupancy
 
 
-def fill_surrounding(matrix, int_radius_step, coords: np.ndarray, add_noise = False):
-
-    def n_closest_fill(x: np.ndarray, pos: Tuple[float, float], d: int, new_fill):
-        x_copy = x.copy()
-        n_x, n_y = pos
-        x_copy[n_x-d:n_x+d+1, n_y-d:n_y+d+1] = new_fill
-        # bitwise OR means set bits never get cleaned up
-        # TODO: think about whether this is actually the desired behavior
-        x = np.logical_or(x, x_copy)
-        return x
-
-    window = np.arange(-int_radius_step, int_radius_step + 1)
-    msh_grid = np.stack(np.meshgrid(window, window), axis=2)
-    bool_subm = np.sqrt(np.square(msh_grid).sum(axis=2)) < int_radius_step
-
-    N = 2 * int_radius_step + 1
-    p = np.round(np.exp(-(np.square(msh_grid) / 15).sum(axis=2)), 3)
-
-    for i in np.arange(coords.shape[0]):
-        if (coords[i, :] > int_radius_step).all() and (coords[i, :] < matrix.shape[0] - int_radius_step).all():
-            bool_subm_i = np.random.random(size=(N, N)) < p if add_noise else bool_subm
-            matrix = n_closest_fill(matrix, coords[i, :], int_radius_step, bool_subm_i) 
-        else:
-            matrix_filled = fill_surrounding_brute(matrix.copy(),int_radius_step,coords[i,0],coords[i,1])
-            # TODO: don't overwrite the input array, make this work in-place to avoid allocation
-            matrix = np.logical_or(matrix, matrix_filled)
-
-    return matrix
-
-
-def fill_surrounding_brute(matrix: np.ndarray, int_radius_step, i, j):
-    row_eval = np.unique(np.minimum(matrix.shape[0] - 1, np.maximum(0, np.arange(i - int_radius_step, i + 1 + int_radius_step))))
-    col_eval = np.unique(np.minimum(matrix.shape[1] - 1, np.maximum(0, np.arange(j - int_radius_step, j + 1 + int_radius_step))))
-    eval_indices = np.sqrt((row_eval-i)[:,np.newaxis]**2 + (col_eval-j)[np.newaxis,:]**2) < int_radius_step
-    matrix[row_eval[0]:row_eval[-1]+1, col_eval[0]:col_eval[-1]+1] = eval_indices
-    return matrix
+@numba.njit(fastmath=True)
+def fill_surrounding(occupancy: np.ndarray, pos_x: int, pos_y: int, x_dist: int, y_dist: int):
+    # TODO: add noise to the occupancy
+    width, height = occupancy.shape
+    for x_offset in range(-x_dist, 2 * x_dist + 1):
+        for y_offset in range(-y_dist, 2 * y_dist + 1):
+            x, y = pos_x + x_offset, pos_y + y_offset
+            if 0 <= x < width and 0 <= y < height:
+                occupancy[x, y] = 1

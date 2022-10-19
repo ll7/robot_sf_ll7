@@ -119,16 +119,16 @@ def grid_boundary_hit(start_point: GridPoint, orient: float,
     return grid_cell_of(x, y)
 
 
-def compute_distances_cache(width: int, height: int, resolution: int) -> np.ndarray:
+def compute_distances_cache(width: int, height: int) -> np.ndarray:
     """Precompute the distances of grid cells from the middle (width+1, height+1).
 
-    Returns an array of shape (width * resolution * 2 + 1, height * resolution * 2 + 1)"""
+    Returns an array of shape (width * 2 + 1, height * 2 + 1)"""
 
-    x = np.arange(-width  * resolution, width  * resolution + 1)[:, np.newaxis]
-    y = np.arange(-height * resolution, height * resolution + 1)[np.newaxis, :]
+    x = np.arange(-width , width  + 1)[:, np.newaxis]
+    y = np.arange(-height, height + 1)[np.newaxis, :]
     x, y = np.meshgrid(x, y)
     xy = np.stack((y, x), axis=2)
-    dists = np.power((xy[:, :, 0] / resolution)**2 + (xy[:, :, 1] / resolution)**2, 0.5)
+    dists = np.power((xy[:, :, 0])**2 + (xy[:, :, 1])**2, 0.5)
     return dists
 
 
@@ -193,25 +193,20 @@ def range_postprocessing(ranges: np.ndarray, scan_length: int,
 
 @dataclass
 class LidarScanner():
-    """Representing a simulated radial LiDAR scanner operating in a 2D plane."""
+    """Representing a simulated radial LiDAR scanner operating
+    in a 2D plane on binary occupancy grids."""
     settings: LidarScannerSettings
     robot_map: BinaryOccupancyGrid
 
     def __post_init__(self):
-        if (self.robot_map.map_width * self.robot_map.map_resolution * 2 + 1) \
-                * (self.robot_map.map_height * self.robot_map.map_resolution * 2 + 1) \
-                    * self.settings.lidar_n_rays > 5e8:
-            print("WARNING: The ray cache will allocate more than 500 MB of memory!")
-
         self.cached_distances = compute_distances_cache(
-            self.robot_map.map_width, self.robot_map.map_height, self.robot_map.map_resolution)
+            self.robot_map.grid_width, self.robot_map.grid_height)
         self.cached_angles = np.linspace(0, 2*pi, self.settings.lidar_n_rays + 1)[:-1]
-        middle = (self.robot_map.map_width + 1, self.robot_map.map_width + 1)
-        w, h = self.robot_map.map_width * 2 + 1, self.robot_map.map_width * 2 + 1
+        middle = (self.robot_map.grid_width + 1, self.robot_map.grid_height + 1)
+        w, h = self.robot_map.grid_width * 2 + 1, self.robot_map.grid_height * 2 + 1
         self.cached_end_pos = np.array([grid_boundary_hit(middle, phi, w, h)
                                         for phi in self.cached_angles])
-
-        self.get_object_occupancy = lambda: self.robot_map.occupancy_overall_xy
+        self.get_object_occupancy = lambda: self.robot_map.occupancy_overall
 
     def angle_id(self, orient: float) -> float:
         """Retrieve the ray index related to the given scan direction."""

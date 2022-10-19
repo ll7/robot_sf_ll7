@@ -150,8 +150,6 @@ class RobotEnv(Env):
         return (norm_ranges, rob_state), reward, done, None
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
-        # TODO: figure out why the reward is sometimes NaN
-
         # if pedestrian / obstacle is hit or time expired
         if self.robot.is_pedestrians_collision(.8) or \
                 self.robot.is_obstacle_collision(self.robot.config.rob_collision_radius) or \
@@ -212,8 +210,8 @@ class RobotEnv(Env):
         robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
         robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
 
-        # if initial condition is too close (1.5m) to obstacle,
-        # pedestrians or target, generate new initial condition
+        # if initial coords are too close (1.5m) to an obstacle,
+        # pedestrian or the target, generate new coords
         while robot_map.is_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
                 robot_pose.target_rel_position(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
             robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)

@@ -39,8 +39,7 @@ def initialize_robot(
 
 
 def initialize_simulator(peds_sparsity, difficulty, dt, peds_speed_mult) -> ExtdSimulator:
-    sim_env = ExtdSimulator(difficulty=difficulty)
-    sim_env.set_ped_sparsity(peds_sparsity)
+    sim_env = ExtdSimulator(difficulty=difficulty, peds_sparsity=peds_sparsity)
     sim_env.peds.step_width = dt if dt else sim_env.peds.step_width
     sim_env.peds.max_speed_multiplier = peds_speed_mult
     return sim_env

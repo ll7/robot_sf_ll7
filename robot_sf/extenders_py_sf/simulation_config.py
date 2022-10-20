@@ -13,16 +13,13 @@ from robot_sf.utils.poly import load_polygon, random_polygon, PolygonCreationSet
 
 
 @dataclass
-class SimulationConfiguration:
-    box_size: float
-
-
-@dataclass
 class SimulatorConfigFlags:
-    __dynamic_grouping: bool
-    __enable_max_steps_stop: bool
-    __enable_topology_on_stopped: bool
-    __enable_rendezvous_centroid: bool
+    dynamic_grouping: bool
+    enable_max_steps_stop: bool
+    enable_topology_on_stopped: bool
+    enable_rendezvous_centroid: bool
+    update_peds: bool
+    activate_ped_robot_force: bool
 
 
 @dataclass
@@ -44,6 +41,27 @@ class NewPedsParams:
     max_stopping_pedestrians: int
     max_unfreezing_pedestrians: int
     max_group_splitting: int=5
+
+
+@dataclass
+class RobotForceConfig:
+    robot_radius: float
+    activation_threshold: int
+    force_multiplier: float
+
+
+@dataclass
+class SimulationConfiguration:
+    box_size: float
+    peds_sparsity: int
+    ped_generation_action_pool: ActionPool
+    group_action_pool: ActionPool
+    stopping_action_pool: ActionPool
+    flags: SimulatorConfigFlags
+    robot_force_config: RobotForceConfig
+    new_peds_params: NewPedsParams
+    obstacle_avoidance_params: List
+    obstacles_lolol: List
 
 
 def load_toml(path_to_filename: str) -> dict:
@@ -80,7 +98,7 @@ def load_map_name(data: dict) -> str:
     return map_name
 
 
-def load_randomly_init_map(data: dict, maps_config_path: str):
+def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int):
     map_name = load_map_name(data)
     path_to_map = os.path.join(maps_config_path, map_name)
 
@@ -114,7 +132,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str):
         
         
     else:
-        n_peds = data['simulator']['custom']['random_population']['max_initial_peds'][self.difficulty]
+        n_peds = data['simulator']['custom']['random_population']['max_initial_peds'][difficulty]
         index_list = np.arange(n_peds).tolist() #Available index to group
         
         #initialize state matrix
@@ -196,22 +214,24 @@ def load_randomly_init_map(data: dict, maps_config_path: str):
                 
                 state[i,2:4] = [dot_x_x, dot_x_y]
 
-        return obstacle, obstacles_lolol, state, groups
+    return box_size, obstacle, obstacles_lolol, state, groups
 
 
-def load_config(path_to_filename: str=None):
+def load_config(path_to_filename: str=None, difficulty: int=0):
     # TODO: don't allow the argument to be None, set this explicitly in calling scope
 
     data = load_toml(path_to_filename)
     maps_config_path = os.path.join(os.path.dirname(
         os.path.dirname(os.path.realpath(__file__))) , 'utils', 'maps')
-    path_to_map = None
-    obstacle, obstacles_lolol, state, groups = load_randomly_init_map(data, maps_config_path)
+    box_size, obstacle, obstacles_lolol, state, groups = \
+        load_randomly_init_map(data, maps_config_path, difficulty)
 
-    #---------------------------------------------------------------------
-    #here load the parameters which are in common
+    robot_force_config = RobotForceConfig(
+        data['simulator']['robot']['robot_radius'],
+        data['simulator']['robot']['activation_threshold'],
+        data['simulator']['robot']['force_multiplier'])
+
     peds_sparsity = data['simulator']['custom']['ped_sparsity']
-    update_peds = data['simulator']['flags']['update_peds']
     ped_generation_action_pool = ActionPool(
         data['simulator']['generation']['actions'],
         data['simulator']['generation']['probabilities'])
@@ -226,7 +246,9 @@ def load_config(path_to_filename: str=None):
         data['simulator']['flags']['allow_dynamic_grouping'],
         data['simulator']['flags']['allow_max_steps_stop'],
         data['simulator']['flags']['topology_operations_on_stopped'],
-        data['simulator']['flags']['rendezvous_centroid'])
+        data['simulator']['flags']['rendezvous_centroid'],
+        data['simulator']['flags']['update_peds'],
+        data['simulator']['flags']['activate_ped_robot_force'])
 
     new_peds_params = NewPedsParams(
         max_single_peds = data['simulator']['generation']['parameters']['max_single_peds'],
@@ -241,24 +263,26 @@ def load_config(path_to_filename: str=None):
         max_unfreezing_pedestrians = data['simulator']['stopping']['parameters']['max_unfreezing_pedestrians'])
 
     # angles to evaluate
-    angles_neg = np.array([-1,-.8,-.6,-.5,-.4,-.3,-.25,-.2,-.15,-.1,-.05])
+    angles_neg = np.array([-1, -.8, -.6, -.5, -.4, -.3, -.25, -.2, -.15, -.1, -.05])
     angles_pos = np.sort(-angles_neg)
-    angles = np.multiply(np.pi,np.concatenate((angles_neg,angles_pos)))
+    angles = np.multiply(np.pi, np.concatenate((angles_neg, angles_pos)))
 
     #obstacles points to get the segments (commented part refers to in-function implementation)
-    p0 = np.empty((0,2))
-    p1 = np.empty((0,2))
+    p0 = np.empty((0, 2))
+    p1 = np.empty((0, 2))
     ##get obstacles on the scenes in p0,p1 format (do be moved to class attributes)
     for obi in obstacle:
-        p0 = np.append(p0,np.array([obi[0],obi[2]])[np.newaxis,:],axis = 0)
-        p1 = np.append(p1,np.array([obi[1],obi[3]])[np.newaxis,:],axis = 0)
+        p0 = np.append(p0, np.array([obi[0], obi[2]])[np.newaxis, :], axis=0)
+        p1 = np.append(p1, np.array([obi[1], obi[3]])[np.newaxis, :], axis=0)
 
     # obstacle_avoidance_params
     view_distance = 15
     forgetting_factor = 0.8
     obstacle_avoidance_params = [angles, p0, p1, view_distance, forgetting_factor]
 
-    self.obstacle_avoidance_params = obstacle_avoidance_params
-    self.obstacles_lolol = obstacles_lolol
-    self.sim_config_user = data
-    return state, groups, obstacle
+    config = SimulationConfiguration(
+        box_size, peds_sparsity, ped_generation_action_pool,
+        group_action_pool, stopping_action_pool, flags, robot_force_config,
+        new_peds_params, obstacle_avoidance_params, obstacles_lolol)
+
+    return config, state, groups, obstacle

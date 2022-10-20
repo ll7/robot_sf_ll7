@@ -5,14 +5,11 @@ Created on Sat Dec  5 12:56:00 2020
 @author: Matteo Caruso, Enrico Regolin
 """
 
-import os
-import toml
-import json
 import copy
 import random
 from typing import List
+from dataclasses import dataclass
 
-from natsort import natsorted
 import numpy as np
 
 import pysocialforce as psf
@@ -22,8 +19,15 @@ from pysocialforce.utils import stateutils
 from .extender_scene import PedState
 from .extender_force import DesiredForce, GroupRepulsiveForce, PedRobotForce
 
-from ..utils.utilities import fill_state, fun_reduce_index
-from ..utils.poly import load_polygon, random_polygon, PolygonCreationSettings
+from robot_sf.utils.utilities import fill_state, fun_reduce_index
+from robot_sf.robot import RobotPose
+from robot_sf.extenders_py_sf.simulation_config import load_config
+
+
+@dataclass
+class RobotObject:
+    pose: RobotPose
+    radius: float
 
 
 class ExtdSimulator(psf.Simulator):
@@ -64,7 +68,7 @@ class ExtdSimulator(psf.Simulator):
 
         """Parameters for the addition of new agents"""
         self.new_peds_params = dict()
-        state, groups, obstacles = self.load_config(path_to_filename=path_to_config)
+        state, groups, obstacles = load_config(path_to_filename=path_to_config)
         self.tmp = obstacles
         self.groups_vect_idxs = []
 
@@ -192,11 +196,7 @@ class ExtdSimulator(psf.Simulator):
         self.robot['orient'] = coordinates[2]
 
     def move_robot(self, coordinates, new_action_radius=None):
-        if new_action_radius is None:
-            self.robot['radius'] = self.sim_config_user['simulator']['robot']['robot_radius']
-        else:
-            self.robot['radius'] = new_action_radius
-
+        self.robot['radius'] = self.sim_config_user['simulator']['robot']['robot_radius']
         self.update_robot_coord(coordinates)
 
     # new function (update pedestrians on scene)
@@ -907,235 +907,6 @@ class ExtdSimulator(psf.Simulator):
         
         self.peds.update(new_pedestrians_states, self.peds.groups)
         return True
-
-    # TODO: model the toml file as a simulator settings class
-    def load_config(self, path_to_filename = None):
-        if path_to_filename is None:
-            try:
-                dirname = os.path.dirname(__file__)
-                parent = os.path.split(dirname)[0]
-                filename = os.path.join(parent, "utils", "config", "map_config.toml")
-                data = toml.load(filename)
-            except Exception:
-                raise ValueError("Cannot load valid config toml file")
-        else:
-            if not isinstance(path_to_filename, str):
-                raise ValueError("invalid input filename")
-            else:
-                try:
-                    data = toml.load(path_to_filename)
-                except Exception:
-                    raise ValueError("Cannot load valid config toml file at specified path:" + path_to_filename)
-
-        #Start populating class structures and attributes if no errors occured
-        # self.__backup_config_data = data
-        maps_config_path = os.path.join ( os.path.dirname(os.path.dirname(os.path.realpath(__file__))) , 'utils', 'maps')
-        path_to_map = None
-        
-        #Check if default map flag is activated
-        if data['simulator']['flags']['default_map']:
-            self.box_size = data['simulator']['default']['box_size']
-            state = np.array(data['simulator']['default']['states'])
-            
-            obstacle = []
-            obstacles_lolol = []
-            
-            for key in data['simulator']['default']['obstacles'].keys():
-                obstacle += data['simulator']['default']['obstacles'][key]
-                obstacles_lolol.append(data['simulator']['default']['obstacles'][key])
-            
-            groups = data['simulator']['default']['groups']
-            
-        else:
-            #Check if map number is specified
-            if not data['simulator']['flags']['random_map']:
-                n = data['simulator']['custom']['map_number']
-                try:
-                    #keys = 
-                    map_name    = natsorted(list(data['map_files'].values()))[n]
-                
-                except:
-                    map_name = natsorted(list(data['map_files'].values()))[0]
-                    raise Warning('Invalid map number: Using map 0')
-                    
-            else:
-                
-                map_name = random.choice(list(data['map_files'].values()))
-                
-            path_to_map = os.path.join(maps_config_path, map_name)
-            
-            #Here load the json file
-            #----------------------------------------------------------------
-            with open(path_to_map, 'r') as f:
-                map_structure = json.load(f)
-                
-            self.box_size = max((map_structure['x_margin'][1]), (map_structure['y_margin'][1]))
-            #print(path_to_map)
-            #Start creating obstacles, peds ecc...
-            obstacle = []
-            obstacles_lolol = []
-            
-            for key in map_structure['Obstacles'].keys():
-                
-                tmp = map_structure['Obstacles'][key]['Edges'].copy()
-                
-                valid_edges = []
-                for n, sub_list in enumerate(tmp):
-                    #if not sub_list[0]==sub_list[1] and not sub_list[2]==sub_list[3]:
-                    valid_edges.append(sub_list)
-                
-
-                
-                obstacle += valid_edges
-                obstacles_lolol.append(valid_edges)
-                
-                
-            if not data['simulator']['flags']['random_initial_population']:
-                state = np.array(data['simulator']['default']['states'])
-                groups = data['simulator']['default']['groups']
-                
-                grouped_peds = []
-                
-                for group in groups:
-                    grouped_peds += group
-                n_peds = len(state)
-                
-                
-            else:
-                n_peds = data['simulator']['custom']['random_population']['max_initial_peds'][self.difficulty]
-                index_list = np.arange(n_peds).tolist() #Available index to group
-                
-                #initialize state matrix
-                state = np.zeros((n_peds, 6))
-                groups = []
-                                   
-                
-                #Initialize groups
-                grouped_peds = []
-                available_peds = index_list.copy()
-                
-                                
-                for i in range(data['simulator']['custom']['random_population']['max_initial_groups']):
-                    max_n = min(len(available_peds), data['simulator']['custom']['random_population']['max_peds_per_group'])
-                    
-                    group = random.sample(available_peds, max_n)
-                    groups.append(group)
-                    grouped_peds += group
-                    
-                    available_peds = [ped for ped in available_peds if ped not in group]
-                    
-                    
-                    #generate group target for grouped peds
-                    if group:
-                        group_destination_a = random.choice([0,1,2,3])
-                        group_destination_b = random.randint(-(self.box_size +1),self.box_size +1)*np.ones((len(group),))
-                        
-                        #Initial speed
-                        dot_x_0 = 0.5 #Module
-                        
-                        #random angle
-                        angle = random.uniform(-np.pi, np.pi)
-                        dot_x_x = dot_x_0*np.cos(angle)
-                        dot_x_y = dot_x_0*np.sin(angle)
-        
-                    #Based on group origin and group destination compute the new states of the 
-                    #new added pedestrians
-                        destination_states = fill_state(group_destination_a, group_destination_b, False, self.box_size)
-                        state[group, 4:6] = destination_states
-                        state[group, 2:4] = [dot_x_x, dot_x_y]
-                
-                #Check for state validity
-                obs_recreated = random_polygon(PolygonCreationSettings(5, irregularity=0, spikeness=0))
-            for i in range(n_peds):
-                #Check if initial position is valid
-                state[i, :2] = np.random.uniform(-self.box_size, self.box_size, (1,2))
-
-                while True:
-                    for iter_num, ob in enumerate(map_structure['Obstacles'].keys()):
-                        #Compute safety radius for each obstacle
-                        obs_recreated = load_polygon(map_structure['Obstacles'][ob]['Vertex'])
-                        vert = np.array(map_structure['Obstacles'][ob]['Vertex'])
-                        radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1
-
-                        if np.linalg.norm(state[i, :2] - obs_recreated.centroid.coords) < radius:
-                            #Generate new point, break and restart the for loop check
-                            state[i, :2] = np.random.uniform(-self.box_size, self.box_size, (1,2))
-                            break
-
-                        #Break the endless loop and let i-index increase
-                    if iter_num == len(map_structure['Obstacles'].keys())-1:
-                        break
-
-                #Generate target
-                if data['simulator']['flags']['random_initial_population']:
-                    #print("Generate target")
-                    if i not in grouped_peds:
-                        destination_a = random.choice([0,1,2,3])
-                        destination_b = random.randint(-(self.box_size +1),self.box_size +1)
-                        
-                        destination_state = fill_state(destination_a, destination_b, False, self.box_size)
-                        state[i, 4:6] = destination_state
-                        
-                        dot_x_0 = 0.5
-                        angle = random.uniform(-np.pi, np.pi)
-                        
-                        dot_x_x = dot_x_0*np.cos(angle)
-                        dot_x_y = dot_x_0*np.sin(angle)
-                        
-                        state[i,2:4] = [dot_x_x, dot_x_y]
-
-        #---------------------------------------------------------------------
-        #here load the parameters which are in common
-        self.peds_sparsity = data['simulator']['custom']['ped_sparsity']
-        self.update_peds = data['simulator']['flags']['update_peds']
-        self.ped_generation_action_pool['actions'] = data['simulator']['generation']['actions']
-        self.ped_generation_action_pool['probabilities'] = data['simulator']['generation']['probabilities']
-        self.group_action_pool['actions'] = data['simulator']['group_actions']['actions']
-        self.group_action_pool['probabilities'] = data['simulator']['group_actions']['probabilities']
-        self.stopping_action_pool['actions'] = data['simulator']['stopping']['actions']
-        self.stopping_action_pool['probabilities'] = data['simulator']['stopping']['probabilities']
-        self.__dynamic_grouping = data['simulator']['flags']['allow_dynamic_grouping']
-        self.__enable_max_steps_stop = data['simulator']['flags']['allow_max_steps_stop']
-        self.__enable_topology_on_stopped = data['simulator']['flags']['topology_operations_on_stopped']
-        self.__enable_rendezvous_centroid = data['simulator']['flags']['rendezvous_centroid']
-        # self.__topology_operations_on_unfreezing = data['simulator']['flags']['topology_operations_on_unfreezing']
-        self.obstacles_lolol = obstacles_lolol #list of lists of lists of obstacles (required for dynamic animation)
-
-        self.new_peds_params['max_single_peds'] = data['simulator']['generation']['parameters']['max_single_peds']
-        self.new_peds_params['max_grp_size'] = data['simulator']['generation']['parameters']['max_group_size']
-        self.new_peds_params['group_width_max'] = data['simulator']['generation']['parameters']['max_group_size']
-        self.new_peds_params['group_width_min'] = data['simulator']['generation']['parameters']['group_width_min']
-        self.new_peds_params['average_speed'] = data['simulator']['generation']['parameters']['average_speed']
-        self.new_peds_params['max_standalone_grouping'] = data['simulator']['group_actions']['parameters']['max_standalone_grouping']
-        self.new_peds_params['max_group_splitting'] = 5
-        self.new_peds_params['max_nsteps_ped_stopped'] = data['simulator']['stopping']['parameters']['max_nsteps_ped_stopped']
-        self.new_peds_params['max_nteps_group_stopped'] = data['simulator']['stopping']['parameters']['max_nsteps_group_stopped']
-        self.new_peds_params['max_stopping_pedestrians'] = data['simulator']['stopping']['parameters']['max_stopping_pedestrians']
-        self.new_peds_params['max_unfreezing_pedestrians'] = data['simulator']['stopping']['parameters']['max_unfreezing_pedestrians']
-
-        ############# obstacle avoidance: (no obstacle_avoidance_params means no obstacles avoidance)
-        # angles to evaluate
-        angles_neg = np.array([-1,-.8,-.6,-.5,-.4,-.3,-.25,-.2,-.15,-.1,-.05])
-        angles_pos = np.sort(-angles_neg)
-        angles = np.multiply(np.pi,np.concatenate((angles_neg,angles_pos)))
-
-        #obstacles points to get the segments (commented part refers to in-function implementation)
-        p0 = np.empty((0,2))
-        p1 = np.empty((0,2))
-        ##get obstacles on the scenes in p0,p1 format (do be moved to class attributes)
-        for obi in obstacle:
-            p0 = np.append(p0,np.array([obi[0],obi[2]])[np.newaxis,:],axis = 0)
-            p1 = np.append(p1,np.array([obi[1],obi[3]])[np.newaxis,:],axis = 0)
-
-        # obstacle_avoidance_params
-        view_distance = 15
-        forgetting_factor = 0.8
-        obstacle_avoidance_params = [  angles, p0, p1, view_distance, forgetting_factor ]
-
-        self.obstacle_avoidance_params = obstacle_avoidance_params
-        self.obstacles_lolol = obstacles_lolol
-        self.sim_config_user = data
-        return state, groups, obstacle
 
     def _update_stopping_time(self):
         #Get index of stopped peds

@@ -59,7 +59,13 @@ sonar-scanner \
 ### 4. Run Simulation Benchmark
 
 ```sh
-python3 simulation_benchmark_zero_load.py
+# build optimized package with Cython (wip)
+python3 setup_cy.py build_ext build
+```
+
+```sh
+# benchmark with scalene instead of cProfile
+python3 -m scalene simulation_benchmark_zero_load.py
 ```
 
 ## Original Repository

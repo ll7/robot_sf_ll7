@@ -1,5 +1,4 @@
-from cProfile import Profile
-from pstats import Stats
+from scalene import scalene_profiler
 from robot_sf.robot_env import RobotEnv
 
 
@@ -9,6 +8,7 @@ def benchmark():
     obs = env.reset()
 
     peds_sim = env.sim_env
+    scalene_profiler.start()
     print('start of simulation')
 
     episode = 0
@@ -26,17 +26,8 @@ def benchmark():
             obs = env.reset()
 
     print('end of simulation')
+    scalene_profiler.stop()
  
 
-def main():
-    profiler = Profile()
-    profiler.enable()
-    benchmark()
-    profiler.disable()
-
-    stats = Stats(profiler).sort_stats('tottime')
-    stats.print_stats(50)
-
-
 if __name__ == "__main__":
-    main()
+    benchmark()

@@ -65,7 +65,7 @@ class ExtdSimulator(psf.Simulator):
         self._timer_stopped_peds = np.zeros((self.peds.size(),), dtype=int)
 
     # make_forces overrides existing function: accounts for obstacle avoidance
-    def make_forces(self, force_configs): 
+    def make_forces(self, force_configs):
         """Construct forces"""
         if self.sim_config_user.obstacle_avoidance_params == None:
             force_des = forces.DesiredForce()
@@ -113,12 +113,12 @@ class ExtdSimulator(psf.Simulator):
 
     # overwrite function to account for pedestrians update
     def step_once(self):
-        """step once"""            
+        """step once"""
         if self.sim_config_user.flags.update_peds:
             self.update_peds_on_scene()
             # only now perform step...
         if self.current_positions.shape[0] > 0:
-            forces = self.compute_forces()    
+            forces = self.compute_forces()
         else:
             forces = 0
 
@@ -144,12 +144,12 @@ class ExtdSimulator(psf.Simulator):
         if (new_positions is not None):
             self.current_positions = new_positions
             self.current_groups = new_groups
-        else:            
+        else:
             self.current_positions = self.get_pedestrians_positions()
             self.current_groups = self.get_pedestrians_groups()
 
         # define vector with all groups belongings (for plotting reasons)
-        groups_vect = np.zeros(self.current_positions.shape[0],dtype = int)
+        groups_vect = np.zeros(self.current_positions.shape[0], dtype = int)
         for j in range(len(groups_vect)):
             for num,group in enumerate(self.current_groups, start=1):
                 if j in group:
@@ -310,7 +310,7 @@ class ExtdSimulator(psf.Simulator):
             self._stopped_groups[destination_group] = False
             self._timer_stopped_group[destination_group] = 0
         else:
-            target_state = np.zeros((len(selected_ped),2))       
+            target_state = np.zeros((len(selected_ped),2))
             ped_old_idx = old_groups[destination_group][0]
             target_state[:,0] = self.peds.state[ped_old_idx,4]
             target_state[:,1] = self.peds.state[ped_old_idx,5]
@@ -328,8 +328,8 @@ class ExtdSimulator(psf.Simulator):
     def group_standalones(self): #(TESTED!)
         """This method takes few standalones pedestrians in the map and group
         them in order to form a new group"""
-        
-        #Immediately brake if there is no space for new groups and dynamic 
+
+        #Immediately brake if there is no space for new groups and dynamic
         #grouping is not allowed
         if not self.sim_config_user.flags.dynamic_grouping and [] not in self.peds.groups: # TODO: what does this mean?
             return False
@@ -403,7 +403,7 @@ class ExtdSimulator(psf.Simulator):
             if sublist and len(sublist) >= 2:
                 valid_indexes.append(n)
 
-        #Immediately brake if there is no space for new groups and dynamic 
+        #Immediately brake if there is no space for new groups and dynamic
         #grouping is not allowed
 
         if not self.sim_config_user.flags.dynamic_grouping and [] not in self.peds.groups:
@@ -439,7 +439,7 @@ class ExtdSimulator(psf.Simulator):
             if idx not in new_group_idx:
                 tmp.append(idx)
         old_groups[group_index] = tmp
- 
+
         #Start populating new group list of list with the new group
         if [] in old_groups:
             tmp_groups = old_groups.index([])
@@ -645,13 +645,13 @@ class ExtdSimulator(psf.Simulator):
                 action = random.choices(tmp, [10, 90])
                 if action == 'merge':
                     success = self.group_merge(group_1_index_origin=group_index)
- 
+
         elif action_chosen[0] == 'merge':
             #try to merge current group
             #print("MERGING")
             #print(group_index)
             success = self.group_merge(group_1_index_origin=group_index)
-            
+
             if not success:
                 tmp = ['split','none']
                 action = random.choices(tmp, [10,90])
@@ -736,9 +736,9 @@ class ExtdSimulator(psf.Simulator):
             num_max = min(len(valid_ped_idx), self.sim_config_user.new_peds_params.max_unfreezing_pedestrians)
             ped_index = random.sample(valid_ped_idx, num_max)
 
-        """Now that the the list of pedestrians index is create we need to update 
+        """Now that the the list of pedestrians index is create we need to update
         the memory variables"""
-        
+
         self._stopped_peds[ped_index] = False
         self._timer_stopped_peds[ped_index] = 0
         self.peds.state[ped_index, 4:6] = self._last_known_ped_target[ped_index, :]
@@ -747,13 +747,13 @@ class ExtdSimulator(psf.Simulator):
         if not self.sim_config_user.flags.enable_topology_on_stopped:
             return True
 
-        """ Vedere se implementare le actions"""    
+        """ Vedere se implementare le actions"""
         #print("TO DO!!")
         return True
 
     def add_new_group(self): #(TESTED!)
         """This method generate pedestrian states for new group"""
-        #Immediately brake if there is no space for new groups and dynamic 
+        #Immediately brake if there is no space for new groups and dynamic
         #grouping is not allowed
 
         if not self.sim_config_user.flags.dynamic_grouping and [] not in self.peds.groups:
@@ -780,7 +780,7 @@ class ExtdSimulator(psf.Simulator):
         group_destination_a = random.choice(np.delete(np.array([0, 1, 2, 3]), group_origin_a))
         group_destination_b = random.randint(-square_dim,square_dim)*np.ones((new_grp_size,))
 
-        #Based on group origin and group destination compute the new states of the 
+        #Based on group origin and group destination compute the new states of the
         #new added pedestrians
         origin_states      = fill_state(group_origin_a, group_origin_b, True , self.box_size)
         destination_states = fill_state(group_destination_a, group_destination_b, False, self.box_size)
@@ -856,7 +856,7 @@ class ExtdSimulator(psf.Simulator):
         self._stopped_peds = np.concatenate((self._stopped_peds, np.zeros((new_pedestrians,), dtype = bool)))
         self._last_known_ped_target = np.concatenate((self._last_known_ped_target, np.zeros((new_pedestrians, 2))))
         self._timer_stopped_peds = np.hstack((self._timer_stopped_peds, new_pedestrians*[False]))
-        
+
         self.peds.update(new_pedestrians_states, self.peds.groups)
         return True
 
@@ -899,9 +899,9 @@ class ExtdSimulator(psf.Simulator):
                     index_action = ped_generations_action.actions.index(action)
                     del ped_generations_action.actions[index_action]
                     val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
-                        
+
                     del ped_generations_action.probs_in_percent[index_action]
-                        
+
                     for i in range(len(ped_generations_action.probs_in_percent)):
                         ped_generations_action.probs_in_percent[i] += val
             elif action == 'group':
@@ -914,9 +914,9 @@ class ExtdSimulator(psf.Simulator):
                         index_action = ped_generations_action.actions.index(action)
                         del ped_generations_action.actions[index_action]
                         val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
-                        
+
                         del ped_generations_action.probs_in_percent[index_action]
-                        
+
                         for i in range(len(ped_generations_action.probs_in_percent)):
                             ped_generations_action.probs_in_percent[i] += val
                 else:
@@ -949,9 +949,9 @@ class ExtdSimulator(psf.Simulator):
                     index_action = topology_actions.actions.index(action)
                     del topology_actions.actions[index_action]
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
-                        
+
                     del topology_actions.probs_in_percent[index_action]
-                        
+
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
             elif action == 'merge':
@@ -963,9 +963,9 @@ class ExtdSimulator(psf.Simulator):
                     index_action = topology_actions.actions.index(action)
                     del topology_actions.actions[index_action]
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
-                        
+
                     del topology_actions.probs_in_percent[index_action]
-                        
+
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
             elif action == 'group_standalone':
@@ -977,9 +977,9 @@ class ExtdSimulator(psf.Simulator):
                     index_action = topology_actions.actions.index(action)
                     del topology_actions.actions[index_action]
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
-                        
+
                     del topology_actions.probs_in_percent[index_action]
-                        
+
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
             elif action == 'toExisting':
@@ -991,11 +991,11 @@ class ExtdSimulator(psf.Simulator):
                     index_action = topology_actions.actions.index(action)
                     del topology_actions.actions[index_action]
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
-                    
+
                     del topology_actions.probs_in_percent[index_action]
-                    
+
                     for i in range(len(topology_actions.probs_in_percent)):
-                        topology_actions.probs_in_percent[i] += val  
+                        topology_actions.probs_in_percent[i] += val
             else:
                 break
 
@@ -1014,9 +1014,9 @@ class ExtdSimulator(psf.Simulator):
                     index_action = stop_actions.actions.index(action)
                     del stop_actions.actions[index_action]
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
-                    
+
                     del stop_actions.probs_in_percent[index_action]
-                    
+
                     for i in range(len(stop_actions.probs_in_percent)):
                         stop_actions.probs_in_percent[i] += val
             elif action == 'stop_group':
@@ -1028,9 +1028,9 @@ class ExtdSimulator(psf.Simulator):
                     index_action = stop_actions.actions.index(action)
                     del stop_actions.actions[index_action]
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
-                    
+
                     del stop_actions.probs_in_percent[index_action]
-                    
+
                     for i in range(len(stop_actions.probs_in_percent)):
                         stop_actions.probs_in_percent[i] += val
             elif action == 'move_pedestrian':
@@ -1043,9 +1043,9 @@ class ExtdSimulator(psf.Simulator):
                     del stop_actions.actions[index_action]
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
                     del stop_actions.probs_in_percent[index_action]
-                    
+
                     for i in range(len(stop_actions.probs_in_percent)):
-                        stop_actions.probs_in_percent[i] += val     
+                        stop_actions.probs_in_percent[i] += val
             elif action == 'move_group':
                 success = self.unfreeze_group()
                 if success:

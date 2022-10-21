@@ -2,3 +2,10 @@
 __pycache__/
 .scannerwork
 .pytest_cache
+*.c
+*.o
+*.so
+profile.json
+build
+*.egg-info
+file.log

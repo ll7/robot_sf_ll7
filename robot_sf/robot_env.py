@@ -178,6 +178,7 @@ class RobotEnv(Env):
         self.duration = 0
         self.rotation_counter = 0
 
+        self.sim_env.reset_state()
         self.target_coords, robot_pose = \
             self._pick_robot_spawn_and_target_pos(self.robot_map)
         self.robot = self.robot_factory(self.robot_map, robot_pose)

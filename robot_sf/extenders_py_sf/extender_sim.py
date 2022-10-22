@@ -45,15 +45,19 @@ class ExtdSimulator(psf.Simulator):
 
         # TODO: get rid of inheritance (if possible)
         super().__init__(state, groups, obs_filtered, config_file)
+        self.peds_sparsity = peds_sparsity
+        self.state_factory = lambda: PedState(state, groups, self.config)
+        self.peds: PedState = None
+        self.reset_state()
 
-        self.peds = PedState(state, groups, self.config)
+    def reset_state(self):
+        self.peds = self.state_factory()
         self.forces = self.make_forces(self.config)
 
         # new state with current positions of "active" pedestrians are stored
         self.active_peds_update()
-        self.set_ped_sparsity(peds_sparsity)
+        self.set_ped_sparsity(self.peds_sparsity)
 
-        """ Memory for pedestrians and groups target direction """
         #Initialize check for stopped group of pedestrians status
         self._stopped_groups = np.zeros((len(self.peds.groups),), dtype = bool)
         self._last_known_group_target = np.zeros((len(self.peds.groups),2))

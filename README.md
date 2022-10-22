@@ -60,7 +60,7 @@ sonar-scanner \
 
 ```sh
 # build optimized package with Cython (wip)
-python3 setup_cy.py build_ext build
+python3 -m pip install .
 ```
 
 ```sh

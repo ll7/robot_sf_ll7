@@ -8,3 +8,6 @@ Pillow==9.2.0
 shapely==1.8.5
 pylint==2.15.4
 pytest==7.1.3
+Cython==0.29.32
+scalene==1.5.13
+numba==0.56.3

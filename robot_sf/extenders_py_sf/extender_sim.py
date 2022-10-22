@@ -48,7 +48,7 @@ class ExtdSimulator(psf.Simulator):
         self.forces = self.make_forces(self.config)
 
         # new state with current positions of "active" pedestrians are stored
-        self.active_peds_update()
+        self._active_peds_update()
         self.set_ped_sparsity(self.peds_sparsity)
 
         #Initialize check for stopped group of pedestrians status
@@ -112,32 +112,28 @@ class ExtdSimulator(psf.Simulator):
     def step_once(self):
         """step once"""
         if self.sim_config_user.flags.update_peds:
-            self.update_peds_on_scene()
+            self._update_peds_on_scene()
             # only now perform step...
-        if self.current_positions.shape[0] > 0:
-            forces = self.compute_forces()
-        else:
-            forces = 0
-
+        forces = self.compute_forces() if self.current_positions.shape[0] > 0 else 0
         self.peds.step(forces)
         self._update_stopping_time()
 
         if self.sim_config_user.flags.enable_max_steps_stop:
             self._unfreeze_exceeding_limits()
 
-    # function to get positions of currently active pedestrians only (for graphical rendering and for Lidar implementation)
+    # function to get positions of currently active pedestrians only
+    # (for graphical rendering and for Lidar implementation)
     def get_pedestrians_positions(self):
-        # get peds states
-        peds_pos = self.get_states()[0][-1,:,:] #states_full is full history, we only want last instance
-        return peds_pos[(peds_pos[:,:2]!=[0,0]).any(axis = 1),:][:,:2]
+        last_peds_states = self.get_states()[0][-1, :, :]
+        return last_peds_states[:, :2]
 
     # function to get groupings of currently active pedestrians only (for graphical rendering)
     def get_pedestrians_groups(self):
         # get peds states
-        return self.get_states()[1][-1]  #states_full is full history, we only want last instance
+        return self.get_states()[1][-1]
 
     # update positions of currently active pedestrians
-    def active_peds_update(self, new_positions: np.ndarray=None, new_groups=None):
+    def _active_peds_update(self, new_positions: np.ndarray=None, new_groups=None):
         if (new_positions is not None):
             self.current_positions = new_positions
             self.current_groups = new_groups
@@ -162,34 +158,32 @@ class ExtdSimulator(psf.Simulator):
         self.update_robot_coord(coordinates)
 
     # new function (update pedestrians on scene)
-    def update_peds_on_scene(self):
+    def _update_peds_on_scene(self):
         box_size = self.box_size
 
         # mask of pedestrians to drop because they reached their target outside of the square
-        # Row of booleans indicating which pedestrian is out of bound (True) and which is still valid (False)
+        # row of booleans indicating which pedestrian is out of bound (True)
+        # and which is still valid (False)
+        ped_positions = self.peds.state[:, :2]
         drop_out_of_bounds: np.ndarray = np.any(
-            np.absolute(self.peds.state[:, :2]) > box_size * 1.2, axis=1)
+            np.absolute(ped_positions) > box_size * 1.2, axis=1) # TODO: use ped radius instead!!!
+        drop_zeroes = (ped_positions == [0, 0]).all(axis=1)
+        # TODO: what does position = (0, 0) mean? model this properly!
 
-        #Find row indices of pedestrians out of bounds: (Needed to update groups)
-        drop_zeroes = (self.peds.state[:, :2]==[0, 0]).all(axis=1) #Da capire ancora
-
-        #Initialize mask all to true
-        mask = np.ones(drop_out_of_bounds.shape, dtype = bool)
-
-        #Set to False pedestrians out of bounds and zeros
+        mask = np.ones(drop_out_of_bounds.shape, dtype=bool)
         mask[drop_out_of_bounds] = False
-        mask[drop_zeroes]= False
+        mask[drop_zeroes] = False
 
-        #Create new pedestrians by applying the mask
-        new_state = self.peds.state[mask,:]
+        # create new pedestrians by applying the mask
+        new_state = self.peds.state[mask, :]
         new_groups = self.peds.groups
 
-        #Remove indexes of removed pedestrians from groups
+        # remove indexes of removed pedestrians from groups
         index_drop = np.where(~mask)[0]
         mask2 = np.ones(self._stopped_peds.shape, dtype=bool)
         mask2[index_drop] = False
 
-        #Clean pedestrians memory
+        # clean pedestrians memory
         self._stopped_peds = self._stopped_peds[mask2]
         self._timer_stopped_peds = self._timer_stopped_peds[mask2]
         self._last_known_ped_target = self._last_known_ped_target[mask2]
@@ -209,7 +203,7 @@ class ExtdSimulator(psf.Simulator):
         self._generation_action_selector()
         self._group_action_selector()
         self._stop_action_selector()
-        self.active_peds_update()
+        self._active_peds_update()
         # re-initialize forces
         self.forces = self.make_forces(self.config)
 
@@ -218,8 +212,10 @@ class ExtdSimulator(psf.Simulator):
         If arg is given, overrides default value"""
         self.peds_sparsity = new_ped_sparsity
         self.av_max_people = round((2*self.box_size)**2 / self.peds_sparsity)
-        self.max_population_for_new_group = int(self.av_max_people - round((self.sim_config_user.new_peds_params.max_grp_size+2)/2) )
-        self.max_population_for_new_individual = self.max_population_for_new_group - (1+self.sim_config_user.new_peds_params.max_single_peds)
+        self.max_population_for_new_group = int(self.av_max_people - \
+            round((self.sim_config_user.new_peds_params.max_grp_size+2)/2) )
+        self.max_population_for_new_individual = self.max_population_for_new_group - \
+            (1 + self.sim_config_user.new_peds_params.max_single_peds)
 
     def get_not_grouped_pedestrian_indexes(self): #(TESTED !!)
         """This method returns a list of pedestrian indexes which doesn't belong
@@ -886,18 +882,18 @@ class ExtdSimulator(psf.Simulator):
                     else:
                         #select new action
                         index_action = ped_generations_action.actions.index(action)
-                        del ped_generations_action.actions[index_action]
+                        ped_generations_action.actions.pop(index_action)
                         val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
-                        del ped_generations_action.probs_in_percent[index_action]
+                        ped_generations_action.probs_in_percent.pop(index_action)
                         for i in range(len(ped_generations_action.probs_in_percent)):
                             ped_generations_action.probs_in_percent[i] += val
                 else:
                     #select new action
                     index_action = ped_generations_action.actions.index(action)
-                    del ped_generations_action.actions[index_action]
+                    ped_generations_action.actions.pop(index_action)
                     val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
 
-                    del ped_generations_action.probs_in_percent[index_action]
+                    ped_generations_action.probs_in_percent.pop(index_action)
 
                     for i in range(len(ped_generations_action.probs_in_percent)):
                         ped_generations_action.probs_in_percent[i] += val
@@ -909,19 +905,19 @@ class ExtdSimulator(psf.Simulator):
                     else:
                         #select new action
                         index_action = ped_generations_action.actions.index(action)
-                        del ped_generations_action.actions[index_action]
+                        ped_generations_action.actions.pop(index_action)
                         val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
 
-                        del ped_generations_action.probs_in_percent[index_action]
+                        ped_generations_action.probs_in_percent.poo(index_action)
 
                         for i in range(len(ped_generations_action.probs_in_percent)):
                             ped_generations_action.probs_in_percent[i] += val
                 else:
                     #Select new action
                         index_action = ped_generations_action.actions.index(action)
-                        del ped_generations_action.actions[index_action]
+                        ped_generations_action.actions.pop(index_action)
                         val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
-                        del ped_generations_action.probs_in_percent[index_action]
+                        ped_generations_action.probs_in_percent.pop(index_action)
                         for i in range(len(ped_generations_action.probs_in_percent)):
                             ped_generations_action.probs_in_percent[i] += val
             elif action == 'both':
@@ -944,10 +940,10 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = topology_actions.actions.index(action)
-                    del topology_actions.actions[index_action]
+                    topology_actions.actions.pop(index_action)
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
 
-                    del topology_actions.probs_in_percent[index_action]
+                    topology_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
@@ -958,10 +954,10 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = topology_actions.actions.index(action)
-                    del topology_actions.actions[index_action]
+                    topology_actions.actions.pop(index_action)
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
 
-                    del topology_actions.probs_in_percent[index_action]
+                    topology_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
@@ -972,10 +968,10 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = topology_actions.actions.index(action)
-                    del topology_actions.actions[index_action]
+                    topology_actions.actions.pop(index_action)
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
 
-                    del topology_actions.probs_in_percent[index_action]
+                    topology_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
@@ -986,10 +982,10 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = topology_actions.actions.index(action)
-                    del topology_actions.actions[index_action]
+                    topology_actions.actions.pop(index_action)
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
 
-                    del topology_actions.probs_in_percent[index_action]
+                    topology_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
@@ -1009,10 +1005,10 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = stop_actions.actions.index(action)
-                    del stop_actions.actions[index_action]
+                    stop_actions.actions.pop(index_action)
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
 
-                    del stop_actions.probs_in_percent[index_action]
+                    stop_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(stop_actions.probs_in_percent)):
                         stop_actions.probs_in_percent[i] += val
@@ -1023,10 +1019,10 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = stop_actions.actions.index(action)
-                    del stop_actions.actions[index_action]
+                    stop_actions.actions.pop(index_action)
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
 
-                    del stop_actions.probs_in_percent[index_action]
+                    stop_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(stop_actions.probs_in_percent)):
                         stop_actions.probs_in_percent[i] += val
@@ -1037,9 +1033,9 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = stop_actions.actions.index(action)
-                    del stop_actions.actions[index_action]
+                    stop_actions.actions.pop(index_action)
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
-                    del stop_actions.probs_in_percent[index_action]
+                    stop_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(stop_actions.probs_in_percent)):
                         stop_actions.probs_in_percent[i] += val
@@ -1050,9 +1046,9 @@ class ExtdSimulator(psf.Simulator):
                 else:
                     #Select new action
                     index_action = stop_actions.actions.index(action)
-                    del stop_actions.actions[index_action]
+                    stop_actions.actions.pop(index_action)
                     val = stop_actions.probs_in_percent[index_action]/len(stop_actions.actions)
-                    del stop_actions.probs_in_percent[index_action]
+                    stop_actions.probs_in_percent.pop(index_action)
 
                     for i in range(len(stop_actions.probs_in_percent)):
                         stop_actions.probs_in_percent[i] += val

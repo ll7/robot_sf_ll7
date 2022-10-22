@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Dec  4 11:35:36 2020
-
-@author: Matteo Caruso
-"""
-
 import os
 import toml
 from datetime import datetime

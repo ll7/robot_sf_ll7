@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Dec  3 16:32:16 2020
-
-@author: Matteo Caruso
-"""
-
 import math
 import random
 from typing import List, Tuple

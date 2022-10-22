@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 26 14:30:55 2020
-
-@author: enric
-"""
-
 import sys 
 import os
 

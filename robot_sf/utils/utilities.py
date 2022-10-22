@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 26 11:23:20 2020
-
-@author: Enrico Regolin
-"""
-
 import numpy as np
 from pysocialforce.utils import stateutils
 

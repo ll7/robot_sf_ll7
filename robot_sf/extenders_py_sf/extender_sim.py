@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Dec  5 12:56:00 2020
-
-@author: Matteo Caruso, Enrico Regolin
-"""
-
 import copy
 import random
 from typing import List

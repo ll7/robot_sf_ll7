@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Dec  3 20:36:15 2020
-
-@author: Matteo Caruso
-"""
-
 import random
 import numpy as np
 import math

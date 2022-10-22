@@ -5,3 +5,6 @@ services:
     build:
       context: .
     runtime: nvidia
+    volumes:
+      - './profiles:/app/profiles'
+    command: --cli --html --outfile /app/profiles/profile.html

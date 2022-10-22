@@ -4,6 +4,8 @@ ADD ./requirements.txt .
 RUN python --version
 RUN python -m pip install pip --upgrade
 RUN python -m pip install -r requirements.txt
-ADD . .
+ADD ./setup.py ./setup.py
+ADD ./robot_sf ./robot_sf
 RUN python -m pip install .
-ENTRYPOINT ["python", "-m", "scalene", "simulation_benchmark_zero_load.py"]
+ADD ./benchmarks ./benchmarks
+ENTRYPOINT ["python", "-m", "scalene", "./benchmarks/simulation_zero_load.py"]

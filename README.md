@@ -58,14 +58,23 @@ sonar-scanner \
 
 ### 4. Run Simulation Benchmark
 
+#### 4.1 Manual Deployment on Host Machine
+
 ```sh
-# build optimized package with Cython (wip)
-python3 -m pip install .
+# build optimized package with Cython
+python3 -m pip install . --upgrade
 ```
 
 ```sh
 # benchmark with scalene instead of cProfile
-python3 -m scalene simulation_benchmark_zero_load.py
+python3 -m scalene ./benchmarks/simulation_zero_load.py
+```
+
+#### 4.2 Dockerized Deployment (GPU-Empowered)
+
+```sh
+docker-compose up --build
+firefox ./profiles/profile.html
 ```
 
 ## Original Repository

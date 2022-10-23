@@ -77,6 +77,13 @@ docker-compose up --build
 firefox ./profiles/profile.html
 ```
 
+#### 4.3 Run Simulation with UI (for Debugging)
+
+```sh
+# render the game state with pygame and observe live
+python3 debug_simulation.py
+```
+
 ## Original Repository
 This repository is a fork of https://github.com/EnricoReg/robot-sf.
 Thank you for providing the initial inspiration and technical

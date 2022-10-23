@@ -14,11 +14,11 @@ RobotAction = PolarVec2D
 
 # TODO: pick reasonable colors
 BACKGROUND_COLOR = (255, 255, 255)
-OBSTACLE_COLOR = (0, 0, 0)
-PEDESTRIAN_COLOR = (0, 0, 0)
-ROBOT_COLOR = (0, 0, 0)
-COLLISION_COLOR = (0, 0, 0)
-ROBOT_ACTION_COLOR = (0, 0, 0)
+OBSTACLE_COLOR = (20, 30, 20)
+PEDESTRIAN_COLOR = (0, 50, 100)
+ROBOT_COLOR = (0, 0, 200)
+COLLISION_COLOR = (200, 0, 0)
+ROBOT_ACTION_COLOR = (0, 100, 0)
 TEXT_COLOR = (0, 0, 0)
 
 
@@ -51,8 +51,9 @@ class VisualizableSimState:
     collisions_occupancy: np.ndarray = field(init=False)
 
     def __post_init__(self):
-        coll_temp = np.bitwise_and(self.obstacles_occupancy, self.pedestrians_occupancy)
-        self.collisions_occupancy = np.bitwise_and(coll_temp, self.robot_occupancy)
+        coll_with_obstacle = np.bitwise_and(self.robot_occupancy, self.pedestrians_occupancy)
+        coll_with_pedestrian = np.bitwise_and(self.robot_occupancy, self.obstacles_occupancy)
+        self.collisions_occupancy = np.bitwise_or(coll_with_obstacle, coll_with_pedestrian)
 
 
 class SimulationView:

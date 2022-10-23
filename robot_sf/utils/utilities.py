@@ -164,11 +164,12 @@ def build_coordinates_scalar(coordinate_a, coordinate_b, distance):
 
 # function used to correctly update groups indices after states are removed
 def fun_reduce_index(list_of_lists, num):
-    for idx_out, a_list in enumerate(list_of_lists):
-        for idx, item in enumerate(a_list):
+    # TODO: implement this assuming a numpy array
+    for i, sub_list in enumerate(list_of_lists):
+        for j, item in enumerate(sub_list):
             if item > num:
-                a_list[idx] = item-1
-        list_of_lists[idx_out] = a_list        
+                sub_list[j] = item-1
+        list_of_lists[i] = sub_list
     return list_of_lists
 
 
@@ -201,7 +202,8 @@ def add_new_group(box_size, max_grp_size, n_pedestrians_actual, group_width_max,
         ), axis=1)
     # define initial speeds of group
     new_group_directions = stateutils.desired_directions(new_group_states)[0]
-    random_speeds = np.repeat((average_speed + np.random.randn(new_group_directions.shape[0]) / speed_variance_red)[np.newaxis, :], 2, axis=0).T
+    random_speeds = np.repeat((average_speed + np.random.randn(
+        new_group_directions.shape[0]) / speed_variance_red)[np.newaxis, :], 2, axis=0).T
     new_group_states[:, 2:4] = np.multiply(new_group_directions, random_speeds)
     # new group indices
     new_group = n_pedestrians_actual+np.arange(new_grp_size)

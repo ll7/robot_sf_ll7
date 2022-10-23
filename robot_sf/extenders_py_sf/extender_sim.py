@@ -5,8 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-import pysocialforce as psf
-from pysocialforce import forces
+from pysocialforce import Simulator, forces
 from pysocialforce.utils import stateutils
 
 from robot_sf.utils.utilities import fill_state, fun_reduce_index
@@ -24,7 +23,7 @@ class RobotObject:
     radius: float
 
 
-class ExtdSimulator(psf.Simulator):
+class ExtdSimulator(Simulator):
     def __init__(self, config_file=None, path_to_config: str=None, difficulty: int=0, peds_sparsity: int=0):
         self.robot = RobotObject(RobotPose(Vec2D(0, 0), 0), 0)
 
@@ -188,6 +187,7 @@ class ExtdSimulator(psf.Simulator):
         self._timer_stopped_peds = self._timer_stopped_peds[mask2]
         self._last_known_ped_target = self._last_known_ped_target[mask2]
 
+        # TODO: use numpy operations instead of this loop
         for i in -np.sort(-index_drop):
             for num,group in enumerate(new_groups):
                 group = np.array(group)
@@ -303,10 +303,10 @@ class ExtdSimulator(psf.Simulator):
             self._stopped_groups[destination_group] = False
             self._timer_stopped_group[destination_group] = 0
         else:
-            target_state = np.zeros((len(selected_ped),2))
+            target_state = np.zeros((len(selected_ped), 2))
             ped_old_idx = old_groups[destination_group][0]
-            target_state[:,0] = self.peds.state[ped_old_idx,4]
-            target_state[:,1] = self.peds.state[ped_old_idx,5]
+            target_state[:, 0] = self.peds.state[ped_old_idx, 4]
+            target_state[:, 1] = self.peds.state[ped_old_idx, 5]
 
         self._last_known_ped_target[selected_ped, :] = [0, 0]
         self._timer_stopped_peds[selected_ped] = 0

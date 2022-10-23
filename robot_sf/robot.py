@@ -1,12 +1,12 @@
 from math import sin, cos
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Tuple
 
 import numpy as np
 
 from robot_sf.vector import RobotPose, PolarVec2D, Vec2D
 from robot_sf.map import BinaryOccupancyGrid
-from robot_sf.range_sensor import LidarScanner, LidarScannerSettings
+from robot_sf.range_sensor import LidarScanner
 
 
 @dataclass
@@ -133,4 +133,4 @@ class DifferentialDriveRobot():
     def is_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
         # TODO: think about whether the robot should know its goal
         #       -> maybe model this as a class "NagivationRequest" or similar
-        return self.state.current_pose.target_rel_position(target_coordinates)[0] <= tolerance
+        return self.state.current_pose.rel_pos(target_coordinates)[0] <= tolerance

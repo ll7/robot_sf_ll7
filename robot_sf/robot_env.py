@@ -184,7 +184,7 @@ class RobotEnv(Env):
         self.robot = self.robot_factory(self.robot_map, robot_pose)
 
         # initialize Scan to get dimension of state (depends on ray cast)
-        dist_to_goal, _ = robot_pose.target_rel_position(self.target_coords)
+        dist_to_goal, _ = robot_pose.rel_pos(self.target_coords)
         self.distance_init = dist_to_goal
         ranges = self.robot.get_scan()
         return self._get_obs(ranges)
@@ -213,7 +213,7 @@ class RobotEnv(Env):
         # if initial coords are too close (1.5m) to an obstacle,
         # pedestrian or the target, generate new coords
         while robot_map.is_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
-                robot_pose.target_rel_position(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
+                robot_pose.rel_pos(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
             robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
             robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
 
@@ -223,7 +223,7 @@ class RobotEnv(Env):
         speed_x = self.robot.state.current_speed.dist
         speed_rot = self.robot.state.current_speed.orient
 
-        target_distance, target_angle = self.robot.state.current_pose.target_rel_position(self.target_coords)
+        target_distance, target_angle = self.robot.state.current_pose.rel_pos(self.target_coords)
         self.closest_obstacle = np.amin(ranges_np)
 
         if self.normalize_obs_state:

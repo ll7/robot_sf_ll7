@@ -48,9 +48,9 @@ setup(
     package_data=PACKAGE_DATA,
     install_requires=INSTALL_REQUIREMENTS,
     zip_safe=False,
-    ext_modules = cythonize(
-        get_ext_paths('robot_sf', EXCLUDE_FILES),
-        compiler_directives={'language_level':3}),
+    # ext_modules = cythonize(
+    #     get_ext_paths('robot_sf', EXCLUDE_FILES),
+    #     compiler_directives={'language_level':3}),
     include_package_data=True,
     python_requires='>=3.8'
 )

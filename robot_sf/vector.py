@@ -40,8 +40,7 @@ class RobotPose:
     def coords_with_orient(self) -> List[float]:
         return [self.pos.x, self.pos.y, self.orient]
 
-    # TODO: rename this
-    def target_rel_position(self, target_coords: np.ndarray) \
+    def rel_pos(self, target_coords: np.ndarray) \
             -> Tuple[np.ndarray, np.ndarray]:
         dists: np.ndarray = np.linalg.norm(target_coords - np.array(self.coords))
         x_offsets = target_coords[0] - self.pos.x

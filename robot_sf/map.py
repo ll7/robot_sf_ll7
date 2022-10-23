@@ -22,25 +22,35 @@ class BinaryOccupancyGrid():
         self.grid_width = int(ceil(map_width * map_resolution))
         self.grid_height = int(ceil(map_height * map_resolution))
 
-        self.occupancy_static_objects, self.obstacle_coordinates = \
+        self.occupancy_obstacles, self.obstacle_coordinates = \
             self._initialize_static_objects()
         self.update_moving_objects()
 
     @property
     def occupancy_overall(self) -> np.ndarray:
-        return np.logical_or(self.occupancy_moving_objects, self.occupancy_static_objects)
+        return np.logical_or(self.occupancy_pedestrians, self.occupancy_obstacles)
+
+    def robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
+        world_x, world_y = robot_pos.as_list
+        x, y = self._world_coords_to_grid_cell(world_x, world_y)
+        x_step, y_step = self._world_length_to_grid_cell_span(coll_distance)
+
+        occ_shape = (self.grid_width, self.grid_height)
+        occupancy = np.zeros(occ_shape, dtype=bool)
+        fill_surrounding(occupancy, x, y, x_step, y_step)
+        return occupancy
 
     def is_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         return self.is_pedestrians_collision(robot_pos, collision_distance) \
             or self.is_obstacle_collision(robot_pos, collision_distance)
 
     def is_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
-        occupancy = self._get_robot_occupancy(robot_pos, collision_distance)
-        return np.logical_and(self.occupancy_static_objects, occupancy).any()
+        occupancy = self.robot_occupancy(robot_pos, collision_distance)
+        return np.logical_and(self.occupancy_obstacles, occupancy).any()
 
     def is_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
-        occupancy = self._get_robot_occupancy(robot_pos, collision_distance)
-        return np.logical_and(self.occupancy_moving_objects, occupancy).any()
+        occupancy = self.robot_occupancy(robot_pos, collision_distance)
+        return np.logical_and(self.occupancy_pedestrians, occupancy).any()
 
     def is_in_bounds(self, x: float, y: float) -> bool:
         return -self.box_size <= x <= self.box_size \
@@ -53,7 +63,7 @@ class BinaryOccupancyGrid():
 
     def update_moving_objects(self):
         # TODO: think about computing this on demand as property
-        self.occupancy_moving_objects = self._compute_moving_objects_occupancy()
+        self.occupancy_pedestrians = self._compute_moving_objects_occupancy()
 
     def _world_coords_to_grid_cell(self, x: float, y: float) -> Tuple[int, int]:
         """Map coordinates from a continuous 2D world to a discrete 2D grid.
@@ -80,16 +90,6 @@ class BinaryOccupancyGrid():
         rounded grid cells in x and y direction."""
         rel_len = length / (2 * self.box_size)
         return round(rel_len * self.grid_width), round(rel_len * self.grid_height)
-
-    def _get_robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
-        world_x, world_y = robot_pos.as_list
-        x, y = self._world_coords_to_grid_cell(world_x, world_y)
-        x_step, y_step = self._world_length_to_grid_cell_span(coll_distance)
-
-        occ_shape = (self.grid_width, self.grid_height)
-        occupancy = np.zeros(occ_shape, dtype=bool)
-        fill_surrounding(occupancy, x, y, x_step, y_step)
-        return occupancy
 
     def _initialize_static_objects(self) -> Tuple[np.ndarray, np.ndarray]:
         occ_shape = (self.grid_width, self.grid_height)

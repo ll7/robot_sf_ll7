@@ -5,9 +5,10 @@ import numpy as np
 from gym import Env, spaces
 
 from robot_sf.map import BinaryOccupancyGrid
-from robot_sf.range_sensor import LidarScanner
+from robot_sf.range_sensor import LidarScanner, LidarScannerSettings
+from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.vector import RobotPose, Vec2D, PolarVec2D
-from robot_sf.robot import DifferentialDriveRobot, LidarScannerSettings, RobotSettings
+from robot_sf.robot import DifferentialDriveRobot, RobotSettings
 from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 
 
@@ -65,7 +66,7 @@ class RobotEnv(Env):
                  v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None,
                  max_v_x_delta: float=.5, max_v_rot_delta: float=.5, dt: float=None,
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
-                 scan_noise: List[float]=None, peds_speed_mult: float=1.3):
+                 scan_noise: List[float]=None, peds_speed_mult: float=1.3, debug: bool=False):
 
         # TODO: get rid of most of these instance variables
         #       -> encapsulate statefulness inside a "state" object
@@ -122,10 +123,30 @@ class RobotEnv(Env):
             ), axis=0)
         self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
 
+        self.timestep = 0
+        self.last_action: PolarVec2D = None
+        if debug:
+            self.sim_ui = SimulationView(self.robot_map.grid_width, self.robot_map.grid_height)
+        # TODO: privode a callback that shuts the simulator down on cancellation by user via UI
+
     def render(self, mode='human'):
-        # TODO: visualize the game state with something like e.g. pygame
-        # rendering: use the map's occupancy grid and display it as bitmap
-        pass
+        action = None if not self.last_action else \
+            VisualizableAction(
+                self.robot.pose,
+                self.last_action,
+                self.robot_map._world_coords_to_grid_cell)
+
+        robot_occupancy = self.robot_map.robot_occupancy(
+            self.robot.pos, self.robot.config.rob_collision_radius)
+
+        state = VisualizableSimState(
+            self.timestep,
+            action,
+            robot_occupancy,
+            self.robot_map.occupancy_pedestrians,
+            self.robot_map.occupancy_obstacles)
+
+        self.sim_ui.render(state)
 
     def step(self, action_np: np.ndarray):
         coords_with_direction = self.robot.pose.coords_with_orient
@@ -146,6 +167,8 @@ class RobotEnv(Env):
 
         # determine the reward and whether the episode is done
         reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, saturate_input)
+        self.timestep += 1
+        self.last_action = action
         return (norm_ranges, rob_state), reward, done, None
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
@@ -177,6 +200,8 @@ class RobotEnv(Env):
     def reset(self):
         self.duration = 0
         self.rotation_counter = 0
+        self.timestep = 0
+        self.last_action = None
 
         self.sim_env.reset_state()
         self.target_coords, robot_pose = \

@@ -73,7 +73,7 @@ python3 -m scalene ./benchmarks/simulation_zero_load.py
 #### 4.2 Dockerized Deployment (GPU-Empowered)
 
 ```sh
-docker-compose up --build
+CURRENT_TIMESTAMP="$(date --iso-8601)T$(date +%T)" docker-compose up --build
 firefox ./profiles/profile.html
 ```
 

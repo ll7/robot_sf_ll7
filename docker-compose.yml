@@ -7,4 +7,4 @@ services:
     runtime: nvidia
     volumes:
       - './profiles:/app/profiles'
-    command: --cli --html --outfile /app/profiles/profile.html
+    command: --cli --html --outfile /app/profiles/profile_${CURRENT_TIMESTAMP}.html

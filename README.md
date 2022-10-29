@@ -71,7 +71,7 @@ python3 -m pip install .
 
 ```sh
 # benchmark with scalene
-python3 -m scalene simulation_zero_load.py
+python3 -m scalene benchmark.py
 ```
 
 #### 4.2 Dockerized Deployment (GPU-Empowered)

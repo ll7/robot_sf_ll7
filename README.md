@@ -88,6 +88,12 @@ firefox ./profiles/profile.html
 python3 debug_simulation.py
 ```
 
+### 5. Run OpenAI StableBaselines Training
+
+```sh
+python3 training.py
+```
+
 ## Original Repository
 This repository is a fork of https://github.com/EnricoReg/robot-sf.
 Thank you for providing the initial inspiration and technical

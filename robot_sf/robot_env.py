@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from math import dist
 from typing import Tuple, List
 
@@ -114,15 +115,16 @@ class RobotEnv(Env):
         self.action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
 
         state_max = np.concatenate((
-                self.lidar_range * np.ones((lidar_n_rays,)),
+                self.lidar_range * np.ones((lidar_sensor.settings.scan_length,)),
                 np.array([self.linear_max, self.angular_max, self.target_distance_max, np.pi])
             ), axis=0)
         state_min = np.concatenate((
-                np.zeros((lidar_n_rays,)),
+                np.zeros((lidar_sensor.settings.scan_length,)),
                 np.array([0, -self.angular_max, 0, -np.pi])
             ), axis=0)
         self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
 
+        self.episode = 0
         self.timestep = 0
         self.last_action: PolarVec2D = None
         if debug:
@@ -169,7 +171,7 @@ class RobotEnv(Env):
         reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, saturate_input)
         self.timestep += 1
         self.last_action = action
-        return (norm_ranges, rob_state), reward, done, None
+        return np.concatenate((norm_ranges, rob_state), axis=0), reward, done, { 'step': self.episode }
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
         # if pedestrian / obstacle is hit or time expired
@@ -198,6 +200,7 @@ class RobotEnv(Env):
         return reward, done
 
     def reset(self):
+        self.episode += 1
         self.duration = 0
         self.rotation_counter = 0
         self.timestep = 0
@@ -212,7 +215,8 @@ class RobotEnv(Env):
         dist_to_goal, _ = robot_pose.rel_pos(self.target_coords)
         self.distance_init = dist_to_goal
         ranges = self.robot.get_scan()
-        return self._get_obs(ranges)
+        norm_ranges, rob_state = self._get_obs(ranges)
+        return np.concatenate((norm_ranges, rob_state), axis=0)
 
     def _pick_robot_spawn_and_target_pos(
             self, robot_map: BinaryOccupancyGrid) -> Tuple[np.ndarray, RobotPose]:

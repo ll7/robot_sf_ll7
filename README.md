@@ -67,7 +67,7 @@ python3 -m pip install . --upgrade
 
 ```sh
 # benchmark with scalene instead of cProfile
-python3 -m scalene ./benchmarks/simulation_zero_load.py
+python3 -m scalene simulation_zero_load.py
 ```
 
 #### 4.2 Dockerized Deployment (GPU-Empowered)

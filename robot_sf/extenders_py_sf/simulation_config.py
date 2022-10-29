@@ -2,7 +2,7 @@ import os
 import toml
 import json
 import random
-from typing import List
+from typing import List, Tuple
 from dataclasses import dataclass
 
 import numpy as np
@@ -98,7 +98,8 @@ def load_map_name(data: dict) -> str:
     return map_name
 
 
-def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int):
+def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
+        -> Tuple[float, List, List, np.ndarray, List]:
     map_name = load_map_name(data)
     path_to_map = os.path.join(maps_config_path, map_name)
 
@@ -217,7 +218,8 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int):
     return box_size, obstacle, obstacles_lolol, state, groups
 
 
-def load_config(path_to_filename: str=None, difficulty: int=0):
+def load_config(path_to_filename: str=None, difficulty: int=0) \
+        -> Tuple[SimulationConfiguration, np.ndarray, List, List]:
     # TODO: don't allow the argument to be None, set this explicitly in calling scope
 
     data = load_toml(path_to_filename)

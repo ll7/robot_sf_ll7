@@ -23,6 +23,7 @@ class RobotObject:
     radius: float
 
 
+# info: this implementation is not ideal, but at least it's not the performance bottleneck
 class ExtdSimulator(Simulator):
     def __init__(self, config_file=None, path_to_config: str=None, difficulty: int=0, peds_sparsity: int=0):
         self.robot = RobotObject(RobotPose(Vec2D(0, 0), 0), 0)

@@ -97,13 +97,14 @@ def change_direction(p0, p1, current_positions, destinations, view_distance, ang
 
         ### choose angles without intersections
         idxs_nan = np.where(np.isnan(my_dist).all(axis=1))[0]  #generated as tuple
-        idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
-        ped_idx = np.where(peds_collision_indices)[0] # indices of directions to be changed
 
-        #generate new destinations
-        new_goal = rotate_segment(collision_states.reshape(2), destinations[ped_idx][0, :], angles[idx_used])
-        new_direction = ([new_goal[0], new_goal[1]] - collision_states.reshape(2)) / np.linalg.norm(new_goal - collision_states)
-        direction[ped_idx] = new_direction
+        if idxs_nan.shape[0] > 0:
+            idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
+            ped_idx = np.where(peds_collision_indices)[0] # indices of directions to be changed
+            #generate new destinations
+            new_goal = rotate_segment(collision_states.reshape(2), destinations[ped_idx][0, :], angles[idx_used])
+            new_direction = ([new_goal[0], new_goal[1]] - collision_states.reshape(2)) / np.linalg.norm(new_goal - collision_states)
+            direction[ped_idx] = new_direction
 
         ### same as above, iteratively
     elif collision_states.shape[0] > 1:
@@ -121,12 +122,12 @@ def change_direction(p0, p1, current_positions, destinations, view_distance, ang
 
             idxs_nan = np.where(np.isnan(my_dist).all(axis = 1))[0]  #generated as tuple
             # TODO: figure out why argmin occasionally receives empty sequences as argument
-            idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
-            ped_idx = np.where(peds_collision_indices)[0][i]
-
-            new_goal = rotate_segment(collision_states[i].reshape(2), destinations[ped_idx], angles[idx_used])
-            new_direction = (new_goal - collision_states[i]) / np.linalg.norm(new_goal - collision_states[i])
-            direction[ped_idx] = new_direction
+            if idxs_nan.shape[0] > 0:
+                idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
+                ped_idx = np.where(peds_collision_indices)[0][i]
+                new_goal = rotate_segment(collision_states[i].reshape(2), destinations[ped_idx], angles[idx_used])
+                new_direction = (new_goal - collision_states[i]) / np.linalg.norm(new_goal - collision_states[i])
+                direction[ped_idx] = new_direction
 
     return direction, peds_collision_indices
 

@@ -9,7 +9,7 @@ in a pedestrian-filled space.
 ### 1. Clone Source Code
 
 ```sh
-git clone https://git.rz.uni-augsburg.de/troestma/scoomatic-pysocialforce
+git clone --recurse-submodules https://git.rz.uni-augsburg.de/troestma/scoomatic-pysocialforce
 cd robot-sf
 ```
 
@@ -18,6 +18,7 @@ cd robot-sf
 ```sh
 python3 -m pip install pip --upgrade
 python3 -m pip install -r requirements.txt
+python3 -m pip install -r fast-pysf/requirements.txt
 ```
 
 ### 3. Run Linter / Tests / Code Analysis
@@ -61,12 +62,15 @@ sonar-scanner \
 #### 4.1 Manual Deployment on Host Machine
 
 ```sh
-# build optimized package with Cython
-python3 -m pip install . --upgrade
+# register packages with pip
+pushd ./fast-pysf
+  python3 -m pip install .
+popd
+python3 -m pip install .
 ```
 
 ```sh
-# benchmark with scalene instead of cProfile
+# benchmark with scalene
 python3 -m scalene simulation_zero_load.py
 ```
 

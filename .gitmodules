@@ -1,0 +1,4 @@
+[submodule "fast-pysf"]
+	path = fast-pysf
+	url = https://github.com/Bonifatius94/PySocialForce
+	branch = fast-obstacle-force-no-refactoring

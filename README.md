@@ -1,11 +1,13 @@
 # robot-sf
 
 ## About
-This project provides a training environment for the Simulation of a robot moving
-in a pedestrian-filled space. It interfaces with OpenAI Gym to facilitate trainings
-with various SOTA reinforcement learning algorithms like e.g. OpenAI StableBaselines3.
+This project provides a training environment for the simulation of a robot moving
+in a pedestrian-filled space.
+
+The project interfaces with OpenAI Gym to facilitate trainings with various
+SOTA reinforcement learning algorithms like e.g. OpenAI StableBaselines3.
 For simulating the pedestrians, the SocialForce model is used via a dependency
-on PySocialForce.
+on a fork of PySocialForce.
 
 ## Quickstart
 
@@ -51,4 +53,4 @@ docker-compose build && docker-compose run \
     robotsf-cuda python ./scripts/training.py
 ```
 
-*Note: See this [setup](./GPU_SETUP.md) to install Docker with GPU support.*
+*Note: See [this setup](./GPU_SETUP.md) to install Docker with GPU support.*

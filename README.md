@@ -14,7 +14,7 @@ on a fork of PySocialForce.
 ### 1. Clone Source Code
 
 ```sh
-git clone --recurse-submodules https://git.rz.uni-augsburg.de/troestma/scoomatic-pysocialforce
+git clone --recurse-submodules https://github.com/Bonifatius94/robot-sf
 cd robot-sf
 ```
 

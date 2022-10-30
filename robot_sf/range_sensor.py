@@ -5,6 +5,9 @@ from typing import List, Tuple
 import numpy as np
 import numba
 
+import logging
+logging.getLogger('numba').setLevel(logging.WARNING)
+
 from robot_sf.map import BinaryOccupancyGrid
 from robot_sf.vector import RobotPose
 

@@ -4,6 +4,9 @@ from typing import Callable, Tuple, List
 import numba
 import numpy as np
 
+import logging
+logging.getLogger('numba').setLevel(logging.WARNING)
+
 from robot_sf.vector import Vec2D
 
 

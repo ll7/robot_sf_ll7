@@ -13,3 +13,5 @@ scalene==1.5.13
 numba==0.56.3
 pygame==2.1.2
 stable-baselines3==1.6.2
+tqdm==4.64.1
+rich==12.6.0

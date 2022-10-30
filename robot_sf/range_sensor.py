@@ -222,7 +222,7 @@ class LidarScanner():
         containing the sensor readings"""
 
         pos_x, pos_y = pose.coords
-        start_pt = self.robot_map._world_coords_to_grid_cell(pos_x, pos_y)
+        start_pt = self.robot_map.world_coords_to_grid_cell(pos_x, pos_y)
         scan_noise = np.array(self.settings.scan_noise)
         scan_length = self.settings.scan_length
 

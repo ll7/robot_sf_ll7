@@ -35,7 +35,7 @@ class BinaryOccupancyGrid():
 
     def robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
         world_x, world_y = robot_pos.as_list
-        pos_x, pos_y = self._world_coords_to_grid_cell(world_x, world_y)
+        pos_x, pos_y = self.world_coords_to_grid_cell(world_x, world_y)
         x_step, y_step = self._world_length_to_grid_cell_span(coll_distance)
 
         occ_shape = (self.grid_width, self.grid_height)
@@ -67,7 +67,7 @@ class BinaryOccupancyGrid():
     def update_moving_objects(self):
         self.occupancy_pedestrians = self._compute_moving_objects_occupancy()
 
-    def _world_coords_to_grid_cell(self, world_x: float, world_y: float) -> Tuple[int, int]:
+    def world_coords_to_grid_cell(self, world_x: float, world_y: float) -> Tuple[int, int]:
         """Map coordinates from a continuous 2D world to a discrete 2D grid.
           x: [-box_x, box_x] -> [0, grid_width  - 1],
           y: [-box_y, box_y] -> [0, grid_height - 1]"""
@@ -100,7 +100,7 @@ class BinaryOccupancyGrid():
         all_coords = np.concatenate(self.get_obstacle_coords())
         coords_in_bounds = [pos for pos in all_coords \
                             if pos.size != 0 and self.is_in_bounds(pos[0], pos[1])]
-        grid_coords = [self._world_coords_to_grid_cell(pos[0], pos[1])
+        grid_coords = [self.world_coords_to_grid_cell(pos[0], pos[1])
                        for pos in coords_in_bounds]
 
         for grid_x, grid_y in grid_coords:
@@ -120,7 +120,7 @@ class BinaryOccupancyGrid():
         eval_points = np.vstack((grid_x, grid_y)).T
 
         for grid_x, grid_y in eval_points:
-            grid_x, grid_y = self._world_coords_to_grid_cell(grid_x, grid_y)
+            grid_x, grid_y = self.world_coords_to_grid_cell(grid_x, grid_y)
             fill_surrounding(occupancy, grid_x, grid_y, x_step, y_step)
 
         return occupancy, np.array(coords_in_bounds)
@@ -131,7 +131,7 @@ class BinaryOccupancyGrid():
 
         peds_pos = self.get_pedestrian_coords()
         grid_coords = [
-            self._world_coords_to_grid_cell(pos[0], pos[1])
+            self.world_coords_to_grid_cell(pos[0], pos[1])
             for pos in peds_pos
             if pos.size != 0 and self.is_in_bounds(pos[0], pos[1])
         ]

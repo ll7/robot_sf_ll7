@@ -133,7 +133,7 @@ class RobotEnv(Env):
             VisualizableAction(
                 self.robot.pose,
                 self.last_action,
-                self.robot_map._world_coords_to_grid_cell)
+                self.robot_map.world_coords_to_grid_cell)
 
         robot_occupancy = self.robot_map.robot_occupancy(
             self.robot.pos, self.robot.config.rob_collision_radius)
@@ -147,15 +147,15 @@ class RobotEnv(Env):
 
         self.sim_ui.render(state)
 
-    def step(self, action_np: np.ndarray):
+    def step(self, action: np.ndarray):
         coords_with_direction = self.robot.pose.coords_with_orient
         self.sim_env.move_robot(coords_with_direction)
         self.sim_env.step(1)
         self.robot_map.update_moving_objects()
 
         dist_before = dist(self.robot.pos.as_list, self.target_coords)
-        action = PolarVec2D(action_np[0], action_np[1])
-        movement, saturate_input = self.robot.apply_action(action, self.d_t)
+        action_parsed = PolarVec2D(action[0], action[1])
+        movement, saturate_input = self.robot.apply_action(action_parsed, self.d_t)
         dot_x, dot_orient = movement.dist, movement.orient
         dist_after = dist(self.robot.pos.as_list, self.target_coords)
 
@@ -167,8 +167,9 @@ class RobotEnv(Env):
         # determine the reward and whether the episode is done
         reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, saturate_input)
         self.timestep += 1
-        self.last_action = action
-        return np.concatenate((norm_ranges, rob_state), axis=0), reward, done, { 'step': self.episode }
+        self.last_action = action_parsed
+        info = { 'step': self.episode }
+        return np.concatenate((norm_ranges, rob_state), axis=0), reward, done, info
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
         # if pedestrian / obstacle is hit or time expired

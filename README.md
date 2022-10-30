@@ -1,8 +1,11 @@
 # robot-sf
 
 ## About
-Environment for the Simulation of a Robot moving
-in a pedestrian-filled space.
+This project provides a training environment for the Simulation of a robot moving
+in a pedestrian-filled space. It interfaces with OpenAI Gym to facilitate trainings
+with various SOTA reinforcement learning algorithms like e.g. OpenAI StableBaselines3.
+For simulating the pedestrians, the SocialForce model is used via a dependency
+on PySocialForce.
 
 ## Quickstart
 

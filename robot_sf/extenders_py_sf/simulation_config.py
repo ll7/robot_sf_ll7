@@ -124,57 +124,57 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     if not data['simulator']['flags']['random_initial_population']:
         state = np.array(data['simulator']['default']['states'])
         groups = data['simulator']['default']['groups']
-        
+
         grouped_peds = []
-        
+
         for group in groups:
             grouped_peds += group
         n_peds = len(state)
-        
-        
+
+
     else:
         n_peds = data['simulator']['custom']['random_population']['max_initial_peds'][difficulty]
         index_list = np.arange(n_peds).tolist() #Available index to group
-        
+
         #initialize state matrix
         state = np.zeros((n_peds, 6))
         groups = []
-                            
-        
+                   
+
         #Initialize groups
         grouped_peds = []
         available_peds = index_list.copy()
-        
-                        
+
+               
         for i in range(data['simulator']['custom']['random_population']['max_initial_groups']):
             max_n = min(len(available_peds), data['simulator']['custom']['random_population']['max_peds_per_group'])
-            
+   
             group = random.sample(available_peds, max_n)
             groups.append(group)
             grouped_peds += group
-            
+   
             available_peds = [ped for ped in available_peds if ped not in group]
-            
-            
+   
+   
             #generate group target for grouped peds
             if group:
                 group_destination_a = random.choice([0,1,2,3])
                 group_destination_b = random.randint(-(box_size +1),box_size +1)*np.ones((len(group),))
-                
+       
                 #Initial speed
                 dot_x_0 = 0.5 #Module
-                
+       
                 #random angle
                 angle = random.uniform(-np.pi, np.pi)
                 dot_x_x = dot_x_0*np.cos(angle)
                 dot_x_y = dot_x_0*np.sin(angle)
 
-            #Based on group origin and group destination compute the new states of the 
+            #Based on group origin and group destination compute the new states of the
             #new added pedestrians
                 destination_states = fill_state(group_destination_a, group_destination_b, False, box_size)
                 state[group, 4:6] = destination_states
                 state[group, 2:4] = [dot_x_x, dot_x_y]
-        
+
         #Check for state validity
         obs_recreated = random_polygon(PolygonCreationSettings(5, irregularity=0, spikeness=0))
     for i in range(n_peds):
@@ -203,16 +203,16 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
             if i not in grouped_peds:
                 destination_a = random.choice([0,1,2,3])
                 destination_b = random.randint(-(box_size +1),box_size +1)
-                
+       
                 destination_state = fill_state(destination_a, destination_b, False, box_size)
                 state[i, 4:6] = destination_state
-                
+       
                 dot_x_0 = 0.5
                 angle = random.uniform(-np.pi, np.pi)
-                
+       
                 dot_x_x = dot_x_0*np.cos(angle)
                 dot_x_y = dot_x_0*np.sin(angle)
-                
+       
                 state[i,2:4] = [dot_x_x, dot_x_y]
 
     return box_size, obstacle, obstacles_lolol, state, groups

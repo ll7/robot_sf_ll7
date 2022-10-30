@@ -42,7 +42,7 @@ Dockerized deployments will recognize when a change requires a rebuild.*
 ### 4. Run Linter / Tests
 
 ```sh
-python3 -m pytest
+python3 -m pytest --ignore=fast-pysf
 python3 -m pylint robot_sf --fail-under=9.5
 ```
 

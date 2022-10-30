@@ -68,8 +68,6 @@ class RobotEnv(Env):
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
                  scan_noise: List[float]=None, peds_speed_mult: float=1.3, debug: bool=False):
 
-        # TODO: get rid of most of these instance variables
-        #       -> encapsulate statefulness inside a "state" object
         scan_noise = scan_noise if scan_noise else [0.005, 0.002]
 
         # info: this gets initialized by env.reset()
@@ -128,7 +126,7 @@ class RobotEnv(Env):
         self.last_action: PolarVec2D = None
         if debug:
             self.sim_ui = SimulationView(self.robot_map.grid_width, self.robot_map.grid_height)
-        # TODO: privode a callback that shuts the simulator down on cancellation by user via UI
+        # TODO: provide a callback that shuts the simulator down on cancellation by user via UI
 
     def render(self, mode='human'):
         action = None if not self.last_action else \

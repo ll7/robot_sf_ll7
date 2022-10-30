@@ -50,7 +50,7 @@ class RobotState:
     def update_robot_speed(self, movement: PolarVec2D):
         # compute Kinematics
         dot_x, dot_orient = movement.dist, movement.orient
-        diff = self.config.interaxis_length * dot_orient / 2 # TODO: rename this
+        diff = self.config.interaxis_length * dot_orient / 2
         self.wheels_speed.left = (dot_x - diff) / self.config.wheel_radius
         self.last_wheels_speed.right = (dot_x + diff) / self.config.wheel_radius
 

@@ -65,7 +65,6 @@ class BinaryOccupancyGrid():
         return low_bound, high_bound
 
     def update_moving_objects(self):
-        # TODO: think about computing this on demand as property
         self.occupancy_pedestrians = self._compute_moving_objects_occupancy()
 
     def _world_coords_to_grid_cell(self, x: float, y: float) -> Tuple[int, int]:

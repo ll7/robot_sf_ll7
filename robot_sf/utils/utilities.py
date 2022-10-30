@@ -121,7 +121,6 @@ def change_direction(p0, p1, current_positions, destinations, view_distance, ang
             my_dist = np.minimum(view_distance, my_dist)
 
             idxs_nan = np.where(np.isnan(my_dist).all(axis = 1))[0]  #generated as tuple
-            # TODO: figure out why argmin occasionally receives empty sequences as argument
             if idxs_nan.shape[0] > 0:
                 idx_used =  np.argmin(np.absolute(idxs_nan - len(angles) / 2))
                 ped_idx = np.where(peds_collision_indices)[0][i]
@@ -165,7 +164,6 @@ def build_coordinates_scalar(coordinate_a, coordinate_b, distance):
 
 # function used to correctly update groups indices after states are removed
 def fun_reduce_index(list_of_lists, num):
-    # TODO: implement this assuming a numpy array
     for i, sub_list in enumerate(list_of_lists):
         for j, item in enumerate(sub_list):
             if item > num:

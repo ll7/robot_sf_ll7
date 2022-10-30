@@ -6,7 +6,7 @@ def training():
     env = RobotEnv()
     model = A2C("MlpPolicy", env)
     model.learn(total_timesteps=int(2e5), progress_bar=True)
-    model.save("dqn_model")
+    model.save("./model/dqn_model")
 
 
 if __name__ == '__main__':

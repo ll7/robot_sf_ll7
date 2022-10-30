@@ -21,24 +21,29 @@ python3 -m pip install -r requirements.txt
 python3 -m pip install -r fast-pysf/requirements.txt
 ```
 
+### 3. Register *robot_sf* and *pysocialforce* Packages 
+
 ```sh
 pushd ./fast-pysf
-  python3 -m pip install .
+    python3 -m pip install .
 popd
 python3 -m pip install .
 ```
 
-*Note: 'python3 -m pip install .' needs to be executed to propagate robot_sf changes.*
+*Note: This needs to be repeated to propagate robot_sf changes on a host deployment.
+Otherwise the calling scope might run an old version of robot_sf.
+Dockerized deployments will recognize when a change requires a rebuild.*
 
-### 3. Run Linter / Tests
+### 4. Run Linter / Tests
 
 ```sh
 python3 -m pytest
 python3 -m pylint robot_sf --fail-under=9.5
 ```
 
-### 4. Run OpenAI StableBaselines Training
+### 5. Run OpenAI StableBaselines Training (Docker)
 
 ```sh
-docker-compose run robotsf-cuda python training.py
+docker-compose build && docker-compose run \
+    robotsf-cuda python ./scripts/training.py
 ```

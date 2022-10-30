@@ -11,5 +11,3 @@ RUN python -m pip install -r requirements.txt
 ADD ./setup.py ./setup.py
 ADD ./robot_sf ./robot_sf
 RUN python -m pip install .
-ADD ./benchmark.py ./benchmark.py
-ENTRYPOINT ["python", "-m", "scalene", "benchmark.py"]

@@ -5,6 +5,8 @@ services:
     build:
       context: .
     runtime: nvidia
+    environment:
+      PYTHONUNBUFFERED: 1
     volumes:
-      - './profiles:/app/profiles'
-    command: --cli --html --outfile /app/profiles/profile_${CURRENT_TIMESTAMP}.html
+      - ./model:/app/model
+      - ./scripts:/app/scripts

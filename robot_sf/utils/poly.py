@@ -7,13 +7,13 @@ import numpy as np
 from shapely.geometry import Polygon
 
 
-def clip(val, min, max):
-    if min > max:
+def clip(val, min_val, max_val):
+    if min_val > max_val:
         return val
-    elif val < min:
-        return min
-    elif val > max:
-        return max
+    elif val < min_val:
+        return min_val
+    elif val > max_val:
+        return max_val
     else:
         return val
 

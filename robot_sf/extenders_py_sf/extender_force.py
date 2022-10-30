@@ -7,7 +7,7 @@ if csfp not in sys.path:
 
 from ..utils.utilities import change_direction
 
-from pysocialforce import forces
+from pysocialforce.forces import Force
 from pysocialforce.utils import stateutils
 
 import numpy as np
@@ -23,7 +23,7 @@ def normalize(vecs: np.ndarray):
     return normalized, norm_factors
 
 
-class PedRobotForce(forces.Force):
+class PedRobotForce(Force):
     def __init__(self, robot_radius=1, activation_treshold=0.5, force_multiplier=1):
         self.robot_radius = robot_radius
         self.activation_treshold = activation_treshold
@@ -52,7 +52,7 @@ class PedRobotForce(forces.Force):
         return force * self.force_multiplier
 
 
-class DesiredForce(forces.Force):
+class DesiredForce(Force):
     """Calculates the force between this agent and the next assigned waypoint.
     If the waypoint has been reached, the next waypoint in the list will be
     selected.
@@ -118,7 +118,7 @@ class DesiredForce(forces.Force):
         return force * self.factor
 
 
-class GroupRepulsiveForce(forces.Force):
+class GroupRepulsiveForce(Force):
     """Group repulsive force"""
 
     def _get_force(self):

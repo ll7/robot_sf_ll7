@@ -1,3 +1,5 @@
+# pylint: disable=all
+
 import random
 import numpy as np
 import math

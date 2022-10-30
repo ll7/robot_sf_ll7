@@ -153,6 +153,7 @@ def build_coordinates_array(coordinate_a, coordinate_b, dim, distance):
         return np.concatenate((distance * np.ones([dim, 1]), coordinate_b[:, np.newaxis]), axis=1)
     elif coordinate_a == 3:
         return np.concatenate((coordinate_b[:, np.newaxis], distance * np.ones([dim, 1])), axis=1)
+    raise ValueError(f'unknown coordinate {coordinate_a}, needs to be within [0, 3]')
 
 
 def build_coordinates_scalar(coordinate_a, coordinate_b, distance):

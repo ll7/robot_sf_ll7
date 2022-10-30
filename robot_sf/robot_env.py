@@ -28,13 +28,7 @@ def initialize_robot(
         robot_map: BinaryOccupancyGrid,
         lidar_sensor: LidarScanner,
         spawn_pos: RobotPose,
-        robot_collision_radius,
-        wheel_max_linear_speed: float,
-        wheel_max_angular_speed: float):
-
-    # initialize robot with map
-    robot_settings = RobotSettings(
-        wheel_max_linear_speed, wheel_max_angular_speed, robot_collision_radius)
+        robot_settings: RobotSettings):
     robot = DifferentialDriveRobot(spawn_pos, robot_settings, lidar_sensor, robot_map)
     return robot
 
@@ -100,12 +94,9 @@ class RobotEnv(Env):
             scan_noise)
 
         self.robot_factory = lambda robot_map, robot_pose: initialize_robot(
-            robot_map,
-            lidar_sensor,
-            robot_pose,
-            collision_distance,
-            self.linear_max,
-            self.angular_max)
+            robot_map, lidar_sensor, robot_pose,
+            robot_settings = RobotSettings(
+                self.linear_max, self.angular_max, collision_distance))
 
         action_low  = np.array([-max_v_x_delta, -max_v_rot_delta])
         action_high = np.array([ max_v_x_delta,  max_v_rot_delta])

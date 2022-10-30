@@ -69,7 +69,7 @@ class ExtdSimulator(Simulator):
     # make_forces overrides existing function: accounts for obstacle avoidance
     def make_forces(self, force_configs):
         """Construct forces"""
-        if self.sim_config_user.obstacle_avoidance_params == None:
+        if self.sim_config_user.obstacle_avoidance_params is None:
             force_des = forces.DesiredForce()
         else:
             force_des = DesiredForce(
@@ -502,7 +502,7 @@ class ExtdSimulator(Simulator):
         if len(valid_indexes) <= 1:
             return False
 
-        if group_1_index_origin is not None and (group_2_index_destination == None):
+        if group_1_index_origin is not None and (group_2_index_destination is None):
             if group_1_index_origin not in valid_indexes:
                 return False
 
@@ -510,7 +510,7 @@ class ExtdSimulator(Simulator):
             tmp.remove(group_1_index_origin)
             group_2_index_destination = random.choice(tmp)
 
-        if (group_1_index_origin == None) and group_2_index_destination is not None:
+        if (group_1_index_origin is None) and group_2_index_destination is not None:
             if group_2_index_destination not in valid_indexes:
                 return False
 
@@ -523,7 +523,7 @@ class ExtdSimulator(Simulator):
                 return False
 
         #---------------------------------------------------------------------
-        if (group_1_index_origin == None) and (group_2_index_destination == None):
+        if (group_1_index_origin is None) and (group_2_index_destination is None):
             group_1_index_origin = random.choice(valid_indexes)
             tmp = valid_indexes.copy()
             tmp.remove(group_1_index_origin)

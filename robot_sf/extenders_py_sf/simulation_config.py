@@ -103,7 +103,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     map_name = load_map_name(data)
     path_to_map = os.path.join(maps_config_path, map_name)
 
-    with open(path_to_map, 'r') as file:
+    with open(path_to_map, 'r', encoding='utf-8') as file:
         map_structure = json.load(file)
 
     box_size = max((map_structure['x_margin'][1]), (map_structure['y_margin'][1]))
@@ -181,6 +181,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
         #Check if initial position is valid
         state[i, :2] = np.random.uniform(-box_size, box_size, (1,2))
 
+        iter_num = 0
         while True:
             for iter_num, obstacle in enumerate(map_structure['Obstacles'].keys()):
                 #Compute safety radius for each obstacle

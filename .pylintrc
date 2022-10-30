@@ -1,10 +1,11 @@
 [MASTER]
-disable=C0114, C0115, C0116, R0903, C0301, W0511, C3001, C0413, C0411, R1723, R0902
+disable=C0114, C0115, C0116, R0903, C0301, W0511, C3001, C0413, C0411, R1723, R0902, W0703
 # disable missing docstring warnings C0114, C0115, C0116 (re-enable later)
 # disable line-too-long and dangling ToDo C0301, W0511
 # disable unnecessary-lambda-assignment C3001
 # disable wrong-import-position, wrong-import-order C0413, C0411
 # disable no-else-break R1723
 # disable too-many-instance-attributes R0902
+# disable broad-except W0703
 
 ignored-modules=pygame

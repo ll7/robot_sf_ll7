@@ -33,7 +33,12 @@ class ExtdSimulator(Simulator):
 
         self.groups_vect_idxs = []
 
+        # TODO: this doesn't make any sense at all, obstacle is a 2D line as (x_0, y_0, x_1, y_1)
+        #       why check for (x_0 == y_0 AND x_1 == y_1), what does this mean?
+        #       filter diagonal obstacles in 45 deg angle? why???
         obs_filtered = [l for l in obstacles if not (l[0] == l[1] and l[2] == l[3])]
+
+        # TODO: why is the robot's position initialized in such a ridiculous way?
         self.move_robot([1e5, 1e5, 0])
 
         # TODO: get rid of inheritance (if possible)

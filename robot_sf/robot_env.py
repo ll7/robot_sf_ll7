@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from math import dist
 from typing import Tuple, List
 
@@ -63,7 +62,7 @@ class RobotEnv(Env):
 
     # TODO: transform this into cohesive data structures
     def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
-                 visual_angle_portion: float=0.5, lidar_range: int=10,
+                 visual_angle_portion: float=0.5, lidar_range: float=10.0,
                  v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None,
                  max_v_x_delta: float=.5, max_v_rot_delta: float=.5, dt: float=None,
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,

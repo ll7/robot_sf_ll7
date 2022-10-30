@@ -50,3 +50,5 @@ python3 -m pylint robot_sf --fail-under=9.5
 docker-compose build && docker-compose run \
     robotsf-cuda python ./scripts/training.py
 ```
+
+*Note: See this [setup](./GPU_SETUP.md) to install Docker with GPU support.*

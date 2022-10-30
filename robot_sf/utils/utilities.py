@@ -8,11 +8,11 @@ def norm_angles(angles: np.ndarray) -> np.ndarray:
 
 
 # check vectorization of these functions
-def line_segment(p0, p1):
-    A = p0[:, 1] - p1[:, 1]
-    B = p1[:, 0] - p0[:, 0]
-    C = p0[:, 0] * p1[:, 1] - p1[:, 0] * p0[:, 1]
-    return np.array([A, B, -C]).T
+def line_segment(p_0, p_1):
+    seg_a = p_0[:, 1] - p_1[:, 1]
+    seg_b = p_1[:, 0] - p_0[:, 0]
+    seg_c = p_0[:, 0] * p_1[:, 1] - p_1[:, 0] * p_0[:, 1]
+    return np.array([seg_a, seg_b, -seg_c]).T
 
 
 # check vectorization of these functions
@@ -26,23 +26,26 @@ def lines_intersection(l_1, l_2, p0_l1, p1_l1, p0_l2, p1_l2):
     y_min_l2 = np.tile(np.minimum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0], 1))
     y_max_l2 = np.tile(np.maximum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0], 1))
 
-    d   = l_1[:, 0][:, np.newaxis] * l_2[:, 1][np.newaxis, :] - l_1[:, 1][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
-    d_x = l_1[:, 2][:, np.newaxis] * l_2[:, 1][np.newaxis, :] - l_1[:, 1][:, np.newaxis] * l_2[:, 2][np.newaxis, :]
-    d_y = l_1[:, 0][:, np.newaxis] * l_2[:, 2][np.newaxis, :] - l_1[:, 2][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
+    d   = l_1[:, 0][:, np.newaxis] * l_2[:, 1][np.newaxis, :] \
+            - l_1[:, 1][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
+    d_x = l_1[:, 2][:, np.newaxis] * l_2[:, 1][np.newaxis, :] \
+            - l_1[:, 1][:, np.newaxis] * l_2[:, 2][np.newaxis, :]
+    d_y = l_1[:, 0][:, np.newaxis] * l_2[:, 2][np.newaxis, :] \
+            - l_1[:, 2][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
 
     # TODO: why ignore?! rather fix the data instead!!!
     with np.errstate(divide='ignore', invalid='ignore'):
-        x = d_x / d
-        y = d_y / d
+        pos_x = d_x / d
+        pos_y = d_y / d
         nan_mask = np.logical_or.reduce((
-            (x < x_min_l1), (x > x_max_l1), (y < y_min_l1), (y > y_max_l1),
-            (x < x_min_l2), (x > x_max_l2), (y < y_min_l2), (y > y_max_l2)))
+            (pos_x < x_min_l1), (pos_x > x_max_l1), (pos_y < y_min_l1), (pos_y > y_max_l1),
+            (pos_x < x_min_l2), (pos_x > x_max_l2), (pos_y < y_min_l2), (pos_y > y_max_l2)))
 
     # TODO: why NaN??? this causes numeric errors
-    x[nan_mask] = np.NAN
-    y[nan_mask] = np.NAN
+    pos_x[nan_mask] = np.NAN
+    pos_y[nan_mask] = np.NAN
 
-    return x, y
+    return pos_x, pos_y
 
 
 def rotate_segment(origin, point, angle):
@@ -58,13 +61,13 @@ def rotate_segment(origin, point, angle):
     return q_x, q_y
 
 
-def change_direction(p0, p1, current_positions, destinations, view_distance, angles, direction, desired_directions):
+def change_direction(p_0, p_1, current_positions, destinations, view_distance, angles, direction, desired_directions):
     #1. find pedestrians who are headed towards an obstacle (within horizon defined by view_distance)
     l_directions = line_segment(current_positions, destinations)
-    l_obstacles  = line_segment(p0, p1)
+    l_obstacles  = line_segment(p_0, p_1)
 
-    R = lines_intersection(l_directions, l_obstacles, current_positions, destinations, p0, p1)
-    intersections_coordinates = np.stack((R[0], R[1]))
+    intersect = lines_intersection(l_directions, l_obstacles, current_positions, destinations, p_0, p_1)
+    intersections_coordinates = np.stack((intersect[0], intersect[1]))
 
     distances = intersections_coordinates - (np.repeat(current_positions.T[:, :, None], intersections_coordinates.shape[2], axis=2))
     with np.errstate(invalid='ignore'):
@@ -74,7 +77,7 @@ def change_direction(p0, p1, current_positions, destinations, view_distance, ang
     #   by changing angles (within predefined angular and distance ranges)
 
     #3. select obstacle-free direction with least angular deviation,
-    #   or (if not available) angle with most distant obstacle  
+    #   or (if not available) angle with most distant obstacle
 
     collision_states: np.ndarray = current_positions[peds_collision_indices]
     close_targets: np.ndarray = collision_states + view_distance * desired_directions[peds_collision_indices]
@@ -86,8 +89,9 @@ def change_direction(p0, p1, current_positions, destinations, view_distance, ang
 
         # get all intersections of new array with existing objects
         l_eval_dirs = line_segment(collision_states.reshape(1, 2), wide_scope__)
-        R = lines_intersection(l_eval_dirs, l_obstacles, collision_states.reshape(1, 2), wide_scope__, p0, p1)
-        intersections_coordinates = np.stack((R[0], R[1]))
+        intersect = lines_intersection(
+            l_eval_dirs, l_obstacles, collision_states.reshape(1, 2), wide_scope__, p_0, p_1)
+        intersections_coordinates = np.stack((intersect[0], intersect[1]))
 
         ### calculate distances from intersections
         dist_0 = intersections_coordinates[0] - collision_states.reshape(2)[0]
@@ -108,13 +112,13 @@ def change_direction(p0, p1, current_positions, destinations, view_distance, ang
 
         ### same as above, iteratively
     elif collision_states.shape[0] > 1:
-        for i in range(collision_states.shape[0]): 
+        for i in range(collision_states.shape[0]):
             wide_scope = rotate_segment(collision_states[i].reshape(2), close_targets[i].reshape(2), angles)
             wide_scope__ = np.stack((wide_scope[0],wide_scope[1]),axis = 1)
 
             l_eval_dirs = line_segment(collision_states[i][np.newaxis, :], wide_scope__)
-            R = lines_intersection(l_eval_dirs, l_obstacles, collision_states[i][np.newaxis,:], wide_scope__, p0, p1)
-            intersections_coordinates = np.stack((R[0], R[1]))
+            intersect = lines_intersection(l_eval_dirs, l_obstacles, collision_states[i][np.newaxis,:], wide_scope__, p_0, p_1)
+            intersections_coordinates = np.stack((intersect[0], intersect[1]))
             dist_0 = intersections_coordinates[0] - collision_states[i][0]
             dist_1 = intersections_coordinates[1] - collision_states[i][1]
             my_dist = np.sqrt((np.stack((dist_0, dist_1))**2).sum(axis=0))
@@ -188,11 +192,11 @@ def add_new_group(box_size, max_grp_size, n_pedestrians_actual, group_width_max,
 
     #Choose random destination and delete the origin
     group_destination_a = np.random.choice(np.delete(np.array([0, 1, 2, 3]), group_origin_a))
-    group_destination_b = np.random.randint(-square_dim, square_dim) * np.ones((new_grp_size,))                                        
+    group_destination_b = np.random.randint(-square_dim, square_dim) * np.ones((new_grp_size,))
 
     origin_states      = fill_state(group_origin_a, group_origin_b, True, box_size)
     destination_states = fill_state(group_destination_a, group_destination_b, False, box_size)
- 
+
     new_group_states = np.concatenate((
             origin_states,
             np.zeros(origin_states.shape),

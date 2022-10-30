@@ -33,7 +33,7 @@ class MapGenerator:
                 random.randint(3, 8), random.random(), random.random())
             polygon = random_polygon(creation_config)
 
-            move_offset = [random.uniform(self.x_margin[0], self.x_margin[1]), 
+            move_offset = [random.uniform(self.x_margin[0], self.x_margin[1]),
                            random.uniform(self.y_margin[0], self.y_margin[1])]
             polygon = move_polygon(polygon, move_offset)
 
@@ -61,7 +61,7 @@ class MapGenerator:
     #         i = 0
     #         if not os.path.isdir('maps'):
     #             os.makedirs('maps')
-                
+
     #         default_name = 'generated_map_'
     #         while True:
     #             if os.path.exists('maps'+'/' + default_name + str(i) + '.json'):
@@ -70,7 +70,7 @@ class MapGenerator:
     #                 with open('maps'+'/'+ default_name + str(i) + '.json','w') as f:
     #                     json.dump(self.obstacles,f)
     #                     break
-                
+
     #     elif filename is not None:
     #         with open(filename,'w') as f:
     #             json.dump(self.obstacles, f)
@@ -86,7 +86,7 @@ class MapGenerator:
         self.obstacles['NumberObstacles'] = len(self.obstacles_list)
         self.obstacles['x_margin'] = self.x_margin
         self.obstacles['y_margin'] = self.y_margin
-        
+
     # def load(self, path_to_json):
     #     #Reset current object
     #     self.reset()
@@ -101,10 +101,7 @@ class MapGenerator:
     #         self.obstacles = tmp_data
     #     else:
     #         raise ValueError('File not found!')
-            
+
     # def generate_and_show(self, n_obstacles = None):
     #     self.generate(n_obstacles)
     #     self.show()
-        
-        
-        

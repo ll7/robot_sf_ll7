@@ -71,8 +71,8 @@ class RobotState:
             + (self.last_wheels_speed.right + self.wheels_speed.right) / 2) * t_s
 
         rel_rotation = (new_orient + self.last_pose.orient) / 2
-        self.current_pose.pos.x += new_x_local * cos(rel_rotation)
-        self.current_pose.pos.y += new_x_local * sin(rel_rotation)
+        self.current_pose.pos.pos_x += new_x_local * cos(rel_rotation)
+        self.current_pose.pos.pos_y += new_x_local * sin(rel_rotation)
         self.current_pose.orient = new_orient
 
         # update old values
@@ -110,8 +110,8 @@ class DifferentialDriveRobot():
     @property
     def is_out_of_bounds(self):
         """checks if robot went out of bounds """
-        x, y = self.state.current_pose.coords
-        return not self._map.is_in_bounds(x, y)
+        pos_x, pos_y = self.state.current_pose.coords
+        return not self._map.is_in_bounds(pos_x, pos_y)
 
     def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
         movement, clipped = self.state.resulting_movement(action)

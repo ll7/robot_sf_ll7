@@ -48,7 +48,7 @@ class LidarScannerSettings:
 
 @numba.njit(fastmath=True)
 def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
-                   p1: GridPoint, p2: GridPoint) -> int:
+                   p_1: GridPoint, p_2: GridPoint) -> int:
     """Jack Bresenham's algorithm (1962) to draw a line with 0/1 pixels
     between the given points p1 and p2 on a 2D grid of given size.
 
@@ -57,7 +57,7 @@ def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
     For performance reasons, the output arrays are passed as parameters
     such that the calling scope only needs to allocate once per entire scan."""
 
-    (x_0, y_0), (x_1, y_1) = p1, p2
+    (x_0, y_0), (x_1, y_1) = p_1, p_2
 
     sign_x = 1 if x_0 < x_1 else -1
     sign_y = 1 if y_0 < y_1 else -1
@@ -88,9 +88,9 @@ def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
     return i
 
 
-def grid_cell_of(x: float, y: float) -> GridPoint:
+def grid_cell_of(pos_x: float, pos_y: float) -> GridPoint:
     """Convert continuous 2D coordinates to the grid cell they belong to."""
-    return int(x), int(y)
+    return int(pos_x), int(pos_y)
 
 
 def normalize_angle(angle: float) -> float:
@@ -111,15 +111,15 @@ def grid_boundary_hit(start_point: GridPoint, orient: float,
 
     Info: this is a really slow algorithm, but it's only performed once on
     simulator launch, so don't care for performance optimization."""
-    x, y = start_point
+    pos_x, pos_y = start_point
     scan_vec = (cos(orient) * scan_scale, sin(orient) * scan_scale)
     is_in_bounds = lambda x, y: 0 <= x < max_x and 0 <= y < max_y
     while True:
-        new_x, new_y = x + scan_vec[0], y + scan_vec[1]
+        new_x, new_y = pos_x + scan_vec[0], pos_y + scan_vec[1]
         if not is_in_bounds(new_x, new_y):
             break
-        x, y = new_x, new_y
-    return grid_cell_of(x, y)
+        pos_x, pos_y = new_x, new_y
+    return grid_cell_of(pos_x, pos_y)
 
 
 def compute_distances_cache(width: int, height: int) -> np.ndarray:
@@ -127,11 +127,11 @@ def compute_distances_cache(width: int, height: int) -> np.ndarray:
 
     Returns an array of shape (width * 2 + 1, height * 2 + 1)"""
 
-    x = np.arange(-width , width  + 1)[:, np.newaxis]
-    y = np.arange(-height, height + 1)[np.newaxis, :]
-    x, y = np.meshgrid(x, y)
-    xy = np.stack((y, x), axis=2)
-    dists = np.power((xy[:, :, 0])**2 + (xy[:, :, 1])**2, 0.5)
+    x_coords = np.arange(-width , width  + 1)[:, np.newaxis]
+    y_coords = np.arange(-height, height + 1)[np.newaxis, :]
+    x_coords, y_coords = np.meshgrid(x_coords, y_coords)
+    all_xy = np.stack((y_coords, x_coords), axis=2)
+    dists = np.power((all_xy[:, :, 0])**2 + (all_xy[:, :, 1])**2, 0.5)
     return dists
 
 
@@ -159,8 +159,8 @@ def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_po
     distances are capped by the maximum scan range."""
 
     width, height = occupancy.shape
-    x, y = scanner_position
-    x_offset, y_offset = width + 1 - x, height + 1 - y
+    pos_x, pos_y = scanner_position
+    x_offset, y_offset = width + 1 - pos_x, height + 1 - pos_y
     end_pos = cached_end_pos - np.array([x_offset, y_offset])
     ray_x, ray_y = np.zeros((width), dtype=np.int64), np.zeros((height), dtype=np.int64)
 
@@ -170,11 +170,11 @@ def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_po
         num_points = bresenham_line(ray_x, ray_y, scanner_position, end_pos[angle_id])
         temp_range = max_scan_dist
         for j in range(num_points):
-            x, y = ray_x[j], ray_y[j]
-            if not 0 <= x < width or not 0 <= y < height:
+            pos_x, pos_y = ray_x[j], ray_y[j]
+            if not 0 <= pos_x < width or not 0 <= pos_y < height:
                 break
-            if occupancy[x, y]:
-                coll_dist = cached_distances[x + x_offset, y + y_offset]
+            if occupancy[pos_x, pos_y]:
+                coll_dist = cached_distances[pos_x + x_offset, pos_y + y_offset]
                 temp_range = min(coll_dist, max_scan_dist)
                 break
         ranges[i] = temp_range
@@ -206,8 +206,8 @@ class LidarScanner():
             self.robot_map.grid_width, self.robot_map.grid_height)
         self.cached_angles = np.linspace(0, 2*pi, self.settings.lidar_n_rays + 1)[:-1]
         middle = (self.robot_map.grid_width + 1, self.robot_map.grid_height + 1)
-        w, h = self.robot_map.grid_width * 2 + 1, self.robot_map.grid_height * 2 + 1
-        self.cached_end_pos = np.array([grid_boundary_hit(middle, phi, w, h)
+        width, height = self.robot_map.grid_width * 2 + 1, self.robot_map.grid_height * 2 + 1
+        self.cached_end_pos = np.array([grid_boundary_hit(middle, phi, width, height)
                                         for phi in self.cached_angles])
         self.get_object_occupancy = lambda: self.robot_map.occupancy_overall
 
@@ -221,8 +221,8 @@ class LidarScanner():
         and an input map (map object) and returns a data structure
         containing the sensor readings"""
 
-        x, y = pose.coords
-        start_pt = self.robot_map._world_coords_to_grid_cell(x, y)
+        pos_x, pos_y = pose.coords
+        start_pt = self.robot_map._world_coords_to_grid_cell(pos_x, pos_y)
         scan_noise = np.array(self.settings.scan_noise)
         scan_length = self.settings.scan_length
 

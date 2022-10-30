@@ -75,8 +75,8 @@ class ExtdSimulator(Simulator):
             force_des = DesiredForce(
                 obstacle_avoidance= True,
                 angles = self.sim_config_user.obstacle_avoidance_params[0],
-                p0 = self.sim_config_user.obstacle_avoidance_params[1],
-                p1 = self.sim_config_user.obstacle_avoidance_params[2],
+                p_0 = self.sim_config_user.obstacle_avoidance_params[1],
+                p_1 = self.sim_config_user.obstacle_avoidance_params[2],
                 view_distance = self.sim_config_user.obstacle_avoidance_params[3],
                 forgetting_factor = self.sim_config_user.obstacle_avoidance_params[4])
 
@@ -84,7 +84,7 @@ class ExtdSimulator(Simulator):
             self.sim_config_user.robot_force_config.robot_radius,
             self.sim_config_user.robot_force_config.activation_threshold,
             self.sim_config_user.robot_force_config.force_multiplier)
-        ped_rob_force.updateRobotState(np.array([[self.robot.pose.pos.x, self.robot.pose.pos.y]], dtype=float))
+        ped_rob_force.update_robot_state(np.array([[self.robot.pose.pos.pos_x, self.robot.pose.pos.pos_y]], dtype=float))
 
         if self.sim_config_user.flags.activate_ped_robot_force:
             force_list: List[forces.Force] = [
@@ -139,7 +139,7 @@ class ExtdSimulator(Simulator):
 
     # update positions of currently active pedestrians
     def _active_peds_update(self, new_positions: np.ndarray=None, new_groups=None):
-        if (new_positions is not None):
+        if new_positions is not None:
             self.current_positions = new_positions
             self.current_groups = new_groups
         else:
@@ -269,7 +269,7 @@ class ExtdSimulator(Simulator):
 
                 selected_ped = pedestrian_idx
 
-                if (len(selected_ped) > self.sim_config_user.new_peds_params.max_standalone_grouping):
+                if len(selected_ped) > self.sim_config_user.new_peds_params.max_standalone_grouping:
                     selected_ped = random.sample(selected_ped, self.sim_config_user.new_peds_params.max_standalone_grouping)
             except Exception:
                 return False
@@ -398,9 +398,9 @@ class ExtdSimulator(Simulator):
 
         #populate group valid indexes
         valid_indexes = []
-        for n,sublist in enumerate(self.peds.groups):
+        for i, sublist in enumerate(self.peds.groups):
             if sublist and len(sublist) >= 2:
-                valid_indexes.append(n)
+                valid_indexes.append(i)
 
         #Immediately brake if there is no space for new groups and dynamic
         #grouping is not allowed
@@ -488,9 +488,9 @@ class ExtdSimulator(Simulator):
         #--------------------------------------
         #There must be at least two valid group indices
         valid_indexes = []
-        for n,sub_list in enumerate(old_groups):
+        for i, sub_list in enumerate(old_groups):
             if sub_list:
-                valid_indexes.append(n)
+                valid_indexes.append(i)
 
         if not self.sim_config_user.flags.enable_topology_on_stopped:
             idx_non_stopped_groups = []
@@ -562,9 +562,9 @@ class ExtdSimulator(Simulator):
 
         #Create valid list of stoppable groups
         valid_indexes = []
-        for n,sub_list in enumerate(self.peds.groups):
-            if sub_list and not self._stopped_groups[n]:
-                valid_indexes.append(n)
+        for i, sub_list in enumerate(self.peds.groups):
+            if sub_list and not self._stopped_groups[i]:
+                valid_indexes.append(i)
 
         if not valid_indexes:
             return False
@@ -697,8 +697,8 @@ class ExtdSimulator(Simulator):
             #Choose pedestrians index to stop
             ped_index = random.sample(new_valid_index, num_ped_to_stop) #Output is a list
 
-        """Now that the list of pedestrians we want to stop is created we need to
-        update the last known target and initialize the clock"""
+        # Now that the list of pedestrians we want to stop is created we need to
+        # update the last known target and initialize the clock
 
         #Update stopped flag
         self._stopped_peds[ped_index] = True
@@ -735,8 +735,8 @@ class ExtdSimulator(Simulator):
             num_max = min(len(valid_ped_idx), self.sim_config_user.new_peds_params.max_unfreezing_pedestrians)
             ped_index = random.sample(valid_ped_idx, num_max)
 
-        """Now that the the list of pedestrians index is create we need to update
-        the memory variables"""
+        # Now that the the list of pedestrians index is create we need to update
+        # the memory variables
 
         self._stopped_peds[ped_index] = False
         self._timer_stopped_peds[ped_index] = 0
@@ -746,7 +746,7 @@ class ExtdSimulator(Simulator):
         if not self.sim_config_user.flags.enable_topology_on_stopped:
             return True
 
-        """ Vedere se implementare le actions"""
+        # Vedere se implementare le actions
         #print("TO DO!!")
         return True
 
@@ -756,7 +756,7 @@ class ExtdSimulator(Simulator):
         #grouping is not allowed
 
         if not self.sim_config_user.flags.dynamic_grouping and [] not in self.peds.groups:
-                return False
+            return False
 
         square_dim = self.box_size + 1
         speed_variance_red = 10
@@ -920,12 +920,12 @@ class ExtdSimulator(Simulator):
                             ped_generations_action.probs_in_percent[i] += val
                 else:
                     #Select new action
-                        index_action = ped_generations_action.actions.index(action)
-                        ped_generations_action.actions.pop(index_action)
-                        val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
-                        ped_generations_action.probs_in_percent.pop(index_action)
-                        for i in range(len(ped_generations_action.probs_in_percent)):
-                            ped_generations_action.probs_in_percent[i] += val
+                    index_action = ped_generations_action.actions.index(action)
+                    ped_generations_action.actions.pop(index_action)
+                    val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
+                    ped_generations_action.probs_in_percent.pop(index_action)
+                    for i in range(len(ped_generations_action.probs_in_percent)):
+                        ped_generations_action.probs_in_percent[i] += val
             elif action == 'both':
                 if self.peds.size() < self.max_population_for_new_individual:
                     self.add_new_individuals()

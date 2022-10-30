@@ -35,12 +35,12 @@ class BinaryOccupancyGrid():
 
     def robot_occupancy(self, robot_pos: Vec2D, coll_distance: float) -> np.ndarray:
         world_x, world_y = robot_pos.as_list
-        x, y = self._world_coords_to_grid_cell(world_x, world_y)
+        pos_x, pos_y = self._world_coords_to_grid_cell(world_x, world_y)
         x_step, y_step = self._world_length_to_grid_cell_span(coll_distance)
 
         occ_shape = (self.grid_width, self.grid_height)
         occupancy = np.zeros(occ_shape, dtype=bool)
-        fill_surrounding(occupancy, x, y, x_step, y_step)
+        fill_surrounding(occupancy, pos_x, pos_y, x_step, y_step)
         return occupancy
 
     def is_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
@@ -55,9 +55,9 @@ class BinaryOccupancyGrid():
         occupancy = self.robot_occupancy(robot_pos, collision_distance)
         return np.logical_and(self.occupancy_pedestrians, occupancy).any()
 
-    def is_in_bounds(self, x: float, y: float) -> bool:
-        return -self.box_size <= x <= self.box_size \
-            and -self.box_size <= y <= self.box_size
+    def is_in_bounds(self, world_x: float, world_y: float) -> bool:
+        return -self.box_size <= world_x <= self.box_size \
+            and -self.box_size <= world_y <= self.box_size
 
     def position_bounds(self) -> Tuple[List[float], List[float]]:
         low_bound  = [-self.box_size, -self.box_size, -np.pi]
@@ -67,24 +67,24 @@ class BinaryOccupancyGrid():
     def update_moving_objects(self):
         self.occupancy_pedestrians = self._compute_moving_objects_occupancy()
 
-    def _world_coords_to_grid_cell(self, x: float, y: float) -> Tuple[int, int]:
+    def _world_coords_to_grid_cell(self, world_x: float, world_y: float) -> Tuple[int, int]:
         """Map coordinates from a continuous 2D world to a discrete 2D grid.
           x: [-box_x, box_x] -> [0, grid_width  - 1],
           y: [-box_y, box_y] -> [0, grid_height - 1]"""
-        scaled_x = (x + self.box_size) / (2 * self.box_size) * self.grid_width
-        scaled_y = (y + self.box_size) / (2 * self.box_size) * self.grid_height
+        scaled_x = (world_x + self.box_size) / (2 * self.box_size) * self.grid_width
+        scaled_y = (world_y + self.box_size) / (2 * self.box_size) * self.grid_height
         grid_x = min(floor(scaled_x), self.grid_width - 1)
         grid_y = min(floor(scaled_y), self.grid_height - 1)
         # info: min() function handles the rare case of an index overflow
         #       when processing x = self.grid_width and/or y = self.grid_height
         return grid_x, grid_y
 
-    def _grid_cell_centroid_to_world_coords(self, x: int, y: int) -> Tuple[float, float]:
+    def _grid_cell_centroid_to_world_coords(self, grid_x: int, grid_y: int) -> Tuple[float, float]:
         """Map coordinates from a continuous 2D world to a discrete 2D grid.
           x: [0, grid_width  - 1] -> [-box_x, box_x],
           y: [0, grid_height - 1] -> [-box_y, box_y]"""
-        world_x = (x + 0.5) / self.grid_width * 2 * self.box_size - self.box_size
-        world_y = (y + 0.5) / self.grid_height * 2 * self.box_size - self.box_size
+        world_x = (grid_x + 0.5) / self.grid_width * 2 * self.box_size - self.box_size
+        world_y = (grid_y + 0.5) / self.grid_height * 2 * self.box_size - self.box_size
         return world_x, world_y
 
     def _world_length_to_grid_cell_span(self, length: float) -> Tuple[int, int]:
@@ -103,8 +103,8 @@ class BinaryOccupancyGrid():
         grid_coords = [self._world_coords_to_grid_cell(pos[0], pos[1])
                        for pos in coords_in_bounds]
 
-        for x, y in grid_coords:
-            occupancy[x, y] = 1
+        for grid_x, grid_y in grid_coords:
+            occupancy[grid_x, grid_y] = 1
 
         # make the map boundary an "obstacle"
         occupancy[:, 0] = 1
@@ -116,12 +116,12 @@ class BinaryOccupancyGrid():
         #       performance, it's only executed once on map creation
         radius = 0.3
         x_step, y_step = self._world_length_to_grid_cell_span(radius)
-        x, y = np.where(occupancy)
-        eval_points = np.vstack((x, y)).T
+        grid_x, grid_y = np.where(occupancy)
+        eval_points = np.vstack((grid_x, grid_y)).T
 
-        for x, y in eval_points:
-            x, y = self._world_coords_to_grid_cell(x, y)
-            fill_surrounding(occupancy, x, y, x_step, y_step)
+        for grid_x, grid_y in eval_points:
+            grid_x, grid_y = self._world_coords_to_grid_cell(grid_x, grid_y)
+            fill_surrounding(occupancy, grid_x, grid_y, x_step, y_step)
 
         return occupancy, np.array(coords_in_bounds)
 
@@ -138,9 +138,9 @@ class BinaryOccupancyGrid():
 
         radius = 0.4
         x_step, y_step = self._world_length_to_grid_cell_span(radius)
-        for x, y in grid_coords:
+        for grid_x, grid_y in grid_coords:
             # TODO: add noise to the signal
-            fill_surrounding(occupancy, x, y, x_step, y_step)
+            fill_surrounding(occupancy, grid_x, grid_y, x_step, y_step)
 
         return occupancy
 
@@ -151,6 +151,6 @@ def fill_surrounding(occupancy: np.ndarray, pos_x: int, pos_y: int, x_dist: int,
     width, height = occupancy.shape
     for x_offset in range(-x_dist, 2 * x_dist + 1):
         for y_offset in range(-y_dist, 2 * y_dist + 1):
-            x, y = pos_x + x_offset, pos_y + y_offset
-            if 0 <= x < width and 0 <= y < height:
-                occupancy[x, y] = 1
+            occ_x, occ_y = pos_x + x_offset, pos_y + y_offset
+            if 0 <= occ_x < width and 0 <= occ_y < height:
+                occupancy[occ_x, occ_y] = 1

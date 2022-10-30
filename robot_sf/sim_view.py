@@ -98,8 +98,8 @@ class SimulationView:
     def _draw_occupancy(self, occupancy: np.ndarray, color: RgbColor):
         pos_x, pos_y = np.where(occupancy)
         for grid_x, grid_y in zip(pos_x, pos_y):
-            x, y = grid_x * self.pixels_per_cell, grid_y * self.pixels_per_cell
-            rect = pygame.Rect(x, y, self.pixels_per_cell, self.pixels_per_cell)
+            pos_x, pos_y = grid_x * self.pixels_per_cell, grid_y * self.pixels_per_cell
+            rect = pygame.Rect(pos_x, pos_y, self.pixels_per_cell, self.pixels_per_cell)
             pygame.draw.rect(self.screen, color, rect)
 
     def _augment_action_vector(self, action: VisualizableAction):

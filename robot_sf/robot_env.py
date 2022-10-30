@@ -39,9 +39,9 @@ def initialize_robot(
     return robot
 
 
-def initialize_simulator(peds_sparsity, difficulty, dt, peds_speed_mult) -> ExtdSimulator:
+def initialize_simulator(peds_sparsity, difficulty, d_t, peds_speed_mult) -> ExtdSimulator:
     sim_env = ExtdSimulator(difficulty=difficulty, peds_sparsity=peds_sparsity)
-    sim_env.peds.step_width = dt if dt else sim_env.peds.step_width
+    sim_env.peds.step_width = d_t if d_t else sim_env.peds.step_width
     sim_env.peds.max_speed_multiplier = peds_speed_mult
     return sim_env
 
@@ -64,7 +64,7 @@ class RobotEnv(Env):
     def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
                  visual_angle_portion: float=0.5, lidar_range: float=10.0,
                  v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None,
-                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, dt: float=None,
+                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, d_t: float=None,
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
                  scan_noise: List[float]=None, peds_speed_mult: float=1.3, debug: bool=False):
 
@@ -87,9 +87,9 @@ class RobotEnv(Env):
 
         sparsity_levels = [500, 200, 100, 50, 20]
         self.sim_env = initialize_simulator(
-            sparsity_levels[difficulty], difficulty, dt, peds_speed_mult)
+            sparsity_levels[difficulty], difficulty, d_t, peds_speed_mult)
         self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2)
-        self.dt = self.sim_env.peds.step_width
+        self.d_t = self.sim_env.peds.step_width
 
         self.robot_map = initialize_map(self.sim_env)
         lidar_sensor = initialize_lidar(
@@ -155,14 +155,14 @@ class RobotEnv(Env):
 
         dist_before = dist(self.robot.pos.as_list, self.target_coords)
         action = PolarVec2D(action_np[0], action_np[1])
-        movement, saturate_input = self.robot.apply_action(action, self.dt)
+        movement, saturate_input = self.robot.apply_action(action, self.d_t)
         dot_x, dot_orient = movement.dist, movement.orient
         dist_after = dist(self.robot.pos.as_list, self.target_coords)
 
         # scan for collisions with LiDAR sensor, generate new observation
         ranges = self.robot.get_scan()
         norm_ranges, rob_state = self._get_obs(ranges)
-        self.rotation_counter += np.abs(dot_orient * self.dt)
+        self.rotation_counter += np.abs(dot_orient * self.d_t)
 
         # determine the reward and whether the episode is done
         reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, saturate_input)
@@ -189,8 +189,8 @@ class RobotEnv(Env):
             done = True
 
         else:
-            self.duration += self.dt
-            reward = self.rewards[0] * ((dist_0 - dist_1) / (self.linear_max * self.dt) \
+            self.duration += self.d_t
+            reward = self.rewards[0] * ((dist_0 - dist_1) / (self.linear_max * self.d_t) \
                 - int(saturate_input) + (1 - min(ranges)) * (dot_x / self.linear_max) * int(dist_0 > dist_1))
             done = False
 

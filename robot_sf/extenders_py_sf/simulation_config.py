@@ -87,9 +87,9 @@ def load_toml(path_to_filename: str) -> dict:
 
 def load_map_name(data: dict) -> str:
     if not data['simulator']['flags']['random_map']:
-        n = data['simulator']['custom']['map_number']
+        map_id = data['simulator']['custom']['map_number']
         try:
-            map_name = natsorted(list(data['map_files'].values()))[n]
+            map_name = natsorted(list(data['map_files'].values()))[map_id]
         except:
             map_name = natsorted(list(data['map_files'].values()))[0]
             raise Warning('Invalid map number: Using map 0')
@@ -103,8 +103,8 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     map_name = load_map_name(data)
     path_to_map = os.path.join(maps_config_path, map_name)
 
-    with open(path_to_map, 'r') as f:
-        map_structure = json.load(f)
+    with open(path_to_map, 'r') as file:
+        map_structure = json.load(file)
 
     box_size = max((map_structure['x_margin'][1]), (map_structure['y_margin'][1]))
     #print(path_to_map)
@@ -115,7 +115,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     for key in map_structure['Obstacles'].keys():
         tmp = map_structure['Obstacles'][key]['Edges'].copy()
         valid_edges = []
-        for n, sub_list in enumerate(tmp):
+        for _, sub_list in enumerate(tmp):
             #if not sub_list[0]==sub_list[1] and not sub_list[2]==sub_list[3]:
             valid_edges.append(sub_list)
         obstacle += valid_edges
@@ -139,31 +139,31 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
         #initialize state matrix
         state = np.zeros((n_peds, 6))
         groups = []
-                   
+
 
         #Initialize groups
         grouped_peds = []
         available_peds = index_list.copy()
 
-               
+
         for i in range(data['simulator']['custom']['random_population']['max_initial_groups']):
             max_n = min(len(available_peds), data['simulator']['custom']['random_population']['max_peds_per_group'])
-   
+
             group = random.sample(available_peds, max_n)
             groups.append(group)
             grouped_peds += group
-   
+
             available_peds = [ped for ped in available_peds if ped not in group]
-   
-   
+
+
             #generate group target for grouped peds
             if group:
                 group_destination_a = random.choice([0,1,2,3])
                 group_destination_b = random.randint(-(box_size +1),box_size +1)*np.ones((len(group),))
-       
+
                 #Initial speed
                 dot_x_0 = 0.5 #Module
-       
+
                 #random angle
                 angle = random.uniform(-np.pi, np.pi)
                 dot_x_x = dot_x_0*np.cos(angle)
@@ -182,10 +182,10 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
         state[i, :2] = np.random.uniform(-box_size, box_size, (1,2))
 
         while True:
-            for iter_num, ob in enumerate(map_structure['Obstacles'].keys()):
+            for iter_num, obstacle in enumerate(map_structure['Obstacles'].keys()):
                 #Compute safety radius for each obstacle
-                obs_recreated = load_polygon(map_structure['Obstacles'][ob]['Vertex'])
-                vert = np.array(map_structure['Obstacles'][ob]['Vertex'])
+                obs_recreated = load_polygon(map_structure['Obstacles'][obstacle]['Vertex'])
+                vert = np.array(map_structure['Obstacles'][obstacle]['Vertex'])
                 radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1
 
                 if np.linalg.norm(state[i, :2] - obs_recreated.centroid.coords) < radius:
@@ -203,16 +203,16 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
             if i not in grouped_peds:
                 destination_a = random.choice([0,1,2,3])
                 destination_b = random.randint(-(box_size +1),box_size +1)
-       
+
                 destination_state = fill_state(destination_a, destination_b, False, box_size)
                 state[i, 4:6] = destination_state
-       
+
                 dot_x_0 = 0.5
                 angle = random.uniform(-np.pi, np.pi)
-       
+
                 dot_x_x = dot_x_0*np.cos(angle)
                 dot_x_y = dot_x_0*np.sin(angle)
-       
+
                 state[i,2:4] = [dot_x_x, dot_x_y]
 
     return box_size, obstacle, obstacles_lolol, state, groups
@@ -270,17 +270,17 @@ def load_config(path_to_filename: str=None, difficulty: int=0) \
     angles = np.multiply(np.pi, np.concatenate((angles_neg, angles_pos)))
 
     #obstacles points to get the segments (commented part refers to in-function implementation)
-    p0 = np.empty((0, 2))
-    p1 = np.empty((0, 2))
+    p_0 = np.empty((0, 2))
+    p_1 = np.empty((0, 2))
     ##get obstacles on the scenes in p0,p1 format (do be moved to class attributes)
     for obi in obstacle:
-        p0 = np.append(p0, np.array([obi[0], obi[2]])[np.newaxis, :], axis=0)
-        p1 = np.append(p1, np.array([obi[1], obi[3]])[np.newaxis, :], axis=0)
+        p_0 = np.append(p_0, np.array([obi[0], obi[2]])[np.newaxis, :], axis=0)
+        p_1 = np.append(p_1, np.array([obi[1], obi[3]])[np.newaxis, :], axis=0)
 
     # obstacle_avoidance_params
     view_distance = 15
     forgetting_factor = 0.8
-    obstacle_avoidance_params = [angles, p0, p1, view_distance, forgetting_factor]
+    obstacle_avoidance_params = [angles, p_0, p_1, view_distance, forgetting_factor]
 
     config = SimulationConfiguration(
         box_size, peds_sparsity, ped_generation_action_pool,

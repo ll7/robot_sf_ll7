@@ -1,4 +1,4 @@
-import sys 
+import sys
 import os
 
 # TODO: try to get rid of this script-scope code
@@ -41,7 +41,7 @@ class PedState(PedState):
         return stacked_history, self.group_states
 
     def compute_centroid_group(self, group_index):
-        """ This method compute the centroid position 
+        """ This method compute the centroid position
         of the group identified by the group_index """
 
         #First check if the group index input is valid
@@ -53,6 +53,6 @@ class PedState(PedState):
             return False
 
         ped_list = self.groups[group_index]
-        x = sum([self.state[i, 0] for i in ped_list]) / len(ped_list)
-        y = sum([self.state[i, 1] for i in ped_list]) / len(ped_list)
-        return [x, y]
+        pos_x = sum([self.state[i, 0] for i in ped_list]) / len(ped_list)
+        pos_y = sum([self.state[i, 1] for i in ped_list]) / len(ped_list)
+        return [pos_x, pos_y]

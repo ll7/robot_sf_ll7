@@ -1,4 +1,4 @@
-import sys 
+import sys
 import os
 
 csfp = os.path.abspath(os.path.dirname(__file__))
@@ -31,17 +31,17 @@ class PedRobotForce(forces.Force):
         self.robot_state = np.array([[1e5, 1e5]], dtype=float)
         self.force_multiplier = force_multiplier
 
-    def updateRobotState(self, pos):
+    def update_robot_state(self, pos):
         self.robot_state = pos
 
     def _get_force(self) -> np.ndarray:
         sigma = self.config("sigma", 0.2)
         threshold = self.activation_treshold + self.peds.agent_radius
         force = np.zeros((self.peds.size(), 2))
-        pos = self.peds.pos()
+        ped_positions = self.peds.pos()
 
-        for i, p in enumerate(pos):
-            diff = p - self.robot_state
+        for i, pos in enumerate(ped_positions):
+            diff = pos - self.robot_state
             directions, dist = stateutils.normalize(diff)
             dist = dist - self.peds.agent_radius -self.robot_radius
             if np.all(dist >= threshold):
@@ -59,19 +59,19 @@ class DesiredForce(forces.Force):
     :return: the calculated force
     """
 
-    def __init__(self, 
-                 obstacle_avoidance= False, 
-                 angles =np.pi*np.array([-1, -0.5, -0.25, 0.25, 0.5, 1]), 
-                 p0 = np.empty((0, 2)),
-                 p1 = np.empty((0, 2)),
+    def __init__(self,
+                 obstacle_avoidance= False,
+                 angles =np.pi*np.array([-1, -0.5, -0.25, 0.25, 0.5, 1]),
+                 p_0 = np.empty((0, 2)),
+                 p_1 = np.empty((0, 2)),
                  view_distance = 15,
                  forgetting_factor = .8):
         super().__init__()
         self.obstacle_avoidance = obstacle_avoidance
         if self.obstacle_avoidance:
             self.angles = angles
-            self.p0 = p0
-            self.p1 = p1
+            self.p_0 = p_0
+            self.p_1 = p_1
             self.view_distance = view_distance
             self.forgetting_factor = forgetting_factor
 
@@ -86,12 +86,12 @@ class DesiredForce(forces.Force):
         ### in the following, direction is changed if obstacle is detected
         if self.obstacle_avoidance:
             direction,peds_collision_indices = change_direction(
-                self.p0,
-                self.p1,
+                self.p_0,
+                self.p_1,
                 self.peds.state[:, :2],   # current positions
                 self.peds.state[:, 4:6],  # current destinations
-                self.view_distance, 
-                self.angles, 
+                self.view_distance,
+                self.angles,
                 direction,
                 self.peds.desired_directions()) # current desired directions
 
@@ -113,7 +113,7 @@ class DesiredForce(forces.Force):
             #print(previous_directions)
             previous_forces = previous_directions * np.tile(forces_intensities, (2, 1)).T
             force[peds_collision_indices] = self.forgetting_factor * force[peds_collision_indices] \
-                + (1 - self.forgetting_factor) * previous_forces[peds_collision_indices] 
+                + (1 - self.forgetting_factor) * previous_forces[peds_collision_indices]
 
         return force * self.factor
 

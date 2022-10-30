@@ -7,15 +7,15 @@ import numpy as np
 from shapely.geometry import Polygon
 
 
-def clip(x, min, max):
+def clip(val, min, max):
     if min > max:
-        return x
-    elif x < min:
+        return val
+    elif val < min:
         return min
-    elif x > max:
+    elif val > max:
         return max
     else:
-        return x
+        return val
 
 
 @dataclass
@@ -45,9 +45,9 @@ def generate_polygon_points(config: PolygonCreationSettings) -> List[Tuple[float
     angle = random.uniform(0, 2 * math.pi)
     for i in range(config.n_vertex):
         r_i = clip(random.gauss(config.radius, config.spikeness), 0, config.radius)
-        x = r_i * math.cos(angle)
-        y = r_i * math.sin(angle)
-        points.append((x, y))
+        pos_x = r_i * math.cos(angle)
+        pos_y = r_i * math.sin(angle)
+        points.append((pos_x, pos_y))
         angle = angle + angle_steps[i]
 
     return points
@@ -85,7 +85,7 @@ def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:
 def move_polygon(poly: Polygon, offset: Tuple[float, float]) -> Polygon:
     points = zip(poly.xy[0], poly.xy[1])
     vertex = np.array(points)
-    x, y = offset
-    vertex[:,0] += x
-    vertex[:,1] += y
+    pos_x, pos_y = offset
+    vertex[:, 0] += pos_x
+    vertex[:, 1] += pos_y
     return Polygon(vertex)

@@ -8,12 +8,12 @@ from robot_sf.utils.utilities import norm_angles
 
 @dataclass
 class Vec2D:
-    x: float
-    y: float
+    pos_x: float
+    pos_y: float
 
     @property
     def as_list(self) -> List[float]:
-        return [self.x, self.y]
+        return [self.pos_x, self.pos_y]
 
 
 @dataclass
@@ -34,17 +34,17 @@ class RobotPose:
 
     @property
     def coords(self) -> List[float]:
-        return [self.pos.x, self.pos.y]
+        return [self.pos.pos_x, self.pos.pos_y]
 
     @property
     def coords_with_orient(self) -> List[float]:
-        return [self.pos.x, self.pos.y, self.orient]
+        return [self.pos.pos_x, self.pos.pos_y, self.orient]
 
     def rel_pos(self, target_coords: np.ndarray) \
             -> Tuple[np.ndarray, np.ndarray]:
         dists: np.ndarray = np.linalg.norm(target_coords - np.array(self.coords))
-        x_offsets = target_coords[0] - self.pos.x
-        y_offsets = target_coords[1] - self.pos.y
+        x_offsets = target_coords[0] - self.pos.pos_x
+        y_offsets = target_coords[1] - self.pos.pos_y
         angles = np.arctan2(y_offsets, x_offsets) - self.orient
         angles = norm_angles(angles)
         return dists, angles

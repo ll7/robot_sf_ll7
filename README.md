@@ -46,7 +46,7 @@ python3 -m pytest --ignore=fast-pysf
 python3 -m pylint robot_sf --fail-under=9.5
 ```
 
-### 5. Run OpenAI StableBaselines Training (Docker)
+### 5. Run StableBaselines Training (Docker)
 
 ```sh
 docker-compose build && docker-compose run \

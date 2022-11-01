@@ -3,4 +3,4 @@ from robot_sf.robot_env import RobotEnv
 
 def test_sample():
     env = RobotEnv()
-    assert True
+    assert env is not None

@@ -97,7 +97,7 @@ class BinaryOccupancyGrid():
         occ_shape = (self.grid_width, self.grid_height)
         occupancy = np.zeros(occ_shape, dtype=bool)
 
-        all_coords = np.concatenate(self.get_obstacle_coords())
+        all_coords = self.get_obstacle_coords()
         coords_in_bounds = [pos for pos in all_coords \
                             if pos.size != 0 and self.is_in_bounds(pos[0], pos[1])]
         grid_coords = [self.world_coords_to_grid_cell(pos[0], pos[1])

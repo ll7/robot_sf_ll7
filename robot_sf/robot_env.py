@@ -46,7 +46,8 @@ def initialize_map(sim_env: ExtdSimulator) -> BinaryOccupancyGrid:
     map_width = 2 * sim_env.box_size
     map_resolution = 10 # grid cell granularity rel. to 1 map unit
     robot_map = BinaryOccupancyGrid(map_height, map_width, map_resolution, sim_env.box_size,
-        lambda: sim_env.env.obstacles, lambda: sim_env.current_positions)
+        lambda: np.concatenate(sim_env.env.obstacles), lambda: sim_env.current_positions)
+        # TODO: access to obstacles is leaking detail outside of abstractions
     return robot_map
 
 

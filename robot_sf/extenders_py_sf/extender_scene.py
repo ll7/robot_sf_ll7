@@ -1,5 +1,6 @@
 import sys
 import os
+from typing import Tuple
 
 # TODO: try to get rid of this script-scope code
 csfp = os.path.abspath(os.path.dirname(__file__))
@@ -11,6 +12,8 @@ import numpy as np
 
 
 class PedState(PedState):
+    # TODO: remove inheritance !!!
+
     @property
     def state(self) -> np.ndarray:
         return self._state
@@ -40,7 +43,7 @@ class PedState(PedState):
         stacked_history = np.stack(self.ped_states)
         return stacked_history, self.group_states
 
-    def compute_centroid_group(self, group_index):
+    def compute_centroid_group(self, group_index) -> Tuple[float, float]:
         """ This method compute the centroid position
         of the group identified by the group_index """
 
@@ -55,4 +58,4 @@ class PedState(PedState):
         ped_list = self.groups[group_index]
         pos_x = sum([self.state[i, 0] for i in ped_list]) / len(ped_list)
         pos_y = sum([self.state[i, 1] for i in ped_list]) / len(ped_list)
-        return [pos_x, pos_y]
+        return pos_x, pos_y

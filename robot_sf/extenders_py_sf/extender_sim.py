@@ -25,6 +25,8 @@ class RobotObject:
 
 # info: this implementation is not ideal, but at least it's not the performance bottleneck
 class ExtdSimulator(Simulator):
+    # TODO: don't use inheritance, it makes the code very complex
+
     def __init__(self, config_file=None, path_to_config: str=None, difficulty: int=0, peds_sparsity: int=0):
         self.robot = RobotObject(RobotPose(Vec2D(0, 0), 0), 0)
 
@@ -84,7 +86,7 @@ class ExtdSimulator(Simulator):
             self.sim_config_user.robot_force_config.robot_radius,
             self.sim_config_user.robot_force_config.activation_threshold,
             self.sim_config_user.robot_force_config.force_multiplier)
-        ped_rob_force.update_robot_state(np.array([[self.robot.pose.pos.pos_x, self.robot.pose.pos.pos_y]], dtype=float))
+        ped_rob_force.update_robot_state(np.array([self.robot.pose.pos.as_list], dtype=float))
 
         if self.sim_config_user.flags.activate_ped_robot_force:
             force_list: List[forces.Force] = [
@@ -454,8 +456,8 @@ class ExtdSimulator(Simulator):
             self._timer_stopped_group = np.hstack((self._timer_stopped_group, 0))
 
         #Continue (Set target new group -> update)
-        destination_a = random.choice([0,1,2,3])
-        destination_b = random.randint(-square_dim,square_dim)*np.ones((len(new_group_idx),))
+        destination_a = random.choice([0, 1, 2, 3])
+        destination_b = random.randint(-square_dim, square_dim) * np.ones((len(new_group_idx),))
 
         #Now generate pedestrian target states
         target_states = fill_state(destination_a, destination_b, False, self.box_size)
@@ -468,73 +470,22 @@ class ExtdSimulator(Simulator):
         self.peds.update(old_ped_state, old_groups)
         return True
 
-    def group_merge(self, group_1_index_origin=None, group_2_index_destination=None): #(TESTED!)
+    def pick_random(self, all_ids: List[int], except_ids: List[int]=None) -> int:
+        except_ids = except_ids if except_ids else []
+        sample_ids = [id for id in all_ids if id not in except_ids]
+        return random.choice(sample_ids)
+
+    @property
+    def valid_group_indices(self) -> List[int]:
+        return [gid for gid, member_ids in enumerate(self.peds.groups) if member_ids]
+
+    def group_merge(self, group_1_index_origin: int, group_2_index_destination: int):
         "This method merge two existing groups into a single one"
+
         old_groups = self.peds.groups
-        len_old_groups = len(self.peds.groups)
-
-        #--------------------------------------
-        if group_1_index_origin is not None:
-            if not isinstance(group_1_index_origin, int) or group_1_index_origin < 0 or group_1_index_origin >= len_old_groups:
-                return False
-
-        if group_2_index_destination is not None:
-            if not isinstance(group_2_index_destination, int) or group_2_index_destination < 0 or group_2_index_destination >= len_old_groups:
-                return False
-
-        if group_1_index_origin is not None and group_2_index_destination is not None and group_1_index_origin == group_2_index_destination:
-            return False
-
-        #--------------------------------------
-        #There must be at least two valid group indices
-        valid_indexes = []
-        for i, sub_list in enumerate(old_groups):
-            if sub_list:
-                valid_indexes.append(i)
-
-        if not self.sim_config_user.flags.enable_topology_on_stopped:
-            idx_non_stopped_groups = []
-            for i in range(len(self._stopped_groups)):
-                if not self._stopped_peds[i]:
-                    idx_non_stopped_groups.append(i)
-            valid_indexes = [item for item in valid_indexes if item in idx_non_stopped_groups]
-
-        if len(valid_indexes) <= 1:
-            return False
-
-        if group_1_index_origin is not None and (group_2_index_destination is None):
-            if group_1_index_origin not in valid_indexes:
-                return False
-
-            tmp = valid_indexes.copy()
-            tmp.remove(group_1_index_origin)
-            group_2_index_destination = random.choice(tmp)
-
-        if (group_1_index_origin is None) and group_2_index_destination is not None:
-            if group_2_index_destination not in valid_indexes:
-                return False
-
-            tmp = valid_indexes.copy()
-            tmp.remove(group_2_index_destination)
-            group_1_index_origin = random.choice(tmp)
-
-        if group_1_index_origin is not None and group_2_index_destination is not None:
-            if group_1_index_origin not in valid_indexes or group_2_index_destination not in valid_indexes:
-                return False
-
-        #---------------------------------------------------------------------
-        if (group_1_index_origin is None) and (group_2_index_destination is None):
-            group_1_index_origin = random.choice(valid_indexes)
-            tmp = valid_indexes.copy()
-            tmp.remove(group_1_index_origin)
-            group_2_index_destination = random.choice(tmp)
-
-        #---------------------------------------------------------------------
-
-        #Now it's time to move pedestrians from group 1 to group 2
-        new_group = old_groups.copy()
-        new_group[group_2_index_destination] = old_groups[group_2_index_destination] + old_groups[group_1_index_origin]
-        new_group[group_1_index_origin] = []
+        new_groups = old_groups.copy()
+        new_groups[group_2_index_destination] = old_groups[group_2_index_destination] + old_groups[group_1_index_origin]
+        new_groups[group_1_index_origin] = []
 
         #Reset group memory
         self._stopped_groups[group_1_index_origin] = False
@@ -544,13 +495,12 @@ class ExtdSimulator(Simulator):
         target_ped_state = np.zeros((len(old_groups[group_1_index_origin]), 2))
         old_ped = old_groups[group_1_index_origin]
         old_ped_target_idx = old_groups[group_2_index_destination][0]
-        target_ped_state[:,0] = self.peds.state[old_ped_target_idx, 4]
-        target_ped_state[:,1] = self.peds.state[old_ped_target_idx, 5]
+        target_ped_state[:, 0] = self.peds.state[old_ped_target_idx, 4]
+        target_ped_state[:, 1] = self.peds.state[old_ped_target_idx, 5]
 
         new_ped_state = self.peds.state
-        new_ped_state[old_ped,4:6] = target_ped_state
-        self.peds.update(new_ped_state, new_group)
-        return True
+        new_ped_state[old_ped, 4:6] = target_ped_state
+        self.peds.update(new_ped_state, new_groups)
 
     def group_stop(self, group_index = None):
         "This method select a group and stop it in the scene"
@@ -590,12 +540,13 @@ class ExtdSimulator(Simulator):
         #Set new group pedestrian target
         if self.sim_config_user.flags.enable_rendezvous_centroid:
             new_target = self.peds.compute_centroid_group(group_index)
+            # TODO: new_target might be a boolean variable that's False indicating an error
         else:
             new_target = self.peds.state[tmp_ped_idx, :2]
 
         new_state = self.peds.state
-        mask = self.peds.groups[group_index]
-        new_state[mask, 4:6] = new_target
+        group_member_ids = self.peds.groups[group_index]
+        new_state[group_member_ids, 4:6] = new_target
         self.peds.update(new_state, self.peds.groups)
 
     def unfreeze_group(self, group_index = None):
@@ -635,30 +586,24 @@ class ExtdSimulator(Simulator):
             return True
 
         #Compute probability of splitting group or merge or do nothing
-        action_chosen = random.choices(['split','merge','none'], [5,5,90])
-        if action_chosen[0] == 'split':
+        action_chosen = random.choices(['split', 'merge', 'none'], weights=[5, 5, 90], k=1)[0]
+        if action_chosen == 'split':
             #Try to split current group
             success = self.group_split(group_index)
             if not success:
-                tmp = ['merge','none']
-                action = random.choices(tmp, [10, 90])
+                action = random.choices(['merge', 'none'], weights=[10, 90], k=1)[0]
                 if action == 'merge':
-                    success = self.group_merge(group_1_index_origin=group_index)
+                    dist_gid = self.pick_random(self.valid_group_indices, [group_index])
+                    self.group_merge(group_index, dist_gid)
 
-        elif action_chosen[0] == 'merge':
-            #try to merge current group
-            #print("MERGING")
-            #print(group_index)
-            success = self.group_merge(group_1_index_origin=group_index)
-
-            if not success:
-                tmp = ['split','none']
-                action = random.choices(tmp, [10,90])
+        elif action_chosen == 'merge':
+            if len(self.valid_group_indices) > 1:
+                dist_gid = self.pick_random(self.valid_group_indices, [group_index])
+                self.group_merge(group_index, dist_gid)
+            else:
+                action = random.choices(['split', 'none'], weights=[10, 90], k=1)[0]
                 if action == 'split':
-                    success = self.group_split(group_index)
-        else:
-            #Do nothing
-            action = 'none'
+                    self.group_split(group_index)
 
         #Update groups
         self.peds.update(self.peds.state, self.peds.groups)
@@ -954,8 +899,10 @@ class ExtdSimulator(Simulator):
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
             elif action == 'merge':
-                success = self.group_merge()
-                if success:
+                if len(self.valid_group_indices) > 1:
+                    src_gid = self.pick_random(self.valid_group_indices)
+                    dest_gid = self.pick_random(self.valid_group_indices, [src_gid])
+                    self.group_merge(src_gid, dest_gid)
                     break
                 else:
                     #Select new action
@@ -964,7 +911,6 @@ class ExtdSimulator(Simulator):
                     val = topology_actions.probs_in_percent[index_action]/len(topology_actions.actions)
 
                     topology_actions.probs_in_percent.pop(index_action)
-
                     for i in range(len(topology_actions.probs_in_percent)):
                         topology_actions.probs_in_percent[i] += val
             elif action == 'group_standalone':

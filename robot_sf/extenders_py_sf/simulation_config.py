@@ -183,10 +183,10 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
 
         iter_num = 0
         while True:
-            for iter_num, obstacle in enumerate(map_structure['Obstacles'].keys()):
+            for iter_num, obstacle_name in enumerate(map_structure['Obstacles'].keys()):
                 #Compute safety radius for each obstacle
-                obs_recreated = load_polygon(map_structure['Obstacles'][obstacle]['Vertex'])
-                vert = np.array(map_structure['Obstacles'][obstacle]['Vertex'])
+                obs_recreated = load_polygon(map_structure['Obstacles'][obstacle_name]['Vertex'])
+                vert = np.array(map_structure['Obstacles'][obstacle_name]['Vertex'])
                 radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1
 
                 if np.linalg.norm(state[i, :2] - obs_recreated.centroid.coords) < radius:

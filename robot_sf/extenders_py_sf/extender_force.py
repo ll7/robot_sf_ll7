@@ -24,7 +24,7 @@ def normalize(vecs: np.ndarray):
 
 
 class PedRobotForce(Force):
-    def __init__(self, robot_radius=1, activation_treshold=0.5, force_multiplier=1):
+    def __init__(self, robot_radius: float=1, activation_treshold: float=0.5, force_multiplier: float=1):
         self.robot_radius = robot_radius
         self.activation_treshold = activation_treshold
         super().__init__()
@@ -76,8 +76,8 @@ class DesiredForce(Force):
             self.forgetting_factor = forgetting_factor
 
     def _get_force(self):
-        relexation_time = self.config("relaxation_time", 0.5)
-        goal_threshold = self.config("goal_threshold", 0.1)
+        relexation_time: float = self.config("relaxation_time", 0.5)
+        goal_threshold: float = self.config("goal_threshold", 0.1)
         pos = self.peds.pos()
         vel = self.peds.vel()
         goal = self.peds.goal()
@@ -85,7 +85,7 @@ class DesiredForce(Force):
         direction, dist = normalize(goal - pos)
         ### in the following, direction is changed if obstacle is detected
         if self.obstacle_avoidance:
-            direction,peds_collision_indices = change_direction(
+            direction, peds_collision_indices = change_direction(
                 self.p_0,
                 self.p_1,
                 self.peds.state[:, :2],   # current positions

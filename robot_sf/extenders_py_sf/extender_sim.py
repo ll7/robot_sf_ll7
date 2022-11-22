@@ -722,7 +722,7 @@ class ExtdSimulator(Simulator):
 
         #Choose random destination and delete the origin side
         group_destination_a = random.choice(np.delete(np.array([0, 1, 2, 3]), group_origin_a))
-        group_destination_b = random.randint(-square_dim,square_dim)*np.ones((new_grp_size,))
+        group_destination_b = random.randint(-square_dim, square_dim)*np.ones((new_grp_size,))
 
         #Based on group origin and group destination compute the new states of the
         #new added pedestrians
@@ -859,7 +859,7 @@ class ExtdSimulator(Simulator):
                         ped_generations_action.actions.pop(index_action)
                         val = ped_generations_action.probs_in_percent[index_action]/len(ped_generations_action.actions)
 
-                        ped_generations_action.probs_in_percent.poo(index_action)
+                        ped_generations_action.probs_in_percent.pop(index_action)
 
                         for i in range(len(ped_generations_action.probs_in_percent)):
                             ped_generations_action.probs_in_percent[i] += val

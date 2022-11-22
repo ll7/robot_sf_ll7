@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 from pysocialforce.utils import stateutils
 
@@ -61,7 +63,8 @@ def rotate_segment(origin, point, angle):
     return q_x, q_y
 
 
-def change_direction(p_0, p_1, current_positions, destinations, view_distance, angles, direction, desired_directions):
+def change_direction(p_0, p_1, current_positions, destinations,
+                     view_distance, angles, direction, desired_directions) -> Tuple[np.ndarray, np.ndarray]:
     #1. find pedestrians who are headed towards an obstacle (within horizon defined by view_distance)
     l_directions = line_segment(current_positions, destinations)
     l_obstacles  = line_segment(p_0, p_1)

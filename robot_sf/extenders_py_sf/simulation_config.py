@@ -25,7 +25,7 @@ class SimulatorConfigFlags:
 @dataclass
 class ActionPool:
     actions: List[str]
-    probs_in_percent: List[int]
+    probs_in_percent: List[float]
 
 
 @dataclass

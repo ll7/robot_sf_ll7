@@ -1,5 +1,5 @@
 from math import dist
-from typing import Tuple, List
+from typing import Tuple, List, Union, Any
 
 import numpy as np
 from gym import Env, spaces
@@ -58,10 +58,10 @@ class RobotEnv(Env):
     # TODO: transform this into cohesive data structures
     def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
                  visual_angle_portion: float=0.5, lidar_range: float=10.0,
-                 v_linear_max: float=1, v_angular_max: float=1, rewards: List[float]=None,
-                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, d_t: float=None,
+                 v_linear_max: float=1, v_angular_max: float=1, rewards: Union[List[float], None]=None,
+                 max_v_x_delta: float=.5, max_v_rot_delta: float=.5, d_t: Union[float, None]=None,
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
-                 scan_noise: List[float]=None, peds_speed_mult: float=1.3, debug: bool=False):
+                 scan_noise: Union[List[float], None]=None, peds_speed_mult: float=1.3, debug: bool=False):
 
         scan_noise = scan_noise if scan_noise else [0.005, 0.002]
 
@@ -125,6 +125,7 @@ class RobotEnv(Env):
             VisualizableAction(
                 self.robot.pose,
                 self.last_action,
+                self.target_coords,
                 self.robot_map.world_coords_to_grid_cell)
 
         robot_occupancy = self.robot_map.robot_occupancy(

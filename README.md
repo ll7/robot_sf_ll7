@@ -39,10 +39,23 @@ python3 -m pip install .
 Otherwise the calling scope might run an old version of robot_sf.
 Dockerized deployments will recognize when a change requires a rebuild.*
 
+Alternatively create soft links for fast-pysf. The modules and tests are
+automatically detected by the interpreter if the calling scope is located
+at the repository's root directory which is very useful e.g. for debugging.
+
+```sh
+ln -s fast-pysf/pysocialforce pysocialforce
+pushd tests
+    ln -s ../fast-pysf/tests pysf_tests
+popd
+```
+
+*Note: The outlined command might differ on Windows, e.g. try mklink*
+
 ### 4. Run Linter / Tests
 
 ```sh
-python3 -m pytest --ignore=fast-pysf
+python3 -m pytest tests
 python3 -m pylint robot_sf --fail-under=9.5
 ```
 

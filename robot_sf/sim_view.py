@@ -21,7 +21,7 @@ PEDESTRIAN_COLOR = (0, 50, 100)
 ROBOT_COLOR = (0, 0, 200)
 COLLISION_COLOR = (200, 0, 0)
 ROBOT_ACTION_COLOR = (0, 100, 0)
-ROBOT_GOAL_COLOR = (0, 100, 0)
+ROBOT_GOAL_COLOR = (0, 204, 102)
 TEXT_COLOR = (0, 0, 0)
 
 
@@ -110,7 +110,7 @@ class SimulationView:
             pygame.draw.rect(self.screen, color, rect)
 
     def _augment_goal_position(self, robot_goal: GridPosition):
-        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, 0.5)
+        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, 5)
 
     def _augment_action_vector(self, action: VisualizableAction):
         start = (action.start[0] * self.pixels_per_cell, action.start[1] * self.pixels_per_cell)

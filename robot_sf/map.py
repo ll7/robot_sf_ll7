@@ -106,12 +106,6 @@ class BinaryOccupancyGrid():
         for grid_x, grid_y in grid_coords:
             occupancy[grid_x, grid_y] = 1
 
-        # make the map boundary an "obstacle"
-        occupancy[:, 0] = 1
-        occupancy[:, -1] = 1
-        occupancy[0, :] = 1
-        occupancy[-1, :] = 1
-
         # info: this is not really efficient, but don't worry about
         #       performance, it's only executed once on map creation
         radius = 0.3
@@ -122,6 +116,12 @@ class BinaryOccupancyGrid():
         for grid_x, grid_y in eval_points:
             grid_x, grid_y = self.world_coords_to_grid_cell(grid_x, grid_y)
             fill_surrounding(occupancy, grid_x, grid_y, x_step, y_step)
+
+        # make the map boundary an "obstacle"
+        occupancy[:, 0] = 1
+        occupancy[:, -1] = 1
+        occupancy[0, :] = 1
+        occupancy[-1, :] = 1
 
         return occupancy, np.array(coords_in_bounds)
 

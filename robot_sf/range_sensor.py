@@ -28,17 +28,17 @@ class LidarScannerSettings:
 
     max_scan_dist: float
     visual_angle_portion: float # info: value between 0 and 1
-    lidar_n_rays: int # info: needs to be a multiple of 4!!!
+    lidar_n_rays: int
     angle_opening: Range=field(init=False)
     scan_length: int=field(init=False)
     scan_noise: List[float]=field(default_factory=lambda: [0, 0])
 
     def __post_init__(self):
-        if self.lidar_n_rays % 4 != 0 and self.lidar_n_rays > 0:
-            raise ValueError('Amount of rays needs to be divisible by 4!')
+        # if self.lidar_n_rays % 4 != 0 and self.lidar_n_rays > 0:
+        #     raise ValueError('Amount of rays needs to be divisible by 4!')
 
         if not 0 < self.visual_angle_portion <= 1:
-            raise ValueError('Scan angle portion needs to be within (0, 1)!')
+            raise ValueError('Scan angle portion needs to be within (0, 1]!')
 
         self.scan_length = int(self.visual_angle_portion * self.lidar_n_rays)
         self.angle_opening = Range(
@@ -66,7 +66,7 @@ def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
     error = diff_x + diff_y
 
     i = 0
-    while True:
+    while i < out_x.shape[0]:
         out_x[i] = x_0
         out_y[i] = y_0
         i += 1
@@ -122,16 +122,15 @@ def grid_boundary_hit(start_point: GridPoint, orient: float,
     return grid_cell_of(pos_x, pos_y)
 
 
-def compute_distances_cache(width: int, height: int) -> np.ndarray:
+def compute_distances_cache(width: int, height: int, x_units: float, y_units: float) -> np.ndarray:
     """Precompute the distances of grid cells from the middle (width+1, height+1).
 
     Returns an array of shape (width * 2 + 1, height * 2 + 1)"""
-
-    x_coords = np.arange(-width , width  + 1)[:, np.newaxis]
-    y_coords = np.arange(-height, height + 1)[np.newaxis, :]
+    x_coords = np.arange(-width , width  + 1)[:, np.newaxis] * x_units / width
+    y_coords = np.arange(-height, height + 1)[np.newaxis, :] * y_units / height
     x_coords, y_coords = np.meshgrid(x_coords, y_coords)
     all_xy = np.stack((y_coords, x_coords), axis=2)
-    dists = np.power((all_xy[:, :, 0])**2 + (all_xy[:, :, 1])**2, 0.5)
+    dists = np.power((all_xy[:, :, 0] + 0.5)**2 + (all_xy[:, :, 1] + 0.5)**2, 0.5)
     return dists
 
 
@@ -159,22 +158,22 @@ def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_po
     distances are capped by the maximum scan range."""
 
     width, height = occupancy.shape
-    pos_x, pos_y = scanner_position
-    x_offset, y_offset = width + 1 - pos_x, height + 1 - pos_y
-    end_pos = cached_end_pos - np.array([x_offset, y_offset])
-    ray_x, ray_y = np.zeros((width), dtype=np.int64), np.zeros((height), dtype=np.int64)
+    pos_x, pos_y = width + 1, height + 1 # scanner is always at the middle of the bigger grid
+    x_offset, y_offset = width - scanner_position[0], height - scanner_position[1]
+    ray_x, ray_y = np.zeros((width + 1), dtype=np.int64), np.zeros((height + 1), dtype=np.int64)
 
     ranges = np.zeros((scan_length))
     for i in range(scan_length):
         angle_id = (first_ray_id + i) % lidar_n_rays
-        num_points = bresenham_line(ray_x, ray_y, scanner_position, end_pos[angle_id])
+        num_points = bresenham_line(ray_x, ray_y, (pos_x, pos_y), cached_end_pos[angle_id])
         temp_range = max_scan_dist
         for j in range(num_points):
-            pos_x, pos_y = ray_x[j], ray_y[j]
-            if not 0 <= pos_x < width or not 0 <= pos_y < height:
+            pos_x, pos_y = ray_x[j], ray_y[j] # ray coords in big grid
+            rel_pos_x, rel_pos_y = pos_x - x_offset, pos_y - y_offset # ray coords in small grid
+            if not 0 <= rel_pos_x < width or not 0 <= rel_pos_y < height:
                 break
-            if occupancy[pos_x, pos_y]:
-                coll_dist = cached_distances[pos_x + x_offset, pos_y + y_offset]
+            if occupancy[rel_pos_x, rel_pos_y]:
+                coll_dist = cached_distances[pos_x, pos_y] # cached distances from mid of big grid
                 temp_range = min(coll_dist, max_scan_dist)
                 break
         ranges[i] = temp_range
@@ -203,10 +202,11 @@ class LidarScanner():
 
     def __post_init__(self):
         self.cached_distances = compute_distances_cache(
-            self.robot_map.grid_width, self.robot_map.grid_height)
+            self.robot_map.grid_width, self.robot_map.grid_height,
+            self.robot_map.box_size, self.robot_map.box_size)
         self.cached_angles = np.linspace(0, 2*pi, self.settings.lidar_n_rays + 1)[:-1]
-        middle = (self.robot_map.grid_width + 1, self.robot_map.grid_height + 1)
-        width, height = self.robot_map.grid_width * 2 + 1, self.robot_map.grid_height * 2 + 1
+        middle = (self.robot_map.grid_width, self.robot_map.grid_height)
+        width, height = self.robot_map.grid_width * 2 - 1, self.robot_map.grid_height * 2 - 1
         self.cached_end_pos = np.array([grid_boundary_hit(middle, phi, width, height)
                                         for phi in self.cached_angles])
         self.get_object_occupancy = lambda: self.robot_map.occupancy_overall

@@ -46,7 +46,7 @@ class LidarScannerSettings:
              np.pi * self.visual_angle_portion)
 
 
-@numba.njit(fastmath=True)
+# @numba.njit(fastmath=True)
 def bresenham_line(out_x: np.ndarray, out_y: np.ndarray,
                    p_1: GridPoint, p_2: GridPoint) -> int:
     """Jack Bresenham's algorithm (1962) to draw a line with 0/1 pixels
@@ -122,19 +122,20 @@ def grid_boundary_hit(start_point: GridPoint, orient: float,
     return grid_cell_of(pos_x, pos_y)
 
 
-def compute_distances_cache(width: int, height: int, x_units: float, y_units: float) -> np.ndarray:
-    """Precompute the distances of grid cells from the middle (width+1, height+1).
+def compute_distances_cache(width: float, height: float, x_units: int, y_units: int) -> np.ndarray:
+    """Precompute the distances of grid cells from the middle (x_units+1, y_units+1)
+    ranging from 0 at the middle to sqrt(width^2 + height^2) at the edges.
 
-    Returns an array of shape (width * 2 + 1, height * 2 + 1)"""
-    x_coords = np.arange(-width , width  + 1)[:, np.newaxis] * x_units / width
-    y_coords = np.arange(-height, height + 1)[np.newaxis, :] * y_units / height
+    Returns an array of shape (x_units * 2 + 1, y_units * 2 + 1)"""
+    x_coords = np.linspace(-1 , 1, num=2*x_units + 1)[:, np.newaxis] * width
+    y_coords = np.linspace(-1 , 1, num=2*y_units + 1)[np.newaxis, :] * height
     x_coords, y_coords = np.meshgrid(x_coords, y_coords)
     all_xy = np.stack((y_coords, x_coords), axis=2)
     dists = np.power((all_xy[:, :, 0] + 0.5)**2 + (all_xy[:, :, 1] + 0.5)**2, 0.5)
     return dists
 
 
-@numba.njit(parallel=True, fastmath=True)
+# @numba.njit(parallel=True, fastmath=True)
 def raycast(first_ray_id: int, occupancy: numba.types.bool_[:, :], cached_end_pos: np.ndarray,
             cached_distances: np.ndarray, scan_length: int, lidar_n_rays: int,
             scanner_position: np.ndarray, max_scan_dist: float) -> np.ndarray:
@@ -202,8 +203,8 @@ class LidarScanner():
 
     def __post_init__(self):
         self.cached_distances = compute_distances_cache(
-            self.robot_map.grid_width, self.robot_map.grid_height,
-            self.robot_map.box_size, self.robot_map.box_size)
+            self.robot_map.box_size, self.robot_map.box_size,
+            self.robot_map.grid_width, self.robot_map.grid_height)
         self.cached_angles = np.linspace(0, 2*pi, self.settings.lidar_n_rays + 1)[:-1]
         middle = (self.robot_map.grid_width, self.robot_map.grid_height)
         width, height = self.robot_map.grid_width * 2 - 1, self.robot_map.grid_height * 2 - 1

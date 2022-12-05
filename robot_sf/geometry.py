@@ -10,18 +10,35 @@ Circle2D = Tuple[Vec2D, float]
 
 
 @numba.njit(fastmath=True)
+def euclid_dist(v1: Vec2D, v2: Vec2D) -> float:
+    return ((v1[0] - v2[0])**2 + (v1[1] - v2[1])**2)**0.5
+
+
+@numba.njit(fastmath=True)
 def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: Vec2D) -> float:
     # source: https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
-    (x1, y1), (x2, y2) = segment
-    (x3, y3), (x4, y4) = origin, (origin[0] + ray_vec[0], origin[1] + ray_vec[1])
+    (x_1, y_1), (x_2, y_2) = segment
+    (x_3, y_3), (x_4, y_4) = origin, (origin[0] + ray_vec[0], origin[1] + ray_vec[1])
 
-    num = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)
-    den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    num = (x_1 - x_3) * (y_3 - y_4) - (y_1 - y_3) * (x_3 - x_4)
+    den = (x_1 - x_2) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4)
+
+    # edge case: line segment has same orientation as ray vector
+    if den == 0:
+        min_x, max_x = min(x_1, x_2), max(x_1, x_2)
+        min_y, max_y = min(y_1, y_2), max(y_1, y_2)
+
+        if min_x <= origin[0] <= max_x and min_y <= origin[1] <= max_y:
+            return 0.0
+        else:
+            dist1 = euclid_dist(origin, (x_1, y_1))
+            dist2 = euclid_dist(origin, (x_2, y_2))
+            return min(dist1, dist2)
+
     t = num / den
-
     if 0 <= t <= 1:
-        cross_x, cross_y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
-        return ((origin[0] - cross_x)**2 + (origin[1] - cross_y)**2)**0.5
+        cross_x, cross_y = x_1 + t * (x_2 - x_1), y_1 + t * (y_2 - y_1)
+        return euclid_dist(origin, (cross_x, cross_y))
     else:
         return np.inf
 

@@ -83,6 +83,7 @@ def range_postprocessing(ranges: np.ndarray, scan_length: int,
     """Postprocess the raycast results to simulate a noisy scan result."""
     not_lost_scans = np.where(np.random.random(scan_length) >= scan_noise[0], 1, 0)
     corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
+    ranges = np.clip(ranges, 0, max_scan_dist)
     ranges = np.where(not_lost_scans, ranges, max_scan_dist)
     corrupt_scans_mask = np.bitwise_and(corrupt_scans, not_lost_scans)
     ranges = np.where(corrupt_scans_mask, ranges * np.random.random(scan_length), ranges)

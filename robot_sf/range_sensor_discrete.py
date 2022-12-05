@@ -8,7 +8,7 @@ import numba
 import logging
 logging.getLogger('numba').setLevel(logging.WARNING)
 
-from robot_sf.map import BinaryOccupancyGrid
+from robot_sf.map_discrete import BinaryOccupancyGrid
 from robot_sf.vector import RobotPose
 
 
@@ -212,7 +212,7 @@ class LidarScanner():
                                         for phi in self.cached_angles])
         self.get_object_occupancy = lambda: self.robot_map.occupancy_overall
 
-    def angle_id(self, orient: float) -> float:
+    def _angle_id(self, orient: float) -> float:
         """Retrieve the ray index related to the given scan direction."""
         orient = normalize_angle(orient)
         return int((orient / (2 * pi)) * self.settings.lidar_n_rays)
@@ -228,7 +228,7 @@ class LidarScanner():
         scan_length = self.settings.scan_length
 
         # perform raycast
-        first_ray_id = self.angle_id(pose.orient + self.settings.angle_opening.lower)
+        first_ray_id = self._angle_id(pose.orient + self.settings.angle_opening.lower)
         occupancy = self.get_object_occupancy()
         ranges = raycast(first_ray_id, occupancy, self.cached_end_pos, self.cached_distances,
                          scan_length, self.settings.lidar_n_rays,

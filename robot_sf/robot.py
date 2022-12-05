@@ -1,12 +1,26 @@
 from math import sin, cos
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Protocol
 
 import numpy as np
 
 from robot_sf.vector import RobotPose, PolarVec2D, Vec2D
-from robot_sf.map import BinaryOccupancyGrid
-from robot_sf.range_sensor import LidarScanner
+
+
+class MapImpl(Protocol):
+    def is_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
+        raise NotImplementedError()
+
+    def is_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
+        raise NotImplementedError()
+
+    def is_in_bounds(self, world_x: float, world_y: float) -> bool:
+        raise NotImplementedError()
+
+
+class ScannerImpl(Protocol):
+    def get_scan(self, pose: RobotPose) -> np.ndarray:
+        raise NotImplementedError()
 
 
 @dataclass
@@ -27,7 +41,6 @@ class RobotSettings:
 @dataclass
 class RobotState:
     config: RobotSettings
-    map: BinaryOccupancyGrid
     current_speed: PolarVec2D
     current_pose: RobotPose
     last_pose: RobotPose
@@ -85,14 +98,13 @@ class DifferentialDriveRobot():
     """Representing a robot with differential driving behavior"""
     spawn_pose: RobotPose
     config: RobotSettings
-    scanner: LidarScanner
-    _map: BinaryOccupancyGrid
+    scanner: ScannerImpl
+    _map: MapImpl
     state: RobotState = field(init=False)
 
     def __post_init__(self):
         self.state = RobotState(
             self.config,
-            self._map,
             PolarVec2D(0, 0),
             self.spawn_pose,
             self.spawn_pose,

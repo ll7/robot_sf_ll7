@@ -30,19 +30,17 @@ class VisualizableAction:
     robot_pose: RobotPose
     robot_action: RobotAction
     robot_goal: WorldPosition
-    world_to_grid: Callable[[float, float], GridPosition]
-    robot_goal_grid: GridPosition = field(init=False)
-    start: GridPosition = field(init=False)
-    end: GridPosition = field(init=False)
+    # world_to_grid: Callable[[float, float], GridPosition]
+    # start: GridPosition = field(init=False)
+    # end: GridPosition = field(init=False)
 
-    def __post_init__(self):
-        self.robot_goal_grid = self.world_to_grid(self.robot_goal[0], self.robot_goal[1])
-        x_start, y_start = self.robot_pose.pos.as_list
-        x_start, y_start = self.world_to_grid(x_start, y_start)
-        x_diff, y_diff = self.robot_action.vector.as_list
-        x_diff, y_diff = self.world_to_grid(x_diff, y_diff)
-        x_end, y_end = x_start + x_diff, y_start + y_diff
-        self.start, self.end = (x_start, y_start), (x_end, y_end)
+    # def __post_init__(self):
+    #     x_start, y_start = self.robot_pose.pos.as_list
+    #     x_start, y_start = self.world_to_grid(x_start, y_start)
+    #     x_diff, y_diff = self.robot_action.vector.as_list
+    #     x_diff, y_diff = self.world_to_grid(x_diff, y_diff)
+    #     x_end, y_end = x_start + x_diff, y_start + y_diff
+    #     self.start, self.end = (x_start, y_start), (x_end, y_end)
 
 
 @dataclass
@@ -51,28 +49,23 @@ class VisualizableSimState:
     the simulator's state at a discrete timestep."""
     timestep: int
     action: Union[VisualizableAction, None]
-    robot_occupancy: np.ndarray
-    pedestrians_occupancy: np.ndarray
-    obstacles_occupancy: np.ndarray
-    collisions_occupancy: np.ndarray = field(init=False)
-
-    def __post_init__(self):
-        coll_with_obstacle = np.bitwise_and(self.robot_occupancy, self.pedestrians_occupancy)
-        coll_with_pedestrian = np.bitwise_and(self.robot_occupancy, self.obstacles_occupancy)
-        self.collisions_occupancy = np.bitwise_or(coll_with_obstacle, coll_with_pedestrian)
+    robot_pose: RobotPose
+    pedestrian_positions: np.ndarray
+    obstacles: np.ndarray
 
 
 class SimulationView:
     """Representing a UI window for visualizing the simulation's state."""
 
-    def __init__(self, grid_width: int=600, grid_height: int=800, pixels_per_cell: int=1):
-        self.width = grid_width * pixels_per_cell
-        self.height = grid_height * pixels_per_cell
-        self.pixels_per_cell = pixels_per_cell
+    def __init__(self, box_width: float=10, box_height: float=10, scaling: float=10):
+        self.width = box_width * scaling
+        self.height = box_height * scaling
+        self.scaling = scaling
 
         pygame.init()
         pygame.font.init()
-        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        self.screen = pygame.display.set_mode(
+            (self.width, self.height), pygame.RESIZABLE)
         self.font = pygame.font.SysFont('Consolas', 14)
         self.timestep_text_pos = (self.width - 100, 10)
         self.clear()
@@ -91,31 +84,52 @@ class SimulationView:
         pygame.display.update()
 
     def render(self, state: VisualizableSimState):
+        state = self._norm_state(state)
         self.screen.fill(BACKGROUND_COLOR)
-        self._draw_occupancy(state.robot_occupancy, ROBOT_COLOR)
-        self._draw_occupancy(state.obstacles_occupancy, OBSTACLE_COLOR)
-        self._draw_occupancy(state.pedestrians_occupancy, PEDESTRIAN_COLOR)
-        self._draw_occupancy(state.collisions_occupancy, COLLISION_COLOR)
+        self._draw_robot(state.robot_pose)
+        self._draw_pedestrians(state.pedestrian_positions)
+        self._draw_obstacles(state.obstacles)
         if state.action:
-            self._augment_action_vector(state.action)
-            self._augment_goal_position(state.action.robot_goal_grid)
+            # self._augment_action_vector(state.action)
+            self._augment_goal_position(state.action.robot_goal)
         self._augment_timestep(state.timestep)
         pygame.display.update()
 
-    def _draw_occupancy(self, occupancy: np.ndarray, color: RgbColor):
-        pos_x, pos_y = np.where(occupancy)
-        for grid_x, grid_y in zip(pos_x, pos_y):
-            pos_x, pos_y = grid_x * self.pixels_per_cell, grid_y * self.pixels_per_cell
-            rect = pygame.Rect(pos_x, pos_y, self.pixels_per_cell, self.pixels_per_cell)
-            pygame.draw.rect(self.screen, color, rect)
+    def _norm_state(self, state: VisualizableSimState) -> VisualizableSimState:
+        state.pedestrian_positions[:, 0] += self.width / 2
+        state.pedestrian_positions[:, 1] += self.height / 2
+        state.pedestrian_positions *= self.scaling
+        state.obstacles[:, 0] += self.width / 2
+        state.obstacles[:, 1] += self.height / 2
+        state.obstacles *= self.scaling
+        state.robot_pose.pos.pos_x += self.width / 2
+        state.robot_pose.pos.pos_y += self.height / 2
+        state.robot_pose.pos.pos_x *= self.scaling
+        state.robot_pose.pos.pos_y *= self.scaling
+        state.action.robot_goal[0] += self.width / 2
+        state.action.robot_goal[1] += self.height / 2
+        state.action.robot_goal[0] *= self.scaling
+        state.action.robot_goal[1] *= self.scaling
+        return state
 
-    def _augment_goal_position(self, robot_goal: GridPosition):
-        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, 5)
+    def _draw_robot(self, pose: RobotPose):
+        pygame.draw.circle(self.screen, ROBOT_COLOR, pose.coords, self.scaling)
 
-    def _augment_action_vector(self, action: VisualizableAction):
-        start = (action.start[0] * self.pixels_per_cell, action.start[1] * self.pixels_per_cell)
-        end = (action.end[0] * self.pixels_per_cell, action.end[1] * self.pixels_per_cell)
-        pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, start, end)
+    def _draw_pedestrians(self, ped_pos: np.ndarray):
+        for ped_x, ped_y in ped_pos:
+            pygame.draw.circle(self.screen, PEDESTRIAN_COLOR, (ped_x, ped_y), self.scaling)
+
+    def _draw_obstacles(self, obstacles: np.ndarray):
+        for s_x, s_y, e_x, e_y in obstacles:
+            pygame.draw.line(self.screen, OBSTACLE_COLOR, (s_x, s_y), (e_x, e_y))
+
+    def _augment_goal_position(self, robot_goal: WorldPosition):
+        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.scaling)
+
+    # def _augment_action_vector(self, action: VisualizableAction):
+    #     start = (action.start[0] * self.scaling, action.start[1] * self.scaling)
+    #     end = (action.end[0] * self.scaling, action.end[1] * self.scaling)
+    #     pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, start, end)
 
     def _augment_timestep(self, timestep: int):
         text = f'step: {timestep}'

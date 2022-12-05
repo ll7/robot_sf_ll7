@@ -4,8 +4,8 @@ from typing import Tuple, List, Union, Any
 import numpy as np
 from gym import Env, spaces
 
-from robot_sf.map import BinaryOccupancyGrid
-from robot_sf.range_sensor import LidarScanner, LidarScannerSettings
+from robot_sf.map_continuous import ContinuousOccupancy
+from robot_sf.range_sensor_continuous import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.vector import RobotPose, Vec2D, PolarVec2D
 from robot_sf.robot import DifferentialDriveRobot, RobotSettings
@@ -13,20 +13,20 @@ from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 
 
 def initialize_lidar(
-        robot_map: BinaryOccupancyGrid,
+        robot_map: ContinuousOccupancy,
         visualization_angle_portion: float,
-        lidar_range: int,
+        lidar_range: float,
         lidar_n_rays: int,
         scan_noise: List[float]):
     lidar_settings = LidarScannerSettings(
         lidar_range, visualization_angle_portion, lidar_n_rays, scan_noise)
-    lidar_sensor = LidarScanner(lidar_settings, robot_map)
+    lidar_sensor = ContinuousLidarScanner(lidar_settings, robot_map)
     return lidar_sensor
 
 
 def initialize_robot(
-        robot_map: BinaryOccupancyGrid,
-        lidar_sensor: LidarScanner,
+        robot_map: ContinuousOccupancy,
+        lidar_sensor: ContinuousLidarScanner,
         spawn_pos: RobotPose,
         robot_settings: RobotSettings):
     robot = DifferentialDriveRobot(spawn_pos, robot_settings, lidar_sensor, robot_map)
@@ -40,14 +40,18 @@ def initialize_simulator(peds_sparsity, difficulty, d_t, peds_speed_mult) -> Ext
     return sim_env
 
 
-def initialize_map(sim_env: ExtdSimulator) -> BinaryOccupancyGrid:
+def initialize_map(sim_env: ExtdSimulator) -> ContinuousOccupancy:
     # initialize map
-    map_height = 2 * sim_env.box_size
-    map_width = 2 * sim_env.box_size
-    map_resolution = 10 # grid cell granularity rel. to 1 map unit
-    robot_map = BinaryOccupancyGrid(map_height, map_width, map_resolution, sim_env.box_size,
-        lambda: np.concatenate(sim_env.env.obstacles), lambda: sim_env.current_positions)
-        # TODO: access to obstacles is leaking detail outside of abstractions
+    # map_height = 2 * sim_env.box_size
+    # map_width = 2 * sim_env.box_size
+    # map_resolution = 10 # grid cell granularity rel. to 1 map unit
+    # robot_map = BinaryOccupancyGrid(map_height, map_width, map_resolution, sim_env.box_size,
+    #     lambda: np.concatenate(sim_env.env.obstacles), lambda: sim_env.current_positions)
+    #     # TODO: access to obstacles is leaking detail outside of abstractions
+    robot_map = ContinuousOccupancy(
+        sim_env.box_size,
+        lambda: sim_env.env.obstacles_raw,
+        lambda: sim_env.current_positions)
     return robot_map
 
 
@@ -117,7 +121,7 @@ class RobotEnv(Env):
         self.timestep = 0
         self.last_action: PolarVec2D = None
         if debug:
-            self.sim_ui = SimulationView(self.robot_map.grid_width, self.robot_map.grid_height)
+            self.sim_ui = SimulationView(self.robot_map.box_size * 2, self.robot_map.box_size * 2)
         # TODO: provide a callback that shuts the simulator down on cancellation by user via UI
 
     def render(self, mode='human'):
@@ -125,18 +129,14 @@ class RobotEnv(Env):
             VisualizableAction(
                 self.robot.pose,
                 self.last_action,
-                self.target_coords,
-                self.robot_map.world_coords_to_grid_cell)
-
-        robot_occupancy = self.robot_map.robot_occupancy(
-            self.robot.pos, self.robot.config.rob_collision_radius)
+                self.target_coords)
 
         state = VisualizableSimState(
             self.timestep,
             action,
-            robot_occupancy,
-            self.robot_map.occupancy_pedestrians,
-            self.robot_map.occupancy_obstacles)
+            self.robot.pose,
+            self.robot_map.pedestrian_coords,
+            self.robot_map.obstacle_coords)
 
         self.sim_ui.render(state)
 
@@ -210,7 +210,7 @@ class RobotEnv(Env):
         return np.concatenate((norm_ranges, rob_state), axis=0)
 
     def _pick_robot_spawn_and_target_pos(
-            self, robot_map: BinaryOccupancyGrid) -> Tuple[np.ndarray, RobotPose]:
+            self, robot_map: ContinuousOccupancy) -> Tuple[np.ndarray, RobotPose]:
         low_bound, high_bound = robot_map.position_bounds()
         count = 0
         min_distance = (high_bound[0] - low_bound[0]) / 20 # TODO: why divide by 20?????
@@ -218,7 +218,8 @@ class RobotEnv(Env):
             target_coords = np.random.uniform(
                 low=np.array(low_bound)[:2], high=np.array(high_bound)[:2], size=2)
             # ensure that the target is not occupied by obstacles
-            dists = np.linalg.norm(robot_map.obstacle_coordinates - target_coords)
+            # TODO: this doesn't work, replace or remove
+            dists = np.linalg.norm(robot_map.obstacle_coords[:, :2] - target_coords)
             if np.amin(dists) > min_distance:
                 break
             count +=1

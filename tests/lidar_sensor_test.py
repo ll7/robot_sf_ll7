@@ -124,9 +124,34 @@ def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
     assert scan == approx(np.full((lidar_n_rays), exp_dist))
 
 
+def test_scanner_detects_max_range_when_nothing_found():
+    max_scan_range = 5
+    lidar_n_rays = 360
+    occupancy = ContinuousOccupancy(10, lambda: np.array([[]]), lambda: np.array([[]]))
+    settings = LidarScannerSettings(max_scan_range, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
+
+    scanner = ContinuousLidarScanner(settings, occupancy)
+    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), 0))
+
+    exp_dist = max_scan_range
+    assert scan.shape[0] == lidar_n_rays
+    assert scan == approx(np.full((lidar_n_rays), exp_dist))
+
+
 def test_scanner_detects_only_closest_obstacle():
-    pass
+    lidar_n_rays = 1
+    obstacles = np.array([[2, 1, 2, -1], [3, 1, 3, -1]])
+    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
+
+    scanner = ContinuousLidarScanner(settings, occupancy)
+    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), pi))
+
+    exp_dist = 2
+    assert scan.shape[0] == lidar_n_rays
+    assert scan == approx(np.full((lidar_n_rays), exp_dist))
 
 
 def test_scanner_ignores_obstacles_outside_of_the_map_bounds():
+    # TODO: this requires evaluating the crossing point whether it's within map bounds
     pass

@@ -59,7 +59,9 @@ def raycast_pedestrians(out_ranges: np.ndarray, scanner_pos: Tuple[float, float]
 @numba.njit(fastmath=True)
 def raycast_obstacles(out_ranges: np.ndarray, scanner_pos: Vec2D,
                       obstacles: np.ndarray, ray_angles: np.ndarray):
-    # TODO: pre-compute ray unit vectors
+    if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
+        return
+
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
         for s_x, s_y, e_x, e_y in obstacles:

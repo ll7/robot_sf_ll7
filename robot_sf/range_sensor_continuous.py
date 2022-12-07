@@ -47,7 +47,9 @@ class LidarScannerSettings:
 @numba.njit(fastmath=True)
 def raycast_pedestrians(out_ranges: np.ndarray, scanner_pos: Tuple[float, float],
                         ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
-    # TODO: pre-compute ray unit vectors
+    if len(ped_pos.shape) != 2 or ped_pos.shape[0] == 0 or ped_pos.shape[1] != 2:
+        return
+
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
         for pos in ped_pos:

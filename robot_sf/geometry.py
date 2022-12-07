@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 import numba
@@ -17,7 +17,7 @@ def euclid_dist(v1: Vec2D, v2: Vec2D) -> float:
 @numba.njit(fastmath=True)
 def cos_sim(v1: Vec2D, v2: Vec2D) -> float:
     return (v1[0] * v2[0] + v1[1] * v2[1]) \
-        / (euclid_dist(v1, (0, 0)) + euclid_dist(v2, (0, 0)))
+        / (euclid_dist(v1, (0, 0)) * euclid_dist(v2, (0, 0)))
 
 
 @numba.njit(fastmath=True)
@@ -33,11 +33,11 @@ def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: 
     if den == 0:
 
         # check if parallel lines are aligned
-        v1 = (x_1 + x_3, y_1 + y_3)
-        v2 = (x_2 + x_4, y_2 + y_4)
+        v1 = (x_1 - x_3, y_1 - y_3)
+        v2 = (x_2 - x_4, y_2 - y_4)
         v3 = (v1[0] * -1, v1[1] * -1)
-        if v1 == (0, 0) or v2 == (0, 0) or v3 == (0, 0) or \
-                cos_sim(v1, v2) > 0.999 or cos_sim(v1, v3) > 0.999:
+        if v1 == (0, 0) or v2 == (0, 0) or \
+                cos_sim(v1, v2) > 0.999 or cos_sim(v2, v3) > 0.999:
             min_x, max_x = min(x_1, x_2), max(x_1, x_2)
             min_y, max_y = min(y_1, y_2), max(y_1, y_2)
 
@@ -75,21 +75,22 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
     if not disc >= 0:
         return np.inf
 
+    disc_root = disc**0.5
     sign_dy = 1 if d_y >= 0 else -1
-    cross_x1 = (det * d_y + sign_dy * d_x * disc) / d_r_sq
-    cross_y1 = (-det * d_x + abs(d_y) * disc) / d_r_sq
-    cross_x2 = (det * d_y - sign_dy * d_x * disc) / d_r_sq
-    cross_y2 = (-det * d_x - abs(d_y) * disc) / d_r_sq
+    cross_x1 = (det * d_y + sign_dy * d_x * disc_root) / d_r_sq
+    cross_y1 = (-det * d_x + abs(d_y) * disc_root) / d_r_sq
+    cross_x2 = (det * d_y - sign_dy * d_x * disc_root) / d_r_sq
+    cross_y2 = (-det * d_x - abs(d_y) * disc_root) / d_r_sq
 
     dist_cross1 = euclid_dist((x_1, y_1), (cross_x1, cross_y1))
     dist_cross2 = euclid_dist((x_1, y_1), (cross_x2, cross_y2))
 
-    vec_cross1 = cross_x1 - x_1, cross_y1 - y_1
-    vec_cross2 = cross_x2 - x_1, cross_y2 - y_1
+    vec_cross1 = cross_x1 - x_1, cross_y1 - y_1 # vector |origin -> cross_1|
+    vec_cross2 = cross_x2 - x_1, cross_y2 - y_1 # vector |origin -> cross_2|
     sim1, sim2 = cos_sim(ray_vec, vec_cross1), cos_sim(ray_vec, vec_cross2)
 
-    cross1_aligned = sim1 > 0.95
-    cross2_aligned = sim2 > 0.95
+    cross1_aligned = sim1 > 0.999
+    cross2_aligned = sim2 > 0.999
     if cross1_aligned and cross2_aligned:
         return min(dist_cross1, dist_cross2)
     elif cross1_aligned:
@@ -129,15 +130,16 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     if not disc >= 0:
         return False
 
+    disc_root = disc**0.5
     sign_dy = 1 if d_y >= 0 else -1
-    cross_x1 = (det * d_y + sign_dy * d_x * disc) / d_r_sq
-    cross_y1 = (-det * d_x + abs(d_y) * disc) / d_r_sq
-    cross_x2 = (det * d_y - sign_dy * d_x * disc) / d_r_sq
-    cross_y2 = (-det * d_x - abs(d_y) * disc) / d_r_sq
-    # TODO: multiply min/max x/y by d_r_sq rather than dividing (because computation is cheaper)
+    cross_x1 = (det * d_y + sign_dy * d_x * disc_root)
+    cross_y1 = (-det * d_x + abs(d_y) * disc_root)
+    cross_x2 = (det * d_y - sign_dy * d_x * disc_root)
+    cross_y2 = (-det * d_x - abs(d_y) * disc_root)
+    # info: don't divide by d_r_sq, rather multiply the comparison (lass compute)
 
-    min_x, max_x = min(x_1, x_2), max(x_1, x_2)
-    min_y, max_y = min(y_1, y_2), max(y_1, y_2)
+    min_x, max_x = min(x_1 * d_r_sq, x_2 * d_r_sq), max(x_1 * d_r_sq, x_2 * d_r_sq)
+    min_y, max_y = min(y_1 * d_r_sq, y_2 * d_r_sq), max(y_1 * d_r_sq, y_2 * d_r_sq)
     is_coll1 = min_x <= cross_x1 <= max_x and min_y <= cross_y1 <= max_y
     is_coll2 = min_x <= cross_x2 <= max_x and min_y <= cross_y2 <= max_y
     return is_coll1 or is_coll2

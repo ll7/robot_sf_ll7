@@ -1,5 +1,6 @@
 from math import dist
 from typing import Tuple, List, Union, Any
+from copy import deepcopy
 
 import numpy as np
 from gym import Env, spaces
@@ -127,16 +128,16 @@ class RobotEnv(Env):
     def render(self, mode='human'):
         action = None if not self.last_action else \
             VisualizableAction(
-                self.robot.pose,
-                self.last_action,
-                self.target_coords)
+                deepcopy(self.robot.pose),
+                deepcopy(self.last_action),
+                deepcopy(self.target_coords))
 
         state = VisualizableSimState(
             self.timestep,
             action,
-            self.robot.pose,
-            self.robot_map.pedestrian_coords,
-            self.robot_map.obstacle_coords)
+            deepcopy(self.robot.pose),
+            deepcopy(self.robot_map.pedestrian_coords),
+            deepcopy(self.robot_map.obstacle_coords))
 
         self.sim_ui.render(state)
 

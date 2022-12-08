@@ -9,7 +9,7 @@ def training():
     model = A2C.load("./model/dqn_model", env=env)
 
     obs = env.reset()
-    for _ in range(1000):
+    for _ in range(10000):
         action, _ = model.predict(obs, deterministic=True)
         obs, _, done, _ = env.step(action)
         env.render()

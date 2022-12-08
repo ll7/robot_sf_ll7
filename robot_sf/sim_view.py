@@ -57,7 +57,7 @@ class VisualizableSimState:
 class SimulationView:
     """Representing a UI window for visualizing the simulation's state."""
 
-    def __init__(self, box_width: float=10, box_height: float=10, scaling: float=10):
+    def __init__(self, box_width: float=10, box_height: float=10, scaling: float=20):
         self.width = box_width * scaling
         self.height = box_height * scaling
         self.scaling = scaling
@@ -96,28 +96,31 @@ class SimulationView:
         pygame.display.update()
 
     def _norm_state(self, state: VisualizableSimState) -> VisualizableSimState:
+        state.pedestrian_positions *= self.scaling
         state.pedestrian_positions[:, 0] += self.width / 2
         state.pedestrian_positions[:, 1] += self.height / 2
-        state.pedestrian_positions *= self.scaling
+        state.obstacles *= self.scaling
         state.obstacles[:, 0] += self.width / 2
         state.obstacles[:, 1] += self.height / 2
-        state.obstacles *= self.scaling
-        state.robot_pose.pos.pos_x += self.width / 2
-        state.robot_pose.pos.pos_y += self.height / 2
+        state.obstacles[:, 2] += self.width / 2
+        state.obstacles[:, 3] += self.height / 2
         state.robot_pose.pos.pos_x *= self.scaling
         state.robot_pose.pos.pos_y *= self.scaling
-        state.action.robot_goal[0] += self.width / 2
-        state.action.robot_goal[1] += self.height / 2
-        state.action.robot_goal[0] *= self.scaling
-        state.action.robot_goal[1] *= self.scaling
+        state.robot_pose.pos.pos_x += self.width / 2
+        state.robot_pose.pos.pos_y += self.height / 2
+        if state.action:
+            state.action.robot_goal[0] *= self.scaling
+            state.action.robot_goal[1] *= self.scaling
+            state.action.robot_goal[0] += self.width / 2
+            state.action.robot_goal[1] += self.height / 2
         return state
 
     def _draw_robot(self, pose: RobotPose):
-        pygame.draw.circle(self.screen, ROBOT_COLOR, pose.coords, self.scaling)
+        pygame.draw.circle(self.screen, ROBOT_COLOR, pose.coords, 0.5 * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         for ped_x, ped_y in ped_pos:
-            pygame.draw.circle(self.screen, PEDESTRIAN_COLOR, (ped_x, ped_y), self.scaling)
+            pygame.draw.circle(self.screen, PEDESTRIAN_COLOR, (ped_x, ped_y), 0.4 * self.scaling)
 
     def _draw_obstacles(self, obstacles: np.ndarray):
         for s_x, s_y, e_x, e_y in obstacles:

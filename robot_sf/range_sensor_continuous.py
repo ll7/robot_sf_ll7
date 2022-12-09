@@ -73,31 +73,38 @@ def raycast_obstacles(out_ranges: np.ndarray, scanner_pos: Vec2D,
 
 
 @numba.njit()
-def raycast(scanner_pos: Tuple[float, float], obstacles: np.ndarray,
-            ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray) -> np.ndarray:
+def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, ped_pos: np.ndarray,
+            ped_radius: float, ray_angles: np.ndarray) -> np.ndarray:
+    """Cast rays in the directions of all given angles outgoing from
+    the scanner's position and detect the minimal collision distance
+    with either a pedestrian or an obstacle (or in case there's no collision,
+    just return the maximum scan range)."""
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
     return out_ranges
 
 
-@numba.njit(parallel=True, fastmath=True)
-def range_postprocessing(ranges: np.ndarray, scan_length: int,
-                         scan_noise: np.ndarray, max_scan_dist: float) -> np.ndarray:
+@numba.njit(fastmath=True)
+def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float):
     """Postprocess the raycast results to simulate a noisy scan result."""
-    not_lost_scans = np.where(np.random.random(scan_length) >= scan_noise[0], 1, 0)
-    corrupt_scans = np.where(np.random.random(scan_length) < scan_noise[1], 1, 0)
-    ranges = np.clip(ranges, 0, max_scan_dist)
-    ranges = np.where(not_lost_scans, ranges, max_scan_dist)
-    corrupt_scans_mask = np.bitwise_and(corrupt_scans, not_lost_scans)
-    ranges = np.where(corrupt_scans_mask, ranges * np.random.random(scan_length), ranges)
-    return ranges
+    prob_scan_loss, prob_scan_corruption = scan_noise
+    for i in range(out_ranges.shape[0]):
+        out_ranges[i] = min(out_ranges[i], max_scan_dist)
+        if np.random.random() < prob_scan_loss:
+            out_ranges[i] = max_scan_dist
+        elif np.random.random() < prob_scan_corruption:
+            out_ranges[i] = out_ranges[i] * np.random.random()
 
 
 @dataclass
 class ContinuousLidarScanner():
     """Representing a simulated radial LiDAR scanner operating
-    in a 2D plane on binary occupancy grids."""
+    in a 2D plane on a continuous occupancy with explicit objects.
+
+    The occupancy contains the robot (as circle), a set of pedestrians
+    (as circles) and a set of static obstacles (as 2D lines)"""
+
     settings: LidarScannerSettings
     robot_map: ContinuousOccupancy
 
@@ -112,7 +119,6 @@ class ContinuousLidarScanner():
         pos_x, pos_y = pose.coords
         robot_orient = pose.orient
         scan_noise = np.array(self.settings.scan_noise)
-        scan_length = self.settings.scan_length
 
         ped_pos = self.robot_map.pedestrian_coords
         obstacles = self.robot_map.obstacle_coords
@@ -123,5 +129,5 @@ class ContinuousLidarScanner():
         ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
 
         ranges = raycast((pos_x, pos_y), obstacles, ped_pos, 0.4, ray_angles)
-        ranges = range_postprocessing(ranges, scan_length, scan_noise, self.settings.max_scan_dist)
+        range_postprocessing(ranges, scan_noise, self.settings.max_scan_dist)
         return ranges

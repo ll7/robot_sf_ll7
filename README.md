@@ -67,3 +67,13 @@ docker-compose build && docker-compose run \
 ```
 
 *Note: See [this setup](./GPU_SETUP.md) to install Docker with GPU support.*
+
+### 6. Edit Maps
+
+```sh
+sudo apt-get update && sudo apt-get install -y python3-tk
+```
+
+```sh
+python3 -m map_editor
+```

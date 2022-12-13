@@ -2,6 +2,7 @@ import os
 import toml
 import json
 import random
+from math import ceil, floor
 from typing import List, Tuple
 from dataclasses import dataclass
 
@@ -10,6 +11,9 @@ from natsort import natsorted
 
 from robot_sf.utils.utilities import fill_state
 from robot_sf.utils.poly import load_polygon, random_polygon, PolygonCreationSettings
+
+
+Vec2D = Tuple[float, float]
 
 
 @dataclass
@@ -106,18 +110,30 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     with open(path_to_map, 'r', encoding='utf-8') as file:
         map_structure = json.load(file)
 
-    box_size = max((map_structure['x_margin'][1]), (map_structure['y_margin'][1]))
-    #print(path_to_map)
-    #Start creating obstacles, peds ecc...
-    obstacle = []
-    obstacles_lolol = []
+    x_span = map_structure['x_margin'][1] - map_structure['x_margin'][0]
+    y_span = map_structure['y_margin'][1] - map_structure['y_margin'][0]
+    min_x, min_y = map_structure['x_margin'][0], map_structure['y_margin'][0]
+    norm_span = max(x_span, y_span)
+    box_size = 10
+    # normalize coords between [-10, 10]
+    norm_scale = box_size / norm_span / 2
+    norm_offset = norm_span / -2
+
+    def norm_coords(p: Vec2D) -> Vec2D:
+        return ((p[0] - min_x) / norm_span * 2 * box_size - box_size,
+                (p[1] - min_y) / norm_span * 2 * box_size - box_size)
 
     for key in map_structure['Obstacles'].keys():
-        tmp = map_structure['Obstacles'][key]['Edges'].copy()
-        valid_edges = []
-        for _, sub_list in enumerate(tmp):
-            #if not sub_list[0]==sub_list[1] and not sub_list[2]==sub_list[3]:
-            valid_edges.append(sub_list)
+        vertices = map_structure['Obstacles'][key]['Vertex']
+        norm_vertices = [norm_coords(p) for p in vertices]
+        map_structure['Obstacles'][key]['Vertex'] = norm_vertices
+
+    obstacle = []
+    obstacles_lolol = []
+    for key in map_structure['Obstacles'].keys():
+        vertices = map_structure['Obstacles'][key]['Vertex']
+        valid_edges = list(zip(vertices[:-1], vertices[1:])) + [[vertices[-1], vertices[0]]]
+        valid_edges = [[p1[0], p2[0], p1[1], p2[1]] for p1, p2 in valid_edges]
         obstacle += valid_edges
         obstacles_lolol.append(valid_edges)
 
@@ -159,7 +175,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
             #generate group target for grouped peds
             if group:
                 group_destination_a = random.choice([0,1,2,3])
-                group_destination_b = random.randint(-(box_size +1),box_size +1)*np.ones((len(group),))
+                group_destination_b = random.randint(-(floor(box_size) +1), ceil(box_size) +1)*np.ones((len(group),))
 
                 #Initial speed
                 dot_x_0 = 0.5 #Module
@@ -181,21 +197,15 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
         #Check if initial position is valid
         state[i, :2] = np.random.uniform(-box_size, box_size, (1,2))
 
-        iter_num = 0
-        while True:
-            for iter_num, obstacle_name in enumerate(map_structure['Obstacles'].keys()):
-                #Compute safety radius for each obstacle
-                obs_recreated = load_polygon(map_structure['Obstacles'][obstacle_name]['Vertex'])
-                vert = np.array(map_structure['Obstacles'][obstacle_name]['Vertex'])
-                radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1
+        for iter_num, obstacle_name in enumerate(map_structure['Obstacles'].keys()):
+            #Compute safety radius for each obstacle
+            obs_recreated = load_polygon(map_structure['Obstacles'][obstacle_name]['Vertex'])
+            vert = np.array(map_structure['Obstacles'][obstacle_name]['Vertex'])
+            radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1
 
-                if np.linalg.norm(state[i, :2] - obs_recreated.centroid.coords) < radius:
-                    #Generate new point, break and restart the for loop check
-                    state[i, :2] = np.random.uniform(-box_size, box_size, (1,2))
-                    break
-
-                #Break the endless loop and let i-index increase
-            if iter_num == len(map_structure['Obstacles'].keys())-1:
+            if np.linalg.norm(state[i, :2] - obs_recreated.centroid.coords) < radius:
+                #Generate new point, break and restart the for loop check
+                state[i, :2] = np.random.uniform(-box_size, box_size, (1,2))
                 break
 
         #Generate target

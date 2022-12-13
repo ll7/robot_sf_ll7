@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple
 
 import numpy as np
 import numba
@@ -12,6 +12,11 @@ Circle2D = Tuple[Vec2D, float]
 @numba.njit(fastmath=True)
 def euclid_dist(v1: Vec2D, v2: Vec2D) -> float:
     return ((v1[0] - v2[0])**2 + (v1[1] - v2[1])**2)**0.5
+
+
+@numba.njit(fastmath=True)
+def euclid_dist_sq(v1: Vec2D, v2: Vec2D) -> float:
+    return (v1[0] - v2[0])**2 + (v1[1] - v2[1])**2
 
 
 @numba.njit(fastmath=True)
@@ -68,8 +73,7 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
 
     det = x_1 * y_2 - x_2 * y_1
     d_x, d_y = x_2 - x_1, y_2 - y_1
-    d_r = euclid_dist((d_x, d_y), (0, 0))
-    d_r_sq = d_r**2
+    d_r_sq = euclid_dist_sq((d_x, d_y), (0, 0))
     disc = r**2 * d_r_sq - det**2
 
     if not disc >= 0:
@@ -105,8 +109,9 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
 def is_circle_circle_intersection(c1: Circle2D, c2: Circle2D) -> bool:
     center_1, radius_1 = c1
     center_2, radius_2 = c2
-    dist = euclid_dist(center_1, center_2)
-    return dist <= radius_1 + radius_2
+    dist_sq = euclid_dist_sq(center_1, center_2)
+    rad_sum_sq = (radius_1 + radius_2)**2
+    return dist_sq <= rad_sum_sq
 
 
 @numba.njit(fastmath=True)
@@ -115,17 +120,17 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     p1, p2 = segment
     (x_1, y_1) = p1[0] - circle_x, p1[1] - circle_y
     (x_2, y_2) = p2[0] - circle_x, p2[1] - circle_y
+    r_sq = r**2
 
     # edge case: line segment's end point(s) inside circle
-    if euclid_dist((x_1, y_1), (0, 0)) <= r \
-            or euclid_dist((x_2, y_2), (0, 0)) <= r:
+    if euclid_dist_sq((x_1, y_1), (0, 0)) <= r_sq \
+            or euclid_dist_sq((x_2, y_2), (0, 0)) <= r_sq:
         return True
 
     det = x_1 * y_2 - x_2 * y_1
     d_x, d_y = x_2 - x_1, y_2 - y_1
-    d_r = euclid_dist((d_x, d_y), (0, 0))
-    d_r_sq = d_r**2
-    disc = r**2 * d_r_sq - det**2
+    d_r_sq = euclid_dist_sq((d_x, d_y), (0, 0))
+    disc = r_sq * d_r_sq - det**2
 
     if not disc >= 0:
         return False
@@ -136,10 +141,25 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     cross_y1 = (-det * d_x + abs(d_y) * disc_root)
     cross_x2 = (det * d_y - sign_dy * d_x * disc_root)
     cross_y2 = (-det * d_x - abs(d_y) * disc_root)
-    # info: don't divide by d_r_sq, rather multiply the comparison (lass compute)
+    # info: don't divide by d_r_sq, rather multiply the comparison (-> faster)
 
     min_x, max_x = min(x_1 * d_r_sq, x_2 * d_r_sq), max(x_1 * d_r_sq, x_2 * d_r_sq)
     min_y, max_y = min(y_1 * d_r_sq, y_2 * d_r_sq), max(y_1 * d_r_sq, y_2 * d_r_sq)
     is_coll1 = min_x <= cross_x1 <= max_x and min_y <= cross_y1 <= max_y
     is_coll2 = min_x <= cross_x2 <= max_x and min_y <= cross_y2 <= max_y
     return is_coll1 or is_coll2
+
+
+# def is_lineseg_line_intersection(segment: Line2D, origin: Vec2D, ray_vec: Vec2D) -> bool:
+#     # source: https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+#     (x_1, y_1), (x_2, y_2) = segment
+#     (x_3, y_3), (x_4, y_4) = origin, (origin[0] + ray_vec[0], origin[1] + ray_vec[1])
+
+#     num = (x_1 - x_3) * (y_3 - y_4) - (y_1 - y_3) * (x_3 - x_4)
+#     den = (x_1 - x_2) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4)
+
+#     if den == 0:
+#         return False
+
+#     t = num / den
+#     return 0 <= t <= 1

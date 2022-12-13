@@ -38,7 +38,8 @@ class LidarScannerSettings:
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError('Scan angle portion needs to be within (0, 1]!')
 
-        self.scan_length = int(self.visual_angle_portion * self.lidar_n_rays)
+        # self.scan_length = int(self.visual_angle_portion * self.lidar_n_rays)
+        self.scan_length = self.lidar_n_rays
         self.angle_opening = Range(
             -np.pi * self.visual_angle_portion,
              np.pi * self.visual_angle_portion)

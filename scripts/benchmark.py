@@ -9,12 +9,11 @@ def benchmark():
     obs = env.reset()
 
     peds_sim = env.sim_env
-    scalene_profiler.start()
-
     env.step(env.action_space.sample())
     env.reset()
     print('start of simulation')
 
+    scalene_profiler.start()
     # start_time = time.perf_counter()
 
     episode = 0
@@ -32,7 +31,7 @@ def benchmark():
             obs = env.reset()
 
     print('end of simulation')
-    # scalene_profiler.stop()
+    scalene_profiler.stop()
 
     # end_time = time.perf_counter()
     # print(f'benchmark took {end_time - start_time} seconds')

@@ -234,9 +234,11 @@ class ExtdSimulator(Simulator):
                 idx.append(i)
         return idx
 
-    def add_standalone_to_existing_group(self, pedestrian_idx = None, destination_group = None): #(TESTED!)
+    def add_standalone_to_existing_group(self): #(TESTED!)
         """This method adds a standalone pedestrian to an existig group inheriting
         also the group target"""
+        pedestrian_idx = None
+        destination_group = None
         square_dim = self.box_size + 1
         idx_standalone = self.get_not_grouped_pedestrian_indexes()
 
@@ -279,26 +281,21 @@ class ExtdSimulator(Simulator):
         #Get valid group if topology deactivated
         valid_group = []
         if not self.sim_config_user.flags.enable_topology_on_stopped:
-            for i in range(len(self.peds.groups)):
-                if not self._stopped_groups[i]:
-                    valid_group.append(i)
+            valid_group = [i for i in range(len(self.peds.groups))
+                           if not self._stopped_groups[i]]
         else:
             valid_group = np.arange(len(self.peds.groups)).tolist()
 
-        if destination_group is None:
-            #Select random destination group
-            destination_group = random.choice(valid_group)
-        else:
-            if destination_group not in valid_group:
-                return False
+        #Select random destination group
+        destination_group = random.choice(valid_group)
 
         if isinstance(selected_ped, int):
             selected_ped = [selected_ped]
+            # info: always needs a list of pedestrians
 
         #Now perform assignements
         old_groups = self.peds.groups
         group = old_groups[destination_group] + selected_ped
-
         new_group = old_groups.copy()
         new_group[destination_group] = group
 

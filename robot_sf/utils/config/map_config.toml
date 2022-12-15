@@ -42,26 +42,28 @@ actions = [ "stop_pedestrian", "stop_group", "move_pedestrian", "move_group", "n
 probabilities = [ 10, 10, 10, 10, 60,]
 
 [simulator.flags]
-allow_dynamic_grouping = true
-allow_max_steps_stop = true
-rendezvous_centroid = true
-topology_operations_on_stopped = true
+allow_dynamic_grouping = true              # activate dynamic grouping at all
+allow_max_steps_stop = true                # unlocking stuck pedestrians after a given amount of timesteps
+rendezvous_centroid = true                 # pull pedestrians towards the centroid of the group
+topology_operations_on_stopped = true      # no idea
 topology_operations_on_unfreezing = true
-random_map = true
-random_initial_population = true
+random_map = true                          # choose map randomly from pre-generated map files
+random_initial_population = true           # does use random instead of default ped / group settings
 random_initial_groups = false
 default_map = false
 update_peds = true
-activate_ped_robot_force = false
+activate_ped_robot_force = false           # pedestrians try to avoid the robot (increases success)
 
 [simulator.default]
 box_size = 20
 ped_sparsity = 15
+
+# deteministic pedestrian spawn states and groupings
 states = [ [ 0.0, 10.0, -0.5, -0.5, 0.0, -25.0,], [ 0.5, 10.0, -0.5, -0.5, 0.5, -25.0,], [ 4.0, 0.0, 0.0, 0.5, 1.0, 25.0,], [ 5.0, 0.0, 0.0, 0.5, 2.0, 25.0,], [ 6.0, 0.0, 0.0, 0.5, 25.0, 6.0,], [ 3.0, 0.0, 0.0, 0.5, 25.0, 7.0,],]
 groups = [ [], [], [ 1, 0,], [], [ 2, 3,], [], [],]
 
 [simulator.custom]
-map_number = 6
+map_number = 6    # pick specific map instead of a random one
 ped_sparsity = 15
 
 [simulator.generation.parameters]
@@ -75,8 +77,8 @@ average_speed = 0.5
 max_standalone_grouping = 5
 
 [simulator.stopping.parameters]
-max_nsteps_ped_stopped = 100
-max_nsteps_group_stopped = 100
+max_nsteps_ped_stopped = 100    # unlock stuck pedestrian
+max_nsteps_group_stopped = 100  # unlock stuck group
 max_stopping_pedestrians = 5
 max_unfreezing_pedestrians = 5
 
@@ -86,6 +88,7 @@ max_number_pedestrian_stop = 5
 max_unfreezing_pedestrians = 5
 
 [simulator.default.obstacles]
+# default pysf obstacles
 obstacle1 = [ [ -1.0, 1.0, -1.0, -1.0,], [ 1.0, 1.0, -1.0, 2.5,], [ 1.0, -1.0, 2.5, 2.5,], [ -1.0, -1.0, 2.5, -1.0,],]
 obstacle2 = [ [ -7, -5, -7, -7,], [ -7, -7, -7, -3,], [ -7, -5, -3, -7,],]
 

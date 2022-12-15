@@ -19,6 +19,7 @@ def line_segment(p_0, p_1):
 
 # check vectorization of these functions
 def lines_intersection(l_1, l_2, p0_l1, p1_l1, p0_l2, p1_l2):
+    # used for 3 times in ExtdSimulator.change_direction()
     x_min_l1 = np.tile(np.minimum(p0_l1[:, 0],p1_l1[:, 0])[:, np.newaxis], (1, l_2.shape[0]))
     x_max_l1 = np.tile(np.maximum(p0_l1[:, 0],p1_l1[:, 0])[:, np.newaxis], (1, l_2.shape[0]))
     y_min_l1 = np.tile(np.minimum(p0_l1[:, 1],p1_l1[:, 1])[:, np.newaxis], (1, l_2.shape[0]))
@@ -65,6 +66,10 @@ def rotate_segment(origin, point, angle):
 
 def change_direction(p_0, p_1, current_positions, destinations,
                      view_distance, angles, direction, desired_directions) -> Tuple[np.ndarray, np.ndarray]:
+
+    # this handles stuck pedestrians whose force is close to 0
+    # TODO: check if this acutally does something (shouldn't be required to run the simulation)
+
     #1. find pedestrians who are headed towards an obstacle (within horizon defined by view_distance)
     l_directions = line_segment(current_positions, destinations)
     l_obstacles  = line_segment(p_0, p_1)
@@ -148,6 +153,7 @@ def fill_state(coordinate_a, coordinate_b, origin,box_size):
 
 
 def build_coordinates_array(coordinate_a, coordinate_b, dim, distance):
+    # spawn pedestrians at the edges
     if coordinate_a == 0:
         return np.concatenate((-distance * np.ones([dim, 1]), coordinate_b[:, np.newaxis]) , axis=1)
     elif coordinate_a == 1:

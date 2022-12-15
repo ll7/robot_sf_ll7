@@ -114,7 +114,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     y_span = map_structure['y_margin'][1] - map_structure['y_margin'][0]
     min_x, min_y = map_structure['x_margin'][0], map_structure['y_margin'][0]
     norm_span = max(x_span, y_span)
-    box_size = 10
+    box_size = 20
     # normalize coords between [-10, 10]
     norm_scale = box_size / norm_span / 2
     norm_offset = norm_span / -2

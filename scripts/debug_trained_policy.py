@@ -5,7 +5,7 @@ from robot_sf.robot_env import RobotEnv
 
 
 def training():
-    env = RobotEnv(debug=True)
+    env = RobotEnv(debug=True, difficulty=2)
     model = A2C.load("./model/dqn_model", env=env)
 
     obs = env.reset()

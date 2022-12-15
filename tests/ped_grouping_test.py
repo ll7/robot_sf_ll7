@@ -1,29 +1,96 @@
+from typing import Set, Tuple
+from dataclasses import dataclass
+
+import numpy as np
+
+from robot_sf.extenders_py_sf.pedestrian_grouping \
+    import PedestrianGroupings, PySFPedestrianStates
+
+Vec2D = Tuple[float, float]
 
 
+def intersect(s1: Set, s2: Set) -> Set:
+    return {e for e in s1 if e in s2}
 
-def test_join_single_pedestrian_to_group():
-    pass
+def contains_all(s: Set, comp: Set) -> bool:
+    return len(intersect(s, comp)) >= len(comp)
 
+def contains_none(s: Set, comp: Set) -> bool:
+    return len(intersect(s, comp)) == 0
 
-def test_split_single_pedestrian_from_group():
-    pass
-
-
-def test_join_group_to_group():
-    pass
-
-
-def test_split_group_from_group():
-    pass
+def set_except(s1: Set, s2: Set) -> Set:
+    return {e for e in s1 if e not in s2}
 
 
-def test_stop_group():
-    pass
+def init_groups():
+    pysf_data = np.array([
+        # group of 3 pedestrians
+        [0, 1, 0, 0, 10, 10],
+        [0.5, 1, 0, 0, 10, 10],
+        [1, 1, 0, 0, 10, 10],
+
+        # group of 2 pedestrians
+        [2, 3, 0, 0, 10, 1],
+        [3, 2, 0, 0, 10, 1],
+
+        # standalone pedestrian
+        [5, 6, 0, 0, 7, 5],
+    ])
+    states = PySFPedestrianStates(pysf_data)
+    groups = PedestrianGroupings(states)
+    groups.new_group({0, 1, 2})
+    groups.new_group({3, 4})
+    return groups
 
 
-def test_unlock_group():
-    pass
+def test_can_create_group_from_unassigned_pedestrians():
+    ped_ids = {0, 1, 2}
+    groups = PedestrianGroupings(None)
+    gid = groups.new_group(ped_ids)
+    assert groups.groups[gid] == ped_ids
 
 
-def test_change_goal_of_group():
-    pass
+def test_can_create_group_from_assigned_pedestrians():
+    ped_ids = {0, 1, 2}
+    groups = PedestrianGroupings(None)
+    old_gid = groups.new_group(ped_ids)
+    new_gid = groups.new_group(ped_ids)
+    assert groups.groups[old_gid] == set()
+    assert groups.groups[new_gid] == ped_ids
+
+
+def test_can_reassign_pedestrians_to_existing_group():
+    ped_ids, old_gid, target_gid = {0, 1, 2}, 0, 1
+    groups = init_groups()
+    groups.reassign_pedestrians(target_gid, ped_ids)
+    assert contains_none(groups.groups[old_gid], ped_ids)
+    assert contains_all(groups.groups[target_gid], ped_ids)
+
+
+def test_can_remove_entire_group():
+    removed_gid = 0
+    groups = init_groups()
+    ped_ids_removed = groups.groups[removed_gid]
+    groups.remove_group(removed_gid)
+    assert contains_none(groups.groups[removed_gid], ped_ids_removed)
+
+
+def test_can_redirect_group_towards_new_goal():
+    redirected_gid = 0
+    groups = init_groups()
+    old_goal = groups.goal_of_group(redirected_gid)
+    new_goal = old_goal[0] + 1, old_goal[1] + 1
+    groups.redirect_group(redirected_gid, new_goal)
+    assert groups.goal_of_group(redirected_gid) == new_goal
+
+
+# def test_can_freeze_group_where_it_stands():
+#     pass
+
+
+# def test_can_unfreeze_group_to_continue_moving_towards_goal():
+#     pass
+
+
+# def test_can_send_group_towards_new_goal_when_group_is_at_goal():
+#     pass

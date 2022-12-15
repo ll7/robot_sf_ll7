@@ -1,0 +1,103 @@
+from __future__ import annotations
+from typing import List, Set, Dict, Tuple, Protocol
+from dataclasses import dataclass, field
+
+import numpy as np
+
+Vec2D = Tuple[float, float]
+Group = List[int]
+
+
+@dataclass
+class PedestrianStates(Protocol):
+    pysf_states: np.ndarray
+
+    @property
+    def num_peds(self) -> int:
+        raise NotImplementedError()
+
+    def redirect(self, ped_id: int, new_goal: Vec2D):
+        raise NotImplementedError()
+
+    def goal_of(self, ped_id: int) -> Vec2D:
+        raise NotImplementedError()
+
+    def pos_of(self, ped_id: int) -> Vec2D:
+        raise NotImplementedError()
+
+
+@dataclass
+class PySFPedestrianStates:
+    pysf_states: np.ndarray
+
+    @property
+    def num_peds(self) -> int:
+        return self.pysf_states.shape[0]
+
+    def redirect(self, ped_id: int, new_goal: Vec2D):
+        self.pysf_states[ped_id, 4:6] = new_goal
+
+    def goal_of(self, ped_id: int) -> Vec2D:
+        x, y = self.pysf_states[ped_id, 4:6]
+        return (x, y)
+
+    def pos_of(self, ped_id: int) -> Vec2D:
+        x, y = self.pysf_states[ped_id, 0:2]
+        return (x, y)
+
+
+@dataclass
+class PedestrianGroupings:
+    states: PedestrianStates
+    groups: Dict[int, Set[int]] = field(default_factory=dict)
+    group_by_ped_id: Dict[int, int] = field(default_factory=dict)
+
+    @property
+    def group_ids(self) -> Set[int]:
+        return set(self.groups.keys())
+
+    def is_standalone(self, ped_id: int) -> bool:
+        return ped_id not in self.group_by_ped_id
+
+    def goal_of_group(self, group_id: int) -> Vec2D:
+        any_ped_id_of_group = next(iter(self.groups[group_id]))
+        return self.states.goal_of(any_ped_id_of_group)
+
+    def new_group(self, ped_ids: Set[int]) -> int:
+        new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0
+        self.groups[new_gid] = ped_ids.copy()
+        for ped_id in ped_ids:
+            if not self.is_standalone(ped_id):
+                old_gid = self.group_by_ped_id[ped_id]
+                self.groups[old_gid].remove(ped_id)
+            self.group_by_ped_id[ped_id] = new_gid
+        return new_gid
+
+    def reassign_pedestrians(self, target_group_id: int, ped_ids: Set[int]):
+        for ped_id in ped_ids:
+            self.reassign_pedestrian(target_group_id, ped_id)
+
+    def reassign_pedestrian(self, target_group_id: int, ped_id: int):
+        if not self.is_standalone(ped_id):
+            old_group = self.groups[self.group_by_ped_id[ped_id]]
+            old_group.remove(ped_id)
+        self.groups[target_group_id].add(ped_id)
+        self.group_by_ped_id[ped_id] = target_group_id
+
+    def remove_group(self, group_id: int):
+        for ped_id in self.groups[group_id]:
+            if not self.is_standalone(ped_id):
+                self.group_by_ped_id.pop(ped_id)
+        self.groups[group_id].clear()
+
+    def redirect_group(self, group_id: int, new_goal: Vec2D):
+        for ped_id in self.groups[group_id]:
+            self.states.redirect(ped_id, new_goal)
+
+    def redirect_pedestrian(self, ped_id: int, new_goal: Vec2D):
+        # info: throwing an exception would crash the whole simulation,
+        #       rather do something consistent than aborting the training
+        if not self.is_standalone(ped_id):
+            self.redirect_group(self.group_by_ped_id[ped_id], new_goal)
+        else:
+            self.states.redirect(ped_id, new_goal)

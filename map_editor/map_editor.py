@@ -1,3 +1,4 @@
+import os
 from time import sleep
 from typing import Tuple, Callable, Union
 from threading import Thread
@@ -22,6 +23,7 @@ class MapEditor:
         self.is_shutdown_requested = False
         self.map_rendering_thread: Union[Thread, None] = None
         self.last_text = ''
+        self._load_example_map()
 
     def launch(self):
         def reload_map():
@@ -81,3 +83,10 @@ class MapEditor:
             self.my_turtle.down()
             self.my_turtle.setpos(e_x, e_y)
         # TODO: hide turtle cursor
+
+    def _load_example_map(self):
+        current_dir = os.path.dirname(__file__)
+        example_filepath = os.path.join(current_dir, 'map_example.json')
+        with open(example_filepath, 'r') as file:
+            text = file.read()
+        self.editor_text_input.insert(tk.END, text)

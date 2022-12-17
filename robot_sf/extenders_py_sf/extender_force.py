@@ -1,5 +1,6 @@
 import sys
 import os
+from typing import Callable, Tuple
 
 csfp = os.path.abspath(os.path.dirname(__file__))
 if csfp not in sys.path:
@@ -11,6 +12,8 @@ from pysocialforce.forces import Force
 from pysocialforce.utils import stateutils
 
 import numpy as np
+
+Vec2D = Tuple[float, float]
 
 
 def normalize(vecs: np.ndarray):
@@ -24,24 +27,23 @@ def normalize(vecs: np.ndarray):
 
 
 class PedRobotForce(Force):
-    def __init__(self, robot_radius: float=1, activation_treshold: float=0.5, force_multiplier: float=1):
+    def __init__(self, get_robot_pos: Callable[[], Vec2D], robot_radius: float=1,
+                 activation_treshold: float=0.5, force_multiplier: float=1):
+        self.get_robot_pos = get_robot_pos
         self.robot_radius = robot_radius
         self.activation_treshold = activation_treshold
         super().__init__()
-        self.robot_state = np.array([[1e5, 1e5]], dtype=float)
         self.force_multiplier = force_multiplier
-
-    def update_robot_state(self, pos):
-        self.robot_state = pos
 
     def _get_force(self) -> np.ndarray:
         sigma = self.config("sigma", 0.2)
         threshold = self.activation_treshold + self.peds.agent_radius
         force = np.zeros((self.peds.size(), 2))
         ped_positions = self.peds.pos()
+        robot_pos = self.get_robot_pos()
 
         for i, pos in enumerate(ped_positions):
-            diff = pos - self.robot_state
+            diff = pos - robot_pos
             directions, dist = stateutils.normalize(diff)
             dist = dist - self.peds.agent_radius -self.robot_radius
             if np.all(dist >= threshold):

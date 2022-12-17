@@ -1,5 +1,5 @@
 from math import dist
-from typing import Tuple, List, Union, Any
+from typing import Tuple, List, Union
 from copy import deepcopy
 
 import numpy as np
@@ -212,6 +212,7 @@ class RobotEnv(Env):
 
     def _pick_robot_spawn_and_target_pos(
             self, robot_map: ContinuousOccupancy) -> Tuple[np.ndarray, RobotPose]:
+        # TODO: don't spawn inside polygons -> move this logic into the map
         low_bound, high_bound = robot_map.position_bounds()
         count = 0
         min_distance = (high_bound[0] - low_bound[0]) / 20 # TODO: why divide by 20?????

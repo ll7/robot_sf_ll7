@@ -15,6 +15,9 @@ class Vec2D:
     def as_list(self) -> List[float]:
         return [self.pos_x, self.pos_y]
 
+    def as_tuple(self) -> Tuple[float, float]:
+        return (self.pos_x, self.pos_y)
+
 
 @dataclass
 class PolarVec2D:

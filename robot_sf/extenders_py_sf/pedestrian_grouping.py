@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import List, Set, Dict, Tuple, Protocol
+from math import dist
+from typing import Set, Dict, Tuple, Protocol, Callable
 from dataclasses import dataclass, field
 
 import numpy as np
 
 Vec2D = Tuple[float, float]
-Group = List[int]
 
 
 @dataclass
@@ -54,7 +54,22 @@ class PedestrianGroupings:
 
     @property
     def group_ids(self) -> Set[int]:
-        return set(self.groups.keys())
+        # info: pedestrian reassignments can cause groups
+        #       to become empty -> ignore empty groups
+        return set([k for k in self.groups.keys()
+                    if len(self.groups[k]) > 0])
+
+    @property
+    def standalone_ped_ids(self) -> Set[int]:
+        return {id for id in range(self.states.num_peds) \
+                if id not in self.group_by_ped_id}
+
+    def group_centroid(self, group_id: int) -> Vec2D:
+        group = self.groups[group_id]
+        group_size = len(group)
+        ped_positions = np.array([self.states.pos_of(id) for id in group])
+        c_x, c_y = np.sum(ped_positions, axis=1) / group_size
+        return (c_x, c_y)
 
     def is_standalone(self, ped_id: int) -> bool:
         return ped_id not in self.group_by_ped_id
@@ -62,6 +77,10 @@ class PedestrianGroupings:
     def goal_of_group(self, group_id: int) -> Vec2D:
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
+
+    def cluster_groups(self, num_groups: int):
+        # TODO: implement k-means here ...
+        pass
 
     def new_group(self, ped_ids: Set[int]) -> int:
         new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0
@@ -101,3 +120,27 @@ class PedestrianGroupings:
             self.redirect_group(self.group_by_ped_id[ped_id], new_goal)
         else:
             self.states.redirect(ped_id, new_goal)
+
+
+@dataclass
+class GroupRedirectBehavior:
+    groups: PedestrianGroupings
+    pick_new_goal: Callable[[], Vec2D]
+    goal_proximity_threshold: float = 1
+
+    def redirect_groups_if_at_goal(self):
+        for gid in self.groups.group_ids:
+            centroid = self.groups.group_centroid(gid)
+            goal = self.groups.goal_of_group(gid)
+            dist_to_goal = dist(centroid, goal)
+            if dist_to_goal < self.goal_proximity_threshold:
+                new_goal = self.pick_new_goal()
+                self.groups.redirect_group(gid, new_goal)
+
+        for pid in self.groups.standalone_ped_ids:
+            pos = self.groups.states.pos_of(pid)
+            goal = self.groups.states.goal_of(pid)
+            dist_to_goal = dist(pos, goal)
+            if dist_to_goal < self.goal_proximity_threshold:
+                new_goal = self.pick_new_goal()
+                self.groups.redirect_pedestrian(pid, new_goal)

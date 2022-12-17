@@ -1,5 +1,4 @@
 from typing import Set, Tuple
-from dataclasses import dataclass
 
 import numpy as np
 
@@ -82,15 +81,3 @@ def test_can_redirect_group_towards_new_goal():
     new_goal = old_goal[0] + 1, old_goal[1] + 1
     groups.redirect_group(redirected_gid, new_goal)
     assert groups.goal_of_group(redirected_gid) == new_goal
-
-
-# def test_can_freeze_group_where_it_stands():
-#     pass
-
-
-# def test_can_unfreeze_group_to_continue_moving_towards_goal():
-#     pass
-
-
-# def test_can_send_group_towards_new_goal_when_group_is_at_goal():
-#     pass

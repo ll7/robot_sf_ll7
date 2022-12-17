@@ -11,7 +11,7 @@ from pysocialforce.scene import PedState
 import numpy as np
 
 
-class PedState(PedState):
+class RSFPedState(PedState):
     # TODO: remove inheritance !!!
 
     @property

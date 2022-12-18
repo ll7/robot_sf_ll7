@@ -10,7 +10,7 @@ Vec2D = Tuple[float, float]
 
 @dataclass
 class PedestrianStates(Protocol):
-    pysf_states: np.ndarray
+    pysf_states: Callable[[], np.ndarray]
 
     @property
     def num_peds(self) -> int:
@@ -28,21 +28,25 @@ class PedestrianStates(Protocol):
 
 @dataclass
 class PySFPedestrianStates:
-    pysf_states: np.ndarray
+    pysf_states: Callable[[], np.ndarray]
 
     @property
     def num_peds(self) -> int:
-        return self.pysf_states.shape[0]
+        return self.pysf_states().shape[0]
+
+    @property
+    def all_ped_pos(self) -> np.ndarray:
+        return self.pysf_states()[:, 4:6]
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
-        self.pysf_states[ped_id, 4:6] = new_goal
+        self.pysf_states()[ped_id, 4:6] = new_goal
 
     def goal_of(self, ped_id: int) -> Vec2D:
-        x, y = self.pysf_states[ped_id, 4:6]
+        x, y = self.pysf_states()[ped_id, 4:6]
         return (x, y)
 
     def pos_of(self, ped_id: int) -> Vec2D:
-        x, y = self.pysf_states[ped_id, 0:2]
+        x, y = self.pysf_states()[ped_id, 0:2]
         return (x, y)
 
 
@@ -144,3 +148,12 @@ class GroupRedirectBehavior:
             if dist_to_goal < self.goal_proximity_threshold:
                 new_goal = self.pick_new_goal()
                 self.groups.redirect_pedestrian(pid, new_goal)
+
+    def pick_new_goals(self):
+        for gid in self.groups.group_ids:
+            new_goal = self.pick_new_goal()
+            self.groups.redirect_group(gid, new_goal)
+
+        for pid in self.groups.standalone_ped_ids:
+            new_goal = self.pick_new_goal()
+            self.groups.redirect_pedestrian(pid, new_goal)

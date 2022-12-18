@@ -115,9 +115,6 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     min_x, min_y = map_structure['x_margin'][0], map_structure['y_margin'][0]
     norm_span = max(x_span, y_span)
     box_size = 20
-    # normalize coords between [-10, 10]
-    norm_scale = box_size / norm_span / 2
-    norm_offset = norm_span / -2
 
     def norm_coords(p: Vec2D) -> Vec2D:
         return ((p[0] - min_x) / norm_span * 2 * box_size - box_size,

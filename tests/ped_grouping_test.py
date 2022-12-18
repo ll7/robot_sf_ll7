@@ -35,7 +35,7 @@ def init_groups():
         # standalone pedestrian
         [5, 6, 0, 0, 7, 5],
     ])
-    states = PySFPedestrianStates(pysf_data)
+    states = PySFPedestrianStates(lambda: pysf_data)
     groups = PedestrianGroupings(states)
     groups.new_group({0, 1, 2})
     groups.new_group({3, 4})

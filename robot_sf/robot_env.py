@@ -51,7 +51,7 @@ def initialize_map(sim_env: ExtdSimulator) -> ContinuousOccupancy:
     #     # TODO: access to obstacles is leaking detail outside of abstractions
     robot_map = ContinuousOccupancy(
         sim_env.box_size,
-        lambda: sim_env.env.obstacles_raw,
+        lambda: sim_env.pysf_sim.env.obstacles_raw,
         lambda: sim_env.current_positions)
     return robot_map
 
@@ -117,7 +117,7 @@ class RobotEnv(Env):
                 np.array([0, -self.angular_max, 0, -np.pi])
             ), axis=0)
         self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
-
+ 
         self.episode = 0
         self.timestep = 0
         self.last_action: PolarVec2D = None
@@ -144,7 +144,7 @@ class RobotEnv(Env):
     def step(self, action: np.ndarray):
         coords_with_direction = self.robot.pose.coords_with_orient
         self.sim_env.move_robot(coords_with_direction)
-        self.sim_env.step(1)
+        self.sim_env.step_once()
         self.robot_map.update_moving_objects()
 
         dist_before = dist(self.robot.pos.as_list, self.target_coords)

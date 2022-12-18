@@ -75,9 +75,7 @@ class ExtdSimulator:
             x, y = np.random.uniform(-self.box_size, self.box_size, size=(2))
             return (x, y)
 
-        self.pysf_sim = None
         get_state = lambda: self.pysf_sim.peds.state
-
         self.pysf_state = PySFPedestrianStates(get_state)
         self.groups = PedestrianGroupings(self.pysf_state)
         self.peds_behavior = GroupRedirectBehavior(self.groups, pick_goal)
@@ -89,8 +87,6 @@ class ExtdSimulator:
         get_robot_pos = lambda: self.robot.pose.pos.as_tuple()
         forces = self.forces = make_forces(config, True, get_robot_pos)
         self.pysf_sim = Simulator(forces, state, self.groups_as_list(), obstacles)
-        # self.state_factory = lambda s, g: PedState(s, g, self.pysf_sim.config)
-
         self.reset_state()
 
     @property
@@ -98,11 +94,7 @@ class ExtdSimulator:
         return self.pysf_sim.peds
 
     def reset_state(self):
-        # ped_states, groups = self.pysf_sim.current_state
-        # self.peds = self.state_factory(ped_states, groups)
-        print('goals before:', self.peds.state[:, 4:6])
         self.peds_behavior.pick_new_goals()
-        print('goals after:', self.peds.state[:, 4:6])
 
     def step_once(self):
         self.peds_behavior.redirect_groups_if_at_goal()
@@ -122,4 +114,3 @@ class ExtdSimulator:
     def move_robot(self, coordinates: List[float]):
         pos_x, pos_y, orient = coordinates
         self.robot.pose = RobotPose(Vec2D(pos_x, pos_y), orient)
-        # print(f'robot pos: ({pos_x}, {pos_y})')

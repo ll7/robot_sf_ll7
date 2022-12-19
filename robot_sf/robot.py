@@ -4,7 +4,10 @@ from typing import Tuple, Protocol
 
 import numpy as np
 
-from robot_sf.vector import RobotPose, PolarVec2D, Vec2D
+from robot_sf.vector import RobotPose, PolarVec2D
+
+
+Vec2D = Tuple[float, float]
 
 
 class MapImpl(Protocol):
@@ -84,8 +87,10 @@ class RobotState:
             + (self.last_wheels_speed.right + self.wheels_speed.right) / 2) * t_s
 
         rel_rotation = (new_orient + self.last_pose.orient) / 2
-        self.current_pose.pos.pos_x += new_x_local * cos(rel_rotation)
-        self.current_pose.pos.pos_y += new_x_local * sin(rel_rotation)
+        x, y = self.current_pose.pos
+        new_x = x + new_x_local * cos(rel_rotation)
+        new_y = y + new_x_local * sin(rel_rotation)
+        self.current_pose.pos = (new_x, new_y)
         self.current_pose.orient = new_orient
 
         # update old values
@@ -142,7 +147,7 @@ class DifferentialDriveRobot():
         return self._map.is_pedestrians_collision(
             self.state.current_pose.pos, collision_distance)
 
-    def is_target_reached(self, target_coordinates: np.ndarray, tolerance: float):
+    def is_target_reached(self, target_coordinates: Vec2D, tolerance: float):
         # TODO: think about whether the robot should know its goal
         #       -> maybe model this as a class "NagivationRequest" or similar
         return self.state.current_pose.rel_pos(target_coordinates)[0] <= tolerance

@@ -8,9 +8,12 @@ from gym import Env, spaces
 from robot_sf.map_continuous import ContinuousOccupancy
 from robot_sf.range_sensor_continuous import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
-from robot_sf.vector import RobotPose, Vec2D, PolarVec2D
+from robot_sf.vector import RobotPose, PolarVec2D
 from robot_sf.robot import DifferentialDriveRobot, RobotSettings
 from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
+
+
+Vec2D = Tuple[float, float]
 
 
 def initialize_lidar(
@@ -72,7 +75,7 @@ class RobotEnv(Env):
 
         # info: this gets initialized by env.reset()
         self.robot: DifferentialDriveRobot = None
-        self.target_coords: np.ndarray = None
+        self.target_coords: Vec2D = None
 
         self.lidar_range = lidar_range
         self.closest_obstacle = self.lidar_range
@@ -147,11 +150,11 @@ class RobotEnv(Env):
         self.sim_env.step_once()
         self.robot_map.update_moving_objects()
 
-        dist_before = dist(self.robot.pos.as_list, self.target_coords)
+        dist_before = dist(self.robot.pos, self.target_coords)
         action_parsed = PolarVec2D(action[0], action[1])
         movement, saturate_input = self.robot.apply_action(action_parsed, self.d_t)
         dot_x, dot_orient = movement.dist, movement.orient
-        dist_after = dist(self.robot.pos.as_list, self.target_coords)
+        dist_after = dist(self.robot.pos, self.target_coords)
 
         # scan for collisions with LiDAR sensor, generate new observation
         ranges = self.robot.get_scan()
@@ -211,14 +214,15 @@ class RobotEnv(Env):
         return np.concatenate((norm_ranges, rob_state), axis=0)
 
     def _pick_robot_spawn_and_target_pos(
-            self, robot_map: ContinuousOccupancy) -> Tuple[np.ndarray, RobotPose]:
+            self, robot_map: ContinuousOccupancy) -> Tuple[Vec2D, RobotPose]:
         # TODO: don't spawn inside polygons -> move this logic into the map
         low_bound, high_bound = robot_map.position_bounds()
         count = 0
         min_distance = (high_bound[0] - low_bound[0]) / 20 # TODO: why divide by 20?????
         while True:
-            target_coords = np.random.uniform(
+            t_x, t_y = np.random.uniform(
                 low=np.array(low_bound)[:2], high=np.array(high_bound)[:2], size=2)
+            target_coords = (t_x, t_y)
             # ensure that the target is not occupied by obstacles
             # TODO: this doesn't work, replace or remove
             dists = np.linalg.norm(robot_map.obstacle_coords[:, :2] - target_coords)
@@ -231,14 +235,14 @@ class RobotEnv(Env):
 
         check_out_of_bounds = lambda coords: not robot_map.is_in_bounds(coords[0], coords[1])
         robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
-        robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
+        robot_pose = RobotPose((robot_coords[0], robot_coords[1]), robot_coords[2])
 
         # if initial coords are too close (1.5m) to an obstacle,
         # pedestrian or the target, generate new coords
         while robot_map.is_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
                 robot_pose.rel_pos(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
             robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
-            robot_pose = RobotPose(Vec2D(robot_coords[0], robot_coords[1]), robot_coords[2])
+            robot_pose = RobotPose((robot_coords[0], robot_coords[1]), robot_coords[2])
 
         return target_coords, robot_pose
 

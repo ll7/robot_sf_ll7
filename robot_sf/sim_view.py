@@ -104,15 +104,13 @@ class SimulationView:
         state.obstacles[:, 1] += self.height / 2
         state.obstacles[:, 2] += self.width / 2
         state.obstacles[:, 3] += self.height / 2
-        state.robot_pose.pos.pos_x *= self.scaling
-        state.robot_pose.pos.pos_y *= self.scaling
-        state.robot_pose.pos.pos_x += self.width / 2
-        state.robot_pose.pos.pos_y += self.height / 2
+        state.robot_pose.pos = (
+            state.robot_pose.pos[0] * self.scaling + self.width / 2,
+            state.robot_pose.pos[1] * self.scaling + self.height / 2)
         if state.action:
-            state.action.robot_goal[0] *= self.scaling
-            state.action.robot_goal[1] *= self.scaling
-            state.action.robot_goal[0] += self.width / 2
-            state.action.robot_goal[1] += self.height / 2
+            state.action.robot_goal = (
+                state.action.robot_goal[0] * self.scaling + self.width / 2,
+                state.action.robot_goal[1] * self.scaling + self.height / 2)
         return state
 
     def _draw_robot(self, pose: RobotPose):

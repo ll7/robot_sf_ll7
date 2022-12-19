@@ -14,7 +14,9 @@ from robot_sf.extenders_py_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
 
 from robot_sf.robot import RobotPose
-from robot_sf.vector import Vec2D
+
+
+Vec2D = Tuple[float, float]
 
 
 @dataclass
@@ -64,6 +66,8 @@ def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
 
 
 class ExtdSimulator:
+    # TODO: include robot kinematics and occupancy here, make RobotEnv just the Gym wrapper
+
     def __init__(self, difficulty: int=0, peds_sparsity: int=0):
         path_to_config: str = None
 
@@ -82,9 +86,9 @@ class ExtdSimulator:
         self.groups_as_list = lambda: self.groups.groups.values()
 
         robot_radius = config.robot_force_config.robot_radius
-        self.robot = RobotObject(RobotPose(Vec2D(1e5, 1e5), 0), robot_radius)
+        self.robot = RobotObject(RobotPose((1e5, 1e5), 0), robot_radius)
 
-        get_robot_pos = lambda: self.robot.pose.pos.as_tuple()
+        get_robot_pos = lambda: self.robot.pose.pos
         forces = self.forces = make_forces(config, True, get_robot_pos)
         self.pysf_sim = Simulator(forces, state, self.groups_as_list(), obstacles)
         self.reset_state()
@@ -113,4 +117,4 @@ class ExtdSimulator:
 
     def move_robot(self, coordinates: List[float]):
         pos_x, pos_y, orient = coordinates
-        self.robot.pose = RobotPose(Vec2D(pos_x, pos_y), orient)
+        self.robot.pose = RobotPose((pos_x, pos_y), orient)

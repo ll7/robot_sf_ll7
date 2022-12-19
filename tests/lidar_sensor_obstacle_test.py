@@ -6,10 +6,11 @@ from pytest import approx
 
 from robot_sf.map_continuous import ContinuousOccupancy
 from robot_sf.range_sensor_continuous import ContinuousLidarScanner, LidarScannerSettings
-from robot_sf.vector import RobotPose, Vec2D
+from robot_sf.vector import RobotPose
 
 
 NO_SCAN_NOISE = [0.0, 0.0]
+Vec2D = Tuple[float, float]
 Point2D = Tuple[float, float]
 
 
@@ -27,7 +28,7 @@ def test_scanner_detects_single_obstacle_orthogonal_orientation():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), pi))
+    scan = scanner.get_scan(RobotPose((0, 0), pi))
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays
@@ -41,7 +42,7 @@ def test_scanner_detects_obstacle_other_orientation_superpositioned():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), pi))
+    scan = scanner.get_scan(RobotPose((0, 0), pi))
 
     exp_dist = 0
     assert scan.shape[0] == lidar_n_rays
@@ -55,7 +56,7 @@ def test_scanner_detects_obstacle_same_orientation_superpositioned():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), pi))
+    scan = scanner.get_scan(RobotPose((0, 0), pi))
 
     exp_dist = 0
     assert scan.shape[0] == lidar_n_rays
@@ -69,7 +70,7 @@ def test_scanner_detects_obstacle_same_orientation_not_superpositioned():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), pi))
+    scan = scanner.get_scan(RobotPose((0, 0), pi))
 
     exp_dist = 3
     assert scan.shape[0] == lidar_n_rays
@@ -90,7 +91,7 @@ def test_scanner_detects_multiple_equidist_obstacles_from_center():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), 0))
+    scan = scanner.get_scan(RobotPose((0, 0), 0))
 
     exp_dist = 2.0
     assert scan.shape[0] == lidar_n_rays
@@ -117,7 +118,7 @@ def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(shift_x, shift_y), 0))
+    scan = scanner.get_scan(RobotPose((shift_x, shift_y), 0))
 
     exp_dist = 2.0
     assert scan.shape[0] == lidar_n_rays
@@ -131,7 +132,7 @@ def test_scanner_detects_max_range_when_nothing_found():
     settings = LidarScannerSettings(max_scan_range, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), 0))
+    scan = scanner.get_scan(RobotPose((0, 0), 0))
 
     exp_dist = max_scan_range
     assert scan.shape[0] == lidar_n_rays
@@ -145,7 +146,7 @@ def test_scanner_detects_only_closest_obstacle():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose(Vec2D(0, 0), pi))
+    scan = scanner.get_scan(RobotPose((0, 0), pi))
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays

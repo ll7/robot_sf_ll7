@@ -2,8 +2,10 @@ from typing import Callable, Tuple, List
 
 import numpy as np
 
-from robot_sf.vector import Vec2D
 from robot_sf.geometry import is_circle_circle_intersection, is_circle_line_intersection
+
+
+Vec2D = Tuple[float, float]
 
 
 class ContinuousOccupancy:
@@ -27,7 +29,7 @@ class ContinuousOccupancy:
             or self.is_obstacle_collision(robot_pos, collision_distance)
 
     def is_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
-        circle_robot = ((robot_pos.pos_x, robot_pos.pos_y), collision_distance)
+        circle_robot = (robot_pos, collision_distance)
         for s_x, s_y, e_x, e_y in self.obstacle_coords:
             if is_circle_line_intersection(circle_robot, ((s_x, s_y), (e_x, e_y))):
                 return True
@@ -35,7 +37,7 @@ class ContinuousOccupancy:
 
     def is_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
         ped_radius = 0.4
-        circle_robot = ((robot_pos.pos_x, robot_pos.pos_y), collision_distance)
+        circle_robot = (robot_pos, collision_distance)
         for ped_x, ped_y in self.pedestrian_coords:
             circle_ped = ((ped_x, ped_y), ped_radius)
             if is_circle_circle_intersection(circle_robot, circle_ped):

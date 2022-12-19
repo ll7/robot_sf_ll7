@@ -134,6 +134,12 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
         obstacle += valid_edges
         obstacles_lolol.append(valid_edges)
 
+    # append map bounds as obstacles
+    obstacle.append([-box_size, box_size, -box_size, -box_size]) # bottom
+    obstacle.append([-box_size, box_size, box_size, box_size])   # top
+    obstacle.append([-box_size, -box_size, -box_size, box_size]) # left
+    obstacle.append([box_size, box_size, -box_size, box_size])   # right
+
     if not data['simulator']['flags']['random_initial_population']:
         state = np.array(data['simulator']['default']['states'])
         groups = data['simulator']['default']['groups']

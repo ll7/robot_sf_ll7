@@ -1,4 +1,3 @@
-from __future__ import annotations
 from math import dist
 from typing import Set, Dict, Tuple, Protocol, Callable
 from dataclasses import dataclass, field
@@ -33,10 +32,6 @@ class PySFPedestrianStates:
     @property
     def num_peds(self) -> int:
         return self.pysf_states().shape[0]
-
-    @property
-    def all_ped_pos(self) -> np.ndarray:
-        return self.pysf_states()[:, 4:6]
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
         self.pysf_states()[ped_id, 4:6] = new_goal

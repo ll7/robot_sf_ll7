@@ -4,11 +4,6 @@ import numpy as np
 from pysocialforce.utils import stateutils
 
 
-def norm_angles(angles: np.ndarray) -> np.ndarray:
-    """Normalize angles between [-pi, pi)"""
-    return (angles + np.pi) % (2 * np.pi) -np.pi
-
-
 # check vectorization of these functions
 def line_segment(p_0, p_1):
     seg_a = p_0[:, 1] - p_1[:, 1]

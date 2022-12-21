@@ -23,10 +23,12 @@ class RobotEnv(Env):
     # TODO: transform this into cohesive data structures
     def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
                  visual_angle_portion: float=1.0, lidar_range: float=10.0,
-                 v_linear_max: float=1, v_angular_max: float=1, rewards: Union[List[float], None]=None,
+                 v_linear_max: float=1, v_angular_max: float=1,
+                 rewards: Union[List[float], None]=None,
                  max_v_x_delta: float=.5, max_v_rot_delta: float=.5, d_t: Union[float, None]=None,
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
-                 scan_noise: Union[List[float], None]=None, peds_speed_mult: float=1.3, debug: bool=False):
+                 scan_noise: Union[List[float], None]=None,
+                 peds_speed_mult: float=1.3, debug: bool=False):
 
         scan_noise = scan_noise if scan_noise else [0.005, 0.002]
 
@@ -124,14 +126,16 @@ class RobotEnv(Env):
         reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, saturate_input)
         self.timestep += 1
         self.last_action = action_parsed
-        return np.concatenate((norm_ranges, rob_state), axis=0), reward, done, { 'step': self.episode }
+        return np.concatenate((norm_ranges, rob_state), axis=0), \
+            reward, done, { 'step': self.episode }
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
         # if pedestrian / obstacle is hit or time expired
         if self.robot.is_pedestrians_collision(.8) or \
                 self.robot.is_obstacle_collision(self.robot.config.rob_collision_radius) or \
                 self.robot.is_out_of_bounds or self.duration > self.sim_length:
-            final_distance_bonus = np.clip((self.distance_init - dist_1) / self.target_distance_max , -1, 1)
+            bonus_unclipped = (self.distance_init - dist_1) / self.target_distance_max
+            final_distance_bonus = np.clip(bonus_unclipped, -1, 1)
             reward = -self.rewards[1] * (1 - final_distance_bonus)
             done = True
 
@@ -147,7 +151,8 @@ class RobotEnv(Env):
         else:
             self.duration += self.d_t
             reward = self.rewards[0] * ((dist_0 - dist_1) / (self.linear_max * self.d_t) \
-                - int(saturate_input) + (1 - min(ranges)) * (dot_x / self.linear_max) * int(dist_0 > dist_1))
+                - int(saturate_input) + (1 - min(ranges)) \
+                    * (dot_x / self.linear_max) * int(dist_0 > dist_1))
             done = False
 
         return reward, done
@@ -197,7 +202,8 @@ class RobotEnv(Env):
 
         # if initial coords are too close (1.5m) to an obstacle,
         # pedestrian or the target, generate new coords
-        while robot_map.is_collision(robot_pose.pos, 1.5) or check_out_of_bounds(robot_pose.coords) or \
+        while robot_map.is_collision(robot_pose.pos, 1.5) or \
+                check_out_of_bounds(robot_pose.coords) or \
                 robot_pose.rel_pos(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
             robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
             robot_pose = RobotPose((robot_coords[0], robot_coords[1]), robot_coords[2])

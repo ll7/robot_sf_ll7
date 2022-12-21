@@ -2,6 +2,9 @@ from typing import Tuple
 import numpy as np
 
 
+# pylint: disable=all
+
+
 # check vectorization of these functions
 def line_segment(p_0, p_1):
     seg_a = p_0[:, 1] - p_1[:, 1]

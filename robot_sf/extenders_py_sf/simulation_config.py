@@ -87,7 +87,8 @@ def load_toml(path_to_filename: str) -> dict:
             try:
                 data: dict = toml.load(path_to_filename)
             except Exception:
-                raise ValueError("Cannot load valid config toml file at specified path:" + path_to_filename)
+                msg = f"Cannot load valid config toml file at specified path: {path_to_filename}"
+                raise ValueError(msg)
     return data
 
 
@@ -104,7 +105,8 @@ def load_map_name(data: dict) -> str:
     return map_name
 
 
-def fill_state(coordinate_a: int, coordinate_b: Union[int, np.ndarray], origin: bool, box_size: float):
+def fill_state(coordinate_a: int, coordinate_b: Union[int, np.ndarray],
+               origin: bool, box_size: float):
     distance = box_size * 1.1 if origin else box_size * 1.6
     if isinstance(coordinate_b, np.ndarray):
         return build_coordinates_array(coordinate_a, coordinate_b, len(coordinate_b), distance)
@@ -281,17 +283,19 @@ def load_config(path_to_filename: str=None, difficulty: int=0) \
         data['simulator']['flags']['update_peds'],
         data['simulator']['flags']['activate_ped_robot_force'])
 
+    group_action_params = data['simulator']['group_actions']['parameters']
+    stopping_params = data['simulator']['stopping']['parameters']
     new_peds_params = NewPedsParams(
         max_single_peds = data['simulator']['generation']['parameters']['max_single_peds'],
         max_grp_size = data['simulator']['generation']['parameters']['max_group_size'],
         group_width_max = data['simulator']['generation']['parameters']['max_group_size'],
         group_width_min = data['simulator']['generation']['parameters']['group_width_min'],
         average_speed = data['simulator']['generation']['parameters']['average_speed'],
-        max_standalone_grouping = data['simulator']['group_actions']['parameters']['max_standalone_grouping'],
-        max_nsteps_ped_stopped = data['simulator']['stopping']['parameters']['max_nsteps_ped_stopped'],
-        max_nteps_group_stopped = data['simulator']['stopping']['parameters']['max_nsteps_group_stopped'],
-        max_stopping_pedestrians = data['simulator']['stopping']['parameters']['max_stopping_pedestrians'],
-        max_unfreezing_pedestrians = data['simulator']['stopping']['parameters']['max_unfreezing_pedestrians'])
+        max_standalone_grouping = group_action_params['max_standalone_grouping'],
+        max_nsteps_ped_stopped = stopping_params['max_nsteps_ped_stopped'],
+        max_nteps_group_stopped = stopping_params['max_nsteps_group_stopped'],
+        max_stopping_pedestrians = stopping_params['max_stopping_pedestrians'],
+        max_unfreezing_pedestrians = stopping_params['max_unfreezing_pedestrians'])
 
     # angles to evaluate
     angles_neg = np.array([-1, -.8, -.6, -.5, -.4, -.3, -.25, -.2, -.15, -.1, -.05])

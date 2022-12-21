@@ -102,9 +102,9 @@ class RobotState:
 class DifferentialDriveRobot():
     """Representing a robot with differential driving behavior"""
     spawn_pose: RobotPose
-    config: RobotSettings
     scanner: ScannerImpl
     _map: MapImpl
+    config: RobotSettings
     state: RobotState = field(init=False)
 
     def __post_init__(self):

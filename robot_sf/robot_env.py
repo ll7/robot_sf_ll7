@@ -16,56 +16,13 @@ from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
 Vec2D = Tuple[float, float]
 
 
-def initialize_lidar(
-        robot_map: ContinuousOccupancy,
-        visualization_angle_portion: float,
-        lidar_range: float,
-        lidar_n_rays: int,
-        scan_noise: List[float]):
-    lidar_settings = LidarScannerSettings(
-        lidar_range, visualization_angle_portion, lidar_n_rays, scan_noise)
-    lidar_sensor = ContinuousLidarScanner(lidar_settings, robot_map)
-    return lidar_sensor
-
-
-def initialize_robot(
-        robot_map: ContinuousOccupancy,
-        lidar_sensor: ContinuousLidarScanner,
-        spawn_pos: RobotPose,
-        robot_settings: RobotSettings):
-    robot = DifferentialDriveRobot(spawn_pos, robot_settings, lidar_sensor, robot_map)
-    return robot
-
-
-def initialize_simulator(peds_sparsity, difficulty, d_t, peds_speed_mult) -> ExtdSimulator:
-    sim_env = ExtdSimulator(difficulty=difficulty, peds_sparsity=peds_sparsity)
-    sim_env.peds.step_width = d_t if d_t else sim_env.peds.step_width
-    sim_env.peds.max_speed_multiplier = peds_speed_mult
-    return sim_env
-
-
-def initialize_map(sim_env: ExtdSimulator) -> ContinuousOccupancy:
-    # initialize map
-    # map_height = 2 * sim_env.box_size
-    # map_width = 2 * sim_env.box_size
-    # map_resolution = 10 # grid cell granularity rel. to 1 map unit
-    # robot_map = BinaryOccupancyGrid(map_height, map_width, map_resolution, sim_env.box_size,
-    #     lambda: np.concatenate(sim_env.env.obstacles), lambda: sim_env.current_positions)
-    #     # TODO: access to obstacles is leaking detail outside of abstractions
-    robot_map = ContinuousOccupancy(
-        sim_env.box_size,
-        lambda: sim_env.pysf_sim.env.obstacles_raw,
-        lambda: sim_env.current_positions)
-    return robot_map
-
-
 class RobotEnv(Env):
     """Representing an OpenAI Gym environment wrapper for
     training a robot with reinforcement leanring"""
 
     # TODO: transform this into cohesive data structures
     def __init__(self, lidar_n_rays: int=272, collision_distance: float=0.7,
-                 visual_angle_portion: float=0.5, lidar_range: float=10.0,
+                 visual_angle_portion: float=1.0, lidar_range: float=10.0,
                  v_linear_max: float=1, v_angular_max: float=1, rewards: Union[List[float], None]=None,
                  max_v_x_delta: float=.5, max_v_rot_delta: float=.5, d_t: Union[float, None]=None,
                  normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
@@ -89,23 +46,21 @@ class RobotEnv(Env):
         self.angular_max = v_angular_max
 
         sparsity_levels = [500, 200, 100, 50, 20]
-        self.sim_env = initialize_simulator(
-            sparsity_levels[difficulty], difficulty, d_t, peds_speed_mult)
+        self.sim_env = ExtdSimulator(difficulty, sparsity_levels[difficulty], d_t, peds_speed_mult)
         self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2)
-        self.d_t = self.sim_env.peds.step_width
+        self.d_t = self.sim_env.d_t
 
-        self.robot_map = initialize_map(self.sim_env)
-        lidar_sensor = initialize_lidar(
-            self.robot_map,
-            visual_angle_portion,
-            self.lidar_range,
-            lidar_n_rays,
-            scan_noise)
+        self.robot_map = ContinuousOccupancy(
+            self.sim_env.box_size,
+            lambda: self.sim_env.pysf_sim.env.obstacles_raw,
+            lambda: self.sim_env.current_positions)
+        lidar_settings = LidarScannerSettings(
+            lidar_range, visual_angle_portion, lidar_n_rays, scan_noise)
+        lidar_sensor = ContinuousLidarScanner(lidar_settings, self.robot_map)
 
-        self.robot_factory = lambda robot_map, robot_pose: initialize_robot(
-            robot_map, lidar_sensor, robot_pose,
-            robot_settings = RobotSettings(
-                self.linear_max, self.angular_max, collision_distance))
+        robot_settings = RobotSettings(self.linear_max, self.angular_max, collision_distance)
+        self.robot_factory = lambda robot_map, robot_pose: \
+            DifferentialDriveRobot(robot_pose, lidar_sensor, robot_map, robot_settings)
 
         action_low  = np.array([-max_v_x_delta, -max_v_rot_delta])
         action_high = np.array([ max_v_x_delta,  max_v_rot_delta])

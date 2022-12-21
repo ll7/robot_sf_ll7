@@ -1,10 +1,8 @@
-from typing import List, Callable, Tuple
+from typing import List, Callable, Tuple, Union
 from dataclasses import dataclass
 
 import numpy as np
-
 from pysocialforce import Simulator, forces
-from pysocialforce.scene import PedState
 
 from robot_sf.extenders_py_sf.extender_force \
     import DesiredForce, GroupRepulsiveForce, PedRobotForce
@@ -68,7 +66,8 @@ def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
 class ExtdSimulator:
     # TODO: include robot kinematics and occupancy here, make RobotEnv just the Gym wrapper
 
-    def __init__(self, difficulty: int=0, peds_sparsity: int=0):
+    def __init__(self, difficulty: int, peds_sparsity: int,
+                 d_t: Union[float, None], peds_speed_mult: float):
         path_to_config: str = None
 
         config, state, _, obstacles = load_config(path_to_config, difficulty)
@@ -91,11 +90,13 @@ class ExtdSimulator:
         get_robot_pos = lambda: self.robot.pose.pos
         forces = self.forces = make_forces(config, True, get_robot_pos)
         self.pysf_sim = Simulator(forces, state, self.groups_as_list(), obstacles)
+        self.pysf_sim.peds.step_width = d_t if d_t else self.pysf_sim.peds.step_width
+        self.pysf_sim.peds.max_speed_multiplier = peds_speed_mult
         self.reset_state()
 
     @property
-    def peds(self) -> PedState:
-        return self.pysf_sim.peds
+    def d_t(self) -> float:
+        return self.pysf_sim.peds.step_width
 
     def reset_state(self):
         self.peds_behavior.pick_new_goals()
@@ -104,7 +105,7 @@ class ExtdSimulator:
         self.peds_behavior.redirect_groups_if_at_goal()
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups_as_list()
-        self.peds.step(ped_forces, groups)
+        self.pysf_sim.peds.step(ped_forces, groups)
 
     @property
     def current_positions(self):

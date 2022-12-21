@@ -187,7 +187,6 @@ class RobotEnv(Env):
                 low=np.array(low_bound)[:2], high=np.array(high_bound)[:2], size=2)
             target_coords = (t_x, t_y)
             # ensure that the target is not occupied by obstacles
-            # TODO: this doesn't work, replace or remove
             dists = np.linalg.norm(robot_map.obstacle_coords[:, :2] - target_coords)
             if np.amin(dists) > min_distance:
                 break

@@ -14,7 +14,6 @@ WorldPosition = Tuple[float, float]
 GridPosition = Tuple[int, int]
 
 
-# TODO: pick reasonable colors
 BACKGROUND_COLOR = (255, 255, 255)
 OBSTACLE_COLOR = (20, 30, 20)
 PEDESTRIAN_COLOR = (255, 50, 50)
@@ -30,17 +29,6 @@ class VisualizableAction:
     robot_pose: RobotPose
     robot_action: RobotAction
     robot_goal: WorldPosition
-    # world_to_grid: Callable[[float, float], GridPosition]
-    # start: GridPosition = field(init=False)
-    # end: GridPosition = field(init=False)
-
-    # def __post_init__(self):
-    #     x_start, y_start = self.robot_pose.pos.as_list
-    #     x_start, y_start = self.world_to_grid(x_start, y_start)
-    #     x_diff, y_diff = self.robot_action.vector.as_list
-    #     x_diff, y_diff = self.world_to_grid(x_diff, y_diff)
-    #     x_end, y_end = x_start + x_diff, y_start + y_diff
-    #     self.start, self.end = (x_start, y_start), (x_end, y_end)
 
 
 @dataclass
@@ -126,11 +114,6 @@ class SimulationView:
 
     def _augment_goal_position(self, robot_goal: WorldPosition):
         pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.scaling)
-
-    # def _augment_action_vector(self, action: VisualizableAction):
-    #     start = (action.start[0] * self.scaling, action.start[1] * self.scaling)
-    #     end = (action.end[0] * self.scaling, action.end[1] * self.scaling)
-    #     pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, start, end)
 
     def _augment_timestep(self, timestep: int):
         text = f'step: {timestep}'

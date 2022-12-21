@@ -1,5 +1,5 @@
 [MASTER]
-disable=C0114, C0115, C0116, R0903, W0511, C3001, C0413, C0411, R1723, R0902, W0703, C0200, R1705, W0707, R1720
+disable=C0114, C0115, C0116, R0903, C3001, C0413, C0411, R1723, R0902, W0703, C0200, R1705, W0707, R1720
 # disable missing docstring warnings C0114, C0115, C0116 (re-enable later)
 # disable line-too-long and dangling ToDo C0301, W0511
 # disable unnecessary-lambda-assignment C3001

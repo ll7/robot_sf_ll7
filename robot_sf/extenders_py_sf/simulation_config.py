@@ -70,26 +70,13 @@ def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:
     return Polygon(np.array(vertices))
 
 
-def load_toml(path_to_filename: str) -> dict:
-    # TODO: remove branching / error handling, just do the damn thing ...
-    if path_to_filename is None:
-        try:
-            dirname = os.path.dirname(__file__)
-            parent = os.path.split(dirname)[0]
-            filename = os.path.join(parent, "utils", "config", "map_config.toml")
-            data: dict = toml.load(filename)
-        except Exception:
-            raise ValueError("Cannot load valid config toml file")
-    else:
-        if not isinstance(path_to_filename, str):
-            raise ValueError("invalid input filename")
-        else:
-            try:
-                data: dict = toml.load(path_to_filename)
-            except Exception:
-                msg = f"Cannot load valid config toml file at specified path: {path_to_filename}"
-                raise ValueError(msg)
-    return data
+def load_toml(config_file: str) -> dict:
+    if not config_file:
+        dirname = os.path.dirname(__file__)
+        parent = os.path.split(dirname)[0]
+        filename = os.path.join(parent, "utils", "config", "map_config.toml")
+        config_file = filename
+    return toml.load(config_file)
 
 
 def load_map_name(data: dict) -> str:
@@ -237,7 +224,7 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     # TODO: figure out why this code is required to init pedestrian positions
     for i in range(n_peds):
         state[i, :2] = np.random.uniform(-box_size, box_size, (1,2))
-        for _, obstacle_name in enumerate(map_structure['Obstacles'].keys()):
+        for _, obstacle_name in enumerate(map_structure['Obstacles']):
             obs_recreated = load_polygon(map_structure['Obstacles'][obstacle_name]['Vertex'])
             vert = np.array(map_structure['Obstacles'][obstacle_name]['Vertex'])
             radius = max(np.linalg.norm(vert - obs_recreated.centroid.coords, axis = 1)) +1

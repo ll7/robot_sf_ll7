@@ -7,9 +7,8 @@ from typing import List, Tuple, Union
 from dataclasses import dataclass
 
 import numpy as np
+from shapely.geometry import Polygon
 from natsort import natsorted
-
-from robot_sf.utils.poly import load_polygon, random_polygon, PolygonCreationSettings
 
 
 Vec2D = Tuple[float, float]
@@ -65,6 +64,10 @@ class SimulationConfiguration:
     new_peds_params: NewPedsParams
     obstacle_avoidance_params: List
     obstacles_lolol: List
+
+
+def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:
+    return Polygon(np.array(vertices))
 
 
 def load_toml(path_to_filename: str) -> dict:
@@ -131,6 +134,8 @@ def build_coordinates_scalar(coordinate_a, coordinate_b, distance):
         return np.array([distance, coordinate_b])
     elif coordinate_a == 3:
         return np.array([coordinate_b, distance])
+    else:
+        raise ValueError()
 
 
 def pick_random_velocity_and_goal(box_size: float):
@@ -191,9 +196,9 @@ def load_randomly_init_map(data: dict, maps_config_path: str, difficulty: int) \
     norm_span = max(x_span, y_span)
     box_size = 20
 
-    def norm_coords(p: Vec2D) -> Vec2D:
-        return ((p[0] - min_x) / norm_span * 2 * box_size - box_size,
-                (p[1] - min_y) / norm_span * 2 * box_size - box_size)
+    def norm_coords(point: Vec2D) -> Vec2D:
+        return ((point[0] - min_x) / norm_span * 2 * box_size - box_size,
+                (point[1] - min_y) / norm_span * 2 * box_size - box_size)
 
     for key in map_structure['Obstacles'].keys():
         vertices = map_structure['Obstacles'][key]['Vertex']

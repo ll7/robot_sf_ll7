@@ -75,7 +75,11 @@ class RobotEnv(Env):
                 np.array([0, -self.angular_max, 0, -np.pi])
             ), axis=0)
         self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
- 
+
+        self.duration = 0
+        self.rotation_counter = 0
+        self.distance_init = float('inf')
+
         self.episode = 0
         self.timestep = 0
         self.last_action: PolarVec2D = None
@@ -120,8 +124,7 @@ class RobotEnv(Env):
         reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, saturate_input)
         self.timestep += 1
         self.last_action = action_parsed
-        info = { 'step': self.episode }
-        return np.concatenate((norm_ranges, rob_state), axis=0), reward, done, info
+        return np.concatenate((norm_ranges, rob_state), axis=0), reward, done, { 'step': self.episode }
 
     def _reward(self, dist_0, dist_1, dot_x, ranges, saturate_input) -> Tuple[float, bool]:
         # if pedestrian / obstacle is hit or time expired

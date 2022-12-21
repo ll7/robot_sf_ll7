@@ -1,6 +1,6 @@
 from time import sleep
 from typing import Callable, Tuple, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pygame
 import numpy as np

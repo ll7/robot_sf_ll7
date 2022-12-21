@@ -37,12 +37,12 @@ class PySFPedestrianStates:
         self.pysf_states()[ped_id, 4:6] = new_goal
 
     def goal_of(self, ped_id: int) -> Vec2D:
-        x, y = self.pysf_states()[ped_id, 4:6]
-        return (x, y)
+        pos_x, pos_y = self.pysf_states()[ped_id, 4:6]
+        return (pos_x, pos_y)
 
     def pos_of(self, ped_id: int) -> Vec2D:
-        x, y = self.pysf_states()[ped_id, 0:2]
-        return (x, y)
+        pos_x, pos_y = self.pysf_states()[ped_id, 0:2]
+        return (pos_x, pos_y)
 
 
 @dataclass
@@ -55,8 +55,7 @@ class PedestrianGroupings:
     def group_ids(self) -> Set[int]:
         # info: pedestrian reassignments can cause groups
         #       to become empty -> ignore empty groups
-        return set([k for k in self.groups.keys()
-                    if len(self.groups[k]) > 0])
+        return {k for k in self.groups if len(self.groups[k]) > 0}
 
     @property
     def standalone_ped_ids(self) -> Set[int]:

@@ -1,7 +1,5 @@
 from typing import Tuple
-
 import numpy as np
-from pysocialforce.utils import stateutils
 
 
 # check vectorization of these functions
@@ -24,17 +22,17 @@ def lines_intersection(l_1, l_2, p0_l1, p1_l1, p0_l2, p1_l2):
     y_min_l2 = np.tile(np.minimum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0], 1))
     y_max_l2 = np.tile(np.maximum(p0_l2[:, 1],p1_l2[:, 1])[np.newaxis, :], (l_1.shape[0], 1))
 
-    d   = l_1[:, 0][:, np.newaxis] * l_2[:, 1][np.newaxis, :] \
+    d_xy = l_1[:, 0][:, np.newaxis] * l_2[:, 1][np.newaxis, :] \
             - l_1[:, 1][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
-    d_x = l_1[:, 2][:, np.newaxis] * l_2[:, 1][np.newaxis, :] \
+    d_x  = l_1[:, 2][:, np.newaxis] * l_2[:, 1][np.newaxis, :] \
             - l_1[:, 1][:, np.newaxis] * l_2[:, 2][np.newaxis, :]
-    d_y = l_1[:, 0][:, np.newaxis] * l_2[:, 2][np.newaxis, :] \
+    d_y  = l_1[:, 0][:, np.newaxis] * l_2[:, 2][np.newaxis, :] \
             - l_1[:, 2][:, np.newaxis] * l_2[:, 0][np.newaxis, :]
 
     # TODO: why ignore?! rather fix the data instead!!!
     with np.errstate(divide='ignore', invalid='ignore'):
-        pos_x = d_x / d
-        pos_y = d_y / d
+        pos_x = d_x / d_xy
+        pos_y = d_y / d_xy
         nan_mask = np.logical_or.reduce((
             (pos_x < x_min_l1), (pos_x > x_max_l1), (pos_y < y_min_l1), (pos_y > y_max_l1),
             (pos_x < x_min_l2), (pos_x > x_max_l2), (pos_y < y_min_l2), (pos_y > y_max_l2)))

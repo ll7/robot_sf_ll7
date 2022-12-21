@@ -75,21 +75,21 @@ class ExtdSimulator:
         self.peds_sparsity = peds_sparsity
 
         def pick_goal() -> Tuple[float, float]:
-            x, y = np.random.uniform(-self.box_size, self.box_size, size=(2))
-            return (x, y)
+            pos_x, pos_y = np.random.uniform(-self.box_size, self.box_size, size=(2))
+            return (pos_x, pos_y)
 
         get_state = lambda: self.pysf_sim.peds.state
         self.pysf_state = PySFPedestrianStates(get_state)
         self.groups = PedestrianGroupings(self.pysf_state)
         self.peds_behavior = GroupRedirectBehavior(self.groups, pick_goal)
-        self.groups_as_list = lambda: self.groups.groups.values()
+        self.groups_as_list = self.groups.groups.values
 
         robot_radius = config.robot_force_config.robot_radius
         self.robot = RobotObject(RobotPose((1e5, 1e5), 0), robot_radius)
 
         get_robot_pos = lambda: self.robot.pose.pos
-        forces = self.forces = make_forces(config, True, get_robot_pos)
-        self.pysf_sim = Simulator(forces, state, self.groups_as_list(), obstacles)
+        sim_forces = self.forces = make_forces(config, True, get_robot_pos)
+        self.pysf_sim = Simulator(sim_forces, state, self.groups_as_list(), obstacles)
         self.pysf_sim.peds.step_width = d_t if d_t else self.pysf_sim.peds.step_width
         self.pysf_sim.peds.max_speed_multiplier = peds_speed_mult
         self.reset_state()

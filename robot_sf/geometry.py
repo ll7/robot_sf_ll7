@@ -10,19 +10,19 @@ Circle2D = Tuple[Vec2D, float]
 
 
 @numba.njit(fastmath=True)
-def euclid_dist(v1: Vec2D, v2: Vec2D) -> float:
-    return ((v1[0] - v2[0])**2 + (v1[1] - v2[1])**2)**0.5
+def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
 
 
 @numba.njit(fastmath=True)
-def euclid_dist_sq(v1: Vec2D, v2: Vec2D) -> float:
-    return (v1[0] - v2[0])**2 + (v1[1] - v2[1])**2
+def euclid_dist_sq(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    return (vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2
 
 
 @numba.njit(fastmath=True)
-def cos_sim(v1: Vec2D, v2: Vec2D) -> float:
-    return (v1[0] * v2[0] + v1[1] * v2[1]) \
-        / (euclid_dist(v1, (0, 0)) * euclid_dist(v2, (0, 0)))
+def cos_sim(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    return (vec_1[0] * vec_2[0] + vec_1[1] * vec_2[1]) \
+        / (euclid_dist(vec_1, (0, 0)) * euclid_dist(vec_2, (0, 0)))
 
 
 @numba.njit(fastmath=True)
@@ -38,11 +38,11 @@ def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: 
     if den == 0:
 
         # check if parallel lines are aligned
-        v1 = (x_1 - x_3, y_1 - y_3)
-        v2 = (x_2 - x_4, y_2 - y_4)
-        v3 = (v1[0] * -1, v1[1] * -1)
-        if v1 == (0, 0) or v2 == (0, 0) or \
-                cos_sim(v1, v2) > 0.999 or cos_sim(v2, v3) > 0.999:
+        v_1 = (x_1 - x_3, y_1 - y_3)
+        v_2 = (x_2 - x_4, y_2 - y_4)
+        v_3 = (v_1[0] * -1, v_1[1] * -1)
+        if v_1 == (0, 0) or v_2 == (0, 0) or \
+                cos_sim(v_1, v_2) > 0.999 or cos_sim(v_2, v_3) > 0.999:
             min_x, max_x = min(x_1, x_2), max(x_1, x_2)
             min_y, max_y = min(y_1, y_2), max(y_1, y_2)
 
@@ -56,9 +56,9 @@ def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: 
             # parallel lines cannot intersect
             return np.inf
 
-    t = num / den
-    if 0 <= t <= 1:
-        cross_x, cross_y = x_1 + t * (x_2 - x_1), y_1 + t * (y_2 - y_1)
+    hit_scale = num / den # called 't' in formula
+    if 0 <= hit_scale <= 1:
+        cross_x, cross_y = x_1 + hit_scale * (x_2 - x_1), y_1 + hit_scale * (y_2 - y_1)
         return euclid_dist(origin, (cross_x, cross_y))
     else:
         return np.inf
@@ -67,14 +67,14 @@ def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: 
 @numba.njit(fastmath=True)
 def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
     # source: https://mathworld.wolfram.com/Circle-LineIntersection.html
-    (circle_x, circle_y), r = circle
+    (circle_x, circle_y), radius = circle
     (x_1, y_1) = origin[0] - circle_x, origin[1] - circle_y
     (x_2, y_2) = x_1 - ray_vec[0], y_1 - ray_vec[1]
 
     det = x_1 * y_2 - x_2 * y_1
     d_x, d_y = x_2 - x_1, y_2 - y_1
     d_r_sq = euclid_dist_sq((d_x, d_y), (0, 0))
-    disc = r**2 * d_r_sq - det**2
+    disc = radius**2 * d_r_sq - det**2
 
     if not disc >= 0:
         return np.inf
@@ -106,9 +106,9 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
 
 
 @numba.njit(fastmath=True)
-def is_circle_circle_intersection(c1: Circle2D, c2: Circle2D) -> bool:
-    center_1, radius_1 = c1
-    center_2, radius_2 = c2
+def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
+    center_1, radius_1 = c_1
+    center_2, radius_2 = c_2
     dist_sq = euclid_dist_sq(center_1, center_2)
     rad_sum_sq = (radius_1 + radius_2)**2
     return dist_sq <= rad_sum_sq
@@ -116,11 +116,11 @@ def is_circle_circle_intersection(c1: Circle2D, c2: Circle2D) -> bool:
 
 @numba.njit(fastmath=True)
 def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
-    (circle_x, circle_y), r = circle
-    p1, p2 = segment
-    (x_1, y_1) = p1[0] - circle_x, p1[1] - circle_y
-    (x_2, y_2) = p2[0] - circle_x, p2[1] - circle_y
-    r_sq = r**2
+    (circle_x, circle_y), radius = circle
+    p_1, p_2 = segment
+    (x_1, y_1) = p_1[0] - circle_x, p_1[1] - circle_y
+    (x_2, y_2) = p_2[0] - circle_x, p_2[1] - circle_y
+    r_sq = radius**2
 
     # edge case: line segment's end point(s) inside circle
     if euclid_dist_sq((x_1, y_1), (0, 0)) <= r_sq \

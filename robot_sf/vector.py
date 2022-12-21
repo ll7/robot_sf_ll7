@@ -31,13 +31,13 @@ class RobotPose:
 
     @property
     def coords(self) -> List[float]:
-        x, y = self.pos
-        return [x ,y]
+        pos_x, pos_y = self.pos
+        return [pos_x ,pos_y]
 
     @property
     def coords_with_orient(self) -> List[float]:
-        x, y = self.pos
-        return [x, y, self.orient]
+        pos_x, pos_y = self.pos
+        return [pos_x, pos_y, self.orient]
 
     def rel_pos(self, target_coords: Vec2D) -> Tuple[float, float]:
         t_x, t_y = target_coords

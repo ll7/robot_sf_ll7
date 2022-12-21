@@ -87,9 +87,9 @@ class RobotState:
             + (self.last_wheels_speed.right + self.wheels_speed.right) / 2) * t_s
 
         rel_rotation = (new_orient + self.last_pose.orient) / 2
-        x, y = self.current_pose.pos
-        new_x = x + new_x_local * cos(rel_rotation)
-        new_y = y + new_x_local * sin(rel_rotation)
+        pos_x, pos_y = self.current_pose.pos
+        new_x = pos_x + new_x_local * cos(rel_rotation)
+        new_y = pos_y + new_x_local * sin(rel_rotation)
         self.current_pose.pos = (new_x, new_y)
         self.current_pose.orient = new_orient
 

@@ -80,16 +80,17 @@ def load_toml(config_file: str) -> dict:
 
 
 def load_map_name(data: dict) -> str:
-    if not data['simulator']['flags']['random_map']:
-        map_id = data['simulator']['custom']['map_number']
-        try:
-            map_name = natsorted(list(data['map_files'].values()))[map_id]
-        except:
-            map_name = natsorted(list(data['map_files'].values()))[0]
-            raise Warning('Invalid map number: Using map 0')
+    map_names = natsorted(list(data['map_files'].values()))
+
+    if data['simulator']['flags']['random_map']:
+        map_id = random.choice(list(range(len(map_names))))
     else:
-        map_name = random.choice(list(data['map_files'].values()))
-    return map_name
+        try:
+            map_id = int(data['simulator']['custom']['map_number'])
+        except:
+            map_id = 0
+
+    return map_names[map_id]
 
 
 def fill_state(coordinate_a: int, coordinate_b: Union[int, np.ndarray],

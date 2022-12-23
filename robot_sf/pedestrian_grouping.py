@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from robot_sf.extenders_py_sf.clustering import find_cluster_outliers, k_means
+from robot_sf.clustering import find_cluster_outliers, k_means
 
 Vec2D = Tuple[float, float]
 

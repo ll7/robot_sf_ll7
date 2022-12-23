@@ -10,7 +10,7 @@ from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.vector import RobotPose, PolarVec2D
 from robot_sf.robot import DifferentialDriveRobot, RobotSettings
-from robot_sf.extenders_py_sf.extender_sim import ExtdSimulator
+from robot_sf.extender_sim import ExtdSimulator
 
 
 Vec2D = Tuple[float, float]

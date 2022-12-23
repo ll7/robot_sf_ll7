@@ -72,9 +72,7 @@ def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:
 
 def load_toml(config_file: str) -> dict:
     if not config_file:
-        dirname = os.path.dirname(__file__)
-        parent = os.path.split(dirname)[0]
-        filename = os.path.join(parent, "utils", "config", "map_config.toml")
+        filename = os.path.join(os.path.dirname(__file__), "config", "map_config.toml")
         config_file = filename
     return toml.load(config_file)
 
@@ -242,8 +240,7 @@ def load_config(path_to_filename: str=None, difficulty: int=0) \
     # TODO: don't allow the argument to be None, set this explicitly in calling scope
 
     data = load_toml(path_to_filename)
-    maps_config_path = os.path.join(os.path.dirname(
-        os.path.dirname(os.path.realpath(__file__))) , 'utils', 'maps')
+    maps_config_path = os.path.join(os.path.dirname(__file__), 'maps')
     box_size, obstacle, obstacles_lolol, state, groups = \
         load_randomly_init_map(data, maps_config_path, difficulty)
 

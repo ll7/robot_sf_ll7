@@ -4,10 +4,10 @@ from dataclasses import dataclass
 import numpy as np
 from pysocialforce import Simulator, forces
 
-from robot_sf.extenders_py_sf.extender_force import PedRobotForce
-from robot_sf.extenders_py_sf.simulation_config \
+from robot_sf.extender_force import PedRobotForce
+from robot_sf.simulation_config \
     import load_config, SimulationConfiguration
-from robot_sf.extenders_py_sf.pedestrian_grouping \
+from robot_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
 
 from robot_sf.robot import RobotPose

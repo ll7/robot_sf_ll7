@@ -1,6 +1,6 @@
 from functools import reduce
 import numpy as np
-from robot_sf.extenders_py_sf.clustering import k_means, find_outliers
+from robot_sf.clustering import k_means, find_outliers
 
 
 def test_can_find_clusters():

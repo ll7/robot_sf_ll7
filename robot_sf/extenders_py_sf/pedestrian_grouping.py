@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from robot_sf.extenders_py_sf.clustering import find_cluster_outliers, k_means
+
 Vec2D = Tuple[float, float]
 
 
@@ -13,6 +15,10 @@ class PedestrianStates(Protocol):
 
     @property
     def num_peds(self) -> int:
+        raise NotImplementedError()
+
+    @property
+    def ped_positions(self) -> np.ndarray:
         raise NotImplementedError()
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
@@ -32,6 +38,10 @@ class PySFPedestrianStates:
     @property
     def num_peds(self) -> int:
         return self.pysf_states().shape[0]
+
+    @property
+    def ped_positions(self) -> np.ndarray:
+        return np.array([self.pos_of(i) for i in range(self.num_peds)])
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
         self.pysf_states()[ped_id, 4:6] = new_goal
@@ -66,7 +76,7 @@ class PedestrianGroupings:
         group = self.groups[group_id]
         group_size = len(group)
         ped_positions = np.array([self.states.pos_of(id) for id in group])
-        c_x, c_y = np.sum(ped_positions, axis=1) / group_size
+        c_x, c_y = np.sum(ped_positions, axis=0) / group_size
         return (c_x, c_y)
 
     def is_standalone(self, ped_id: int) -> bool:
@@ -77,8 +87,12 @@ class PedestrianGroupings:
         return self.states.goal_of(any_ped_id_of_group)
 
     def cluster_groups(self, num_groups: int):
-        # TODO: implement k-means here ...
-        pass
+        ped_positions = self.states.ped_positions
+        groups, _ = k_means(ped_positions, num_groups)
+        outliers = find_cluster_outliers(ped_positions, groups)
+        for ped_ids in groups:
+            ped_ids.difference_update(outliers)
+            self.new_group(ped_ids)
 
     def new_group(self, ped_ids: Set[int]) -> int:
         new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0

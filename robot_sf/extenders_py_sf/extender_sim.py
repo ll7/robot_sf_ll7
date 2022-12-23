@@ -82,7 +82,7 @@ class ExtdSimulator:
         self.pysf_state = PySFPedestrianStates(get_state)
         self.groups = PedestrianGroupings(self.pysf_state)
         self.peds_behavior = GroupRedirectBehavior(self.groups, pick_goal)
-        self.groups_as_list = self.groups.groups.values
+        self.groups_as_list = lambda: [list(ped_ids) for ped_ids in self.groups.groups.values()]
 
         robot_radius = config.robot_force_config.robot_radius
         self.robot = RobotObject(RobotPose((1e5, 1e5), 0), robot_radius)
@@ -92,6 +92,7 @@ class ExtdSimulator:
         self.pysf_sim = Simulator(sim_forces, state, self.groups_as_list(), obstacles)
         self.pysf_sim.peds.step_width = d_t if d_t else self.pysf_sim.peds.step_width
         self.pysf_sim.peds.max_speed_multiplier = peds_speed_mult
+        self.groups.cluster_groups(self.pysf_state.num_peds // 5)
         self.reset_state()
 
     @property

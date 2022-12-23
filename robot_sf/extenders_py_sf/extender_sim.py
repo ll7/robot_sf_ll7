@@ -4,8 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from pysocialforce import Simulator, forces
 
-from robot_sf.extenders_py_sf.extender_force \
-    import DesiredForce, GroupRepulsiveForce, PedRobotForce
+from robot_sf.extenders_py_sf.extender_force import PedRobotForce
 from robot_sf.extenders_py_sf.simulation_config \
     import load_config, SimulationConfiguration
 from robot_sf.extenders_py_sf.pedestrian_grouping \
@@ -25,18 +24,6 @@ class RobotObject:
 
 def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
                 get_robot_pos: Callable[[], Tuple[float, float]]) -> List[forces.Force]:
-    """Construct forces"""
-    if sim_config_user.obstacle_avoidance_params is None:
-        force_des = forces.DesiredForce()
-    else:
-        force_des = DesiredForce(
-            obstacle_avoidance= True,
-            angles = sim_config_user.obstacle_avoidance_params[0],
-            p_0 = sim_config_user.obstacle_avoidance_params[1],
-            p_1 = sim_config_user.obstacle_avoidance_params[2],
-            view_distance = sim_config_user.obstacle_avoidance_params[3],
-            forgetting_factor = sim_config_user.obstacle_avoidance_params[4])
-
     ped_rob_force = PedRobotForce(
         get_robot_pos,
         sim_config_user.robot_force_config.robot_radius,
@@ -44,7 +31,7 @@ def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
         sim_config_user.robot_force_config.force_multiplier)
 
     force_list: List[forces.Force] = [
-        force_des,
+        forces.DesiredForce(),
         forces.SocialForce(),
         forces.ObstacleForce(),
     ]
@@ -54,7 +41,7 @@ def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
 
     group_forces = [
         forces.GroupCoherenceForceAlt(),
-        GroupRepulsiveForce(),
+        forces.GroupRepulsiveForce(),
         forces.GroupGazeForceAlt(),
     ]
     if enable_groups:

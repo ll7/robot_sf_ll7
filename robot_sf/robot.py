@@ -127,7 +127,7 @@ class DifferentialDriveRobot():
     @property
     def is_out_of_bounds(self):
         """checks if robot went out of bounds """
-        pos_x, pos_y = self.state.current_pose.coords
+        pos_x, pos_y = self.state.current_pose.pos
         return not self._map.is_in_bounds(pos_x, pos_y)
 
     def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:

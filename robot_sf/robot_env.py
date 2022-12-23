@@ -106,8 +106,7 @@ class RobotEnv(Env):
         self.sim_ui.render(state)
 
     def step(self, action: np.ndarray):
-        coords_with_direction = self.robot.pose.coords_with_orient
-        self.sim_env.move_robot(coords_with_direction)
+        self.sim_env.move_robot(self.robot.pose)
         self.sim_env.step_once()
         self.robot_map.update_moving_objects()
 
@@ -202,7 +201,7 @@ class RobotEnv(Env):
         # if initial coords are too close (1.5m) to an obstacle,
         # pedestrian or the target, generate new coords
         while robot_map.is_collision(robot_pose.pos, 1.5) or \
-                check_out_of_bounds(robot_pose.coords) or \
+                check_out_of_bounds(robot_pose.pos) or \
                 robot_pose.rel_pos(target_coords)[0] < (high_bound[0] - low_bound[0]) / 2:
             robot_coords = np.random.uniform(low=low_bound, high=high_bound, size=3)
             robot_pose = RobotPose((robot_coords[0], robot_coords[1]), robot_coords[2])

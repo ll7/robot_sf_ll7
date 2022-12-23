@@ -117,7 +117,7 @@ class ContinuousLidarScanner():
         and an input map (map object) and returns a data structure
         containing the sensor readings"""
 
-        pos_x, pos_y = pose.coords
+        pos_x, pos_y = pose.pos
         robot_orient = pose.orient
         scan_noise = np.array(self.settings.scan_noise)
 

@@ -102,7 +102,7 @@ class SimulationView:
         return state
 
     def _draw_robot(self, pose: RobotPose):
-        pygame.draw.circle(self.screen, ROBOT_COLOR, pose.coords, 0.5 * self.scaling)
+        pygame.draw.circle(self.screen, ROBOT_COLOR, pose.pos, 0.5 * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         for ped_x, ped_y in ped_pos:

@@ -106,6 +106,5 @@ class ExtdSimulator:
         _, groups = self.pysf_sim.current_state
         return groups
 
-    def move_robot(self, coordinates: List[float]):
-        pos_x, pos_y, orient = coordinates
-        self.robot.pose = RobotPose((pos_x, pos_y), orient)
+    def move_robot(self, pose: RobotPose):
+        self.robot.pose = pose

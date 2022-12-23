@@ -10,7 +10,7 @@ from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.vector import RobotPose, PolarVec2D
 from robot_sf.robot import DifferentialDriveRobot, RobotSettings
-from robot_sf.extender_sim import ExtdSimulator
+from robot_sf.simulator import Simulator
 
 
 Vec2D = Tuple[float, float]
@@ -48,7 +48,7 @@ class RobotEnv(Env):
         self.angular_max = v_angular_max
 
         sparsity_levels = [500, 200, 100, 50, 20]
-        self.sim_env = ExtdSimulator(difficulty, sparsity_levels[difficulty], d_t, peds_speed_mult)
+        self.sim_env = Simulator(difficulty, sparsity_levels[difficulty], d_t, peds_speed_mult)
         self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2)
         self.d_t = self.sim_env.d_t
 

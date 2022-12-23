@@ -12,7 +12,7 @@ for the mobile robot navigating the crowd
 """
 HOME_REPO = 'https://github.com/matteocaruso1993/robot_env'
 EXCLUDE_FILES = []
-PACKAGE_DATA = {'robot_sf': ['utils/maps/*.json','utils/config/map_config.toml']}
+PACKAGE_DATA = {'robot_sf': ['maps/*.json','config/map_config.toml']}
 INSTALL_REQUIREMENTS = ['numpy', 'Pillow', 'matplotlib', 'pysocialforce', 'python-math',
                         'jsons', 'toml', 'natsort', 'numba', 'shapely']
 

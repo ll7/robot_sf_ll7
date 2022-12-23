@@ -2,14 +2,13 @@ from typing import List, Callable, Tuple, Union
 from dataclasses import dataclass
 
 import numpy as np
-from pysocialforce import Simulator, forces
+import pysocialforce as pysf
 
 from robot_sf.extender_force import PedRobotForce
 from robot_sf.simulation_config \
     import load_config, SimulationConfiguration
 from robot_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
-
 from robot_sf.robot import RobotPose
 
 
@@ -23,26 +22,26 @@ class RobotObject:
 
 
 def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
-                get_robot_pos: Callable[[], Tuple[float, float]]) -> List[forces.Force]:
+                get_robot_pos: Callable[[], Tuple[float, float]]) -> List[pysf.forces.Force]:
     ped_rob_force = PedRobotForce(
         get_robot_pos,
         sim_config_user.robot_force_config.robot_radius,
         sim_config_user.robot_force_config.activation_threshold,
         sim_config_user.robot_force_config.force_multiplier)
 
-    force_list: List[forces.Force] = [
-        forces.DesiredForce(),
-        forces.SocialForce(),
-        forces.ObstacleForce(),
+    force_list: List[pysf.forces.Force] = [
+        pysf.forces.DesiredForce(),
+        pysf.forces.SocialForce(),
+        pysf.forces.ObstacleForce(),
     ]
 
     if sim_config_user.flags.activate_ped_robot_force:
         force_list.append(ped_rob_force)
 
     group_forces = [
-        forces.GroupCoherenceForceAlt(),
-        forces.GroupRepulsiveForce(),
-        forces.GroupGazeForceAlt(),
+        pysf.forces.GroupCoherenceForceAlt(),
+        pysf.forces.GroupRepulsiveForce(),
+        pysf.forces.GroupGazeForceAlt(),
     ]
     if enable_groups:
         force_list += group_forces
@@ -50,7 +49,7 @@ def make_forces(sim_config_user: SimulationConfiguration, enable_groups: bool,
     return force_list
 
 
-class ExtdSimulator:
+class Simulator:
     # TODO: include robot kinematics and occupancy here, make RobotEnv just the Gym wrapper
 
     def __init__(self, difficulty: int, peds_sparsity: int,
@@ -76,7 +75,7 @@ class ExtdSimulator:
 
         get_robot_pos = lambda: self.robot.pose.pos
         sim_forces = self.forces = make_forces(config, True, get_robot_pos)
-        self.pysf_sim = Simulator(sim_forces, state, self.groups_as_list(), obstacles)
+        self.pysf_sim = pysf.Simulator(sim_forces, state, self.groups_as_list(), obstacles)
         self.pysf_sim.peds.step_width = d_t if d_t else self.pysf_sim.peds.step_width
         self.pysf_sim.peds.max_speed_multiplier = peds_speed_mult
 

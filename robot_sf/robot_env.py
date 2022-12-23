@@ -5,8 +5,8 @@ from copy import deepcopy
 import numpy as np
 from gym import Env, spaces
 
-from robot_sf.map_continuous import ContinuousOccupancy
-from robot_sf.range_sensor_continuous import ContinuousLidarScanner, LidarScannerSettings
+from robot_sf.occupancy import ContinuousOccupancy
+from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.vector import RobotPose, PolarVec2D
 from robot_sf.robot import DifferentialDriveRobot, RobotSettings

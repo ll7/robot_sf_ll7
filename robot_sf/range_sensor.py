@@ -6,7 +6,7 @@ import numpy as np
 import numba
 
 from robot_sf.vector import RobotPose
-from robot_sf.map_continuous import ContinuousOccupancy
+from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.geometry import circle_line_intersection_distance, \
                               lineseg_line_intersection_distance
 

@@ -4,8 +4,8 @@ from typing import Tuple
 import numpy as np
 from pytest import approx
 
-from robot_sf.map_continuous import ContinuousOccupancy
-from robot_sf.range_sensor_continuous import ContinuousLidarScanner, LidarScannerSettings
+from robot_sf.occupancy import ContinuousOccupancy
+from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.vector import RobotPose
 
 

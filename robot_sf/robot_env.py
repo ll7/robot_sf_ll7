@@ -26,8 +26,8 @@ class RobotEnv(Env):
                  v_linear_max: float=1, v_angular_max: float=1,
                  rewards: Union[List[float], None]=None,
                  max_v_x_delta: float=.5, max_v_rot_delta: float=.5, d_t: Union[float, None]=None,
-                 normalize_obs_state: bool=True, sim_length: int=200, difficulty: int=0,
-                 scan_noise: Union[List[float], None]=None,
+                 normalize_obs_state: bool=True, sim_length: int=200,
+                 scan_noise: Union[List[float], None]=None, difficulty: int=0,
                  peds_speed_mult: float=1.3, debug: bool=False):
 
         scan_noise = scan_noise if scan_noise else [0.005, 0.002]
@@ -47,8 +47,7 @@ class RobotEnv(Env):
         self.linear_max =  v_linear_max
         self.angular_max = v_angular_max
 
-        sparsity_levels = [500, 200, 100, 50, 20]
-        self.sim_env = Simulator(difficulty, sparsity_levels[difficulty], d_t, peds_speed_mult)
+        self.sim_env = Simulator(d_t, peds_speed_mult)
         self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2)
         self.d_t = self.sim_env.d_t
 

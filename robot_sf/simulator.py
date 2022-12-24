@@ -86,9 +86,6 @@ class Simulator:
         self.pysf_sim = pysf.Simulator(sim_forces, ped_states_np, self.groups_as_list(), obstacles)
         self.pysf_sim.peds.step_width = d_t if d_t else self.pysf_sim.peds.step_width
         self.pysf_sim.peds.max_speed_multiplier = peds_speed_mult
-
-        if self.pysf_state.num_peds:
-            self.groups.cluster_groups(self.pysf_state.num_peds // 5)
         self.reset_state()
 
     @property

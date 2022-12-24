@@ -16,7 +16,7 @@ class PedSpawnConfig:
     max_group_members: int
     group_member_probs: List[float] = field(default_factory=list)
     initial_speed: float = 0.5
-    group_size_decay: float = 0.2
+    group_size_decay: float = 0.3
 
     def __post_init__(self):
         if not len(self.group_member_probs) == self.max_group_members:

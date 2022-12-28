@@ -28,6 +28,9 @@ class PedestrianStates(Protocol):
     def pos_of(self, ped_id: int) -> Vec2D:
         raise NotImplementedError()
 
+    def pos_of_many(self, ped_ids: Set[int]) -> np.ndarray:
+        raise NotImplementedError()
+
 
 @dataclass
 class PySFPedestrianStates:
@@ -39,7 +42,7 @@ class PySFPedestrianStates:
 
     @property
     def ped_positions(self) -> np.ndarray:
-        return np.array([self.pos_of(i) for i in range(self.num_peds)])
+        return self.pysf_states()[:, 0:2]
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
         self.pysf_states()[ped_id, 4:6] = new_goal
@@ -51,6 +54,9 @@ class PySFPedestrianStates:
     def pos_of(self, ped_id: int) -> Vec2D:
         pos_x, pos_y = self.pysf_states()[ped_id, 0:2]
         return (pos_x, pos_y)
+
+    def pos_of_many(self, ped_ids: Set[int]) -> np.ndarray:
+        return self.pysf_states()[list(ped_ids), 0:2]
 
 
 @dataclass
@@ -72,9 +78,8 @@ class PedestrianGroupings:
 
     def group_centroid(self, group_id: int) -> Vec2D:
         group = self.groups[group_id]
-        group_size = len(group)
-        ped_positions = np.array([self.states.pos_of(id) for id in group])
-        c_x, c_y = np.sum(ped_positions, axis=0) / group_size
+        positions = self.states.pos_of_many(group)
+        c_x, c_y = np.mean(positions, axis=0)
         return (c_x, c_y)
 
     def is_standalone(self, ped_id: int) -> bool:

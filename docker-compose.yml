@@ -9,4 +9,5 @@ services:
       PYTHONUNBUFFERED: 1
     volumes:
       - ./model:/app/model
+      - ./logs:/app/logs
       - ./scripts:/app/scripts

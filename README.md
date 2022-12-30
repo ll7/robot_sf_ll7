@@ -66,7 +66,7 @@ python3 -m pytest tests --ignore=tests/pysf_tests
 
 ```sh
 docker-compose build && docker-compose run \
-    robotsf-cuda python ./scripts/training.py
+    robotsf-cuda python ./scripts/training_ppo.py
 ```
 
 *Note: See [this setup](./GPU_SETUP.md) to install Docker with GPU support.*

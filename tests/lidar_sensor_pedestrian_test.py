@@ -6,12 +6,12 @@ from pytest import approx
 
 from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
-from robot_sf.vector import RobotPose
 
 
 NO_SCAN_NOISE = [0.0, 0.0]
 Vec2D = Tuple[float, float]
 Point2D = Tuple[float, float]
+RobotPose = Tuple[Vec2D, float]
 
 
 def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D:
@@ -28,7 +28,7 @@ def test_scanner_detects_single_pedestrian():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose((0, 0), pi))
+    scan = scanner.get_scan(((0, 0), pi))
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays
@@ -46,7 +46,7 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose((0, 0), 0))
+    scan = scanner.get_scan(((0, 0), 0))
 
     exp_dist = 2.0
     assert scan.shape[0] == lidar_n_rays
@@ -60,7 +60,7 @@ def test_scanner_detects_only_closest_pedestrian():
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(RobotPose((0, 0), pi))
+    scan = scanner.get_scan(((0, 0), pi))
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays

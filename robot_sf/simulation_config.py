@@ -54,11 +54,15 @@ def load_randomly_init_map(data: dict, maps_config_path: str) -> Tuple[float, Li
     with open(path_to_map, 'r', encoding='utf-8') as file:
         map_structure = json.load(file)
 
+    # TODO: extend maps to provide spawn zones / goal zones
+
+    # TODO: support another shape that's called a path (lines between points without area)
+
     x_span = map_structure['x_margin'][1] - map_structure['x_margin'][0]
     y_span = map_structure['y_margin'][1] - map_structure['y_margin'][0]
     min_x, min_y = map_structure['x_margin'][0], map_structure['y_margin'][0]
     norm_span = max(x_span, y_span)
-    box_size = 20
+    box_size = 20 # TODO: remove this hard-coded scale, pysf forces are calibrated for 1m scale
 
     def norm_coords(point: Vec2D) -> Vec2D:
         return ((point[0] - min_x) / norm_span * 2 * box_size - box_size,

@@ -5,13 +5,13 @@ from dataclasses import dataclass, field
 import numpy as np
 import numba
 
-from robot_sf.vector import RobotPose
 from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.geometry import circle_line_intersection_distance, \
                               lineseg_line_intersection_distance
 
 
 Vec2D = Tuple[float, float]
+RobotPose = Tuple[Vec2D, float]
 
 
 @dataclass
@@ -117,8 +117,7 @@ class ContinuousLidarScanner():
         and an input map (map object) and returns a data structure
         containing the sensor readings"""
 
-        pos_x, pos_y = pose.pos
-        robot_orient = pose.orient
+        (pos_x, pos_y), robot_orient = pose
         scan_noise = np.array(self.settings.scan_noise)
 
         ped_pos = self.robot_map.pedestrian_coords

@@ -5,13 +5,13 @@ from dataclasses import dataclass
 import pygame
 import numpy as np
 
-from robot_sf.vector import PolarVec2D, RobotPose
 
+Vec2D = Tuple[float, float]
+PolarVec2D = Tuple[float, float]
+RobotPose = Tuple[Vec2D, float]
 
 RgbColor = Tuple[int, int, int]
 RobotAction = PolarVec2D
-WorldPosition = Tuple[float, float]
-GridPosition = Tuple[int, int]
 
 
 BACKGROUND_COLOR = (255, 255, 255)
@@ -28,7 +28,7 @@ TEXT_COLOR = (0, 0, 0)
 class VisualizableAction:
     robot_pose: RobotPose
     robot_action: RobotAction
-    robot_goal: WorldPosition
+    robot_goal: Vec2D
 
 
 @dataclass
@@ -92,9 +92,10 @@ class SimulationView:
         state.obstacles[:, 1] += self.height / 2
         state.obstacles[:, 2] += self.width / 2
         state.obstacles[:, 3] += self.height / 2
-        state.robot_pose.pos = (
-            state.robot_pose.pos[0] * self.scaling + self.width / 2,
-            state.robot_pose.pos[1] * self.scaling + self.height / 2)
+        state.robot_pose = ((
+            state.robot_pose[0][0] * self.scaling + self.width / 2,
+            state.robot_pose[0][1] * self.scaling + self.height / 2),
+            state.robot_pose[1])
         if state.action:
             state.action.robot_goal = (
                 state.action.robot_goal[0] * self.scaling + self.width / 2,
@@ -102,7 +103,7 @@ class SimulationView:
         return state
 
     def _draw_robot(self, pose: RobotPose):
-        pygame.draw.circle(self.screen, ROBOT_COLOR, pose.pos, 0.5 * self.scaling)
+        pygame.draw.circle(self.screen, ROBOT_COLOR, pose[0], 0.5 * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         for ped_x, ped_y in ped_pos:
@@ -112,7 +113,7 @@ class SimulationView:
         for s_x, s_y, e_x, e_y in obstacles:
             pygame.draw.line(self.screen, OBSTACLE_COLOR, (s_x, s_y), (e_x, e_y))
 
-    def _augment_goal_position(self, robot_goal: WorldPosition):
+    def _augment_goal_position(self, robot_goal: Vec2D):
         pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.scaling)
 
     def _augment_timestep(self, timestep: int):

@@ -1,25 +1,58 @@
-import os
-from typing import List, Callable, Tuple, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List, Callable, Tuple, Union, Protocol
 
+import numpy as np
 import pysocialforce as pysf
 
 from robot_sf.ped_spawn_generator \
     import SpawnGenerator, PedSpawnConfig, initialize_pedestrians
 from robot_sf.ped_robot_force import PedRobotForce
-from robot_sf.simulation_config import RobotForceConfig, load_config
+from robot_sf.simulation_config import RobotForceConfig
 from robot_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
-from robot_sf.robot import RobotPose
 
 
 Vec2D = Tuple[float, float]
+PolarVec2D = Tuple[float, float]
+RobotPose = Tuple[Vec2D, float]
+
+
+class ScannerImpl(Protocol):
+    def get_scan(self, pose: RobotPose) -> np.ndarray:
+        raise NotImplementedError()
 
 
 @dataclass
-class RobotObject:
-    pose: RobotPose
-    radius: float
+class MovingRobot(Protocol):
+    @property
+    def dist_to_goal(self) -> float:
+        raise NotImplementedError()
+
+    @property
+    def pos(self) -> Vec2D:
+        raise NotImplementedError()
+
+    @property
+    def pose(self) -> RobotPose:
+        raise NotImplementedError()
+
+    @property
+    def goal(self) -> Vec2D:
+        raise NotImplementedError()
+
+    @property
+    def is_valid_state(self) -> bool:
+        raise NotImplementedError()
+
+    @property
+    def current_speed(self) -> PolarVec2D:
+        raise NotImplementedError()
+
+    def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
+        raise NotImplementedError()
+
+    def is_target_reached(self, tolerance: float):
+        raise NotImplementedError()
 
 
 def make_forces(
@@ -51,15 +84,18 @@ def make_forces(
     return force_list
 
 
+@dataclass
 class Simulator:
-    # TODO: include robot kinematics and occupancy here, make RobotEnv just the Gym wrapper
+    box_size: float
+    config: RobotForceConfig
+    obstacles: List[Tuple[float, float, float, float]]
+    scanner: ScannerImpl
+    robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
+    peds_speed_mult: float = 1.3
+    custom_d_t: Union[float, None] = field(default=1)
+    robot: MovingRobot = field(init=False)
 
-    def __init__(self, d_t: Union[float, None], peds_speed_mult: float):
-
-        # TODO: use dependency injection and move this to calling scope
-        path_to_config = os.path.join(os.path.dirname(__file__), "config", "map_config.toml")
-        self.box_size, config, obstacles = load_config(path_to_config)
-
+    def __post_init__(self):
         box_rect = (
             (-self.box_size, self.box_size),
             (-self.box_size, -self.box_size),
@@ -67,48 +103,68 @@ class Simulator:
         spawn_gen = SpawnGenerator([box_rect])
         spawn_config = PedSpawnConfig(20, 6)
         ped_states_np, initial_groups = initialize_pedestrians(spawn_config, spawn_gen, spawn_gen)
-        pick_goal = lambda: spawn_gen.generate(1)[0]
+        pick_ped_goal = lambda: spawn_gen.generate(1)[0]
+        self.pick_robot_spawn = lambda: spawn_gen.generate(1)[0]
+        self.pick_robot_goal = lambda: spawn_gen.generate(1)[0]
 
         get_state = lambda: self.pysf_sim.peds.state
-        self.pysf_state = PySFPedestrianStates(get_state)
-        self.groups = PedestrianGroupings(self.pysf_state)
-        self.peds_behavior = GroupRedirectBehavior(self.groups, pick_goal)
-        self.groups_as_list = lambda: [list(ped_ids) for ped_ids in self.groups.groups.values()]
+        pysf_state = PySFPedestrianStates(get_state)
+        groups = PedestrianGroupings(pysf_state)
+        self.peds_behavior = GroupRedirectBehavior(groups, pick_ped_goal)
+        self.groups_as_list = lambda: [list(ped_ids) for ped_ids in groups.groups.values()]
 
         for ped_ids in initial_groups:
-            self.groups.new_group(ped_ids)
+            groups.new_group(ped_ids)
 
-        robot_radius = config.robot_radius
-        self.robot = RobotObject(RobotPose((1e5, 1e5), 0), robot_radius)
-
-        get_robot_pos = lambda: self.robot.pose.pos
-        sim_forces = self.forces = make_forces(config, True, get_robot_pos)
-        self.pysf_sim = pysf.Simulator(sim_forces, ped_states_np, self.groups_as_list(), obstacles)
-        self.pysf_sim.peds.step_width = d_t if d_t else self.pysf_sim.peds.step_width
-        self.pysf_sim.peds.max_speed_multiplier = peds_speed_mult
+        get_robot_pos = lambda: self.robot.pos
+        sim_forces = make_forces(self.config, True, get_robot_pos)
+        self.pysf_sim = pysf.Simulator(sim_forces, ped_states_np, self.groups_as_list(), self.obstacles)
+        self.pysf_sim.peds.step_width = self.custom_d_t \
+            if self.custom_d_t else self.pysf_sim.peds.step_width
+        self.pysf_sim.peds.max_speed_multiplier = self.peds_speed_mult
         self.reset_state()
 
     @property
     def d_t(self) -> float:
         return self.pysf_sim.peds.step_width
 
-    def reset_state(self):
-        self.peds_behavior.pick_new_goals()
+    @property
+    def goal_pos(self) -> Vec2D:
+        return self.robot.goal
 
-    def step_once(self):
-        self.peds_behavior.redirect_groups_if_at_goal()
-        ped_forces = self.pysf_sim.compute_forces()
-        groups = self.groups_as_list()
-        self.pysf_sim.peds.step(ped_forces, groups)
+    @property
+    def dist_to_goal(self) -> float:
+        return self.robot.dist_to_goal
+
+    @property
+    def is_target_reached(self) -> bool:
+        return self.robot.is_target_reached(tolerance=1.0)
 
     @property
     def current_positions(self):
         ped_states, _ = self.pysf_sim.current_state
         return ped_states[:, 0:2]
 
+    def get_scan(self) -> np.ndarray:
+        return self.scanner.get_scan(self.robot.pose)
+
+    def reset_state(self):
+        self.peds_behavior.pick_new_goals()
+        robot_pose = (self.pick_robot_spawn(), 0)
+        goal_pos = self.pick_robot_goal()
+        self.robot = self.robot_factory(robot_pose, goal_pos)
+
+    def step_once(self, action: PolarVec2D) -> Tuple[PolarVec2D, float, float, bool]:
+        self.peds_behavior.redirect_groups_if_at_goal()
+        ped_forces = self.pysf_sim.compute_forces()
+        groups = self.groups_as_list()
+        self.pysf_sim.peds.step(ped_forces, groups)
+
+        dist_before = self.robot.dist_to_goal
+        movement, is_overdrive = self.robot.apply_action(action, self.d_t)
+        dist_after = self.robot.dist_to_goal
+        return movement, dist_before, dist_after, is_overdrive
+
     def get_pedestrians_groups(self):
         _, groups = self.pysf_sim.current_state
         return groups
-
-    def move_robot(self, pose: RobotPose):
-        self.robot.pose = pose

@@ -24,7 +24,7 @@ def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D
 def test_scanner_detects_single_obstacle_orthogonal_orientation():
     lidar_n_rays = 1
     obstacles = np.array([[2, 1, 2, -1]])
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -38,7 +38,7 @@ def test_scanner_detects_single_obstacle_orthogonal_orientation():
 def test_scanner_detects_obstacle_other_orientation_superpositioned():
     lidar_n_rays = 1
     obstacles = np.array([[0, 1, 0, -1]])
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -52,7 +52,7 @@ def test_scanner_detects_obstacle_other_orientation_superpositioned():
 def test_scanner_detects_obstacle_same_orientation_superpositioned():
     lidar_n_rays = 1
     obstacles = np.array([[1, 0, -1, 0]])
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -66,7 +66,7 @@ def test_scanner_detects_obstacle_same_orientation_superpositioned():
 def test_scanner_detects_obstacle_same_orientation_not_superpositioned():
     lidar_n_rays = 1
     obstacles = np.array([[3, 0, 4, 0]])
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -87,7 +87,7 @@ def test_scanner_detects_multiple_equidist_obstacles_from_center():
     obs_ends = np.array([rotate((2, -1), (0, 0), rot) for rot in cached_angles])
     obstacles = np.concatenate((obs_starts[:, 0:1], obs_starts[:, 1:2],
                                 obs_ends[:, 0:1], obs_ends[:, 1:2]), axis=1)
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -114,7 +114,7 @@ def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
     obstacles[:, 2] += shift_x
     obstacles[:, 1] += shift_y
     obstacles[:, 3] += shift_y
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -128,7 +128,7 @@ def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
 def test_scanner_detects_max_range_when_nothing_found():
     max_scan_range = 5
     lidar_n_rays = 360
-    occupancy = ContinuousOccupancy(10, lambda: np.array([[]]), lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: np.array([[]]))
     settings = LidarScannerSettings(max_scan_range, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
@@ -142,7 +142,7 @@ def test_scanner_detects_max_range_when_nothing_found():
 def test_scanner_detects_only_closest_obstacle():
     lidar_n_rays = 1
     obstacles = np.array([[2, 1, 2, -1], [3, 1, 3, -1]])
-    occupancy = ContinuousOccupancy(10, lambda: obstacles, lambda: np.array([[]]))
+    occupancy = ContinuousOccupancy(10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)

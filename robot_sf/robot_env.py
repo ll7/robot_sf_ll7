@@ -49,17 +49,20 @@ class RobotEnv(Env):
         self.sim_env: Simulator = None
         self.occupancy = ContinuousOccupancy(
             box_size,
+            lambda: self.sim_env.robot_pose[0],
+            lambda: self.sim_env.goal_pos,
             lambda: self.sim_env.pysf_sim.env.obstacles_raw,
-            lambda: self.sim_env.current_positions)
+            lambda: self.sim_env.current_positions,
+            robot_radius)
         lidar_settings = LidarScannerSettings(
             lidar_range, visual_angle_portion, lidar_n_rays, scan_noise)
-        lidar_sensor = ContinuousLidarScanner(lidar_settings, self.occupancy)
+        self.lidar_sensor = ContinuousLidarScanner(lidar_settings, self.occupancy)
 
-        robot_settings = RobotSettings(robot_radius,self.linear_max, self.angular_max, collision_distance)
+        robot_settings = RobotSettings(robot_radius, self.linear_max, self.angular_max, collision_distance)
         robot_factory = lambda spawn_pose, goal: \
-            DifferentialDriveRobot(spawn_pose, goal, self.occupancy, robot_settings)
+            DifferentialDriveRobot(spawn_pose, goal, robot_settings)
 
-        self.sim_env = Simulator(box_size, config, obstacles, lidar_sensor, robot_factory, peds_speed_mult, d_t)
+        self.sim_env = Simulator(box_size, config, obstacles, robot_factory, peds_speed_mult, d_t)
         self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2) # length of box diagonal
         self.d_t = self.sim_env.d_t
 
@@ -90,10 +93,7 @@ class RobotEnv(Env):
 
     def render(self, mode='human'):
         action = None if not self.last_action else \
-            VisualizableAction(
-                deepcopy(self.sim_env.robot.pose),
-                deepcopy(self.last_action),
-                deepcopy(self.sim_env.goal_pos))
+            VisualizableAction(self.sim_env.robot.pose, self.last_action, self.sim_env.goal_pos)
 
         state = VisualizableSimState(
             self.timestep,
@@ -106,12 +106,11 @@ class RobotEnv(Env):
 
     def step(self, action: np.ndarray):
         action_parsed = (action[0], action[1])
-        movement, dist_before, dist_after, is_overdrive = \
+        (dot_x, dot_orient), dist_before, dist_after, is_overdrive = \
             self.sim_env.step_once(action_parsed)
-        dot_x, dot_orient = movement
 
-        ranges = self.sim_env.get_scan()
-        norm_ranges, rob_state = self._get_obs(ranges)
+        norm_ranges, rob_state = self._get_obs()
+        obs = np.concatenate((norm_ranges, rob_state), axis=0)
         self.rotation_counter += np.abs(dot_orient * self.d_t)
 
         # determine the reward and whether the episode is done
@@ -119,14 +118,27 @@ class RobotEnv(Env):
         self.duration += self.d_t
         self.timestep += 1
         self.last_action = action_parsed
-        return np.concatenate((norm_ranges, rob_state), axis=0), \
-            reward, done, { 'step': self.episode }
+        return obs, reward, done, { 'step': self.episode }
+
+    def reset(self):
+        self.episode += 1
+        self.duration = 0.0
+        self.rotation_counter = 0
+        self.timestep = 0
+        self.last_action = None
+
+        self.sim_env.reset_state()
+
+        self.distance_init = self.sim_env.dist_to_goal
+        norm_ranges, rob_state = self._get_obs()
+        obs = np.concatenate((norm_ranges, rob_state), axis=0)
+        return obs
 
     def _is_end_of_episode_with_failure(self) -> bool:
-        return self.sim_env.robot.is_valid_state or self.duration > self.sim_length
+        return self.occupancy.is_robot_collision or self.duration > self.sim_length
 
     def _is_end_of_episode_with_success(self) -> bool:
-        return self.sim_env.is_target_reached
+        return self.occupancy.is_robot_at_goal
 
     def _reward(self, dist_0: float, dist_1: float, dot_x: float,
                 ranges: np.ndarray, was_action_clipped: bool) -> Tuple[float, bool]:
@@ -144,8 +156,6 @@ class RobotEnv(Env):
         elif self._is_end_of_episode_with_success():
             cum_rotations = (self.rotation_counter / (2 * np.pi))
             penalty = rotation_penalty * cum_rotations / (1e-5 + self.duration)
-
-            # reward is proportional to distance covered / speed in getting to target
             reward = np.maximum(base_reward / 2, base_reward - penalty)
             done = True
 
@@ -164,21 +174,8 @@ class RobotEnv(Env):
 
         return reward, done
 
-    def reset(self):
-        self.episode += 1
-        self.duration = 0.0
-        self.rotation_counter = 0
-        self.timestep = 0
-        self.last_action = None
-
-        self.sim_env.reset_state()
-
-        self.distance_init = self.sim_env.dist_to_goal
-        ranges = self.sim_env.get_scan()
-        norm_ranges, rob_state = self._get_obs(ranges)
-        return np.concatenate((norm_ranges, rob_state), axis=0)
-
-    def _get_obs(self, ranges_np: np.ndarray):
+    def _get_obs(self):
+        ranges_np = self.lidar_sensor.get_scan(self.sim_env.robot_pose)
         speed_x, speed_rot = self.sim_env.robot.current_speed
         target_distance, target_angle = rel_pos(self.sim_env.robot.pose, self.sim_env.goal_pos)
 

@@ -1,6 +1,6 @@
 from math import dist, atan2, sin, cos
 from dataclasses import dataclass, field
-from typing import Tuple, Protocol
+from typing import Tuple
 
 import numpy as np
 
@@ -18,17 +18,6 @@ def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
     angle = atan2(t_y - r_y, t_x - r_x) - orient
     angle = (angle + np.pi) % (2 * np.pi) -np.pi
     return distance, angle
-
-
-class MapImpl(Protocol):
-    def is_obstacle_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
-        raise NotImplementedError()
-
-    def is_pedestrians_collision(self, robot_pos: Vec2D, collision_distance: float) -> bool:
-        raise NotImplementedError()
-
-    def is_in_bounds(self, world_x: float, world_y: float) -> bool:
-        raise NotImplementedError()
 
 
 @dataclass
@@ -101,7 +90,6 @@ class DifferentialDriveRobot():
 
     spawn_pose: RobotPose
     goal: Vec2D
-    occupancy: MapImpl
     config: RobotSettings
     state: RobotState = field(init=False)
 
@@ -129,31 +117,8 @@ class DifferentialDriveRobot():
     def current_speed(self) -> PolarVec2D:
         return self.state.current_speed
 
-    @property
-    def is_valid_state(self) -> bool:
-        return self.is_pedestrians_collision(.8) or \
-            self.is_obstacle_collision() or \
-            self.is_out_of_bounds
-
-    @property
-    def is_out_of_bounds(self):
-        """checks if robot went out of bounds """
-        pos_x, pos_y = self.state.current_pose[0]
-        return not self.occupancy.is_in_bounds(pos_x, pos_y)
-
     def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
         movement, clipped = self.state.resulting_movement(action)
         self.state.update_robot_speed(movement)
         self.state.compute_odometry(d_t)
         return movement, clipped
-
-    def is_obstacle_collision(self) -> bool:
-        return self.occupancy.is_obstacle_collision(
-            self.state.current_pose[0], self.config.rob_collision_radius)
-
-    def is_pedestrians_collision(self, collision_distance: float) -> bool:
-        return self.occupancy.is_pedestrians_collision(
-            self.state.current_pose[0], collision_distance)
-
-    def is_target_reached(self, tolerance: float):
-        return self.dist_to_goal <= tolerance

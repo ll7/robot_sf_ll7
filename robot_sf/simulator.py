@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Callable, Tuple, Union, Protocol
 
-import numpy as np
 import pysocialforce as pysf
 
 from robot_sf.ped_spawn_generator \
@@ -15,11 +14,6 @@ from robot_sf.pedestrian_grouping \
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
-
-
-class ScannerImpl(Protocol):
-    def get_scan(self, pose: RobotPose) -> np.ndarray:
-        raise NotImplementedError()
 
 
 @dataclass
@@ -41,17 +35,10 @@ class MovingRobot(Protocol):
         raise NotImplementedError()
 
     @property
-    def is_valid_state(self) -> bool:
-        raise NotImplementedError()
-
-    @property
     def current_speed(self) -> PolarVec2D:
         raise NotImplementedError()
 
     def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
-        raise NotImplementedError()
-
-    def is_target_reached(self, tolerance: float):
         raise NotImplementedError()
 
 
@@ -89,7 +76,6 @@ class Simulator:
     box_size: float
     config: RobotForceConfig
     obstacles: List[Tuple[float, float, float, float]]
-    scanner: ScannerImpl
     robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
     peds_speed_mult: float = 1.3
     custom_d_t: Union[float, None] = field(default=1)
@@ -133,20 +119,17 @@ class Simulator:
         return self.robot.goal
 
     @property
-    def dist_to_goal(self) -> float:
-        return self.robot.dist_to_goal
+    def robot_pose(self) -> RobotPose:
+        return self.robot.pose
 
     @property
-    def is_target_reached(self) -> bool:
-        return self.robot.is_target_reached(tolerance=1.0)
+    def dist_to_goal(self) -> float:
+        return self.robot.dist_to_goal
 
     @property
     def current_positions(self):
         ped_states, _ = self.pysf_sim.current_state
         return ped_states[:, 0:2]
-
-    def get_scan(self) -> np.ndarray:
-        return self.scanner.get_scan(self.robot.pose)
 
     def reset_state(self):
         self.peds_behavior.pick_new_goals()

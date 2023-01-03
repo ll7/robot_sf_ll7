@@ -72,6 +72,7 @@ class SimulationView:
         pygame.display.update()
 
     def render(self, state: VisualizableSimState):
+        sleep(0.01)
         state = self._norm_state(state)
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_robot(state.robot_pose)

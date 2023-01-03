@@ -8,6 +8,7 @@ import numpy as np
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[PolarVec2D, float]
+WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
 
 
 def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
@@ -16,14 +17,8 @@ def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
     distance = dist(target_coords, (r_x, r_y))
 
     angle = atan2(t_y - r_y, t_x - r_x) - orient
-    angle = (angle + np.pi) % (2 * np.pi) -np.pi
+    angle = (angle + np.pi) % (2 * np.pi) - np.pi
     return distance, angle
-
-
-@dataclass
-class WheelSpeedState:
-    left: float
-    right: float
 
 
 @dataclass
@@ -37,18 +32,32 @@ class RobotSettings:
 
 
 @dataclass
-class RobotState:
+class DifferentialDriveState:
+    pose: RobotPose
+    velocity: PolarVec2D = field(default=(0, 0))
+    last_wheels_speed: WheelSpeedState = field(default=(0, 0))
+    wheels_speed: WheelSpeedState = field(default=(0, 0))
+
+
+@dataclass
+class DifferentialDriveMotion:
     config: RobotSettings
-    current_speed: PolarVec2D
-    current_pose: RobotPose
-    last_wheels_speed: WheelSpeedState
-    wheels_speed: WheelSpeedState
 
-    # TODO: think of adding a markdown file describing what's happening here
+    def move(self, state: DifferentialDriveState,
+             action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
+        robot_vel, clipped = self._robot_velocity(state.velocity, action)
+        new_wheel_speeds = self._resulting_wheel_speeds(robot_vel)
+        distance = self._covered_distance(state.wheels_speed, new_wheel_speeds, d_t)
+        new_orient = self._new_orientation(state.pose[1], state.wheels_speed, new_wheel_speeds, d_t)
+        state.pose = self._compute_odometry(state.pose, (distance, new_orient))
+        state.last_wheels_speed = state.wheels_speed
+        state.wheels_speed = new_wheel_speeds
+        state.velocity = robot_vel
+        return robot_vel, clipped
 
-    def resulting_movement(self, action: PolarVec2D) -> Tuple[PolarVec2D, bool]:
-        dot_x = self.current_speed[0] + action[0]
-        dot_orient = self.current_speed[1] + action[1]
+    def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D) -> Tuple[PolarVec2D, bool]:
+        dot_x = velocity[0] + action[0]
+        dot_orient = velocity[1] + action[1]
         clipped = dot_x < 0 or dot_x > self.config.max_linear_speed or \
             abs(dot_orient) > self.config.max_angular_speed
 
@@ -57,31 +66,40 @@ class RobotState:
         dot_orient = np.clip(dot_orient, -angular_max, angular_max)
         return (dot_x, dot_orient), clipped
 
-    def update_robot_speed(self, movement: PolarVec2D):
+    def _resulting_wheel_speeds(self, movement: PolarVec2D) -> WheelSpeedState:
         dot_x, dot_orient = movement
         diff = self.config.interaxis_length * dot_orient / 2
-        self.wheels_speed.left = (dot_x - diff) / self.config.wheel_radius
-        self.last_wheels_speed.right = (dot_x + diff) / self.config.wheel_radius
-        self.current_speed = (dot_x, dot_orient)
+        new_left_wheel_speed = (dot_x - diff) / self.config.wheel_radius
+        new_right_wheel_speed = (dot_x + diff) / self.config.wheel_radius
+        return new_left_wheel_speed, new_right_wheel_speed
 
-    def compute_odometry(self, t_s: float):
-        right_left_diff = -(self.last_wheels_speed.left + self.wheels_speed.left) / 2 \
-            + (self.last_wheels_speed.right + self.wheels_speed.right) / 2
+    def _covered_distance(self, last_wheel_speeds: WheelSpeedState,
+                                new_wheel_speeds: WheelSpeedState, d_t: float) -> float:
+        last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
+        wheel_speed_left, wheel_speed_right = new_wheel_speeds
+        velocity = ((last_wheel_speed_left + wheel_speed_left) / 2 \
+            + (last_wheel_speed_right + wheel_speed_right) / 2)
+        distance_covered = self.config.wheel_radius / 2 * velocity * d_t
+        return distance_covered
 
-        new_orient = self.current_pose[1] \
-            + self.config.wheel_radius / self.config.interaxis_length \
-                * right_left_diff * t_s
+    def _new_orientation(self, robot_orient: float, last_wheel_speeds: WheelSpeedState,
+                         wheel_speeds: WheelSpeedState, d_t: float) -> float:
+        last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
+        wheel_speed_left, wheel_speed_right = wheel_speeds
 
-        new_x_local = self.config.wheel_radius / 2 \
-                * ((self.last_wheels_speed.left + self.wheels_speed.left) / 2 \
-            + (self.last_wheels_speed.right + self.wheels_speed.right) / 2) * t_s
+        right_left_diff = (last_wheel_speed_right + wheel_speed_right) / 2 \
+            - (last_wheel_speed_left + wheel_speed_left) / 2
+        diff = self.config.wheel_radius / self.config.interaxis_length * right_left_diff * d_t
+        new_orient = robot_orient + diff
+        return new_orient
 
-        rel_rotation = (new_orient + self.current_pose[1]) / 2
-        pos_x, pos_y = self.current_pose[0]
-        new_x = pos_x + new_x_local * cos(rel_rotation)
-        new_y = pos_y + new_x_local * sin(rel_rotation)
-        self.current_pose = ((new_x, new_y), new_orient)
-        self.last_wheels_speed = self.wheels_speed
+    def _compute_odometry(self, old_pose: RobotPose, movement: PolarVec2D) -> RobotPose:
+        distance_covered, new_orient = movement
+        (robot_x, robot_y), old_orient = old_pose
+        rel_rotation = (old_orient + new_orient) / 2
+        new_x = robot_x + distance_covered * cos(rel_rotation)
+        new_y = robot_y + distance_covered * sin(rel_rotation)
+        return ((new_x, new_y), new_orient)
 
 
 @dataclass
@@ -91,23 +109,20 @@ class DifferentialDriveRobot():
     spawn_pose: RobotPose
     goal: Vec2D
     config: RobotSettings
-    state: RobotState = field(init=False)
+    state: DifferentialDriveState = field(init=False)
+    movement: DifferentialDriveMotion = field(init=False)
 
     def __post_init__(self):
-        self.state = RobotState(
-            self.config,
-            (0, 0),
-            self.spawn_pose,
-            WheelSpeedState(0, 0),
-            WheelSpeedState(0, 0))
+        self.state = DifferentialDriveState(self.spawn_pose)
+        self.movement = DifferentialDriveMotion(self.config)
 
     @property
     def pos(self) -> Vec2D:
-        return self.state.current_pose[0]
+        return self.state.pose[0]
 
     @property
     def pose(self) -> RobotPose:
-        return self.state.current_pose
+        return self.state.pose
 
     @property
     def dist_to_goal(self) -> float:
@@ -115,10 +130,7 @@ class DifferentialDriveRobot():
 
     @property
     def current_speed(self) -> PolarVec2D:
-        return self.state.current_speed
+        return self.state.velocity
 
     def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
-        movement, clipped = self.state.resulting_movement(action)
-        self.state.update_robot_speed(movement)
-        self.state.compute_odometry(d_t)
-        return movement, clipped
+        return self.movement.move(self.state, action, d_t)

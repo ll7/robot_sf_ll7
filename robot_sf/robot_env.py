@@ -114,7 +114,8 @@ class RobotEnv(Env):
         self.rotation_counter += np.abs(dot_orient * self.d_t)
 
         # determine the reward and whether the episode is done
-        reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, is_overdrive)
+        reward, done = self._reward()
+        # reward, done = self._reward(dist_before, dist_after, dot_x, norm_ranges, is_overdrive)
         self.duration += self.d_t
         self.timestep += 1
         self.last_action = action_parsed
@@ -140,39 +141,17 @@ class RobotEnv(Env):
     def _is_end_of_episode_with_success(self) -> bool:
         return self.occupancy.is_robot_at_goal
 
-    def _reward(self, dist_0: float, dist_1: float, dot_x: float,
-                ranges: np.ndarray, was_action_clipped: bool) -> Tuple[float, bool]:
-
-        base_reward = self.rewards[1]
-        rotation_penalty = self.rewards[2]
-
-        if self._is_end_of_episode_with_failure():
-            distance_covered = self.distance_init - dist_1
-            bonus_unclipped = distance_covered / self.target_distance_max
-            final_distance_bonus = np.clip(bonus_unclipped, -1, 1)
-            reward = -base_reward * (1 - final_distance_bonus)
-            done = True
-
-        elif self._is_end_of_episode_with_success():
-            cum_rotations = (self.rotation_counter / (2 * np.pi))
-            penalty = rotation_penalty * cum_rotations / (1e-5 + self.duration)
-            reward = np.maximum(base_reward / 2, base_reward - penalty)
-            done = True
-
-        else:
-            max_distance_per_step = self.linear_max * self.d_t
-            distance_covered_during_step = dist_0 - dist_1
-            progress_towards_goal = distance_covered_during_step / max_distance_per_step
-            obstacle_proximity = 1 - min(ranges)
-            goal_proximity = int(dist_0 > dist_1)
-            speed_ratio = dot_x / self.linear_max
-            overdrive_penalty = int(was_action_clipped)
-
-            reward = progress_towards_goal - overdrive_penalty + \
-                obstacle_proximity * speed_ratio * goal_proximity
-            done = False
-
-        return reward, done
+    def _reward(self) -> Tuple[float, bool]:
+        reward, is_terminal = -0.01, False
+        if self.occupancy.is_robot_collision:
+            reward -= 1
+            is_terminal = True
+        if self.occupancy.is_robot_at_goal:
+            reward += 1.01
+            is_terminal = True
+        if self.duration > self.sim_length:
+            is_terminal = True
+        return reward, is_terminal
 
     def _get_obs(self):
         ranges_np = self.lidar_sensor.get_scan(self.sim_env.robot_pose)

@@ -135,19 +135,13 @@ class RobotEnv(Env):
         obs = np.concatenate((norm_ranges, rob_state), axis=0)
         return obs
 
-    def _is_end_of_episode_with_failure(self) -> bool:
-        return self.occupancy.is_robot_collision or self.duration > self.sim_length
-
-    def _is_end_of_episode_with_success(self) -> bool:
-        return self.occupancy.is_robot_at_goal
-
     def _reward(self) -> Tuple[float, bool]:
-        reward, is_terminal = -0.01, False
+        reward, is_terminal = 0, False
         if self.occupancy.is_robot_collision:
             reward -= 1
             is_terminal = True
         if self.occupancy.is_robot_at_goal:
-            reward += 1.01
+            reward += 1
             is_terminal = True
         if self.duration > self.sim_length:
             is_terminal = True

@@ -20,6 +20,7 @@ class RobotForceConfig:
     robot_radius: float
     activation_threshold: int
     force_multiplier: float
+    sigma: float=0.2
 
 
 def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:

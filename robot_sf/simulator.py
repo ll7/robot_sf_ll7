@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Callable, Tuple, Union, Protocol
 
 import pysocialforce as pysf
+from pysocialforce.utils import SimulatorConfig as PySFSimConfig
 
 from robot_sf.ped_spawn_generator \
     import SpawnGenerator, PedSpawnConfig, initialize_pedestrians
@@ -42,35 +43,6 @@ class MovingRobot(Protocol):
         raise NotImplementedError()
 
 
-def make_forces(
-        robot_force_config: RobotForceConfig, enable_groups: bool,
-        get_robot_pos: Callable[[], Vec2D]) -> List[pysf.forces.Force]:
-    ped_rob_force = PedRobotForce(
-        get_robot_pos,
-        robot_force_config.robot_radius,
-        robot_force_config.activation_threshold,
-        robot_force_config.force_multiplier)
-
-    force_list: List[pysf.forces.Force] = [
-        pysf.forces.DesiredForce(),
-        pysf.forces.SocialForce(),
-        pysf.forces.ObstacleForce(),
-    ]
-
-    if robot_force_config.is_active:
-        force_list.append(ped_rob_force)
-
-    group_forces = [
-        pysf.forces.GroupCoherenceForceAlt(),
-        pysf.forces.GroupRepulsiveForce(),
-        pysf.forces.GroupGazeForceAlt(),
-    ]
-    if enable_groups:
-        force_list += group_forces
-
-    return force_list
-
-
 @dataclass
 class Simulator:
     box_size: float
@@ -102,9 +74,15 @@ class Simulator:
         for ped_ids in initial_groups:
             groups.new_group(ped_ids)
 
-        get_robot_pos = lambda: self.robot.pos
-        sim_forces = make_forces(self.config, True, get_robot_pos)
-        self.pysf_sim = pysf.Simulator(sim_forces, ped_states_np, self.groups_as_list(), self.obstacles)
+        def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
+            forces = pysf.simulator.make_forces(sim, config)
+            if self.config.is_active:
+                forces.append(PedRobotForce(self.config, sim.peds, lambda: self.robot.pos))
+            return forces
+
+        self.pysf_sim = pysf.Simulator(
+            ped_states_np, self.groups_as_list(),
+            self.obstacles, make_forces=make_forces)
         self.pysf_sim.peds.step_width = self.custom_d_t \
             if self.custom_d_t else self.pysf_sim.peds.step_width
         self.pysf_sim.peds.max_speed_multiplier = self.peds_speed_mult

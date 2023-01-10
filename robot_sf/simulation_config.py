@@ -3,11 +3,13 @@ import toml
 import json
 import random
 from typing import List, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from shapely.geometry import Polygon
 from natsort import natsorted
+
+from robot_sf.ped_robot_force import PedRobotForceConfig
 
 
 Vec2D = Tuple[float, float]
@@ -15,23 +17,19 @@ Line2D = Tuple[float, float, float, float]
 
 
 @dataclass
-class RobotForceConfig:
-    is_active: bool
-    robot_radius: float
-    activation_threshold: int
-    force_multiplier: float
-    sigma: float=0.2
+class Obstacle:
+    vertices: List[Vec2D]
+    lines: List[Line2D] = field(init=False)
 
+    def __post_init__(self):
+        edges = list(zip(self.vertices[:-1], self.vertices[1:])) \
+            + [[self.vertices[-1], self.vertices[0]]]
+        edges = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
+        self.lines = edges
 
-def load_polygon(vertices: List[Tuple[float, float]]) -> Polygon:
-    return Polygon(np.array(vertices))
-
-
-def load_toml(config_file: str) -> dict:
-    if not config_file:
-        filename = os.path.join(os.path.dirname(__file__), "config", "map_config.toml")
-        config_file = filename
-    return toml.load(config_file)
+    @property
+    def as_polygon(self) -> Polygon:
+        return Polygon(np.array(self.vertices))
 
 
 def load_map_name(data: dict) -> str:
@@ -90,16 +88,15 @@ def load_randomly_init_map(data: dict, maps_config_path: str) -> Tuple[float, Li
     return box_size, obstacle
 
 
-def load_config(config_filepath: str) \
-        -> Tuple[float, RobotForceConfig, List[Line2D]]:
-    data = load_toml(config_filepath)
+def load_config(config_filepath: str) -> Tuple[float, PedRobotForceConfig, List[Line2D]]:
+    data = toml.load(config_filepath)
     config_path = os.path.join(os.path.dirname(__file__), 'maps')
-    box_size, obstacle = load_randomly_init_map(data, config_path)
+    box_size, obstacles = load_randomly_init_map(data, config_path)
 
-    robot_config = RobotForceConfig(
+    robot_config = PedRobotForceConfig(
         data['simulator']['flags']['activate_ped_robot_force'],
         data['simulator']['robot']['robot_radius'],
         data['simulator']['robot']['activation_threshold'],
         data['simulator']['robot']['force_multiplier'])
 
-    return box_size, robot_config, obstacle
+    return box_size, robot_config, obstacles

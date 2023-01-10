@@ -12,37 +12,26 @@ from robot_sf.geometry import circle_line_intersection_distance, \
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
-
-
-@dataclass
-class Range:
-    lower: float
-    upper: float
+Range = Tuple[float, float]
 
 
 @dataclass
 class LidarScannerSettings:
     """Representing LiDAR sensor configuration settings."""
 
-    max_scan_dist: float
-    visual_angle_portion: float # info: value between 0 and 1
-    lidar_n_rays: int
-    angle_opening: Range=field(init=False)
-    scan_length: int=field(init=False)
-    scan_noise: List[float]=field(default_factory=lambda: [0, 0])
+    max_scan_dist: float = 10.0
+    visual_angle_portion: float = 1.0
+    lidar_n_rays: int = 272
+    scan_noise: List[float] = field(default_factory=lambda: [0.005, 0.002])
+    angle_opening: Range = field(init=False)
+    scan_length: int = field(init=False)
 
     def __post_init__(self):
-        # if self.lidar_n_rays % 4 != 0 and self.lidar_n_rays > 0:
-        #     raise ValueError('Amount of rays needs to be divisible by 4!')
-
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError('Scan angle portion needs to be within (0, 1]!')
 
-        # self.scan_length = int(self.visual_angle_portion * self.lidar_n_rays)
         self.scan_length = self.lidar_n_rays
-        self.angle_opening = Range(
-            -np.pi * self.visual_angle_portion,
-             np.pi * self.visual_angle_portion)
+        self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
 
 
 @numba.njit(fastmath=True)
@@ -123,8 +112,8 @@ class ContinuousLidarScanner():
         ped_pos = self.robot_map.pedestrian_coords
         obstacles = self.robot_map.obstacle_coords
 
-        lower = robot_orient + self.settings.angle_opening.lower
-        upper = robot_orient + self.settings.angle_opening.upper
+        lower = robot_orient + self.settings.angle_opening[0]
+        upper = robot_orient + self.settings.angle_opening[1]
         ray_angles = np.linspace(lower, upper, self.settings.lidar_n_rays + 1)[:-1]
         ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
 

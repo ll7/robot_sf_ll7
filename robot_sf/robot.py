@@ -23,9 +23,9 @@ def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
 
 @dataclass
 class RobotSettings:
-    radius: float
-    max_linear_speed: float
-    max_angular_speed: float
+    radius: float = 1.0
+    max_linear_speed: float = 0.5
+    max_angular_speed: float = 0.5
     rob_collision_radius: float = 0.7
     wheel_radius: float = 0.05
     interaxis_length: float = 0.3
@@ -43,9 +43,8 @@ class DifferentialDriveState:
 class DifferentialDriveMotion:
     config: RobotSettings
 
-    def move(self, state: DifferentialDriveState,
-             action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
-        robot_vel, clipped = self._robot_velocity(state.velocity, action)
+    def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float):
+        robot_vel = self._robot_velocity(state.velocity, action)
         new_wheel_speeds = self._resulting_wheel_speeds(robot_vel)
         distance = self._covered_distance(state.wheels_speed, new_wheel_speeds, d_t)
         new_orient = self._new_orientation(state.pose[1], state.wheels_speed, new_wheel_speeds, d_t)
@@ -53,18 +52,14 @@ class DifferentialDriveMotion:
         state.last_wheels_speed = state.wheels_speed
         state.wheels_speed = new_wheel_speeds
         state.velocity = robot_vel
-        return robot_vel, clipped
 
-    def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D) -> Tuple[PolarVec2D, bool]:
+    def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D) -> PolarVec2D:
         dot_x = velocity[0] + action[0]
         dot_orient = velocity[1] + action[1]
-        clipped = dot_x < 0 or dot_x > self.config.max_linear_speed or \
-            abs(dot_orient) > self.config.max_angular_speed
-
         dot_x = np.clip(dot_x, 0, self.config.max_linear_speed)
         angular_max = self.config.max_angular_speed
         dot_orient = np.clip(dot_orient, -angular_max, angular_max)
-        return (dot_x, dot_orient), clipped
+        return dot_x, dot_orient
 
     def _resulting_wheel_speeds(self, movement: PolarVec2D) -> WheelSpeedState:
         dot_x, dot_orient = movement
@@ -132,5 +127,5 @@ class DifferentialDriveRobot():
     def current_speed(self) -> PolarVec2D:
         return self.state.velocity
 
-    def apply_action(self, action: PolarVec2D, d_t: float) -> Tuple[PolarVec2D, bool]:
-        return self.movement.move(self.state, action, d_t)
+    def apply_action(self, action: PolarVec2D, d_t: float):
+        self.movement.move(self.state, action, d_t)

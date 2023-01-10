@@ -1,12 +1,20 @@
 from typing import Tuple, Callable
+from dataclasses import dataclass
 
 import numpy as np
 from pysocialforce.scene import PedState
 from pysocialforce.utils import stateutils
 
-from robot_sf.simulation_config import RobotForceConfig
-
 Vec2D = Tuple[float, float]
+
+
+@dataclass
+class PedRobotForceConfig:
+    is_active: bool = False
+    robot_radius: float = 1.0
+    activation_threshold: float = 1.0
+    force_multiplier: float = 1.0
+    sigma: float=0.2
 
 
 class PedRobotForce:
@@ -16,7 +24,7 @@ class PedRobotForce:
     If the force multiplier is parameterized with a negative factor,
     this force can be used for adverserial trainings as well."""
 
-    def __init__(self, config: RobotForceConfig, peds: PedState,
+    def __init__(self, config: PedRobotForceConfig, peds: PedState,
                  get_robot_pos: Callable[[], Vec2D]):
         self.config = config
         self.peds = peds

@@ -14,7 +14,7 @@ HOME_REPO = 'https://github.com/Bonifatius94/robot_env'
 EXCLUDE_FILES = []
 PACKAGE_DATA = {'robot_sf': ['maps/*.json']}
 INSTALL_REQUIREMENTS = ['numpy', 'Pillow', 'matplotlib', 'pysocialforce', 'python-math',
-                        'json', 'toml', 'numba', 'shapely']
+                        'jsons', 'toml', 'numba', 'shapely']
 
 
 def get_ext_paths(root_dir, exclude_files):

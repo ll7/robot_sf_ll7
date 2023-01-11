@@ -34,7 +34,7 @@ jobs:
           python -m pip install .
 
       - name: Run tests
-        run: python -m pytest
+        run: python -m pytest tests
 
       - name: Run linter
         run: python -m pylint robot_sf

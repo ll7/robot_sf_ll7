@@ -115,22 +115,20 @@ class RobotEnv(Env):
         self.episode += 1
         self.timestep = 0
         self.last_action = None
-
         self.sim_env.reset_state()
 
-        self.distance_init = self.sim_env.dist_to_goal
         norm_ranges, rob_state = self._get_obs()
         obs = np.concatenate((norm_ranges, rob_state), axis=0)
         return obs
 
     def _reward(self) -> Tuple[float, bool]:
-        step_discount = 1.0 / self.max_sim_steps
+        step_discount = 0.1 / self.max_sim_steps
         reward, is_terminal = -step_discount, False
         if self.occupancy.is_robot_collision:
             reward -= 1
             is_terminal = True
         if self.occupancy.is_robot_at_goal:
-            reward += 2
+            reward += 1
             is_terminal = True
         if self.timestep >= self.max_sim_steps:
             is_terminal = True

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Callable, Tuple, Union, Protocol
+from typing import List, Callable, Tuple, Protocol
 
 import pysocialforce as pysf
 from pysocialforce.utils import SimulatorConfig as PySFSimConfig
@@ -49,7 +49,7 @@ class Simulator:
     config: PedRobotForceConfig
     obstacles: List[Tuple[float, float, float, float]]
     robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
-    difficulty: int
+    difficulty: int # TODO: do something with the difficulty
     peds_speed_mult: float
     d_t: float
     robot: MovingRobot = field(init=False)

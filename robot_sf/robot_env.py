@@ -1,4 +1,3 @@
-import os
 from math import ceil
 from dataclasses import dataclass
 from typing import Tuple, Union
@@ -7,11 +6,12 @@ from copy import deepcopy
 import numpy as np
 from gym import Env, spaces
 
-from robot_sf.simulation_config import load_config
+from robot_sf.simulation_config import MapDefinitionPool
 from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.robot import DifferentialDriveRobot, RobotSettings, rel_pos
+from robot_sf.ped_robot_force import PedRobotForceConfig
 from robot_sf.simulator import Simulator
 
 
@@ -21,31 +21,40 @@ PolarVec2D = Tuple[float, float]
 
 @dataclass
 class SimulationSettings:
+    difficulty: int=2
     sim_length: int=200
     d_t: float=0.4
     peds_speed_mult: float=1.3
     lidar_n_rays: int=272
     norm_obs: bool=True
+    prf_config = PedRobotForceConfig = PedRobotForceConfig()
+
+
+@dataclass
+class EnvSettings:
+    sim_config: SimulationSettings = SimulationSettings()
+    lidar_config: LidarScannerSettings = LidarScannerSettings()
+    robot_config: RobotSettings = RobotSettings()
+    map_pool: MapDefinitionPool = MapDefinitionPool()
 
 
 class RobotEnv(Env):
     """Representing an OpenAI Gym environment wrapper for
     training a robot with reinforcement leanring"""
 
-    def __init__(self, debug: bool=False, difficulty: int=0,
-                 sim_config: SimulationSettings = SimulationSettings(),
-                 lidar_config: LidarScannerSettings = LidarScannerSettings(),
-                 robot_config: RobotSettings = RobotSettings()):
+    def __init__(self, env_config: EnvSettings = EnvSettings(), debug: bool=False):
+        self.sim_config = env_config.sim_config
+        self.lidar_config = env_config.lidar_config
+        self.robot_config = env_config.robot_config
 
-        self.sim_config = sim_config
-        self.lidar_config = lidar_config
-        self.robot_config = robot_config
+        map_def = env_config.map_pool.choose_random_map()
+        box_size = map_def.box_size
 
-        self.max_sim_steps = ceil(sim_config.sim_length / sim_config.d_t)
         self.env_type = 'RobotEnv'
-
-        path_to_config = os.path.join(os.path.dirname(__file__), "config", "map_config.toml")
-        box_size, force_config, obstacles = load_config(path_to_config)
+        self.max_sim_steps = ceil(self.sim_config.sim_length / self.sim_config.d_t)
+        self.max_target_dist = np.sqrt(2) * (box_size * 2) # the box diagonal
+        self.action_space, self.observation_space = \
+            RobotEnv._build_gym_spaces(self.max_target_dist, self.robot_config, self.lidar_config)
 
         self.sim_env: Simulator = None
         self.occupancy = ContinuousOccupancy(
@@ -54,39 +63,26 @@ class RobotEnv(Env):
             lambda: self.sim_env.goal_pos,
             lambda: self.sim_env.pysf_sim.env.obstacles_raw,
             lambda: self.sim_env.current_positions,
-            robot_config.radius)
+            self.robot_config.radius)
 
-        self.lidar_sensor = ContinuousLidarScanner(lidar_config, self.occupancy)
+        self.lidar_sensor = ContinuousLidarScanner(self.lidar_config, self.occupancy)
         robot_factory = lambda s, g: DifferentialDriveRobot(s, g, self.robot_config)
 
         self.sim_env = Simulator(
-            box_size, force_config, obstacles, robot_factory,
-            difficulty, sim_config.peds_speed_mult, sim_config.d_t)
-        self.target_distance_max = np.sqrt(2) * (self.sim_env.box_size * 2)
-        # info: max distance is length of box diagonal
-
-        action_low  = np.array([-robot_config.max_linear_speed, -robot_config.max_angular_speed])
-        action_high = np.array([ robot_config.max_linear_speed,  robot_config.max_angular_speed])
-        self.action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
-
-        state_max = np.concatenate((
-                lidar_config.max_scan_dist * np.ones((lidar_config.scan_length,)),
-                np.array([robot_config.max_linear_speed, robot_config.max_angular_speed,
-                          self.target_distance_max, np.pi])), axis=0)
-        state_min = np.concatenate((
-                np.zeros((lidar_config.scan_length,)),
-                np.array([0, -robot_config.max_angular_speed, 0, -np.pi])
-            ), axis=0)
-        self.observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
+            box_size, self.sim_config.prf_config, map_def.obstacles_pysf, robot_factory,
+            self.sim_config.difficulty, self.sim_config.peds_speed_mult, self.sim_config.d_t)
 
         self.episode = 0
         self.timestep = 0
         self.last_action: Union[PolarVec2D, None] = None
         if debug:
-            self.sim_ui = SimulationView(self.sim_env.box_size * 2, self.sim_env.box_size * 2)
+            self.sim_ui = SimulationView(box_size * 2, box_size * 2)
         # TODO: provide a callback that shuts the simulator down on cancellation by user via UI
 
     def render(self, mode='human'):
+        if not self.sim_ui:
+            raise RuntimeError('Debug mode is not activated! Consider setting debug=True!')
+
         action = None if not self.last_action else \
             VisualizableAction(self.sim_env.robot.pose, self.last_action, self.sim_env.goal_pos)
 
@@ -143,7 +139,26 @@ class RobotEnv(Env):
             ranges_np /= self.lidar_config.max_scan_dist
             speed_x /= self.robot_config.max_linear_speed
             speed_rot = speed_rot / self.robot_config.max_angular_speed
-            target_distance /= self.target_distance_max
+            target_distance /= self.max_target_dist
             target_angle = target_angle / np.pi
 
         return ranges_np, np.array([speed_x, speed_rot, target_distance, target_angle])
+
+    @staticmethod
+    def _build_gym_spaces(
+            max_target_dist: float, robot_config: RobotSettings, \
+            lidar_config: LidarScannerSettings) -> Tuple[spaces.Box, spaces.Box]:
+        action_low  = np.array([-robot_config.max_linear_speed, -robot_config.max_angular_speed])
+        action_high = np.array([ robot_config.max_linear_speed,  robot_config.max_angular_speed])
+        action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
+
+        state_max = np.concatenate((
+                lidar_config.max_scan_dist * np.ones((lidar_config.scan_length,)),
+                np.array([robot_config.max_linear_speed, robot_config.max_angular_speed,
+                            max_target_dist, np.pi])), axis=0)
+        state_min = np.concatenate((
+                np.zeros((lidar_config.scan_length,)),
+                np.array([0, -robot_config.max_angular_speed, 0, -np.pi])
+            ), axis=0)
+        observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
+        return action_space, observation_space

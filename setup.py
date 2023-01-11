@@ -4,17 +4,17 @@ from setuptools import setup, find_packages
 
 
 PACKAGE_NAME = 'robot_sf'
-PACKAGE_VERSION = '1.0.0'
-PACKAGE_AUTHORS = 'Matteo Caruso and Enrico Regolin'
+PACKAGE_VERSION = '2.0.0'
+PACKAGE_AUTHORS = 'Marco Tröster'
 PACKAGE_DESCRIPTION = """
 This package allows implementing a "gym-style" environment
 for the mobile robot navigating the crowd
 """
-HOME_REPO = 'https://github.com/matteocaruso1993/robot_env'
+HOME_REPO = 'https://github.com/Bonifatius94/robot_env'
 EXCLUDE_FILES = []
-PACKAGE_DATA = {'robot_sf': ['maps/*.json','config/map_config.toml']}
+PACKAGE_DATA = {'robot_sf': ['maps/*.json']}
 INSTALL_REQUIREMENTS = ['numpy', 'Pillow', 'matplotlib', 'pysocialforce', 'python-math',
-                        'jsons', 'toml', 'natsort', 'numba', 'shapely']
+                        'json', 'toml', 'numba', 'shapely']
 
 
 def get_ext_paths(root_dir, exclude_files):
@@ -42,7 +42,7 @@ setup(
     description=PACKAGE_DESCRIPTION,
     url=HOME_REPO,
     author=PACKAGE_AUTHORS,
-    author_email='matteo.caruso@phd.units.it',
+    author_email='marco.troester.student@uni-augsburg.de',
     license="GPLv3",
     packages=find_packages(),
     package_data=PACKAGE_DATA,

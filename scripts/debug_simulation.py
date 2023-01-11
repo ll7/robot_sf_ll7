@@ -3,7 +3,7 @@ from robot_sf.robot_env import RobotEnv
 
 def benchmark():
     total_steps = 20000
-    env = RobotEnv(difficulty=2, debug=True)
+    env = RobotEnv(debug=True)
     obs = env.reset()
     env.render()
 

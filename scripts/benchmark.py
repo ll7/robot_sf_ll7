@@ -5,7 +5,7 @@ from robot_sf.robot_env import RobotEnv
 
 def benchmark():
     total_steps = 10000
-    env = RobotEnv(difficulty=2)
+    env = RobotEnv()
     obs = env.reset()
 
     peds_sim = env.sim_env

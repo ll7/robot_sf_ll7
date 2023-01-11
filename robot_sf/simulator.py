@@ -6,8 +6,8 @@ from pysocialforce.utils import SimulatorConfig as PySFSimConfig
 
 from robot_sf.ped_spawn_generator \
     import SpawnGenerator, PedSpawnConfig, initialize_pedestrians
-from robot_sf.ped_robot_force import PedRobotForce
-from robot_sf.simulation_config import PedRobotForceConfig
+from robot_sf.ped_robot_force \
+    import PedRobotForce, PedRobotForceConfig
 from robot_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
 

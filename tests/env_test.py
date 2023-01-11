@@ -8,7 +8,7 @@ def test_can_create_env():
 
 def test_can_simulate_with_pedestrians():
     total_steps = 1000
-    env = RobotEnv(difficulty=2)
+    env = RobotEnv()
     env.reset()
     for _ in range(total_steps):
         rand_action = env.action_space.sample()

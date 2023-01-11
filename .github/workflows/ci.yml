@@ -34,7 +34,7 @@ jobs:
           python -m pip install .
 
       - name: Run tests
-        run: python -m pytest --ignore=fast-pysf
+        run: python -m pytest
 
       - name: Run linter
-        run: python -m pylint robot_sf --fail-under=9.0
+        run: python -m pylint robot_sf

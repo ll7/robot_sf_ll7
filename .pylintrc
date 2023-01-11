@@ -8,4 +8,6 @@ disable=C0114, C0115, C0116, R0903, C3001, C0413, C0411, R1723, R0902, W0703, C0
 # disable too-many-instance-attributes R0902
 # disable broad-except, raise-missing-from, consider-using-enumerate W0703, W0707, C0200
 
+fail-under=9.0
+min-similarity-lines=10
 ignored-modules=pygame

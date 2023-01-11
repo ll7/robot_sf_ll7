@@ -6,7 +6,7 @@ from copy import deepcopy
 import numpy as np
 from gym import Env, spaces
 
-from robot_sf.simulation_config import MapDefinitionPool
+from robot_sf.sim_config import MapDefinitionPool
 from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState

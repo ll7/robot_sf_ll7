@@ -20,7 +20,6 @@ class Obstacle:
 
     def __post_init__(self):
         edges = list(zip(self.vertices[:-1], self.vertices[1:]))
-        edges += [[self.vertices[-1], self.vertices[0]]]
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
         self.lines = lines
 

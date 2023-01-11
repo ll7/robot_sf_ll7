@@ -4,6 +4,7 @@ from typing import List, Callable, Tuple, Protocol
 import pysocialforce as pysf
 from pysocialforce.utils import SimulatorConfig as PySFSimConfig
 
+from robot_sf.sim_config import MapDefinition
 from robot_sf.ped_spawn_generator \
     import SpawnGenerator, PedSpawnConfig, initialize_pedestrians
 from robot_sf.ped_robot_force \
@@ -43,28 +44,40 @@ class MovingRobot(Protocol):
         raise NotImplementedError()
 
 
+class SimulationSettings(Protocol):
+    @property
+    def difficulty(self) -> int:
+        raise NotImplementedError()
+    
+    @property
+    def d_t(self) -> float:
+        raise NotImplementedError()
+
+    @property
+    def peds_speed_mult(self) -> float:
+        raise NotImplementedError()
+
+    @property
+    def prf_config(self) -> PedRobotForceConfig:
+        raise NotImplementedError()
+
+
 @dataclass
 class Simulator:
     box_size: float
-    config: PedRobotForceConfig
-    obstacles: List[Tuple[float, float, float, float]]
+    config: SimulationSettings
+    map_def: MapDefinition
     robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
-    difficulty: int # TODO: do something with the difficulty
-    peds_speed_mult: float
-    d_t: float
     robot: MovingRobot = field(init=False)
 
     def __post_init__(self):
-        box_rect = (
-            (-self.box_size, self.box_size),
-            (-self.box_size, -self.box_size),
-            (self.box_size, -self.box_size))
-        spawn_gen = SpawnGenerator([box_rect])
+        spawn_gen = SpawnGenerator(self.map_def.spawn_zones)
+        goal_gen = SpawnGenerator(self.map_def.goal_zones)
         spawn_config = PedSpawnConfig(20, 6)
         ped_states_np, initial_groups = initialize_pedestrians(spawn_config, spawn_gen, spawn_gen)
         pick_ped_goal = lambda: spawn_gen.generate(1)[0]
         self.pick_robot_spawn = lambda: spawn_gen.generate(1)[0]
-        self.pick_robot_goal = lambda: spawn_gen.generate(1)[0]
+        self.pick_robot_goal = lambda: goal_gen.generate(1)[0]
 
         get_state = lambda: self.pysf_sim.peds.state
         pysf_state = PySFPedestrianStates(get_state)
@@ -77,15 +90,15 @@ class Simulator:
 
         def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
             forces = pysf.simulator.make_forces(sim, config)
-            if self.config.is_active:
-                forces.append(PedRobotForce(self.config, sim.peds, lambda: self.robot.pos))
+            if self.config.prf_config.is_active:
+                forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: self.robot.pos))
             return forces
 
         self.pysf_sim = pysf.Simulator(
             ped_states_np, self.groups_as_list(),
-            self.obstacles, make_forces=make_forces)
-        self.pysf_sim.peds.step_width = self.d_t
-        self.pysf_sim.peds.max_speed_multiplier = self.peds_speed_mult
+            self.map_def.obstacles_pysf, make_forces=make_forces)
+        self.pysf_sim.peds.step_width = self.config.d_t
+        self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.reset_state()
 
     @property
@@ -116,7 +129,7 @@ class Simulator:
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups_as_list()
         self.pysf_sim.peds.step(ped_forces, groups)
-        self.robot.apply_action(action, self.d_t)
+        self.robot.apply_action(action, self.config.d_t)
 
     def get_pedestrians_groups(self):
         _, groups = self.pysf_sim.current_state

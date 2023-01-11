@@ -21,13 +21,12 @@ PolarVec2D = Tuple[float, float]
 
 @dataclass
 class SimulationSettings:
-    difficulty: int=2
     sim_length: int=200
+    norm_obs: bool=True
+    difficulty: int=2
     d_t: float=0.4
     peds_speed_mult: float=1.3
-    lidar_n_rays: int=272
-    norm_obs: bool=True
-    prf_config = PedRobotForceConfig = PedRobotForceConfig()
+    prf_config: PedRobotForceConfig = PedRobotForceConfig()
 
 
 @dataclass
@@ -67,10 +66,7 @@ class RobotEnv(Env):
 
         self.lidar_sensor = ContinuousLidarScanner(self.lidar_config, self.occupancy)
         robot_factory = lambda s, g: DifferentialDriveRobot(s, g, self.robot_config)
-
-        self.sim_env = Simulator(
-            box_size, self.sim_config.prf_config, map_def.obstacles_pysf, robot_factory,
-            self.sim_config.difficulty, self.sim_config.peds_speed_mult, self.sim_config.d_t)
+        self.sim_env = Simulator(box_size, self.sim_config, map_def, robot_factory)
 
         self.episode = 0
         self.timestep = 0

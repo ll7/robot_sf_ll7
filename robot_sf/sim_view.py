@@ -85,6 +85,9 @@ class SimulationView:
         pygame.display.update()
 
     def _norm_state(self, state: VisualizableSimState) -> VisualizableSimState:
+        # TODO: render robot at the center, show only surrounding within a box
+        #       -> enable open world scenario with bigger maps
+
         state.pedestrian_positions *= self.scaling
         state.pedestrian_positions[:, 0] += self.width / 2
         state.pedestrian_positions[:, 1] += self.height / 2
@@ -104,9 +107,11 @@ class SimulationView:
         return state
 
     def _draw_robot(self, pose: RobotPose):
+        # TODO: display robot with an image instead of a circle
         pygame.draw.circle(self.screen, ROBOT_COLOR, pose[0], 0.5 * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
+        # TODO: display pedestrians with an image instead of a circle
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(self.screen, PEDESTRIAN_COLOR, (ped_x, ped_y), 0.4 * self.scaling)
 
@@ -115,9 +120,11 @@ class SimulationView:
             pygame.draw.line(self.screen, OBSTACLE_COLOR, (s_x, s_y), (e_x, e_y))
 
     def _augment_goal_position(self, robot_goal: Vec2D):
+        # TODO: display pedestrians with an image instead of a circle
         pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.scaling)
 
     def _augment_timestep(self, timestep: int):
+        # TODO: show map name as well
         text = f'step: {timestep}'
         text_surface = self.font.render(text, False, TEXT_COLOR)
         self.screen.blit(text_surface, self.timestep_text_pos)

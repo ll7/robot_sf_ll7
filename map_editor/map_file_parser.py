@@ -1,12 +1,13 @@
 import json
 from typing import Union, Tuple, List, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 
 Range2D = Tuple[float, float] # (low, high)
 Vec2D = Tuple[float, float]
+Rect = Tuple[Vec2D, Vec2D, Vec2D]
 
 
 @dataclass
@@ -14,6 +15,8 @@ class VisualizableMapConfig:
     x_margin: Range2D
     y_margin: Range2D
     obstacles: np.ndarray
+    goal_zones: List[Rect] = field(default_factory=list)
+    spawn_zones: List[Rect] = field(default_factory=list)
 
 
 MAP_VERSION_V0 = 'v0'
@@ -51,6 +54,8 @@ def determine_mapfile_version(text: str) -> Union[str, None]:
                 for obs_key in map_data['Obstacles']]):
             return MAP_VERSION_V0
 
+        # TODO: add checks for spawn / goal zone definitions
+
         return MAP_VERSION_V1
     except:
         return None
@@ -81,9 +86,37 @@ def parse_mapfile_text_v0(text: str) -> Union[VisualizableMapConfig, None]:
         return None
 
 
+def parse_mapfile_text_v1(text: str) -> Union[VisualizableMapConfig, None]:
+    try:
+        map_data = json.loads(text)
+
+        all_lines = list()
+        for obstacle in map_data['Obstacles']:
+            vertices: List[Vec2D] = map_data['Obstacles'][obstacle]['Vertex']
+            edges = list(zip(vertices[:-1], vertices[1:])) \
+                + [(vertices[-1], vertices[0])]
+            for (s_x, s_y), (e_x, e_y) in edges:
+                line = [s_x, e_x, s_y, e_y]
+                all_lines.append(line)
+        obstacles = np.array(all_lines)
+
+        x_margin = map_data['x_margin']
+        x_margin = (x_margin[0], x_margin[1])
+
+        y_margin = map_data['y_margin']
+        y_margin = (y_margin[0], y_margin[1])
+
+        goal_zones = map_data['GoalZones']
+        spawn_zones = map_data['SpawnZones']
+
+        return VisualizableMapConfig(x_margin, y_margin, obstacles, goal_zones, spawn_zones)
+    except:
+        return None
+
+
 parsers_by_version = {
     MAP_VERSION_V0: parse_mapfile_text_v0,
-    MAP_VERSION_V1: parse_mapfile_text_v0,
+    MAP_VERSION_V1: parse_mapfile_text_v1,
 }
 
 

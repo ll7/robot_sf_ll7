@@ -1,6 +1,6 @@
 import os
 from time import sleep
-from typing import Tuple, Callable, Union
+from typing import Tuple, Callable, Union, List
 from threading import Thread
 
 import turtle
@@ -9,6 +9,9 @@ import tkinter.scrolledtext as tks
 
 from map_editor.map_file_parser import \
     parse_mapfile_text, VisualizableMapConfig
+
+Vec2D = Tuple[float, float]
+Rect = Tuple[Vec2D, Vec2D, Vec2D]
 
 
 class MapEditor:
@@ -35,9 +38,6 @@ class MapEditor:
                     self._render_map_canvas(map_config)
                 else:
                     print('parsing config file failed!')
-                    # TODO: think of showing some hint that there was a parser error
-                    #       any maybe augment in the text view where the error occured
-                    pass
 
         def reload_map_as_daemon(frequency_hz: float, is_term: Callable[[], bool]):
             reload_intercal_secs = 1 / frequency_hz
@@ -82,7 +82,35 @@ class MapEditor:
             self.my_turtle.setpos(s_x, s_y)
             self.my_turtle.down()
             self.my_turtle.setpos(e_x, e_y)
-        # TODO: hide turtle cursor
+        # TODO: render spawn / goal zones
+
+        def rect_points(rect: Rect) -> List[Vec2D]:
+            def add_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:
+                return v1[0] + v2[0], v1[1] + v2[1]
+            def sub_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:
+                return v1[0] - v2[0], v1[1] - v2[1]
+            p1, p2, p3 = rect
+            p4 = add_vec(sub_vec(p3, p2), p1)
+            return [p1, p2, p3, p4]
+
+        def draw_rect(points: List[Vec2D]):
+            p1, p2, p3, p4 = points
+            self.my_turtle.up()
+            self.my_turtle.setpos(p1)
+            self.my_turtle.down()
+            self.my_turtle.setpos(p2)
+            self.my_turtle.setpos(p3)
+            self.my_turtle.setpos(p4)
+
+        self.my_turtle.color('green')
+        for rect in map_config.goal_zones:
+            draw_rect(rect_points(rect))
+
+        self.my_turtle.color('blue')
+        for rect in map_config.spawn_zones:
+            draw_rect(rect_points(rect))
+
+        self.my_turtle.up()
 
     def _load_example_map(self):
         current_dir = os.path.dirname(__file__)

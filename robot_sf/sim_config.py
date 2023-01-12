@@ -80,8 +80,12 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         (-box_size, -box_size, -box_size,  box_size), # left
         ( box_size,  box_size, -box_size,  box_size)] # right
 
-    # TODO: add spawn / goal zones to file format and parse them here ...
-    box_rect = ((-box_size, box_size), (-box_size, -box_size), (box_size, -box_size))
-    spawn_zones, goal_zones = [box_rect], [box_rect]
+    if 'GoalZones' in map_structure and 'SpawnZones' in map_structure:
+        goal_zones = map_structure['GoalZones']
+        spawn_zones = map_structure['SpawnZones']
+    else:
+        # TODO: remove this fallback logic for maps without explicit spawn / goal zones
+        box_rect = ((-box_size, box_size), (-box_size, -box_size), (box_size, -box_size))
+        spawn_zones, goal_zones = [box_rect], [box_rect]
 
     return MapDefinition(box_size, obstacles, spawn_zones, goal_zones, map_bounds)

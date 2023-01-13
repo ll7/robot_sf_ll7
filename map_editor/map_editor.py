@@ -77,6 +77,11 @@ class MapEditor:
 
     def _render_map_canvas(self, map_config: VisualizableMapConfig):
         (min_x, max_x), (min_y, max_y) = map_config.x_margin, map_config.y_margin
+        width, height = max_x- min_x, max_y - min_y
+        if width > height:
+            max_y = min_y + width
+        else:
+            max_x = min_x + height
         self.my_turtle.screen.setworldcoordinates(min_x, min_y, max_x, max_y)
         self.my_turtle.clear()
         self.my_turtle.color('black')

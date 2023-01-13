@@ -30,9 +30,11 @@ class Obstacle:
 
 @dataclass
 class MapDefinition:
-    box_size: float # TODO: think of computing the box size here ...
+    width: float
+    height: float
     obstacles: List[Obstacle]
-    spawn_zones: List[Rect]
+    robot_spawn_zones: List[Rect]
+    ped_spawn_zones: List[Rect]
     goal_zones: List[Rect]
     bounds: List[Line2D]
     obstacles_pysf: List[Line2D] = field(init=False)
@@ -60,32 +62,34 @@ class MapDefinitionPool:
 
 
 def serialize_map(map_structure: dict) -> MapDefinition:
-    x_span = map_structure['x_margin'][1] - map_structure['x_margin'][0]
-    y_span = map_structure['y_margin'][1] - map_structure['y_margin'][0]
-    min_x, min_y = map_structure['x_margin'][0], map_structure['y_margin'][0]
-    norm_span = max(x_span, y_span)
-    box_size = 20.0 # TODO: remove this hard-coded scale, pysf forces are calibrated for 1m scale
+    (min_x, max_x), (min_y, max_y) = map_structure['x_margin'], map_structure['y_margin']
+    width, height = max_x - min_x, max_y - min_y
 
-    def norm_coords(point: Vec2D) -> Vec2D:
-        return ((point[0] - min_x) / norm_span * 2 * box_size - box_size,
-                (point[1] - min_y) / norm_span * 2 * box_size - box_size)
+    def norm_pos(pos: Vec2D) -> Vec2D:
+        return (pos[0] - min_x, pos[1] - min_y)
 
-    obstacle_vertices = [[norm_coords(p) for p in map_structure['Obstacles'][k]['Vertex']]
-                         for k in map_structure['Obstacles']]
-    obstacles = [Obstacle(v) for v in obstacle_vertices]
+    obstacles = [Obstacle([norm_pos(p) for p in map_structure['Obstacles'][k]['Vertex']])
+                 for k in map_structure['Obstacles']]
 
     map_bounds = [
-        (-box_size,  box_size, -box_size, -box_size), # bottom
-        (-box_size,  box_size,  box_size,  box_size), # top
-        (-box_size, -box_size, -box_size,  box_size), # left
-        ( box_size,  box_size, -box_size,  box_size)] # right
+        (0, width, 0, 0),           # bottom
+        (0, width, height, height), # top
+        (0, 0, 0, height),          # left
+        (width, width, 0, height)]  # right
 
-    if 'GoalZones' in map_structure and 'SpawnZones' in map_structure:
-        goal_zones = map_structure['GoalZones']
-        spawn_zones = map_structure['SpawnZones']
+    def norm_zone(rect: Rect) -> Rect:
+        return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
+
+    if 'goal_zones' in map_structure and 'robot_spawn_zones' in map_structure \
+            and 'ped_spawn_zones' in map_structure:
+        goal_zones = [norm_zone(z) for z in map_structure['goal_zones']]
+        robot_spawn_zones = [norm_zone(z) for z in map_structure['robot_spawn_zones']]
+        ped_spawn_zones = [norm_zone(z) for z in map_structure['ped_spawn_zones']]
     else:
         # TODO: remove this fallback logic for maps without explicit spawn / goal zones
-        box_rect = ((-box_size, box_size), (-box_size, -box_size), (box_size, -box_size))
-        spawn_zones, goal_zones = [box_rect], [box_rect]
+        box_rect = ((0.0, height), (0.0, 0.0), (width, 0.0))
+        robot_spawn_zones, ped_spawn_zones, goal_zones = [box_rect], [box_rect], [box_rect]
 
-    return MapDefinition(box_size, obstacles, spawn_zones, goal_zones, map_bounds)
+    return MapDefinition(
+        width, height, obstacles, robot_spawn_zones,
+        ped_spawn_zones, goal_zones, map_bounds)

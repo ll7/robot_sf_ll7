@@ -12,7 +12,8 @@ Vec2D = Tuple[float, float]
 
 @dataclass
 class ContinuousOccupancy:
-    box_size: float
+    width: float
+    height: float
     get_robot_coords: Callable[[], Vec2D]
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
@@ -56,5 +57,4 @@ class ContinuousOccupancy:
         return False
 
     def is_in_bounds(self, world_x: float, world_y: float) -> bool:
-        return -self.box_size <= world_x <= self.box_size \
-            and -self.box_size <= world_y <= self.box_size
+        return 0 <= world_x <= self.width and 0 <= world_y <= self.height

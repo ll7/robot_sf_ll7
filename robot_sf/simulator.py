@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass, field
 from typing import List, Callable, Tuple, Protocol
 
@@ -64,20 +65,22 @@ class SimulationSettings(Protocol):
 
 @dataclass
 class Simulator:
-    box_size: float
     config: SimulationSettings
     map_def: MapDefinition
     robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
     robot: MovingRobot = field(init=False)
+    goal_id: int = field(init=False, default=0)
 
     def __post_init__(self):
-        spawn_gen = SpawnGenerator(self.map_def.spawn_zones)
-        goal_gen = SpawnGenerator(self.map_def.goal_zones)
+        ped_spawn_gen = SpawnGenerator(self.map_def.ped_spawn_zones)
+        robot_spawn_gen = SpawnGenerator(self.map_def.robot_spawn_zones)
+        self.robot_goal_gens = [SpawnGenerator([z]) for z in self.map_def.goal_zones]
+
         spawn_config = PedSpawnConfig(20, 6)
-        ped_states_np, initial_groups = initialize_pedestrians(spawn_config, spawn_gen, spawn_gen)
-        pick_ped_goal = lambda: spawn_gen.generate(1)[0]
-        self.pick_robot_spawn = lambda: spawn_gen.generate(1)[0]
-        self.pick_robot_goal = lambda: goal_gen.generate(1)[0]
+        ped_states_np, initial_groups = initialize_pedestrians(
+            spawn_config, ped_spawn_gen, ped_spawn_gen)
+        pick_ped_goal = lambda: ped_spawn_gen.generate(1)[0]
+        self.pick_robot_spawn = lambda: robot_spawn_gen.generate(1)[0]
 
         get_state = lambda: self.pysf_sim.peds.state
         pysf_state = PySFPedestrianStates(get_state)
@@ -121,7 +124,8 @@ class Simulator:
     def reset_state(self):
         self.peds_behavior.pick_new_goals()
         robot_pose = (self.pick_robot_spawn(), 0)
-        goal_pos = self.pick_robot_goal()
+        self.goal_id = random.randint(0, len(self.robot_goal_gens) - 1)
+        goal_pos = self.robot_goal_gens[self.goal_id].generate(1)[0]
         self.robot = self.robot_factory(robot_pose, goal_pos)
 
     def step_once(self, action: PolarVec2D):

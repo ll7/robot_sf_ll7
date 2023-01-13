@@ -11,12 +11,21 @@ Rect = Tuple[Vec2D, Vec2D, Vec2D]
 
 
 @dataclass
+class GlobalRoute:
+    spawn_id: int
+    goal_id: int
+    waypoints: List[Vec2D]
+
+
+@dataclass
 class VisualizableMapConfig:
     x_margin: Range2D
     y_margin: Range2D
     obstacles: np.ndarray
     goal_zones: List[Rect] = field(default_factory=list)
-    spawn_zones: List[Rect] = field(default_factory=list)
+    robot_spawn_zones: List[Rect] = field(default_factory=list)
+    ped_spawn_zones: List[Rect] = field(default_factory=list)
+    robot_routes: List[GlobalRoute] = field(default_factory=list)
 
 
 MAP_VERSION_V0 = 'v0'
@@ -54,7 +63,9 @@ def determine_mapfile_version(text: str) -> Union[str, None]:
                 for obs_key in map_data['Obstacles']]):
             return MAP_VERSION_V0
 
-        # TODO: add checks for spawn / goal zone definitions
+        required_v1_keys = { 'ped_spawn_zones', 'robot_spawn_zones', 'goal_zones' }
+        if not contains_all(set(map_data.keys()), required_v1_keys):
+            return MAP_VERSION_V0
 
         return MAP_VERSION_V1
     except:
@@ -100,16 +111,22 @@ def parse_mapfile_text_v1(text: str) -> Union[VisualizableMapConfig, None]:
                 all_lines.append(line)
         obstacles = np.array(all_lines)
 
+        routes = [GlobalRoute(o['spawn_id'], o['goal_id'], o['waypoints'])
+                  for o in map_data['robot_routes']]
+
         x_margin = map_data['x_margin']
         x_margin = (x_margin[0], x_margin[1])
 
         y_margin = map_data['y_margin']
         y_margin = (y_margin[0], y_margin[1])
 
-        goal_zones = map_data['GoalZones']
-        spawn_zones = map_data['SpawnZones']
+        goal_zones = map_data['goal_zones']
+        robot_spawn_zones = map_data['robot_spawn_zones']
+        ped_spawn_zones = map_data['ped_spawn_zones']
 
-        return VisualizableMapConfig(x_margin, y_margin, obstacles, goal_zones, spawn_zones)
+        return VisualizableMapConfig(
+            x_margin, y_margin, obstacles, goal_zones,
+            robot_spawn_zones, ped_spawn_zones, routes)
     except:
         return None
 

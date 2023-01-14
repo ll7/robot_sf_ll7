@@ -29,6 +29,13 @@ class Obstacle:
 
 
 @dataclass
+class GlobalRoute:
+    spawn_id: int
+    goal_id: int
+    waypoints: List[Vec2D]
+
+
+@dataclass
 class MapDefinition:
     width: float
     height: float
@@ -37,6 +44,7 @@ class MapDefinition:
     ped_spawn_zones: List[Rect]
     goal_zones: List[Rect]
     bounds: List[Line2D]
+    robot_routes: List[GlobalRoute]
     obstacles_pysf: List[Line2D] = field(init=False)
 
     def __post_init__(self):
@@ -71,6 +79,9 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     obstacles = [Obstacle([norm_pos(p) for p in map_structure['Obstacles'][k]['Vertex']])
                  for k in map_structure['Obstacles']]
 
+    robot_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']])
+                    for o in map_structure['robot_routes']]
+
     map_bounds = [
         (0, width, 0, 0),           # bottom
         (0, width, height, height), # top
@@ -80,16 +91,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     def norm_zone(rect: Rect) -> Rect:
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
-    if 'goal_zones' in map_structure and 'robot_spawn_zones' in map_structure \
-            and 'ped_spawn_zones' in map_structure:
-        goal_zones = [norm_zone(z) for z in map_structure['goal_zones']]
-        robot_spawn_zones = [norm_zone(z) for z in map_structure['robot_spawn_zones']]
-        ped_spawn_zones = [norm_zone(z) for z in map_structure['ped_spawn_zones']]
-    else:
-        # TODO: remove this fallback logic for maps without explicit spawn / goal zones
-        box_rect = ((0.0, height), (0.0, 0.0), (width, 0.0))
-        robot_spawn_zones, ped_spawn_zones, goal_zones = [box_rect], [box_rect], [box_rect]
+    goal_zones = [norm_zone(z) for z in map_structure['goal_zones']]
+    robot_spawn_zones = [norm_zone(z) for z in map_structure['robot_spawn_zones']]
+    ped_spawn_zones = [norm_zone(z) for z in map_structure['ped_spawn_zones']]
 
     return MapDefinition(
         width, height, obstacles, robot_spawn_zones,
-        ped_spawn_zones, goal_zones, map_bounds)
+        ped_spawn_zones, goal_zones, map_bounds, robot_routes)

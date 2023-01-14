@@ -37,6 +37,10 @@ class MovingRobot(Protocol):
     def goal(self) -> Vec2D:
         raise NotImplementedError()
 
+    @goal.setter
+    def goal(self, new_goal: Vec2D):
+        raise NotImplementedError()
+
     @property
     def current_speed(self) -> PolarVec2D:
         raise NotImplementedError()
@@ -69,18 +73,19 @@ class Simulator:
     map_def: MapDefinition
     robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
     robot: MovingRobot = field(init=False)
+    spawn_id: int = field(init=False, default=0)
     goal_id: int = field(init=False, default=0)
+    waypoint_id: int = field(init=False, default=-1)
 
     def __post_init__(self):
         ped_spawn_gen = SpawnGenerator(self.map_def.ped_spawn_zones)
-        robot_spawn_gen = SpawnGenerator(self.map_def.robot_spawn_zones)
+        self.robot_spawn_gens = [SpawnGenerator([z]) for z in self.map_def.robot_spawn_zones]
         self.robot_goal_gens = [SpawnGenerator([z]) for z in self.map_def.goal_zones]
 
         spawn_config = PedSpawnConfig(20, 6)
         ped_states_np, initial_groups = initialize_pedestrians(
             spawn_config, ped_spawn_gen, ped_spawn_gen)
         pick_ped_goal = lambda: ped_spawn_gen.generate(1)[0]
-        self.pick_robot_spawn = lambda: robot_spawn_gen.generate(1)[0]
 
         get_state = lambda: self.pysf_sim.peds.state
         pysf_state = PySFPedestrianStates(get_state)
@@ -123,10 +128,26 @@ class Simulator:
 
     def reset_state(self):
         self.peds_behavior.pick_new_goals()
-        robot_pose = (self.pick_robot_spawn(), 0)
-        self.goal_id = random.randint(0, len(self.robot_goal_gens) - 1)
-        goal_pos = self.robot_goal_gens[self.goal_id].generate(1)[0]
-        self.robot = self.robot_factory(robot_pose, goal_pos)
+        route = next(filter(
+            lambda r: r.goal_id == self.goal_id and r.spawn_id == self.spawn_id,
+            self.map_def.robot_routes))
+
+        if self.waypoint_id == -1 or not self.dist_to_goal < 1.0:
+            # reset simulation, respawn robot and pick new goal
+            self.spawn_id = random.randint(0, len(self.robot_spawn_gens) - 1)
+            self.goal_id = random.randint(0, len(self.robot_goal_gens) - 1)
+            self.waypoint_id = 0
+            goal_pos = route.waypoints[self.waypoint_id]
+            robot_pose = (self.robot_spawn_gens[self.spawn_id].generate(1)[0], 0)
+            self.robot = self.robot_factory(robot_pose, goal_pos)
+        elif self.waypoint_id == len(route.waypoints) - 1:
+            # pick final target within goal zone
+            self.waypoint_id = -1
+            self.robot.goal = self.robot_goal_gens[self.goal_id].generate(1)[0]
+        else:
+            # navigate towards next waypoint
+            self.waypoint_id += 1
+            self.robot.goal = route.waypoints[self.waypoint_id]
 
     def step_once(self, action: PolarVec2D):
         self.peds_behavior.redirect_groups_if_at_goal()

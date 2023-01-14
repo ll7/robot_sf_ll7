@@ -79,10 +79,7 @@ class RobotEnv(Env):
         action_parsed = (action[0], action[1])
         self.sim_env.step_once(action_parsed)
         self.last_action = action_parsed
-
-        norm_ranges, rob_state = self._get_obs()
-        obs = np.concatenate((norm_ranges, rob_state), axis=0)
-
+        obs = self._get_obs()
         reward, done = self._reward()
         self.timestep += 1
         return obs, reward, done, { 'step': self.episode }
@@ -92,10 +89,7 @@ class RobotEnv(Env):
         self.timestep = 0
         self.last_action = None
         self.sim_env.reset_state()
-
-        norm_ranges, rob_state = self._get_obs()
-        obs = np.concatenate((norm_ranges, rob_state), axis=0)
-        return obs
+        return self._get_obs()
 
     def _reward(self) -> Tuple[float, bool]:
         step_discount = 0.1 / self.max_sim_steps
@@ -110,7 +104,7 @@ class RobotEnv(Env):
             is_terminal = True
         return reward, is_terminal
 
-    def _get_obs(self):
+    def _get_obs(self) -> np.ndarray:
         ranges_np = self.lidar_sensor.get_scan(self.sim_env.robot_pose)
         speed_x, speed_rot = self.sim_env.robot.current_speed
         target_distance, target_angle = rel_pos(self.sim_env.robot.pose, self.sim_env.goal_pos)
@@ -122,7 +116,8 @@ class RobotEnv(Env):
             target_distance /= self.max_target_dist
             target_angle = target_angle / np.pi
 
-        return ranges_np, np.array([speed_x, speed_rot, target_distance, target_angle])
+        robot_state = np.array([speed_x, speed_rot, target_distance, target_angle])
+        return np.concatenate((ranges_np, robot_state), axis=0)
 
     def render(self, mode='human'):
         if not self.sim_ui:

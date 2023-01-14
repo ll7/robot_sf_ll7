@@ -120,7 +120,7 @@ class RobotEnv(Env):
             reward -= 1
             is_terminal = True
         if self.occupancy.is_robot_at_goal:
-            reward += 1
+            reward += 10
             is_terminal = True
         if self.timestep >= self.max_sim_steps:
             is_terminal = True

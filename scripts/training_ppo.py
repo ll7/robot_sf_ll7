@@ -6,9 +6,10 @@ from robot_sf.robot_env import RobotEnv
 
 
 def training():
-    env = make_vec_env(lambda: RobotEnv(), n_envs=32, vec_env_cls=SubprocVecEnv)
-    model = PPO("MlpPolicy", env, tensorboard_log="./logs/ppo_logs/", n_steps=2048)
-    save_model = CheckpointCallback(1_000_000, "./model/backup", "ppo_model")
+    n_envs = 64
+    env = make_vec_env(lambda: RobotEnv(), n_envs=n_envs, vec_env_cls=SubprocVecEnv)
+    model = PPO("MlpPolicy", env, tensorboard_log="./logs/ppo_logs/")
+    save_model = CheckpointCallback(1_000_000 // n_envs, "./model/backup", "ppo_model")
     model.learn(total_timesteps=50_000_000, progress_bar=True, callback=save_model)
     model.save("./model/ppo_model")
 

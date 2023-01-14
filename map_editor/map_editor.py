@@ -1,6 +1,6 @@
 import os
 from time import sleep
-from typing import Tuple, Callable, Union
+from typing import Tuple, Callable, Union, List
 from threading import Thread
 
 import turtle
@@ -9,6 +9,9 @@ import tkinter.scrolledtext as tks
 
 from map_editor.map_file_parser import \
     parse_mapfile_text, VisualizableMapConfig
+
+Vec2D = Tuple[float, float]
+Rect = Tuple[Vec2D, Vec2D, Vec2D]
 
 
 class MapEditor:
@@ -32,12 +35,12 @@ class MapEditor:
                 map_config = parse_mapfile_text(config_content)
                 if map_config:
                     self.last_text = config_content
-                    self._render_map_canvas(map_config)
+                    try:
+                        self._render_map_canvas(map_config)
+                    except:
+                        print('data error, cannot display')
                 else:
                     print('parsing config file failed!')
-                    # TODO: think of showing some hint that there was a parser error
-                    #       any maybe augment in the text view where the error occured
-                    pass
 
         def reload_map_as_daemon(frequency_hz: float, is_term: Callable[[], bool]):
             reload_intercal_secs = 1 / frequency_hz
@@ -74,15 +77,68 @@ class MapEditor:
 
     def _render_map_canvas(self, map_config: VisualizableMapConfig):
         (min_x, max_x), (min_y, max_y) = map_config.x_margin, map_config.y_margin
+        width, height = max_x- min_x, max_y - min_y
+        if width > height:
+            max_y = min_y + width
+        else:
+            max_x = min_x + height
         self.my_turtle.screen.setworldcoordinates(min_x, min_y, max_x, max_y)
         self.my_turtle.clear()
         self.my_turtle.color('black')
-        for s_x, e_x, s_y, e_y in map_config.obstacles:
+
+        def draw_line(p1: Vec2D, p2: Vec2D):
             self.my_turtle.up()
-            self.my_turtle.setpos(s_x, s_y)
+            self.my_turtle.setpos(p1)
             self.my_turtle.down()
-            self.my_turtle.setpos(e_x, e_y)
-        # TODO: hide turtle cursor
+            self.my_turtle.setpos(p2)
+
+        for s_x, e_x, s_y, e_y in map_config.obstacles:
+            draw_line((s_x, s_y), (e_x, e_y))
+
+        def rect_points(rect: Rect) -> List[Vec2D]:
+            def add_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:
+                return v1[0] + v2[0], v1[1] + v2[1]
+            def sub_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:
+                return v1[0] - v2[0], v1[1] - v2[1]
+            p1, p2, p3 = rect
+            p4 = add_vec(sub_vec(p3, p2), p1)
+            return [p1, p2, p3, p4]
+
+        def draw_rect(points: List[Vec2D]):
+            p1, p2, p3, p4 = points
+            self.my_turtle.up()
+            self.my_turtle.setpos(p1)
+            self.my_turtle.down()
+            self.my_turtle.setpos(p2)
+            self.my_turtle.setpos(p3)
+            self.my_turtle.setpos(p4)
+            self.my_turtle.setpos(p1)
+
+        self.my_turtle.color('green')
+        for rect in map_config.goal_zones:
+            draw_rect(rect_points(rect))
+
+        self.my_turtle.color('blue')
+        for rect in map_config.robot_spawn_zones:
+            draw_rect(rect_points(rect))
+
+        self.my_turtle.color('red')
+        for rect in map_config.ped_spawn_zones:
+            draw_rect(rect_points(rect))
+
+        def draw_circle(center: Vec2D, radius: float):
+            self.my_turtle.up()
+            self.my_turtle.setpos((center[0], center[1] - radius))
+            self.my_turtle.down()
+            self.my_turtle.circle(radius, steps=50)
+
+        self.my_turtle.color('green')
+        self.my_turtle.fillcolor('green')
+        for route in map_config.robot_routes:
+            for p in route.waypoints:
+                draw_circle(p, radius=1)
+
+        self.my_turtle.up()
 
     def _load_example_map(self):
         current_dir = os.path.dirname(__file__)

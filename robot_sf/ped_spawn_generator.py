@@ -40,11 +40,11 @@ class SpawnGenerator:
         zone_id = np.random.choice(len(self.spawn_zones), size=1, p=self._zone_probs)[0]
         p_1, p_2, p_3 = self.spawn_zones[zone_id]
 
-        s_1, s_2 = dist(p_1, p_2), dist(p_2, p_3)
+        d_x, d_y = dist(p_2, p_3), dist(p_1, p_2)
         rot = atan2(p_3[1] - p_2[1], p_3[0] - p_2[0])
-        center = np.random.uniform(0, s_1), np.random.uniform(0, s_2)
-        norm_points = np.random.normal(center, scale, size=(num_samples, 2))
-        # TODO: handle points outside of the spawn zone
+        x_pos = np.random.uniform(0, d_x, (num_samples, 1))
+        y_pos = np.random.uniform(0, d_y, (num_samples, 1))
+        norm_points = np.concatenate((x_pos, y_pos), axis=1)
 
         def rotate(point: Vec2D, angle: float) -> Vec2D:
             pos_x, pos_y = point

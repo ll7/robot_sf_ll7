@@ -5,7 +5,7 @@ from typing import List, Callable, Tuple, Protocol
 import pysocialforce as pysf
 from pysocialforce.utils import SimulatorConfig as PySFSimConfig
 
-from robot_sf.sim_config import MapDefinition
+from robot_sf.sim_config import MapDefinition, GlobalRoute
 from robot_sf.ped_spawn_generator \
     import SpawnGenerator, PedSpawnConfig, initialize_pedestrians
 from robot_sf.ped_robot_force \
@@ -99,7 +99,8 @@ class Simulator:
         def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
             forces = pysf.simulator.make_forces(sim, config)
             if self.config.prf_config.is_active:
-                forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: self.robot.pos))
+                forces.append(PedRobotForce(
+                    self.config.prf_config, sim.peds, lambda: self.robot.pos))
             return forces
 
         self.pysf_sim = pysf.Simulator(
@@ -128,26 +129,29 @@ class Simulator:
 
     def reset_state(self):
         self.peds_behavior.pick_new_goals()
-        route = next(filter(
-            lambda r: r.goal_id == self.goal_id and r.spawn_id == self.spawn_id,
-            self.map_def.robot_routes))
 
-        if self.waypoint_id == -1 or not self.dist_to_goal < 1.0:
-            # reset simulation, respawn robot and pick new goal
+        def get_route(spawn_id: int, goal_id: int) -> GlobalRoute:
+            return next(filter(
+                lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
+                self.map_def.robot_routes))
+
+        reset_required = self.waypoint_id == -1 or not self.dist_to_goal < 1.0
+        if reset_required:
             self.spawn_id = random.randint(0, len(self.robot_spawn_gens) - 1)
             self.goal_id = random.randint(0, len(self.robot_goal_gens) - 1)
+            route = get_route(self.spawn_id, self.goal_id)
             self.waypoint_id = 0
             goal_pos = route.waypoints[self.waypoint_id]
             robot_pose = (self.robot_spawn_gens[self.spawn_id].generate(1)[0], 0)
             self.robot = self.robot_factory(robot_pose, goal_pos)
-        elif self.waypoint_id == len(route.waypoints) - 1:
-            # pick final target within goal zone
-            self.waypoint_id = -1
-            self.robot.goal = self.robot_goal_gens[self.goal_id].generate(1)[0]
         else:
-            # navigate towards next waypoint
-            self.waypoint_id += 1
-            self.robot.goal = route.waypoints[self.waypoint_id]
+            route = get_route(self.spawn_id, self.goal_id)
+            if self.waypoint_id == len(route.waypoints) - 1:
+                self.waypoint_id = -1
+                self.robot.goal = self.robot_goal_gens[self.goal_id].generate(1)[0]
+            else:
+                self.waypoint_id += 1
+                self.robot.goal = route.waypoints[self.waypoint_id]
 
     def step_once(self, action: PolarVec2D):
         self.peds_behavior.redirect_groups_if_at_goal()

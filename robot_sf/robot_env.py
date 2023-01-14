@@ -72,7 +72,7 @@ class RobotEnv(Env):
         self.timestep = 0
         self.last_action: Union[PolarVec2D, None] = None
         if debug:
-            self.sim_ui = SimulationView(width, height, scaling=4)
+            self.sim_ui = SimulationView(1200, 800, scaling=15)
         # TODO: provide a callback that shuts the simulator down on cancellation by user via UI
 
     def step(self, action: np.ndarray):
@@ -92,6 +92,8 @@ class RobotEnv(Env):
         return self._get_obs()
 
     def _reward(self) -> Tuple[float, bool]:
+        # TODO: distinguish between obstacle hit and pedestrian hit
+        # TODO: rate pedestrian hit higher than reaching the goal (to avoid harm)
         step_discount = 0.1 / self.max_sim_steps
         reward, is_terminal = -step_discount, False
         if self.occupancy.is_robot_collision:

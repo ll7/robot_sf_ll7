@@ -46,8 +46,8 @@ class SimulationView:
     """Representing a UI window for visualizing the simulation's state."""
 
     def __init__(self, width: float=10, height: float=10, scaling: float=20):
-        self.width = width * scaling
-        self.height = height * scaling
+        self.width = width
+        self.height = height
         self.scaling = scaling
 
         pygame.init()
@@ -85,19 +85,20 @@ class SimulationView:
         pygame.display.update()
 
     def _norm_state(self, state: VisualizableSimState) -> VisualizableSimState:
-        # TODO: render robot at the center, show only surrounding within a box
-        #       -> enable open world scenario with bigger maps
-
+        r_x, r_y = state.robot_pose[0]
+        x_offset, y_offset = r_x * self.scaling - self.width / 2, r_y * self.scaling - self.height / 2
         state.pedestrian_positions *= self.scaling
+        state.pedestrian_positions -= [x_offset, y_offset]
         state.obstacles *= self.scaling
+        state.obstacles -= [x_offset, y_offset, x_offset, y_offset]
         state.robot_pose = ((
-            state.robot_pose[0][0] * self.scaling,
-            state.robot_pose[0][1] * self.scaling),
+            state.robot_pose[0][0] * self.scaling - x_offset,
+            state.robot_pose[0][1] * self.scaling - y_offset),
             state.robot_pose[1])
         if state.action:
             state.action.robot_goal = (
-                state.action.robot_goal[0] * self.scaling,
-                state.action.robot_goal[1] * self.scaling)
+                state.action.robot_goal[0] * self.scaling - x_offset,
+                state.action.robot_goal[1] * self.scaling - y_offset)
         return state
 
     def _draw_robot(self, pose: RobotPose):

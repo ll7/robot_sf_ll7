@@ -60,6 +60,13 @@ class MapDefinition:
         obstacle_lines = [line for o in self.obstacles for line in o.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
+        if self.width < 0 or self.width < 0:
+            raise ValueError("Map height and width mustn't be zero or negative!")
+        if not self.robot_spawn_zones or not self.ped_spawn_zones or not self.goal_zones:
+            raise ValueError("Spawn and goal zones mustn't be empty!")
+        if len(self.bounds) != 4:
+            raise ValueError("Invalid bounds! Expected exactly 4 bounds!")
+
         def route_exists_once(spawn_id: int, goal_id: int) -> bool:
             return len(list(filter(
                 lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
@@ -67,8 +74,10 @@ class MapDefinition:
 
         num_spawns, num_goals = len(self.robot_spawn_zones), len(self.goal_zones)
         spawn_goal_perms = [(s, g) for s in range(num_spawns) for g in range(num_goals)]
-        if not all(map(lambda perm: route_exists_once(perm[0], perm[1]), spawn_goal_perms)):
-            raise ValueError(('Missing or ambiguous routes! Please ensure that every ',
+        missing_routes = list(filter(lambda perm: route_exists_once(perm[0], perm[1]), spawn_goal_perms))
+        if len(missing_routes) > 0:
+            missing = ', '.join([f'{s} -> {g}' for s, g in missing_routes])
+            raise ValueError((f'Missing or ambiguous routes {missing}! Please ensure that every ',
                 'spawn zone is connected to every goal zone by exactly one route!'))
 
 

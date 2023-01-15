@@ -74,7 +74,7 @@ class MapDefinition:
 
         num_spawns, num_goals = len(self.robot_spawn_zones), len(self.goal_zones)
         spawn_goal_perms = [(s, g) for s in range(num_spawns) for g in range(num_goals)]
-        missing_routes = list(filter(lambda perm: route_exists_once(perm[0], perm[1]), spawn_goal_perms))
+        missing_routes = list(filter(lambda perm: not route_exists_once(perm[0], perm[1]), spawn_goal_perms))
         if len(missing_routes) > 0:
             missing = ', '.join([f'{s} -> {g}' for s, g in missing_routes])
             raise ValueError((f'Missing or ambiguous routes {missing}! Please ensure that every ',

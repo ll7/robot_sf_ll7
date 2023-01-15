@@ -4,9 +4,6 @@ import random
 from typing import List, Tuple
 from dataclasses import dataclass, field
 
-# import numpy as np
-# from shapely.geometry import Polygon
-
 
 Vec2D = Tuple[float, float]
 Line2D = Tuple[float, float, float, float]
@@ -19,13 +16,17 @@ class Obstacle:
     lines: List[Line2D] = field(init=False)
 
     def __post_init__(self):
-        edges = list(zip(self.vertices[:-1], self.vertices[1:]))
+        if not self.vertices:
+            raise ValueError('No vertices specified for obstacle!')
+
+        edges = list(zip(self.vertices[:-1], self.vertices[1:])) \
+            + [(self.vertices[-1], self.vertices[0])]
+        edges = list(filter(lambda l: l[0] != l[1], edges)) # remove fake lines that are just points
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
         self.lines = lines
 
-    # @property
-    # def as_polygon(self) -> Polygon:
-    #     return Polygon(np.array(self.vertices))
+        if not self.vertices:
+            print('WARNING: obstacle is just a single point that cannot collide!')
 
 
 @dataclass
@@ -33,6 +34,14 @@ class GlobalRoute:
     spawn_id: int
     goal_id: int
     waypoints: List[Vec2D]
+
+    def __post_init__(self):
+        if self.spawn_id < 0:
+            raise ValueError('Spawn id needs to be an integer >= 0!')
+        if self.goal_id < 0:
+            raise ValueError('Goal id needs to be an integer >= 0!')
+        if not self.waypoints:
+            raise ValueError(f'Route {self.spawn_id} -> {self.goal_id} contains no waypoints!')
 
 
 @dataclass
@@ -51,6 +60,17 @@ class MapDefinition:
         obstacle_lines = [line for o in self.obstacles for line in o.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
+        def route_exists_once(spawn_id: int, goal_id: int) -> bool:
+            return len(list(filter(
+                lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
+                self.robot_routes))) == 1
+
+        num_spawns, num_goals = len(self.robot_spawn_zones), len(self.goal_zones)
+        spawn_goal_perms = [(s, g) for s in range(num_spawns) for g in range(num_goals)]
+        if not all(map(lambda perm: route_exists_once(perm[0], perm[1]), spawn_goal_perms)):
+            raise ValueError(('Missing or ambiguous routes! Please ensure that every ',
+                'spawn zone is connected to every goal zone by exactly one route!'))
+
 
 @dataclass
 class MapDefinitionPool:
@@ -59,11 +79,17 @@ class MapDefinitionPool:
 
     def __post_init__(self):
         if not self.map_defs:
+            if not os.path.exists(self.maps_folder) or not os.path.isdir(self.maps_folder):
+                raise ValueError(f"Map directory '{self.maps_folder}' does not exist!")
+
             def load_json(path: str) -> dict:
                 with open(path, 'r', encoding='utf-8') as file:
                     return json.load(file)
             map_files = [os.path.join(self.maps_folder, f) for f in os.listdir(self.maps_folder)]
             self.map_defs = [serialize_map(load_json(f)) for f in map_files]
+
+        if not self.map_defs:
+            raise ValueError('Map pool is empty! Please specify some maps!')
 
     def choose_random_map(self) -> MapDefinition:
         return random.choice(self.map_defs)

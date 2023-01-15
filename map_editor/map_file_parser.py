@@ -39,31 +39,18 @@ def determine_mapfile_version(text: str) -> Union[str, None]:
     def contains_all(s1: Set, comp: Set) -> bool:
         return intersect_sets(s1, comp) == comp
 
-    def contains_any(s1: Set, comp: Set) -> bool:
-        return len(intersect_sets(s1, comp)) > 0
-
     try:
         map_data: dict = json.loads(text)
 
-        required_toplevel_keys = { 'Obstacles', 'x_margin', 'y_margin' }
+        required_toplevel_keys = { 'x_margin', 'y_margin' }
         if not contains_all(set(map_data.keys()), required_toplevel_keys):
             return None
 
-        required_obstacle_keys = { 'ID', 'Vertex' }
-        if any([not contains_all(set(map_data['Obstacles'][obs_key]), required_obstacle_keys) \
-                for obs_key in map_data['Obstacles']]):
-            return None
-
-        obsolete_v0_toplevel_keys = { 'NumberObstacles', 'Created' }
+        obsolete_v0_toplevel_keys = { 'Obstacles', 'NumberObstacles', 'Created' }
         if any([k for k in obsolete_v0_toplevel_keys if k in map_data]):
             return MAP_VERSION_V0
 
-        obsolete_v0_obstacle_keys = { 'Edges' }
-        if any([contains_any(set(map_data['Obstacles'][obs_key]), obsolete_v0_obstacle_keys) \
-                for obs_key in map_data['Obstacles']]):
-            return MAP_VERSION_V0
-
-        required_v1_keys = { 'ped_spawn_zones', 'robot_spawn_zones', 'goal_zones' }
+        required_v1_keys = { 'obstacles', 'ped_spawn_zones', 'robot_spawn_zones', 'goal_zones', 'robot_routes' }
         if not contains_all(set(map_data.keys()), required_v1_keys):
             return MAP_VERSION_V0
 
@@ -77,8 +64,8 @@ def parse_mapfile_text_v0(text: str) -> Union[VisualizableMapConfig, None]:
         map_data = json.loads(text)
 
         all_lines = list()
-        for obstacle in map_data['Obstacles']:
-            vertices: List[Vec2D] = map_data['Obstacles'][obstacle]['Vertex']
+        for obstacle in map_data['obstacles']:
+            vertices: List[Vec2D] = map_data['obstacles'][obstacle]['Vertex']
             edges = list(zip(vertices[:-1], vertices[1:])) \
                 + [(vertices[-1], vertices[0])]
             for (s_x, s_y), (e_x, e_y) in edges:
@@ -102,8 +89,8 @@ def parse_mapfile_text_v1(text: str) -> Union[VisualizableMapConfig, None]:
         map_data = json.loads(text)
 
         all_lines = list()
-        for obstacle in map_data['Obstacles']:
-            vertices: List[Vec2D] = map_data['Obstacles'][obstacle]['Vertex']
+        for vertices in map_data['obstacles']:
+            vertices: List[Vec2D]
             edges = list(zip(vertices[:-1], vertices[1:])) \
                 + [(vertices[-1], vertices[0])]
             for (s_x, s_y), (e_x, e_y) in edges:

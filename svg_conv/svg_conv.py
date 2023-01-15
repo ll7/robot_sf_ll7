@@ -30,18 +30,13 @@ def points_of_paths(paths: List[Path]) -> List[List[Vec2D]]:
 
 
 def serialize_mapjson(poly_points: List[List[Vec2D]]) -> str:
-    obstacles_list = [{ 'ID': str(i), 'Vertex': points } for i, points in enumerate(poly_points)]
-    obstacles = dict()
-    for obstacle in obstacles_list:
-        obs_name = obstacle['ID']
-        obstacles[f'obstacle_{obs_name}'] = obstacle
-
+    obstacles = poly_points
     all_points = [p for points in poly_points for p in points]
-    x_margin = [min([x for x, y in all_points]), max([x for x, y in all_points])]
-    y_margin = [min([y for x, y in all_points]), max([y for x, y in all_points])]
+    x_margin = [min([x for x, _ in all_points]), max([x for x, _ in all_points])]
+    y_margin = [min([y for _, y in all_points]), max([y for _, y in all_points])]
 
     map_obj = {
-        'Obstacles': obstacles,
+        'obstacles': obstacles,
         'x_margin': x_margin,
         'y_margin': y_margin
     }

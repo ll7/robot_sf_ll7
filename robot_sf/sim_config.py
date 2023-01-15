@@ -111,8 +111,8 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     def norm_pos(pos: Vec2D) -> Vec2D:
         return (pos[0] - min_x, pos[1] - min_y)
 
-    obstacles = [Obstacle([norm_pos(p) for p in map_structure['Obstacles'][k]['Vertex']])
-                 for k in map_structure['Obstacles']]
+    obstacles = [Obstacle([norm_pos(p) for p in vertices])
+                 for vertices in map_structure['obstacles']]
 
     robot_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']])
                     for o in map_structure['robot_routes']]

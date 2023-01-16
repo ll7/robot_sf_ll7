@@ -24,9 +24,8 @@ def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
 @dataclass
 class RobotSettings:
     radius: float = 1.0
-    max_linear_speed: float = 0.5
+    max_linear_speed: float = 2.0
     max_angular_speed: float = 0.5
-    rob_collision_radius: float = 0.7
     wheel_radius: float = 0.05
     interaxis_length: float = 0.3
 

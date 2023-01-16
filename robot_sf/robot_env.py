@@ -97,10 +97,10 @@ class RobotEnv(Env):
         step_discount = 0.1 / self.max_sim_steps
         reward, is_terminal = -step_discount, False
         if self.occupancy.is_robot_collision:
-            reward -= 1
+            reward -= 2
             is_terminal = True
         if self.occupancy.is_robot_at_goal:
-            reward += 10
+            reward += 1
             is_terminal = True
         if self.timestep >= self.max_sim_steps:
             is_terminal = True

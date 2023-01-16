@@ -97,6 +97,7 @@ class Simulator:
 
         def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
             forces = pysf.simulator.make_forces(sim, config)
+            forces = [f for f in forces if type(f) != pysf.forces.ObstacleForce]
             if self.config.prf_config.is_active:
                 forces.append(PedRobotForce(
                     self.config.prf_config, sim.peds, lambda: self.robot.pos))

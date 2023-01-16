@@ -78,19 +78,18 @@ class Simulator:
     waypoint_id: int = field(init=False, default=-1)
 
     def __post_init__(self):
-        ped_spawn_gen = SpawnGenerator(self.map_def.ped_spawn_zones)
+        ped_spawn_gens = [SpawnGenerator([z]) for z in self.map_def.ped_spawn_zones]
         self.robot_spawn_gens = [SpawnGenerator([z]) for z in self.map_def.robot_spawn_zones]
         self.robot_goal_gens = [SpawnGenerator([z]) for z in self.map_def.goal_zones]
 
-        spawn_config = PedSpawnConfig(20, 6)
-        ped_states_np, initial_groups = initialize_pedestrians(
-            spawn_config, ped_spawn_gen, ped_spawn_gen)
-        pick_ped_goal = lambda: ped_spawn_gen.generate(1)[0]
+        spawn_config = PedSpawnConfig(0.01, 6)
+        ped_states_np, initial_groups, zone_assignments = \
+            initialize_pedestrians(spawn_config, self.map_def.ped_spawn_zones)
 
         get_state = lambda: self.pysf_sim.peds.state
         pysf_state = PySFPedestrianStates(get_state)
         groups = PedestrianGroupings(pysf_state)
-        self.peds_behavior = GroupRedirectBehavior(groups, pick_ped_goal)
+        self.peds_behavior = GroupRedirectBehavior(groups, zone_assignments, ped_spawn_gens)
         self.groups_as_list = lambda: [list(ped_ids) for ped_ids in groups.groups.values()]
 
         for ped_ids in initial_groups:
@@ -142,13 +141,13 @@ class Simulator:
             route = get_route(self.spawn_id, self.goal_id)
             self.waypoint_id = 0
             goal_pos = route.waypoints[self.waypoint_id]
-            robot_pose = (self.robot_spawn_gens[self.spawn_id].generate(1)[0], 0)
+            robot_pose = (self.robot_spawn_gens[self.spawn_id].generate(1)[0][0], 0)
             self.robot = self.robot_factory(robot_pose, goal_pos)
         else:
             route = get_route(self.spawn_id, self.goal_id)
             if self.waypoint_id == len(route.waypoints) - 1:
                 self.waypoint_id = -1
-                self.robot.goal = self.robot_goal_gens[self.goal_id].generate(1)[0]
+                self.robot.goal = self.robot_goal_gens[self.goal_id].generate(1)[0][0]
             else:
                 self.waypoint_id += 1
                 self.robot.goal = route.waypoints[self.waypoint_id]

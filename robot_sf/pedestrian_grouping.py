@@ -1,8 +1,10 @@
 from math import dist
-from typing import Set, Dict, Tuple, Protocol, Callable
+from typing import List, Set, Dict, Tuple, Protocol, Callable
 from dataclasses import dataclass, field
 
 import numpy as np
+
+from robot_sf.ped_spawn_generator import SpawnGenerator
 
 Vec2D = Tuple[float, float]
 
@@ -64,6 +66,8 @@ class PedestrianGroupings:
     states: PedestrianStates
     groups: Dict[int, Set[int]] = field(default_factory=dict)
     group_by_ped_id: Dict[int, int] = field(default_factory=dict)
+
+    # TODO: remove group reassignments, feature isn't required
 
     @property
     def group_ids(self) -> Set[int]:
@@ -132,8 +136,14 @@ class PedestrianGroupings:
 @dataclass
 class GroupRedirectBehavior:
     groups: PedestrianGroupings
-    pick_new_goal: Callable[[], Vec2D]
+    zone_assignments: Dict[int, int]
+    spawn_zones: List[SpawnGenerator]
     goal_proximity_threshold: float = 1
+    pick_new_goal: Callable[[int], Vec2D] = field(init=False)
+
+    def __post_init__(self):
+        self.pick_new_goal = lambda pid: \
+            self.spawn_zones[self.zone_assignments[pid]].generate(1)[0][0]
 
     def redirect_groups_if_at_goal(self):
         for gid in self.groups.group_ids:
@@ -141,7 +151,8 @@ class GroupRedirectBehavior:
             goal = self.groups.goal_of_group(gid)
             dist_to_goal = dist(centroid, goal)
             if dist_to_goal < self.goal_proximity_threshold:
-                new_goal = self.pick_new_goal()
+                any_pid = next(iter(self.groups.groups[gid]))
+                new_goal = self.pick_new_goal(any_pid)
                 self.groups.redirect_group(gid, new_goal)
 
         for pid in self.groups.standalone_ped_ids:
@@ -149,14 +160,15 @@ class GroupRedirectBehavior:
             goal = self.groups.states.goal_of(pid)
             dist_to_goal = dist(pos, goal)
             if dist_to_goal < self.goal_proximity_threshold:
-                new_goal = self.pick_new_goal()
+                new_goal = self.pick_new_goal(pid)
                 self.groups.redirect_pedestrian(pid, new_goal)
 
     def pick_new_goals(self):
         for gid in self.groups.group_ids:
-            new_goal = self.pick_new_goal()
+            any_pid = next(iter(self.groups.groups[gid]))
+            new_goal = self.pick_new_goal(any_pid)
             self.groups.redirect_group(gid, new_goal)
 
         for pid in self.groups.standalone_ped_ids:
-            new_goal = self.pick_new_goal()
+            new_goal = self.pick_new_goal(pid)
             self.groups.redirect_pedestrian(pid, new_goal)

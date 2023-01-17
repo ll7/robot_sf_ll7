@@ -1,12 +1,10 @@
-from stable_baselines3 import A2C
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3 import PPO
 from robot_sf.robot_env import RobotEnv
 
 
 def training():
     env = RobotEnv(debug=True)
-    model = A2C.load("./model/dqn_model", env=env)
+    model = PPO.load("./model/ppo_model", env=env)
 
     obs = env.reset()
     for _ in range(10000):

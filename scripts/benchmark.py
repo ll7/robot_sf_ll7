@@ -1,4 +1,4 @@
-# import time
+import time
 from scalene import scalene_profiler
 from robot_sf.robot_env import RobotEnv
 
@@ -9,12 +9,13 @@ def benchmark():
     obs = env.reset()
 
     peds_sim = env.sim_env
+
     env.step(env.action_space.sample())
     env.reset()
     print('start of simulation')
 
+    start_time = time.perf_counter()
     scalene_profiler.start()
-    # start_time = time.perf_counter()
 
     episode = 0
     ep_rewards = 0
@@ -33,8 +34,8 @@ def benchmark():
     print('end of simulation')
     scalene_profiler.stop()
 
-    # end_time = time.perf_counter()
-    # print(f'benchmark took {end_time - start_time} seconds')
+    end_time = time.perf_counter()
+    print(f'benchmark took {end_time - start_time} seconds')
 
 
 if __name__ == "__main__":

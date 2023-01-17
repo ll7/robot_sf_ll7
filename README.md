@@ -82,3 +82,15 @@ python3 -m map_editor
 ```
 
 *Note: See [this documentation](./docs/MAP_EDITOR_USAGE.md) on how to use the map editor.*
+
+### 7. Visual Debugging
+
+```sh
+cp scripts/debug_random_policy.py .
+python3 debug_random_policy.py
+```
+
+```sh
+cp scripts/debug_trained_policy.py .
+python3 debug_trained_policy.py
+```

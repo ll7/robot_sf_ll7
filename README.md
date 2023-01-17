@@ -56,10 +56,7 @@ popd
 
 ```sh
 python3 -m pytest tests
-python3 -m pylint robot_sf --fail-under=9.5
-
-# run only robot_sf tests
-python3 -m pytest tests --ignore=tests/pysf_tests
+python3 -m pylint robot_sf
 ```
 
 ### 5. Run StableBaselines Training (Docker)

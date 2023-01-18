@@ -1,5 +1,5 @@
 from math import ceil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple, Union
 from copy import deepcopy
 
@@ -37,6 +37,37 @@ class EnvSettings:
     map_pool: MapDefinitionPool = MapDefinitionPool()
 
 
+@dataclass
+class EnvState:
+    is_pedestrian_collision: bool
+    is_obstacle_collision: bool
+    is_robot_at_goal: bool
+    is_timesteps_exceeded: bool
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.is_timesteps_exceeded or self.is_pedestrian_collision or \
+            self.is_obstacle_collision or self.is_robot_at_goal
+
+
+@dataclass
+class SimpleReward:
+    max_sim_steps: float
+    step_discount: float = field(init=False)
+
+    def __post_init__(self):
+        self.step_discount = 0.1 / self.max_sim_steps
+
+    def __call__(self, state: EnvState) -> float:
+        reward = -self.step_discount
+        # TODO: think of punishing pedestrian collision harder than obstacle collision
+        if state.is_pedestrian_collision or state.is_obstacle_collision:
+            reward -= 2
+        if state.is_robot_at_goal:
+            reward += 1
+        return reward
+
+
 class RobotEnv(Env):
     """Representing an OpenAI Gym environment wrapper for
     training a robot with reinforcement leanring"""
@@ -54,8 +85,9 @@ class RobotEnv(Env):
         self.max_target_dist = np.sqrt(2) * (max(width, height) * 2) # the box diagonal
         self.action_space, self.observation_space = \
             RobotEnv._build_gym_spaces(self.max_target_dist, self.robot_config, self.lidar_config)
+        self.reward_func = SimpleReward(self.max_sim_steps)
 
-        self.sim_env: Simulator = None
+        self.sim_env: Simulator
         self.occupancy = ContinuousOccupancy(
             width, height,
             lambda: self.sim_env.robot_pose[0],
@@ -72,15 +104,19 @@ class RobotEnv(Env):
         self.timestep = 0
         self.last_action: Union[PolarVec2D, None] = None
         if debug:
-            self.sim_ui = SimulationView(1200, 800, scaling=15)
-        # TODO: provide a callback that shuts the simulator down on cancellation by user via UI
+            self.sim_ui = SimulationView()
 
     def step(self, action: np.ndarray):
         action_parsed = (action[0], action[1])
         self.sim_env.step_once(action_parsed)
         self.last_action = action_parsed
         obs = self._get_obs()
-        reward, done = self._reward()
+        state = EnvState(
+            self.occupancy.is_pedestrian_collision,
+            self.occupancy.is_obstacle_collision,
+            self.occupancy.is_robot_at_goal,
+            self.timestep > self.max_sim_steps)
+        reward, done = self.reward_func(state), state.is_terminal
         self.timestep += 1
         return obs, reward, done, { 'step': self.episode }
 
@@ -90,21 +126,6 @@ class RobotEnv(Env):
         self.last_action = None
         self.sim_env.reset_state()
         return self._get_obs()
-
-    def _reward(self) -> Tuple[float, bool]:
-        # TODO: distinguish between obstacle hit and pedestrian hit
-        # TODO: rate pedestrian hit higher than reaching the goal (to avoid harm)
-        step_discount = 0.1 / self.max_sim_steps
-        reward, is_terminal = -step_discount, False
-        if self.occupancy.is_robot_collision:
-            reward -= 2
-            is_terminal = True
-        if self.occupancy.is_robot_at_goal:
-            reward += 1
-            is_terminal = True
-        if self.timestep >= self.max_sim_steps:
-            is_terminal = True
-        return reward, is_terminal
 
     def _get_obs(self) -> np.ndarray:
         ranges_np = self.lidar_sensor.get_scan(self.sim_env.robot_pose)

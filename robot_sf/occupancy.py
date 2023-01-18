@@ -30,24 +30,21 @@ class ContinuousOccupancy:
         return self.get_pedestrian_coords()
 
     @property
-    def is_robot_collision(self) -> bool:
+    def is_obstacle_collision(self) -> bool:
         robot_x, robot_y = self.get_robot_coords()
-        return self.is_pedestrians_collision(self.robot_radius) or \
-            self.is_obstacle_collision(self.robot_radius) or \
-            not self.is_in_bounds(robot_x, robot_y)
+        if not self.is_in_bounds(robot_x, robot_y):
+            return True
 
-    @property
-    def is_robot_at_goal(self) -> bool:
-        return dist(self.get_robot_coords(), self.get_goal_coords()) < self.goal_radius
-
-    def is_obstacle_collision(self, collision_distance: float) -> bool:
-        circle_robot = (self.get_robot_coords(), collision_distance)
+        collision_distance = self.robot_radius
+        circle_robot = ((robot_x, robot_y), collision_distance)
         for s_x, s_y, e_x, e_y in self.obstacle_coords:
             if is_circle_line_intersection(circle_robot, ((s_x, s_y), (e_x, e_y))):
                 return True
         return False
 
-    def is_pedestrians_collision(self, collision_distance: float) -> bool:
+    @property
+    def is_pedestrian_collision(self) -> bool:
+        collision_distance = self.robot_radius
         ped_radius = 0.4
         circle_robot = (self.get_robot_coords(), collision_distance)
         for ped_x, ped_y in self.pedestrian_coords:
@@ -55,6 +52,10 @@ class ContinuousOccupancy:
             if is_circle_circle_intersection(circle_robot, circle_ped):
                 return True
         return False
+
+    @property
+    def is_robot_at_goal(self) -> bool:
+        return dist(self.get_robot_coords(), self.get_goal_coords()) < self.goal_radius
 
     def is_in_bounds(self, world_x: float, world_y: float) -> bool:
         return 0 <= world_x <= self.width and 0 <= world_y <= self.height

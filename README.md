@@ -88,6 +88,13 @@ python3 debug_random_policy.py
 ```
 
 ```sh
+mkdir model
+pushd model;
+    wget https://megastore.rz.uni-augsburg.de/get/hXJCV2BgAC/ -O ppo_model.zip
+popd
+```
+
+```sh
 cp scripts/debug_trained_policy.py .
 python3 debug_trained_policy.py
 ```

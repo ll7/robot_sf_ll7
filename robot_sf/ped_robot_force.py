@@ -2,6 +2,8 @@ from typing import Tuple, Callable
 from dataclasses import dataclass
 
 import numpy as np
+import numba
+
 from pysocialforce.scene import PedState
 from pysocialforce.utils import stateutils
 
@@ -32,19 +34,32 @@ class PedRobotForce:
 
     def __call__(self) -> np.ndarray:
         threshold = self.config.activation_threshold + self.peds.agent_radius
-        forces = np.zeros((self.peds.size(), 2))
+        sigma = self.config.sigma
         ped_positions = self.peds.pos()
         robot_pos = self.get_robot_pos()
+        ped_radius = self.peds.agent_radius
+        robot_radius = self.config.robot_radius
 
-        diff = (ped_positions - robot_pos).astype(np.float64)
-        directions, dists = stateutils.normalize(diff)
-
-        dists = dists - self.peds.agent_radius - self.config.robot_radius
-        if np.all(dists >= threshold):
-            return forces
-
-        dist_mask = dists < threshold
-        directions[dist_mask] *= np.exp(-dists[dist_mask].reshape(-1, 1) / self.config.sigma)
-        forces[dist_mask] = np.sum(directions[dist_mask], axis=0)
-
+        forces = np.zeros((self.peds.size(), 2))
+        ped_robot_force(
+            forces, ped_positions, robot_pos, ped_radius,
+            robot_radius, sigma, threshold)
         return forces * self.config.force_multiplier
+
+
+@numba.njit(fastmath=True)
+def ped_robot_force(
+        out_forces: np.ndarray, ped_positions: np.ndarray, robot_pos: Vec2D,
+        ped_radius: float, robot_radius: float, sigma: float, threshold: float) -> np.ndarray:
+
+    robot_pos = np.array([[robot_pos[0], robot_pos[1]]])
+    diff = (ped_positions - robot_pos).astype(np.float64)
+    directions, dists = stateutils.normalize(diff)
+    dists = dists - ped_radius - robot_radius
+    if np.all(dists >= threshold):
+        return out_forces
+
+    dist_mask = dists < threshold
+    directions[dist_mask] *= np.exp(-dists[dist_mask].reshape(-1, 1) / sigma)
+    out_forces[dist_mask] = np.sum(directions[dist_mask], axis=0)
+    return out_forces

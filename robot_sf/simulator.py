@@ -55,7 +55,7 @@ class SimulationSettings(Protocol):
         raise NotImplementedError()
     
     @property
-    def d_t(self) -> float:
+    def step_time_in_secs(self) -> float:
         raise NotImplementedError()
 
     @property
@@ -106,7 +106,7 @@ class Simulator:
         self.pysf_sim = pysf.Simulator(
             ped_states_np, self.groups_as_list(),
             self.map_def.obstacles_pysf, make_forces=make_forces)
-        self.pysf_sim.peds.step_width = self.config.d_t
+        self.pysf_sim.peds.step_width = self.config.step_time_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.reset_state()
 
@@ -135,7 +135,7 @@ class Simulator:
                 lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
                 self.map_def.robot_routes))
 
-        reset_required = self.waypoint_id == -1 or not self.dist_to_goal < 1.0
+        reset_required = self.waypoint_id == -1 or self.dist_to_goal >= 1.0
         if reset_required:
             self.spawn_id = random.randint(0, len(self.robot_spawn_gens) - 1)
             self.goal_id = random.randint(0, len(self.robot_goal_gens) - 1)
@@ -158,7 +158,7 @@ class Simulator:
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups_as_list()
         self.pysf_sim.peds.step(ped_forces, groups)
-        self.robot.apply_action(action, self.config.d_t)
+        self.robot.apply_action(action, self.config.step_time_in_secs)
 
     def get_pedestrians_groups(self):
         _, groups = self.pysf_sim.current_state

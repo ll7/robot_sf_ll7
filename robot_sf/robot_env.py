@@ -21,12 +21,15 @@ PolarVec2D = Tuple[float, float]
 
 @dataclass
 class SimulationSettings:
-    sim_length: int=200
-    norm_obs: bool=True
+    sim_length_in_secs: float=200.0
     difficulty: int=2
-    d_t: float=0.4
-    peds_speed_mult: float=0.7
-    prf_config: PedRobotForceConfig = PedRobotForceConfig()
+    step_time_in_secs: float=0.1
+    peds_speed_mult: float=1.3
+    prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
+
+    @property
+    def max_sim_steps(self) -> int:
+        return ceil(self.sim_length_in_secs / self.step_time_in_secs)
 
 
 @dataclass
@@ -60,7 +63,6 @@ class SimpleReward:
 
     def __call__(self, state: EnvState) -> float:
         reward = -self.step_discount
-        # TODO: think of punishing pedestrian collision harder than obstacle collision
         if state.is_pedestrian_collision or state.is_obstacle_collision:
             reward -= 2
         if state.is_robot_at_goal:
@@ -81,7 +83,7 @@ class RobotEnv(Env):
         width, height = map_def.width, map_def.height
 
         self.env_type = 'RobotEnv'
-        self.max_sim_steps = ceil(self.sim_config.sim_length / self.sim_config.d_t)
+        self.max_sim_steps = self.sim_config.max_sim_steps
         self.max_target_dist = np.sqrt(2) * (max(width, height) * 2) # the box diagonal
         self.action_space, self.observation_space = \
             RobotEnv._build_gym_spaces(self.max_target_dist, self.robot_config, self.lidar_config)
@@ -118,7 +120,7 @@ class RobotEnv(Env):
             self.timestep > self.max_sim_steps)
         reward, done = self.reward_func(state), state.is_terminal
         self.timestep += 1
-        return obs, reward, done, { 'step': self.episode }
+        return obs, reward, done, { 'step': self.episode, 'meta': state }
 
     def reset(self):
         self.episode += 1
@@ -132,12 +134,12 @@ class RobotEnv(Env):
         speed_x, speed_rot = self.sim_env.robot.current_speed
         target_distance, target_angle = rel_pos(self.sim_env.robot.pose, self.sim_env.goal_pos)
 
-        if self.sim_config.norm_obs:
-            ranges_np /= self.lidar_config.max_scan_dist
-            speed_x /= self.robot_config.max_linear_speed
-            speed_rot = speed_rot / self.robot_config.max_angular_speed
-            target_distance /= self.max_target_dist
-            target_angle = target_angle / np.pi
+        # normalize observations within [0, 1] or [-1, 1]
+        ranges_np /= self.lidar_config.max_scan_dist
+        speed_x /= self.robot_config.max_linear_speed
+        speed_rot = speed_rot / self.robot_config.max_angular_speed
+        target_distance /= self.max_target_dist
+        target_angle = target_angle / np.pi
 
         robot_state = np.array([speed_x, speed_rot, target_distance, target_angle])
         return np.concatenate((ranges_np, robot_state), axis=0)

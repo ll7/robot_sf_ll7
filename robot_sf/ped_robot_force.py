@@ -13,7 +13,7 @@ class PedRobotForceConfig:
     is_active: bool = False
     robot_radius: float = 1.0
     activation_threshold: float = 1.0
-    force_multiplier: float = 1.0
+    force_multiplier: float = 10.0
     sigma: float=0.2
 
 
@@ -32,17 +32,19 @@ class PedRobotForce:
 
     def __call__(self) -> np.ndarray:
         threshold = self.config.activation_threshold + self.peds.agent_radius
-        force = np.zeros((self.peds.size(), 2))
+        forces = np.zeros((self.peds.size(), 2))
         ped_positions = self.peds.pos()
         robot_pos = self.get_robot_pos()
 
-        for i, pos in enumerate(ped_positions):
-            diff = pos - robot_pos
-            directions, dist = stateutils.normalize(diff)
-            dist = dist - self.peds.agent_radius -self.config.robot_radius
-            if np.all(dist >= threshold):
-                continue
-            dist_mask = dist < threshold
-            directions[dist_mask] *= np.exp(-dist[dist_mask].reshape(-1, 1) / self.config.sigma)
-            force[i] = np.sum(directions[dist_mask], axis=0)
-        return force * self.config.force_multiplier
+        diff = (ped_positions - robot_pos).astype(np.float64)
+        directions, dists = stateutils.normalize(diff)
+
+        dists = dists - self.peds.agent_radius - self.config.robot_radius
+        if np.all(dists >= threshold):
+            return forces
+
+        dist_mask = dists < threshold
+        directions[dist_mask] *= np.exp(-dists[dist_mask].reshape(-1, 1) / self.config.sigma)
+        forces[dist_mask] = np.sum(directions[dist_mask], axis=0)
+
+        return forces * self.config.force_multiplier

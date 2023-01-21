@@ -14,9 +14,8 @@ Vec2D = Tuple[float, float]
 class PedRobotForceConfig:
     is_active: bool = False
     robot_radius: float = 1.0
-    activation_threshold: float = 1.0
+    activation_threshold: float = 2.0
     force_multiplier: float = 10.0
-    sigma: float=0.2
 
 
 class PedRobotForce:
@@ -33,33 +32,41 @@ class PedRobotForce:
         self.get_robot_pos = get_robot_pos
 
     def __call__(self) -> np.ndarray:
-        threshold = self.config.activation_threshold + self.peds.agent_radius
-        sigma = self.config.sigma
+        threshold = self.config.activation_threshold \
+            + self.peds.agent_radius + self.config.robot_radius
         ped_positions = self.peds.pos()
         robot_pos = self.get_robot_pos()
-        ped_radius = self.peds.agent_radius
-        robot_radius = self.config.robot_radius
-
         forces = np.zeros((self.peds.size(), 2))
-        ped_robot_force(
-            forces, ped_positions, robot_pos, ped_radius,
-            robot_radius, sigma, threshold)
+        ped_robot_force(forces, ped_positions, robot_pos, threshold)
         return forces * self.config.force_multiplier
 
 
 @numba.njit(fastmath=True)
 def ped_robot_force(
-        out_forces: np.ndarray, ped_positions: np.ndarray, robot_pos: Vec2D,
-        ped_radius: float, robot_radius: float, sigma: float, threshold: float) -> np.ndarray:
+        out_forces: np.ndarray, ped_positions: np.ndarray,
+        robot_pos: Vec2D, threshold: float):
 
-    robot_pos = np.array([[robot_pos[0], robot_pos[1]]])
-    diff = (ped_positions - robot_pos).astype(np.float64)
-    directions, dists = stateutils.normalize(diff)
-    dists = dists - ped_radius - robot_radius
-    if np.all(dists >= threshold):
-        return out_forces
+    for i, ped_pos in enumerate(ped_positions):
+        distance = euclid_dist(robot_pos, ped_pos)
+        if distance <= threshold:
+            dx_dist, dy_dist = der_euclid_dist(ped_pos, robot_pos, distance)
+            out_forces[i] = potential_field_force(distance, dx_dist, dy_dist)
 
-    dist_mask = dists < threshold
-    directions[dist_mask] *= np.exp(-dists[dist_mask].reshape(-1, 1) / sigma)
-    out_forces[dist_mask] = np.sum(directions[dist_mask], axis=0)
-    return out_forces
+
+@numba.njit(fastmath=True)
+def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
+    return ((v_1[0] - v_2[0])**2 + (v_1[1] - v_2[1])**2)**0.5
+
+
+@numba.njit(fastmath=True)
+def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
+    # info: distance is an expensive operation and therefore pre-computed
+    dx1_dist = (p1[0] - p2[0]) / distance
+    dy1_dist = (p1[1] - p2[1]) / distance
+    return dx1_dist, dy1_dist
+
+
+@numba.njit(fastmath=True)
+def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> Tuple[float, float]:
+    der_potential = 1 / pow(dist, 3)
+    return der_potential * dx_dist, der_potential * dy_dist

@@ -82,7 +82,7 @@ class Simulator:
         self.robot_spawn_gens = [SpawnGenerator([z]) for z in self.map_def.robot_spawn_zones]
         self.robot_goal_gens = [SpawnGenerator([z]) for z in self.map_def.goal_zones]
 
-        spawn_config = PedSpawnConfig(0.02, 6)
+        spawn_config = PedSpawnConfig(0.01, 6)
         ped_states_np, initial_groups, zone_assignments = \
             initialize_pedestrians(spawn_config, self.map_def.ped_spawn_zones)
 

@@ -35,22 +35,33 @@ class LidarScannerSettings:
 
 
 @numba.njit(fastmath=True)
-def raycast_pedestrians(out_ranges: np.ndarray, scanner_pos: Tuple[float, float],
-                        ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
-    if len(ped_pos.shape) != 2 or ped_pos.shape[0] == 0 or ped_pos.shape[1] != 2:
-        return
-
-    for i, angle in enumerate(ray_angles):
-        unit_vec = cos(angle), sin(angle)
-        for pos in ped_pos:
-            ped_circle = ((pos[0], pos[1]), ped_radius)
-            coll_dist = circle_line_intersection_distance(ped_circle, scanner_pos, unit_vec)
-            out_ranges[i] = min(coll_dist, out_ranges[i])
+def euclid_dist_sq(v_1: Vec2D, v_2: Vec2D) -> float:
+    return (v_1[0] - v_2[0])**2 + (v_1[1] - v_2[1])**2
 
 
 @numba.njit(fastmath=True)
-def raycast_obstacles(out_ranges: np.ndarray, scanner_pos: Vec2D,
-                      obstacles: np.ndarray, ray_angles: np.ndarray):
+def raycast_pedestrians(
+        out_ranges: np.ndarray, scanner_pos: Vec2D, max_scan_range: float,
+        ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
+
+    if len(ped_pos.shape) != 2 or ped_pos.shape[0] == 0 or ped_pos.shape[1] != 2:
+        return
+
+    threshold_sq = max_scan_range**2
+    for i, angle in enumerate(ray_angles):
+        unit_vec = cos(angle), sin(angle)
+        for pos in ped_pos:
+            if euclid_dist_sq(pos, scanner_pos) <= threshold_sq:
+                ped_circle = ((pos[0], pos[1]), ped_radius)
+                coll_dist = circle_line_intersection_distance(ped_circle, scanner_pos, unit_vec)
+                out_ranges[i] = min(coll_dist, out_ranges[i])
+
+
+@numba.njit(fastmath=True)
+def raycast_obstacles(
+        out_ranges: np.ndarray, scanner_pos: Vec2D,
+        obstacles: np.ndarray, ray_angles: np.ndarray):
+
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
 
@@ -63,14 +74,14 @@ def raycast_obstacles(out_ranges: np.ndarray, scanner_pos: Vec2D,
 
 
 @numba.njit()
-def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, ped_pos: np.ndarray,
-            ped_radius: float, ray_angles: np.ndarray) -> np.ndarray:
+def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
+            ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray) -> np.ndarray:
     """Cast rays in the directions of all given angles outgoing from
     the scanner's position and detect the minimal collision distance
     with either a pedestrian or an obstacle (or in case there's no collision,
     just return the maximum scan range)."""
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
-    raycast_pedestrians(out_ranges, scanner_pos, ped_pos, ped_radius, ray_angles)
+    raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
     return out_ranges
 
@@ -108,6 +119,7 @@ class ContinuousLidarScanner():
 
         (pos_x, pos_y), robot_orient = pose
         scan_noise = np.array(self.settings.scan_noise)
+        scan_dist = self.settings.max_scan_dist
 
         ped_pos = self.robot_map.pedestrian_coords
         obstacles = self.robot_map.obstacle_coords
@@ -117,6 +129,6 @@ class ContinuousLidarScanner():
         ray_angles = np.linspace(lower, upper, self.settings.lidar_n_rays + 1)[:-1]
         ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
 
-        ranges = raycast((pos_x, pos_y), obstacles, ped_pos, 0.4, ray_angles)
-        range_postprocessing(ranges, scan_noise, self.settings.max_scan_dist)
+        ranges = raycast((pos_x, pos_y), obstacles, scan_dist, ped_pos, 0.4, ray_angles)
+        range_postprocessing(ranges, scan_noise, scan_dist)
         return ranges

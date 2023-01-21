@@ -51,9 +51,13 @@ class MovingRobot(Protocol):
 
 class SimulationSettings(Protocol):
     @property
-    def difficulty(self) -> int:
+    def peds_per_area_m2(self) -> float:
         raise NotImplementedError()
-    
+
+    @property
+    def max_peds_per_group(self) -> int:
+        raise NotImplementedError()
+
     @property
     def step_time_in_secs(self) -> float:
         raise NotImplementedError()
@@ -82,7 +86,7 @@ class Simulator:
         self.robot_spawn_gens = [SpawnGenerator([z]) for z in self.map_def.robot_spawn_zones]
         self.robot_goal_gens = [SpawnGenerator([z]) for z in self.map_def.goal_zones]
 
-        spawn_config = PedSpawnConfig(0.01, 6)
+        spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
         ped_states_np, initial_groups, zone_assignments = \
             initialize_pedestrians(spawn_config, self.map_def.ped_spawn_zones)
 

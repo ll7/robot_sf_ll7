@@ -1,6 +1,6 @@
 from math import ceil
 from dataclasses import dataclass, field
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 from copy import deepcopy
 
 import numpy as np
@@ -21,15 +21,21 @@ PolarVec2D = Tuple[float, float]
 
 @dataclass
 class SimulationSettings:
-    sim_length_in_secs: float=200.0
-    difficulty: int=2
-    step_time_in_secs: float=0.1
-    peds_speed_mult: float=1.3
+    sim_length_in_secs: float = 200.0
+    step_time_in_secs: float = 0.1
+    peds_speed_mult: float = 1.3
+    difficulty: int = 2
+    max_peds_per_group: int = 6
     prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
+    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.0, 0.02, 0.04, 0.06])
 
     @property
     def max_sim_steps(self) -> int:
         return ceil(self.sim_length_in_secs / self.step_time_in_secs)
+
+    @property
+    def peds_per_area_m2(self) -> float:
+        return self.ped_density_by_difficulty[self.difficulty]
 
 
 @dataclass

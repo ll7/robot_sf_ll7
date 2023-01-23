@@ -42,19 +42,28 @@ def euclid_dist_sq(v_1: Vec2D, v_2: Vec2D) -> float:
 @numba.njit(fastmath=True)
 def raycast_pedestrians(
         out_ranges: np.ndarray, scanner_pos: Vec2D, max_scan_range: float,
-        ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
+        ped_positions: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
 
-    if len(ped_pos.shape) != 2 or ped_pos.shape[0] == 0 or ped_pos.shape[1] != 2:
+    if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 or ped_positions.shape[1] != 2:
         return
 
+    scanner_pos_np = np.array([scanner_pos[0], scanner_pos[1]])
     threshold_sq = max_scan_range**2
+    rel_ped_pos = ped_positions - scanner_pos_np
+    dist_sq = np.sum((rel_ped_pos)**2, axis=1)
+    ped_mask = np.where(dist_sq <= threshold_sq)[0]
+    relevant_ped_pos = ped_positions[ped_mask]
+
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
-        for pos in ped_pos:
-            if euclid_dist_sq(pos, scanner_pos) <= threshold_sq:
-                ped_circle = ((pos[0], pos[1]), ped_radius)
-                coll_dist = circle_line_intersection_distance(ped_circle, scanner_pos, unit_vec)
-                out_ranges[i] = min(coll_dist, out_ranges[i])
+        # cos_sims = rel_ped_pos[:, 0] * unit_vec[0] + rel_ped_pos[:, 1] * unit_vec[1]
+        # ped_mask = np.where(cos_sims > 0)[0]
+        # relevant_ped_pos = relevant_ped_pos[ped_mask]
+
+        for pos in relevant_ped_pos:
+            ped_circle = ((pos[0], pos[1]), ped_radius)
+            coll_dist = circle_line_intersection_distance(ped_circle, scanner_pos, unit_vec)
+            out_ranges[i] = min(coll_dist, out_ranges[i])
 
 
 @numba.njit(fastmath=True)

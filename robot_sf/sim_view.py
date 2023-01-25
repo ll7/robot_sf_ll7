@@ -49,6 +49,7 @@ class SimulationView:
         self.height = height
         self.scaling = scaling
         self.size_changed = False
+        self.is_exit_requested = False
 
         pygame.init()
         pygame.font.init()
@@ -58,16 +59,13 @@ class SimulationView:
         self.timestep_text_pos = (self.width - 100, 10)
         self.clear()
 
-    def show(self, on_term: Callable[[], None]):
-        # TODO: process this event loop in a background thread
-        while True:
+    def show(self):
+        while not self.is_exit_requested:
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
-                    pygame.quit()
-                    on_term()
-                    quit()
+                    self.is_exit_requested = True
                 elif e.type == pygame.VIDEORESIZE:
-                    self.size_changed = self.width != e.w or self.height != e.h
+                    self.size_changed = True
                     self.width, self.height = e.w, e.h
             sleep(0.01)
 
@@ -78,6 +76,9 @@ class SimulationView:
 
     def render(self, state: VisualizableSimState):
         sleep(0.01)
+        if self.is_exit_requested:
+            pygame.quit()
+            exit()
         if self.size_changed:
             self._resize_window()
         state = self._zoom_camera(state)

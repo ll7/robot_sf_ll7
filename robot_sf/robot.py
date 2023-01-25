@@ -29,6 +29,16 @@ class RobotSettings:
     wheel_radius: float = 0.05
     interaxis_length: float = 0.3
 
+    def __post_init__(self):
+        if self.radius <= 0:
+            raise ValueError("Robot's radius mustn't be negative or zero! Needs to model a corps!")
+        if self.radius <= 0:
+            raise ValueError("Robot's wheel radius mustn't be negative or zero! Needs to model a corps!")
+        if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
+            raise ValueError("Robot's max. linear / angular speed mustn't be negative or zero!")
+        if self.interaxis_length <= 0:
+            raise ValueError("Robot's interaxis length mustn't be negative or zero!")
+
 
 @dataclass
 class DifferentialDriveState:

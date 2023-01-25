@@ -29,6 +29,12 @@ class LidarScannerSettings:
     def __post_init__(self):
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError('Scan angle portion needs to be within (0, 1]!')
+        if self.max_scan_dist <= 0:
+            raise ValueError("Max. scan distance mustn't be negative or zero!")
+        if self.lidar_n_rays <= 0:
+            raise ValueError("Amount of LiDAR rays mustn't be negative or zero!")
+        if any([not 0 <= prob <= 1 for prob in self.scan_noise]):
+            raise ValueError("Scan noise probabilities must be within [0, 1]!")
 
         self.scan_length = self.lidar_n_rays
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)

@@ -50,25 +50,33 @@ def raycast_pedestrians(
         out_ranges: np.ndarray, scanner_pos: Vec2D, max_scan_range: float,
         ped_positions: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
 
-    if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 or ped_positions.shape[1] != 2:
+    if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 \
+            or ped_positions.shape[1] != 2:
         return
 
     scanner_pos_np = np.array([scanner_pos[0], scanner_pos[1]])
     threshold_sq = max_scan_range**2
-    rel_ped_pos = ped_positions - scanner_pos_np
-    dist_sq = np.sum((rel_ped_pos)**2, axis=1)
-    ped_mask = np.where(dist_sq <= threshold_sq)[0]
-    relevant_ped_pos = ped_positions[ped_mask]
+    relative_ped_pos = ped_positions - scanner_pos_np
+    dist_sq = np.sum(relative_ped_pos**2, axis=1)
+    ped_dist_mask = np.where(dist_sq <= threshold_sq)[0]
+    close_ped_pos = relative_ped_pos[ped_dist_mask]
+
+    if len(ped_dist_mask) == 0:
+        return
 
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
-        # cos_sims = rel_ped_pos[:, 0] * unit_vec[0] + rel_ped_pos[:, 1] * unit_vec[1]
-        # ped_mask = np.where(cos_sims > 0)[0]
-        # relevant_ped_pos = relevant_ped_pos[ped_mask]
+        cos_sims = close_ped_pos[:, 0] * unit_vec[0] \
+            + close_ped_pos[:, 1] * unit_vec[1]
+
+        ped_dir_mask = np.where(cos_sims >= 0)[0]
+        joined_mask = ped_dist_mask[ped_dir_mask]
+        relevant_ped_pos = relative_ped_pos[joined_mask]
 
         for pos in relevant_ped_pos:
             ped_circle = ((pos[0], pos[1]), ped_radius)
-            coll_dist = circle_line_intersection_distance(ped_circle, scanner_pos, unit_vec)
+            coll_dist = circle_line_intersection_distance(
+                ped_circle, (0.0, 0.0), unit_vec)
             out_ranges[i] = min(coll_dist, out_ranges[i])
 
 

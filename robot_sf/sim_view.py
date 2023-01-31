@@ -1,7 +1,9 @@
 from time import sleep
 from math import sin, cos
-from typing import Callable, Tuple, Union
+from typing import Tuple, Union
 from dataclasses import dataclass
+from threading import Thread
+from signal import signal, SIGINT
 
 import pygame
 import numpy as np
@@ -50,6 +52,7 @@ class SimulationView:
         self.scaling = scaling
         self.size_changed = False
         self.is_exit_requested = False
+        self.is_abortion_requested = False
 
         pygame.init()
         pygame.font.init()
@@ -60,10 +63,25 @@ class SimulationView:
         self.clear()
 
     def show(self):
+        self.ui_events_thread = Thread(target=self._process_event_queue)
+        self.ui_events_thread.start()
+
+        def handle_sigint(signum, frame):
+            self.is_exit_requested = True
+            self.is_abortion_requested = True
+
+        signal(SIGINT, handle_sigint)
+
+    def exit(self):
+        self.is_exit_requested = True
+        self.ui_events_thread.join()
+
+    def _process_event_queue(self):
         while not self.is_exit_requested:
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     self.is_exit_requested = True
+                    self.is_abortion_requested = True
                 elif e.type == pygame.VIDEORESIZE:
                     self.size_changed = True
                     self.width, self.height = e.w, e.h
@@ -75,12 +93,18 @@ class SimulationView:
         pygame.display.update()
 
     def render(self, state: VisualizableSimState):
-        sleep(0.01)
+        sleep(0.01) # limit UI update rate to 100 fps
+
+        # info: event handling needs to be processed
+        #       in the main thread to access UI resources
         if self.is_exit_requested:
             pygame.quit()
-            exit()
+            self.ui_events_thread.join()
+            if self.is_abortion_requested:
+                exit()
         if self.size_changed:
             self._resize_window()
+
         state = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_robot(state.robot_pose)

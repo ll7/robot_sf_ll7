@@ -2,7 +2,6 @@ from math import ceil
 from dataclasses import dataclass, field
 from typing import Tuple, Union, List
 from copy import deepcopy
-from threading import Thread
 
 import numpy as np
 from gym import Env, spaces
@@ -133,8 +132,7 @@ class RobotEnv(Env):
         self.last_action: Union[PolarVec2D, None] = None
         if debug:
             self.sim_ui = SimulationView()
-            self.ui_events_thread = Thread(target=self.sim_ui.show)
-            self.ui_events_thread.start()
+            self.sim_ui.show()
 
     def step(self, action: np.ndarray):
         action_parsed = (action[0], action[1])
@@ -187,6 +185,10 @@ class RobotEnv(Env):
             deepcopy(self.occupancy.obstacle_coords))
 
         self.sim_ui.render(state)
+
+    def exit(self):
+        if self.sim_ui:
+            self.sim_ui.exit()
 
     @staticmethod
     def _build_gym_spaces(

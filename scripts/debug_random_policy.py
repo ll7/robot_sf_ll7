@@ -22,6 +22,7 @@ def benchmark():
             print(f'end of episode {episode}, total rewards {ep_rewards}')
             ep_rewards = 0
             obs = env.reset()
+    env.exit()
 
     print('end of simulation')
 

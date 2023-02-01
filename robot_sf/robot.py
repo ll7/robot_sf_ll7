@@ -32,7 +32,7 @@ class RobotSettings:
     def __post_init__(self):
         if self.radius <= 0:
             raise ValueError("Robot's radius mustn't be negative or zero! Needs to model a corps!")
-        if self.radius <= 0:
+        if self.wheel_radius <= 0:
             raise ValueError("Robot's wheel radius mustn't be negative or zero! Needs to model a corps!")
         if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
             raise ValueError("Robot's max. linear / angular speed mustn't be negative or zero!")

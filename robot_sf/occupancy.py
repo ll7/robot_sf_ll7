@@ -1,10 +1,11 @@
-from math import dist
 from typing import Callable, Tuple
 from dataclasses import dataclass
 
 import numpy as np
 
-from robot_sf.geometry import is_circle_circle_intersection, is_circle_line_intersection
+from robot_sf.geometry import \
+    is_circle_circle_intersection, \
+    is_circle_line_intersection
 
 
 Vec2D = Tuple[float, float]
@@ -19,6 +20,7 @@ class ContinuousOccupancy:
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
     robot_radius: float=1.0
+    ped_radius: float=0.4
     goal_radius: float=1.0
 
     @property
@@ -45,7 +47,7 @@ class ContinuousOccupancy:
     @property
     def is_pedestrian_collision(self) -> bool:
         collision_distance = self.robot_radius
-        ped_radius = 0.4
+        ped_radius = self.ped_radius
         circle_robot = (self.get_robot_coords(), collision_distance)
         for ped_x, ped_y in self.pedestrian_coords:
             circle_ped = ((ped_x, ped_y), ped_radius)
@@ -55,7 +57,9 @@ class ContinuousOccupancy:
 
     @property
     def is_robot_at_goal(self) -> bool:
-        return dist(self.get_robot_coords(), self.get_goal_coords()) < self.goal_radius
+        robot_circle = (self.get_robot_coords(), self.robot_radius)
+        goal_circle = (self.get_goal_coords(), self.goal_radius)
+        return is_circle_circle_intersection(robot_circle, goal_circle)
 
     def is_in_bounds(self, world_x: float, world_y: float) -> bool:
         return 0 <= world_x <= self.width and 0 <= world_y <= self.height

@@ -26,6 +26,8 @@ class SimulationSettings:
     peds_speed_mult: float = 1.3
     difficulty: int = 2
     max_peds_per_group: int = 6
+    ped_radius: float = 0.4
+    goal_radius: float = 1.0
     prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
     ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.0, 0.02, 0.04, 0.06])
 
@@ -38,6 +40,10 @@ class SimulationSettings:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")
         if self.max_peds_per_group <= 0:
             raise ValueError("Maximum pedestrians per group mustn't be negative or zero!")
+        if self.ped_radius <= 0:
+            raise ValueError("Pedestrian radius mustn't be negative or zero!")
+        if self.goal_radius <= 0:
+            raise ValueError("Goal radius mustn't be negative or zero!")
         if not 0 <= self.difficulty < len(self.ped_density_by_difficulty):
             raise ValueError("No pedestrian density registered for selected difficulty level!")
         if not self.prf_config:
@@ -120,18 +126,24 @@ class RobotEnv(Env):
             lambda: self.sim_env.robot_pose[0],
             lambda: self.sim_env.goal_pos,
             lambda: self.sim_env.pysf_sim.env.obstacles_raw,
-            lambda: self.sim_env.current_positions,
-            self.robot_config.radius)
+            lambda: self.sim_env.ped_positions,
+            self.robot_config.radius,
+            self.sim_config.ped_radius,
+            self.sim_config.goal_radius)
 
         self.lidar_sensor = ContinuousLidarScanner(self.lidar_config, self.occupancy)
         robot_factory = lambda s, g: DifferentialDriveRobot(s, g, self.robot_config)
-        self.sim_env = Simulator(self.sim_config, map_def, robot_factory)
+        goal_detection = lambda: self.occupancy.is_robot_at_goal
+        self.sim_env = Simulator(self.sim_config, map_def, robot_factory, goal_detection)
 
         self.episode = 0
         self.timestep = 0
         self.last_action: Union[PolarVec2D, None] = None
         if debug:
-            self.sim_ui = SimulationView()
+            self.sim_ui = SimulationView(
+                robot_radius=self.robot_config.radius,
+                ped_radius=self.sim_config.ped_radius,
+                goal_radius=self.sim_config.goal_radius)
             self.sim_ui.show()
 
     def step(self, action: np.ndarray):

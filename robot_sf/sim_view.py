@@ -46,10 +46,15 @@ class VisualizableSimState:
 class SimulationView:
     """Representing a UI window for visualizing the simulation's state."""
 
-    def __init__(self, width: float=1200, height: float=800, scaling: float=15):
+    def __init__(
+            self, width: float=1200, height: float=800, scaling: float=15,
+            robot_radius: float=1.0, ped_radius: float=0.4, goal_radius: float=1.0):
         self.width = width
         self.height = height
         self.scaling = scaling
+        self.robot_radius = robot_radius
+        self.ped_radius = ped_radius
+        self.goal_radius = goal_radius
         self.size_changed = False
         self.is_exit_requested = False
         self.is_abortion_requested = False
@@ -147,14 +152,12 @@ class SimulationView:
 
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
-        ROBOT_RADIUS = 0.5
-        pygame.draw.circle(self.screen, ROBOT_COLOR, pose[0], ROBOT_RADIUS * self.scaling)
+        pygame.draw.circle(self.screen, ROBOT_COLOR, pose[0], self.robot_radius * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         # TODO: display pedestrians with an image instead of a circle
-        PED_RADIUS = 0.4
         for ped_x, ped_y in ped_pos:
-            pygame.draw.circle(self.screen, PED_COLOR, (ped_x, ped_y), PED_RADIUS * self.scaling)
+            pygame.draw.circle(self.screen, PED_COLOR, (ped_x, ped_y), self.ped_radius * self.scaling)
 
     def _draw_obstacles(self, obstacles: np.ndarray):
         for s_x, s_y, e_x, e_y in obstacles:
@@ -162,8 +165,7 @@ class SimulationView:
 
     def _augment_goal_position(self, robot_goal: Vec2D):
         # TODO: display pedestrians with an image instead of a circle
-        GOAL_RADIUS = 0.5
-        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, GOAL_RADIUS * self.scaling)
+        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.goal_radius * self.scaling)
 
     def _augment_action_vector(self, action: VisualizableAction):
         r_x, r_y = action.robot_pose[0]

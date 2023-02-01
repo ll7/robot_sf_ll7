@@ -152,6 +152,8 @@ class ContinuousLidarScanner():
         ray_angles = np.linspace(lower, upper, self.settings.lidar_n_rays + 1)[:-1]
         ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
 
-        ranges = raycast((pos_x, pos_y), obstacles, scan_dist, ped_pos, 0.4, ray_angles)
+        ranges = raycast(
+            (pos_x, pos_y), obstacles, scan_dist, ped_pos,
+            self.robot_map.ped_radius, ray_angles)
         range_postprocessing(ranges, scan_noise, scan_dist)
         return ranges

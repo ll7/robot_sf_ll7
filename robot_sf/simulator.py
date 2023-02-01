@@ -76,6 +76,7 @@ class Simulator:
     config: SimulationSettings
     map_def: MapDefinition
     robot_factory: Callable[[RobotPose, Vec2D], MovingRobot]
+    is_robot_at_goal: Callable[[], bool]
     robot: MovingRobot = field(init=False)
     spawn_id: int = field(init=False, default=0)
     goal_id: int = field(init=False, default=0)
@@ -91,8 +92,8 @@ class Simulator:
             initialize_pedestrians(spawn_config, self.map_def.ped_spawn_zones)
 
         get_state = lambda: self.pysf_sim.peds.state
-        pysf_state = PySFPedestrianStates(get_state)
-        groups = PedestrianGroupings(pysf_state)
+        self.pysf_state = PySFPedestrianStates(get_state)
+        groups = PedestrianGroupings(self.pysf_state)
         self.peds_behavior = GroupRedirectBehavior(groups, zone_assignments, ped_spawn_gens)
         self.groups_as_list = lambda: [list(ped_ids) for ped_ids in groups.groups.values()]
 
@@ -123,13 +124,8 @@ class Simulator:
         return self.robot.pose
 
     @property
-    def dist_to_goal(self) -> float:
-        return self.robot.dist_to_goal
-
-    @property
-    def current_positions(self):
-        ped_states, _ = self.pysf_sim.current_state
-        return ped_states[:, 0:2]
+    def ped_positions(self):
+        return self.pysf_state.ped_positions
 
     def reset_state(self):
         self.peds_behavior.pick_new_goals()
@@ -139,7 +135,7 @@ class Simulator:
                 lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
                 self.map_def.robot_routes))
 
-        reset_required = self.waypoint_id == -1 or self.dist_to_goal >= 1.0
+        reset_required = self.waypoint_id == -1 or not self.is_robot_at_goal
         if reset_required:
             self.spawn_id = random.randint(0, len(self.robot_spawn_gens) - 1)
             self.goal_id = random.randint(0, len(self.robot_goal_gens) - 1)

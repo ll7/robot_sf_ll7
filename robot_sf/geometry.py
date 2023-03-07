@@ -64,20 +64,61 @@ def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: 
     else:
         return np.inf
 
-
 @numba.njit(fastmath=True)
 def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
+    (c_x, c_y), r = circle
+    ray_x, ray_y = ray_vec
+
+    # shift circle's center to the origin (0, 0)
+    (p1_x, p1_y) = origin[0] - c_x, origin[1] - c_y
+
+    r_sq = r**2
+    norm_p1 = p1_x**2 + p1_y**2
+
+    # cofficients a, b, c of the quadratic solution formula
+    s_x, s_y = ray_x, ray_y
+    t_x, t_y = p1_x, p1_y
+    a = s_x**2 + s_y**2
+    b = 2 * (s_x * t_x + s_y * t_y)
+    c = norm_p1 - r_sq
+
+    # abort when ray doesn't collide
+    disc = b**2 - 4 * a * c
+    if disc < 0 or (b > 0 and b**2 > disc):
+        return np.inf
+
+    # compute quadratic solutions
+    disc_root = disc**0.5
+    mu_1 = (-b - disc_root) / 2 * a
+    mu_2 = (-b + disc_root) / 2 * a
+
+    # compute cross points S1, S2 and distances to the origin
+    s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y  + t_y
+    s2_x, s2_y = mu_2 * s_x + t_x, mu_2 * s_y  + t_y
+    dist_1 = euclid_dist((p1_x, p1_y), (s1_x, s1_y))
+    dist_2 = euclid_dist((p1_x, p1_y), (s2_x, s2_y))
+
+    if mu_1 >= 0 and mu_2 >= 0:
+        return min(dist_1, dist_2)
+    elif mu_1 >= 0:
+        return dist_1
+    else: # if mu_2 >= 0:
+        return dist_2
+
+
+@numba.njit(fastmath=True)
+def circle_line_intersection_distance_2(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
     # source: https://mathworld.wolfram.com/Circle-LineIntersection.html
     (circle_x, circle_y), radius = circle
     (x_1, y_1) = origin[0] - circle_x, origin[1] - circle_y
-    (x_2, y_2) = x_1 - ray_vec[0], y_1 - ray_vec[1]
+    (x_2, y_2) = x_1 + ray_vec[0], y_1 + ray_vec[1]
 
     det = x_1 * y_2 - x_2 * y_1
     d_x, d_y = x_2 - x_1, y_2 - y_1
     d_r_sq = euclid_dist_sq((d_x, d_y), (0, 0))
     disc = radius**2 * d_r_sq - det**2
 
-    if not disc >= 0:
+    if disc < 0:
         return np.inf
 
     disc_root = disc**0.5
@@ -117,23 +158,56 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
 
 @numba.njit(fastmath=True)
 def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
+    """Simple vector math implementation using quadratic solution formula."""
+    (c_x, c_y), r = circle
+    (p1_x, p1_y), (p2_x, p2_y) = segment
+
+    # shift circle's center to the origin (0, 0)
+    (p1_x, p1_y), (p2_x, p2_y) = (p1_x - c_x, p1_y - c_y), (p2_x - c_x, p2_y - c_y)
+
+    r_sq = r**2
+    norm_p1, norm_p2 = p1_x**2 + p1_y**2, p2_x**2 + p2_y**2
+
+    # edge case: line segment ends inside the circle -> collision!
+    if norm_p1 <= r_sq or norm_p2 <= r_sq:
+        return True
+
+    # cofficients a, b, c of the quadratic solution formula
+    s_x, s_y = p2_x - p1_x, p2_y - p1_y
+    t_x, t_y = p1_x, p1_y
+    a = s_x**2 + s_y**2
+    b = 2 * (s_x * t_x + s_y * t_y)
+    c = norm_p1 - r_sq
+
+    # discard cases where infinite line doesn't collide
+    disc = b**2 - 4 * a * c
+    if disc < 0:
+        return False
+
+    # check if collision is actually within the line segment
+    disc_root = disc**0.5
+    return 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a
+
+
+@numba.njit(fastmath=True)
+def is_circle_line_intersection_2(circle: Circle2D, segment: Line2D) -> bool:
+    """Alternative implementation using determinant vector math"""
     (circle_x, circle_y), radius = circle
     p_1, p_2 = segment
     (x_1, y_1) = p_1[0] - circle_x, p_1[1] - circle_y
     (x_2, y_2) = p_2[0] - circle_x, p_2[1] - circle_y
     r_sq = radius**2
 
-    # edge case: line segment's end point(s) inside circle
-    if euclid_dist_sq((x_1, y_1), (0, 0)) <= r_sq \
-            or euclid_dist_sq((x_2, y_2), (0, 0)) <= r_sq:
+    # edge case: line segment's end point(s) are inside the circle -> collision!
+    if x_1**2 + y_1**2 <= r_sq or x_2**2 + y_2**2 <= r_sq:
         return True
 
     det = x_1 * y_2 - x_2 * y_1
     d_x, d_y = x_2 - x_1, y_2 - y_1
-    d_r_sq = euclid_dist_sq((d_x, d_y), (0, 0))
+    d_r_sq = d_x**2 + d_y**2
     disc = r_sq * d_r_sq - det**2
 
-    if not disc >= 0:
+    if disc < 0:
         return False
 
     disc_root = disc**0.5

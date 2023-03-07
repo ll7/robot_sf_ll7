@@ -65,3 +65,30 @@ def test_scanner_detects_only_closest_pedestrian():
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays
     assert scan == approx(np.full((lidar_n_rays), exp_dist))
+
+
+def test_scanner_detects_nothing_when_there_is_nothing():
+    lidar_n_rays = 1
+    occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: np.array([[]]))
+    settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
+
+    scanner = ContinuousLidarScanner(settings, occupancy)
+    scan = scanner.get_scan(((0, 0), pi))
+
+    exp_dist = 5
+    assert scan.shape[0] == lidar_n_rays
+    assert scan == approx(np.full((lidar_n_rays), exp_dist))
+
+
+def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
+    lidar_n_rays = 1
+    pedestrians = np.array([[2.4, 0]])
+    occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians)
+    settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
+
+    scanner = ContinuousLidarScanner(settings, occupancy)
+    scan = scanner.get_scan(((0, 0), 0))
+
+    exp_dist = 5
+    assert scan.shape[0] == lidar_n_rays
+    assert scan == approx(np.full((lidar_n_rays), exp_dist))

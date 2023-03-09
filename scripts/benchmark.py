@@ -1,4 +1,5 @@
 import time
+from stable_baselines3 import PPO
 from scalene import scalene_profiler
 from robot_sf.robot_env import RobotEnv
 
@@ -6,6 +7,7 @@ from robot_sf.robot_env import RobotEnv
 def benchmark():
     total_steps = 10000
     env = RobotEnv()
+    model = PPO.load("./model/ppo_model", env=env)
     obs = env.reset()
 
     peds_sim = env.sim_env
@@ -20,8 +22,8 @@ def benchmark():
     episode = 0
     ep_rewards = 0
     for step in range(total_steps):
-        rand_action = env.action_space.sample()
-        obs, reward, done, _ = env.step(rand_action)
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, _ = env.step(action)
         ep_rewards += reward
         # print(f'step {step}, reward {reward} (peds: {peds_sim.peds.size()})')
 

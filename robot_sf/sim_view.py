@@ -1,7 +1,7 @@
 from time import sleep
 from math import sin, cos
 from typing import Tuple, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Thread
 from signal import signal, SIGINT
 
@@ -43,28 +43,29 @@ class VisualizableSimState:
     obstacles: np.ndarray
 
 
+@dataclass
 class SimulationView:
-    """Representing a UI window for visualizing the simulation's state."""
+    width: float=1200
+    height: float=800
+    scaling: float=15
+    robot_radius: float=1.0
+    ped_radius: float=0.4
+    goal_radius: float=1.0
+    size_changed: bool = field(init=False, default=False)
+    is_exit_requested: bool = field(init=False, default=False)
+    is_abortion_requested: bool = field(init=False, default=False)
+    screen: pygame.surface.Surface = field(init=False)
+    font: pygame.font.Font = field(init=False)
 
-    def __init__(
-            self, width: float=1200, height: float=800, scaling: float=15,
-            robot_radius: float=1.0, ped_radius: float=0.4, goal_radius: float=1.0):
-        self.width = width
-        self.height = height
-        self.scaling = scaling
-        self.robot_radius = robot_radius
-        self.ped_radius = ped_radius
-        self.goal_radius = goal_radius
-        self.size_changed = False
-        self.is_exit_requested = False
-        self.is_abortion_requested = False
+    def timestep_text_pos(self) -> Vec2D:
+        return (self.width - 100, 10)
 
+    def __post_init__(self):
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.RESIZABLE)
         self.font = pygame.font.SysFont('Consolas', 14)
-        self.timestep_text_pos = (self.width - 100, 10)
         self.clear()
 
     def show(self):

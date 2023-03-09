@@ -44,8 +44,8 @@ class RobotSettings:
 class DifferentialDriveState:
     pose: RobotPose
     velocity: PolarVec2D = field(default=(0, 0))
-    last_wheels_speed: WheelSpeedState = field(default=(0, 0))
-    wheels_speed: WheelSpeedState = field(default=(0, 0))
+    last_wheel_speeds: WheelSpeedState = field(default=(0, 0))
+    wheel_speeds: WheelSpeedState = field(default=(0, 0))
 
 
 @dataclass
@@ -55,11 +55,11 @@ class DifferentialDriveMotion:
     def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float):
         robot_vel = self._robot_velocity(state.velocity, action)
         new_wheel_speeds = self._resulting_wheel_speeds(robot_vel)
-        distance = self._covered_distance(state.wheels_speed, new_wheel_speeds, d_t)
-        new_orient = self._new_orientation(state.pose[1], state.wheels_speed, new_wheel_speeds, d_t)
+        distance = self._covered_distance(state.wheel_speeds, new_wheel_speeds, d_t)
+        new_orient = self._new_orientation(state.pose[1], state.wheel_speeds, new_wheel_speeds, d_t)
         state.pose = self._compute_odometry(state.pose, (distance, new_orient))
-        state.last_wheels_speed = state.wheels_speed
-        state.wheels_speed = new_wheel_speeds
+        state.last_wheel_speeds = state.wheel_speeds
+        state.wheel_speeds = new_wheel_speeds
         state.velocity = robot_vel
 
     def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D) -> PolarVec2D:
@@ -77,17 +77,20 @@ class DifferentialDriveMotion:
         new_right_wheel_speed = (dot_x + diff) / self.config.wheel_radius
         return new_left_wheel_speed, new_right_wheel_speed
 
-    def _covered_distance(self, last_wheel_speeds: WheelSpeedState,
-                                new_wheel_speeds: WheelSpeedState, d_t: float) -> float:
+    def _covered_distance(
+            self, last_wheel_speeds: WheelSpeedState,
+            new_wheel_speeds: WheelSpeedState, d_t: float) -> float:
         last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
         wheel_speed_left, wheel_speed_right = new_wheel_speeds
+
         velocity = ((last_wheel_speed_left + wheel_speed_left) / 2 \
             + (last_wheel_speed_right + wheel_speed_right) / 2)
         distance_covered = self.config.wheel_radius / 2 * velocity * d_t
         return distance_covered
 
-    def _new_orientation(self, robot_orient: float, last_wheel_speeds: WheelSpeedState,
-                         wheel_speeds: WheelSpeedState, d_t: float) -> float:
+    def _new_orientation(
+            self, robot_orient: float, last_wheel_speeds: WheelSpeedState,
+            wheel_speeds: WheelSpeedState, d_t: float) -> float:
         last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
         wheel_speed_left, wheel_speed_right = wheel_speeds
 
@@ -103,7 +106,7 @@ class DifferentialDriveMotion:
         rel_rotation = (old_orient + new_orient) / 2
         new_x = robot_x + distance_covered * cos(rel_rotation)
         new_y = robot_y + distance_covered * sin(rel_rotation)
-        return ((new_x, new_y), new_orient)
+        return (new_x, new_y), new_orient
 
 
 @dataclass

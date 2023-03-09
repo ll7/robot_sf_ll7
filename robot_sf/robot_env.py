@@ -1,6 +1,6 @@
 from math import ceil
 from dataclasses import dataclass, field
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Callable
 from copy import deepcopy
 
 import numpy as np
@@ -105,7 +105,10 @@ class RobotEnv(Env):
     """Representing an OpenAI Gym environment wrapper for
     training a robot with reinforcement leanring"""
 
-    def __init__(self, env_config: EnvSettings = EnvSettings(), debug: bool=False):
+    def __init__(
+            self, env_config: EnvSettings = EnvSettings(),
+            reward_func: Union[Callable[[EnvState], float], None] = None,
+            debug: bool=False):
         self.sim_config = env_config.sim_config
         self.lidar_config = env_config.lidar_config
         self.robot_config = env_config.robot_config
@@ -118,7 +121,7 @@ class RobotEnv(Env):
         self.max_target_dist = np.sqrt(2) * (max(width, height) * 2) # the box diagonal
         self.action_space, self.observation_space = \
             RobotEnv._build_gym_spaces(self.max_target_dist, self.robot_config, self.lidar_config)
-        self.reward_func = SimpleReward(self.max_sim_steps)
+        self.reward_func = reward_func if reward_func else SimpleReward(self.max_sim_steps)
 
         self.sim_env: Simulator
         self.occupancy = ContinuousOccupancy(

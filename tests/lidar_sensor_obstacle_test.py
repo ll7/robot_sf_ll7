@@ -49,30 +49,31 @@ def test_scanner_detects_obstacle_other_orientation_superpositioned():
     assert scan == approx(np.full((lidar_n_rays), exp_dist))
 
 
-def test_scanner_detects_obstacle_same_orientation_superpositioned():
-    lidar_n_rays = 1
+def test_scanner_ignores_obstacle_same_orientation_superpositioned():
+    lidar_n_rays, max_scan_dist = 1, 5
     obstacles = np.array([[1, 0, -1, 0]])
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
-    settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
+    settings = LidarScannerSettings(max_scan_dist, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
     scan = scanner.get_scan(((0, 0), pi))
 
-    exp_dist = 0
+    # info: obstacles don't have a body, cannot collide
+    exp_dist = max_scan_dist
     assert scan.shape[0] == lidar_n_rays
     assert scan == approx(np.full((lidar_n_rays), exp_dist))
 
 
-def test_scanner_detects_obstacle_same_orientation_not_superpositioned():
-    lidar_n_rays = 1
+def test_scanner_ignores_obstacle_same_orientation_not_superpositioned():
+    lidar_n_rays, max_scan_dist = 1, 5
     obstacles = np.array([[3, 0, 4, 0]])
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
-    settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
+    settings = LidarScannerSettings(max_scan_dist, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scanner = ContinuousLidarScanner(settings, occupancy)
     scan = scanner.get_scan(((0, 0), pi))
 
-    exp_dist = 3
+    exp_dist = max_scan_dist
     assert scan.shape[0] == lidar_n_rays
     assert scan == approx(np.full((lidar_n_rays), exp_dist))
 

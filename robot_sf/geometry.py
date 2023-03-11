@@ -27,40 +27,26 @@ def cos_sim(vec_1: Vec2D, vec_2: Vec2D) -> float:
 
 
 @numba.njit(fastmath=True)
-def lineseg_line_intersection_distance(segment: Line2D, origin: Vec2D, ray_vec: Vec2D) -> float:
-    # source: https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_vec: Vec2D) -> float:
     (x_1, y_1), (x_2, y_2) = segment
-    (x_3, y_3), (x_4, y_4) = origin, (origin[0] + ray_vec[0], origin[1] + ray_vec[1])
+    x_sensor, y_sensor = sensor_pos
+    x_diff, y_diff = x_1 - x_sensor, y_1 - y_sensor
+    x_seg, y_seg = x_2 - x_1, y_2 - y_1
+    x_ray, y_ray = ray_vec
 
-    num = (x_1 - x_3) * (y_3 - y_4) - (y_1 - y_3) * (x_3 - x_4)
-    den = (x_1 - x_2) * (y_3 - y_4) - (y_1 - y_2) * (x_3 - x_4)
+    num = x_ray * y_diff - y_ray * x_diff
+    den = x_seg * y_ray - x_ray * y_seg
 
     # edge case: line segment has same orientation as ray vector
     if den == 0:
+        return np.inf
 
-        # check if parallel lines are aligned
-        v_1 = (x_1 - x_3, y_1 - y_3)
-        v_2 = (x_2 - x_4, y_2 - y_4)
-        v_3 = (v_1[0] * -1, v_1[1] * -1)
-        if v_1 == (0, 0) or v_2 == (0, 0) or \
-                cos_sim(v_1, v_2) > 0.999 or cos_sim(v_2, v_3) > 0.999:
-            min_x, max_x = min(x_1, x_2), max(x_1, x_2)
-            min_y, max_y = min(y_1, y_2), max(y_1, y_2)
+    mu = num / den
+    tau = (mu * x_seg + x_diff) / x_ray
 
-            if min_x <= origin[0] <= max_x and min_y <= origin[1] <= max_y:
-                return 0.0
-            else:
-                dist1 = euclid_dist(origin, (x_1, y_1))
-                dist2 = euclid_dist(origin, (x_2, y_2))
-                return min(dist1, dist2)
-        else:
-            # parallel lines cannot intersect
-            return np.inf
-
-    hit_scale = num / den # called 't' in formula
-    if 0 <= hit_scale <= 1:
-        cross_x, cross_y = x_1 + hit_scale * (x_2 - x_1), y_1 + hit_scale * (y_2 - y_1)
-        return euclid_dist(origin, (cross_x, cross_y))
+    if 0 <= mu <= 1 and tau >= 0:
+        cross_x, cross_y = x_1 + mu * (x_2 - x_1), y_1 + mu * (y_2 - y_1)
+        return euclid_dist(sensor_pos, (cross_x, cross_y))
     else:
         return np.inf
 

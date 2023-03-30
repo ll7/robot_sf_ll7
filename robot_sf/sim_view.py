@@ -57,6 +57,7 @@ class SimulationView:
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
 
+    @property
     def timestep_text_pos(self) -> Vec2D:
         return (self.width - 100, 10)
 

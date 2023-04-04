@@ -21,22 +21,20 @@ class LidarScannerSettings:
 
     max_scan_dist: float = 10.0
     visual_angle_portion: float = 1.0
-    lidar_n_rays: int = 272
+    num_rays: int = 272
     scan_noise: List[float] = field(default_factory=lambda: [0.005, 0.002])
     angle_opening: Range = field(init=False)
-    scan_length: int = field(init=False)
 
     def __post_init__(self):
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError('Scan angle portion needs to be within (0, 1]!')
         if self.max_scan_dist <= 0:
             raise ValueError("Max. scan distance mustn't be negative or zero!")
-        if self.lidar_n_rays <= 0:
+        if self.num_rays <= 0:
             raise ValueError("Amount of LiDAR rays mustn't be negative or zero!")
         if any([not 0 <= prob <= 1 for prob in self.scan_noise]):
             raise ValueError("Scan noise probabilities must be within [0, 1]!")
 
-        self.scan_length = self.lidar_n_rays
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
 
 
@@ -133,7 +131,7 @@ class ContinuousLidarScanner():
     robot_map: ContinuousOccupancy
 
     def __post_init__(self):
-        self.cached_angles = np.linspace(0, 2*np.pi, self.settings.lidar_n_rays + 1)[:-1]
+        self.cached_angles = np.linspace(0, 2*np.pi, self.settings.num_rays + 1)[:-1]
 
     def get_scan(self, pose: RobotPose) -> np.ndarray:
         """This method takes in input the state of the robot
@@ -149,7 +147,7 @@ class ContinuousLidarScanner():
 
         lower = robot_orient + self.settings.angle_opening[0]
         upper = robot_orient + self.settings.angle_opening[1]
-        ray_angles = np.linspace(lower, upper, self.settings.lidar_n_rays + 1)[:-1]
+        ray_angles = np.linspace(lower, upper, self.settings.num_rays + 1)[:-1]
         ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
 
         ranges = raycast(

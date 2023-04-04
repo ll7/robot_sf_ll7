@@ -1,74 +1,20 @@
-from math import ceil
 from dataclasses import dataclass, field
-from typing import Tuple, Union, List, Callable
+from typing import Tuple, Union, Callable
 from copy import deepcopy
 
 import numpy as np
 from gym import Env, spaces
 
-from robot_sf.sim_config import MapDefinitionPool
+from robot_sf.sim_config import EnvSettings
 from robot_sf.occupancy import ContinuousOccupancy
-from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
+from robot_sf.range_sensor import ContinuousLidarScanner
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
-from robot_sf.robot import DifferentialDriveRobot, RobotSettings, rel_pos
-from robot_sf.ped_robot_force import PedRobotForceConfig
+from robot_sf.robot import DifferentialDriveRobot, rel_pos, angle
 from robot_sf.simulator import Simulator
 
 
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
-
-
-@dataclass
-class SimulationSettings:
-    sim_length_in_secs: float = 200.0
-    step_time_in_secs: float = 0.1
-    peds_speed_mult: float = 1.3
-    difficulty: int = 2
-    max_peds_per_group: int = 6
-    ped_radius: float = 0.4
-    goal_radius: float = 1.0
-    prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
-    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.0, 0.02, 0.04, 0.06])
-
-    def __post_init__(self):
-        if self.sim_length_in_secs <= 0:
-            raise ValueError("Simulation length for episodes mustn't be negative or zero!")
-        if self.step_time_in_secs <= 0:
-            raise ValueError("Step time mustn't be negative or zero!")
-        if self.peds_speed_mult <= 0:
-            raise ValueError("Pedestrian speed mustn't be negative or zero!")
-        if self.max_peds_per_group <= 0:
-            raise ValueError("Maximum pedestrians per group mustn't be negative or zero!")
-        if self.ped_radius <= 0:
-            raise ValueError("Pedestrian radius mustn't be negative or zero!")
-        if self.goal_radius <= 0:
-            raise ValueError("Goal radius mustn't be negative or zero!")
-        if not 0 <= self.difficulty < len(self.ped_density_by_difficulty):
-            raise ValueError("No pedestrian density registered for selected difficulty level!")
-        if not self.prf_config:
-            raise ValueError("Pedestrian-Robot-Force settings need to be specified!")
-
-    @property
-    def max_sim_steps(self) -> int:
-        return ceil(self.sim_length_in_secs / self.step_time_in_secs)
-
-    @property
-    def peds_per_area_m2(self) -> float:
-        return self.ped_density_by_difficulty[self.difficulty]
-
-
-@dataclass
-class EnvSettings:
-    sim_config: SimulationSettings = SimulationSettings()
-    lidar_config: LidarScannerSettings = LidarScannerSettings()
-    robot_config: RobotSettings = RobotSettings()
-    map_pool: MapDefinitionPool = MapDefinitionPool()
-
-    def __post_init__(self):
-        if not self.sim_config or not self.lidar_config \
-                or not self.robot_config or not self.map_pool:
-            raise ValueError('Please make sure all properties are initialized!')
 
 
 @dataclass
@@ -90,6 +36,7 @@ class SimpleReward:
     step_discount: float = field(init=False)
 
     def __post_init__(self):
+        # TODO: think of removing the step discount, gamma already discounts rewards
         self.step_discount = 0.1 / self.max_sim_steps
 
     def __call__(self, state: EnvState) -> float:
@@ -99,6 +46,19 @@ class SimpleReward:
         if state.is_robot_at_goal:
             reward += 1
         return reward
+
+
+def build_action_space(max_linear_speed: float, max_angular_speed) -> spaces.Box:
+    drive_actuator = np.array([max_linear_speed, max_angular_speed], dtype=np.float64)
+    return spaces.Box(low=drive_actuator * -1.0, high=drive_actuator, dtype=np.float64)
+
+
+def build_norm_observation_space(num_rays: int) -> spaces.Box:
+    range_sensor = np.ones((num_rays), dtype=np.float64)
+    drive_state = np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+    state_max = np.concatenate((range_sensor, drive_state), axis=0)
+    state_min = np.concatenate((range_sensor * 0.0, drive_state * -1.0), axis=0)
+    return spaces.Box(low=state_min, high=state_max, dtype=np.float64)
 
 
 class RobotEnv(Env):
@@ -119,8 +79,9 @@ class RobotEnv(Env):
         self.env_type = 'RobotEnv'
         self.max_sim_steps = self.sim_config.max_sim_steps
         self.max_target_dist = np.sqrt(2) * (max(width, height) * 2) # the box diagonal
-        self.action_space, self.observation_space = \
-            RobotEnv._build_gym_spaces(self.max_target_dist, self.robot_config, self.lidar_config)
+        self.action_space = build_action_space(
+            self.robot_config.max_linear_speed, self.robot_config.max_angular_speed)
+        self.observation_space = build_norm_observation_space(self.lidar_config.num_rays)
         self.reward_func = reward_func if reward_func else SimpleReward(self.max_sim_steps)
 
         self.sim_env: Simulator
@@ -135,7 +96,7 @@ class RobotEnv(Env):
             self.sim_config.goal_radius)
 
         self.lidar_sensor = ContinuousLidarScanner(self.lidar_config, self.occupancy)
-        robot_factory = lambda s, g: DifferentialDriveRobot(s, g, self.robot_config)
+        robot_factory = lambda s: DifferentialDriveRobot(s, self.robot_config)
         goal_detection = lambda: self.occupancy.is_robot_at_goal
         self.sim_env = Simulator(self.sim_config, map_def, robot_factory, goal_detection)
 
@@ -174,16 +135,19 @@ class RobotEnv(Env):
         ranges_np = self.lidar_sensor.get_scan(self.sim_env.robot_pose)
         speed_x, speed_rot = self.sim_env.robot.current_speed
         target_distance, target_angle = rel_pos(self.sim_env.robot.pose, self.sim_env.goal_pos)
+        next_target_angle = 0.0 if not self.sim_env.next_goal_pos else \
+            angle(self.sim_env.robot.pos, self.sim_env.goal_pos, self.sim_env.next_goal_pos)
 
         # normalize observations within [0, 1] or [-1, 1]
         ranges_np /= self.lidar_config.max_scan_dist
         speed_x /= self.robot_config.max_linear_speed
-        speed_rot = speed_rot / self.robot_config.max_angular_speed
+        speed_rot /= self.robot_config.max_angular_speed
         target_distance /= self.max_target_dist
-        target_angle = target_angle / np.pi
+        target_angle /= np.pi
+        next_target_angle /= np.pi
 
-        robot_state = np.array([speed_x, speed_rot, target_distance, target_angle])
-        return np.concatenate((ranges_np, robot_state), axis=0)
+        state = np.array([speed_x, speed_rot, target_distance, target_angle, next_target_angle])
+        return np.concatenate((ranges_np, state), axis=0)
 
     def render(self, mode='human'):
         if not self.sim_ui:
@@ -204,22 +168,3 @@ class RobotEnv(Env):
     def exit(self):
         if self.sim_ui:
             self.sim_ui.exit()
-
-    @staticmethod
-    def _build_gym_spaces(
-            max_target_dist: float, robot_config: RobotSettings, \
-            lidar_config: LidarScannerSettings) -> Tuple[spaces.Box, spaces.Box]:
-        action_low  = np.array([-robot_config.max_linear_speed, -robot_config.max_angular_speed])
-        action_high = np.array([ robot_config.max_linear_speed,  robot_config.max_angular_speed])
-        action_space = spaces.Box(low=action_low, high=action_high, dtype=np.float64)
-
-        state_max = np.concatenate((
-                lidar_config.max_scan_dist * np.ones((lidar_config.scan_length,)),
-                np.array([robot_config.max_linear_speed, robot_config.max_angular_speed,
-                          max_target_dist, np.pi])), axis=0)
-        state_min = np.concatenate((
-                np.zeros((lidar_config.scan_length,)),
-                np.array([0, -robot_config.max_angular_speed, 0, -np.pi])
-            ), axis=0)
-        observation_space = spaces.Box(low=state_min, high=state_max, dtype=np.float64)
-        return action_space, observation_space

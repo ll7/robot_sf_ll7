@@ -26,7 +26,7 @@ python3 -m pip install -r requirements.txt
 python3 -m pip install -r fast-pysf/requirements.txt
 ```
 
-### 3. Register *robot_sf* and *pysocialforce* Packages 
+### 3. Register *robot_sf* and *pysocialforce* Packages
 
 ```sh
 pushd ./fast-pysf

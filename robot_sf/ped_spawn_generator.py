@@ -7,7 +7,7 @@ import numpy as np
 PedState = np.ndarray
 PedGrouping = Set[int]
 Vec2D = Tuple[float, float]
-SpawnZone = Tuple[Vec2D, Vec2D, Vec2D] # rect ABC with sides |A B|, |B C| and diagonal |A C|
+Zone = Tuple[Vec2D, Vec2D, Vec2D] # rect ABC with sides |A B|, |B C| and diagonal |A C|
 ZoneAssignments = Dict[int, int]
 
 
@@ -27,20 +27,20 @@ class PedSpawnConfig:
 
 
 @dataclass
-class SpawnGenerator:
-    spawn_zones: List[SpawnZone]
+class ZonePointsGenerator:
+    zones: List[Zone]
     zone_areas: List[float] = field(init=False)
     _zone_probs: List[float] = field(init=False)
 
     def __post_init__(self):
-        self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.spawn_zones]
+        self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
         total_area = sum(self.zone_areas)
         self._zone_probs = [area / total_area for area in self.zone_areas]
         # info: distribute proportionally by zone area
 
     def generate(self, num_samples: int) -> Tuple[List[Vec2D], int]:
-        zone_id = np.random.choice(len(self.spawn_zones), size=1, p=self._zone_probs)[0]
-        p_1, p_2, p_3 = self.spawn_zones[zone_id]
+        zone_id = np.random.choice(len(self.zones), size=1, p=self._zone_probs)[0]
+        p_1, p_2, p_3 = self.zones[zone_id]
 
         d_x, d_y = dist(p_2, p_3), dist(p_1, p_2)
         rot = atan2(p_3[1] - p_2[1], p_3[0] - p_2[0])
@@ -59,11 +59,11 @@ class SpawnGenerator:
         return shifted_points, zone_id
 
 
-def initialize_pedestrians(config: PedSpawnConfig, spawn_zones: List[SpawnZone]) \
+def initialize_pedestrians(config: PedSpawnConfig, spawn_zones: List[Zone]) \
         -> Tuple[PedState, List[PedGrouping], ZoneAssignments]:
 
-    spawn_gen = SpawnGenerator(spawn_zones)
-    goal_gens = [SpawnGenerator([z]) for z in spawn_zones]
+    spawn_gen = ZonePointsGenerator(spawn_zones)
+    goal_gens = [ZonePointsGenerator([z]) for z in spawn_zones]
 
     total_num_peds = ceil(sum(spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []

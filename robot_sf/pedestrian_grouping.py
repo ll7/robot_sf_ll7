@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from robot_sf.ped_spawn_generator import SpawnGenerator
+from robot_sf.ped_spawn_generator import ZonePointsGenerator
 
 Vec2D = Tuple[float, float]
 
@@ -137,7 +137,7 @@ class PedestrianGroupings:
 class GroupRedirectBehavior:
     groups: PedestrianGroupings
     zone_assignments: Dict[int, int]
-    spawn_zones: List[SpawnGenerator]
+    spawn_zones: List[ZonePointsGenerator]
     goal_proximity_threshold: float = 1
     pick_new_goal: Callable[[int], Vec2D] = field(init=False)
 

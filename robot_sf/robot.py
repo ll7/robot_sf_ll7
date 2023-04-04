@@ -11,6 +11,15 @@ RobotPose = Tuple[PolarVec2D, float]
 WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
 
 
+def angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
+    v1_x, v1_y = p_2[0] - p_1[0], p_2[1] - p_1[1]
+    v2_x, v2_y = p_3[0] - p_2[0], p_3[1] - p_2[1]
+    o_1, o_2 = atan2(v1_y, v1_x), atan2(v2_y, v2_x)
+    angle_raw = o_2 - o_1
+    angle_norm = (angle_raw + np.pi) % (2 * np.pi) - np.pi
+    return angle_norm
+
+
 def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
     t_x, t_y = target_coords
     (r_x, r_y), orient = pose
@@ -114,7 +123,6 @@ class DifferentialDriveRobot():
     """Representing a robot with differential driving behavior"""
 
     spawn_pose: RobotPose
-    goal: Vec2D
     config: RobotSettings
     state: DifferentialDriveState = field(init=False)
     movement: DifferentialDriveMotion = field(init=False)
@@ -130,10 +138,6 @@ class DifferentialDriveRobot():
     @property
     def pose(self) -> RobotPose:
         return self.state.pose
-
-    @property
-    def dist_to_goal(self) -> float:
-        return dist(self.pose[0], self.goal)
 
     @property
     def current_speed(self) -> PolarVec2D:

@@ -77,8 +77,7 @@ class PedestrianGroupings:
 
     @property
     def standalone_ped_ids(self) -> Set[int]:
-        return {id for id in range(self.states.num_peds) \
-                if id not in self.group_by_ped_id}
+        return {id for id in range(self.states.num_peds) if self.is_standalone(id)}
 
     def group_centroid(self, group_id: int) -> Vec2D:
         group = self.groups[group_id]

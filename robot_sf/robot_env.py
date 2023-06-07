@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Tuple, Union, Callable
 from copy import deepcopy
@@ -79,13 +80,28 @@ class SensorFusion:
         return np.concatenate((lidar_state, drive_state), axis=0) / self.max_values
 
 
+def collect_metadata(env) -> dict:
+    # TODO: add RobotEnv type hint
+    return {
+        "episode": env.episode,
+        "step_of_episode": env.timestep,
+        "is_pedestrian_collision": env.occupancy.is_pedestrian_collision,
+        "is_obstacle_collision": env.occupancy.is_obstacle_collision,
+        "is_robot_at_goal": env.occupancy.is_robot_at_goal,
+        "is_timesteps_exceeded": env.timestep > env.max_sim_steps,
+        "max_sim_steps": env.max_sim_steps
+    }
+
+
 class RobotEnv(Env):
     """Representing an OpenAI Gym environment wrapper for
     training a robot with reinforcement leanring"""
 
     def __init__(
             self, env_config: EnvSettings = EnvSettings(),
+            metadata_collector: Callable[[RobotEnv], dict] = collect_metadata,
             reward_func: Callable[[dict], float] = simple_reward,
+            term_func: Callable[[dict], bool] = is_terminal,
             debug: bool = False):
         self.sim_config = env_config.sim_config
         self.lidar_config = env_config.lidar_config
@@ -102,6 +118,8 @@ class RobotEnv(Env):
             self.robot_config.max_linear_speed, self.robot_config.max_angular_speed,
             map_def.max_target_dist)
         self.reward_func = reward_func
+        self.term_func = term_func
+        self.metadata_collector = metadata_collector
 
         self.sim_env: Simulator
         self.occupancy = ContinuousOccupancy(
@@ -143,17 +161,9 @@ class RobotEnv(Env):
         self.last_action = action_parsed
         obs = self.sensor_fusion.next_obs()
 
-        meta = {
-            "episode": self.episode,
-            "step_of_episode": self.timestep,
-            "is_pedestrian_collision": self.occupancy.is_pedestrian_collision,
-            "is_obstacle_collision": self.occupancy.is_obstacle_collision,
-            "is_robot_at_goal": self.occupancy.is_robot_at_goal,
-            "is_timesteps_exceeded": self.timestep > self.max_sim_steps,
-            "max_sim_steps": self.max_sim_steps
-        }
+        meta = self.metadata_collector(self)
         self.timestep += 1
-        return obs, self.reward_func(meta), is_terminal(meta), meta
+        return obs, self.reward_func(meta), self.term_func(meta), meta
 
     def reset(self):
         self.episode += 1

@@ -18,35 +18,19 @@ PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 
 
-@dataclass
-class EnvState:
-    is_pedestrian_collision: bool
-    is_obstacle_collision: bool
-    is_robot_at_goal: bool
-    is_timesteps_exceeded: bool
-
-    @property
-    def is_terminal(self) -> bool:
-        return self.is_timesteps_exceeded or self.is_pedestrian_collision or \
-            self.is_obstacle_collision or self.is_robot_at_goal
+def simple_reward(meta: dict) -> float:
+    step_discount = 0.1 / meta["max_sim_steps"]
+    reward = -step_discount
+    if meta["is_pedestrian_collision"] or meta["is_obstacle_collision"]:
+        reward -= 2
+    if meta["is_robot_at_goal"]:
+        reward += 1
+    return reward
 
 
-@dataclass
-class SimpleReward:
-    max_sim_steps: float
-    step_discount: float = field(init=False)
-
-    def __post_init__(self):
-        # TODO: think of removing the step discount, gamma already discounts rewards
-        self.step_discount = 0.1 / self.max_sim_steps
-
-    def __call__(self, state: EnvState) -> float:
-        reward = -self.step_discount
-        if state.is_pedestrian_collision or state.is_obstacle_collision:
-            reward -= 2
-        if state.is_robot_at_goal:
-            reward += 1
-        return reward
+def is_terminal(meta: dict) -> bool:
+    return meta["is_timesteps_exceeded"] or meta["is_pedestrian_collision"] or \
+        meta["is_obstacle_collision"] or meta["is_robot_at_goal"]
 
 
 def build_action_space(max_linear_speed: float, max_angular_speed) -> spaces.Box:
@@ -101,8 +85,8 @@ class RobotEnv(Env):
 
     def __init__(
             self, env_config: EnvSettings = EnvSettings(),
-            reward_func: Union[Callable[[EnvState], float], None] = None,
-            debug: bool=False):
+            reward_func: Callable[[dict], float] = simple_reward,
+            debug: bool = False):
         self.sim_config = env_config.sim_config
         self.lidar_config = env_config.lidar_config
         self.robot_config = env_config.robot_config
@@ -117,7 +101,7 @@ class RobotEnv(Env):
             self.lidar_config.num_rays, self.lidar_config.max_scan_dist,
             self.robot_config.max_linear_speed, self.robot_config.max_angular_speed,
             map_def.max_target_dist)
-        self.reward_func = reward_func if reward_func else SimpleReward(self.max_sim_steps)
+        self.reward_func = reward_func
 
         self.sim_env: Simulator
         self.occupancy = ContinuousOccupancy(
@@ -158,14 +142,18 @@ class RobotEnv(Env):
         self.sim_env.step_once(action_parsed)
         self.last_action = action_parsed
         obs = self.sensor_fusion.next_obs()
-        state = EnvState(
-            self.occupancy.is_pedestrian_collision,
-            self.occupancy.is_obstacle_collision,
-            self.occupancy.is_robot_at_goal,
-            self.timestep > self.max_sim_steps)
-        reward, done = self.reward_func(state), state.is_terminal
+
+        meta = {
+            "episode": self.episode,
+            "step_of_episode": self.timestep,
+            "is_pedestrian_collision": self.occupancy.is_pedestrian_collision,
+            "is_obstacle_collision": self.occupancy.is_obstacle_collision,
+            "is_robot_at_goal": self.occupancy.is_robot_at_goal,
+            "is_timesteps_exceeded": self.timestep > self.max_sim_steps,
+            "max_sim_steps": self.max_sim_steps
+        }
         self.timestep += 1
-        return obs, reward, done, { 'step': self.episode, 'meta': state }
+        return obs, self.reward_func(meta), is_terminal(meta), meta
 
     def reset(self):
         self.episode += 1

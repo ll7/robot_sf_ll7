@@ -1,6 +1,7 @@
 import os
 import json
 import random
+from math import sqrt
 from typing import List, Tuple
 from dataclasses import dataclass, field
 
@@ -79,6 +80,10 @@ class MapDefinition:
             missing = ', '.join([f'{s} -> {g}' for s, g in missing_routes])
             raise ValueError((f'Missing or ambiguous routes {missing}! Please ensure that every ',
                 'spawn zone is connected to every goal zone by exactly one route!'))
+
+    @property
+    def max_target_dist(self) -> float:
+        return sqrt(2) * (max(self.width, self.height) * 2)
 
     def find_route(self, spawn_id: int, goal_id: int) -> GlobalRoute:
         # TODO: model non-existing routes with nullable result

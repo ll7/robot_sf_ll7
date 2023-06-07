@@ -7,7 +7,7 @@ import numpy as np
 
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
-RobotPose = Tuple[PolarVec2D, float]
+RobotPose = Tuple[Vec2D, float]
 WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
 
 

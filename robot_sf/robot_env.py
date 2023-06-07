@@ -114,8 +114,10 @@ class RobotEnv(Env):
             self.robot_config.max_linear_speed, self.robot_config.max_angular_speed)
         self.observation_space = build_norm_observation_space(self.lidar_config.num_rays)
         obs_norm = build_obs_norm_max_values(
-            self.lidar_config.num_rays, self.lidar_config.max_scan_dist,
-            self.robot_config.max_linear_speed, self.robot_config.max_angular_speed,
+            self.lidar_config.num_rays,
+            self.lidar_config.max_scan_dist,
+            self.robot_config.max_linear_speed,
+            self.robot_config.max_angular_speed,
             map_def.max_target_dist)
         self.reward_func = reward_func
         self.term_func = term_func
@@ -141,8 +143,7 @@ class RobotEnv(Env):
             lambda: self.lidar_sensor.get_scan(self.sim_env.robot_pose) / self.lidar_config.max_scan_dist,
             lambda: (self.sim_env.robot.current_speed[0] / self.robot_config.max_linear_speed,
                      self.sim_env.robot.current_speed[1] / self.robot_config.max_angular_speed),
-            lambda: target_sensor_obs(
-                self.sim_env.robot.pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos),
+            lambda: target_sensor_obs(self.sim_env.robot_pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos),
             obs_norm)
 
         self.episode = 0

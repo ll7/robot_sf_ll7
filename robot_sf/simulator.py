@@ -152,6 +152,6 @@ class Simulator:
         self.pysf_sim.peds.step(ped_forces, groups)
         self.robot.apply_action(action, self.config.step_time_in_secs)
 
-    def get_pedestrians_groups(self):
-        _, groups = self.pysf_sim.current_state
-        return groups
+    # def get_pedestrians_groups(self):
+    #     _, groups = self.pysf_sim.current_state
+    #     return groups

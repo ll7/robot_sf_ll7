@@ -8,7 +8,7 @@ from gym import Env, spaces
 
 from robot_sf.sim_config import EnvSettings
 from robot_sf.occupancy import ContinuousOccupancy
-from robot_sf.range_sensor import ContinuousLidarScanner
+from robot_sf.range_sensor import lidar_ray_scan
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.robot import DifferentialDriveRobot, rel_pos, angle
 from robot_sf.simulator import Simulator
@@ -125,7 +125,8 @@ class RobotEnv(Env):
 
         self.sim_env: Simulator
         self.occupancy = ContinuousOccupancy(
-            map_def.width, map_def.height,
+            map_def.width,
+            map_def.height,
             lambda: self.sim_env.robot_pose[0],
             lambda: self.sim_env.goal_pos,
             lambda: self.sim_env.pysf_sim.env.obstacles_raw,
@@ -134,17 +135,16 @@ class RobotEnv(Env):
             self.sim_config.ped_radius,
             self.sim_config.goal_radius)
 
-        self.lidar_sensor = ContinuousLidarScanner(self.lidar_config, self.occupancy)
         robot_factory = lambda pose: DifferentialDriveRobot(pose, self.robot_config)
         goal_detection = lambda: self.occupancy.is_robot_at_goal
         self.sim_env = Simulator(self.sim_config, map_def, robot_factory, goal_detection)
 
+        ray_sensor = lambda: lidar_ray_scan(
+            self.sim_env.robot_pose, self.occupancy, self.lidar_config)
+        target_sensor = lambda: target_sensor_obs(
+            self.sim_env.robot_pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos)
         self.sensor_fusion = SensorFusion(
-            lambda: self.lidar_sensor.get_scan(self.sim_env.robot_pose) / self.lidar_config.max_scan_dist,
-            lambda: (self.sim_env.robot.current_speed[0] / self.robot_config.max_linear_speed,
-                     self.sim_env.robot.current_speed[1] / self.robot_config.max_angular_speed),
-            lambda: target_sensor_obs(self.sim_env.robot_pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos),
-            obs_norm)
+            ray_sensor, lambda: self.sim_env.robot.current_speed, target_sensor, obs_norm)
 
         self.episode = 0
         self.timestep = 0

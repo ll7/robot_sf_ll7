@@ -5,7 +5,7 @@ import numpy as np
 from pytest import approx
 
 from robot_sf.occupancy import ContinuousOccupancy
-from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
+from robot_sf.range_sensor import lidar_ray_scan, LidarScannerSettings
 
 
 NO_SCAN_NOISE = [0.0, 0.0]
@@ -27,8 +27,7 @@ def test_scanner_detects_single_pedestrian():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians)
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays
@@ -45,8 +44,7 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: ped_pos)
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), 0))
+    scan = lidar_ray_scan(((0, 0), 0), occupancy, settings)
 
     exp_dist = 2.0
     assert scan.shape[0] == lidar_n_rays
@@ -59,8 +57,7 @@ def test_scanner_detects_only_closest_pedestrian():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians)
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays
@@ -72,8 +69,7 @@ def test_scanner_detects_nothing_when_there_is_nothing():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = 5
     assert scan.shape[0] == lidar_n_rays
@@ -86,8 +82,7 @@ def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians)
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), 0))
+    scan = lidar_ray_scan(((0, 0), 0), occupancy, settings)
 
     exp_dist = 5
     assert scan.shape[0] == lidar_n_rays

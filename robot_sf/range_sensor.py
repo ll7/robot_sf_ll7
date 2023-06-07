@@ -119,39 +119,30 @@ def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_sca
             out_ranges[i] = out_ranges[i] * np.random.random()
 
 
-@dataclass
-class ContinuousLidarScanner():
+def lidar_ray_scan(
+        pose: RobotPose,
+        robot_map: ContinuousOccupancy,
+        settings: LidarScannerSettings) -> np.ndarray:
     """Representing a simulated radial LiDAR scanner operating
     in a 2D plane on a continuous occupancy with explicit objects.
 
     The occupancy contains the robot (as circle), a set of pedestrians
     (as circles) and a set of static obstacles (as 2D lines)"""
 
-    settings: LidarScannerSettings
-    robot_map: ContinuousOccupancy
+    (pos_x, pos_y), robot_orient = pose
+    scan_noise = np.array(settings.scan_noise)
+    scan_dist = settings.max_scan_dist
 
-    def __post_init__(self):
-        self.cached_angles = np.linspace(0, 2*np.pi, self.settings.num_rays + 1)[:-1]
+    ped_pos = robot_map.pedestrian_coords
+    obstacles = robot_map.obstacle_coords
 
-    def get_scan(self, pose: RobotPose) -> np.ndarray:
-        """This method takes in input the state of the robot
-        and an input map (map object) and returns a data structure
-        containing the sensor readings"""
+    lower = robot_orient + settings.angle_opening[0]
+    upper = robot_orient + settings.angle_opening[1]
+    ray_angles = np.linspace(lower, upper, settings.num_rays + 1)[:-1]
+    ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
 
-        (pos_x, pos_y), robot_orient = pose
-        scan_noise = np.array(self.settings.scan_noise)
-        scan_dist = self.settings.max_scan_dist
-
-        ped_pos = self.robot_map.pedestrian_coords
-        obstacles = self.robot_map.obstacle_coords
-
-        lower = robot_orient + self.settings.angle_opening[0]
-        upper = robot_orient + self.settings.angle_opening[1]
-        ray_angles = np.linspace(lower, upper, self.settings.num_rays + 1)[:-1]
-        ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
-
-        ranges = raycast(
-            (pos_x, pos_y), obstacles, scan_dist, ped_pos,
-            self.robot_map.ped_radius, ray_angles)
-        range_postprocessing(ranges, scan_noise, scan_dist)
-        return ranges
+    ranges = raycast(
+        (pos_x, pos_y), obstacles, scan_dist, ped_pos,
+        robot_map.ped_radius, ray_angles)
+    range_postprocessing(ranges, scan_noise, scan_dist)
+    return ranges

@@ -5,7 +5,7 @@ import numpy as np
 from pytest import approx
 
 from robot_sf.occupancy import ContinuousOccupancy
-from robot_sf.range_sensor import ContinuousLidarScanner, LidarScannerSettings
+from robot_sf.range_sensor import lidar_ray_scan, LidarScannerSettings
 
 
 NO_SCAN_NOISE = [0.0, 0.0]
@@ -27,8 +27,7 @@ def test_scanner_detects_single_obstacle_orthogonal_orientation():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays
@@ -41,8 +40,7 @@ def test_scanner_detects_obstacle_other_orientation_superpositioned():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = 0
     assert scan.shape[0] == lidar_n_rays
@@ -55,8 +53,7 @@ def test_scanner_ignores_obstacle_same_orientation_superpositioned():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(max_scan_dist, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     # info: obstacles don't have a body, cannot collide
     exp_dist = max_scan_dist
@@ -70,8 +67,7 @@ def test_scanner_ignores_obstacle_same_orientation_not_superpositioned():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(max_scan_dist, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = max_scan_dist
     assert scan.shape[0] == lidar_n_rays
@@ -91,8 +87,7 @@ def test_scanner_detects_multiple_equidist_obstacles_from_center():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), 0))
+    scan = lidar_ray_scan(((0, 0), 0), occupancy, settings)
 
     exp_dist = 2.0
     assert scan.shape[0] == lidar_n_rays
@@ -118,8 +113,7 @@ def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((shift_x, shift_y), 0))
+    scan = lidar_ray_scan(((shift_x, shift_y), 0), occupancy, settings)
 
     exp_dist = 2.0
     assert scan.shape[0] == lidar_n_rays
@@ -132,8 +126,7 @@ def test_scanner_detects_max_range_when_nothing_found():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: np.array([[]]))
     settings = LidarScannerSettings(max_scan_range, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), 0))
+    scan = lidar_ray_scan(((0, 0), 0), occupancy, settings)
 
     exp_dist = max_scan_range
     assert scan.shape[0] == lidar_n_rays
@@ -146,8 +139,7 @@ def test_scanner_detects_only_closest_obstacle():
     occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: obstacles, lambda: np.array([[]]))
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
-    scanner = ContinuousLidarScanner(settings, occupancy)
-    scan = scanner.get_scan(((0, 0), pi))
+    scan = lidar_ray_scan(((0, 0), pi), occupancy, settings)
 
     exp_dist = 2
     assert scan.shape[0] == lidar_n_rays

@@ -1,17 +1,19 @@
 import random
+from math import dist
 from dataclasses import dataclass, field
-from typing import List, Callable, Tuple, Protocol, Union
+from typing import List, Tuple, Union, Callable
 
 import pysocialforce as pysf
 from pysocialforce.utils import SimulatorConfig as PySFSimConfig
 
+from robot_sf.sim_config import SimulationSettings
 from robot_sf.map_config import MapDefinition
 from robot_sf.ped_spawn_generator \
     import ZonePointsGenerator, PedSpawnConfig, initialize_pedestrians
-from robot_sf.ped_robot_force \
-    import PedRobotForce, PedRobotForceConfig
+from robot_sf.ped_robot_force import PedRobotForce
 from robot_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
+from robot_sf.robot import DifferentialDriveRobot
 
 
 Vec2D = Tuple[float, float]
@@ -20,72 +22,89 @@ RobotPose = Tuple[Vec2D, float]
 
 
 @dataclass
-class MovingRobot(Protocol):
-    @property
-    def pos(self) -> Vec2D:
-        raise NotImplementedError()
+class RouteNavigator:
+    waypoints: List[Vec2D] = field(default_factory=list)
+    waypoint_id: int = 0
+    proximity_threshold: float = 1.0 # info: should be set to vehicle radius + goal radius
+    pos: Vec2D = field(default=(0, 0))
+    reached_waypoint: bool = False
 
     @property
-    def pose(self) -> RobotPose:
-        raise NotImplementedError()
+    def reached_destination(self) -> bool:
+        return len(self.waypoints) == 0 or \
+            dist(self.waypoints[-1], self.pos) <= self.proximity_threshold
 
     @property
-    def current_speed(self) -> PolarVec2D:
-        raise NotImplementedError()
-
-    def apply_action(self, action: PolarVec2D, d_t: float):
-        raise NotImplementedError()
-
-
-class SimulationSettings(Protocol):
-    @property
-    def peds_per_area_m2(self) -> float:
-        raise NotImplementedError()
+    def current_waypoint(self) -> Vec2D:
+        return self.waypoints[self.waypoint_id]
 
     @property
-    def max_peds_per_group(self) -> int:
-        raise NotImplementedError()
+    def next_waypoint(self) -> Union[Vec2D, None]:
+        return self.waypoints[self.waypoint_id + 1] \
+            if self.waypoint_id + 1 < len(self.waypoints) else None
 
-    @property
-    def step_time_in_secs(self) -> float:
-        raise NotImplementedError()
+    def update_position(self, pos: Vec2D):
+        reached_waypoint = dist(self.current_waypoint, pos) <= self.proximity_threshold
+        if reached_waypoint:
+            self.waypoint_id = min(len(self.waypoints) - 1, self.waypoint_id + 1)
+        self.pos = pos
+        self.reached_waypoint = reached_waypoint
 
-    @property
-    def peds_speed_mult(self) -> float:
-        raise NotImplementedError()
+    def new_route(self, route: List[Vec2D]):
+        self.waypoints = route
+        self.waypoint_id = 0
 
-    @property
-    def prf_config(self) -> PedRobotForceConfig:
-        raise NotImplementedError()
+
+def sample_route(
+        map_def: MapDefinition,
+        spawn_gens: List[ZonePointsGenerator],
+        goal_gens: List[ZonePointsGenerator]) -> List[Vec2D]:
+
+    def generate_point(zone: ZonePointsGenerator) -> Vec2D:
+            points, zone_id = zone.generate(num_samples=1)
+            return points[0]
+
+    spawn_id = random.randint(0, len(spawn_gens) - 1)
+    goal_id = random.randint(0, len(goal_gens) - 1)
+    route = map_def.find_route(spawn_id, goal_id)
+    initial_spawn = generate_point(spawn_gens[route.spawn_id])
+    final_goal = generate_point(goal_gens[route.goal_id])
+    route = [initial_spawn] + route.waypoints + [final_goal]
+    # TODO: think of adding a bit of noise to the exact waypoint positions as well
+    return route
 
 
 @dataclass
 class Simulator:
     config: SimulationSettings
     map_def: MapDefinition
-    robot_factory: Callable[[RobotPose], MovingRobot]
-    is_robot_at_goal: Callable[[], bool]
-    robot: MovingRobot = field(init=False)
-    waypoints: List[Vec2D] = field(init=False, default_factory=list)
-    waypoint_id: int = field(init=False, default=-1)
+    robot: DifferentialDriveRobot
+    goal_proximity_threshold: float
+    navigator: RouteNavigator = field(init=False)
+    pysf_sim: pysf.Simulator = field(init=False)
+    sample_route: Callable[[], List[Vec2D]] = field(init=False)
+    pysf_state: PySFPedestrianStates = field(init=False)
+    groups: PedestrianGroupings = field(init=False)
+    peds_behavior: GroupRedirectBehavior = field(init=False)
 
     def __post_init__(self):
         ped_spawn_gens = [ZonePointsGenerator([z]) for z in self.map_def.ped_spawn_zones]
-        self.robot_spawn_gens = [ZonePointsGenerator([z]) for z in self.map_def.robot_spawn_zones]
-        self.robot_goal_gens = [ZonePointsGenerator([z]) for z in self.map_def.goal_zones]
+        robot_spawn_gens = [ZonePointsGenerator([z]) for z in self.map_def.robot_spawn_zones]
+        robot_goal_gens = [ZonePointsGenerator([z]) for z in self.map_def.goal_zones]
+
+        self.sample_route = lambda: sample_route(
+            self.map_def, robot_spawn_gens, robot_goal_gens)
 
         spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
         ped_states_np, initial_groups, zone_assignments = \
             initialize_pedestrians(spawn_config, self.map_def.ped_spawn_zones)
 
-        get_state = lambda: self.pysf_sim.peds.state
-        self.pysf_state = PySFPedestrianStates(get_state)
-        groups = PedestrianGroupings(self.pysf_state)
-        self.peds_behavior = GroupRedirectBehavior(groups, zone_assignments, ped_spawn_gens)
-        self.groups_as_list = lambda: [list(ped_ids) for ped_ids in groups.groups.values()]
+        self.pysf_state = PySFPedestrianStates(lambda: self.pysf_sim.peds.state)
+        self.groups = PedestrianGroupings(self.pysf_state)
+        self.peds_behavior = GroupRedirectBehavior(self.groups, zone_assignments, ped_spawn_gens)
 
         for ped_ids in initial_groups:
-            groups.new_group(ped_ids)
+            self.groups.new_group(ped_ids)
 
         def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
             forces = pysf.simulator.make_forces(sim, config)
@@ -96,20 +115,20 @@ class Simulator:
             return forces
 
         self.pysf_sim = pysf.Simulator(
-            ped_states_np, self.groups_as_list(),
+            ped_states_np, self.groups.groups_as_lists,
             self.map_def.obstacles_pysf, make_forces=make_forces)
-        self.pysf_sim.peds.step_width = self.config.step_time_in_secs
+        self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
+        self.navigator = RouteNavigator(proximity_threshold=self.goal_proximity_threshold)
         self.reset_state()
 
     @property
     def goal_pos(self) -> Vec2D:
-        return self.waypoints[self.waypoint_id]
+        return self.navigator.current_waypoint
 
     @property
     def next_goal_pos(self) -> Union[Vec2D, None]:
-        return self.waypoints[self.waypoint_id + 1] \
-            if self.waypoint_id + 1 < len(self.waypoints) else None
+        return self.navigator.next_waypoint
 
     @property
     def robot_pose(self) -> RobotPose:
@@ -121,37 +140,20 @@ class Simulator:
 
     def reset_state(self):
         self.peds_behavior.pick_new_goals()
-
-        def generate_point(zone: ZonePointsGenerator) -> Vec2D:
-            points, zone_id = zone.generate(num_samples=1)
-            return points[0]
-
-        def generate_route() -> List[Vec2D]:
-            spawn_id = random.randint(0, len(self.robot_spawn_gens) - 1)
-            goal_id = random.randint(0, len(self.robot_goal_gens) - 1)
-            route = self.map_def.find_route(spawn_id, goal_id)
-            initial_spawn = generate_point(self.robot_spawn_gens[route.spawn_id])
-            final_goal = generate_point(self.robot_goal_gens[route.goal_id])
-            route = [initial_spawn] + route.waypoints + [final_goal]
-            # TODO: think of adding a bit of noise to the exact waypoint positions as well
-            return route
-
-        collision = not self.is_robot_at_goal
-        last_waypoint_reached = self.waypoint_id == len(self.waypoints) - 1
-        if collision or last_waypoint_reached:
-            self.waypoints = generate_route()
-            self.waypoint_id = 1
-            self.robot = self.robot_factory((self.waypoints[0], 0))
+        collision = not self.navigator.reached_waypoint
+        is_at_final_goal = self.navigator.reached_destination
+        if collision or is_at_final_goal:
+            print("collision or reached destination")
+            waypoints = self.sample_route()
+            self.navigator.new_route(waypoints[1:])
+            self.robot.reset_state((waypoints[0], 0))
         else:
-            self.waypoint_id += 1
+            print("reached intermediate waypoint")
 
     def step_once(self, action: PolarVec2D):
         self.peds_behavior.redirect_groups_if_at_goal()
         ped_forces = self.pysf_sim.compute_forces()
-        groups = self.groups_as_list()
+        groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
-        self.robot.apply_action(action, self.config.step_time_in_secs)
-
-    # def get_pedestrians_groups(self):
-    #     _, groups = self.pysf_sim.current_state
-    #     return groups
+        self.robot.apply_action(action, self.config.time_per_step_in_secs)
+        self.navigator.update_position(self.robot.pos)

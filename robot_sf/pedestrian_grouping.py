@@ -70,6 +70,10 @@ class PedestrianGroupings:
     # TODO: remove group reassignments, feature isn't required
 
     @property
+    def groups_as_lists(self) -> List[List[int]]:
+        return [list(ped_ids) for ped_ids in self.groups.values()]
+
+    @property
     def group_ids(self) -> Set[int]:
         # info: pedestrian reassignments can cause groups
         #       to become empty -> ignore empty groups

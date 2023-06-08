@@ -143,12 +143,9 @@ class Simulator:
         collision = not self.navigator.reached_waypoint
         is_at_final_goal = self.navigator.reached_destination
         if collision or is_at_final_goal:
-            print("collision or reached destination")
             waypoints = self.sample_route()
             self.navigator.new_route(waypoints[1:])
             self.robot.reset_state((waypoints[0], 0))
-        else:
-            print("reached intermediate waypoint")
 
     def step_once(self, action: PolarVec2D):
         self.peds_behavior.redirect_groups_if_at_goal()

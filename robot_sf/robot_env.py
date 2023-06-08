@@ -35,24 +35,23 @@ def is_terminal(meta: dict) -> bool:
 
 
 def build_action_space(max_linear_speed: float, max_angular_speed) -> spaces.Box:
-    drive_actuator = np.array([max_linear_speed, max_angular_speed], dtype=np.float64)
-    return spaces.Box(low=drive_actuator * -1.0, high=drive_actuator, dtype=np.float64)
+    high = np.array([max_linear_speed, max_angular_speed], dtype=np.float32)
+    low = np.array([0.0, -max_angular_speed], dtype=np.float32)
+    return spaces.Box(low=low, high=high)
 
 
-def build_norm_observation_space(num_rays: int) -> spaces.Box:
-    range_sensor = np.ones((num_rays), dtype=np.float64)
-    drive_state = np.array([1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
-    state_max = np.concatenate((range_sensor, drive_state), axis=0)
-    state_min = np.concatenate((range_sensor * 0.0, drive_state * -1.0), axis=0)
-    return spaces.Box(low=state_min, high=state_max, dtype=np.float64)
-
-
-def build_obs_norm_max_values(
+def build_norm_observation_space(
         num_rays: int, max_scan_dist: float, max_linear_speed: float,
-        max_angular_speed: float, max_target_dist: float) -> np.ndarray:
+        max_angular_speed: float, max_target_dist: float) -> Tuple[spaces.Box, np.ndarray]:
     max_drive_state = np.array([max_linear_speed, max_angular_speed, max_target_dist, np.pi, np.pi])
+    min_drive_state = np.array([0.0, -max_angular_speed, 0.0, -np.pi, -np.pi])
     max_lidar_state = np.full((num_rays), max_scan_dist)
-    return np.concatenate((max_lidar_state, max_drive_state), axis=0)
+    min_lidar_state = np.zeros((num_rays))
+    max_obs = np.concatenate((max_lidar_state, max_drive_state), axis=0, dtype=np.float32)
+    min_obs = np.concatenate((min_lidar_state, min_drive_state), axis=0, dtype=np.float32)
+    low, high = min_obs / max_obs, max_obs / max_obs
+    norm_obs_space = spaces.Box(low=low, high=high)
+    return norm_obs_space, max_obs
 
 
 def target_sensor_obs(
@@ -87,15 +86,15 @@ def collect_metadata(env) -> dict:
         "step_of_episode": env.timestep,
         "is_pedestrian_collision": env.occupancy.is_pedestrian_collision,
         "is_obstacle_collision": env.occupancy.is_obstacle_collision,
-        "is_robot_at_goal": env.occupancy.is_robot_at_goal,
+        "is_robot_at_goal": env.sim_env.navigator.reached_waypoint,
         "is_timesteps_exceeded": env.timestep > env.max_sim_steps,
         "max_sim_steps": env.max_sim_steps
     }
 
 
 class RobotEnv(Env):
-    """Representing an OpenAI Gym environment wrapper for
-    training a robot with reinforcement leanring"""
+    """Representing an OpenAI Gym environment for training
+    a self-driving robot with reinforcement learning"""
 
     def __init__(
             self, env_config: EnvSettings = EnvSettings(),
@@ -103,57 +102,51 @@ class RobotEnv(Env):
             reward_func: Callable[[dict], float] = simple_reward,
             term_func: Callable[[dict], bool] = is_terminal,
             debug: bool = False):
-        self.sim_config = env_config.sim_config
-        self.lidar_config = env_config.lidar_config
-        self.robot_config = env_config.robot_config
-        map_def = env_config.map_pool.choose_random_map()
-
-        self.env_type = 'RobotEnv'
-        self.max_sim_steps = self.sim_config.max_sim_steps
-        self.action_space = build_action_space(
-            self.robot_config.max_linear_speed, self.robot_config.max_angular_speed)
-        self.observation_space = build_norm_observation_space(self.lidar_config.num_rays)
-        obs_norm = build_obs_norm_max_values(
-            self.lidar_config.num_rays,
-            self.lidar_config.max_scan_dist,
-            self.robot_config.max_linear_speed,
-            self.robot_config.max_angular_speed,
-            map_def.max_target_dist)
         self.reward_func = reward_func
         self.term_func = term_func
         self.metadata_collector = metadata_collector
+        sim_config = env_config.sim_config
+        lidar_config = env_config.lidar_config
+        robot_config = env_config.robot_config
+        map_def = env_config.map_pool.choose_random_map()
 
-        self.sim_env: Simulator
+        self.env_type = 'RobotEnv'
+        self.max_sim_steps = sim_config.max_sim_steps
+        self.action_space = build_action_space(
+            robot_config.max_linear_speed, robot_config.max_angular_speed)
+        self.observation_space, obs_norm = build_norm_observation_space(
+            lidar_config.num_rays, lidar_config.max_scan_dist, robot_config.max_linear_speed,
+            robot_config.max_angular_speed, map_def.max_target_dist)
+
+        robot = DifferentialDriveRobot(robot_config)
+        goal_proximity = robot_config.radius + sim_config.goal_radius
+        self.sim_env = Simulator(sim_config, map_def, robot, goal_proximity)
+
         self.occupancy = ContinuousOccupancy(
             map_def.width,
             map_def.height,
-            lambda: self.sim_env.robot_pose[0],
+            lambda: robot.pos,
             lambda: self.sim_env.goal_pos,
             lambda: self.sim_env.pysf_sim.env.obstacles_raw,
             lambda: self.sim_env.ped_positions,
-            self.robot_config.radius,
-            self.sim_config.ped_radius,
-            self.sim_config.goal_radius)
+            robot_config.radius,
+            sim_config.ped_radius,
+            sim_config.goal_radius)
 
-        robot_factory = lambda pose: DifferentialDriveRobot(pose, self.robot_config)
-        goal_detection = lambda: self.occupancy.is_robot_at_goal
-        self.sim_env = Simulator(self.sim_config, map_def, robot_factory, goal_detection)
-
-        ray_sensor = lambda: lidar_ray_scan(
-            self.sim_env.robot_pose, self.occupancy, self.lidar_config)
+        ray_sensor = lambda: lidar_ray_scan(robot.pose, self.occupancy, lidar_config)
         target_sensor = lambda: target_sensor_obs(
-            self.sim_env.robot_pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos)
+            robot.pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos)
         self.sensor_fusion = SensorFusion(
-            ray_sensor, lambda: self.sim_env.robot.current_speed, target_sensor, obs_norm)
+            ray_sensor, lambda: robot.current_speed, target_sensor, obs_norm)
 
         self.episode = 0
         self.timestep = 0
         self.last_action: Union[PolarVec2D, None] = None
         if debug:
             self.sim_ui = SimulationView(
-                robot_radius=self.robot_config.radius,
-                ped_radius=self.sim_config.ped_radius,
-                goal_radius=self.sim_config.goal_radius)
+                robot_radius=robot_config.radius,
+                ped_radius=sim_config.ped_radius,
+                goal_radius=sim_config.goal_radius)
             self.sim_ui.show()
 
     def step(self, action: np.ndarray):

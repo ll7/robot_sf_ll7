@@ -122,13 +122,11 @@ class DifferentialDriveMotion:
 class DifferentialDriveRobot():
     """Representing a robot with differential driving behavior"""
 
-    spawn_pose: RobotPose
     config: RobotSettings
-    state: DifferentialDriveState = field(init=False)
+    state: DifferentialDriveState = field(default=DifferentialDriveState(((0, 0), 0)))
     movement: DifferentialDriveMotion = field(init=False)
 
     def __post_init__(self):
-        self.state = DifferentialDriveState(self.spawn_pose)
         self.movement = DifferentialDriveMotion(self.config)
 
     @property
@@ -145,3 +143,6 @@ class DifferentialDriveRobot():
 
     def apply_action(self, action: PolarVec2D, d_t: float):
         self.movement.move(self.state, action, d_t)
+
+    def reset_state(self, new_pose: RobotPose):
+        self.state = DifferentialDriveState(new_pose)

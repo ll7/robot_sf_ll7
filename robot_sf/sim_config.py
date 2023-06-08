@@ -2,7 +2,6 @@ from math import ceil
 from typing import List
 from dataclasses import dataclass, field
 
-
 from robot_sf.map_config import MapDefinitionPool
 from robot_sf.range_sensor import LidarScannerSettings
 from robot_sf.robot import RobotSettings
@@ -11,8 +10,8 @@ from robot_sf.ped_robot_force import PedRobotForceConfig
 
 @dataclass
 class SimulationSettings:
-    sim_length_in_secs: float = 200.0
-    step_time_in_secs: float = 0.1
+    sim_time_in_secs: float = 200.0
+    time_per_step_in_secs: float = 0.1
     peds_speed_mult: float = 1.3
     difficulty: int = 2
     max_peds_per_group: int = 6
@@ -22,9 +21,9 @@ class SimulationSettings:
     ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.0, 0.02, 0.04, 0.06])
 
     def __post_init__(self):
-        if self.sim_length_in_secs <= 0:
+        if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")
-        if self.step_time_in_secs <= 0:
+        if self.time_per_step_in_secs <= 0:
             raise ValueError("Step time mustn't be negative or zero!")
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")
@@ -41,7 +40,7 @@ class SimulationSettings:
 
     @property
     def max_sim_steps(self) -> int:
-        return ceil(self.sim_length_in_secs / self.step_time_in_secs)
+        return ceil(self.sim_time_in_secs / self.time_per_step_in_secs)
 
     @property
     def peds_per_area_m2(self) -> float:

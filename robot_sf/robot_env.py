@@ -82,6 +82,7 @@ class SensorFusion:
 def collect_metadata(env) -> dict:
     # TODO: add RobotEnv type hint
     return {
+        "step": env.episode * env.max_sim_steps,
         "episode": env.episode,
         "step_of_episode": env.timestep,
         "is_pedestrian_collision": env.occupancy.is_pedestrian_collision,
@@ -123,15 +124,9 @@ class RobotEnv(Env):
         self.sim_env = Simulator(sim_config, map_def, robot, goal_proximity)
 
         self.occupancy = ContinuousOccupancy(
-            map_def.width,
-            map_def.height,
-            lambda: robot.pos,
-            lambda: self.sim_env.goal_pos,
-            lambda: self.sim_env.pysf_sim.env.obstacles_raw,
-            lambda: self.sim_env.ped_positions,
-            robot_config.radius,
-            sim_config.ped_radius,
-            sim_config.goal_radius)
+            map_def.width, map_def.height, lambda: robot.pos, lambda: self.sim_env.goal_pos,
+            lambda: self.sim_env.pysf_sim.env.obstacles_raw, lambda: self.sim_env.ped_positions,
+            robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
 
         ray_sensor = lambda: lidar_ray_scan(robot.pose, self.occupancy, lidar_config)
         target_sensor = lambda: target_sensor_obs(
@@ -157,7 +152,7 @@ class RobotEnv(Env):
 
         meta = self.metadata_collector(self)
         self.timestep += 1
-        return obs, self.reward_func(meta), self.term_func(meta), meta
+        return obs, self.reward_func(meta), self.term_func(meta), { "step": meta["step"], "meta": meta }
 
     def reset(self):
         self.episode += 1

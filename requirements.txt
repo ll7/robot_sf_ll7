@@ -1,7 +1,7 @@
 # PySocialForce==1.1.2
 numpy==1.23.4
 toml==0.10.2
-# gym==0.26.2
+gym==0.21.0
 matplotlib==3.6.1
 natsort==8.2.0
 Pillow==9.2.0

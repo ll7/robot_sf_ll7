@@ -13,12 +13,12 @@ class SimulationSettings:
     sim_time_in_secs: float = 200.0
     time_per_step_in_secs: float = 0.1
     peds_speed_mult: float = 1.3
-    difficulty: int = 2
+    difficulty: int = 0
     max_peds_per_group: int = 6
     ped_radius: float = 0.4
     goal_radius: float = 1.0
     prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
-    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.0, 0.02, 0.04, 0.06])
+    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.06])
 
     def __post_init__(self):
         if self.sim_time_in_secs <= 0:

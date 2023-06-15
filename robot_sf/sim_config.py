@@ -17,6 +17,7 @@ class SimulationSettings:
     max_peds_per_group: int = 6
     ped_radius: float = 0.4
     goal_radius: float = 1.0
+    stack_steps: int = 3
     prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
     ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.06])
 

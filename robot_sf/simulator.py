@@ -17,6 +17,7 @@ from robot_sf.robot import DifferentialDriveRobot
 
 
 Vec2D = Tuple[float, float]
+RobotAction = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 
@@ -147,7 +148,7 @@ class Simulator:
             self.navigator.new_route(waypoints[1:])
             self.robot.reset_state((waypoints[0], 0))
 
-    def step_once(self, action: PolarVec2D):
+    def step_once(self, action: RobotAction):
         self.peds_behavior.redirect_groups_if_at_goal()
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups.groups_as_lists

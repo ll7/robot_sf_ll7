@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Tuple, Union, Callable
+from typing import Tuple, Union, Callable, Dict, List
 from copy import deepcopy
 
 import numpy as np
@@ -17,6 +17,9 @@ from robot_sf.simulator import Simulator
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
+
+OBS_DRIVE_STATE = "drive_state"
+OBS_RAYS = "rays"
 
 
 def simple_reward(meta: dict) -> float:
@@ -35,23 +38,40 @@ def is_terminal(meta: dict) -> bool:
 
 
 def build_action_space(max_linear_speed: float, max_angular_speed) -> spaces.Box:
+    # TODO: make action space specific to vehicle's kinematic model
     high = np.array([max_linear_speed, max_angular_speed], dtype=np.float32)
     low = np.array([0.0, -max_angular_speed], dtype=np.float32)
     return spaces.Box(low=low, high=high)
 
 
 def build_norm_observation_space(
-        num_rays: int, max_scan_dist: float, max_linear_speed: float,
-        max_angular_speed: float, max_target_dist: float) -> Tuple[spaces.Box, np.ndarray]:
-    max_drive_state = np.array([max_linear_speed, max_angular_speed, max_target_dist, np.pi, np.pi])
-    min_drive_state = np.array([0.0, -max_angular_speed, 0.0, -np.pi, -np.pi])
-    max_lidar_state = np.full((num_rays), max_scan_dist)
-    min_lidar_state = np.zeros((num_rays))
-    max_obs = np.concatenate((max_lidar_state, max_drive_state), axis=0, dtype=np.float32)
-    min_obs = np.concatenate((min_lidar_state, min_drive_state), axis=0, dtype=np.float32)
-    low, high = min_obs / max_obs, max_obs / max_obs
-    norm_obs_space = spaces.Box(low=low, high=high)
-    return norm_obs_space, max_obs
+        timesteps: int, num_rays: int, max_scan_dist: float, max_linear_speed: float,
+        max_angular_speed: float, max_target_dist: float) -> Tuple[spaces.Dict, spaces.Dict]:
+    # TODO: make drive state specific to vehicle's kinematic model
+    max_drive_state = np.array([
+        [max_linear_speed, max_angular_speed, max_target_dist, np.pi, np.pi]
+        for t in range(timesteps)], dtype=np.float32)
+    min_drive_state = np.array([
+        [0.0, -max_angular_speed, 0.0, -np.pi, -np.pi]
+        for t in range(timesteps)], dtype=np.float32)
+    max_lidar_state = np.full((timesteps, num_rays), max_scan_dist)
+    min_lidar_state = np.zeros((timesteps, num_rays))
+
+    orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
+    orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)
+    orig_obs_space = spaces.Dict({ OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state })
+
+    box_drive_state = spaces.Box(
+        low=min_drive_state / max_drive_state,
+        high=max_drive_state / max_drive_state,
+        dtype=np.float32)
+    box_lidar_state = spaces.Box(
+        low=min_lidar_state / max_lidar_state,
+        high=max_lidar_state / max_lidar_state,
+        dtype=np.float32)
+    norm_obs_space = spaces.Dict({ OBS_DRIVE_STATE: box_drive_state, OBS_RAYS: box_lidar_state })
+
+    return norm_obs_space, orig_obs_space
 
 
 def target_sensor_obs(
@@ -69,14 +89,40 @@ class SensorFusion:
     lidar_sensor: Callable[[], np.ndarray]
     robot_speed_sensor: Callable[[], PolarVec2D]
     target_sensor: Callable[[], Tuple[float, float, float]]
-    max_values: np.ndarray = field(default_factory=lambda: np.ones(()))
+    obs_space: spaces.Dict
+    drive_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
+    lidar_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
+    cache_steps: int = field(init=False)
 
-    def next_obs(self) -> np.ndarray:
+    def __post_init__(self):
+        self.cache_steps = self.obs_space[OBS_RAYS].shape[0]
+
+    def next_obs(self) -> Dict[str, np.ndarray]:
         lidar_state = self.lidar_sensor()
+        # TODO: append beginning at the end for conv feature extractor
+
         speed_x, speed_rot = self.robot_speed_sensor()
         target_distance, target_angle, next_target_angle = self.target_sensor()
         drive_state = np.array([speed_x, speed_rot, target_distance, target_angle, next_target_angle])
-        return np.concatenate((lidar_state, drive_state), axis=0) / self.max_values
+
+        # info: populate cache with same states -> no movement
+        if len(self.drive_state_cache) == 0:
+            for _ in range(self.cache_steps):
+                self.drive_state_cache.append(drive_state)
+                self.lidar_state_cache.append(lidar_state)
+
+        self.drive_state_cache.append(drive_state)
+        self.lidar_state_cache.append(lidar_state)
+        self.drive_state_cache.pop(0)
+        self.lidar_state_cache.pop(0)
+
+        stacked_drive_state = np.array(self.drive_state_cache, dtype=np.float32)
+        stacked_lidar_state = np.array(self.lidar_state_cache, dtype=np.float32)
+
+        max_drive = self.obs_space[OBS_DRIVE_STATE].high
+        max_lidar = self.obs_space[OBS_RAYS].high
+        return { OBS_DRIVE_STATE: stacked_drive_state / max_drive,
+                 OBS_RAYS: stacked_lidar_state / max_lidar }
 
 
 def collect_metadata(env) -> dict:
@@ -115,9 +161,9 @@ class RobotEnv(Env):
         self.max_sim_steps = sim_config.max_sim_steps
         self.action_space = build_action_space(
             robot_config.max_linear_speed, robot_config.max_angular_speed)
-        self.observation_space, obs_norm = build_norm_observation_space(
-            lidar_config.num_rays, lidar_config.max_scan_dist, robot_config.max_linear_speed,
-            robot_config.max_angular_speed, map_def.max_target_dist)
+        self.observation_space, orig_obs_space = build_norm_observation_space(
+            sim_config.stack_steps, lidar_config.num_rays, lidar_config.max_scan_dist,
+            robot_config.max_linear_speed, robot_config.max_angular_speed, map_def.max_target_dist)
 
         robot = DifferentialDriveRobot(robot_config)
         goal_proximity = robot_config.radius + sim_config.goal_radius
@@ -132,7 +178,7 @@ class RobotEnv(Env):
         target_sensor = lambda: target_sensor_obs(
             robot.pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos)
         self.sensor_fusion = SensorFusion(
-            ray_sensor, lambda: robot.current_speed, target_sensor, obs_norm)
+            ray_sensor, lambda: robot.current_speed, target_sensor, orig_obs_space)
 
         self.episode = 0
         self.timestep = 0
@@ -151,8 +197,9 @@ class RobotEnv(Env):
         obs = self.sensor_fusion.next_obs()
 
         meta = self.metadata_collector(self)
+        masked_meta = { "step": meta["step"], "meta": meta } # info: SB3 crashes otherwise
         self.timestep += 1
-        return obs, self.reward_func(meta), self.term_func(meta), { "step": meta["step"], "meta": meta }
+        return obs, self.reward_func(meta), self.term_func(meta), masked_meta
 
     def reset(self):
         self.episode += 1
@@ -165,13 +212,11 @@ class RobotEnv(Env):
         if not self.sim_ui:
             raise RuntimeError('Debug mode is not activated! Consider setting debug=True!')
 
-        action = None if not self.last_action else \
-            VisualizableAction(self.sim_env.robot.pose, self.last_action, self.sim_env.goal_pos)
+        action = None if not self.last_action else VisualizableAction(
+            self.sim_env.robot.pose, self.last_action, self.sim_env.goal_pos)
 
         state = VisualizableSimState(
-            self.timestep,
-            action,
-            self.sim_env.robot.pose,
+            self.timestep, action, self.sim_env.robot.pose,
             deepcopy(self.occupancy.pedestrian_coords),
             deepcopy(self.occupancy.obstacle_coords))
 

@@ -3,9 +3,11 @@ from dataclasses import dataclass, field
 from typing import Tuple
 
 import numpy as np
+from gym import spaces
 
 
 Vec2D = Tuple[float, float]
+RobotAction = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
@@ -130,6 +132,18 @@ class DifferentialDriveRobot():
         self.movement = DifferentialDriveMotion(self.config)
 
     @property
+    def observation_space(self) -> spaces.Box:
+        high = np.array([self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32)
+        low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
+        return spaces.Box(low=low, high=high, dtype=np.float32)
+
+    @property
+    def action_space(self) -> spaces.Box:
+        high = np.array([self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32)
+        low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
+        return spaces.Box(low=low, high=high, dtype=np.float32)
+
+    @property
     def pos(self) -> Vec2D:
         return self.state.pose[0]
 
@@ -141,7 +155,7 @@ class DifferentialDriveRobot():
     def current_speed(self) -> PolarVec2D:
         return self.state.velocity
 
-    def apply_action(self, action: PolarVec2D, d_t: float):
+    def apply_action(self, action: RobotAction, d_t: float):
         self.movement.move(self.state, action, d_t)
 
     def reset_state(self, new_pose: RobotPose):

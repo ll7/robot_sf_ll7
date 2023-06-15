@@ -128,3 +128,7 @@ def parse_mapfile_text(text: str) -> Union[VisualizableMapConfig, None]:
     version = determine_mapfile_version(text)
     print(f'file version is {version}')
     return parsers_by_version[version](text) if version else None
+
+
+def format_waypoints_as_json(waypoints: List[Vec2D]) -> str:
+    return json.dumps(waypoints)

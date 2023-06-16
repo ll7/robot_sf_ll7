@@ -8,7 +8,7 @@ from robot_sf.feature_extractor import DynamicsExtractor
 
 
 def training():
-    n_envs = 16
+    n_envs = 64
     env = make_vec_env(lambda: RobotEnv(), n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)

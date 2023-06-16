@@ -1,4 +1,5 @@
 from __future__ import annotations
+from math import atan2, dist
 from dataclasses import dataclass, field
 from typing import Tuple, Union, Callable, Dict, List
 from copy import deepcopy
@@ -10,7 +11,7 @@ from robot_sf.sim_config import EnvSettings
 from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.range_sensor import lidar_ray_scan
 from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
-from robot_sf.robot import DifferentialDriveRobot, rel_pos, angle
+from robot_sf.robot.differential_drive import DifferentialDriveRobot
 from robot_sf.simulator import Simulator
 
 
@@ -37,22 +38,14 @@ def is_terminal(meta: dict) -> bool:
         meta["is_obstacle_collision"] or meta["is_robot_at_goal"]
 
 
-def build_action_space(max_linear_speed: float, max_angular_speed) -> spaces.Box:
-    # TODO: make action space specific to vehicle's kinematic model
-    high = np.array([max_linear_speed, max_angular_speed], dtype=np.float32)
-    low = np.array([0.0, -max_angular_speed], dtype=np.float32)
-    return spaces.Box(low=low, high=high)
-
-
 def build_norm_observation_space(
-        timesteps: int, num_rays: int, max_scan_dist: float, max_linear_speed: float,
-        max_angular_speed: float, max_target_dist: float) -> Tuple[spaces.Dict, spaces.Dict]:
-    # TODO: make drive state specific to vehicle's kinematic model
+        timesteps: int, num_rays: int, max_scan_dist: float,
+        robot_obs: spaces.Box, max_target_dist: float) -> Tuple[spaces.Dict, spaces.Dict]:
     max_drive_state = np.array([
-        [max_linear_speed, max_angular_speed, max_target_dist, np.pi, np.pi]
+        robot_obs.high.tolist() + [max_target_dist, np.pi, np.pi]
         for t in range(timesteps)], dtype=np.float32)
     min_drive_state = np.array([
-        [0.0, -max_angular_speed, 0.0, -np.pi, -np.pi]
+        robot_obs.low.tolist() + [0.0, -np.pi, -np.pi]
         for t in range(timesteps)], dtype=np.float32)
     max_lidar_state = np.full((timesteps, num_rays), max_scan_dist)
     min_lidar_state = np.zeros((timesteps, num_rays))
@@ -139,6 +132,25 @@ def collect_metadata(env) -> dict:
     }
 
 
+def angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
+    v1_x, v1_y = p_2[0] - p_1[0], p_2[1] - p_1[1]
+    v2_x, v2_y = p_3[0] - p_2[0], p_3[1] - p_2[1]
+    o_1, o_2 = atan2(v1_y, v1_x), atan2(v2_y, v2_x)
+    angle_raw = o_2 - o_1
+    angle_norm = (angle_raw + np.pi) % (2 * np.pi) - np.pi
+    return angle_norm
+
+
+def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
+    t_x, t_y = target_coords
+    (r_x, r_y), orient = pose
+    distance = dist(target_coords, (r_x, r_y))
+
+    angle = atan2(t_y - r_y, t_x - r_x) - orient
+    angle = (angle + np.pi) % (2 * np.pi) - np.pi
+    return distance, angle
+
+
 class RobotEnv(Env):
     """Representing an OpenAI Gym environment for training
     a self-driving robot with reinforcement learning"""
@@ -159,13 +171,13 @@ class RobotEnv(Env):
 
         self.env_type = 'RobotEnv'
         self.max_sim_steps = sim_config.max_sim_steps
-        self.action_space = build_action_space(
-            robot_config.max_linear_speed, robot_config.max_angular_speed)
+        robot = env_config.robot_factory()
+
+        self.action_space = robot.action_space
         self.observation_space, orig_obs_space = build_norm_observation_space(
             sim_config.stack_steps, lidar_config.num_rays, lidar_config.max_scan_dist,
-            robot_config.max_linear_speed, robot_config.max_angular_speed, map_def.max_target_dist)
+            robot.observation_space, map_def.max_target_dist)
 
-        robot = DifferentialDriveRobot(robot_config)
         goal_proximity = robot_config.radius + sim_config.goal_radius
         self.sim_env = Simulator(sim_config, map_def, robot, goal_proximity)
 

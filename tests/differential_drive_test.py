@@ -1,5 +1,6 @@
 from math import pi
-from robot_sf.robot import DifferentialDriveMotion, DifferentialDriveState, RobotSettings
+from robot_sf.robot.differential_drive \
+    import DifferentialDriveMotion, DifferentialDriveState, DifferentialDriveSettings
 
 
 def norm_angle(angle: float) -> float:
@@ -11,7 +12,7 @@ def norm_angle(angle: float) -> float:
 
 
 def test_can_drive_right_curve():
-    motion = DifferentialDriveMotion(RobotSettings(1, 1, 1, 1))
+    motion = DifferentialDriveMotion(DifferentialDriveSettings(1, 1, 1, 1))
     pose_before, vel_before, wheel_speeds = ((0, 0), 0), (1, 0), (1, 1)
     state = DifferentialDriveState(pose_before, vel_before, wheel_speeds, wheel_speeds)
     right_curve_action = (1, -0.5)
@@ -22,7 +23,7 @@ def test_can_drive_right_curve():
 
 
 def test_can_drive_left_curve():
-    motion = DifferentialDriveMotion(RobotSettings(1, 1, 1, 1))
+    motion = DifferentialDriveMotion(DifferentialDriveSettings(1, 1, 1, 1))
     pose_before, vel_before, wheel_speeds = ((0, 0), 0), (1, 0), (1, 1)
     state = DifferentialDriveState(pose_before, vel_before, wheel_speeds, wheel_speeds)
     left_curve_action = (1, 0.5)

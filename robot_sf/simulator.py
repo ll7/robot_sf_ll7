@@ -13,14 +13,15 @@ from robot_sf.ped_spawn_generator \
 from robot_sf.ped_robot_force import PedRobotForce
 from robot_sf.pedestrian_grouping \
     import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
-from robot_sf.robot.differential_drive import DifferentialDriveRobot
-from robot_sf.robot.bicycle_drive import BicycleDriveRobot
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveAction
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 
 
 Vec2D = Tuple[float, float]
-RobotAction = Tuple[float, float]
+RobotAction = Union[DifferentialDriveAction, BicycleAction]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
+Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
 
 
 @dataclass
@@ -80,7 +81,7 @@ def sample_route(
 class Simulator:
     config: SimulationSettings
     map_def: MapDefinition
-    robot: Union[DifferentialDriveRobot, BicycleDriveRobot]
+    robot: Robot
     goal_proximity_threshold: float
     navigator: RouteNavigator = field(init=False)
     pysf_sim: pysf.Simulator = field(init=False)

@@ -10,9 +10,12 @@ from gym import Env, spaces
 from robot_sf.sim_config import EnvSettings
 from robot_sf.occupancy import ContinuousOccupancy
 from robot_sf.range_sensor import lidar_ray_scan
-from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
-from robot_sf.robot.differential_drive import DifferentialDriveRobot
+from robot_sf.sim_view import \
+    SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.simulator import Simulator
+
+from robot_sf.robot.differential_drive import DifferentialDriveAction
+from robot_sf.robot.bicycle_drive import BicycleAction
 
 
 Vec2D = Tuple[float, float]
@@ -67,6 +70,25 @@ def build_norm_observation_space(
     return norm_obs_space, orig_obs_space
 
 
+def angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
+    v1_x, v1_y = p_2[0] - p_1[0], p_2[1] - p_1[1]
+    v2_x, v2_y = p_3[0] - p_2[0], p_3[1] - p_2[1]
+    o_1, o_2 = atan2(v1_y, v1_x), atan2(v2_y, v2_x)
+    angle_raw = o_2 - o_1
+    angle_norm = (angle_raw + np.pi) % (2 * np.pi) - np.pi
+    return angle_norm
+
+
+def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
+    t_x, t_y = target_coords
+    (r_x, r_y), orient = pose
+    distance = dist(target_coords, (r_x, r_y))
+
+    angle = atan2(t_y - r_y, t_x - r_x) - orient
+    angle = (angle + np.pi) % (2 * np.pi) - np.pi
+    return distance, angle
+
+
 def target_sensor_obs(
         robot_pose: RobotPose,
         goal_pos: Vec2D,
@@ -82,13 +104,13 @@ class SensorFusion:
     lidar_sensor: Callable[[], np.ndarray]
     robot_speed_sensor: Callable[[], PolarVec2D]
     target_sensor: Callable[[], Tuple[float, float, float]]
-    obs_space: spaces.Dict
+    unnormed_obs_space: spaces.Dict
     drive_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
     lidar_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
-        self.cache_steps = self.obs_space[OBS_RAYS].shape[0]
+        self.cache_steps = self.unnormed_obs_space[OBS_RAYS].shape[0]
 
     def next_obs(self) -> Dict[str, np.ndarray]:
         lidar_state = self.lidar_sensor()
@@ -112,8 +134,8 @@ class SensorFusion:
         stacked_drive_state = np.array(self.drive_state_cache, dtype=np.float32)
         stacked_lidar_state = np.array(self.lidar_state_cache, dtype=np.float32)
 
-        max_drive = self.obs_space[OBS_DRIVE_STATE].high
-        max_lidar = self.obs_space[OBS_RAYS].high
+        max_drive = self.unnormed_obs_space[OBS_DRIVE_STATE].high
+        max_lidar = self.unnormed_obs_space[OBS_RAYS].high
         return { OBS_DRIVE_STATE: stacked_drive_state / max_drive,
                  OBS_RAYS: stacked_lidar_state / max_lidar }
 
@@ -130,25 +152,6 @@ def collect_metadata(env) -> dict:
         "is_timesteps_exceeded": env.timestep > env.max_sim_steps,
         "max_sim_steps": env.max_sim_steps
     }
-
-
-def angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
-    v1_x, v1_y = p_2[0] - p_1[0], p_2[1] - p_1[1]
-    v2_x, v2_y = p_3[0] - p_2[0], p_3[1] - p_2[1]
-    o_1, o_2 = atan2(v1_y, v1_x), atan2(v2_y, v2_x)
-    angle_raw = o_2 - o_1
-    angle_norm = (angle_raw + np.pi) % (2 * np.pi) - np.pi
-    return angle_norm
-
-
-def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
-    t_x, t_y = target_coords
-    (r_x, r_y), orient = pose
-    distance = dist(target_coords, (r_x, r_y))
-
-    angle = atan2(t_y - r_y, t_x - r_x) - orient
-    angle = (angle + np.pi) % (2 * np.pi) - np.pi
-    return distance, angle
 
 
 class RobotEnv(Env):
@@ -194,7 +197,7 @@ class RobotEnv(Env):
 
         self.episode = 0
         self.timestep = 0
-        self.last_action: Union[PolarVec2D, None] = None
+        self.last_action: Union[DifferentialDriveAction, BicycleAction, None] = None
         if debug:
             self.sim_ui = SimulationView(
                 robot_radius=robot_config.radius,
@@ -203,7 +206,7 @@ class RobotEnv(Env):
             self.sim_ui.show()
 
     def step(self, action: np.ndarray):
-        action_parsed = (action[0], action[1])
+        action_parsed = self.sim_env.robot.parse_action(action)
         self.sim_env.step_once(action_parsed)
         self.last_action = action_parsed
         obs = self.sensor_fusion.next_obs()

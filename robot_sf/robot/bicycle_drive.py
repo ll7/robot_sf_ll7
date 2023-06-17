@@ -115,3 +115,6 @@ class BicycleDriveRobot():
 
     def reset_state(self, new_pose: RobotPose):
         self.state = BicycleDriveState(new_pose, 0)
+
+    def parse_action(self, action: np.ndarray) -> BicycleAction:
+        return (action[0], action[1])

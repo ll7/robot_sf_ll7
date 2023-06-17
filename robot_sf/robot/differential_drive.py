@@ -143,3 +143,6 @@ class DifferentialDriveRobot():
 
     def reset_state(self, new_pose: RobotPose):
         self.state = DifferentialDriveState(new_pose)
+
+    def parse_action(self, action: np.ndarray) -> DifferentialDriveAction:
+        return (action[0], action[1])

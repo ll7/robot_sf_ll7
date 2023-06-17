@@ -8,6 +8,8 @@ from signal import signal, SIGINT
 import pygame
 import numpy as np
 
+from robot_sf.robot.differential_drive import DifferentialDriveAction
+from robot_sf.robot.bicycle_drive import BicycleAction
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -28,7 +30,7 @@ TEXT_COLOR = (0, 0, 0)
 @dataclass
 class VisualizableAction:
     robot_pose: RobotPose
-    robot_action: RobotAction
+    robot_action: Union[DifferentialDriveAction, BicycleAction]
     robot_goal: Vec2D
 
 

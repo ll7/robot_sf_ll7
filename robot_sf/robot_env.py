@@ -186,7 +186,7 @@ class RobotEnv(Env):
 
         self.occupancy = ContinuousOccupancy(
             map_def.width, map_def.height, lambda: robot.pos, lambda: self.sim_env.goal_pos,
-            lambda: self.sim_env.pysf_sim.env.obstacles_raw, lambda: self.sim_env.ped_positions,
+            lambda: self.sim_env.pysf_sim.env.obstacles_raw[:, :4], lambda: self.sim_env.ped_positions,
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
 
         ray_sensor = lambda: lidar_ray_scan(robot.pose, self.occupancy, lidar_config)

@@ -121,7 +121,7 @@ def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_sca
 
 def lidar_ray_scan(
         pose: RobotPose,
-        robot_map: ContinuousOccupancy,
+        occ: ContinuousOccupancy,
         settings: LidarScannerSettings) -> np.ndarray:
     """Representing a simulated radial LiDAR scanner operating
     in a 2D plane on a continuous occupancy with explicit objects.
@@ -133,8 +133,8 @@ def lidar_ray_scan(
     scan_noise = np.array(settings.scan_noise)
     scan_dist = settings.max_scan_dist
 
-    ped_pos = robot_map.pedestrian_coords
-    obstacles = robot_map.obstacle_coords
+    ped_pos = occ.pedestrian_coords
+    obstacles = occ.obstacle_coords
 
     lower = robot_orient + settings.angle_opening[0]
     upper = robot_orient + settings.angle_opening[1]
@@ -143,6 +143,6 @@ def lidar_ray_scan(
 
     ranges = raycast(
         (pos_x, pos_y), obstacles, scan_dist, ped_pos,
-        robot_map.ped_radius, ray_angles)
+        occ.ped_radius, ray_angles)
     range_postprocessing(ranges, scan_noise, scan_dist)
     return ranges

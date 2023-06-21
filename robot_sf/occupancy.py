@@ -25,7 +25,7 @@ class ContinuousOccupancy:
 
     @property
     def obstacle_coords(self) -> np.ndarray:
-        return self.get_obstacle_coords()[:, :4]
+        return self.get_obstacle_coords()
 
     @property
     def pedestrian_coords(self) -> np.ndarray:

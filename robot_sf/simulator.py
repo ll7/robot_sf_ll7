@@ -11,8 +11,8 @@ from robot_sf.map_config import MapDefinition
 from robot_sf.ped_spawn_generator \
     import ZonePointsGenerator, PedSpawnConfig, initialize_pedestrians
 from robot_sf.ped_robot_force import PedRobotForce
-from robot_sf.pedestrian_grouping \
-    import GroupRedirectBehavior, PySFPedestrianStates, PedestrianGroupings
+from robot_sf.ped_grouping \
+    import CrowdedZoneBehavior, PedestrianStates, PedestrianGroupings
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 
@@ -73,7 +73,7 @@ def sample_route(
     initial_spawn = generate_point(spawn_gens[route.spawn_id])
     final_goal = generate_point(goal_gens[route.goal_id])
     route = [initial_spawn] + route.waypoints + [final_goal]
-    # TODO: think of adding a bit of noise to the exact waypoint positions as well
+    # TODO: add noise to the exact waypoint positions to avoid learning routes by heart
     return route
 
 
@@ -86,9 +86,9 @@ class Simulator:
     navigator: RouteNavigator = field(init=False)
     pysf_sim: pysf.Simulator = field(init=False)
     sample_route: Callable[[], List[Vec2D]] = field(init=False)
-    pysf_state: PySFPedestrianStates = field(init=False)
+    pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
-    peds_behavior: GroupRedirectBehavior = field(init=False)
+    peds_behavior: CrowdedZoneBehavior = field(init=False)
 
     def __post_init__(self):
         ped_spawn_gens = [ZonePointsGenerator([z]) for z in self.map_def.ped_spawn_zones]
@@ -102,15 +102,16 @@ class Simulator:
         ped_states_np, initial_groups, zone_assignments = \
             initialize_pedestrians(spawn_config, self.map_def.ped_spawn_zones)
 
-        self.pysf_state = PySFPedestrianStates(lambda: self.pysf_sim.peds.state)
+        self.pysf_state = PedestrianStates(lambda: self.pysf_sim.peds.state)
         self.groups = PedestrianGroupings(self.pysf_state)
-        self.peds_behavior = GroupRedirectBehavior(self.groups, zone_assignments, ped_spawn_gens)
+        self.peds_behavior = CrowdedZoneBehavior(self.groups, zone_assignments, ped_spawn_gens)
 
         for ped_ids in initial_groups:
             self.groups.new_group(ped_ids)
 
         def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
             forces = pysf.simulator.make_forces(sim, config)
+            # TODO: enable obstacle force in case pedestrian routes require it
             forces = [f for f in forces if type(f) != pysf.forces.ObstacleForce]
             if self.config.prf_config.is_active:
                 forces.append(PedRobotForce(
@@ -123,7 +124,9 @@ class Simulator:
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.navigator = RouteNavigator(proximity_threshold=self.goal_proximity_threshold)
+
         self.reset_state()
+        self.peds_behavior.pick_new_goals()
 
     @property
     def goal_pos(self) -> Vec2D:
@@ -142,7 +145,6 @@ class Simulator:
         return self.pysf_state.ped_positions
 
     def reset_state(self):
-        self.peds_behavior.pick_new_goals()
         collision = not self.navigator.reached_waypoint
         is_at_final_goal = self.navigator.reached_destination
         if collision or is_at_final_goal:

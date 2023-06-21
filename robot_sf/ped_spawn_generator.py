@@ -76,9 +76,7 @@ def initialize_pedestrians(config: PedSpawnConfig, spawn_zones: List[Zone]) \
         num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
         num_assigned_peds = total_num_peds - num_unassigned_peds
         ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
-
-        if len(ped_ids) > 1:
-            groups.append(set(ped_ids))
+        groups.append(set(ped_ids))
 
         # spawn all group members in the same randomly sampled zone and also
         # keep them within that zone by picking the group's goal accordingly

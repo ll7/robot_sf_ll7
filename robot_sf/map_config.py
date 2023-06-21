@@ -55,6 +55,9 @@ class MapDefinition:
     goal_zones: List[Rect]
     bounds: List[Line2D]
     robot_routes: List[GlobalRoute]
+    ped_goal_zones: List[Rect]
+    ped_crowded_zones: List[Rect]
+    ped_routes: List[GlobalRoute]
     obstacles_pysf: List[Line2D] = field(init=False)
 
     def __post_init__(self):
@@ -126,6 +129,8 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     robot_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']])
                     for o in map_structure['robot_routes']]
+    ped_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']])
+                  for o in map_structure['ped_routes']]
 
     map_bounds = [
         (0, width, 0, 0),           # bottom
@@ -136,10 +141,13 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     def norm_zone(rect: Rect) -> Rect:
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
-    goal_zones = [norm_zone(z) for z in map_structure['goal_zones']]
+    robot_goal_zones = [norm_zone(z) for z in map_structure['robot_goal_zones']]
     robot_spawn_zones = [norm_zone(z) for z in map_structure['robot_spawn_zones']]
+    ped_goal_zones = [norm_zone(z) for z in map_structure['ped_goal_zones']]
     ped_spawn_zones = [norm_zone(z) for z in map_structure['ped_spawn_zones']]
+    ped_crowded_zones = [norm_zone(z) for z in map_structure['ped_crowded_zones']]
 
     return MapDefinition(
         width, height, obstacles, robot_spawn_zones,
-        ped_spawn_zones, goal_zones, map_bounds, robot_routes)
+        ped_spawn_zones, robot_goal_zones, map_bounds, robot_routes,
+        ped_goal_zones, ped_crowded_zones, ped_routes)

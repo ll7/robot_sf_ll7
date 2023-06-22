@@ -148,7 +148,7 @@ def collect_metadata(env) -> dict:
         "step_of_episode": env.timestep,
         "is_pedestrian_collision": env.occupancy.is_pedestrian_collision,
         "is_obstacle_collision": env.occupancy.is_obstacle_collision,
-        "is_robot_at_goal": env.sim_env.navigator.reached_waypoint,
+        "is_robot_at_goal": env.sim_env.robot_nav.reached_waypoint,
         "is_timesteps_exceeded": env.timestep > env.max_sim_steps,
         "max_sim_steps": env.max_sim_steps
     }

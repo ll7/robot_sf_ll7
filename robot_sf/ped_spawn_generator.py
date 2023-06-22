@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from typing import Tuple, List, Set, Dict
 import numpy as np
 
+from robot_sf.map_config import GlobalRoute
+
 
 PedState = np.ndarray
 PedGrouping = Set[int]
@@ -18,12 +20,33 @@ class PedSpawnConfig:
     group_member_probs: List[float] = field(default_factory=list)
     initial_speed: float = 0.5
     group_size_decay: float = 0.3
+    sidewalk_width: float = 3.0
 
     def __post_init__(self):
         if not len(self.group_member_probs) == self.max_group_members:
             # initialize group size probabilities decaying by power law
             power_dist = [self.group_size_decay**i for i in range(self.max_group_members)]
             self.group_member_probs = [p / sum(power_dist) for p in power_dist]
+
+
+def rotate(point: Vec2D, angle: float) -> Vec2D:
+    pos_x, pos_y = point
+    new_x = pos_x * cos(angle) - pos_y * sin(angle)
+    new_y = pos_x * sin(angle) + pos_y * cos(angle)
+    return new_x, new_y
+
+
+def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
+    a, b, c = zone
+    width, height = dist(b, c), dist(a, b)
+    rot = atan2(c[1] - b[1], c[0] - b[0])
+
+    x_pos = np.random.uniform(0, width, (num_samples, 1))
+    y_pos = np.random.uniform(0, height, (num_samples, 1))
+    norm_points = np.concatenate((x_pos, y_pos), axis=1)
+
+    add_vec = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
+    return [add_vec(rotate((x, y), rot), b) for x, y in norm_points]
 
 
 @dataclass
@@ -40,32 +63,24 @@ class ZonePointsGenerator:
 
     def generate(self, num_samples: int) -> Tuple[List[Vec2D], int]:
         zone_id = np.random.choice(len(self.zones), size=1, p=self._zone_probs)[0]
-        p_1, p_2, p_3 = self.zones[zone_id]
-
-        d_x, d_y = dist(p_2, p_3), dist(p_1, p_2)
-        rot = atan2(p_3[1] - p_2[1], p_3[0] - p_2[0])
-        x_pos = np.random.uniform(0, d_x, (num_samples, 1))
-        y_pos = np.random.uniform(0, d_y, (num_samples, 1))
-        norm_points = np.concatenate((x_pos, y_pos), axis=1)
-
-        def rotate(point: Vec2D, angle: float) -> Vec2D:
-            pos_x, pos_y = point
-            new_x = pos_x * cos(angle) - pos_y * sin(angle)
-            new_y = pos_x * sin(angle) + pos_y * cos(angle)
-            return new_x, new_y
-
-        rotated_points = [rotate((x, y), rot) for x, y in norm_points]
-        shifted_points = [(x + p_2[0], y + p_2[1]) for x, y in rotated_points]
-        return shifted_points, zone_id
+        return sample_zone(self.zones[zone_id], num_samples), zone_id
 
 
-def initialize_pedestrians(config: PedSpawnConfig, spawn_zones: List[Zone]) \
+def populate_ped_routes(config: PedSpawnConfig, routes: List[GlobalRoute]) \
+        -> Tuple[np.ndarray, List[PedGrouping], Dict[int, GlobalRoute]]:
+    # TODO: spawn pedestrian groups uniformly along the routes (use sidewalk width as lateral bound)
+    # TODO: weigh routes by route length -> sample probability
+    return np.zeros((1, 6)), [], {}
+
+
+def populate_crowded_zones(config: PedSpawnConfig, crowded_zones: List[Zone]) \
         -> Tuple[PedState, List[PedGrouping], ZoneAssignments]:
 
-    spawn_gen = ZonePointsGenerator(spawn_zones)
-    goal_gens = [ZonePointsGenerator([z]) for z in spawn_zones]
+    # TODO: assign pedestrians to routes, not only crowded zones
 
-    total_num_peds = ceil(sum(spawn_gen.zone_areas) * config.peds_per_area_m2)
+    proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
+
+    total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
     zone_assignments = dict()
@@ -80,8 +95,8 @@ def initialize_pedestrians(config: PedSpawnConfig, spawn_zones: List[Zone]) \
 
         # spawn all group members in the same randomly sampled zone and also
         # keep them within that zone by picking the group's goal accordingly
-        spawn_points, zone_id = spawn_gen.generate(num_peds_in_group)
-        group_goal = goal_gens[zone_id].generate(1)[0][0]
+        spawn_points, zone_id = proportional_spawn_gen.generate(num_peds_in_group)
+        group_goal = sample_zone(crowded_zones[zone_id], 1)[0]
 
         centroid = np.mean(spawn_points, axis=0)
         rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])

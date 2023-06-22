@@ -2,7 +2,7 @@ import os
 import json
 import random
 from math import sqrt
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from dataclasses import dataclass, field
 
 
@@ -35,6 +35,8 @@ class GlobalRoute:
     spawn_id: int
     goal_id: int
     waypoints: List[Vec2D]
+    spawn_zone: Rect
+    goal_zone: Rect
 
     def __post_init__(self):
         if self.spawn_id < 0:
@@ -52,7 +54,7 @@ class MapDefinition:
     obstacles: List[Obstacle]
     robot_spawn_zones: List[Rect]
     ped_spawn_zones: List[Rect]
-    goal_zones: List[Rect]
+    robot_goal_zones: List[Rect]
     bounds: List[Line2D]
     robot_routes: List[GlobalRoute]
     ped_goal_zones: List[Rect]
@@ -66,32 +68,18 @@ class MapDefinition:
 
         if self.width < 0 or self.height < 0:
             raise ValueError("Map width and height mustn't be zero or negative!")
-        if not self.robot_spawn_zones or not self.ped_spawn_zones or not self.goal_zones:
+        if not self.robot_spawn_zones or not self.ped_spawn_zones or not self.robot_goal_zones:
             raise ValueError("Spawn and goal zones mustn't be empty!")
         if len(self.bounds) != 4:
             raise ValueError("Invalid bounds! Expected exactly 4 bounds!")
-
-        def route_exists_once(spawn_id: int, goal_id: int) -> bool:
-            return len(list(filter(
-                lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
-                self.robot_routes))) == 1
-
-        num_spawns, num_goals = len(self.robot_spawn_zones), len(self.goal_zones)
-        spawn_goal_perms = [(s, g) for s in range(num_spawns) for g in range(num_goals)]
-        missing_routes = list(filter(lambda perm: not route_exists_once(perm[0], perm[1]), spawn_goal_perms))
-        if len(missing_routes) > 0:
-            missing = ', '.join([f'{s} -> {g}' for s, g in missing_routes])
-            raise ValueError((f'Missing or ambiguous routes {missing}! Please ensure that every ',
-                'spawn zone is connected to every goal zone by exactly one route!'))
 
     @property
     def max_target_dist(self) -> float:
         return sqrt(2) * (max(self.width, self.height) * 2)
 
-    def find_route(self, spawn_id: int, goal_id: int) -> GlobalRoute:
-        # TODO: model non-existing routes with nullable result
+    def find_route(self, spawn_id: int, goal_id: int) -> Union[GlobalRoute, None]:
         return next(filter(lambda r:
-            r.goal_id == goal_id and r.spawn_id == spawn_id, self.robot_routes))
+            r.goal_id == goal_id and r.spawn_id == spawn_id, self.robot_routes), None)
 
 
 @dataclass
@@ -127,17 +115,6 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     obstacles = [Obstacle([norm_pos(p) for p in vertices])
                  for vertices in map_structure['obstacles']]
 
-    robot_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']])
-                    for o in map_structure['robot_routes']]
-    ped_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']])
-                  for o in map_structure['ped_routes']]
-
-    map_bounds = [
-        (0, width, 0, 0),           # bottom
-        (0, width, height, height), # top
-        (0, 0, 0, height),          # left
-        (width, width, 0, height)]  # right
-
     def norm_zone(rect: Rect) -> Rect:
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
@@ -146,6 +123,19 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     ped_goal_zones = [norm_zone(z) for z in map_structure['ped_goal_zones']]
     ped_spawn_zones = [norm_zone(z) for z in map_structure['ped_spawn_zones']]
     ped_crowded_zones = [norm_zone(z) for z in map_structure['ped_crowded_zones']]
+
+    robot_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']],
+                                robot_spawn_zones[o['spawn_id']], robot_goal_zones[o['goal_id']])
+                    for o in map_structure['robot_routes']]
+    ped_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']],
+                              ped_spawn_zones[o['spawn_id']], ped_goal_zones[o['goal_id']])
+                  for o in map_structure['ped_routes']]
+
+    map_bounds = [
+        (0, width, 0, 0),           # bottom
+        (0, width, height, height), # top
+        (0, 0, 0, height),          # left
+        (width, width, 0, height)]  # right
 
     return MapDefinition(
         width, height, obstacles, robot_spawn_zones,

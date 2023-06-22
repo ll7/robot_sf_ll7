@@ -1,11 +1,8 @@
-from math import dist
 from typing import List, Set, Dict, Tuple, Callable
 from dataclasses import dataclass, field
 from copy import deepcopy
 
 import numpy as np
-
-from robot_sf.ped_spawn_generator import ZonePointsGenerator
 
 Vec2D = Tuple[float, float]
 
@@ -63,6 +60,9 @@ class PedestrianGroupings:
         c_x, c_y = np.mean(positions, axis=0)
         return (c_x, c_y)
 
+    def group_size(self, group_id: int) -> int:
+        return len(self.groups[group_id])
+
     def goal_of_group(self, group_id: int) -> Vec2D:
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
@@ -87,31 +87,6 @@ class PedestrianGroupings:
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
 
-
-@dataclass
-class CrowdedZoneBehavior:
-    groups: PedestrianGroupings
-    zone_assignments: Dict[int, int]
-    crowded_zones: List[ZonePointsGenerator]
-    goal_proximity_threshold: float = 1
-    pick_new_goal: Callable[[int], Vec2D] = field(init=False)
-
-    def __post_init__(self):
-        self.pick_new_goal = lambda pid: \
-            self.crowded_zones[self.zone_assignments[pid]].generate(1)[0][0]
-
-    def redirect_groups_if_at_goal(self):
-        for gid in self.groups.group_ids:
-            centroid = self.groups.group_centroid(gid)
-            goal = self.groups.goal_of_group(gid)
-            dist_to_goal = dist(centroid, goal)
-            if dist_to_goal < self.goal_proximity_threshold:
-                any_pid = next(iter(self.groups.groups[gid]))
-                new_goal = self.pick_new_goal(any_pid)
-                self.groups.redirect_group(gid, new_goal)
-
-    def pick_new_goals(self):
-        for gid in self.groups.group_ids:
-            any_pid = next(iter(self.groups.groups[gid]))
-            new_goal = self.pick_new_goal(any_pid)
-            self.groups.redirect_group(gid, new_goal)
+    def reposition_group(self, group_id: int, new_positions: List[Vec2D]):
+        for ped_id, new_pos in zip(self.groups[group_id], new_positions):
+            self.states.reposition(ped_id, new_pos)

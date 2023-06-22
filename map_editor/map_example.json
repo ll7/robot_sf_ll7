@@ -21,10 +21,31 @@
     "ped_spawn_zones": [
         [[20, 40], [20, 30], [30, 30]]
     ],
-    "goal_zones": [
+    "robot_goal_zones": [
+        [[40, 10], [40, 0], [50, 0]]
+    ],
+    "ped_goal_zones": [
+        [[40, 10], [40, 0], [50, 0]]
+    ],
+    "ped_crowded_zones": [
         [[40, 10], [40, 0], [50, 0]]
     ],
     "robot_routes": [
+        {
+            "spawn_id": 0,
+            "goal_id": 0,
+            "waypoints": [
+                [10, 30],
+                [15, 27],
+                [20, 23],
+                [25, 19],
+                [30, 16],
+                [35, 13],
+                [40, 10]
+            ]
+        }
+    ],
+    "ped_routes": [
         {
             "spawn_id": 0,
             "goal_id": 0,

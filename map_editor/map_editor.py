@@ -23,7 +23,7 @@ class MapCanvas:
     ROBOT_GOAL_COLOR = "green"
     ROBOT_SPAWN_COLOR = "blue"
     PED_SPAWN_COLOR = "red"
-    PED_GOAL_COLOR = "darkgreen"
+    PED_GOAL_COLOR = "magenta"
     ROBOT_ROUTE_COLOR = "green"
     PED_CROWDED_COLOR = "orange"
     PED_ROUTE_COLOR = "yellow"
@@ -44,6 +44,7 @@ class MapCanvas:
 
     def render(self, map_config: VisualizableMapConfig):
         self.canvas.delete("all")
+        self.canvas.configure(bg=MapCanvas.BG_COLOR)
         scaling = self.scaling((map_config.x_margin, map_config.y_margin))
 
         def rect_points(rect: Rect) -> List[Vec2D]:

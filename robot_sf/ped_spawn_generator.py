@@ -49,6 +49,26 @@ def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
     return [add_vec(rotate((x, y), rot), b) for x, y in norm_points]
 
 
+def sample_route(
+        route: GlobalRoute, num_samples: int,
+        sidewalk_width: float) -> Tuple[List[Vec2D], int]:
+
+    sampled_offset = np.random.uniform(0, route.total_length)
+    sec_id = next(iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]))
+
+    start, end = route.sections[sec_id]
+    add_vecs = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
+    sub_vecs = lambda v1, v2: (v1[0] - v2[0], v1[1] - v2[1])
+    clip_spread = lambda v: np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
+    center = add_vecs(start, sub_vecs(end, start))
+    std_dev = sidewalk_width / 4
+
+    x_offsets = clip_spread(np.random.normal(center[0], std_dev, (num_samples, 1)))
+    y_offsets = clip_spread(np.random.normal(center[1], std_dev, (num_samples, 1)))
+    points = np.concatenate((x_offsets, y_offsets), axis=1) + center
+    return [p for p in points], sec_id
+
+
 @dataclass
 class ZonePointsGenerator:
     zones: List[Zone]
@@ -66,20 +86,71 @@ class ZonePointsGenerator:
         return sample_zone(self.zones[zone_id], num_samples), zone_id
 
 
+@dataclass
+class RoutePointsGenerator:
+    routes: List[GlobalRoute]
+    sidewalk_width: float
+    _route_probs: List[float] = field(init=False)
+
+    def __post_init__(self):
+        # info: distribute proportionally by zone area; area ~ route length * sidewalk width
+        self._zone_probs = [r.total_length / self.total_length for r in self.routes]
+
+    @property
+    def total_length(self) -> float:
+        return sum([r.total_length for r in self.routes])
+
+    @property
+    def total_sidewalks_area(self) -> float:
+        return self.total_length * self.sidewalk_width
+
+    def generate(self, num_samples: int) -> Tuple[List[Vec2D], int, int]:
+        route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
+        spawn_pos, sec_id = sample_route(self.routes[route_id], num_samples, self.sidewalk_width)
+        return spawn_pos, route_id, sec_id
+
+
 def populate_ped_routes(config: PedSpawnConfig, routes: List[GlobalRoute]) \
-        -> Tuple[np.ndarray, List[PedGrouping], Dict[int, GlobalRoute]]:
-    # TODO: spawn pedestrian groups uniformly along the routes (use sidewalk width as lateral bound)
-    # TODO: weigh routes by route length -> sample probability
-    return np.zeros((1, 6)), [], {}
+        -> Tuple[np.ndarray, List[PedGrouping], Dict[int, GlobalRoute], List[int]]:
+
+    proportional_spawn_gen = RoutePointsGenerator(routes, config.sidewalk_width)
+    total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
+    ped_states, groups = np.zeros((total_num_peds, 6)), []
+    num_unassigned_peds = total_num_peds
+    route_assignments = dict()
+    initial_sections = []
+
+    while num_unassigned_peds > 0:
+        probs = config.group_member_probs
+        num_peds_in_group = np.random.choice(len(probs), p=probs) + 1
+        num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
+        num_assigned_peds = total_num_peds - num_unassigned_peds
+        ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
+        groups.append(set(ped_ids))
+
+        # spawn all group members along a uniformly sampled route with respect to the route's length
+        spawn_points, route_id, sec_id = proportional_spawn_gen.generate(num_peds_in_group)
+        group_goal = routes[route_id].sections[sec_id][1]
+        initial_sections.append(sec_id)
+
+        centroid = np.mean(spawn_points, axis=0)
+        rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
+        velocity = np.array([cos(rot), sin(rot)]) * config.initial_speed
+        ped_states[ped_ids, 0:2] = spawn_points
+        ped_states[ped_ids, 2:4] = velocity
+        ped_states[ped_ids, 4:6] = group_goal
+        for pid in ped_ids:
+            route_assignments[pid] = route_id
+
+        num_unassigned_peds -= num_peds_in_group
+
+    return ped_states, groups, route_assignments, initial_sections
 
 
 def populate_crowded_zones(config: PedSpawnConfig, crowded_zones: List[Zone]) \
         -> Tuple[PedState, List[PedGrouping], ZoneAssignments]:
 
-    # TODO: assign pedestrians to routes, not only crowded zones
-
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
-
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds

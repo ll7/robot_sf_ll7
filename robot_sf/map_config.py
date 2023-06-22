@@ -1,7 +1,7 @@
 import os
 import json
 import random
-from math import sqrt
+from math import sqrt, dist
 from typing import List, Tuple, Union
 from dataclasses import dataclass, field
 
@@ -43,8 +43,30 @@ class GlobalRoute:
             raise ValueError('Spawn id needs to be an integer >= 0!')
         if self.goal_id < 0:
             raise ValueError('Goal id needs to be an integer >= 0!')
-        if not self.waypoints:
+        if len(self.waypoints) < 1:
             raise ValueError(f'Route {self.spawn_id} -> {self.goal_id} contains no waypoints!')
+
+    @property
+    def sections(self) -> List[Tuple[Vec2D, Vec2D]]:
+        return [] if len(self.waypoints) < 2 else list(zip(self.waypoints[:-1], self.waypoints[1:]))
+
+    @property
+    def section_lengths(self) -> List[float]:
+        return [dist(p1, p2) for p1, p2 in self.sections]
+
+    @property
+    def section_offsets(self) -> List[float]:
+        lengths = self.section_lengths
+        offsets = []
+        temp_offset = 0.0
+        for section_length in lengths:
+            offsets.append(temp_offset)
+            temp_offset += section_length
+        return offsets
+
+    @property
+    def total_length(self) -> float:
+        return 0 if len(self.waypoints) < 2 else sum(self.section_lengths)
 
 
 @dataclass

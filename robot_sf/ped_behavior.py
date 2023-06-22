@@ -49,15 +49,16 @@ class CrowdedZoneBehavior:
 class FollowRouteBehavior:
     groups: PedestrianGroupings
     route_assignments: Dict[int, GlobalRoute]
+    initial_sections: List[int]
     goal_proximity_threshold: float = 1
     navigators: Dict[int, RouteNavigator] = field(init=False)
 
     def __post_init__(self):
         self.navigators = {}
-        for gid, route in self.route_assignments.items():
+        for (gid, route), sec_id in zip(self.route_assignments.items(), self.initial_sections):
             group_pos = self.groups.group_centroid(gid)
             self.navigators[gid] = RouteNavigator(
-                route.waypoints, 0, self.goal_proximity_threshold, group_pos)
+                route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos)
 
     def step(self):
         for gid, nav in self.navigators.items():

@@ -32,7 +32,7 @@ def populate_simulation(
 
     crowd_ped_states_np, crowd_groups, zone_assignments = \
         populate_crowded_zones(spawn_config, map_def.ped_spawn_zones)
-    route_ped_states_np, route_groups, route_assignments = \
+    route_ped_states_np, route_groups, route_assignments, initial_sections = \
         populate_ped_routes(spawn_config, map_def.ped_routes)
 
     tau = pysf_config.scene_config.tau
@@ -58,7 +58,7 @@ def populate_simulation(
 
     crowd_behavior = CrowdedZoneBehavior(
         crowd_groupings, zone_assignments, map_def.ped_spawn_zones)
-    route_behavior = FollowRouteBehavior(route_groupings, route_assignments)
+    route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
     ped_behaviors: List[PedestrianBehavior] = [crowd_behavior] # [crowd_behavior, route_behavior]
     # TODO: enable "follow route behavior" once it's ready
     return pysf_state, groups, ped_behaviors

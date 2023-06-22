@@ -54,7 +54,7 @@ def sample_route(
         sidewalk_width: float) -> Tuple[List[Vec2D], int]:
 
     sampled_offset = np.random.uniform(0, route.total_length)
-    sec_id = next(iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]))
+    sec_id = next(iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1)
 
     start, end = route.sections[sec_id]
     add_vecs = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
@@ -132,6 +132,7 @@ def populate_ped_routes(config: PedSpawnConfig, routes: List[GlobalRoute]) \
         spawn_points, route_id, sec_id = proportional_spawn_gen.generate(num_peds_in_group)
         group_goal = routes[route_id].sections[sec_id][1]
         initial_sections.append(sec_id)
+        route_assignments[len(groups) - 1] = routes[route_id]
 
         centroid = np.mean(spawn_points, axis=0)
         rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
@@ -139,8 +140,6 @@ def populate_ped_routes(config: PedSpawnConfig, routes: List[GlobalRoute]) \
         ped_states[ped_ids, 0:2] = spawn_points
         ped_states[ped_ids, 2:4] = velocity
         ped_states[ped_ids, 4:6] = group_goal
-        for pid in ped_ids:
-            route_assignments[pid] = route_id
 
         num_unassigned_peds -= num_peds_in_group
 

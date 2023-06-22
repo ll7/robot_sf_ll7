@@ -31,7 +31,7 @@ def populate_simulation(
     ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
 
     crowd_ped_states_np, crowd_groups, zone_assignments = \
-        populate_crowded_zones(spawn_config, map_def.ped_spawn_zones)
+        populate_crowded_zones(spawn_config, map_def.ped_crowded_zones)
     route_ped_states_np, route_groups, route_assignments, initial_sections = \
         populate_ped_routes(spawn_config, map_def.ped_routes)
 
@@ -39,7 +39,7 @@ def populate_simulation(
     combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
     taus = np.full((combined_ped_states_np.shape[0]), tau)
     ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
-    id_offset = ped_states.shape[0]
+    id_offset = crowd_ped_states_np.shape[0]
     combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
 
     pysf_state = PedestrianStates(lambda: ped_states)
@@ -57,10 +57,9 @@ def populate_simulation(
         route_groupings.new_group(ped_ids)
 
     crowd_behavior = CrowdedZoneBehavior(
-        crowd_groupings, zone_assignments, map_def.ped_spawn_zones)
+        crowd_groupings, zone_assignments, map_def.ped_crowded_zones)
     route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
-    ped_behaviors: List[PedestrianBehavior] = [crowd_behavior] # [crowd_behavior, route_behavior]
-    # TODO: enable "follow route behavior" once it's ready
+    ped_behaviors: List[PedestrianBehavior] = [crowd_behavior, route_behavior]
     return pysf_state, groups, ped_behaviors
 
 

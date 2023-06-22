@@ -65,19 +65,18 @@ class FollowRouteBehavior:
             group_pos = self.groups.group_centroid(gid)
             nav.update_position(group_pos)
             if nav.reached_destination:
-                self.reset_group(gid)
+                self.respawn_group_at_start(gid)
             elif nav.reached_waypoint:
                 self.groups.redirect_group(gid, nav.current_waypoint)
 
     def reset(self):
-        for gid in self.navigators:
-            self.reset_group(gid)
+        pass
 
-    def reset_group(self, gid: int):
+    def respawn_group_at_start(self, gid: int):
         nav = self.navigators[gid]
         num_peds = self.groups.group_size(gid)
         spawn_zone = self.route_assignments[gid].spawn_zone
         spawn_positions = sample_zone(spawn_zone, num_peds)
         self.groups.reposition_group(gid, spawn_positions)
-        self.groups.redirect_group(gid, nav.current_waypoint)
+        self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0

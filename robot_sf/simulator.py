@@ -2,8 +2,10 @@ from dataclasses import dataclass, field
 from typing import List, Tuple, Union, Callable
 
 import numpy as np
-import pysocialforce as pysf
+from pysocialforce import Simulator as PySFSimulator
+from pysocialforce.simulator import make_forces as pysf_make_forces
 from pysocialforce.utils import SimulatorConfig as PySFSimConfig
+from pysocialforce.forces import Force as PySFForce, ObstacleForce
 
 from robot_sf.sim_config import SimulationSettings
 from robot_sf.map_config import MapDefinition
@@ -24,6 +26,44 @@ RobotPose = Tuple[Vec2D, float]
 Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
 
 
+def populate_simulation(
+        pysf_config: PySFSimConfig, spawn_config: PedSpawnConfig, map_def: MapDefinition
+    ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
+
+    crowd_ped_states_np, crowd_groups, zone_assignments = \
+        populate_crowded_zones(spawn_config, map_def.ped_spawn_zones)
+    route_ped_states_np, route_groups, route_assignments = \
+        populate_ped_routes(spawn_config, map_def.ped_routes)
+
+    tau = pysf_config.scene_config.tau
+    combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
+    taus = np.full((combined_ped_states_np.shape[0]), tau)
+    ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
+    id_offset = ped_states.shape[0]
+    combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
+
+    pysf_state = PedestrianStates(lambda: ped_states)
+    crowd_pysf_state = PedestrianStates(lambda: ped_states[:id_offset])
+    route_pysf_state = PedestrianStates(lambda: ped_states[id_offset:])
+
+    groups = PedestrianGroupings(pysf_state)
+    for ped_ids in combined_groups:
+        groups.new_group(ped_ids)
+    crowd_groupings = PedestrianGroupings(crowd_pysf_state)
+    for ped_ids in crowd_groups:
+        crowd_groupings.new_group(ped_ids)
+    route_groupings = PedestrianGroupings(route_pysf_state)
+    for ped_ids in route_groups:
+        route_groupings.new_group(ped_ids)
+
+    crowd_behavior = CrowdedZoneBehavior(
+        crowd_groupings, zone_assignments, map_def.ped_spawn_zones)
+    route_behavior = FollowRouteBehavior(route_groupings, route_assignments)
+    ped_behaviors: List[PedestrianBehavior] = [crowd_behavior] # [crowd_behavior, route_behavior]
+    # TODO: enable "follow route behavior" once it's ready
+    return pysf_state, groups, ped_behaviors
+
+
 @dataclass
 class Simulator:
     config: SimulationSettings
@@ -31,53 +71,29 @@ class Simulator:
     robot: Robot
     goal_proximity_threshold: float
     robot_nav: RouteNavigator = field(init=False)
-    pysf_sim: pysf.Simulator = field(init=False)
+    pysf_sim: PySFSimulator = field(init=False)
     sample_route: Callable[[], List[Vec2D]] = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
     peds_behaviors: List[PedestrianBehavior] = field(init=False)
 
     def __post_init__(self):
+        pysf_config = PySFSimConfig()
         spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
-        crowd_ped_states_np, crowd_groups, zone_assignments = \
-            populate_crowded_zones(spawn_config, self.map_def.ped_spawn_zones)
-        route_ped_states_np, route_groups, route_assignments = \
-            populate_ped_routes(spawn_config, self.map_def.ped_routes)
+        self.pysf_state, self.groups, self.peds_behaviors = \
+              populate_simulation(pysf_config, spawn_config, self.map_def)
 
-        combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
-        id_offset = combined_ped_states_np.shape[0]
-        combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
-
-        self.pysf_state = PedestrianStates(lambda: self.pysf_sim.peds.state)
-        crowd_pysf_state = PedestrianStates(lambda: self.pysf_sim.peds.state[:id_offset])
-        route_pysf_state = PedestrianStates(lambda: self.pysf_sim.peds.state[id_offset:])
-
-        self.groups = PedestrianGroupings(self.pysf_state)
-        for ped_ids in combined_groups:
-            self.groups.new_group(ped_ids)
-        crowd_groupings = PedestrianGroupings(crowd_pysf_state)
-        for ped_ids in crowd_groups:
-            crowd_groupings.new_group(ped_ids)
-        route_groupings = PedestrianGroupings(route_pysf_state)
-        for ped_ids in route_groups:
-            route_groupings.new_group(ped_ids)
-
-        crowd_behavior = CrowdedZoneBehavior(
-            crowd_groupings, zone_assignments, self.map_def.ped_spawn_zones)
-        route_behavior = FollowRouteBehavior(route_groupings, route_assignments)
-        self.peds_behaviors = [crowd_behavior] # [crowd_behavior, route_behavior]
-
-        def make_forces(sim: pysf.Simulator, config: PySFSimConfig) -> List[pysf.forces.Force]:
-            forces = pysf.simulator.make_forces(sim, config)
+        def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
+            forces = pysf_make_forces(sim, config)
             # TODO: enable obstacle force in case pedestrian routes require it
-            forces = [f for f in forces if type(f) != pysf.forces.ObstacleForce]
+            forces = [f for f in forces if type(f) != ObstacleForce]
             if self.config.prf_config.is_active:
                 forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: self.robot.pos))
             return forces
 
-        self.pysf_sim = pysf.Simulator(
-            combined_ped_states_np, self.groups.groups_as_lists,
-            self.map_def.obstacles_pysf, make_forces=make_forces)
+        self.pysf_sim = PySFSimulator(
+            self.pysf_state.pysf_states(), self.groups.groups_as_lists,
+            self.map_def.obstacles_pysf, config=pysf_config, make_forces=make_forces)
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.robot_nav = RouteNavigator(proximity_threshold=self.goal_proximity_threshold)

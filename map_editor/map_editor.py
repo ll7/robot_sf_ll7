@@ -7,6 +7,7 @@ from threading import Thread
 
 import tkinter as tk
 import tkinter.scrolledtext as tks
+import numpy as np
 
 from map_editor.map_file_parser import \
     parse_mapfile_text, VisualizableMapConfig
@@ -68,10 +69,8 @@ class MapCanvas:
         scaling = self.map_to_canvas_scaling()
 
         def rect_points(rect: Rect) -> List[Vec2D]:
-            def add_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:
-                return v1[0] + v2[0], v1[1] + v2[1]
-            def sub_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:
-                return v1[0] - v2[0], v1[1] - v2[1]
+            add_vec = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
+            sub_vec = lambda v1, v2: (v1[0] - v2[0], v1[1] - v2[1])
             p1, p2, p3 = rect
             p4 = add_vec(sub_vec(p3, p2), p1)
             return [p1, p2, p3, p4]
@@ -80,43 +79,52 @@ class MapCanvas:
             (min_x, _), (min_y, _) = map_config.x_margin, map_config.y_margin
             return (p[0] - min_x) * scaling, (p[1] - min_y) * scaling
 
-        def draw_rect(canvas: tk.Canvas, rect: List[Vec2D], color="black"):
+        def draw_zone(zone_id: int, rect: List[Vec2D], color="black"):
             p1, p2, p3, p4 = rect
-            canvas.create_line(scale(p1), scale(p2), fill=color)
-            canvas.create_line(scale(p2), scale(p3), fill=color)
-            canvas.create_line(scale(p3), scale(p4), fill=color)
-            canvas.create_line(scale(p4), scale(p1), fill=color)
+            self.canvas.create_line(scale(p1), scale(p2), fill=color)
+            self.canvas.create_line(scale(p2), scale(p3), fill=color)
+            self.canvas.create_line(scale(p3), scale(p4), fill=color)
+            self.canvas.create_line(scale(p4), scale(p1), fill=color)
 
-        def draw_circle(p: Vec2D, r: float, color="black", fill=None):
+            min_x, max_x = min(p1[0], p2[0], p3[0], p4[0]), max(p1[0], p2[0], p3[0], p4[0])
+            min_y, max_y = min(p1[1], p2[1], p3[1], p4[1]), max(p1[1], p2[1], p3[1], p4[1])
+            middle = min_x + (max_x - min_x) / 2, min_y + (max_y - min_y) / 2
+            middle = scale(middle)
+            self.canvas.create_text(
+                middle[0], middle[1], text=str(zone_id),
+                fill="black", font=('Helvetica 10 bold'))
+
+        def draw_waypoint(p: Vec2D, r: float, color="black", fill=None):
             (x, y), r = scale(p), r * scaling
-            self.canvas.create_oval(x-r, y-r, x+r, y+r, outline=color, fill=fill if fill else color)
+            fill = fill if fill else color
+            self.canvas.create_oval(x-r, y-r, x+r, y+r, outline=color, fill=fill)
 
         for s_x, e_x, s_y, e_y in map_config.obstacles:
             if (s_x, s_y) != (e_x, e_y):
                 self.canvas.create_line(scale((s_x, s_y)), scale((e_x, e_y)), fill=MapCanvas.OBSTACLE_COLOR)
 
-        for rect in map_config.robot_spawn_zones:
-            draw_rect(self.canvas, rect_points(rect), MapCanvas.ROBOT_SPAWN_COLOR)
+        for i, rect in enumerate(map_config.robot_spawn_zones):
+            draw_zone(i, rect_points(rect), MapCanvas.ROBOT_SPAWN_COLOR)
 
-        for rect in map_config.robot_goal_zones:
-            draw_rect(self.canvas, rect_points(rect), MapCanvas.ROBOT_GOAL_COLOR)
+        for i, rect in enumerate(map_config.robot_goal_zones):
+            draw_zone(i, rect_points(rect), MapCanvas.ROBOT_GOAL_COLOR)
 
-        for rect in map_config.ped_spawn_zones:
-            draw_rect(self.canvas, rect_points(rect), MapCanvas.PED_SPAWN_COLOR)
+        for i, rect in enumerate(map_config.ped_spawn_zones):
+            draw_zone(i, rect_points(rect), MapCanvas.PED_SPAWN_COLOR)
 
-        for rect in map_config.ped_goal_zones:
-            draw_rect(self.canvas, rect_points(rect), MapCanvas.PED_GOAL_COLOR)
+        for i, rect in enumerate(map_config.ped_goal_zones):
+            draw_zone(i, rect_points(rect), MapCanvas.PED_GOAL_COLOR)
 
-        for rect in map_config.ped_crowded_zones:
-            draw_rect(self.canvas, rect_points(rect), MapCanvas.PED_CROWDED_COLOR)
+        for i, rect in enumerate(map_config.ped_crowded_zones):
+            draw_zone(i, rect_points(rect), MapCanvas.PED_CROWDED_COLOR)
 
         for route in map_config.robot_routes:
             for p in route.waypoints:
-                draw_circle(p, 1, MapCanvas.ROBOT_ROUTE_COLOR)
+                draw_waypoint(p, 1, MapCanvas.ROBOT_ROUTE_COLOR)
 
         for route in map_config.ped_routes:
             for p in route.waypoints:
-                draw_circle(p, 1, MapCanvas.PED_ROUTE_COLOR)
+                draw_waypoint(p, 1, MapCanvas.PED_ROUTE_COLOR)
 
 
 class MapToolbarMode(IntEnum):

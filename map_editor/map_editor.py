@@ -30,22 +30,42 @@ class MapCanvas:
 
     def __init__(self, frame: tk.Frame):
         self.canvas = tk.Canvas(frame)
-        self.canvas.config(width=800, height=800)
+        self.width, self.height = 800, 800
+        self.canvas.config(width=self.width, height=self.height)
+        self.mouse_pos = (0, 0)
+        self.last_map_bounds = ((0, 1), (0, 1))
+
+        def track_mouse_pos(event):
+            self.mouse_pos = (event.x, event.y)
+
+        def print_map_coords(e):
+            x, y = self.mouse_pos
+            (min_x, _), (min_y, _) = self.last_map_bounds
+            scaling = self.canvas_to_map_scaling()
+            map_x, map_y = x * scaling + min_x, y * scaling + min_y
+            print(f"[{map_x:.2f}, {map_y:.2f}]")
+
+        self.canvas.bind('<Motion>', track_mouse_pos)
+        self.canvas.bind('<Button-1>', print_map_coords)
 
     def pack(self):
         self.canvas.pack()
 
-    def scaling(self, bounds: MapBounds) -> float:
-        canvas_width, canvas_height = self.canvas.winfo_width(), self.canvas.winfo_height()
-        (min_x, max_x), (min_y, max_y) = bounds
+    def map_to_canvas_scaling(self) -> float:
+        canvas_width, canvas_height = self.width, self.height
+        (min_x, max_x), (min_y, max_y) = self.last_map_bounds
         map_width, map_height = max_x - min_x, max_y - min_y
         x_scale, y_scale = canvas_width / map_width, canvas_height / map_height
         return min(x_scale, y_scale)
 
+    def canvas_to_map_scaling(self) -> float:
+        return 1 / self.map_to_canvas_scaling()
+
     def render(self, map_config: VisualizableMapConfig):
+        self.last_map_bounds = (map_config.x_margin, map_config.y_margin)
         self.canvas.delete("all")
         self.canvas.configure(bg=MapCanvas.BG_COLOR)
-        scaling = self.scaling((map_config.x_margin, map_config.y_margin))
+        scaling = self.map_to_canvas_scaling()
 
         def rect_points(rect: Rect) -> List[Vec2D]:
             def add_vec(v1: Vec2D, v2: Vec2D) -> Vec2D:

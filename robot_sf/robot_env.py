@@ -201,6 +201,8 @@ class RobotEnv(Env):
         self.last_action: Union[DifferentialDriveAction, BicycleAction, None] = None
         if debug:
             self.sim_ui = SimulationView(
+                scaling=10,
+                obstacles=map_def.obstacles,
                 robot_radius=robot_config.radius,
                 ped_radius=sim_config.ped_radius,
                 goal_radius=sim_config.goal_radius)
@@ -233,8 +235,7 @@ class RobotEnv(Env):
 
         state = VisualizableSimState(
             self.timestep, action, self.sim_env.robot.pose,
-            deepcopy(self.occupancy.pedestrian_coords),
-            deepcopy(self.occupancy.obstacle_coords))
+            deepcopy(self.occupancy.pedestrian_coords))
 
         self.sim_ui.render(state)
 

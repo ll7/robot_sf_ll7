@@ -5,6 +5,7 @@ from math import sqrt, dist
 from typing import List, Tuple, Union
 from dataclasses import dataclass, field
 
+import numpy as np
 
 Vec2D = Tuple[float, float]
 Line2D = Tuple[float, float, float, float]
@@ -15,11 +16,13 @@ Rect = Tuple[Vec2D, Vec2D, Vec2D]
 class Obstacle:
     vertices: List[Vec2D]
     lines: List[Line2D] = field(init=False)
+    vertices_np: np.ndarray = field(init=False)
 
     def __post_init__(self):
         if not self.vertices:
             raise ValueError('No vertices specified for obstacle!')
 
+        self.vertices_np = np.array(self.vertices)
         edges = list(zip(self.vertices[:-1], self.vertices[1:])) \
             + [(self.vertices[-1], self.vertices[0])]
         edges = list(filter(lambda l: l[0] != l[1], edges)) # remove fake lines that are just points

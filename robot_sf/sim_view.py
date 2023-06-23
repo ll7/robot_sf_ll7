@@ -1,6 +1,6 @@
 from time import sleep
 from math import sin, cos
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 from dataclasses import dataclass, field
 from threading import Thread
 from signal import signal, SIGINT
@@ -10,6 +10,7 @@ import numpy as np
 
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction
+from robot_sf.map_config import Obstacle
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -42,7 +43,7 @@ class VisualizableSimState:
     action: Union[VisualizableAction, None]
     robot_pose: RobotPose
     pedestrian_positions: np.ndarray
-    obstacles: np.ndarray
+    # obstacles: List[Obstacle]
 
 
 @dataclass
@@ -53,6 +54,7 @@ class SimulationView:
     robot_radius: float=1.0
     ped_radius: float=0.4
     goal_radius: float=1.0
+    obstacles: List[Obstacle] = field(default_factory=list)
     size_changed: bool = field(init=False, default=False)
     is_exit_requested: bool = field(init=False, default=False)
     is_abortion_requested: bool = field(init=False, default=False)
@@ -68,8 +70,24 @@ class SimulationView:
         pygame.font.init()
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.RESIZABLE)
+        pygame.display.set_caption('RobotSF Simulation')
         self.font = pygame.font.SysFont('Consolas', 14)
+        self.surface_obstacles = self.preprocess_obstacles()
         self.clear()
+
+    def preprocess_obstacles(self) -> pygame.Surface:
+        obst_vertices = [o.vertices_np * self.scaling for o in self.obstacles]
+        min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
+        for vertices in obst_vertices:
+            min_x, max_x = min(np.min(vertices[:, 0]), min_x), max(np.max(vertices[:, 0]), max_x)
+            min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
+        width, height = max_x - min_x, max_y - min_y
+        print("poly surcace", width, height)
+        surface = pygame.Surface((width, height))
+        surface.fill(BACKGROUND_COLOR)
+        for vertices in obst_vertices:
+            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in vertices])
+        return surface
 
     def show(self):
         self.ui_events_thread = Thread(target=self._process_event_queue)
@@ -114,11 +132,11 @@ class SimulationView:
         if self.size_changed:
             self._resize_window()
 
-        state = self._zoom_camera(state)
+        state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
+        self._draw_obstacles(offset)
         self._draw_robot(state.robot_pose)
         self._draw_pedestrians(state.pedestrian_positions)
-        self._draw_obstacles(state.obstacles)
         if state.action:
             self._augment_action_vector(state.action)
             self._augment_goal_position(state.action.robot_goal)
@@ -132,14 +150,13 @@ class SimulationView:
         self.screen.blit(old_surface, (0, 0))
         self.size_changed = False
 
-    def _zoom_camera(self, state: VisualizableSimState) -> VisualizableSimState:
+    def _zoom_camera(self, state: VisualizableSimState) \
+            -> Tuple[VisualizableSimState, Tuple[float, float]]:
         r_x, r_y = state.robot_pose[0]
         x_offset = r_x * self.scaling - self.width / 2
         y_offset = r_y * self.scaling - self.height / 2
         state.pedestrian_positions *= self.scaling
         state.pedestrian_positions -= [x_offset, y_offset]
-        state.obstacles *= self.scaling
-        state.obstacles -= [x_offset, y_offset, x_offset, y_offset]
         state.robot_pose = ((
             state.robot_pose[0][0] * self.scaling - x_offset,
             state.robot_pose[0][1] * self.scaling - y_offset),
@@ -152,7 +169,7 @@ class SimulationView:
             state.action.robot_goal = (
                 state.action.robot_goal[0] * self.scaling - x_offset,
                 state.action.robot_goal[1] * self.scaling - y_offset)
-        return state
+        return state, (x_offset, y_offset)
 
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
@@ -163,9 +180,9 @@ class SimulationView:
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(self.screen, PED_COLOR, (ped_x, ped_y), self.ped_radius * self.scaling)
 
-    def _draw_obstacles(self, obstacles: np.ndarray):
-        for s_x, s_y, e_x, e_y in obstacles:
-            pygame.draw.line(self.screen, OBSTACLE_COLOR, (s_x, s_y), (e_x, e_y))
+    def _draw_obstacles(self, offset: Tuple[float, float]):
+        offset = offset[0] * -1, offset[1] * -1
+        self.screen.blit(self.surface_obstacles, offset)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
         # TODO: display pedestrians with an image instead of a circle

@@ -1,3 +1,4 @@
+from math import atan2
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union, Callable
 
@@ -123,7 +124,8 @@ class Simulator:
         if collision or is_at_final_goal:
             waypoints = sample_route(self.map_def)
             self.robot_nav.new_route(waypoints[1:])
-            self.robot.reset_state((waypoints[0], 0))
+            new_orient = atan2(waypoints[1][1] - waypoints[0][1], waypoints[1][0] - waypoints[0][0])
+            self.robot.reset_state((waypoints[0], new_orient))
 
     def step_once(self, action: RobotAction):
         for behavior in self.peds_behaviors:

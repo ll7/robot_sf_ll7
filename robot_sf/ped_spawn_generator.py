@@ -36,7 +36,7 @@ def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
     rel_width = np.random.uniform(0, 1, (num_samples, 1))
     rel_height = np.random.uniform(0, 1, (num_samples, 1))
     points = b + rel_width * vec_ba + rel_height * vec_bc
-    return [p for p in points]
+    return [(x, y) for x, y in points]
 
 
 def sample_route(
@@ -56,7 +56,7 @@ def sample_route(
     x_offsets = clip_spread(np.random.normal(center[0], std_dev, (num_samples, 1)))
     y_offsets = clip_spread(np.random.normal(center[1], std_dev, (num_samples, 1)))
     points = np.concatenate((x_offsets, y_offsets), axis=1) + center
-    return [p for p in points], sec_id
+    return [(x, y) for x, y in points], sec_id
 
 
 @dataclass

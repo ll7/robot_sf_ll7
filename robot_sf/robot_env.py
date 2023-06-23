@@ -95,7 +95,7 @@ def target_sensor_obs(
         next_goal_pos: Union[Vec2D, None]) -> Tuple[float, float, float]:
     robot_pos, _ = robot_pose
     target_distance, target_angle = rel_pos(robot_pose, goal_pos)
-    next_target_angle = 0.0 if not next_goal_pos else angle(robot_pos, goal_pos, next_goal_pos)
+    next_target_angle = 0.0 if next_goal_pos is None else angle(robot_pos, goal_pos, next_goal_pos)
     return target_distance, target_angle, next_target_angle
 
 
@@ -149,6 +149,7 @@ def collect_metadata(env) -> dict:
         "is_pedestrian_collision": env.occupancy.is_pedestrian_collision,
         "is_obstacle_collision": env.occupancy.is_obstacle_collision,
         "is_robot_at_goal": env.sim_env.robot_nav.reached_waypoint,
+        "is_route_complete": env.sim_env.robot_nav.reached_destination,
         "is_timesteps_exceeded": env.timestep > env.max_sim_steps,
         "max_sim_steps": env.max_sim_steps
     }

@@ -29,24 +29,14 @@ class PedSpawnConfig:
             self.group_member_probs = [p / sum(power_dist) for p in power_dist]
 
 
-def rotate(point: Vec2D, angle: float) -> Vec2D:
-    pos_x, pos_y = point
-    new_x = pos_x * cos(angle) - pos_y * sin(angle)
-    new_y = pos_x * sin(angle) + pos_y * cos(angle)
-    return new_x, new_y
-
-
 def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
     a, b, c = zone
-    width, height = dist(b, c), dist(a, b)
-    rot = atan2(c[1] - b[1], c[0] - b[0])
-
-    x_pos = np.random.uniform(0, width, (num_samples, 1))
-    y_pos = np.random.uniform(0, height, (num_samples, 1))
-    norm_points = np.concatenate((x_pos, y_pos), axis=1)
-
-    add_vec = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
-    return [add_vec(rotate((x, y), rot), b) for x, y in norm_points]
+    a, b, c = np.array(a), np.array(b), np.array(c)
+    vec_ba, vec_bc = a - b, c - b
+    rel_width = np.random.uniform(0, 1, (num_samples, 1))
+    rel_height = np.random.uniform(0, 1, (num_samples, 1))
+    points = b + rel_width * vec_ba + rel_height * vec_bc
+    return [p for p in points]
 
 
 def sample_route(

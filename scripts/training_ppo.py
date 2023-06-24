@@ -4,12 +4,20 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 from robot_sf.robot_env import RobotEnv
+from robot_sf.sim_config import EnvSettings
 from robot_sf.feature_extractor import DynamicsExtractor
 
 
 def training():
     n_envs = 64
-    env = make_vec_env(lambda: RobotEnv(), n_envs=n_envs, vec_env_cls=SubprocVecEnv)
+    difficulty = 1
+
+    def make_env():
+        config = EnvSettings()
+        config.sim_config.difficulty = difficulty
+        return RobotEnv(config)
+
+    env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
     model = PPO("MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs)

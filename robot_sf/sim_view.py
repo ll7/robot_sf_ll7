@@ -19,7 +19,8 @@ RgbColor = Tuple[int, int, int]
 
 
 BACKGROUND_COLOR = (255, 255, 255)
-OBSTACLE_COLOR = (20, 30, 20)
+BACKGROUND_COLOR_TRANSP = (255, 255, 255, 128)
+OBSTACLE_COLOR = (20, 30, 20, 128)
 PED_COLOR = (255, 50, 50)
 ROBOT_COLOR = (0, 0, 200)
 COLLISION_COLOR = (200, 0, 0)
@@ -83,8 +84,8 @@ class SimulationView:
             min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
         width, height = max_x - min_x, max_y - min_y
         print("poly surcace", width, height)
-        surface = pygame.Surface((width, height))
-        surface.fill(BACKGROUND_COLOR)
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill(BACKGROUND_COLOR_TRANSP)
         for vertices in obst_vertices:
             pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in vertices])
         return surface
@@ -135,11 +136,11 @@ class SimulationView:
         state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_obstacles(offset)
-        self._draw_robot(state.robot_pose)
-        self._draw_pedestrians(state.pedestrian_positions)
         if state.action:
             self._augment_action_vector(state.action)
             self._augment_goal_position(state.action.robot_goal)
+        self._draw_robot(state.robot_pose)
+        self._draw_pedestrians(state.pedestrian_positions)
         self._augment_timestep(state.timestep)
         pygame.display.update()
 

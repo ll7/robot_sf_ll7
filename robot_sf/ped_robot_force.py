@@ -30,6 +30,7 @@ class PedRobotForce:
         self.config = config
         self.peds = peds
         self.get_robot_pos = get_robot_pos
+        self.last_forces = 0.0
 
     def __call__(self) -> np.ndarray:
         threshold = self.config.activation_threshold \
@@ -38,7 +39,9 @@ class PedRobotForce:
         robot_pos = self.get_robot_pos()
         forces = np.zeros((self.peds.size(), 2))
         ped_robot_force(forces, ped_positions, robot_pos, threshold)
-        return forces * self.config.force_multiplier
+        forces = forces * self.config.force_multiplier
+        self.last_forces = forces
+        return forces
 
 
 @numba.njit(fastmath=True)

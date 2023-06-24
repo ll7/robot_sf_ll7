@@ -13,7 +13,7 @@ from robot_sf.range_sensor import lidar_ray_scan
 from robot_sf.sim_view import \
     SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.simulator import Simulator
-
+from robot_sf.ped_robot_force import PedRobotForce
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction
 
@@ -31,6 +31,22 @@ def simple_reward(meta: dict) -> float:
     reward = -step_discount
     if meta["is_pedestrian_collision"] or meta["is_obstacle_collision"]:
         reward -= 2
+    if meta["is_robot_at_goal"]:
+        reward += 1
+    return reward
+
+
+def disturbance_reward(meta: dict) -> float:
+    step_discount = 0.1 / meta["max_sim_steps"]
+    reward = -step_discount
+
+    forces = meta["ped_robot_forces"]
+    intensities = (np.clip(np.sqrt(np.sum(forces**2, axis=1)), 0.1, 1.1) - 0.1) / 1.0
+    total_disturbance = np.clip(np.sum(intensities), 0.0, 1.0) / meta["max_sim_steps"]
+    reward -= total_disturbance * 10
+
+    if meta["is_pedestrian_collision"] or meta["is_obstacle_collision"]:
+        reward -= 3
     if meta["is_robot_at_goal"]:
         reward += 1
     return reward
@@ -151,7 +167,9 @@ def collect_metadata(env) -> dict:
         "is_robot_at_goal": env.sim_env.robot_nav.reached_waypoint,
         "is_route_complete": env.sim_env.robot_nav.reached_destination,
         "is_timesteps_exceeded": env.timestep > env.max_sim_steps,
-        "max_sim_steps": env.max_sim_steps
+        "max_sim_steps": env.max_sim_steps,
+        "ped_robot_forces": [f for f in env.sim_env.pysf_sim.forces
+                             if isinstance(f, PedRobotForce)][0].last_forces
     }
 
 
@@ -162,7 +180,7 @@ class RobotEnv(Env):
     def __init__(
             self, env_config: EnvSettings = EnvSettings(),
             metadata_collector: Callable[[RobotEnv], dict] = collect_metadata,
-            reward_func: Callable[[dict], float] = simple_reward,
+            reward_func: Callable[[dict], float] = disturbance_reward,
             term_func: Callable[[dict], bool] = is_terminal,
             debug: bool = False):
         self.reward_func = reward_func

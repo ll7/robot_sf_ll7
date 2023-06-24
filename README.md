@@ -9,6 +9,12 @@ SOTA reinforcement learning algorithms like e.g. StableBaselines3.
 For simulating the pedestrians, the SocialForce model is used via a dependency
 on a fork of PySocialForce.
 
+Following video outlines some training results where a robot with e-scooter
+kinematics is driving at the campus of University of Augsburg using real
+map data from OpenStreetMap.
+
+![](./docs/video/demo_01.gif)
+
 ## Quickstart
 
 ### 1. Clone Source Code
@@ -90,7 +96,7 @@ python3 debug_random_policy.py
 ```sh
 mkdir model
 pushd model;
-    wget https://megastore.rz.uni-augsburg.de/get/hXJCV2BgAC/ -O ppo_model.zip
+    wget https://megastore.rz.uni-augsburg.de/get/0oxVNm_Boo/ -O ppo_model.zip
 popd
 ```
 

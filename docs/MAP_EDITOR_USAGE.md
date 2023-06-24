@@ -36,8 +36,9 @@ Each rectangle with points ABCD is given as a tuple of (A, B, C) where |AC|
 represents the diagonal; D = A + (C - B).
 
 The spawn zones are defined as ``robot_spawn_zones`` and ``ped_spawn_zones``
-and the goal zones as ``goal_zones``. All three properties are mandatory
-and need to contain at least one zone each.
+and the goal zones as ``robot_goal_zones`` and ``ped_goal_zones``. Moreover,
+there's ``ped_crowded_zones`` to model high traffic pedestrian zones.
+All five properties are mandatory, but can be empty.
 
 ```json
 {
@@ -47,34 +48,43 @@ and need to contain at least one zone each.
     "ped_spawn_zones": [
         [[20, 40], [20, 30], [30, 30]]
     ],
-    "goal_zones": [
+    "robot_goal_zones": [
+        [[40, 10], [40, 0], [50, 0]]
+    ],
+    "ped_goal_zones": [
+        [[40, 10], [40, 0], [50, 0]]
+    ],
+    "ped_crowded_zones": [
         [[40, 10], [40, 0], [50, 0]]
     ],
     ...
+}
 ```
 
-In the map editor's preview window, robot spawn zones are blue,
-pedestrian spawn zones are red and goal zones are green.
-The colors are coherent with the simulation view's coloring.
+In the map editor's preview display, robot spawn zones are blue,
+pedestrian spawn zones are red, robot goal zones are green,
+pedestrian goal zones are magenta and crowded zones are orange.
 
-#### Robot Routes
-For navigating the robot from each spawn zone towards each goal zone,
-routes have to be specified. Each route contains a list of waypoints
-which are used by the simulator to mock global navigation.
+#### Robot / Pedestrian Routes
+For navigating from spawn zones to goal zones, routes have to be specified.
+Each route contains a list of waypoints which are used by the simulator
+to mock global navigation.
 
-The routes are specified by the ``robot_routes`` property.
-It's always required to contain all combinations of robot spawn zones
-and goal zones where the route waypoints are a non-empty list.
+The routes are specified by the ``robot_routes`` and ``ped_routes`` properties.
+It's not required to connect all zones with each other (in contrast to
+prior versions of robot\_sf). Pedestrians and robots are only spawned at
+the origin of actual routes.
 
 Spawn and goal zones with n elements are assigned ids within [0, n-1]
 in an ascending order according to their position in the map file.
+This is also outlined in the map editor's preview display.
 
 ```json
 {
     "robot_spawn_zones": [
         [[0, 40], [0, 30], [10, 30]]
     ],
-    "goal_zones": [
+    "robot_goal_zones": [
         [[40, 10], [40, 0], [50, 0]]
     ],
     "robot_routes": [
@@ -96,7 +106,35 @@ in an ascending order according to their position in the map file.
 }
 ```
 
-In the map editor, routes are displayed as green circles.
+```json
+{
+    "ped_spawn_zones": [
+        [[0, 40], [0, 30], [10, 30]]
+    ],
+    "ped_goal_zones": [
+        [[40, 10], [40, 0], [50, 0]]
+    ],
+    "ped_routes": [
+        {
+            "spawn_id": 0,
+            "goal_id": 0,
+            "waypoints": [
+                [10, 30],
+                [15, 27],
+                [20, 23],
+                [25, 19],
+                [30, 16],
+                [35, 13],
+                [40, 10]
+            ]
+        }
+    ],
+    ...
+}
+```
+
+In the map editor, the robot route waypoints are displayed as green circles
+and the pedestrian route waypoints are displayed as yellow circles.
 
 #### Obstacles
 Last but not least, the map contains a set of obstacles that the robot
@@ -109,7 +147,7 @@ a lot of sense to have an empty map.
 
 ```json
 {
-"obstacles": [
+    "obstacles": [
         [
             [0, 10],
             [10, 10],
@@ -129,6 +167,3 @@ a lot of sense to have an empty map.
 
 Obstacles are displayed with black lines which is consistent with
 the simulation's coloring.
-
-### Known Issues
-- The text editor doesn't support the Ctrl+A key binding to select all text.

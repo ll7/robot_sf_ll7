@@ -1,11 +1,12 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 
 from robot_sf.robot_env import RobotEnv
 from robot_sf.sim_config import EnvSettings
 from robot_sf.feature_extractor import DynamicsExtractor
+from robot_sf.tb_logging import DrivingMetricsCallback
 
 
 def training():
@@ -21,9 +22,11 @@ def training():
 
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
     model = PPO("MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs)
-    save_model = CheckpointCallback(1_000_000 // n_envs, "./model/backup", "ppo_model")
+    save_model_callback = CheckpointCallback(1_000_000 // n_envs, "./model/backup", "ppo_model")
+    collect_metrics_callback = DrivingMetricsCallback(n_envs)
+    combined_callback = CallbackList([save_model_callback, collect_metrics_callback])
 
-    model.learn(total_timesteps=50_000_000, progress_bar=True, callback=save_model)
+    model.learn(total_timesteps=50_000_000, progress_bar=True, callback=combined_callback)
     model.save("./model/ppo_model")
 
 

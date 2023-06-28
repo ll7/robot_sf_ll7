@@ -34,7 +34,7 @@ def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     if norm_p1 <= r_sq or norm_p2 <= r_sq:
         return True
 
-    # cofficients a, b, c of the quadratic solution formula
+    # coefficients a, b, c of the quadratic solution formula
     s_x, s_y = p2_x - p1_x, p2_y - p1_y
     t_x, t_y = p1_x, p1_y
     a = s_x**2 + s_y**2

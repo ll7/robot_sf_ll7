@@ -1,3 +1,6 @@
+
+# WARNING: don't move this script or else loading trained SB3 policies might not work
+
 import numpy as np
 from gym import spaces
 

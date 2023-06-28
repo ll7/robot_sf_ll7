@@ -1,4 +1,4 @@
-from robot_sf.simulator import RouteNavigator
+from robot_sf.nav.navigation import RouteNavigator
 
 
 def west_east_route():

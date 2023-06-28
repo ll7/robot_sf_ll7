@@ -10,8 +10,8 @@ from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion, OBS_RAYS, OBS_DRIVE_STATE
-from robot_sf.sim_view import SimulationView, VisualizableAction, VisualizableSimState
-from robot_sf.simulator import Simulator
+from robot_sf.sim.sim_view import SimulationView, VisualizableAction, VisualizableSimState
+from robot_sf.sim.simulator import Simulator
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction

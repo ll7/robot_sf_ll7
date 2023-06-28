@@ -109,7 +109,7 @@ class MapDefinition:
 
 @dataclass
 class MapDefinitionPool:
-    maps_folder: str = os.path.join(os.path.dirname(__file__), "maps")
+    maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
     map_defs: List[MapDefinition] = field(default_factory=list)
 
     def __post_init__(self):

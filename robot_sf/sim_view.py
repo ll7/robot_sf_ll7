@@ -10,7 +10,7 @@ import numpy as np
 
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction
-from robot_sf.map_config import Obstacle
+from robot_sf.nav.map_config import Obstacle
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]

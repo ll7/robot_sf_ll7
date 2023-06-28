@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Tuple, List, Set, Dict
 import numpy as np
 
-from robot_sf.map_config import GlobalRoute
+from robot_sf.nav.map_config import GlobalRoute
 
 
 PedState = np.ndarray

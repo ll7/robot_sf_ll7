@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import numba
 
-from robot_sf.occupancy import ContinuousOccupancy
+from robot_sf.nav.occupancy import ContinuousOccupancy
 
 
 Vec2D = Tuple[float, float]

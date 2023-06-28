@@ -2,10 +2,10 @@ from math import dist
 from typing import List, Dict, Tuple, Protocol
 from dataclasses import dataclass, field
 
-from robot_sf.map_config import GlobalRoute
-from robot_sf.navigation import RouteNavigator
-from robot_sf.ped_spawn_generator import sample_zone
-from robot_sf.ped_grouping import PedestrianGroupings
+from robot_sf.nav.map_config import GlobalRoute
+from robot_sf.nav.navigation import RouteNavigator
+from robot_sf.ped_npc.ped_spawn_generator import sample_zone
+from robot_sf.ped_npc.ped_grouping import PedestrianGroupings
 
 Vec2D = Tuple[float, float]
 Zone = Tuple[Vec2D, Vec2D, Vec2D]

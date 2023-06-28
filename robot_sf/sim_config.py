@@ -2,11 +2,11 @@ from math import ceil
 from typing import List, Union
 from dataclasses import dataclass, field
 
-from robot_sf.map_config import MapDefinitionPool
-from robot_sf.range_sensor import LidarScannerSettings
+from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings, DifferentialDriveRobot
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings, BicycleDriveRobot
-from robot_sf.ped_robot_force import PedRobotForceConfig
+from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 
 
 @dataclass

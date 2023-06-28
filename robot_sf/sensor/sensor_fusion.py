@@ -10,7 +10,7 @@ OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"
 
 
-def build_norm_observation_space(
+def fused_sensor_space(
         timesteps: int, num_rays: int, max_scan_dist: float,
         robot_obs: spaces.Box, target_obs: spaces.Box) -> Tuple[spaces.Dict, spaces.Dict]:
     max_drive_state = np.array([

@@ -2,7 +2,7 @@ from typing import Set, Tuple
 
 import numpy as np
 
-from robot_sf.ped_grouping \
+from robot_sf.ped_npc.ped_grouping \
     import PedestrianGroupings, PedestrianStates
 
 Vec2D = Tuple[float, float]

@@ -9,15 +9,15 @@ from pysocialforce.utils import SimulatorConfig as PySFSimConfig
 from pysocialforce.forces import Force as PySFForce, ObstacleForce
 
 from robot_sf.sim_config import SimulationSettings
-from robot_sf.map_config import MapDefinition
-from robot_sf.ped_spawn_generator \
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.ped_npc.ped_spawn_generator \
     import PedSpawnConfig, populate_crowded_zones, populate_ped_routes
-from robot_sf.ped_robot_force import PedRobotForce
-from robot_sf.ped_grouping import PedestrianStates, PedestrianGroupings
-from robot_sf.ped_behavior import PedestrianBehavior, CrowdedZoneBehavior, FollowRouteBehavior
+from robot_sf.ped_npc.ped_robot_force import PedRobotForce
+from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
+from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, CrowdedZoneBehavior, FollowRouteBehavior
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
-from robot_sf.navigation import RouteNavigator, sample_route
+from robot_sf.nav.navigation import RouteNavigator, sample_route
 
 
 Vec2D = Tuple[float, float]

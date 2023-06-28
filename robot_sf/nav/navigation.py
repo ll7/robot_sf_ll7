@@ -3,8 +3,8 @@ from math import dist
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
 
-from robot_sf.map_config import MapDefinition
-from robot_sf.ped_spawn_generator import sample_zone
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.ped_npc.ped_spawn_generator import sample_zone
 
 Vec2D = Tuple[float, float]
 Zone = Tuple[Vec2D, Vec2D, Vec2D]

@@ -1,7 +1,7 @@
 from math import dist
 from typing import Tuple
 import numpy as np
-from robot_sf.occupancy import ContinuousOccupancy
+from robot_sf.nav.occupancy import ContinuousOccupancy
 
 Vec2D = Tuple[float, float]
 

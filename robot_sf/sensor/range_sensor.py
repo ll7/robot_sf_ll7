@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import numba
+from gym import spaces
 
 from robot_sf.nav.occupancy import ContinuousOccupancy
 
@@ -216,3 +217,9 @@ def lidar_ray_scan(
         occ.ped_radius, ray_angles)
     range_postprocessing(ranges, scan_noise, scan_dist)
     return ranges
+
+
+def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
+    high = np.full((num_rays), max_scan_dist, dtype=np.float32)
+    low = np.zeros((num_rays), dtype=np.float32)
+    return spaces.Box(low=low, high=high, dtype=np.float32)

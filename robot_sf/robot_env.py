@@ -7,7 +7,7 @@ from gym import Env
 
 from robot_sf.sim_config import EnvSettings
 from robot_sf.nav.occupancy import ContinuousOccupancy
-from robot_sf.sensor.range_sensor import lidar_ray_scan
+from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion, OBS_RAYS, OBS_DRIVE_STATE
 from robot_sf.sim.sim_view import SimulationView, VisualizableAction, VisualizableSimState
@@ -101,8 +101,9 @@ class RobotEnv(Env):
 
         self.action_space = robot.action_space
         self.observation_space, orig_obs_space = fused_sensor_space(
-            sim_config.stack_steps, lidar_config.num_rays, lidar_config.max_scan_dist,
-            robot.observation_space, target_sensor_space(map_def.max_target_dist))
+            sim_config.stack_steps, robot.observation_space,
+            target_sensor_space(map_def.max_target_dist),
+            lidar_sensor_space(lidar_config.num_rays, lidar_config.max_scan_dist))
 
         ray_sensor = lambda: lidar_ray_scan(robot.pose, self.occupancy, lidar_config)
         target_sensor = lambda: target_sensor_obs(

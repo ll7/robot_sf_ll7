@@ -11,16 +11,17 @@ OBS_RAYS = "rays"
 
 
 def fused_sensor_space(
-        timesteps: int, num_rays: int, max_scan_dist: float,
-        robot_obs: spaces.Box, target_obs: spaces.Box) -> Tuple[spaces.Dict, spaces.Dict]:
+        timesteps: int, robot_obs: spaces.Box,
+        target_obs: spaces.Box, lidar_obs: spaces.Box
+    ) -> Tuple[spaces.Dict, spaces.Dict]:
     max_drive_state = np.array([
         robot_obs.high.tolist() + target_obs.high.tolist()
         for t in range(timesteps)], dtype=np.float32)
     min_drive_state = np.array([
         robot_obs.low.tolist() + target_obs.low.tolist()
         for t in range(timesteps)], dtype=np.float32)
-    max_lidar_state = np.full((timesteps, num_rays), max_scan_dist)
-    min_lidar_state = np.zeros((timesteps, num_rays))
+    max_lidar_state = np.array([lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32)
+    min_lidar_state = np.array([lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
 
     orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
     orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)

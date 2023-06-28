@@ -6,13 +6,88 @@ import numpy as np
 import numba
 
 from robot_sf.occupancy import ContinuousOccupancy
-from robot_sf.geometry import circle_line_intersection_distance, \
-                              lineseg_line_intersection_distance
 
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 Range = Tuple[float, float]
+
+
+Vec2D = Tuple[float, float]
+Line2D = Tuple[Vec2D, Vec2D]
+Circle2D = Tuple[Vec2D, float]
+
+
+@numba.njit(fastmath=True)
+def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
+
+
+@numba.njit(fastmath=True)
+def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_vec: Vec2D) -> float:
+    (x_1, y_1), (x_2, y_2) = segment
+    x_sensor, y_sensor = sensor_pos
+    x_diff, y_diff = x_1 - x_sensor, y_1 - y_sensor
+    x_seg, y_seg = x_2 - x_1, y_2 - y_1
+    x_ray, y_ray = ray_vec
+
+    num = x_ray * y_diff - y_ray * x_diff
+    den = x_seg * y_ray - x_ray * y_seg
+
+    # edge case: line segment has same orientation as ray vector
+    if den == 0:
+        return np.inf
+
+    mu = num / den
+    tau = (mu * x_seg + x_diff) / x_ray
+
+    if 0 <= mu <= 1 and tau >= 0:
+        cross_x, cross_y = x_1 + mu * (x_2 - x_1), y_1 + mu * (y_2 - y_1)
+        return euclid_dist(sensor_pos, (cross_x, cross_y))
+    else:
+        return np.inf
+
+
+@numba.njit(fastmath=True)
+def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
+    (c_x, c_y), r = circle
+    ray_x, ray_y = ray_vec
+
+    # shift circle's center to the origin (0, 0)
+    (p1_x, p1_y) = origin[0] - c_x, origin[1] - c_y
+
+    r_sq = r**2
+    norm_p1 = p1_x**2 + p1_y**2
+
+    # cofficients a, b, c of the quadratic solution formula
+    s_x, s_y = ray_x, ray_y
+    t_x, t_y = p1_x, p1_y
+    a = s_x**2 + s_y**2
+    b = 2 * (s_x * t_x + s_y * t_y)
+    c = norm_p1 - r_sq
+
+    # abort when ray doesn't collide
+    disc = b**2 - 4 * a * c
+    if disc < 0 or (b > 0 and b**2 > disc):
+        return np.inf
+
+    # compute quadratic solutions
+    disc_root = disc**0.5
+    mu_1 = (-b - disc_root) / 2 * a
+    mu_2 = (-b + disc_root) / 2 * a
+
+    # compute cross points S1, S2 and distances to the origin
+    s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y  + t_y
+    s2_x, s2_y = mu_2 * s_x + t_x, mu_2 * s_y  + t_y
+    dist_1 = euclid_dist((p1_x, p1_y), (s1_x, s1_y))
+    dist_2 = euclid_dist((p1_x, p1_y), (s2_x, s2_y))
+
+    if mu_1 >= 0 and mu_2 >= 0:
+        return min(dist_1, dist_2)
+    elif mu_1 >= 0:
+        return dist_1
+    else: # if mu_2 >= 0:
+        return dist_2
 
 
 @dataclass
@@ -36,11 +111,6 @@ class LidarScannerSettings:
             raise ValueError("Scan noise probabilities must be within [0, 1]!")
 
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
-
-
-@numba.njit(fastmath=True)
-def euclid_dist_sq(v_1: Vec2D, v_2: Vec2D) -> float:
-    return (v_1[0] - v_2[0])**2 + (v_1[1] - v_2[1])**2
 
 
 @numba.njit(fastmath=True)

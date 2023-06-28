@@ -2,13 +2,53 @@ from typing import Callable, Tuple
 from dataclasses import dataclass
 
 import numpy as np
-
-from robot_sf.geometry import \
-    is_circle_circle_intersection, \
-    is_circle_line_intersection
-
+import numba
 
 Vec2D = Tuple[float, float]
+Circle2D = Tuple[Vec2D, float]
+Line2D = Tuple[Vec2D, Vec2D]
+
+
+@numba.njit(fastmath=True)
+def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
+    center_1, radius_1 = c_1
+    center_2, radius_2 = c_2
+    dist_sq = (center_1[0] - center_2[0])**2 + (center_1[1] - center_2[1])**2
+    rad_sum_sq = (radius_1 + radius_2)**2
+    return dist_sq <= rad_sum_sq
+
+
+@numba.njit(fastmath=True)
+def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
+    """Simple vector math implementation using quadratic solution formula."""
+    (c_x, c_y), r = circle
+    (p1_x, p1_y), (p2_x, p2_y) = segment
+
+    # shift circle's center to the origin (0, 0)
+    (p1_x, p1_y), (p2_x, p2_y) = (p1_x - c_x, p1_y - c_y), (p2_x - c_x, p2_y - c_y)
+
+    r_sq = r**2
+    norm_p1, norm_p2 = p1_x**2 + p1_y**2, p2_x**2 + p2_y**2
+
+    # edge case: line segment ends inside the circle -> collision!
+    if norm_p1 <= r_sq or norm_p2 <= r_sq:
+        return True
+
+    # cofficients a, b, c of the quadratic solution formula
+    s_x, s_y = p2_x - p1_x, p2_y - p1_y
+    t_x, t_y = p1_x, p1_y
+    a = s_x**2 + s_y**2
+    b = 2 * (s_x * t_x + s_y * t_y)
+    c = norm_p1 - r_sq
+
+    # discard cases where infinite line doesn't collide
+    disc = b**2 - 4 * a * c
+    if disc < 0:
+        return False
+
+    # check if collision is actually within the line segment
+    disc_root = disc**0.5
+    return 0 <= -b - disc_root <= 2 * a or 0 <= -b + disc_root <= 2 * a
 
 
 @dataclass

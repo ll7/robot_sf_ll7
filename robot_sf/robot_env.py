@@ -150,7 +150,7 @@ class RobotEnv(Env):
 
         state = VisualizableSimState(
             self.timestep, action, self.sim_env.robot.pose,
-            deepcopy(self.occupancy.pedestrian_coords))
+            deepcopy(self.sim_env.ped_positions))
 
         self.sim_ui.render(state)
 

@@ -3,9 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import numba
-
 from pysocialforce.scene import PedState
-from pysocialforce.utils import stateutils
 
 Vec2D = Tuple[float, float]
 

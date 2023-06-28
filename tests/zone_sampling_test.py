@@ -1,4 +1,4 @@
-from robot_sf.ped_npc.ped_spawn_generator import sample_zone
+from robot_sf.ped_npc.ped_zone import sample_zone
 
 
 def is_within_zone(p):

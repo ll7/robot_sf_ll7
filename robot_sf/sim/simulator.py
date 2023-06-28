@@ -2,7 +2,6 @@ from math import atan2
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union, Callable
 
-import numpy as np
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.simulator import make_forces as pysf_make_forces
 from pysocialforce.utils import SimulatorConfig as PySFSimConfig
@@ -10,11 +9,10 @@ from pysocialforce.forces import Force as PySFForce, ObstacleForce
 
 from robot_sf.sim_config import SimulationSettings
 from robot_sf.nav.map_config import MapDefinition
-from robot_sf.ped_npc.ped_spawn_generator \
-    import PedSpawnConfig, populate_crowded_zones, populate_ped_routes
+from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
 from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
-from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, CrowdedZoneBehavior, FollowRouteBehavior
+from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 from robot_sf.nav.navigation import RouteNavigator, sample_route
@@ -25,43 +23,6 @@ RobotAction = Union[DifferentialDriveAction, BicycleAction]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
-
-
-def populate_simulation(
-        pysf_config: PySFSimConfig, spawn_config: PedSpawnConfig, map_def: MapDefinition
-    ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
-
-    crowd_ped_states_np, crowd_groups, zone_assignments = \
-        populate_crowded_zones(spawn_config, map_def.ped_crowded_zones)
-    route_ped_states_np, route_groups, route_assignments, initial_sections = \
-        populate_ped_routes(spawn_config, map_def.ped_routes)
-
-    tau = pysf_config.scene_config.tau
-    combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
-    taus = np.full((combined_ped_states_np.shape[0]), tau)
-    ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
-    id_offset = crowd_ped_states_np.shape[0]
-    combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
-
-    pysf_state = PedestrianStates(lambda: ped_states)
-    crowd_pysf_state = PedestrianStates(lambda: ped_states[:id_offset])
-    route_pysf_state = PedestrianStates(lambda: ped_states[id_offset:])
-
-    groups = PedestrianGroupings(pysf_state)
-    for ped_ids in combined_groups:
-        groups.new_group(ped_ids)
-    crowd_groupings = PedestrianGroupings(crowd_pysf_state)
-    for ped_ids in crowd_groups:
-        crowd_groupings.new_group(ped_ids)
-    route_groupings = PedestrianGroupings(route_pysf_state)
-    for ped_ids in route_groups:
-        route_groupings.new_group(ped_ids)
-
-    crowd_behavior = CrowdedZoneBehavior(
-        crowd_groupings, zone_assignments, map_def.ped_crowded_zones)
-    route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
-    ped_behaviors: List[PedestrianBehavior] = [crowd_behavior, route_behavior]
-    return pysf_state, groups, ped_behaviors
 
 
 @dataclass
@@ -80,8 +41,9 @@ class Simulator:
     def __post_init__(self):
         pysf_config = PySFSimConfig()
         spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
-        self.pysf_state, self.groups, self.peds_behaviors = \
-              populate_simulation(pysf_config, spawn_config, self.map_def)
+        self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
+            pysf_config.scene_config.tau, spawn_config,
+            self.map_def.ped_routes, self.map_def.ped_crowded_zones)
 
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
             forces = pysf_make_forces(sim, config)

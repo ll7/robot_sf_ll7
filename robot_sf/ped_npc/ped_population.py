@@ -4,7 +4,10 @@ from typing import Tuple, List, Set, Dict
 import numpy as np
 
 from robot_sf.nav.map_config import GlobalRoute
-
+from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
+from robot_sf.ped_npc.ped_behavior import \
+    PedestrianBehavior, CrowdedZoneBehavior, FollowRouteBehavior
+from robot_sf.ped_npc.ped_zone import sample_zone
 
 PedState = np.ndarray
 PedGrouping = Set[int]
@@ -28,15 +31,6 @@ class PedSpawnConfig:
             power_dist = [self.group_size_decay**i for i in range(self.max_group_members)]
             self.group_member_probs = [p / sum(power_dist) for p in power_dist]
 
-
-def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
-    a, b, c = zone
-    a, b, c = np.array(a), np.array(b), np.array(c)
-    vec_ba, vec_bc = a - b, c - b
-    rel_width = np.random.uniform(0, 1, (num_samples, 1))
-    rel_height = np.random.uniform(0, 1, (num_samples, 1))
-    points = b + rel_width * vec_ba + rel_height * vec_bc
-    return [(x, y) for x, y in points]
 
 
 def sample_route(
@@ -170,3 +164,39 @@ def populate_crowded_zones(config: PedSpawnConfig, crowded_zones: List[Zone]) \
         num_unassigned_peds -= num_peds_in_group
 
     return ped_states, groups, zone_assignments
+
+
+def populate_simulation(
+        tau: float, spawn_config: PedSpawnConfig,
+        ped_routes: List[GlobalRoute], ped_crowded_zones: List[Zone]
+    ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
+
+    crowd_ped_states_np, crowd_groups, zone_assignments = \
+        populate_crowded_zones(spawn_config, ped_crowded_zones)
+    route_ped_states_np, route_groups, route_assignments, initial_sections = \
+        populate_ped_routes(spawn_config, ped_routes)
+
+    combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
+    taus = np.full((combined_ped_states_np.shape[0]), tau)
+    ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
+    id_offset = crowd_ped_states_np.shape[0]
+    combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
+
+    pysf_state = PedestrianStates(lambda: ped_states)
+    crowd_pysf_state = PedestrianStates(lambda: ped_states[:id_offset])
+    route_pysf_state = PedestrianStates(lambda: ped_states[id_offset:])
+
+    groups = PedestrianGroupings(pysf_state)
+    for ped_ids in combined_groups:
+        groups.new_group(ped_ids)
+    crowd_groupings = PedestrianGroupings(crowd_pysf_state)
+    for ped_ids in crowd_groups:
+        crowd_groupings.new_group(ped_ids)
+    route_groupings = PedestrianGroupings(route_pysf_state)
+    for ped_ids in route_groups:
+        route_groupings.new_group(ped_ids)
+
+    crowd_behavior = CrowdedZoneBehavior(crowd_groupings, zone_assignments, ped_crowded_zones)
+    route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
+    ped_behaviors: List[PedestrianBehavior] = [crowd_behavior, route_behavior]
+    return pysf_state, groups, ped_behaviors

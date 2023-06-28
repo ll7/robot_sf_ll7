@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from robot_sf.nav.map_config import GlobalRoute
 from robot_sf.nav.navigation import RouteNavigator
-from robot_sf.ped_npc.ped_spawn_generator import sample_zone
+from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings
 
 Vec2D = Tuple[float, float]

@@ -14,15 +14,15 @@ class EnvOutcome(IntEnum):
 class EnvMetrics:
     route_outcomes: List[EnvOutcome] = field(default_factory=list)
     intermediate_goal_outcomes: List[EnvOutcome] = field(default_factory=list)
-    cache_size: int = 100
+    cache_size: int = 10
 
     @property
     def total_routes(self) -> int:
-        return len(self.route_outcomes)
+        return max(len(self.route_outcomes), 1)
 
     @property
     def total_intermediate_goals(self) -> int:
-        return len(self.intermediate_goal_outcomes)
+        return max(len(self.intermediate_goal_outcomes), 1)
 
     @property
     def pedestrian_collisions(self) -> int:
@@ -87,9 +87,9 @@ class EnvMetrics:
         else:
             raise NotImplementedError("unknown environment outcome")
 
-        self.intermediate_goal_outcomes.append(outcome)
         if len(self.intermediate_goal_outcomes) > self.cache_size:
             self.intermediate_goal_outcomes.pop(0)
+        self.intermediate_goal_outcomes.append(outcome)
 
     def _on_next_route_outcome(self, meta: dict):
         if meta["is_pedestrian_collision"]:
@@ -103,9 +103,9 @@ class EnvMetrics:
         else:
             raise NotImplementedError("unknown environment outcome")
 
-        self.route_outcomes.append(outcome)
         if len(self.route_outcomes) > self.cache_size:
             self.route_outcomes.pop(0)
+        self.route_outcomes.append(outcome)
 
 
 @dataclass

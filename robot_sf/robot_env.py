@@ -23,16 +23,16 @@ RobotPose = Tuple[Vec2D, float]
 
 
 def simple_reward(meta: dict) -> float:
-    step_discount = 0.1 / meta["max_sim_steps"]
+    step_discount = 0.01 / meta["max_sim_steps"]
     reward = -step_discount
     if meta["is_pedestrian_collision"]:
-        reward -= 1000
+        reward -= 3
     if meta["is_obstacle_collision"]:
-        reward -= 20
+        reward -= 2
     if meta["is_robot_at_goal"]:
-        reward += 1 # assuming routes with <50 waypoints
+        reward += 0.1 # assuming routes with <50 waypoints
     if meta["is_route_complete"]:
-        reward += 100
+        reward += 1
     return reward
 
 

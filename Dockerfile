@@ -11,3 +11,9 @@ RUN python -m pip install -r requirements.txt
 ADD ./setup.py ./setup.py
 ADD ./robot_sf ./robot_sf
 RUN python -m pip install .
+ADD ./tests ./tests
+
+WORKDIR /app/tests
+RUN ln -s ../fast-pysf/tests pysf_tests
+WORKDIR /app
+RUN python -m pytest tests

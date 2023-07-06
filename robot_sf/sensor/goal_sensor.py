@@ -14,7 +14,11 @@ def norm_angle(angle: float) -> float:
 
 
 def angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
-    v1_x, v1_y = p_1[0] - p_2[0], p_1[1] - p_2[1]
+    """Compute the difference between the linear projection of a vehicle at p1
+    moving straight towards the goal p2 and the straight trajectory from p2
+    towards the next goal p3."""
+
+    v1_x, v1_y = p_2[0] - p_1[0], p_2[1] - p_1[1]
     v2_x, v2_y = p_3[0] - p_2[0], p_3[1] - p_2[1]
     o_1, o_2 = atan2(v1_y, v1_x), atan2(v2_y, v2_x)
     return norm_angle(o_2 - o_1)

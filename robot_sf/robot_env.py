@@ -23,11 +23,15 @@ RobotPose = Tuple[Vec2D, float]
 
 
 def simple_reward(meta: dict) -> float:
-    step_discount = 0.1 / meta["max_sim_steps"]
+    step_discount = 0.01 / meta["max_sim_steps"]
     reward = -step_discount
-    if meta["is_pedestrian_collision"] or meta["is_obstacle_collision"]:
+    if meta["is_pedestrian_collision"]:
+        reward -= 3
+    if meta["is_obstacle_collision"]:
         reward -= 2
     if meta["is_robot_at_goal"]:
+        reward += 0.1 # assuming routes with <50 waypoints
+    if meta["is_route_complete"]:
         reward += 1
     return reward
 
@@ -77,7 +81,7 @@ class RobotEnv(Env):
     def __init__(
             self, env_config: EnvSettings = EnvSettings(),
             metadata_collector: Callable[[RobotEnv], dict] = collect_metadata,
-            reward_func: Callable[[dict], float] = disturbance_reward,
+            reward_func: Callable[[dict], float] = simple_reward,
             term_func: Callable[[dict], bool] = is_terminal,
             debug: bool = False):
         self.reward_func = reward_func

@@ -16,7 +16,7 @@ class BicycleDriveSettings:
     wheelbase: float=1.0
     max_steer: float=0.78 # 45 deg
     max_velocity: float=3.0
-    max_accel: float=3.0
+    max_accel: float=1.0
 
     @property
     def radius(self) -> float:

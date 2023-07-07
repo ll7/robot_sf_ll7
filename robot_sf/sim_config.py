@@ -12,7 +12,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 class EnvSettings:
     sim_config: SimulationSettings = SimulationSettings()
     lidar_config: LidarScannerSettings = LidarScannerSettings()
-    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = BicycleDriveSettings()
+    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = DifferentialDriveSettings()
     map_pool: MapDefinitionPool = MapDefinitionPool()
 
     def __post_init__(self):

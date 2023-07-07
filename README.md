@@ -104,3 +104,10 @@ popd
 cp scripts/debug_trained_policy.py .
 python3 debug_trained_policy.py
 ```
+
+### 8. Optimize Training Hyperparams (Docker)
+
+```sh
+docker-compose build && docker-compose run \
+    robotsf-cuda python ./scripts/hparam_opt.py
+```

@@ -9,3 +9,4 @@ stable-baselines3==1.6.2
 tqdm==4.64.1
 rich==12.6.0
 tensorboard==2.11.0
+optuna==3.2.0

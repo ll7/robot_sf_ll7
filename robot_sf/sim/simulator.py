@@ -50,6 +50,7 @@ class Simulator:
             # TODO: enable obstacle force in case pedestrian routes require it
             forces = [f for f in forces if type(f) != ObstacleForce]
             if self.config.prf_config.is_active:
+                self.config.prf_config.robot_radius = self.robot.config.radius
                 forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: self.robot.pos))
             return forces
 

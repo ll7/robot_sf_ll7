@@ -139,6 +139,7 @@ class RobotEnv(Env):
         self.timestep = 0
         self.last_action = None
         self.sim_env.reset_state()
+        self.sensor_fusion.reset_cache()
         return self.sensor_fusion.next_obs()
 
     def render(self, mode='human'):

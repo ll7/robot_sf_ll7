@@ -79,3 +79,7 @@ class SensorFusion:
         max_lidar = self.unnormed_obs_space[OBS_RAYS].high
         return { OBS_DRIVE_STATE: stacked_drive_state / max_drive,
                  OBS_RAYS: stacked_lidar_state / max_lidar }
+
+    def reset_cache(self):
+        self.drive_state_cache.clear()
+        self.lidar_state_cache.clear()

@@ -77,7 +77,7 @@ def training_score(
 
 
 def objective(trial: optuna.Trial) -> float:
-    n_envs = trial.suggest_categorical("n_envs", [2, 4])
+    n_envs = trial.suggest_categorical("n_envs", [32, 40, 48, 56, 64])
     n_epochs = trial.suggest_int("n_epochs", 2, 20)
     n_steps = trial.suggest_categorical("n_steps", [128, 256, 512, 1024, 1536, 2048, 2560, 3072, 3584, 4096])
     use_sde = trial.suggest_categorical("use_sde", [True, False])

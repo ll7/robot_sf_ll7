@@ -11,7 +11,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.callbacks import CallbackList, BaseCallback
 
-from robot_sf.robot_env import RobotEnv
+from robot_sf.robot_env import RobotEnv, simple_reward
 from robot_sf.sim_config import EnvSettings
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.tb_logging import DrivingMetricsCallback, VecEnvMetrics
@@ -52,7 +52,13 @@ def training_score(
     def make_env():
         config = EnvSettings()
         config.sim_config.difficulty = difficulty
-        return RobotEnv(config)
+        config.sim_config.stack_steps = hparams["num_stacked_steps"]
+        config.sim_config.time_per_step_in_secs = hparams["d_t"]
+        config.sim_config.use_next_goal = hparams["use_next_goal"]
+        reward_func = lambda meta: simple_reward(
+            meta, hparams["step_discount"], hparams["ped_coll_penalty"],
+            hparams["obst_coll_penalty"], hparams["reach_wp_reward"])
+        return RobotEnv(config, reward_func=reward_func)
 
     env = make_vec_env(make_env, n_envs=hparams["n_envs"], vec_env_cls=SubprocVecEnv)
 
@@ -77,21 +83,58 @@ def training_score(
 
 
 def objective(trial: optuna.Trial) -> float:
-    n_envs = trial.suggest_categorical("n_envs", [32, 40, 48, 56, 64])
-    n_epochs = trial.suggest_int("n_epochs", 2, 20)
-    n_steps = trial.suggest_categorical("n_steps", [128, 256, 512, 1024, 1536, 2048, 2560, 3072, 3584, 4096])
-    use_sde = trial.suggest_categorical("use_sde", [True, False])
-    use_ray_conv = trial.suggest_categorical("use_ray_conv", [True, False])
-    if use_ray_conv:
-        num_filters = [trial.suggest_categorical(f"num_filters_{i}", [8, 16, 32, 64, 128, 256]) for i in range(4)]
-        kernel_sizes = [trial.suggest_categorical(f"kernel_sizes_{i}", [3, 5, 7, 9]) for i in range(4)]
-        dropout_rates = [trial.suggest_float(f"dropout_rates_{i}", 0.0, 1.0) for i in range(4)]
-    else:
-        num_filters = []
-        kernel_sizes = []
-        dropout_rates = []
+    tune_ppo = False
+    tune_simulation = True
+    tune_reward = False
+
+    if tune_ppo:
+        n_envs = trial.suggest_categorical("n_envs", [32, 40, 48, 56, 64])
+        n_epochs = trial.suggest_int("n_epochs", 2, 20)
+        n_steps = trial.suggest_categorical("n_steps", [128, 256, 512, 1024, 1536, 2048, 2560, 3072, 3584, 4096])
+        use_sde = trial.suggest_categorical("use_sde", [True, False])
+        use_ray_conv = trial.suggest_categorical("use_ray_conv", [True, False])
+        if use_ray_conv:
+            num_filters = [trial.suggest_categorical(f"num_filters_{i}", [8, 16, 32, 64, 128, 256]) for i in range(4)]
+            kernel_sizes = [trial.suggest_categorical(f"kernel_sizes_{i}", [3, 5, 7, 9]) for i in range(4)]
+            dropout_rates = [trial.suggest_float(f"dropout_rates_{i}", 0.0, 1.0) for i in range(4)]
+        else:
+            num_filters = []
+            kernel_sizes = []
+            dropout_rates = []
+    else: # use defaults
+        n_envs = 64
+        n_epochs = 10
+        n_steps = 2048
+        use_sde = False
+        use_ray_conv = True
+        num_filters = [64, 16, 16, 16]
+        kernel_sizes = [3, 3, 3, 3]
+        dropout_rates = [0.3, 0.3, 0.3, 0.3]
+
+    if tune_simulation:
+        num_stacked_steps = trial.suggest_int("num_stacked_steps", 1, 5)
+        num_lidar_rays = trial.suggest_categorical("num_lidar_rays", [144, 176, 208, 272])
+        d_t = trial.suggest_float("d_t", 0.1, 0.5)
+        use_next_goal = trial.suggest_categorical("use_next_goal", [True, False])
+    else: # use defaults
+        num_stacked_steps = 3
+        num_lidar_rays = 272
+        d_t = 0.1
+        use_next_goal = True
+
+    if tune_reward:
+        ped_coll_penalty = trial.suggest_int("ped_coll_penalty", -10, -1)
+        obst_coll_penalty = trial.suggest_int("obst_coll_penalty", -10, -1)
+        step_discount = trial.suggest_float("step_discount", -1.0, 0.0)
+        reach_wp_reward = trial.suggest_int("reach_wp_reward", 1, 10)
+    else: # use defaults
+        ped_coll_penalty = -2.0
+        obst_coll_penalty = -2.0
+        step_discount = -0.1
+        reach_wp_reward = 1.0
 
     sugg_params = {
+        # PPO hparams
         "n_envs": n_envs,
         "n_epochs": n_epochs,
         "n_steps": n_steps,
@@ -99,7 +142,19 @@ def objective(trial: optuna.Trial) -> float:
         "use_ray_conv": use_ray_conv,
         "num_filters": num_filters,
         "kernel_sizes": kernel_sizes,
-        "dropout_rates": dropout_rates
+        "dropout_rates": dropout_rates,
+
+        # simulator hparams
+        "num_stacked_steps": num_stacked_steps,
+        "num_lidar_rays": num_lidar_rays,
+        "d_t": d_t,
+        "use_next_goal": use_next_goal,
+
+        # reward hparams
+        "ped_coll_penalty": ped_coll_penalty,
+        "obst_coll_penalty": obst_coll_penalty,
+        "step_discount": step_discount,
+        "reach_wp_reward": reach_wp_reward
     }
 
     return training_score(sugg_params)

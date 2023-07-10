@@ -22,13 +22,19 @@ PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 
 
-def simple_reward(meta: dict) -> float:
-    step_discount = 0.01 / meta["max_sim_steps"]
-    reward = -step_discount
-    if meta["is_pedestrian_collision"] or meta["is_obstacle_collision"]:
-        reward -= 2
+def simple_reward(
+        meta: dict,
+        max_episode_step_discount: float=-0.01,
+        ped_coll_penalty: float=-2,
+        obst_coll_penalty: float=-2,
+        reach_waypoint_reward: float=1) -> float:
+    reward = max_episode_step_discount / meta["max_sim_steps"]
+    if meta["is_pedestrian_collision"]:
+        reward += ped_coll_penalty
+    if meta["is_obstacle_collision"]:
+        reward += obst_coll_penalty
     if meta["is_robot_at_goal"]:
-        reward += 1
+        reward += reach_waypoint_reward
     return reward
 
 
@@ -109,7 +115,8 @@ class RobotEnv(Env):
         target_sensor = lambda: target_sensor_obs(
             robot.pose, self.sim_env.goal_pos, self.sim_env.next_goal_pos)
         self.sensor_fusion = SensorFusion(
-            ray_sensor, lambda: robot.current_speed, target_sensor, orig_obs_space)
+            ray_sensor, lambda: robot.current_speed, target_sensor,
+            orig_obs_space, sim_config.use_next_goal)
 
         self.episode = 0
         self.timestep = 0

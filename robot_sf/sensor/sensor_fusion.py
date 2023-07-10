@@ -46,6 +46,7 @@ class SensorFusion:
     robot_speed_sensor: Callable[[], PolarVec2D]
     target_sensor: Callable[[], Tuple[float, float, float]]
     unnormed_obs_space: spaces.Dict
+    use_next_goal: bool
     drive_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
     lidar_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
     cache_steps: int = field(init=False)
@@ -59,6 +60,7 @@ class SensorFusion:
 
         speed_x, speed_rot = self.robot_speed_sensor()
         target_distance, target_angle, next_target_angle = self.target_sensor()
+        next_target_angle = next_target_angle if self.use_next_goal else 0.0
         drive_state = np.array([speed_x, speed_rot, target_distance, target_angle, next_target_angle])
 
         # info: populate cache with same states -> no movement

@@ -17,10 +17,15 @@ class BicycleDriveSettings:
     max_steer: float=0.78 # 45 deg
     max_velocity: float=3.0
     max_accel: float=1.0
+    allow_backwards: bool=False
 
     @property
     def radius(self) -> float:
         return self.wheelbase / 2
+
+    @property
+    def min_velocity(self) -> float:
+        return -self.max_velocity if self.allow_backwards else 0.0
 
 
 @dataclass
@@ -60,7 +65,7 @@ class BicycleMotion:
 
         acceleration = np.clip(acceleration, -self.config.max_accel, self.config.max_accel)
         new_velocity = velocity + d_t * acceleration
-        new_velocity = np.clip(new_velocity, -self.config.max_velocity, self.config.max_velocity)
+        new_velocity = np.clip(new_velocity, self.config.min_velocity, self.config.max_velocity)
         steering_angle = np.clip(steering_angle, -self.config.max_steer, self.config.max_steer)
         angular_velocity = new_velocity * tan(steering_angle) / self.config.wheelbase
 
@@ -89,7 +94,7 @@ class BicycleDriveRobot():
     @property
     def observation_space(self) -> spaces.Box:
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
-        low = np.array([-self.config.max_velocity, -self.config.max_steer], dtype=np.float32)
+        low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property

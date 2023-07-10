@@ -72,8 +72,8 @@ def parse_mapfile_text_v0(text: str) -> Union[VisualizableMapConfig, None]:
         map_data = json.loads(text)
 
         all_lines = list()
-        for obstacle in map_data["obstacles"]:
-            vertices: List[Vec2D] = map_data["obstacles"][obstacle]["Vertex"]
+        for obstacle in map_data["Obstacles"]:
+            vertices: List[Vec2D] = map_data["Obstacles"][obstacle]["Vertex"]
             edges = list(zip(vertices[:-1], vertices[1:])) \
                 + [(vertices[-1], vertices[0])]
             for (s_x, s_y), (e_x, e_y) in edges:

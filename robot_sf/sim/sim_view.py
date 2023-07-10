@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from threading import Thread
 from signal import signal, SIGINT
 
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+
 import pygame
 import numpy as np
 

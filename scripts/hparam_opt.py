@@ -104,17 +104,17 @@ def objective(trial: optuna.Trial) -> float:
     else: # use defaults
         n_envs = 64
         n_epochs = 10
-        n_steps = 2048
+        n_steps = 1024
         use_sde = False
         use_ray_conv = True
-        num_filters = [64, 16, 16, 16]
-        kernel_sizes = [3, 3, 3, 3]
-        dropout_rates = [0.3, 0.3, 0.3, 0.3]
+        num_filters = [256, 256, 64, 32]
+        kernel_sizes = [5, 5, 5, 3]
+        dropout_rates = [0.1, 0.1, 0.3, 0.3]
 
     if tune_simulation:
         num_stacked_steps = trial.suggest_int("num_stacked_steps", 1, 5)
         num_lidar_rays = trial.suggest_categorical("num_lidar_rays", [144, 176, 208, 272])
-        d_t = trial.suggest_float("d_t", 0.1, 0.5)
+        d_t = trial.suggest_categorical("d_t", [0.1, 0.2, 0.3, 0.4, 0.5])
         use_next_goal = trial.suggest_categorical("use_next_goal", [True, False])
     else: # use defaults
         num_stacked_steps = 3
@@ -167,7 +167,7 @@ def generate_storage_url(study_name: str) -> str:
 def tune_hparams(study_name: str):
     study = optuna.create_study(
         study_name=study_name, direction="maximize",
-        storage=generate_storage_url(study_name))
+        storage=generate_storage_url(study_name), load_if_exists=True)
     study.optimize(objective, n_trials=100, gc_after_trial=True)
 
 

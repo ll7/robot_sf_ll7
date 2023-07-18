@@ -28,8 +28,10 @@ class DriveQualityCallback(BaseCallback):
 
     @property
     def score(self) -> float:
-        return sum([t * (self.max_steps - s) / self.max_steps
-                    for t, s in zip(self.completion_thresholds, self.steps_to_reach_threshold)])
+        steps_per_threshold = zip(self.completion_thresholds, self.steps_to_reach_threshold)
+        reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
+        threshold_scores = sum([t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds])
+        return threshold_scores / (sum(self.completion_thresholds) * 3)
 
     def _on_training_start(self):
         pass
@@ -44,10 +46,8 @@ class DriveQualityCallback(BaseCallback):
 
 
 def training_score(
-        hparams: dict, max_steps: int=5_000_000, difficulty: int=1,
-        route_completion_thresholds: List[float]=[
-            0.01, 0.02, 0.05, 0.10, 0.20, 0.30, 0.40, 0.50,
-            0.60, 0.70, 0.80, 0.90, 0.95, 0.98, 0.99, 1.0]):
+        study_name: str, hparams: dict, max_steps: int=5_000_000, difficulty: int=1,
+        route_completion_thresholds: List[float]=[i / 100 for i in range(1, 101)]):
 
     def make_env():
         config = EnvSettings()
@@ -70,7 +70,7 @@ def training_score(
             kernel_sizes = hparams["kernel_sizes"],
             dropout_rates = hparams["dropout_rates"]
         ))
-    model = PPO("MultiInputPolicy", env, tensorboard_log="./logs/optuna_logs/",
+    model = PPO("MultiInputPolicy", env, tensorboard_log=f"./logs/{study_name}/",
                 n_steps=hparams["n_steps"], n_epochs=hparams["n_epochs"],
                 use_sde=hparams["use_sde"], policy_kwargs=policy_kwargs)
     collect_metrics_callback = DrivingMetricsCallback(hparams["n_envs"])
@@ -82,12 +82,8 @@ def training_score(
     return threshold_callback.score
 
 
-def objective(trial: optuna.Trial) -> float:
-    tune_ppo = False
-    tune_simulation = True
-    tune_reward = False
-
-    if tune_ppo:
+def suggest_ppo_params(trial: optuna.Trial, tune: bool=False) -> dict:
+    if tune:
         n_envs = trial.suggest_categorical("n_envs", [32, 40, 48, 56, 64])
         n_epochs = trial.suggest_int("n_epochs", 2, 20)
         n_steps = trial.suggest_categorical("n_steps", [128, 256, 512, 1024, 1536, 2048])
@@ -111,7 +107,20 @@ def objective(trial: optuna.Trial) -> float:
         kernel_sizes = [5, 5, 5, 3]
         dropout_rates = [0.1, 0.1, 0.3, 0.3]
 
-    if tune_simulation:
+    return {
+        "n_envs": n_envs,
+        "n_epochs": n_epochs,
+        "n_steps": n_steps,
+        "use_sde": use_sde,
+        "use_ray_conv": use_ray_conv,
+        "num_filters": num_filters,
+        "kernel_sizes": kernel_sizes,
+        "dropout_rates": dropout_rates,
+    }
+
+
+def suggest_simulation_params(trial: optuna.Trial, tune: bool=False) -> dict:
+    if tune:
         num_stacked_steps = trial.suggest_int("num_stacked_steps", 1, 5)
         num_lidar_rays = trial.suggest_categorical("num_lidar_rays", [144, 176, 208, 272])
         d_t = trial.suggest_categorical("d_t", [0.1, 0.2, 0.3, 0.4, 0.5])
@@ -122,42 +131,45 @@ def objective(trial: optuna.Trial) -> float:
         d_t = 0.1
         use_next_goal = True
 
-    if tune_reward:
+    return {
+        "num_stacked_steps": num_stacked_steps,
+        "num_lidar_rays": num_lidar_rays,
+        "d_t": d_t,
+        "use_next_goal": use_next_goal,
+    }
+
+
+def suggest_reward_params(trial: optuna.Trial, tune: bool=False) -> dict:
+    if tune:
         ped_coll_penalty = trial.suggest_int("ped_coll_penalty", -10, -1)
         obst_coll_penalty = trial.suggest_int("obst_coll_penalty", -10, -1)
         step_discount = trial.suggest_float("step_discount", -1.0, 0.0)
-        reach_wp_reward = trial.suggest_int("reach_wp_reward", 1, 10)
+        reach_wp_reward = 1.0
+        # reach_wp_reward = trial.suggest_int("reach_wp_reward", 1, 10)
     else: # use defaults
         ped_coll_penalty = -2.0
         obst_coll_penalty = -2.0
         step_discount = -0.1
         reach_wp_reward = 1.0
 
-    sugg_params = {
-        # PPO hparams
-        "n_envs": n_envs,
-        "n_epochs": n_epochs,
-        "n_steps": n_steps,
-        "use_sde": use_sde,
-        "use_ray_conv": use_ray_conv,
-        "num_filters": num_filters,
-        "kernel_sizes": kernel_sizes,
-        "dropout_rates": dropout_rates,
-
-        # simulator hparams
-        "num_stacked_steps": num_stacked_steps,
-        "num_lidar_rays": num_lidar_rays,
-        "d_t": d_t,
-        "use_next_goal": use_next_goal,
-
-        # reward hparams
+    return {
         "ped_coll_penalty": ped_coll_penalty,
         "obst_coll_penalty": obst_coll_penalty,
         "step_discount": step_discount,
         "reach_wp_reward": reach_wp_reward
     }
 
-    return training_score(sugg_params)
+
+def objective(trial: optuna.Trial, study_name: str) -> float:
+    ppo_params = suggest_ppo_params(trial, tune=False)
+    sim_params = suggest_simulation_params(trial, tune=False)
+    rew_params = suggest_reward_params(trial, tune=True)
+
+    def merge_dicts(dicts: List[dict]) -> dict:
+        return {k: d[k] for d in dicts for k in d}
+
+    sugg_params = merge_dicts([ppo_params, sim_params, rew_params])
+    return training_score(study_name, sugg_params)
 
 
 def generate_storage_url(study_name: str) -> str:
@@ -168,8 +180,8 @@ def tune_hparams(study_name: str):
     study = optuna.create_study(
         study_name=study_name, direction="maximize",
         storage=generate_storage_url(study_name), load_if_exists=True)
-    study.optimize(objective, n_trials=100, gc_after_trial=True)
+    study.optimize(lambda t: objective(t, study_name), n_trials=100, gc_after_trial=True)
 
 
 if __name__ == '__main__':
-    tune_hparams("diffdrive-opt")
+    tune_hparams("reward-opt")

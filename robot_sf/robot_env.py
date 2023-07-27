@@ -24,8 +24,8 @@ RobotPose = Tuple[Vec2D, float]
 
 def simple_reward(
         meta: dict,
-        max_episode_step_discount: float=-0.01,
-        ped_coll_penalty: float=-2,
+        max_episode_step_discount: float=-0.1,
+        ped_coll_penalty: float=-5,
         obst_coll_penalty: float=-2,
         reach_waypoint_reward: float=1) -> float:
     reward = max_episode_step_discount / meta["max_sim_steps"]

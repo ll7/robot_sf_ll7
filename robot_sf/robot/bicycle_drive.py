@@ -18,10 +18,7 @@ class BicycleDriveSettings:
     max_velocity: float=3.0
     max_accel: float=1.0
     allow_backwards: bool=False
-
-    @property
-    def radius(self) -> float:
-        return self.wheelbase / 2
+    radius: float=1.0
 
     @property
     def min_velocity(self) -> float:

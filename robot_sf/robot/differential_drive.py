@@ -14,7 +14,7 @@ WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
 
 @dataclass
 class DifferentialDriveSettings:
-    radius: float = 0.5
+    radius: float = 1.0
     max_linear_speed: float = 2.0
     max_angular_speed: float = 0.5
     wheel_radius: float = 0.05

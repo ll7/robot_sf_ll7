@@ -93,7 +93,7 @@ class MapDefinition:
 
         if self.width < 0 or self.height < 0:
             raise ValueError("Map width and height mustn't be zero or negative!")
-        if not self.robot_spawn_zones or not self.ped_spawn_zones or not self.robot_goal_zones:
+        if not self.robot_spawn_zones or not self.robot_goal_zones:
             raise ValueError("Spawn and goal zones mustn't be empty!")
         if len(self.bounds) != 4:
             raise ValueError("Invalid bounds! Expected exactly 4 bounds!")

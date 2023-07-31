@@ -17,7 +17,7 @@ class SimulationSettings:
     stack_steps: int = 3
     use_next_goal: bool = True
     prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
-    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.06])
+    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.08])
 
     def __post_init__(self):
         if self.sim_time_in_secs <= 0:

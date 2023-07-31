@@ -10,10 +10,10 @@ Vec2D = Tuple[float, float]
 
 @dataclass
 class PedRobotForceConfig:
-    is_active: bool = False
-    robot_radius: float = 0.5
+    is_active: bool = True
+    robot_radius: float = 1.0
     activation_threshold: float = 2.0
-    force_multiplier: float = 2.5
+    force_multiplier: float = 10.0
 
 
 class PedRobotForce:

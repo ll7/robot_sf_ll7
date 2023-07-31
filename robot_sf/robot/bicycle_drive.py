@@ -13,12 +13,12 @@ RobotPose = Tuple[Vec2D, float]
 
 @dataclass
 class BicycleDriveSettings:
+    radius: float=1.0 # info: collision radius, not relevant for kinematics
     wheelbase: float=1.0
     max_steer: float=0.78 # 45 deg
     max_velocity: float=3.0
     max_accel: float=1.0
     allow_backwards: bool=False
-    radius: float=1.0
 
     @property
     def min_velocity(self) -> float:

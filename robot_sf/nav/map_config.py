@@ -2,7 +2,7 @@ import os
 import json
 import random
 from math import sqrt, dist
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -86,10 +86,18 @@ class MapDefinition:
     ped_crowded_zones: List[Rect]
     ped_routes: List[GlobalRoute]
     obstacles_pysf: List[Line2D] = field(init=False)
+    robot_route_by_spawn_id: Dict[int, List[GlobalRoute]] = field(init=False)
 
     def __post_init__(self):
         obstacle_lines = [line for o in self.obstacles for line in o.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
+
+        self.robot_route_by_spawn_id = dict()
+        for route in self.robot_routes:
+            if route.spawn_id in self.robot_route_by_spawn_id:
+                self.robot_route_by_spawn_id[route.spawn_id].append(route)
+            else:
+                self.robot_route_by_spawn_id[route.spawn_id] = [route]
 
         if self.width < 0 or self.height < 0:
             raise ValueError("Map width and height mustn't be zero or negative!")
@@ -97,6 +105,10 @@ class MapDefinition:
             raise ValueError("Spawn and goal zones mustn't be empty!")
         if len(self.bounds) != 4:
             raise ValueError("Invalid bounds! Expected exactly 4 bounds!")
+
+    @property
+    def num_start_pos(self) -> int:
+        return len(set([r.spawn_id for r in self.robot_routes]))
 
     @property
     def max_target_dist(self) -> float:
@@ -155,6 +167,15 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     ped_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']],
                               ped_spawn_zones[o['spawn_id']], ped_goal_zones[o['goal_id']])
                   for o in map_structure['ped_routes']]
+
+    def reverse_route(route: GlobalRoute) -> GlobalRoute:
+        return GlobalRoute(
+            route.goal_id, route.spawn_id, list(reversed(route.waypoints)),
+            route.goal_zone, route.spawn_zone)
+
+    # info: this works because spawn and goal zones are the same
+    rev_robot_routes = [reverse_route(r) for r in robot_routes]
+    robot_routes = robot_routes + rev_robot_routes
 
     map_bounds = [
         (0, width, 0, 0),           # bottom

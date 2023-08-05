@@ -28,7 +28,7 @@ class BicycleDriveSettings:
 @dataclass
 class BicycleDriveState:
     pose: RobotPose
-    velocity: float
+    velocity: float = field(default=0)
 
     @property
     def pos(self) -> Vec2D:

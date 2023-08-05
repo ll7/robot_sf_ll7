@@ -175,6 +175,7 @@ def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
+    # TODO: add raycast for other robots
     return out_ranges
 
 

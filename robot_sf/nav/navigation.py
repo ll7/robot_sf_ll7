@@ -1,7 +1,7 @@
-from random import sample
+from random import sample, randint
 from math import dist
 from dataclasses import dataclass, field
-from typing import List, Tuple, Union
+from typing import List, Tuple, Optional
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
@@ -28,7 +28,7 @@ class RouteNavigator:
         return self.waypoints[self.waypoint_id]
 
     @property
-    def next_waypoint(self) -> Union[Vec2D, None]:
+    def next_waypoint(self) -> Optional[Vec2D]:
         return self.waypoints[self.waypoint_id + 1] \
             if self.waypoint_id + 1 < len(self.waypoints) else None
 
@@ -44,8 +44,14 @@ class RouteNavigator:
         self.waypoint_id = 0
 
 
-def sample_route(map_def: MapDefinition) -> List[Vec2D]:
-    route = sample(map_def.robot_routes, 1)[0]
+def sample_route(
+        map_def: MapDefinition,
+        spawn_id: Optional[int]=None) -> List[Vec2D]:
+
+    spawn_id = spawn_id if spawn_id is not None else \
+        randint(0, len(map_def.robot_spawn_zones) - 1)
+    routes = map_def.robot_route_by_spawn_id[spawn_id]
+    route = sample(routes, 1)[0]
     initial_spawn = sample_zone(route.spawn_zone, 1)[0]
     final_goal = sample_zone(route.goal_zone, 1)[0]
     route = [initial_spawn] + route.waypoints + [final_goal]

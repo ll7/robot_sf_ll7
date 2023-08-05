@@ -96,6 +96,10 @@ class ContinuousOccupancy:
         return False
 
     @property
+    def is_robot_robot_collision(self) -> bool:
+        return False
+
+    @property
     def is_robot_at_goal(self) -> bool:
         robot_circle = (self.get_robot_coords(), self.robot_radius)
         goal_circle = (self.get_goal_coords(), self.goal_radius)

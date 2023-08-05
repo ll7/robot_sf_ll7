@@ -29,9 +29,9 @@ Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
 class Simulator:
     config: SimulationSettings
     map_def: MapDefinition
-    robot: Robot
+    robots: List[Robot]
     goal_proximity_threshold: float
-    robot_nav: RouteNavigator = field(init=False)
+    robot_navs: List[RouteNavigator] = field(init=False)
     pysf_sim: PySFSimulator = field(init=False)
     sample_route: Callable[[], List[Vec2D]] = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
@@ -47,11 +47,11 @@ class Simulator:
 
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
             forces = pysf_make_forces(sim, config)
-            # TODO: enable obstacle force in case pedestrian routes require it
             forces = [f for f in forces if type(f) != ObstacleForce]
             if self.config.prf_config.is_active:
-                self.config.prf_config.robot_radius = self.robot.config.radius
-                forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: self.robot.pos))
+                for robot in self.robots:
+                    self.config.prf_config.robot_radius = robot.config.radius
+                    forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: robot.pos))
             return forces
 
         self.pysf_sim = PySFSimulator(
@@ -59,42 +59,48 @@ class Simulator:
             self.map_def.obstacles_pysf, config=pysf_config, make_forces=make_forces)
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
-        self.robot_nav = RouteNavigator(proximity_threshold=self.goal_proximity_threshold)
+        self.robot_navs = [RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots]
 
         self.reset_state()
         for behavior in self.peds_behaviors:
             behavior.reset()
 
     @property
-    def goal_pos(self) -> Vec2D:
-        return self.robot_nav.current_waypoint
+    def goal_pos(self) -> List[Vec2D]:
+        return [n.current_waypoint for n in self.robot_navs]
 
     @property
-    def next_goal_pos(self) -> Union[Vec2D, None]:
-        return self.robot_nav.next_waypoint
+    def next_goal_pos(self) -> List[Union[Vec2D, None]]:
+        return [n.next_waypoint for n in self.robot_navs]
 
     @property
-    def robot_pose(self) -> RobotPose:
-        return self.robot.pose
+    def robot_poses(self) -> List[RobotPose]:
+        return [r.pose for r in self.robots]
 
     @property
-    def ped_positions(self):
+    def robot_pos(self) -> List[Vec2D]:
+        return [r.pose[0] for r in self.robots]
+
+    @property
+    def ped_pos(self):
         return self.pysf_state.ped_positions
 
     def reset_state(self):
-        collision = not self.robot_nav.reached_waypoint
-        is_at_final_goal = self.robot_nav.reached_destination
-        if collision or is_at_final_goal:
-            waypoints = sample_route(self.map_def)
-            self.robot_nav.new_route(waypoints[1:])
-            new_orient = atan2(waypoints[1][1] - waypoints[0][1], waypoints[1][0] - waypoints[0][0])
-            self.robot.reset_state((waypoints[0], new_orient))
+        for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs)):
+            collision = not nav.reached_waypoint
+            is_at_final_goal = nav.reached_destination
+            if collision or is_at_final_goal:
+                waypoints = sample_route(self.map_def, i)
+                nav.new_route(waypoints[1:])
+                new_orient = atan2(waypoints[1][1] - waypoints[0][1], waypoints[1][0] - waypoints[0][0])
+                robot.reset_state((waypoints[0], new_orient))
 
-    def step_once(self, action: RobotAction):
+    def step_once(self, actions: List[RobotAction]):
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
-        self.robot.apply_action(action, self.config.time_per_step_in_secs)
-        self.robot_nav.update_position(self.robot.pos)
+        for robot, nav, action in zip(self.robots, self.robot_navs, actions):
+            robot.apply_action(action, self.config.time_per_step_in_secs)
+            nav.update_position(robot.pos)

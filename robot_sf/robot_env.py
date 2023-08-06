@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from copy import deepcopy
 
 from gym.vector import VectorEnv
-from gym import spaces
+from gym import Env, spaces
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator
 
@@ -189,6 +189,45 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
     return action_space, observation_space, orig_obs_space
 
 
+class RobotEnv(Env):
+    """Representing an OpenAI Gym environment for training
+    a self-driving robot with reinforcement learning"""
+
+    def __init__(
+            self, env_config: EnvSettings = EnvSettings(),
+            reward_func: Callable[[dict], float] = simple_reward,
+            debug: bool = False):
+
+        map_def = env_config.map_pool.map_defs[0] # info: only use first map
+        self.action_space, self.observation_space, orig_obs_space = init_spaces(env_config, map_def)
+
+        self.reward_func, self.debug = reward_func, debug
+        self.simulator = init_simulators(env_config, map_def)[0]
+        d_t = env_config.sim_config.time_per_step_in_secs
+        max_ep_time = env_config.sim_config.sim_time_in_secs
+
+        occupancies, sensors = init_collision_and_sensors(self.simulator, env_config, orig_obs_space)
+        self.state = RobotState(self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time)
+
+    def step(self, action):
+        action = self.simulator.robots[0].parse_action(action)
+        self.simulator.step_once([action])
+        obs = self.state.step()
+        meta = self.state.meta_dict()
+        term = self.state.is_terminal
+        reward = self.reward_func(meta)
+        return obs, reward, term, { "step": meta["step"], "meta": meta }
+
+    def reset(self):
+        self.simulator.reset_state()
+        obs = self.state.reset()
+        return obs
+
+    def render(self):
+        # TODO: add support for PyGame rendering
+        pass
+
+
 class MultiRobotEnv(VectorEnv):
     """Representing an OpenAI Gym environment for training
     a self-driving robot with reinforcement learning"""
@@ -231,6 +270,7 @@ class MultiRobotEnv(VectorEnv):
         obs = [state.step() for state in self.states]
 
         metas = [state.meta_dict() for state in self.states]
+        masked_metas = [{ "step": meta["step"], "meta": meta } for meta in metas]
         terms = [state.is_terminal for state in self.states]
         rewards = [self.reward_func(meta) for meta in metas]
 
@@ -242,13 +282,14 @@ class MultiRobotEnv(VectorEnv):
         obs = { OBS_DRIVE_STATE: [o[OBS_DRIVE_STATE] for o in obs],
                 OBS_RAYS: [o[OBS_RAYS] for o in obs] }
 
-        return obs, rewards, terms, metas
+        return obs, rewards, terms, masked_metas
 
     def reset(self):
-        # TODO: implement parallel computation
+        # TODO: parallelize
         for sim in self.simulators:
             sim.reset_state()
         obs = [state.reset() for state in self.states]
+
         return {
             OBS_DRIVE_STATE: [o[OBS_DRIVE_STATE] for o in obs],
             OBS_RAYS: [o[OBS_RAYS] for o in obs],

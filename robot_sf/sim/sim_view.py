@@ -86,7 +86,6 @@ class SimulationView:
             min_x, max_x = min(np.min(vertices[:, 0]), min_x), max(np.max(vertices[:, 0]), max_x)
             min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
         width, height = max_x - min_x, max_y - min_y
-        print("poly surcace", width, height)
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
         surface.fill(BACKGROUND_COLOR_TRANSP)
         for vertices in obst_vertices:

@@ -50,8 +50,8 @@ def sample_route(
 
     spawn_id = spawn_id if spawn_id is not None else \
         randint(0, len(map_def.robot_spawn_zones) - 1)
-    routes = map_def.robot_route_by_spawn_id[spawn_id]
-    route = sample(routes, 1)[0]
+    routes = map_def.robot_routes_by_spawn_id[spawn_id]
+    route = sample(routes, k=1)[0]
     initial_spawn = sample_zone(route.spawn_zone, 1)[0]
     final_goal = sample_zone(route.goal_zone, 1)[0]
     route = [initial_spawn] + route.waypoints + [final_goal]

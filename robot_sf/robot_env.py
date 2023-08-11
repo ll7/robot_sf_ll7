@@ -168,12 +168,16 @@ def init_collision_and_sensors(
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
         for i in range(num_robots)]
 
-    ray_sensors = [lambda: lidar_ray_scan(r.pose, o, lidar_config) for r, o in zip(sim.robots, occupancies)]
-    target_sensors = [lambda: target_sensor_obs(r.pose, g, ng)
-                        for r, g, ng in zip(sim.robots, sim.goal_pos, sim.next_goal_pos)]
-    speed_sensors = [lambda: r.current_speed for r in sim.robots]
-    sensor_fusions = [SensorFusion(lidar, speed, goal, orig_obs_space, sim_config.use_next_goal)
-                      for speed, lidar, goal in zip(speed_sensors, ray_sensors, target_sensors)]
+    sensor_fusions: List[SensorFusion] = []
+    for r_id in range(num_robots):
+        ray_sensor = lambda r_id=r_id: lidar_ray_scan(
+            sim.robots[r_id].pose, occupancies[r_id], lidar_config)
+        target_sensor = lambda r_id=r_id: target_sensor_obs(
+            sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
+        speed_sensor = lambda r_id=r_id: sim.robots[r_id].current_speed
+        sensor_fusions.append(SensorFusion(
+            ray_sensor, speed_sensor, target_sensor,
+            orig_obs_space, sim_config.use_next_goal))
 
     return occupancies, sensor_fusions
 
@@ -185,7 +189,7 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
         env_config.sim_config.stack_steps, robot.observation_space,
         target_sensor_space(map_def.max_target_dist),
         lidar_sensor_space(env_config.lidar_config.num_rays,
-                            env_config.lidar_config.max_scan_dist))
+                           env_config.lidar_config.max_scan_dist))
     return action_space, observation_space, orig_obs_space
 
 
@@ -209,8 +213,19 @@ class RobotEnv(Env):
         occupancies, sensors = init_collision_and_sensors(self.simulator, env_config, orig_obs_space)
         self.state = RobotState(self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time)
 
+        self.last_action = None
+        if debug:
+            self.sim_ui = SimulationView(
+                scaling=10,
+                obstacles=map_def.obstacles,
+                robot_radius=env_config.robot_config.radius,
+                ped_radius=env_config.sim_config.ped_radius,
+                goal_radius=env_config.sim_config.goal_radius)
+            self.sim_ui.show()
+
     def step(self, action):
         action = self.simulator.robots[0].parse_action(action)
+        self.last_action = action
         self.simulator.step_once([action])
         obs = self.state.step()
         meta = self.state.meta_dict()
@@ -224,8 +239,21 @@ class RobotEnv(Env):
         return obs
 
     def render(self):
-        # TODO: add support for PyGame rendering
-        pass
+        if not self.sim_ui:
+            raise RuntimeError('Debug mode is not activated! Consider setting debug=True!')
+
+        action = None if not self.last_action else VisualizableAction(
+            self.simulator.robot_poses[0], self.last_action, self.simulator.goal_pos[0])
+
+        state = VisualizableSimState(
+            self.state.timestep, action, self.simulator.robot_poses[0],
+            deepcopy(self.simulator.ped_pos))
+
+        self.sim_ui.render(state)
+
+    def exit(self):
+        if self.sim_ui:
+            self.sim_ui.exit()
 
 
 class MultiRobotEnv(VectorEnv):

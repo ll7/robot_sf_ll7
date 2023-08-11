@@ -86,18 +86,18 @@ class MapDefinition:
     ped_crowded_zones: List[Rect]
     ped_routes: List[GlobalRoute]
     obstacles_pysf: List[Line2D] = field(init=False)
-    robot_route_by_spawn_id: Dict[int, List[GlobalRoute]] = field(init=False)
+    robot_routes_by_spawn_id: Dict[int, List[GlobalRoute]] = field(init=False)
 
     def __post_init__(self):
         obstacle_lines = [line for o in self.obstacles for line in o.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
-        self.robot_route_by_spawn_id = dict()
+        self.robot_routes_by_spawn_id = dict()
         for route in self.robot_routes:
-            if route.spawn_id in self.robot_route_by_spawn_id:
-                self.robot_route_by_spawn_id[route.spawn_id].append(route)
+            if route.spawn_id in self.robot_routes_by_spawn_id:
+                self.robot_routes_by_spawn_id[route.spawn_id].append(route)
             else:
-                self.robot_route_by_spawn_id[route.spawn_id] = [route]
+                self.robot_routes_by_spawn_id[route.spawn_id] = [route]
 
         if self.width < 0 or self.height < 0:
             raise ValueError("Map width and height mustn't be zero or negative!")

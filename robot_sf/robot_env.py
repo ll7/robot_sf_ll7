@@ -1,9 +1,10 @@
-from __future__ import annotations
 from math import ceil
 from typing import Tuple, Callable, List, Protocol, Any
 from dataclasses import dataclass, field
 from copy import deepcopy
+from multiprocessing.pool import ThreadPool
 
+import numpy as np
 from gym.vector import VectorEnv
 from gym import Env, spaces
 from robot_sf.nav.map_config import MapDefinition
@@ -216,7 +217,7 @@ class RobotEnv(Env):
         self.last_action = None
         if debug:
             self.sim_ui = SimulationView(
-                scaling=10,
+                scaling=6,
                 obstacles=map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
@@ -258,7 +259,7 @@ class RobotEnv(Env):
 
 class MultiRobotEnv(VectorEnv):
     """Representing an OpenAI Gym environment for training
-    a self-driving robot with reinforcement learning"""
+    multiple self-driving robots with reinforcement learning"""
 
     def __init__(
             self, env_config: EnvSettings = EnvSettings(),
@@ -268,6 +269,10 @@ class MultiRobotEnv(VectorEnv):
         map_def = env_config.map_pool.map_defs[0] # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
         super(MultiRobotEnv, self).__init__(num_robots, observation_space, action_space)
+        self.action_space = spaces.Box(
+            low=np.array([self.single_action_space.low for _ in range(num_robots)]),
+            high=np.array([self.single_action_space.high for _ in range(num_robots)]),
+            dtype=self.single_action_space.low.dtype)
 
         self.reward_func, self.debug = reward_func, debug
         self.simulators = init_simulators(env_config, map_def, num_robots)
@@ -281,6 +286,9 @@ class MultiRobotEnv(VectorEnv):
                       for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors)]
             self.states.extend(states)
 
+        self.sim_worker_pool = ThreadPool(len(self.simulators))
+        self.obs_worker_pool = ThreadPool(num_robots)
+
     def step(self, actions):
         actions = [self.simulators[0].robots[0].parse_action(a) for a in actions]
         i = 0
@@ -290,15 +298,15 @@ class MultiRobotEnv(VectorEnv):
             actions_per_simulator.append(actions[i:i+num_robots])
             i += num_robots
 
-        # TODO: parallelize
-        for sim, sim_actions in zip(self.simulators, actions_per_simulator):
-            sim.step_once(sim_actions)
+        self.sim_worker_pool.map(
+            lambda s_a: s_a[0].step_once(s_a[1]),
+            zip(self.simulators, actions_per_simulator))
 
-        # TODO: parallelize
-        obs = [state.step() for state in self.states]
+        obs = self.obs_worker_pool.map(lambda s: s.step(), self.states)
 
         metas = [state.meta_dict() for state in self.states]
         masked_metas = [{ "step": meta["step"], "meta": meta } for meta in metas]
+        masked_metas = (*masked_metas,)
         terms = [state.is_terminal for state in self.states]
         rewards = [self.reward_func(meta) for meta in metas]
 
@@ -307,22 +315,23 @@ class MultiRobotEnv(VectorEnv):
                 sim.reset_state()
                 obs[i] = state.reset()
 
-        obs = { OBS_DRIVE_STATE: [o[OBS_DRIVE_STATE] for o in obs],
-                OBS_RAYS: [o[OBS_RAYS] for o in obs] }
+        obs = { OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
+                OBS_RAYS: np.array([o[OBS_RAYS] for o in obs])}
 
         return obs, rewards, terms, masked_metas
 
     def reset(self):
-        # TODO: parallelize
-        for sim in self.simulators:
-            sim.reset_state()
-        obs = [state.reset() for state in self.states]
+        self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
+        obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
 
-        return {
-            OBS_DRIVE_STATE: [o[OBS_DRIVE_STATE] for o in obs],
-            OBS_RAYS: [o[OBS_RAYS] for o in obs],
-        }
+        obs = { OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
+                OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]) }
+        return obs
 
     def render(self, robot_id: int=0):
         # TODO: add support for PyGame rendering
         pass
+
+    def close_extras(self, **kwargs):
+        self.sim_worker_pool.close()
+        self.obs_worker_pool.close()

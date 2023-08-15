@@ -16,9 +16,9 @@ class DynamicsExtractor(BaseFeaturesExtractor):
     def __init__(
             self, observation_space: spaces.Dict,
             use_ray_conv: bool=True,
-            num_filters: List[int]=[256, 256, 64, 32],
-            kernel_sizes: List[int]=[5, 5, 5, 3],
-            dropout_rates: List[float]=[0.1, 0.1, 0.3, 0.3]):
+            num_filters: List[int]=[64, 16, 16, 16],
+            kernel_sizes: List[int]=[3, 3, 3, 3],
+            dropout_rates: List[float]=[0.3, 0.3, 0.3, 0.3]):
         rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
         drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
         drive_state_features = np.prod(drive_state_space.shape)

@@ -65,7 +65,14 @@ python3 -m pytest tests
 python3 -m pylint robot_sf
 ```
 
-### 5. Run StableBaselines Training (Docker)
+### 5. Run Visual Debugging of Pre-Trained Demo Models
+
+```sh
+python3 demo_offensive.py
+python3 demo_defensive.py
+```
+
+### 6. Run StableBaselines Training (Docker)
 
 ```sh
 docker-compose build && docker-compose run \
@@ -74,7 +81,7 @@ docker-compose build && docker-compose run \
 
 *Note: See [this setup](./docs/GPU_SETUP.md) to install Docker with GPU support.*
 
-### 6. Edit Maps
+### 7. Edit Maps
 
 ```sh
 sudo apt-get update && sudo apt-get install -y python3-tk
@@ -85,25 +92,6 @@ python3 -m map_editor
 ```
 
 *Note: See [this documentation](./docs/MAP_EDITOR_USAGE.md) on how to use the map editor.*
-
-### 7. Visual Debugging
-
-```sh
-cp scripts/debug_random_policy.py .
-python3 debug_random_policy.py
-```
-
-```sh
-mkdir model
-pushd model;
-    wget https://megastore.rz.uni-augsburg.de/get/0oxVNm_Boo/ -O ppo_model.zip
-popd
-```
-
-```sh
-cp scripts/debug_trained_policy.py .
-python3 debug_trained_policy.py
-```
 
 ### 8. Optimize Training Hyperparams (Docker)
 

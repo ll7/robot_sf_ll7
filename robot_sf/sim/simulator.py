@@ -1,6 +1,5 @@
-from math import atan2
 from dataclasses import dataclass, field
-from typing import List, Tuple, Union, Callable
+from typing import List, Tuple, Union
 
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.simulator import make_forces as pysf_make_forces
@@ -31,9 +30,9 @@ class Simulator:
     map_def: MapDefinition
     robots: List[Robot]
     goal_proximity_threshold: float
+    random_start_pos: bool
     robot_navs: List[RouteNavigator] = field(init=False)
     pysf_sim: PySFSimulator = field(init=False)
-    sample_route: Callable[[], List[Vec2D]] = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
     peds_behaviors: List[PedestrianBehavior] = field(init=False)
@@ -90,10 +89,9 @@ class Simulator:
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, i)
+                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
                 nav.new_route(waypoints[1:])
-                new_orient = atan2(waypoints[1][1] - waypoints[0][1], waypoints[1][0] - waypoints[0][0])
-                robot.reset_state((waypoints[0], new_orient))
+                robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: List[RobotAction]):
         for behavior in self.peds_behaviors:

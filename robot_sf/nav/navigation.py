@@ -1,5 +1,5 @@
 from random import sample, randint
-from math import dist
+from math import dist, atan2
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 
@@ -32,6 +32,11 @@ class RouteNavigator:
         return self.waypoints[self.waypoint_id + 1] \
             if self.waypoint_id + 1 < len(self.waypoints) else None
 
+    @property
+    def initial_orientation(self) -> float:
+        return atan2(self.waypoints[1][1] - self.waypoints[0][1],
+                     self.waypoints[1][0] - self.waypoints[0][0])
+
     def update_position(self, pos: Vec2D):
         reached_waypoint = dist(self.current_waypoint, pos) <= self.proximity_threshold
         if reached_waypoint:
@@ -49,7 +54,7 @@ def sample_route(
         spawn_id: Optional[int]=None) -> List[Vec2D]:
 
     spawn_id = spawn_id if spawn_id is not None else \
-        randint(0, len(map_def.robot_spawn_zones) - 1)
+        randint(0, map_def.num_start_pos - 1)
     routes = map_def.robot_routes_by_spawn_id[spawn_id]
     route = sample(routes, k=1)[0]
     initial_spawn = sample_zone(route.spawn_zone, 1)[0]

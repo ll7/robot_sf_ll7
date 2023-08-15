@@ -142,7 +142,9 @@ def simple_reward(
     return reward
 
 
-def init_simulators(env_config: EnvSettings, map_def: MapDefinition, num_robots: int = 1):
+def init_simulators(
+        env_config: EnvSettings, map_def: MapDefinition,
+        num_robots: int = 1, random_start_pos: bool = True) -> List[Simulator]:
     num_sims = ceil(num_robots / map_def.num_start_pos)
     goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
     sims: List[Simulator] = []
@@ -150,7 +152,10 @@ def init_simulators(env_config: EnvSettings, map_def: MapDefinition, num_robots:
     for i in range(num_sims):
         n = map_def.num_start_pos if i < num_sims - 1 else num_robots % map_def.num_start_pos
         sim_robots = [env_config.robot_factory() for _ in range(n)]
-        sims.append(Simulator(env_config.sim_config, map_def, sim_robots, goal_proximity))
+        sim = Simulator(
+            env_config.sim_config, map_def, sim_robots,
+            goal_proximity, random_start_pos)
+        sims.append(sim)
 
     return sims
 
@@ -207,7 +212,7 @@ class RobotEnv(Env):
         self.action_space, self.observation_space, orig_obs_space = init_spaces(env_config, map_def)
 
         self.reward_func, self.debug = reward_func, debug
-        self.simulator = init_simulators(env_config, map_def)[0]
+        self.simulator = init_simulators(env_config, map_def, random_start_pos=True)[0]
         d_t = env_config.sim_config.time_per_step_in_secs
         max_ep_time = env_config.sim_config.sim_time_in_secs
 
@@ -217,7 +222,7 @@ class RobotEnv(Env):
         self.last_action = None
         if debug:
             self.sim_ui = SimulationView(
-                scaling=6,
+                scaling=10,
                 obstacles=map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
@@ -275,7 +280,7 @@ class MultiRobotEnv(VectorEnv):
             dtype=self.single_action_space.low.dtype)
 
         self.reward_func, self.debug = reward_func, debug
-        self.simulators = init_simulators(env_config, map_def, num_robots)
+        self.simulators = init_simulators(env_config, map_def, num_robots, random_start_pos=False)
         self.states: List[RobotState] = []
         d_t = env_config.sim_config.time_per_step_in_secs
         max_ep_time = env_config.sim_config.sim_time_in_secs

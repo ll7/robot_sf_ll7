@@ -177,7 +177,7 @@ def init_collision_and_sensors(
     sensor_fusions: List[SensorFusion] = []
     for r_id in range(num_robots):
         ray_sensor = lambda r_id=r_id: lidar_ray_scan(
-            sim.robots[r_id].pose, occupancies[r_id], lidar_config)
+            sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
         target_sensor = lambda r_id=r_id: target_sensor_obs(
             sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
         speed_sensor = lambda r_id=r_id: sim.robots[r_id].current_speed
@@ -208,6 +208,7 @@ class RobotEnv(Env):
             reward_func: Callable[[dict], float] = simple_reward,
             debug: bool = False):
 
+        self.env_config = env_config
         map_def = env_config.map_pool.map_defs[0] # info: only use first map
         self.action_space, self.observation_space, orig_obs_space = init_spaces(env_config, map_def)
 
@@ -251,9 +252,19 @@ class RobotEnv(Env):
         action = None if not self.last_action else VisualizableAction(
             self.simulator.robot_poses[0], self.last_action, self.simulator.goal_pos[0])
 
+        robot_pos = self.simulator.robot_poses[0][0]
+        distances, directions = lidar_ray_scan(
+            self.simulator.robot_poses[0], self.state.occupancy, self.env_config.lidar_config)
+        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
+        ray_vecs_np = np.array(
+            [[[robot_pos[0], robot_pos[1]], [robot_pos[0] + x, robot_pos[1] + y]] for x, y in ray_vecs])
+        ped_actions = zip(self.simulator.pysf_sim.peds.pos(),
+                          self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2)
+        ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
+
         state = VisualizableSimState(
             self.state.timestep, action, self.simulator.robot_poses[0],
-            deepcopy(self.simulator.ped_pos))
+            deepcopy(self.simulator.ped_pos), ray_vecs_np, ped_actions_np)
 
         self.sim_ui.render(state)
 

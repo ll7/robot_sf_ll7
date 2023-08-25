@@ -7,7 +7,7 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 
 def training():
     env_config = EnvSettings(
-        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.06]),
+        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True))
     env = RobotEnv(env_config, debug=True)
     model = PPO.load("./model/run_043", env=env)

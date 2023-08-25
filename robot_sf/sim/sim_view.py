@@ -28,7 +28,9 @@ PED_COLOR = (255, 50, 50)
 ROBOT_COLOR = (0, 0, 200)
 COLLISION_COLOR = (200, 0, 0)
 ROBOT_ACTION_COLOR = (65, 105, 225)
+PED_ACTION_COLOR = (255, 50, 50)
 ROBOT_GOAL_COLOR = (0, 204, 102)
+ROBOT_LIDAR_COLOR = (238, 160, 238, 128)
 TEXT_COLOR = (0, 0, 0)
 
 
@@ -47,6 +49,8 @@ class VisualizableSimState:
     action: Union[VisualizableAction, None]
     robot_pose: RobotPose
     pedestrian_positions: np.ndarray
+    ray_vecs: np.ndarray
+    ped_actions: np.ndarray
     # obstacles: List[Obstacle]
 
 
@@ -134,15 +138,18 @@ class SimulationView:
                 exit()
         if self.size_changed:
             self._resize_window()
+            self.size_changed = False
 
         state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_obstacles(offset)
+        self._augment_lidar(state.ray_vecs)
+        self._augment_ped_actions(state.ped_actions)
         if state.action:
-            self._augment_action_vector(state.action)
+            self._augment_robot_action(state.action)
             self._augment_goal_position(state.action.robot_goal)
-        self._draw_robot(state.robot_pose)
         self._draw_pedestrians(state.pedestrian_positions)
+        self._draw_robot(state.robot_pose)
         self._augment_timestep(state.timestep)
         pygame.display.update()
 
@@ -151,7 +158,6 @@ class SimulationView:
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
-        self.size_changed = False
 
     def _zoom_camera(self, state: VisualizableSimState) \
             -> Tuple[VisualizableSimState, Tuple[float, float]]:
@@ -160,6 +166,10 @@ class SimulationView:
         y_offset = r_y * self.scaling - self.height / 2
         state.pedestrian_positions *= self.scaling
         state.pedestrian_positions -= [x_offset, y_offset]
+        state.ped_actions *= self.scaling
+        state.ped_actions -= [x_offset, y_offset]
+        state.ray_vecs *= self.scaling
+        state.ray_vecs -= [x_offset, y_offset]
         state.robot_pose = ((
             state.robot_pose[0][0] * self.scaling - x_offset,
             state.robot_pose[0][1] * self.scaling - y_offset),
@@ -191,7 +201,11 @@ class SimulationView:
         # TODO: display pedestrians with an image instead of a circle
         pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.goal_radius * self.scaling)
 
-    def _augment_action_vector(self, action: VisualizableAction):
+    def _augment_lidar(self, ray_vecs: np.ndarray):
+        for p1, p2 in ray_vecs:
+            pygame.draw.line(self.screen, ROBOT_LIDAR_COLOR, p1, p2)
+
+    def _augment_robot_action(self, action: VisualizableAction):
         r_x, r_y = action.robot_pose[0]
         vec_length, vec_orient = action.robot_action[0] * self.scaling * 3, action.robot_pose[1]
 
@@ -202,7 +216,11 @@ class SimulationView:
             return v_1[0] + v_2[0], v_1[1] + v_2[1]
 
         vec_x, vec_y = add_vec((r_x, r_y), from_polar(vec_length, vec_orient))
-        pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, (r_x, r_y), (vec_x, vec_y))
+        pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, (r_x, r_y), (vec_x, vec_y), width=3)
+
+    def _augment_ped_actions(self, ped_actions: np.ndarray):
+        for p1, p2 in ped_actions:
+            pygame.draw.line(self.screen, PED_ACTION_COLOR, p1, p2, width=3)
 
     def _augment_timestep(self, timestep: int):
         # TODO: show map name as well

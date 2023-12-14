@@ -150,7 +150,8 @@ def init_simulators(
     sims: List[Simulator] = []
 
     for i in range(num_sims):
-        n = map_def.num_start_pos if i < num_sims - 1 else num_robots % map_def.num_start_pos
+        n = map_def.num_start_pos if i < num_sims - 1 \
+            else max(1, num_robots % map_def.num_start_pos)
         sim_robots = [env_config.robot_factory() for _ in range(n)]
         sim = Simulator(
             env_config.sim_config, map_def, sim_robots,

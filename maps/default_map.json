@@ -1,0 +1,42 @@
+{
+    "version": "1.0",
+    "name": "default_map",
+    "bounds": {
+        "x_margin": [-100, 100],
+        "y_margin": [-200, 200]
+    },
+    "ped_routes": [
+        {
+            "name": "route_1",
+            "waypoints": [
+                [0, 0],
+                [0, 100],
+                [100, 100],
+                [100, 0],
+                [0, 0]
+            ],
+            "reversible": "true"
+        }
+    ],
+    "crowded_zones": [
+        {
+            "name": "zone_1",
+            "zone_rect": [
+                [40, -40],
+                [40, -20],
+                [60, -20]
+            ]
+        }
+    ],
+    "obstacles": [
+        {
+            "name": "obstacle_1",
+            "vertices": [
+                [20, 20],
+                [20, 40],
+                [40, 40],
+                [40, 20]
+            ]
+        }
+    ]
+}

@@ -1,6 +1,5 @@
 from time import sleep
-from math import sin, cos
-from typing import Tuple, Union, List
+from typing import Tuple, List
 from dataclasses import dataclass, field
 from threading import Thread
 from signal import signal, SIGINT
@@ -12,6 +11,7 @@ import pygame
 import numpy as np
 
 from pysocialforce.map_config import Obstacle
+from pysocialforce.simulator import SimState
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -34,6 +34,17 @@ class VisualizableSimState:
     timestep: int
     pedestrian_positions: np.ndarray
     ped_actions: np.ndarray
+
+
+def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimState:
+    state, groups = sim_state
+    ped_pos = np.array(state[:, 0:2])
+    ped_vel = np.array(state[:, 2:4])
+    actions = np.concatenate((
+            np.expand_dims(ped_pos, axis=1),
+            np.expand_dims(ped_pos + ped_vel, axis=1)
+        ), axis=1)
+    return VisualizableSimState(step, ped_pos, actions)
 
 
 @dataclass

@@ -55,7 +55,7 @@ class Simulator_v2:
             populate_simulation(
                 s.scene_config.tau, s.ped_spawn_config,
                 m.routes, m.crowded_zones),
-            on_step: Callable[[SimState], None] = lambda s: None):
+            on_step: Callable[[int, SimState], None] = lambda t, s: None):
         """
         Initializes a Simulator_v2 object.
 
@@ -77,6 +77,7 @@ class Simulator_v2:
             self.groupings.groups_as_lists,
             self.config.scene_config)
         self.forces = make_forces(self, config)
+        self.t = 0
 
     @property
     def current_state(self) -> SimState:
@@ -135,7 +136,7 @@ class Simulator_v2:
         for behavior in self.behaviors:
             behavior.step()
 
-    def step(self, n=1):
+    def step(self, n: int=1):
         """
         Performs n steps in the simulation.
 
@@ -147,8 +148,8 @@ class Simulator_v2:
         """
         for _ in range(n):
             self._step_once()
-            self.on_step(self.current_state)
-        return self
+            self.on_step(self.t, self.current_state)
+            self.t += 1
 
 
 class Simulator:
@@ -157,13 +158,14 @@ class Simulator:
                  obstacles: List[Line2D]=None,
                  config: SimulatorConfig=SimulatorConfig(),
                  make_forces: Callable[[Simulator, SimulatorConfig], List[forces.Force]]=make_forces,
-                 on_step: Callable[[SimState], None] = lambda s: None):
+                 on_step: Callable[[int, SimState], None] = lambda t, s: None):
         self.config = config
         self.on_step = on_step
         resolution = self.config.scene_config.resolution
         self.env = EnvState(obstacles, resolution)
         self.peds = PedState(state, groups, self.config.scene_config)
         self.forces = make_forces(self, config)
+        self.t = 0
 
     def compute_forces(self):
         """compute forces"""
@@ -198,5 +200,5 @@ class Simulator:
         """Step n time"""
         for _ in range(n):
             self.step_once()
-            self.on_step(self.current_state)
-        return self
+            self.on_step(self.t, self.current_state)
+            self.t += 1

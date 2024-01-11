@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from pysocialforce import stateutils
 from pysocialforce.config import SceneConfig
 
 
@@ -71,7 +70,7 @@ class PedState:
 
     def speeds(self):
         """Return the speeds corresponding to a given state."""
-        return stateutils.speeds(self.state)
+        return np.linalg.norm(self.vel(), axis=1)
 
     def step(self, force, groups=None):
         """Move peds according to forces"""
@@ -79,7 +78,7 @@ class PedState:
         desired_velocity = self.vel() + self.d_t * force
         desired_velocity = self.capped_velocity(desired_velocity, self.max_speeds)
         # stop when arrived
-        desired_velocity[stateutils.desired_directions(self.state)[1] < 0.5] = [0, 0]
+        # desired_velocity[stateutils.desired_directions(self.state)[1] < 0.5] = [0, 0]
 
         # update state
         next_state = self.state
@@ -88,8 +87,8 @@ class PedState:
         next_groups = groups if groups is not None else self.groups
         self.update(next_state, next_groups)
 
-    def desired_directions(self):
-        return stateutils.desired_directions(self.state)[0]
+    # def desired_directions(self):
+    #     return stateutils.desired_directions(self.state)[0]
 
     @staticmethod
     def capped_velocity(desired_velocity, max_velocity):

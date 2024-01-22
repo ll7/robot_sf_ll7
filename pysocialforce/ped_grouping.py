@@ -1,3 +1,9 @@
+"""
+ped_grouping.py
+Handles the 
+- PedstrianStates
+- PedestrianGroupings
+"""
 from typing import List, Set, Dict, Tuple
 from dataclasses import dataclass, field
 from copy import deepcopy
@@ -28,31 +34,90 @@ class PedestrianStates:
 
     @property
     def num_peds(self) -> int:
+        """
+        Get the number of pedestrians in the simulation.
+
+        Returns:
+            int: The number of pedestrians.
+        """
         return self.raw_states.shape[0]
 
     @property
     def ped_positions(self) -> np.ndarray:
+        """
+        Get the positions of the pedestrians.
+
+        Returns:
+            np.ndarray: An array containing the x and y coordinates of the pedestrians.
+        """
         return self.raw_states[:, 0:2]
-    
+
     @property
     def ped_velocities(self) -> np.ndarray:
+        """
+        Returns the velocities of the pedestrians.
+
+        Returns:
+            np.ndarray: An array containing the velocities of the pedestrians.
+        """
         return self.raw_states[:, 2:4]
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
+        """
+        Redirects the specified pedestrian to a new goal position.
+
+        Args:
+            ped_id (int): The ID of the pedestrian to redirect.
+            new_goal (Vec2D): The new goal position for the pedestrian.
+        """
         self.raw_states[ped_id, 4:6] = new_goal
 
     def reposition(self, ped_id: int, new_pos: Vec2D):
+        """
+        Repositions a pedestrian to a new position.
+
+        Args:
+            ped_id (int): The ID of the pedestrian to reposition.
+            new_pos (Vec2D): The new position to set for the pedestrian.
+        """
         self.raw_states[ped_id, 0:2] = new_pos
 
     def goal_of(self, ped_id: int) -> Vec2D:
+        """
+        Returns the goal position of a pedestrian.
+
+        Args:
+            ped_id (int): The ID of the pedestrian.
+
+        Returns:
+            Vec2D: The goal position of the pedestrian.
+        """
         pos_x, pos_y = self.raw_states[ped_id, 4:6]
         return (pos_x, pos_y)
 
     def pos_of(self, ped_id: int) -> Vec2D:
+        """
+        Returns the position of the pedestrian with the given ID.
+
+        Args:
+            ped_id (int): The ID of the pedestrian.
+
+        Returns:
+            Vec2D: The position of the pedestrian as a 2D vector.
+        """
         pos_x, pos_y = self.raw_states[ped_id, 0:2]
         return (pos_x, pos_y)
 
     def pos_of_many(self, ped_ids: Set[int]) -> np.ndarray:
+        """
+        Returns the positions of multiple pedestrians.
+
+        Args:
+            ped_ids (Set[int]): A set of pedestrian IDs.
+
+        Returns:
+            np.ndarray: An array containing the positions of the specified pedestrians.
+        """
         return self.raw_states[list(ped_ids), 0:2]
 
 

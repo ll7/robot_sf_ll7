@@ -20,6 +20,7 @@ Force = Callable[[], np.ndarray]
 
 class SimEntitiesProvider(Protocol):
     """Not implemented!!!"""
+
     def get_obstacles(self) -> List[np.ndarray]:
         raise NotImplementedError()
 
@@ -37,7 +38,7 @@ class DebuggableForce:
     def __init__(self, force: Force):
         self.force = force
 
-    def __call__(self, debug: bool=False):
+    def __call__(self, debug: bool = False):
         """
         Call the wrapped force and optionally log its value for debugging.
 
@@ -87,7 +88,8 @@ class DesiredForce:
         direction, dist = normalize(goal - pos)
         force = np.zeros((self.peds.size(), 2))
         force[dist > goal_threshold] = (
-            direction * self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
+            direction *
+            self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
         )[dist > goal_threshold, :]
         force[dist <= goal_threshold] = -1.0 * vel[dist <= goal_threshold]
         force /= relexation_time
@@ -126,7 +128,7 @@ def social_force(
         n: int, n_prime: int,
         lambda_importance: float,
         gamma: float
-        ) -> np.ndarray:
+) -> np.ndarray:
     """
     Calculates the social force acting on each pedestrian.
 
@@ -170,7 +172,7 @@ def social_force_single_ped(
         n: int, n_prime:
         int, lambda_importance:
         float, gamma: float
-        ) -> Point2D:
+) -> Point2D:
     """
     Calculates the social force exerted on a single pedestrian.
 
@@ -202,7 +204,7 @@ def social_force_ped_ped(
         n_prime: int,
         lambda_importance: float,
         gamma: float
-        ) -> Point2D:
+) -> Point2D:
     """
     Calculates the social force between two pedestrians.
 
@@ -222,15 +224,19 @@ def social_force_ped_ped(
     (diff_dir_x, diff_dir_y), diff_length = norm_vec((pos_diff_x, pos_diff_y))
     interaction_vec_x = lambda_importance * vel_diff_x + diff_dir_x
     interaction_vec_y = lambda_importance * vel_diff_y + diff_dir_y
-    interaction_dir, interaction_length = norm_vec((interaction_vec_x, interaction_vec_y))
+    interaction_dir, interaction_length = norm_vec(
+        (interaction_vec_x, interaction_vec_y))
     interaction_dir_x, interaction_dir_y = interaction_dir
 
-    theta = atan2(interaction_dir[1], interaction_dir[0]) - atan2(diff_dir_y, diff_dir_x)
+    theta = atan2(interaction_dir[1], interaction_dir[0]
+                  ) - atan2(diff_dir_y, diff_dir_x)
     theta_sign = 1 if theta >= 0 else -1
     B = gamma * interaction_length + 1e-8
 
-    force_velocity_amount = exp(-1.0 * diff_length / B - (n_prime * B * theta)**2)
-    force_angle_amount = -theta_sign * exp(-1.0 * diff_length / B - (n * B * theta)**2)
+    force_velocity_amount = exp(-1.0 * diff_length /
+                                B - (n_prime * B * theta)**2)
+    force_angle_amount = -theta_sign * \
+        exp(-1.0 * diff_length / B - (n * B * theta)**2)
     force_velocity_x = interaction_dir_x * force_velocity_amount
     force_velocity_y = interaction_dir_y * force_velocity_amount
     force_angle_x = -interaction_dir_y * force_angle_amount
@@ -294,10 +300,10 @@ def all_obstacle_forces(out_forces: np.ndarray, ped_positions: np.ndarray,
 
 @njit(fastmath=True)
 def obstacle_force(obstacle: Line2D,
-        ortho_vec: Point2D,
-        ped_pos: Point2D,
-        ped_radius: float
-        ) -> Tuple[float, float]:
+                   ortho_vec: Point2D,
+                   ped_pos: Point2D,
+                   ped_radius: float
+                   ) -> Tuple[float, float]:
     """The obstacle force between a line segment (= obstacle) and
     a point (= pedestrian's position) is computed as follows:
     1) compute the distance between the line segment and the point
@@ -312,12 +318,15 @@ def obstacle_force(obstacle: Line2D,
 
     coll_dist = 1e-5
     x1, y1, x2, y2 = obstacle
-    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] + ortho_vec[0], ped_pos[1] + ortho_vec[1])
+    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] +
+                                   ortho_vec[0], ped_pos[1] + ortho_vec[1])
 
     # handle edge case where the obstacle is just a point
     if (x1, y1) == (x2, y2):
-        obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], x1, y1) - ped_radius, coll_dist)
-        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos, (x1, y1), obst_dist)
+        obst_dist = max(euclid_dist(
+            ped_pos[0], ped_pos[1], x1, y1) - ped_radius, coll_dist)
+        dx_obst_dist, dy_obst_dist = der_euclid_dist(
+            ped_pos, (x1, y1), obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
     # info: there's always an intersection with the orthogonal vector
@@ -332,20 +341,22 @@ def obstacle_force(obstacle: Line2D,
         d2 = euclid_dist(ped_pos[0], ped_pos[1], x2, y2)
         obst_dist = max(min(d1, d2) - ped_radius, coll_dist)
         closer_obst_bound = (x1, y1) if d1 < d2 else (x2, y2)
-        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos, closer_obst_bound, obst_dist)
+        dx_obst_dist, dy_obst_dist = der_euclid_dist(
+            ped_pos, closer_obst_bound, obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
     # orthogonal vector hits within segment bounds
     cross_x, cross_y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
-    obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], cross_x, cross_y) - ped_radius, coll_dist)
+    obst_dist = max(euclid_dist(
+        ped_pos[0], ped_pos[1], cross_x, cross_y) - ped_radius, coll_dist)
     dx3_cross_x = (y4 - y3) / den * (x2 - x1)
     dx3_cross_y = (y4 - y3) / den * (y2 - y1)
     dy3_cross_x = (x3 - x4) / den * (x2 - x1)
     dy3_cross_y = (x3 - x4) / den * (y2 - y1)
-    dx_obst_dist = ((cross_x - ped_pos[0]) * (dx3_cross_x - 1) \
-        + (cross_y - ped_pos[1]) * dx3_cross_y) / obst_dist
-    dy_obst_dist = ((cross_x - ped_pos[0]) * dy3_cross_x \
-        + (cross_y - ped_pos[1]) * (dy3_cross_y - 1)) / obst_dist
+    dx_obst_dist = ((cross_x - ped_pos[0]) * (dx3_cross_x - 1)
+                    + (cross_y - ped_pos[1]) * dx3_cross_y) / obst_dist
+    dy_obst_dist = ((cross_x - ped_pos[0]) * dy3_cross_x
+                    + (cross_y - ped_pos[1]) * (dy3_cross_y - 1)) / obst_dist
     return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
 
@@ -458,7 +469,7 @@ def group_gaze_force(
         member_pos: np.ndarray,
         member_directions: np.ndarray,
         member_dist: np.ndarray
-        ) -> np.ndarray:
+) -> np.ndarray:
     """
     Calculates the group gaze force for each member in a group.
 
@@ -475,33 +486,33 @@ def group_gaze_force(
 
     # Initialize a zero array to store the output forces for each member, size Nx2 for N members and 2D forces.
     out_forces = np.zeros((group_size, 2))
-    
+
     # Iterate over all group members to calculate the force that each should experience.
     for i in range(group_size):
         # Calculate the center of mass of the other members excluding the current member.
         other_member_pos = member_pos[np.arange(group_size) != i, :2]
         mass_center_without_ped = centroid(other_member_pos)
-        
+
         # Compute the relative vector pointing from the current member's position to this center of mass.
         relative_com_x = mass_center_without_ped[0] - member_pos[i, 0]
         relative_com_y = mass_center_without_ped[1] - member_pos[i, 1]
 
         # Normalize this vector and get the distance to the center of mass.
         com_dir, com_dist = norm_vec((relative_com_x, relative_com_y))
-        
-        # Calculate the dot product between the pedestrian’s direction and the vector 
-        # pointing towards the center of mass. This will be used to determine 
+
+        # Calculate the dot product between the pedestrian’s direction and the vector
+        # pointing towards the center of mass. This will be used to determine
         # the alignment of the pedestrian's gaze with the group's common direction.
         ped_dir_x, ped_dir_y = member_directions[i]
         element_prod = ped_dir_x * com_dir[0] + ped_dir_y * com_dir[1]
-        
-        # Weigh the influence by the distance to the center of mass and the 
+
+        # Weigh the influence by the distance to the center of mass and the
         # aforementioned dot product, normalized by the member’s desired separation distance.
         factor = com_dist * element_prod / member_dist[i]
-        
+
         # Project the computed factor onto the pedestrian's direction to obtain the force components.
         force_x, force_y = ped_dir_x * factor, ped_dir_y * factor
-        
+
         # Assign the calculated force to the output array for the current member.
         out_forces[i, 0] = force_x
         out_forces[i, 1] = force_y
@@ -578,6 +589,9 @@ def centroid(vecs: np.ndarray) -> Tuple[float, float]:
     Returns:
     Tuple[float, float]: A tuple containing the x and y coordinates of the centroid.
     """
+    # Check if the array is empty
+    if vecs.size == 0:
+        raise ValueError("Input array is empty")
 
     # Determine the number of data points in the array
     num_datapoints = vecs.shape[0]

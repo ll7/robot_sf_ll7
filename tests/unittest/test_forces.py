@@ -32,7 +32,7 @@ class TestCentroidFunction(unittest.TestCase):
 
     def test_empty_array(self):
         """Test that the centroid of an empty array raises an error."""
-        points = np.array([])
+        points = np.array([], dtype=np.float64).reshape(0, 2)
         with self.assertRaises(ValueError):
             centroid(points)
 

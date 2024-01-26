@@ -565,12 +565,34 @@ def each_diff(vecs: np.ndarray, keepdims=False) -> np.ndarray:
 
 @njit
 def centroid(vecs: np.ndarray) -> Tuple[float, float]:
-    """Center-of-mass of a given group as arithmetic mean."""
+    """
+    Compute the centroid of a set of points in 2D space.
+
+    The centroid is calculated as the arithmetic mean (average) 
+    of all the points. It is often referred to as the "center of gravity" or 
+    "geometric center" of a two-dimensional shape.
+
+    Parameters:
+    vecs (np.ndarray): An array of points where each point is represented as [x, y].
+
+    Returns:
+    Tuple[float, float]: A tuple containing the x and y coordinates of the centroid.
+    """
+
+    # Determine the number of data points in the array
     num_datapoints = vecs.shape[0]
+
+    # Initialize sums for x and y coordinates
     centroid_x, centroid_y = 0, 0
+
+    # Sum up all x and y coordinates
     for x, y in vecs:
         centroid_x += x
         centroid_y += y
+
+    # Divide by the number of points to get the average for each dimension
     centroid_x /= num_datapoints
     centroid_y /= num_datapoints
+
+    # Return the centroid coordinates as a tuple
     return centroid_x, centroid_y

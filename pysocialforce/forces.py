@@ -316,6 +316,7 @@ def obstacle_force(obstacle: Line2D,
         obstacle: A tuple representing the endpoints (x1, y1, x2, y2) of the
                   line segment that forms the obstacle.
         ortho_vec: A vector orthogonal to the direction of pedestrian movement.
+            # TODO Is this correct?
         ped_pos: The current position (x, y) of the pedestrian.
         ped_radius: The radius of the pedestrian (used for collision avoidance).
 

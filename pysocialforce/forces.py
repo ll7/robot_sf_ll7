@@ -304,59 +304,73 @@ def obstacle_force(obstacle: Line2D,
                    ped_pos: Point2D,
                    ped_radius: float
                    ) -> Tuple[float, float]:
-    """The obstacle force between a line segment (= obstacle) and
-    a point (= pedestrian's position) is computed as follows:
-    1) compute the distance between the line segment and the point
-    2) compute the repulsive force, i.e. the partial derivative by x/y of the point
-    regarding the virtual potential field denoted as 1 / (2 * dist(line_seg, point)^2)
-    3) return the force as separate x/y components
+    """
+    Calculate the repulsive force exerted by an obstacle on a pedestrian.
 
-    There are 3 cases to be considered for computing the distance:
-    1) obstacle is just a point instead of a line segment
-    2) orthogonal projection hits within the obstacle's line segment
-    3) orthogonal projection doesn't hit within the obstacle's line segment"""
+    The force is calculated based on the distance from the pedestrian to the
+    nearest point on the obstacle and the gradient of the potential field at
+    that point. The potential field is inversely proportional to the square of
+    the distance to the obstacle.
 
+    Args:
+        obstacle: A tuple representing the endpoints (x1, y1, x2, y2) of the
+                  line segment that forms the obstacle.
+        ortho_vec: A vector orthogonal to the direction of pedestrian movement.
+        ped_pos: The current position (x, y) of the pedestrian.
+        ped_radius: The radius of the pedestrian (used for collision avoidance).
+
+    Returns:
+        A tuple (force_x, force_y) representing the x and y components of the
+        repulsive force exerted by the obstacle on the pedestrian.
+    """
+
+    # Minimum distance to consider for collision calculations.
     coll_dist = 1e-5
-    x1, y1, x2, y2 = obstacle
-    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] +
-                                   ortho_vec[0], ped_pos[1] + ortho_vec[1])
 
-    # handle edge case where the obstacle is just a point
+    # Unpack obstacle endpoints and calculate orthogonal projection points.
+    x1, y1, x2, y2 = obstacle
+    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] + ortho_vec[0],
+                                   ped_pos[1] + ortho_vec[1])
+
+    # Case 1: Obstacle is a single point (no length).
     if (x1, y1) == (x2, y2):
-        obst_dist = max(euclid_dist(
-            ped_pos[0], ped_pos[1], x1, y1) - ped_radius, coll_dist)
-        dx_obst_dist, dy_obst_dist = der_euclid_dist(
-            ped_pos, (x1, y1), obst_dist)
+        obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], x1, y1) -
+                        ped_radius, coll_dist)
+        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos, (x1, y1),
+                                                     obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
-    # info: there's always an intersection with the orthogonal vector
+    # Calculate intersection of orthogonal projection with obstacle line.
     num = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)
     den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
     t = num / den
-    ortho_hit = 0 <= t <= 1
+    ortho_hit = 0 <= t <= 1  # Check if intersection is within segment bounds.
 
-    # orthogonal vector doesn't hit within segment bounds
+    # Case 3: Orthogonal projection does not hit within the obstacle segment.
     if not ortho_hit:
         d1 = euclid_dist(ped_pos[0], ped_pos[1], x1, y1)
         d2 = euclid_dist(ped_pos[0], ped_pos[1], x2, y2)
         obst_dist = max(min(d1, d2) - ped_radius, coll_dist)
         closer_obst_bound = (x1, y1) if d1 < d2 else (x2, y2)
-        dx_obst_dist, dy_obst_dist = der_euclid_dist(
-            ped_pos, closer_obst_bound, obst_dist)
+        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos,
+                                                     closer_obst_bound,
+                                                     obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
-    # orthogonal vector hits within segment bounds
+    # Case 2: Orthogonal projection hits within the obstacle segment.
     cross_x, cross_y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
-    obst_dist = max(euclid_dist(
-        ped_pos[0], ped_pos[1], cross_x, cross_y) - ped_radius, coll_dist)
+    obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], cross_x, cross_y) -
+                    ped_radius, coll_dist)
+    # Compute derivatives of the intersection point with respect to ped_pos.
     dx3_cross_x = (y4 - y3) / den * (x2 - x1)
     dx3_cross_y = (y4 - y3) / den * (y2 - y1)
     dy3_cross_x = (x3 - x4) / den * (x2 - x1)
     dy3_cross_y = (x3 - x4) / den * (y2 - y1)
-    dx_obst_dist = ((cross_x - ped_pos[0]) * (dx3_cross_x - 1)
-                    + (cross_y - ped_pos[1]) * dx3_cross_y) / obst_dist
-    dy_obst_dist = ((cross_x - ped_pos[0]) * dy3_cross_x
-                    + (cross_y - ped_pos[1]) * (dy3_cross_y - 1)) / obst_dist
+    # Compute derivatives of the obstacle distance with respect to ped_pos.
+    dx_obst_dist = ((cross_x - ped_pos[0]) * (dx3_cross_x - 1) +
+                    (cross_y - ped_pos[1]) * dx3_cross_y) / obst_dist
+    dy_obst_dist = ((cross_x - ped_pos[0]) * dy3_cross_x +
+                    (cross_y - ped_pos[1]) * (dy3_cross_y - 1)) / obst_dist
     return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
 

@@ -412,9 +412,17 @@ class GroupCoherenceForceAlt:
 
 
 class GroupRepulsiveForce:
-    """Group repulsive force"""
+    """
+    Group repulsive force
+    A class representing the computation of group repulsive force which is a social force
+    that models the repulsive interaction among different members within a group of pedestrians.
+    """
 
     def __init__(self, config: GroupReplusiveForceConfig, peds: PedState):
+        """
+        :param config: An instance of GroupReplusiveForceConfig containing configuration parameters for the repulsive force.
+        :param peds: An instance of PedState representing the state (position, velocity, etc.) of all pedestrians.
+        """
         self.config = config
         self.peds = peds
 

@@ -386,28 +386,64 @@ def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> Tuple[float, f
 
 
 class GroupCoherenceForceAlt:
-    """Alternative group coherence force as specified in pedsim_ros"""
+    """
+    Alternative group coherence force as specified in pedsim_ros
+    This class represents the computation of an alternative model for the group 
+    coherence force, which is a social force that aims to keep the members of a 
+    group together.
+    """
 
     def __init__(self, config: GroupCoherenceForceConfig, peds: PedState):
+        """
+        Initialize the GroupCoherenceForceAlt object.
+
+        :param config: An instance of GroupCoherenceForceConfig containing the 
+            configuration parameters for the coherence force.
+        :param peds: An instance of PedState representing the state 
+            (position, velocity, etc.) of all pedestrians.
+        """
+        # Store the pedestrian states which includes positions and velocities.
         self.peds = peds
+        
+        # Store the configuration for calculating coherence forces.
         self.config = config
 
     def __call__(self):
+        # Initialize an array to store coherence forces for each pedestrian with zero values.
         forces = np.zeros((self.peds.size(), 2))
+        
+        # If no groups exist within the pedestrian data, return the initialized zero-forces array.
         if not self.peds.has_group():
             return forces
 
+        # Iterate over groups of pedestrians to calculate coherence forces.
         for group in self.peds.groups:
+            # Set the threshold based on the number of members in the group.
             threshold = (len(group) - 1) / 2
+            
+            # Extract the positions of all members in the current group.
             member_pos = self.peds.pos()[group, :]
+            
+            # Continue to the next group if the current one has no members.
             if len(member_pos) == 0:
                 continue
 
+            # Compute the centroid (center of mass) for the group's positions.
             com = centroid(member_pos)
+            
+            # Calculate the vector from individual members to the centroid.
             force_vec = com - member_pos
+            
+            # Compute the norms (magnitudes) of those vectors.
             norms = np.linalg.norm(force_vec, axis=1)
+            
+            # Apply a softening factor based on the distance from the centroid, using hyperbolic tangent.
             softened_factor = (np.tanh(norms - threshold) + 1) / 2
+            
+            # Calculate the actual forces applying the softening factor to the force vectors.
             forces[group, :] += (force_vec.T * softened_factor).T
+        
+        # Return the calculated forces scaled by the factor defined in the configuration.
         return forces * self.config.factor
 
 

@@ -427,22 +427,34 @@ class GroupRepulsiveForce:
         self.peds = peds
 
     def __call__(self):
+        # Retrieve the distance threshold from configuration where repulsive force is effective.
         threshold = self.config.threshold
+        # Initialize a zero np.array to store repulsive forces for each pedestrian.
         forces = np.zeros((self.peds.size(), 2))
+
+        # If no groups exist in the pedestrian dataset, return the zero-initialized forces array.
         if not self.peds.has_group():
             return forces
 
+        # Iterate over groups of pedestrians.
         for group in self.peds.groups:
+            # Skip processing for empty groups.
             if not group:
                 continue
 
             size = len(group)
             member_pos = self.peds.pos()[group, :]
+
+            # Calculate the relative positions among members in the group.
             diff = each_diff(member_pos)  # others - self
+            # Normalize the relative position vectors and get their norms.
             _, norms = normalize(diff)
+            # Zero out the relative positions of members outside the threshold distance.
             diff[norms > threshold, :] = 0
+            # Sum the adjusted relative positions to compute forces for the current group.
             forces[group, :] += np.sum(diff.reshape((size, -1, 2)), axis=1)
 
+        # Multiply the forces by a scaling factor from the configuration and return the result.
         return forces * self.config.factor
 
 

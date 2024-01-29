@@ -413,7 +413,6 @@ class GroupCoherenceForceAlt:
 
 class GroupRepulsiveForce:
     """
-    Group repulsive force
     A class representing the computation of group repulsive force which is a social force
     that models the repulsive interaction among different members within a group of pedestrians.
     """

@@ -439,25 +439,47 @@ class GroupRepulsiveForce:
 
 
 class GroupGazeForceAlt:
-    """Group gaze force"""
+    """
+    Group gaze force
+    A class representing the alternative method to compute group gaze force which is 
+    a social force that models the interaction within a group of pedestrians.
+    """
 
     def __init__(self, config: GroupGazeForceConfig, peds: PedState):
+        """
+        :param config: An instance of GroupGazeForceConfig containing
+            configuration parameters.
+        :param peds: An instance of PedState representing the state of all pedestrians.
+        """
         self.config = config
         self.peds = peds
 
     def __call__(self):
+        """
+        Calculates and returns the group gaze forces for all pedestrian groups. 
+        This method allows an instance of the class to be called as a function.
+
+        :return: A numpy array containing the forces applied to each pedestrian 
+            due to group gaze.
+        """
+        # Initialize a zero matrix for the forces with dimensions equal to the number of pedestrians by 2 (for x and y components).
         forces = np.zeros((self.peds.size(), 2))
 
+        # If there are no groups, return the zero-initialized forces array.
         if not self.peds.has_group():
             return forces
 
         ped_positions = self.peds.pos()
+        # Calculate desired directions and distances for the group gaze force.
         directions, dist = desired_directions(self.peds.state)
 
+        # Iterate over each group in the pedestrian groups.
         for group in self.peds.groups:
             group_size = len(group)
+            # If the group size is less than or equal to 1, skip this group as it does not exert group force.
             if group_size <= 1:
                 continue
+            # Compute the group gaze force for the current group and assign it to the forces array.
             forces[group, :] = group_gaze_force(
                 ped_positions[group, :], directions[group, :], dist[group])
 

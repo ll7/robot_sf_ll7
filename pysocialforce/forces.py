@@ -219,28 +219,45 @@ def social_force_ped_ped(
     Returns:
         Point2D: The social force vector between the two pedestrians.
     """
+    # Decompose position and velocity differences into components
     pos_diff_x, pos_diff_y = pos_diff
     vel_diff_x, vel_diff_y = vel_diff
+    
+    # Calculate normalized direction vector and its length from position diff
     (diff_dir_x, diff_dir_y), diff_length = norm_vec((pos_diff_x, pos_diff_y))
+    
+    # Compute interaction vector based on velocity difference and direction
     interaction_vec_x = lambda_importance * vel_diff_x + diff_dir_x
     interaction_vec_y = lambda_importance * vel_diff_y + diff_dir_y
+    
+    # Normalize the interaction vector and get its length
     interaction_dir, interaction_length = norm_vec(
         (interaction_vec_x, interaction_vec_y))
     interaction_dir_x, interaction_dir_y = interaction_dir
 
+    # Calculate angle between interaction direction and difference direction
     theta = atan2(interaction_dir[1], interaction_dir[0]
                   ) - atan2(diff_dir_y, diff_dir_x)
+    # Determine the sign of theta for force calculation
     theta_sign = 1 if theta >= 0 else -1
+    # Calculate B parameter with a small constant to avoid division by zero
     B = gamma * interaction_length + 1e-8
 
+    # Compute the magnitude of the velocity component of the social force
     force_velocity_amount = exp(-1.0 * diff_length /
                                 B - (n_prime * B * theta)**2)
+    # Compute the magnitude of the angle component of the social force
     force_angle_amount = -theta_sign * \
         exp(-1.0 * diff_length / B - (n * B * theta)**2)
+    
+    # Calculate the x and y components of the velocity force
     force_velocity_x = interaction_dir_x * force_velocity_amount
     force_velocity_y = interaction_dir_y * force_velocity_amount
+    # Calculate the x and y components of the angle force
     force_angle_x = -interaction_dir_y * force_angle_amount
     force_angle_y = interaction_dir_x * force_angle_amount
+    
+    # Return the total social force as a combination of both components
     return force_velocity_x + force_angle_x, force_velocity_y + force_angle_y
 
 

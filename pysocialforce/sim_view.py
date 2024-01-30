@@ -112,10 +112,10 @@ class SimulationView:
                     self.size_changed = True
                     self.width, self.height = e.w, e.h
                 elif e.type == pygame.KEYDOWN:  # new code
-                    if e.key == pygame.K_UP:
+                    if e.key == pygame.K_PLUS:
                         self.scaling += 1
                         self.redraw_needed = True
-                    elif e.key == pygame.K_DOWN:
+                    elif e.key == pygame.K_MINUS:
                         self.scaling -= 1
                         if self.scaling < 1:  # prevent scaling from going below 1
                             self.scaling = 1

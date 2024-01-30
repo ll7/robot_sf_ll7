@@ -283,8 +283,12 @@ class ObstacleForce:
 
 
 @njit(fastmath=True)
-def all_obstacle_forces(out_forces: np.ndarray, ped_positions: np.ndarray,
-                        obstacles: np.ndarray, ped_radius: float):
+def all_obstacle_forces(
+        out_forces: np.ndarray,
+        ped_positions: np.ndarray,
+        obstacles: np.ndarray,
+        ped_radius: float
+):
     """
     Calculates the forces exerted by all obstacles on each pedestrian.
 
@@ -300,21 +304,21 @@ def all_obstacle_forces(out_forces: np.ndarray, ped_positions: np.ndarray,
     # Extract obstacle line segments and their orthogonal vectors
     obstacle_segments = obstacles[:, :4]
     ortho_vecs = obstacles[:, 4:]
-    
+
     # Get the number of pedestrians and obstacles
     num_peds = ped_positions.shape[0]
     num_obstacles = obstacles.shape[0]
-    
+
     # Iterate over each pedestrian
     for i in range(num_peds):
         ped_pos = ped_positions[i]  # Current pedestrian position
-        
+
         # Iterate over each obstacle
         for j in range(num_obstacles):
             # Calculate the force exerted by the current obstacle
             force_x, force_y = obstacle_force(
                 obstacle_segments[j], ortho_vecs[j], ped_pos, ped_radius)
-            
+
             # Accumulate forces from all obstacles on the current pedestrian
             out_forces[i, 0] += force_x
             out_forces[i, 1] += force_y
@@ -441,14 +445,14 @@ class GroupCoherenceForceAlt:
         """
         # Store the pedestrian states which includes positions and velocities.
         self.peds = peds
-        
+
         # Store the configuration for calculating coherence forces.
         self.config = config
 
     def __call__(self):
         # Initialize an array to store coherence forces for each pedestrian with zero values.
         forces = np.zeros((self.peds.size(), 2))
-        
+
         # If no groups exist within the pedestrian data, return the initialized zero-forces array.
         if not self.peds.has_group():
             return forces
@@ -457,29 +461,29 @@ class GroupCoherenceForceAlt:
         for group in self.peds.groups:
             # Set the threshold based on the number of members in the group.
             threshold = (len(group) - 1) / 2
-            
+
             # Extract the positions of all members in the current group.
             member_pos = self.peds.pos()[group, :]
-            
+
             # Continue to the next group if the current one has no members.
             if len(member_pos) == 0:
                 continue
 
             # Compute the centroid (center of mass) for the group's positions.
             com = centroid(member_pos)
-            
+
             # Calculate the vector from individual members to the centroid.
             force_vec = com - member_pos
-            
+
             # Compute the norms (magnitudes) of those vectors.
             norms = np.linalg.norm(force_vec, axis=1)
-            
+
             # Apply a softening factor based on the distance from the centroid, using hyperbolic tangent.
             softened_factor = (np.tanh(norms - threshold) + 1) / 2
-            
+
             # Calculate the actual forces applying the softening factor to the force vectors.
             forces[group, :] += (force_vec.T * softened_factor).T
-        
+
         # Return the calculated forces scaled by the factor defined in the configuration.
         return forces * self.config.factor
 
@@ -706,7 +710,7 @@ def centroid(vecs: np.ndarray) -> Tuple[float, float]:
     # Check if the array is empty
     if vecs.size == 0 or vecs.shape == (0, ):
         raise ValueError("Input array is empty")
-    
+
     # Determine the number of data points in the array
     num_datapoints = vecs.shape[0]
 

@@ -80,19 +80,41 @@ class DesiredForce:
         self.peds = peds
 
     def __call__(self):
+        """
+        Calculate and return the desired force for each pedestrian.
+
+        :return: A numpy array containing the forces for all pedestrians.
+        """
+        # Relaxation time determines how quickly a pedestrian adapts their velocity
         relexation_time: float = self.config.relaxation_time
+        # Threshold distance to consider a goal as reached
         goal_threshold = self.config.goal_threshold
+        
+        # Get current position, velocity, and goal for each pedestrian
         pos = self.peds.pos()
         vel = self.peds.vel()
         goal = self.peds.goal()
+        
+        # Calculate normalized direction vector and distance to the goal
         direction, dist = normalize(goal - pos)
+        
+        # Initialize force array with zeros for each pedestrian
         force = np.zeros((self.peds.size(), 2))
+        
+        # For pedestrians further than the goal threshold from their goal,
+        # calculate the force based on the desired speed and current velocity
         force[dist > goal_threshold] = (
             direction *
             self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
         )[dist > goal_threshold, :]
+        
+        # For pedestrians within the goal threshold, apply a braking force
         force[dist <= goal_threshold] = -1.0 * vel[dist <= goal_threshold]
+        
+        # Divide the force by the relaxation time to get the final force value
         force /= relexation_time
+        
+        # Multiply by a factor from the configuration to scale the force
         return force * self.config.factor
 
 

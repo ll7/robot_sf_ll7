@@ -166,24 +166,37 @@ def social_force(
     Returns:
         np.ndarray: Array of shape (num_peds, 2) representing the social forces acting on each pedestrian.
     """
+    # Number of pedestrians based on the positions array
     num_peds = ped_positions.shape[0]
+    # Square of the activation threshold for distance comparison
     activation_threshold_sq = activation_threshold**2
+    # Initialize forces array with zeros for all pedestrians
     forces = np.zeros((num_peds, 2))
 
+    # Iterate over each pedestrian to calculate their social force
     for ped_i in range(num_peds):
+        # Calculate position differences between current ped and others
         all_pos_diffs = ped_positions[ped_i] - ped_positions
+        # Compute squared distances to other pedestrians
         pos_dists_sq = np.sum(all_pos_diffs**2, axis=1)
+        # Create a mask for peds within the activation threshold
         ped_mask = pos_dists_sq <= activation_threshold_sq
+        # Exclude the current pedestrian from the mask
         ped_mask[ped_i] = False
+        # Get indices of other pedestrians within the activation threshold
         other_ped_ids = np.where(ped_mask)[0]
 
+        # Get position and velocity differences for relevant pedestrians
         pos_diffs = all_pos_diffs[other_ped_ids]
         vel_diffs = ped_velocities[other_ped_ids] - ped_velocities[ped_i]
+        # Calculate the social force components for the current pedestrian
         force_x, force_y = social_force_single_ped(
             pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma)
+        # Assign calculated force components to the forces array
         forces[ped_i, 0] = force_x
         forces[ped_i, 1] = force_y
 
+    # Return the array containing social forces for all pedestrians
     return forces
 
 

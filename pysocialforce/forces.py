@@ -285,15 +285,37 @@ class ObstacleForce:
 @njit(fastmath=True)
 def all_obstacle_forces(out_forces: np.ndarray, ped_positions: np.ndarray,
                         obstacles: np.ndarray, ped_radius: float):
+    """
+    Calculates the forces exerted by all obstacles on each pedestrian.
+
+    Parameters:
+    - out_forces (np.ndarray): Array to store the resulting forces for each pedestrian.
+    - ped_positions (np.ndarray): Array of shape (num_peds, 2) containing the positions of all pedestrians.
+    - obstacles (np.ndarray): Array of shape (num_obstacles, 6) containing the obstacle line segments and their orthogonal vectors.
+    - ped_radius (float): Radius of the pedestrians.
+
+    Returns:
+    None
+    """
+    # Extract obstacle line segments and their orthogonal vectors
     obstacle_segments = obstacles[:, :4]
     ortho_vecs = obstacles[:, 4:]
+    
+    # Get the number of pedestrians and obstacles
     num_peds = ped_positions.shape[0]
     num_obstacles = obstacles.shape[0]
+    
+    # Iterate over each pedestrian
     for i in range(num_peds):
-        ped_pos = ped_positions[i]
+        ped_pos = ped_positions[i]  # Current pedestrian position
+        
+        # Iterate over each obstacle
         for j in range(num_obstacles):
+            # Calculate the force exerted by the current obstacle
             force_x, force_y = obstacle_force(
                 obstacle_segments[j], ortho_vecs[j], ped_pos, ped_radius)
+            
+            # Accumulate forces from all obstacles on the current pedestrian
             out_forces[i, 0] += force_x
             out_forces[i, 1] += force_y
 
@@ -316,7 +338,7 @@ def obstacle_force(obstacle: Line2D,
         obstacle: A tuple representing the endpoints (x1, y1, x2, y2) of the
                   line segment that forms the obstacle.
         ortho_vec: A vector orthogonal to the direction of pedestrian movement.
-            # TODO Is this correct?
+            # TODO Is this correct? Maybe the ortho_vec is orthogonal to the obstacle?
         ped_pos: The current position (x, y) of the pedestrian.
         ped_radius: The radius of the pedestrian (used for collision avoidance).
 
@@ -347,7 +369,7 @@ def obstacle_force(obstacle: Line2D,
     t = num / den
     ortho_hit = 0 <= t <= 1  # Check if intersection is within segment bounds.
 
-    # Case 3: Orthogonal projection does not hit within the obstacle segment.
+    # Case 2: Orthogonal projection does not hit within the obstacle segment.
     if not ortho_hit:
         d1 = euclid_dist(ped_pos[0], ped_pos[1], x1, y1)
         d2 = euclid_dist(ped_pos[0], ped_pos[1], x2, y2)
@@ -358,7 +380,7 @@ def obstacle_force(obstacle: Line2D,
                                                      obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
-    # Case 2: Orthogonal projection hits within the obstacle segment.
+    # Case 1: Orthogonal projection hits within the obstacle segment.
     cross_x, cross_y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
     obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], cross_x, cross_y) -
                     ped_radius, coll_dist)

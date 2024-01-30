@@ -134,6 +134,7 @@ class SimulationView:
         state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_obstacles(offset)
+        self._draw_grid()
         self._augment_ped_actions(state.ped_actions)
         self._draw_pedestrians(state.pedestrian_positions)
         self._augment_timestep(state.timestep)
@@ -167,3 +168,18 @@ class SimulationView:
         text = f'step: {timestep}'
         text_surface = self.font.render(text, False, TEXT_COLOR)
         self.screen.blit(text_surface, self.timestep_text_pos)
+
+    def _draw_grid(self, grid_size: int=50, grid_color: RgbColor=(200, 200, 200)):
+        """
+        Draw a grid on the screen.
+        :param grid_size: The increment of the grid in pixels."""
+        scaled_grid_size = grid_size*self.scaling
+        font = pygame.font.Font(None, 24)
+        for x in range(0, self.width, scaled_grid_size):
+            pygame.draw.line(self.screen, grid_color, (x, 0), (x, self.height))
+            label = font.render(str(int(x/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (x, 0))
+        for y in range(0, self.height, scaled_grid_size):
+            pygame.draw.line(self.screen, grid_color, (0, y), (self.width, y))
+            label = font.render(str(int(y/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (0, y))

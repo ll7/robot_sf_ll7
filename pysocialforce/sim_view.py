@@ -59,6 +59,7 @@ class SimulationView:
     is_abortion_requested: bool = field(init=False, default=False)
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
+    redraw_needed: bool = field(init=False, default=False)
 
     @property
     def timestep_text_pos(self) -> Vec2D:
@@ -110,6 +111,15 @@ class SimulationView:
                 elif e.type == pygame.VIDEORESIZE:
                     self.size_changed = True
                     self.width, self.height = e.w, e.h
+                elif e.type == pygame.KEYDOWN:  # new code
+                    if e.key == pygame.K_UP:
+                        self.scaling += 1
+                        self.redraw_needed = True
+                    elif e.key == pygame.K_DOWN:
+                        self.scaling -= 1
+                        if self.scaling < 1:  # prevent scaling from going below 1
+                            self.scaling = 1
+                        self.redraw_needed = True
             sleep(0.01)
 
     def clear(self):
@@ -130,7 +140,9 @@ class SimulationView:
         if self.size_changed:
             self._resize_window()
             self.size_changed = False
-
+        if self.redraw_needed:
+            self.surface_obstacles = self.preprocess_obstacles()
+            self.redraw_needed = False
         state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_obstacles(offset)

@@ -59,10 +59,12 @@ class SimulationView:
     is_abortion_requested: bool = field(init=False, default=False)
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
+    redraw_needed: bool = field(init=False, default=False)
+    offset: np.array = field(init=False, default=np.array([0, 0]))
 
     @property
     def timestep_text_pos(self) -> Vec2D:
-        return (self.width - 100, 10)
+        return (16, 16)
 
     def __post_init__(self):
         pygame.init()
@@ -110,16 +112,34 @@ class SimulationView:
                 elif e.type == pygame.VIDEORESIZE:
                     self.size_changed = True
                     self.width, self.height = e.w, e.h
+                elif e.type == pygame.KEYDOWN:
+                    # handle key presses
+                    if e.key == pygame.K_PLUS:
+                        self.scaling += 1
+                        self.redraw_needed = True
+                    elif e.key == pygame.K_MINUS:
+                        self.scaling -= 1
+                        if self.scaling < 1:
+                            # prevent scaling from going below 1
+                            self.scaling = 1
+                        self.redraw_needed = True
+                    elif e.key == pygame.K_LEFT:
+                        self.offset[0] -= 10
+                    elif e.key == pygame.K_RIGHT:
+                        self.offset[0] += 10
+                    elif e.key == pygame.K_UP:
+                        self.offset[1] -= 10
+                    elif e.key == pygame.K_DOWN:
+                        self.offset[1] += 10
             sleep(0.01)
 
     def clear(self):
         self.screen.fill(BACKGROUND_COLOR)
-        self._augment_timestep(0)
+        self._add_text(0)
         pygame.display.update()
 
     def render(self, state: VisualizableSimState, fps: int=60):
         sleep(1 / fps)
-
         # info: event handling needs to be processed
         #       in the main thread to access UI resources
         if self.is_exit_requested:
@@ -130,13 +150,16 @@ class SimulationView:
         if self.size_changed:
             self._resize_window()
             self.size_changed = False
-
-        state, offset = self._zoom_camera(state)
+        if self.redraw_needed:
+            self.surface_obstacles = self.preprocess_obstacles()
+            self.redraw_needed = False
+        state = self._scale_pedestrian_state(state)
         self.screen.fill(BACKGROUND_COLOR)
-        self._draw_obstacles(offset)
+        self._draw_obstacles()
+        self._draw_grid()
         self._augment_ped_actions(state.ped_actions)
         self._draw_pedestrians(state.pedestrian_positions)
-        self._augment_timestep(state.timestep)
+        self._add_text(state.timestep)
         pygame.display.update()
 
     def _resize_window(self):
@@ -145,25 +168,79 @@ class SimulationView:
             (self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
-    def _zoom_camera(self, state: VisualizableSimState) \
+    def _scale_pedestrian_state(self, state: VisualizableSimState) \
             -> Tuple[VisualizableSimState, Tuple[float, float]]:
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
-        return state, (0, 0)
+        return state
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         for ped_x, ped_y in ped_pos:
-            pygame.draw.circle(self.screen, PED_COLOR, (ped_x, ped_y), self.ped_radius * self.scaling)
+            pygame.draw.circle(
+                self.screen,
+                PED_COLOR,
+                (ped_x+self.offset[0], ped_y+self.offset[1]),
+                self.ped_radius * self.scaling
+                )
 
-    def _draw_obstacles(self, offset: Tuple[float, float]):
-        offset = offset[0], offset[1]
-        self.screen.blit(self.surface_obstacles, offset)
+    def _draw_obstacles(self):
+        self.screen.blit(self.surface_obstacles, self.offset)
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
+        """Draw the actions of the pedestrians as lines."""
         for p1, p2 in ped_actions:
-            pygame.draw.line(self.screen, PED_ACTION_COLOR, p1, p2, width=3)
+            pygame.draw.line(
+                self.screen,
+                PED_ACTION_COLOR,
+                p1+self.offset,
+                p2+self.offset,
+                width=3
+                )
 
-    def _augment_timestep(self, timestep: int):
-        text = f'step: {timestep}'
-        text_surface = self.font.render(text, False, TEXT_COLOR)
-        self.screen.blit(text_surface, self.timestep_text_pos)
+    def _add_text(self, timestep: int):
+        text_lines = [
+            f'step: {timestep}',
+            f'scaling: {self.scaling}',
+            f'x-offset: {self.offset[0]/self.scaling:.2f}',
+            f'y-offset: {self.offset[1]/self.scaling:.2f}'
+        ]
+        for i, text in enumerate(text_lines):
+            text_surface = self.font.render(text, False, TEXT_COLOR)
+            pos = self.timestep_text_pos[0], self.timestep_text_pos[1] + i * self.font.get_linesize()
+            self.screen.blit(text_surface, pos)
+
+    def _draw_grid(
+            self,
+            grid_increment: int=50,
+            grid_color: RgbColor=(200, 200, 200)
+            ):
+        """
+        Draw a grid on the screen.
+        :param grid_increment: The increment of the grid in pixels.
+        :param grid_color: The color of the grid lines.
+        """
+        scaled_grid_size = grid_increment*self.scaling
+        font = pygame.font.Font(None, 24)
+        # draw the vertical lines
+        start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
+        for x in range(start_x, self.width-self.offset[0], scaled_grid_size):
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (x + self.offset[0], 0),
+                (x + self.offset[0], self.height)
+                )
+            label = font.render(str(int(x/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (x + self.offset[0], 0))
+        
+        # draw the horizontal lines
+        start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
+        for y in range(start_y, self.height-self.offset[1], scaled_grid_size):
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (0, y + self.offset[1]),
+                (self.width, y + self.offset[1])
+                )
+            label = font.render(str(int(y/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (0, y + self.offset[1]))

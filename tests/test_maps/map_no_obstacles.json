@@ -1,0 +1,61 @@
+{
+    "version": "1.0",
+    "name": "default_map",
+    "bounds": {
+        "x_margin": [
+            0,
+            200
+        ],
+        "y_margin": [
+            0,
+            200
+        ]
+    },
+    "ped_routes": [
+        {
+            "name": "route_1",
+            "waypoints": [
+                [
+                    50,
+                    50
+                ],
+                [
+                    50,
+                    100
+                ],
+                [
+                    100,
+                    100
+                ],
+                [
+                    100,
+                    50
+                ],
+                [
+                    50,
+                    50
+                ]
+            ],
+            "reversible": "false"
+        }
+    ],
+    "crowded_zones": [
+        {
+            "name": "zone_1",
+            "zone_rect": [
+                [
+                    105,
+                    105
+                ],
+                [
+                    130,
+                    130
+                ],
+                [
+                    150,
+                    130
+                ]
+            ]
+        }
+    ]
+}

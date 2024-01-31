@@ -1,0 +1,37 @@
+{
+    "version": "1.0",
+    "name": "default_map",
+    "bounds": {
+        "x_margin": [0, 200],
+        "y_margin": [0, 200]
+    },
+    "ped_routes": [
+        {
+            "name": "route_1",
+            "waypoints": [
+                [5, 20],
+                [195, 20]
+            ],
+            "reversible": "false"
+        }
+    ],
+    "obstacles": [
+        {
+            "name": "obst_top",
+            "vertices": [
+                [0, 25],
+                [200, 25],
+                [200, 30],
+                [0, 30]
+            ]
+        },
+        {
+            "name": "obst_bottom",
+            "vertices": [
+                [0, 15],
+                [200, 15],
+                [200, 10],
+                [0, 10]
+            ]}
+    ]
+}

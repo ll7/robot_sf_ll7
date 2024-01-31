@@ -200,8 +200,9 @@ class SimulationView:
     def _add_text(self, timestep: int):
         text_lines = [
             f'step: {timestep}',
-            f'offset: {self.offset[0]}, {self.offset[1]}',
-            f'scaling: {self.scaling}'
+            f'scaling: {self.scaling}',
+            f'x-offset: {self.offset[0]/self.scaling:.2f}',
+            f'y-offset: {self.offset[1]/self.scaling:.2f}'
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)

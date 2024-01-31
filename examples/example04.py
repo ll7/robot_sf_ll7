@@ -1,5 +1,5 @@
 """
-# Example 03: simulate with visual rendering
+# Example 04: simulate with a new map02.json
 """
 
 import pysocialforce as pysf

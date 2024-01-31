@@ -221,19 +221,25 @@ class SimulationView:
         scaled_grid_size = grid_increment*self.scaling
         font = pygame.font.Font(None, 24)
         # draw the vertical lines
-        for x in range(self.offset[0], self.width+self.offset[0], scaled_grid_size):
+        start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
+        for x in range(start_x, self.width-self.offset[0], scaled_grid_size):
             pygame.draw.line(
                 self.screen,
                 grid_color,
-                (x, 0),
-                (x, self.height)
+                (x + self.offset[0], 0),
+                (x + self.offset[0], self.height)
                 )
-            label = font.render(str(int((x-self.offset[0])/self.scaling)), 1, grid_color)
-            self.screen.blit(label, (x, 0))
+            label = font.render(str(int(x/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (x + self.offset[0], 0))
         
         # draw the horizontal lines
-        for y in range(0, self.height, scaled_grid_size):
-            adjusted_y = y + self.offset[1]  # adjust y by the offset
-            pygame.draw.line(self.screen, grid_color, (0, adjusted_y), (self.width, adjusted_y))
+        start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
+        for y in range(start_y, self.height-self.offset[1], scaled_grid_size):
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (0, y + self.offset[1]),
+                (self.width, y + self.offset[1])
+                )
             label = font.render(str(int(y/self.scaling)), 1, grid_color)
-            self.screen.blit(label, (0, adjusted_y))  # use adjusted_y here
+            self.screen.blit(label, (0, y + self.offset[1]))

@@ -49,6 +49,23 @@ def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimStat
 
 @dataclass
 class SimulationView:
+    """
+    The SimulationView class represents the graphical view of the simulation.
+
+    Attributes:
+        width (float): The width of the simulation view.
+        height (float): The height of the simulation view.
+        scaling (float): The scaling factor for the simulation view.
+        ped_radius (float): The radius of the pedestrians in the simulation.
+        obstacles (List[Obstacle]): The list of obstacles in the simulation.
+        size_changed (bool): Flag indicating if the size of the view has changed.
+        is_exit_requested (bool): Flag indicating if an exit is requested.
+        is_abortion_requested (bool): Flag indicating if an abortion is requested.
+        screen (pygame.surface.Surface): The surface representing the screen.
+        font (pygame.font.Font): The font used for rendering text on the screen.
+        redraw_needed (bool): Flag indicating if a redraw is needed.
+        offset (np.array): The offset of the view.
+    """
     width: float=1200
     height: float=800
     scaling: float=15
@@ -165,7 +182,7 @@ class SimulationView:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
                 if handler:
-                    handler(e)    
+                    handler(e)
             sleep(0.01)  # Consider removing or replacing with a frame rate clock
 
 
@@ -250,7 +267,8 @@ class SimulationView:
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
-            pos = self.timestep_text_pos[0], self.timestep_text_pos[1] + i * self.font.get_linesize()
+            pos = self.timestep_text_pos[0], \
+                self.timestep_text_pos[1] + i * self.font.get_linesize()
             self.screen.blit(text_surface, pos)
 
     def _draw_grid(

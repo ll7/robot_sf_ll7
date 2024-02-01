@@ -125,6 +125,12 @@ class SimulationView:
         return surface
 
     def show(self):
+        """
+        Starts a separate thread to process the event queue and handles SIGINT signal.
+
+        This method starts a new thread to process the event queue in the background.
+        It also sets up a signal handler for SIGINT to handle the interruption of the program.
+        """
         self.ui_events_thread = Thread(target=self._process_event_queue)
         self.ui_events_thread.start()
 
@@ -187,11 +193,24 @@ class SimulationView:
 
 
     def clear(self):
+        """
+        Clears the screen and updates the display.
+
+        This method fills the screen with the background color,
+        adds text at position 0, and updates the display.
+        """
         self.screen.fill(BACKGROUND_COLOR)
         self._add_text(0)
         pygame.display.update()
 
     def render(self, state: VisualizableSimState, fps: int=60):
+        """
+        Renders the simulation state on the pygame screen.
+
+        Args:
+            state (VisualizableSimState): The simulation state to be rendered.
+            fps (int, optional): The frames per second for rendering. Defaults to 60.
+        """
         sleep(1 / fps)
         # info: event handling needs to be processed
         #       in the main thread to access UI resources
@@ -294,7 +313,7 @@ class SimulationView:
                 )
             label = font.render(str(int(x/self.scaling)), 1, grid_color)
             self.screen.blit(label, (x + self.offset[0], 0))
-        
+
         # draw the horizontal lines
         start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
         for y in range(start_y, self.height-self.offset[1], scaled_grid_size):

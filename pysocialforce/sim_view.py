@@ -78,7 +78,7 @@ class SimulationView:
 
     def preprocess_obstacles(self) -> pygame.Surface:
         obst_vertices = [o.vertices_np * self.scaling for o in self.obstacles]
-        min_x, max_x, min_y, max_y = 0, -np.inf, 0, -np.inf
+        min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
         for vertices in obst_vertices:
             min_x, max_x = min(np.min(vertices[:, 0]), min_x), max(np.max(vertices[:, 0]), max_x)
             min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
@@ -86,7 +86,8 @@ class SimulationView:
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
         surface.fill(BACKGROUND_COLOR_TRANSP)
         for vertices in obst_vertices:
-            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in vertices])
+            shifted_vertices = vertices - [min_x, min_y]  # Shift the vertices so that the minimum x and y coordinates are 0
+            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in shifted_vertices])
         return surface
 
     def show(self):
@@ -202,7 +203,9 @@ class SimulationView:
                 )
 
     def _draw_obstacles(self):
-        self.screen.blit(self.surface_obstacles, self.offset)
+        for obstacle in self.obstacles:
+            scaled_vertices = [(x*self.scaling + self.offset[0], y*self.scaling + self.offset[1]) for x, y in obstacle.vertices_np]
+            pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
         """Draw the actions of the pedestrians as lines."""

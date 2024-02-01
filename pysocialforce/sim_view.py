@@ -49,6 +49,23 @@ def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimStat
 
 @dataclass
 class SimulationView:
+    """
+    The SimulationView class represents the graphical view of the simulation.
+
+    Attributes:
+        width (float): The width of the simulation view.
+        height (float): The height of the simulation view.
+        scaling (float): The scaling factor for the simulation view.
+        ped_radius (float): The radius of the pedestrians in the simulation.
+        obstacles (List[Obstacle]): The list of obstacles in the simulation.
+        size_changed (bool): Flag indicating if the size of the view has changed.
+        is_exit_requested (bool): Flag indicating if an exit is requested.
+        is_abortion_requested (bool): Flag indicating if an abortion is requested.
+        screen (pygame.surface.Surface): The surface representing the screen.
+        font (pygame.font.Font): The font used for rendering text on the screen.
+        redraw_needed (bool): Flag indicating if a redraw is needed.
+        offset (np.array): The offset of the view.
+    """
     width: float=1200
     height: float=800
     scaling: float=15
@@ -77,16 +94,34 @@ class SimulationView:
         self.clear()
 
     def preprocess_obstacles(self) -> pygame.Surface:
+        # Scale the vertices of the obstacles
         obst_vertices = [o.vertices_np * self.scaling for o in self.obstacles]
-        min_x, max_x, min_y, max_y = 0, -np.inf, 0, -np.inf
+
+        # Initialize the minimum and maximum x and y coordinates
+        min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
+
+        # Find the minimum and maximum x and y coordinates among all the obstacles
         for vertices in obst_vertices:
             min_x, max_x = min(np.min(vertices[:, 0]), min_x), max(np.max(vertices[:, 0]), max_x)
             min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
+
+        # Calculate the width and height of the surface needed to draw the obstacles
         width, height = max_x - min_x, max_y - min_y
+
+        # Create a new surface with the calculated width and height
         surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        # Fill the surface with a transparent background color
         surface.fill(BACKGROUND_COLOR_TRANSP)
+
+        # Draw each obstacle on the surface
         for vertices in obst_vertices:
-            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in vertices])
+            # Shift the vertices so that the minimum x and y coordinates are 0
+            shifted_vertices = vertices - [min_x, min_y]
+            # Draw the obstacle as a polygon with the shifted vertices
+            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in shifted_vertices])
+
+        # Return the surface with the drawn obstacles
         return surface
 
     def show(self):
@@ -147,7 +182,7 @@ class SimulationView:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
                 if handler:
-                    handler(e)    
+                    handler(e)
             sleep(0.01)  # Consider removing or replacing with a frame rate clock
 
 
@@ -202,7 +237,15 @@ class SimulationView:
                 )
 
     def _draw_obstacles(self):
-        self.screen.blit(self.surface_obstacles, self.offset)
+        # Iterate over each obstacle in the list of obstacles
+        for obstacle in self.obstacles:
+            # Scale and offset the vertices of the obstacle
+            scaled_vertices = [
+                (x*self.scaling + self.offset[0],
+                 y*self.scaling + self.offset[1]
+                 ) for x, y in obstacle.vertices_np]
+            # Draw the obstacle as a polygon on the screen
+            pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
         """Draw the actions of the pedestrians as lines."""
@@ -224,7 +267,8 @@ class SimulationView:
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
-            pos = self.timestep_text_pos[0], self.timestep_text_pos[1] + i * self.font.get_linesize()
+            pos = self.timestep_text_pos[0], \
+                self.timestep_text_pos[1] + i * self.font.get_linesize()
             self.screen.blit(text_surface, pos)
 
     def _draw_grid(

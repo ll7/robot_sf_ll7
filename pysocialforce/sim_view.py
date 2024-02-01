@@ -220,8 +220,14 @@ class SimulationView:
                 )
 
     def _draw_obstacles(self):
+        # Iterate over each obstacle in the list of obstacles
         for obstacle in self.obstacles:
-            scaled_vertices = [(x*self.scaling + self.offset[0], y*self.scaling + self.offset[1]) for x, y in obstacle.vertices_np]
+            # Scale and offset the vertices of the obstacle
+            scaled_vertices = [
+                (x*self.scaling + self.offset[0],
+                 y*self.scaling + self.offset[1]
+                 ) for x, y in obstacle.vertices_np]
+            # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):

@@ -23,6 +23,8 @@ def extract_buildings_as_obstacle(
     building_rgb_color_str (str): The color to filter by (in percentage format).
     map_scale_factor (float): The scale factor applied during the export.
         !!!Tehere is uncertainty in this scale factor!!!
+    Returns:
+    ET.Element: The root element of the new SVG file.
     """
     logger.info("Converting Map: %s", map_full_name)
     tree = ET.parse(map_full_name)
@@ -100,7 +102,6 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
     image_width = viewbox[2]
 
     # Add an alternating black and white line over the whole image width
-    line_length = 100  # Length of each line segment in meters
     for i in range(0, int(image_width), line_length):
         color = "rgb(0,0,0)" if (i // line_length) % 2 == 0 else "rgb(100%,100%,100%)"
         ET.SubElement(

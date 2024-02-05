@@ -37,7 +37,7 @@ def extract_buildings_as_obstacle(
     elements = []
     # Iterate over all elements in the root object
     for elem in root.iter():
-    # Check if the element has a 'style' attribute and if the 'style' attribute 
+    # Check if the element has a 'style' attribute and if the 'style' attribute
     # contains the building_rgb_color_str
         if 'style' in elem.attrib and building_rgb_color_str in elem.attrib['style']:
         # If the condition is met, add the element to the list
@@ -104,12 +104,12 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
     for i in range(0, int(image_width), line_length):
         color = "rgb(0,0,0)" if (i // line_length) % 2 == 0 else "rgb(100%,100%,100%)"
         ET.SubElement(
-            root, 
+            root,
             'line', 
-            x1=str(i), 
-            y1="10", 
-            x2=str(i + line_length), 
-            y2="10", 
+            x1=str(i),
+            y1="10",
+            x2=str(i + line_length),
+            y2="10",
             style=f"stroke:{color};stroke-width:2"
             )
     scale_text = ET.SubElement(root, 'text', x="10", y="30", style="font-size:12px")

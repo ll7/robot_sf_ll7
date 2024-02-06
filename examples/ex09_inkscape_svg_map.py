@@ -1,4 +1,5 @@
 """
+ex09_inkscape_svg_map.py
 Inkscape SVG map used in in pysocialforce.
 """
 import logging
@@ -13,7 +14,7 @@ path_info = svg_path_info("maps/osm_maps/converted_maps/map3_1350_buildings_inks
 
 map_def = path_info_to_mapdefintion(path_info)
 
-# print(map_def)
+print(map_def.routes)
 
 simulator = pysf.Simulator_v2(map_def)
 display = pysf.SimulationView(map_def=map_def, scaling=10)

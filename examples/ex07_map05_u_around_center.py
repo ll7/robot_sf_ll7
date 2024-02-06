@@ -1,5 +1,5 @@
 """
-# Example 07:
+# Example 07: load a U shaped pedestrian map and simulate a route around an obstacle
 """
 
 import pysocialforce as pysf

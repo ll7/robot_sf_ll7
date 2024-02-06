@@ -1,17 +1,22 @@
+"""
+sim_view.py
+handle the visualisation of pysocialforce in pygame
+"""
 from time import sleep
-from typing import Tuple, List
 from dataclasses import dataclass, field
 from threading import Thread
 from signal import signal, SIGINT
 
 import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 import pygame
 import numpy as np
 
-from pysocialforce.map_config import Obstacle
+
 from pysocialforce.simulator import SimState
+from pysocialforce.map_config import MapDefinition
+
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -70,7 +75,7 @@ class SimulationView:
     height: float=800
     scaling: float=15
     ped_radius: float=0.4
-    obstacles: List[Obstacle] = field(default_factory=list)
+    map_def: MapDefinition = field(default_factory=MapDefinition)
     size_changed: bool = field(init=False, default=False)
     is_exit_requested: bool = field(init=False, default=False)
     is_abortion_requested: bool = field(init=False, default=False)
@@ -95,7 +100,7 @@ class SimulationView:
 
     def preprocess_obstacles(self) -> pygame.Surface:
         # Scale the vertices of the obstacles
-        obst_vertices = [o.vertices_np * self.scaling for o in self.obstacles]
+        obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
 
         # Initialize the minimum and maximum x and y coordinates
         min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
@@ -226,9 +231,14 @@ class SimulationView:
             self.surface_obstacles = self.preprocess_obstacles()
             self.redraw_needed = False
         state = self._scale_pedestrian_state(state)
+        
+        # static objects
         self.screen.fill(BACKGROUND_COLOR)
         self._draw_obstacles()
         self._draw_grid()
+        self._draw_pedestrian_routes()
+
+        # dynamic objects
         self._augment_ped_actions(state.ped_actions)
         self._draw_pedestrians(state.pedestrian_positions)
         self._add_text(state.timestep)
@@ -257,7 +267,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
-        for obstacle in self.obstacles:
+        for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [
                 (x*self.scaling + self.offset[0],
@@ -275,6 +285,19 @@ class SimulationView:
                 p1+self.offset,
                 p2+self.offset,
                 width=3
+                )
+            
+    def _draw_pedestrian_routes(self):
+        """
+        draw the map_def.routes on the screen
+        """
+        for route in self.map_def.routes:
+            pygame.draw.lines(
+                self.screen,
+                (0, 0, 255),
+                False,
+                [(x*self.scaling + self.offset[0], y*self.scaling + self.offset[1])
+                for x, y in route.waypoints]
                 )
 
     def _add_text(self, timestep: int):

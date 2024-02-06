@@ -4,6 +4,8 @@ import re
 import logging
 import numpy as np
 
+from pysocialforce.map_config import MapDefinition, Obstacle, GlobalRoute, Zone
+
 logger = logging.getLogger(__name__)
 
 def svg_path_info(svg_file):
@@ -59,3 +61,69 @@ def svg_path_info(svg_file):
         path_info.append({'coordinates': np_coordinates, 'label': label, 'id': id_})
 
     return path_info
+
+def path_info_to_mapdefintion(path_info):
+    """
+    Convert the path information to a MapDefinition object.
+
+    Args:
+        path_info (List[Dict]): A list of dictionaries containing path information.
+
+    Returns:
+        MapDefinition: A MapDefinition object containing the map components.
+    """
+    obstacles = []
+    routes = []
+    crowded_zones = []
+    for path in path_info:
+
+        # check the label of the path
+        if path['label'] == 'obstacle':
+            # Convert the coordinates to a list of vertices
+            vertices = path['coordinates'].tolist()
+            
+            # Check if the first and last verices are the same
+            if not np.array_equal(vertices[0], vertices[-1]):
+                logger.warning(
+                    "The first and last vertices of the obstacle in path <%s> are not the same. " +
+                    "Adding the first vertex to the end to close the polygon.",
+                    path['id']
+                    )
+                # Add the first vertex to the end to close the polygon
+                vertices.append(vertices[0])
+                # TODO is it really necessary to close the polygon?
+
+            # Append the obstacle to the list
+            obstacles.append(Obstacle(vertices))
+
+        elif path['label'] == 'route':
+            # Convert the coordinates to a list of vertices
+            vertices = path['coordinates'].tolist()
+
+            # Append the obstacle to the list
+            routes.append(GlobalRoute(vertices))
+
+
+        elif path['label'] == 'crowded_zone':
+            # Convert the coordinates to a list of vertices
+            vertices = path['coordinates'].tolist()
+
+            # Append the crowded zone to the list
+            crowded_zones.append(Zone(vertices))
+
+        else:
+            logger.warning(
+                "Unknown label <%s> in id <%s>",
+                path['label'],
+                path['id']
+                )
+
+    # check if the lists are empty and raise a warning
+    if not obstacles:
+        logger.warning("No obstacles found in the SVG file")
+    if not routes:
+        logger.warning("No routes found in the SVG file")
+    if not crowded_zones:
+        logger.warning("No crowded zones found in the SVG file")
+
+    return MapDefinition(obstacles, routes, crowded_zones)

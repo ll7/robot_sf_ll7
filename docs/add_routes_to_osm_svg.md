@@ -1,6 +1,16 @@
 # Add pedestrian routes to the OSM SVG
 
+## Requirements
+
 Requirements: Use [OSM Map Converter](OSM_map_converter.md) to convert the OSM map to an SVG file.
+
+## Inkscape
+
+> !!! Inkscape Setup !!!
+
+Based on [a forum contribution](<https://alpha.inkscape.org/vectors/www.inkscapeforum.com/viewtopic388d.html?t=11228>) it is necessary to change the desired path `Path data > Path string format:` from `Optimized` to `Absolute`!
+
+![Path must be Absolute](assets/inkscape_set_path_absolute.png)
 
 The SVG file can be edited with Inkscape. The pedestrian routes can be added as lines to the svg file. The following example shows how to add pedestrian routes to the SVG file.
 
@@ -37,3 +47,5 @@ Save the svg file.
 ## Use svg files as map layout
 
 Use <pysocialforce/map_loader_svg.py> to handle the labeled svg files.
+
+An example can be found in <examples/ex09_inkscape_svg_map.py>.

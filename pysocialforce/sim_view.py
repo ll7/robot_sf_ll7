@@ -6,6 +6,7 @@ from time import sleep
 from dataclasses import dataclass, field
 from threading import Thread
 from signal import signal, SIGINT
+from typing import Tuple
 
 import os
 

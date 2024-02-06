@@ -12,6 +12,7 @@ import numpy as np
 
 from pysocialforce.map_config import Obstacle
 from pysocialforce.simulator import SimState
+from pysocialforce.map_config import MapDefinition
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -70,7 +71,7 @@ class SimulationView:
     height: float=800
     scaling: float=15
     ped_radius: float=0.4
-    obstacles: List[Obstacle] = field(default_factory=list)
+    map_def: MapDefinition = field(default_factory=MapDefinition)
     size_changed: bool = field(init=False, default=False)
     is_exit_requested: bool = field(init=False, default=False)
     is_abortion_requested: bool = field(init=False, default=False)
@@ -95,7 +96,7 @@ class SimulationView:
 
     def preprocess_obstacles(self) -> pygame.Surface:
         # Scale the vertices of the obstacles
-        obst_vertices = [o.vertices_np * self.scaling for o in self.obstacles]
+        obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
 
         # Initialize the minimum and maximum x and y coordinates
         min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
@@ -257,7 +258,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
-        for obstacle in self.obstacles:
+        for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [
                 (x*self.scaling + self.offset[0],

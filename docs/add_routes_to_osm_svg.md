@@ -28,6 +28,8 @@ There, you have to edit the `Label:` field to `route`.
 
 ![inkscape edited label.](assets/inkscape_properties_edited_label.png)
 
+> !!! Remember to always `Set` the object level after editing at the bottom of the `Object Properties` tab !!!
+
 An example map can be found here: <maps/osm_maps/converted_maps/map3_1350_buildings_inkscape.svg>.
 
 Save the svg file.

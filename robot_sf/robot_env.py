@@ -1,3 +1,29 @@
+"""
+`robot_env.py` is a module that defines the simulation environment for a robot or multiple robots.
+It includes classes and protocols for defining the robot's state, actions, and 
+observations within the environment. 
+
+Key components of this module include:
+
+1. `Robot`: A protocol that outlines the necessary properties and methods a robot should have. 
+These include observation space, action space, and methods to apply actions,
+reset state, and parse actions.
+
+2. `RobotState`: A data class that represents the state of a robot in the simulation environment.
+It includes information about navigation, occupancy (for collision detection),
+sensor fusion, and simulation time. It also tracks various conditions such as collision states,
+timeout condition, simulation time elapsed, and timestep count.
+
+3. `RobotEnv`: A class that represents the robot's environment. It inherits from `VectorEnv`
+from the `gym` library, which is a base class for environments that operate over
+vectorized actions and observations. It includes methods for stepping through the environment,
+resetting it, rendering it, and closing it.
+It also defines the action and observation spaces for the robot.
+
+4. `MultiRobotEnv`: A class that extends `RobotEnv` to handle multiple robots in the environment.
+It overrides the `step_async` method to apply actions to all robots in the environment.
+"""
+
 from math import ceil
 from typing import Tuple, Callable, List, Protocol, Any
 from dataclasses import dataclass, field
@@ -14,7 +40,8 @@ from robot_sf.sim_config import EnvSettings
 from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
-from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion, OBS_RAYS, OBS_DRIVE_STATE
+from robot_sf.sensor.sensor_fusion import (
+    fused_sensor_space, SensorFusion, OBS_RAYS, OBS_DRIVE_STATE)
 from robot_sf.sim.sim_view import SimulationView, VisualizableAction, VisualizableSimState
 from robot_sf.sim.simulator import Simulator
 
@@ -173,27 +200,76 @@ def simple_reward(
         ped_coll_penalty: float=-5,
         obst_coll_penalty: float=-2,
         reach_waypoint_reward: float=1) -> float:
+    """
+    Calculate the reward for the robot's current state.
+
+    Parameters:
+    meta (dict): Metadata containing information about the robot's current state.
+    max_episode_step_discount (float): Discount factor for each step in the episode.
+    ped_coll_penalty (float): Penalty for colliding with a pedestrian.
+    obst_coll_penalty (float): Penalty for colliding with an obstacle.
+    reach_waypoint_reward (float): Reward for reaching a waypoint.
+
+    Returns:
+    float: The calculated reward.
+    """
+
+    # Initialize reward with a discount based on the maximum simulation steps
     reward = max_episode_step_discount / meta["max_sim_steps"]
+
+    # If there's a collision with a pedestrian or another robot, apply penalty
     if meta["is_pedestrian_collision"] or meta["is_robot_collision"]:
         reward += ped_coll_penalty
+
+    # If there's a collision with an obstacle, apply penalty
     if meta["is_obstacle_collision"]:
         reward += obst_coll_penalty
+
+    # If the robot has reached its goal, apply reward
     if meta["is_robot_at_goal"]:
         reward += reach_waypoint_reward
+
     return reward
 
 
 def init_simulators(
-        env_config: EnvSettings, map_def: MapDefinition,
-        num_robots: int = 1, random_start_pos: bool = True) -> List[Simulator]:
+        env_config: EnvSettings,
+        map_def: MapDefinition,
+        num_robots: int = 1,
+        random_start_pos: bool = True
+        ) -> List[Simulator]:
+    """
+    Initialize simulators for the robot environment.
+
+    Parameters:
+    env_config (EnvSettings): Configuration settings for the environment.
+    map_def (MapDefinition): Definition of the map for the environment.
+    num_robots (int): Number of robots in the environment.
+    random_start_pos (bool): Whether to start the robots at random positions.
+
+    Returns:
+    List[Simulator]: A list of initialized Simulator objects.
+    """
+
+    # Calculate the number of simulators needed based on the number of robots and start positions
     num_sims = ceil(num_robots / map_def.num_start_pos)
+
+    # Calculate the proximity to the goal based on the robot radius and goal radius
     goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
+
+    # Initialize an empty list to hold the simulators
     sims: List[Simulator] = []
 
+    # Create the required number of simulators
     for i in range(num_sims):
+        # Determine the number of robots for this simulator
         n = map_def.num_start_pos if i < num_sims - 1 \
             else max(1, num_robots % map_def.num_start_pos)
+
+        # Create the robots for this simulator
         sim_robots = [env_config.robot_factory() for _ in range(n)]
+
+        # Create the simulator with the robots and add it to the list
         sim = Simulator(
             env_config.sim_config, map_def, sim_robots,
             goal_proximity, random_start_pos)

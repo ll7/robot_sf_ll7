@@ -52,7 +52,7 @@ at the repository's root directory which is very useful e.g. for debugging.
 ```sh
 ln -s fast-pysf/pysocialforce pysocialforce
 pushd tests
-    ln -s ../fast-pysf/tests pysf_tests
+    # ln -s ../fast-pysf/tests pysf_tests
 popd
 ```
 

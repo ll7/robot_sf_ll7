@@ -14,6 +14,6 @@ RUN python -m pip install .
 ADD ./tests ./tests
 
 WORKDIR /app/tests
-RUN ln -s ../fast-pysf/tests pysf_tests
+# RUN ln -s ../fast-pysf/tests pysf_tests
 WORKDIR /app
 RUN python -m pytest tests

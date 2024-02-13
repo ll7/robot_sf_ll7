@@ -177,8 +177,13 @@ class LidarScannerSettings:
 
 @numba.njit(fastmath=True)
 def raycast_pedestrians(
-        out_ranges: np.ndarray, scanner_pos: Vec2D, max_scan_range: float,
-        ped_positions: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
+        out_ranges: np.ndarray,
+        scanner_pos: Vec2D,
+        max_scan_range: float,
+        ped_positions: np.ndarray,
+        ped_radius: float,
+        ray_angles: np.ndarray
+        ):
     """
     Perform raycasting to detect pedestrians within the scanner's range.
 

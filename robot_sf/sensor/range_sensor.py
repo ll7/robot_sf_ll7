@@ -134,8 +134,8 @@ def circle_line_intersection_distance(
 
     # Compute quadratic solutions
     disc_root = disc**0.5
-    mu_1 = (-b - disc_root) / 2 * a
-    mu_2 = (-b + disc_root) / 2 * a
+    mu_1 = (-b - disc_root) / (2 * a)
+    mu_2 = (-b + disc_root) / (2 * a)
 
     # Compute cross points S1, S2 and distances to the origin
     s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y  + t_y

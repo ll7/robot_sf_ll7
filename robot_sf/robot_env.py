@@ -280,11 +280,28 @@ def init_simulators(
 
 def init_collision_and_sensors(
         sim: Simulator, env_config: EnvSettings, orig_obs_space: spaces.Dict):
+    """
+    Initialize collision detection and sensor fusion for the robots in the simulator.
+
+    Parameters:
+    sim (Simulator): The simulator object.
+    env_config (EnvSettings): Configuration settings for the environment.
+    orig_obs_space (spaces.Dict): Original observation space.
+
+    Returns:
+    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
+        A tuple containing a list of occupancy objects for collision detection
+        and a list of sensor fusion objects for sensor data handling.
+    """
+
+    # Get the number of robots, simulation configuration,
+    # robot configuration, and lidar configuration
     num_robots = len(sim.robots)
     sim_config = env_config.sim_config
     robot_config = env_config.robot_config
     lidar_config = env_config.lidar_config
 
+    # Initialize occupancy objects for each robot for collision detection
     occupancies = [ContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[i], lambda: sim.goal_pos[i],
@@ -292,13 +309,17 @@ def init_collision_and_sensors(
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
         for i in range(num_robots)]
 
+    # Initialize sensor fusion objects for each robot for sensor data handling
     sensor_fusions: List[SensorFusion] = []
     for r_id in range(num_robots):
+        # Define the ray sensor, target sensor, and speed sensor for each robot
         ray_sensor = lambda r_id=r_id: lidar_ray_scan(
             sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
         target_sensor = lambda r_id=r_id: target_sensor_obs(
             sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
         speed_sensor = lambda r_id=r_id: sim.robots[r_id].current_speed
+
+        # Create the sensor fusion object and add it to the list
         sensor_fusions.append(SensorFusion(
             ray_sensor, speed_sensor, target_sensor,
             orig_obs_space, sim_config.use_next_goal))

@@ -191,6 +191,7 @@ def raycast_pedestrians(
     ----------
     out_ranges : np.ndarray
         The output array to store the detected range for each ray.
+        ! This array is modified in place.
     scanner_pos : Vec2D
         The position of the scanner.
     max_scan_range : float
@@ -204,7 +205,7 @@ def raycast_pedestrians(
 
     Returns
     -------
-    None
+    output_ranges is modified in place.
     """
 
     # Check if pedestrian positions array is empty or not 2D

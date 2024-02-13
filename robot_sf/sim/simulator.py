@@ -3,7 +3,7 @@ from typing import List, Tuple, Union
 
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.simulator import make_forces as pysf_make_forces
-from pysocialforce.utils import SimulatorConfig as PySFSimConfig
+from pysocialforce.config import SimulatorConfig as PySFSimConfig
 from pysocialforce.forces import Force as PySFForce, ObstacleForce
 
 from robot_sf.sim_config import SimulationSettings

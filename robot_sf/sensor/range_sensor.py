@@ -89,24 +89,43 @@ def lineseg_line_intersection_distance(
 
 
 @numba.njit(fastmath=True)
-def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
+def circle_line_intersection_distance(
+    circle: Circle2D,
+    origin: Vec2D,
+    ray_vec: Vec2D
+    ) -> float:
+    """
+    Calculate the distance from the origin to the intersection point between 
+    a circle and a ray vector.
+
+    Parameters:
+    circle (Circle2D): The circle defined by its center and radius.
+    origin (Vec2D): The origin of the ray vector.
+    ray_vec (Vec2D): The ray vector.
+
+    Returns:
+    float: The distance to the nearest intersection point, or infinity if no 
+    intersection.
+    """
+    # Unpack circle center and radius, and ray vector
     (c_x, c_y), r = circle
     ray_x, ray_y = ray_vec
 
-    # shift circle's center to the origin (0, 0)
+    # Shift circle's center to the origin (0, 0)
     (p1_x, p1_y) = origin[0] - c_x, origin[1] - c_y
 
+    # Calculate squared radius and norm of p1
     r_sq = r**2
     norm_p1 = p1_x**2 + p1_y**2
 
-    # cofficients a, b, c of the quadratic solution formula
+    # Coefficients a, b, c of the quadratic solution formula
     s_x, s_y = ray_x, ray_y
     t_x, t_y = p1_x, p1_y
     a = s_x**2 + s_y**2
     b = 2 * (s_x * t_x + s_y * t_y)
     c = norm_p1 - r_sq
 
-    # abort when ray doesn't collide
+    # Abort when ray doesn't collide with circle
     disc = b**2 - 4 * a * c
     if disc < 0 or (b > 0 and b**2 > disc):
         return np.inf
@@ -116,12 +135,13 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
     mu_1 = (-b - disc_root) / 2 * a
     mu_2 = (-b + disc_root) / 2 * a
 
-    # compute cross points S1, S2 and distances to the origin
+    # Compute cross points S1, S2 and distances to the origin
     s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y  + t_y
     s2_x, s2_y = mu_2 * s_x + t_x, mu_2 * s_y  + t_y
     dist_1 = euclid_dist((p1_x, p1_y), (s1_x, s1_y))
     dist_2 = euclid_dist((p1_x, p1_y), (s2_x, s2_y))
 
+    # Return the distance to the nearest intersection point
     if mu_1 >= 0 and mu_2 >= 0:
         return min(dist_1, dist_2)
     elif mu_1 >= 0:

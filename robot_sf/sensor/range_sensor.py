@@ -108,17 +108,19 @@ def circle_line_intersection_distance(
     intersection.
     """
     # Unpack circle center and radius, and ray vector
-    (c_x, c_y), r = circle
+    (circle_x, circle_y), radius = circle
     ray_x, ray_y = ray_vec
 
     # Shift circle's center to the origin (0, 0)
-    (p1_x, p1_y) = origin[0] - c_x, origin[1] - c_y
+    p1_x = origin[0] - circle_x
+    p1_y = origin[1] - circle_y
 
     # Calculate squared radius and norm of p1
-    r_sq = r**2
+    r_sq = radius**2
     norm_p1 = p1_x**2 + p1_y**2
 
     # Coefficients a, b, c of the quadratic solution formula
+    # ax^2+bx+c=0
     s_x, s_y = ray_x, ray_y
     t_x, t_y = p1_x, p1_y
     a = s_x**2 + s_y**2
@@ -130,7 +132,7 @@ def circle_line_intersection_distance(
     if disc < 0 or (b > 0 and b**2 > disc):
         return np.inf
 
-    # compute quadratic solutions
+    # Compute quadratic solutions
     disc_root = disc**0.5
     mu_1 = (-b - disc_root) / 2 * a
     mu_2 = (-b + disc_root) / 2 * a

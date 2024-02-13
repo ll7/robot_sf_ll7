@@ -8,15 +8,23 @@ from gym import spaces
 
 from robot_sf.nav.occupancy import ContinuousOccupancy
 
-
 Vec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
-Range = Tuple[float, float]
+"""Type alias for a 2D vector represented as a tuple of two floats"""
 
-
-Vec2D = Tuple[float, float]
 Line2D = Tuple[Vec2D, Vec2D]
+"""Type alias for a 2D line represented as a tuple of two 2D vectors (start and end points)"""
+
 Circle2D = Tuple[Vec2D, float]
+"""Type alias for a 2D circle represented as a tuple of a 2D vector (center) and a float (radius)"""
+
+RobotPose = Tuple[Vec2D, float]
+"""
+Type alias for a robot's pose represented as a tuple of a 2D vector (position)
+and a float (orientation)
+"""
+
+Range = Tuple[float, float]
+"""Type alias for a range represented as a tuple of two floats"""
 
 
 @numba.njit(fastmath=True)

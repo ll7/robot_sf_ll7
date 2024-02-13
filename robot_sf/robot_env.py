@@ -57,6 +57,24 @@ class Robot(Protocol):
 
 @dataclass
 class RobotState:
+    """
+    Represents the state of a robot in a simulated environment,
+    including information about navigation,
+    occupancy, sensor fusion, and simulation time.
+
+    Attributes:
+        nav (RouteNavigator): Object managing navigation and route planning.
+        occupancy (ContinuousOccupancy): Object tracking spatial occupation, 
+            for collision detection.
+        sensors (SensorFusion): Object for managing sensor data and fusion.
+        d_t (float): The simulation timestep duration.
+        sim_time_limit (float): The maximum allowed simulation time.
+
+    Additional attributes with default values initialized to False or 0 representing various
+    conditions such as collision states, timeout condition, simulation time elapsed,
+    and timestep count.
+    These are updated during the simulation.
+    """
     nav: RouteNavigator
     occupancy: ContinuousOccupancy
     sensors: SensorFusion
@@ -73,22 +91,34 @@ class RobotState:
 
     @property
     def max_sim_steps(self) -> int:
+        """Calculates the maximum number of simulation steps based on time limit."""
         return int(ceil(self.sim_time_limit / self.d_t))
 
     @property
     def is_terminal(self) -> bool:
-        return self.is_at_goal or self.is_timeout or self.is_collision_with_robot \
-            or self.is_collision_with_ped or self.is_collision_with_obst
+        """
+        Checks if the current state is terminal, i.e., if the robot has reached its goal,
+        timed out, or collided with any object or other robots.
+        """
+        return (self.is_at_goal or self.is_timeout or self.is_collision_with_robot or
+                self.is_collision_with_ped or self.is_collision_with_obst)
 
     @property
     def is_waypoint_complete(self) -> bool:
+        """Indicates whether the current waypoint has been reached."""
         return self.nav.reached_waypoint
 
     @property
     def is_route_complete(self) -> bool:
+        """Indicates whether the entire planned route has been completed."""
         return self.nav.reached_destination
 
     def reset(self):
+        """
+        Resets the robot's state for a new simulation episode, incrementing the episode counter,
+        resetting the timestep and elapsed time, clearing collision and goal flags, and refreshing
+        sensor data for the initial observation.
+        """
         self.episode += 1
         self.timestep = 0
         self.sim_time_elapsed = 0.0
@@ -101,6 +131,11 @@ class RobotState:
         return self.sensors.next_obs()
 
     def step(self):
+        """
+        Advances the robot's state by one simulation timestep, updating the elapsed time,
+        checking for collisions, goal achievement, and timeout. Returns the next observation
+        from sensors.
+        """
         # TODO: add check for robot-robot collisions as well
         self.timestep += 1
         self.sim_time_elapsed += self.d_t
@@ -112,6 +147,12 @@ class RobotState:
         return self.sensors.next_obs()
 
     def meta_dict(self) -> dict:
+        """
+        Compiles a dictionary of metadata about the robot's state for logging or
+        monitoring purposes.
+        Includes information such as episode number, current timestep, collision status,
+        goal achievement, and completion status of the route.
+        """
         return {
             "step": self.episode * self.max_sim_steps,
             "episode": self.episode,
@@ -193,10 +234,13 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
     robot = env_config.robot_factory()
     action_space = robot.action_space
     observation_space, orig_obs_space = fused_sensor_space(
-        env_config.sim_config.stack_steps, robot.observation_space,
+        env_config.sim_config.stack_steps,
+        robot.observation_space,
         target_sensor_space(map_def.max_target_dist),
-        lidar_sensor_space(env_config.lidar_config.num_rays,
-                           env_config.lidar_config.max_scan_dist))
+        lidar_sensor_space(
+            env_config.lidar_config.num_rays,
+            env_config.lidar_config.max_scan_dist)
+        )
     return action_space, observation_space, orig_obs_space
 
 

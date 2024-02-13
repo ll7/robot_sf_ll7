@@ -108,17 +108,19 @@ def circle_line_intersection_distance(
     intersection.
     """
     # Unpack circle center and radius, and ray vector
-    (c_x, c_y), r = circle
+    (circle_x, circle_y), radius = circle
     ray_x, ray_y = ray_vec
 
     # Shift circle's center to the origin (0, 0)
-    (p1_x, p1_y) = origin[0] - c_x, origin[1] - c_y
+    p1_x = origin[0] - circle_x
+    p1_y = origin[1] - circle_y
 
     # Calculate squared radius and norm of p1
-    r_sq = r**2
+    r_sq = radius**2
     norm_p1 = p1_x**2 + p1_y**2
 
     # Coefficients a, b, c of the quadratic solution formula
+    # ax^2+bx+c=0
     s_x, s_y = ray_x, ray_y
     t_x, t_y = p1_x, p1_y
     a = s_x**2 + s_y**2
@@ -130,10 +132,10 @@ def circle_line_intersection_distance(
     if disc < 0 or (b > 0 and b**2 > disc):
         return np.inf
 
-    # compute quadratic solutions
+    # Compute quadratic solutions
     disc_root = disc**0.5
-    mu_1 = (-b - disc_root) / 2 * a
-    mu_2 = (-b + disc_root) / 2 * a
+    mu_1 = (-b - disc_root) / (2 * a)
+    mu_2 = (-b + disc_root) / (2 * a)
 
     # Compute cross points S1, S2 and distances to the origin
     s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y  + t_y
@@ -175,32 +177,74 @@ class LidarScannerSettings:
 
 @numba.njit(fastmath=True)
 def raycast_pedestrians(
-        out_ranges: np.ndarray, scanner_pos: Vec2D, max_scan_range: float,
-        ped_positions: np.ndarray, ped_radius: float, ray_angles: np.ndarray):
+        out_ranges: np.ndarray,
+        scanner_pos: Vec2D,
+        max_scan_range: float,
+        ped_positions: np.ndarray,
+        ped_radius: float,
+        ray_angles: np.ndarray
+        ):
+    """
+    Perform raycasting to detect pedestrians within the scanner's range.
 
+    Parameters
+    ----------
+    out_ranges : np.ndarray
+        The output array to store the detected range for each ray.
+        ! This array is modified in place.
+    scanner_pos : Vec2D
+        The position of the scanner.
+    max_scan_range : float
+        The maximum range of the scanner.
+    ped_positions : np.ndarray
+        The positions of the pedestrians.
+    ped_radius : float
+        The radius of the pedestrians.
+    ray_angles : np.ndarray
+        The angles of the rays.
+
+    Returns
+    -------
+    output_ranges is modified in place.
+    """
+
+    # Check if pedestrian positions array is empty or not 2D
     if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 \
             or ped_positions.shape[1] != 2:
         return
 
+    # Convert scanner position to numpy array
     scanner_pos_np = np.array([scanner_pos[0], scanner_pos[1]])
+
+    # Calculate square of maximum scan range
     threshold_sq = max_scan_range**2
+
+    # Calculate relative positions of pedestrians and their squared distances
     relative_ped_pos = ped_positions - scanner_pos_np
     dist_sq = np.sum(relative_ped_pos**2, axis=1)
+
+    # Find pedestrians within scanner's range
     ped_dist_mask = np.where(dist_sq <= threshold_sq)[0]
     close_ped_pos = relative_ped_pos[ped_dist_mask]
 
+    # If no pedestrians are within range, return
     if len(ped_dist_mask) == 0:
         return
 
+    # For each ray angle, calculate cosine similarities and find pedestrians
+    # in the direction of the ray
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
         cos_sims = close_ped_pos[:, 0] * unit_vec[0] \
             + close_ped_pos[:, 1] * unit_vec[1]
 
+        # Find pedestrians in the direction of the ray
         ped_dir_mask = np.where(cos_sims >= 0)[0]
         joined_mask = ped_dist_mask[ped_dir_mask]
         relevant_ped_pos = relative_ped_pos[joined_mask]
 
+        # For each pedestrian in the direction of the ray, calculate the
+        # distance to the pedestrian's edge and update the output range
         for pos in relevant_ped_pos:
             ped_circle = ((pos[0], pos[1]), ped_radius)
             coll_dist = circle_line_intersection_distance(

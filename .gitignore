@@ -1,4 +1,3 @@
-.vscode
 __pycache__/
 .scannerwork
 .pytest_cache

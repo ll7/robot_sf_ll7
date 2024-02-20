@@ -186,48 +186,112 @@ class DifferentialDriveMotion:
 
 @dataclass
 class DifferentialDriveRobot():
-    """Representing a robot with differential driving behavior"""
+    """
+    A robot with differential drive behavior that defines its movement, 
+    action and observation space.
+    """
 
-    config: DifferentialDriveSettings
+    config: DifferentialDriveSettings  # Configuration settings for the robot
+    # Default state of the robot on initialization
     state: DifferentialDriveState = field(default=DifferentialDriveState(((0, 0), 0)))
+    # Movement logic for the robot based on the config; initialized post-creation
     movement: DifferentialDriveMotion = field(init=False)
 
     def __post_init__(self):
+        """Initializes the movement behavior of the robot after class creation."""
         self.movement = DifferentialDriveMotion(self.config)
 
     @property
     def observation_space(self) -> spaces.Box:
+        """
+        Defines the observation space for the robot based on its configuration.
+
+        Returns:
+            Box: An instance of gym.spaces.Box representing the continuous
+                 observation space where each observation is a vector containing
+                 linear and angular speeds.
+        """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed]
-            , dtype=np.float32)
+            [self.config.max_linear_speed, self.config.max_angular_speed],
+            dtype=np.float32)
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def action_space(self) -> spaces.Box:
+        """
+        Defines the action space for the robot based on its configuration.
+
+        Returns:
+            Box: An instance of gym.spaces.Box representing the continuous
+                 action space where each action is a vector containing
+                 linear and angular speeds.
+        """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed]
-            , dtype=np.float32)
+            [self.config.max_linear_speed, self.config.max_angular_speed],
+            dtype=np.float32)
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def pos(self) -> Vec2D:
+        """
+        Current position of the robot.
+
+        Returns:
+            Vec2D: The x-y coordinates representing the current position.
+        """
         return self.state.pose[0]
 
     @property
     def pose(self) -> RobotPose:
+        """
+        Current pose (position and orientation) of the robot.
+
+        Returns:
+            RobotPose: The pose representing the robot's current position and
+                orientation.
+        """
         return self.state.pose
 
     @property
     def current_speed(self) -> PolarVec2D:
+        """
+        Current speed of the robot in polar coordinates (linear and angular).
+
+        Returns:
+            PolarVec2D: The current speed of the robot.
+        """
         return self.state.velocity
 
     def apply_action(self, action: DifferentialDriveAction, d_t: float):
+        """
+        Applies an action to the robot over a time interval.
+
+        Args:
+            action: The action to be applied represented by linear and angular
+                    velocities.
+            d_t: The duration in seconds over which to apply the action.
+        """
         self.movement.move(self.state, action, d_t)
 
     def reset_state(self, new_pose: RobotPose):
+        """
+        Resets the robot's state to a new pose.
+
+        Args:
+            new_pose: The new pose to set as the current state.
+        """
         self.state = DifferentialDriveState(new_pose)
 
     def parse_action(self, action: np.ndarray) -> DifferentialDriveAction:
+        """
+        Parses a numpy array into a DifferentialDriveAction.
+
+        Args:
+            action: A numpy array containing linear and angular components.
+
+        Returns:
+            DifferentialDriveAction: The tuple with linear and angular velocity.
+        """
         return (action[0], action[1])

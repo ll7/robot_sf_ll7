@@ -1,3 +1,8 @@
+"""
+ped_behavior.py
+- Defines the behavior of pedestrian groups
+- Pedestrian groups can be assigned to follow a route or to move around a crowded zone
+"""
 from math import dist
 from typing import List, Dict, Tuple, Protocol
 from dataclasses import dataclass, field
@@ -12,6 +17,7 @@ Zone = Tuple[Vec2D, Vec2D, Vec2D]
 
 
 class PedestrianBehavior(Protocol):
+    # TODO: What is the purpose of this class?
     def step(self):
         raise NotImplementedError()
 

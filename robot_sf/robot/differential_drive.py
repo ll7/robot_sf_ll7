@@ -152,11 +152,20 @@ class DifferentialDriveMotion:
         return new_orient
 
     def _compute_odometry(self, old_pose: RobotPose, movement: PolarVec2D) -> RobotPose:
+        """
+        Computes and returns the new odometry of the robot.
+
+        :param old_pose: The previous pose of the robot (x, y, orientation).
+        :param movement: The movement made by the robot (distance, new orientation).
+        :return: The updated pose of the robot.
+        """
         distance_covered, new_orient = movement
         (robot_x, robot_y), old_orient = old_pose
         rel_rotation = (old_orient + new_orient) / 2
+        # TODO: should I use numpy for cos and sin?
         new_x = robot_x + distance_covered * cos(rel_rotation)
         new_y = robot_y + distance_covered * sin(rel_rotation)
+        # TODO: should I return this in (x, y, orientation) format?
         return (new_x, new_y), new_orient
 
 

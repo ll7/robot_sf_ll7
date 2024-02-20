@@ -15,21 +15,42 @@ WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
 
 @dataclass
 class DifferentialDriveSettings:
+    """
+    Configuration settings for a differential drive robot, including physical 
+    characteristics and speed limitations.
+    """
+
+    # Radius of the robot (typically used for collision detection)
     radius: float = 1.0
+    # Maximum linear velocity the robot can achieve
     max_linear_speed: float = 2.0
+    # Maximum angular velocity the robot can achieve
     max_angular_speed: float = 0.5
+    # Radius of the wheels (used to calculate rotations from linear movement)
     wheel_radius: float = 0.05
+    # Distance between the centers of the two wheels of the robot
     interaxis_length: float = 0.3
 
     def __post_init__(self):
+        """
+        Post-initialization processing to ensure valid configuration values.
+
+        Raises:
+            ValueError: If any of the provided settings are not within the 
+                        expected positive, non-zero ranges.
+        """
         if self.radius <= 0:
-            raise ValueError("Robot's radius mustn't be negative or zero! Needs to model a corps!")
+            raise ValueError("Robot's radius must be positive and non-zero!")
         if self.wheel_radius <= 0:
-            raise ValueError("Robot's wheel radius mustn't be negative or zero! Needs to model a corps!")
+            raise ValueError("Robot's wheel radius must be positive and non-zero!")
         if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
-            raise ValueError("Robot's max. linear / angular speed mustn't be negative or zero!")
+            raise ValueError(
+                "Robot's max. linear and angular speeds must be positive and non-zero!"
+            )
         if self.interaxis_length <= 0:
-            raise ValueError("Robot's interaxis length mustn't be negative or zero!")
+            raise ValueError(
+                "Robot's interaxis length must be positive and non-zero!"
+            )
 
 
 @dataclass

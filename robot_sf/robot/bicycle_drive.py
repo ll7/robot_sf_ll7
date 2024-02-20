@@ -13,20 +13,31 @@ RobotPose = Tuple[Vec2D, float]
 
 @dataclass
 class BicycleDriveSettings:
-    radius: float=1.0 # info: collision radius, not relevant for kinematics
-    wheelbase: float=1.0
-    max_steer: float=0.78 # 45 deg
-    max_velocity: float=3.0
-    max_accel: float=1.0
-    allow_backwards: bool=False
+    """
+    A class that defines the settings for a bicycle drive robot.
+    """
+
+    radius: float = 1.0  # Collision radius, not relevant for kinematics
+    wheelbase: float = 1.0  # Distance between front and rear wheels
+    max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
+    max_velocity: float = 3.0  # Maximum forward velocity
+    max_accel: float = 1.0  # Maximum acceleration
+    allow_backwards: bool = False  # Whether backwards movement is allowed
 
     @property
     def min_velocity(self) -> float:
+        """
+        Get the minimum velocity of the robot.
+
+        If backwards movement is allowed, the minimum velocity is -max_velocity.
+        Otherwise, the minimum velocity is 0.
+        """
         return -self.max_velocity if self.allow_backwards else 0.0
 
 
 @dataclass
 class BicycleDriveState:
+    """A class that represents the state of a bicycle drive robot."""
     pose: RobotPose
     velocity: float = field(default=0)
 
@@ -36,10 +47,12 @@ class BicycleDriveState:
 
     @property
     def orient(self) -> float:
+        """Get the orientation of the robot in radians."""
         return self.pose[1]
 
     @property
     def current_speed(self) -> PolarVec2D:
+        """Get the current speed and orientation of the robot."""
         return (self.velocity, self.orient)
 
 
@@ -56,24 +69,55 @@ class BicycleMotion:
     config: BicycleDriveSettings
 
     def move(self, state: BicycleDriveState, action: BicycleAction, d_t: float):
+        """
+        Update the state of the bicycle given an action and time duration.
+        
+        Args:
+            state (BicycleDriveState): The current state of the bicycle.
+            action (BicycleAction): The action to take, contains acceleration
+                                    and steering angle.
+            d_t (float): The time duration for which to apply the action.
+
+        Returns:
+            None: The method updates the state in-place.
+        """
         acceleration, steering_angle = action
         (x, y), orient = state.pose
         velocity = state.velocity
 
+        # Apply limits to the acceleration and calculate new velocity
         acceleration = np.clip(acceleration, -self.config.max_accel, self.config.max_accel)
         new_velocity = velocity + d_t * acceleration
         new_velocity = np.clip(new_velocity, self.config.min_velocity, self.config.max_velocity)
+
+        # Apply limits to the steering angle
         steering_angle = np.clip(steering_angle, -self.config.max_steer, self.config.max_steer)
+
+        # Calculate angular velocity based on velocity and steering angle
         angular_velocity = new_velocity * tan(steering_angle) / self.config.wheelbase
 
+        # Update position coordinates based on current orientation and speed
         new_x = x + velocity * cos(orient) * d_t
         new_y = y + velocity * sin(orient) * d_t
+
+        # Normalize new orientation to ensure it stays within the valid range
         new_orient = self._norm_angle(orient + angular_velocity * d_t)
 
+        # Update state with new pose and velocity
         state.pose = ((new_x, new_y), new_orient)
         state.velocity = new_velocity
 
     def _norm_angle(self, angle: float) -> float:
+        """
+        Normalize an angle to be within the range [-π, π].
+        
+        Args:
+            angle (float): The angle to normalize.
+
+        Returns:
+            float: Normalized angle within range [-π, π].
+        TODO: I think that this function is implemented in multiple places in the codebase.
+        """
         return atan2(sin(angle), cos(angle))
 
 

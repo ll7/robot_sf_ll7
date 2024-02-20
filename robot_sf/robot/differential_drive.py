@@ -120,15 +120,24 @@ class DifferentialDriveMotion:
         return new_left_wheel_speed, new_right_wheel_speed
 
     def _covered_distance(
-            self, last_wheel_speeds: WheelSpeedState,
-            new_wheel_speeds: WheelSpeedState, d_t: float) -> float:
-        last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
-        wheel_speed_left, wheel_speed_right = new_wheel_speeds
+            self,
+            last_wheel_speeds: WheelSpeedState,
+            new_wheel_speeds: WheelSpeedState,
+            d_t: float
+            ) -> float:
+        """
+        Computes the distance covered by the robot over the time interval `d_t`.
 
-        velocity = ((last_wheel_speed_left + wheel_speed_left) / 2 \
-            + (last_wheel_speed_right + wheel_speed_right) / 2)
-        distance_covered = self.config.wheel_radius / 2 * velocity * d_t
-        return distance_covered
+        :param last_wheel_speeds: The previous wheel speeds.
+        :param new_wheel_speeds: The updated wheel speeds.
+        :param d_t: The time elapsed since last speeds measurement.
+        :return: The covered distance during `d_t`.
+        """
+        avg_left_speed = (last_wheel_speeds[0] + new_wheel_speeds[0]) / 2
+        avg_right_speed = (last_wheel_speeds[1] + new_wheel_speeds[1]) / 2
+        average_velocity = (avg_left_speed + avg_right_speed) / 2
+        # TODO: Validate that this is the correct formula for distance covered
+        return self.config.wheel_radius / 2 * average_velocity * d_t
 
     def _new_orientation(
             self, robot_orient: float, last_wheel_speeds: WheelSpeedState,

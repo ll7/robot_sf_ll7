@@ -17,7 +17,10 @@ Zone = Tuple[Vec2D, Vec2D, Vec2D]
 
 
 class PedestrianBehavior(Protocol):
-    # TODO: What is the purpose of this class?
+    """
+    !!! Not Implemented !!!
+    TODO: What is the purpose of this class?
+    """
     def step(self):
         raise NotImplementedError()
 

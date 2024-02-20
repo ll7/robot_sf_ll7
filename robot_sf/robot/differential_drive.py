@@ -1,3 +1,4 @@
+"""Differential Drive Robot Model"""
 from math import sin, cos
 from dataclasses import dataclass, field
 from typing import Tuple
@@ -44,9 +45,21 @@ DifferentialDriveAction = Tuple[float, float] # (linear velocity, angular veloci
 
 @dataclass
 class DifferentialDriveMotion:
+    """
+    Class providing functionality for simulating or controlling the motion
+    of a differential drive robot based on its settings and current state.
+    """
     config: DifferentialDriveSettings
 
     def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float):
+        """
+        Updates the robot's state including position and velocity based on 
+        the action taken and elapsed time.
+        
+        :param state: The current state of the differential drive.
+        :param action: The desired change in velocity and orientation (dx, dtheta).
+        :param d_t: The time elapsed since the last update in seconds.
+        """
         robot_vel = self._robot_velocity(state.velocity, action)
         new_wheel_speeds = self._resulting_wheel_speeds(robot_vel)
         distance = self._covered_distance(state.wheel_speeds, new_wheel_speeds, d_t)
@@ -57,6 +70,14 @@ class DifferentialDriveMotion:
         state.velocity = robot_vel
 
     def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D) -> PolarVec2D:
+        """
+        Computes the new polar velocity vector from the current velocity and
+        the action applied.
+
+        :param velocity: The current velocity of the robot (linear speed, angular speed).
+        :param action: The action to apply on the velocity (dV, dTheta).
+        :return: The clipped new velocity as per max speeds.
+        """
         dot_x = velocity[0] + action[0]
         dot_orient = velocity[1] + action[1]
         dot_x = np.clip(dot_x, 0, self.config.max_linear_speed)
@@ -65,6 +86,12 @@ class DifferentialDriveMotion:
         return dot_x, dot_orient
 
     def _resulting_wheel_speeds(self, movement: PolarVec2D) -> WheelSpeedState:
+        """
+        Calculates the wheel speeds resulting from a given robot movement.
+
+        :param movement: The movement of the robot encoded as a polar vector (speed, orientation).
+        :return: The calculated wheel speeds (left wheel speed, right wheel speed).
+        """
         dot_x, dot_orient = movement
         diff = self.config.interaxis_length * dot_orient / 2
         new_left_wheel_speed = (dot_x - diff) / self.config.wheel_radius

@@ -1,3 +1,7 @@
+"""
+The `sensor_fusion.py` file defines a `SensorFusion` class that combines data from multiple sensors.
+It also provides a function `fused_sensor_space` to create a combined observation space.
+"""
 from typing import Tuple, Callable, List, Dict
 from dataclasses import dataclass, field
 
@@ -11,22 +15,51 @@ OBS_RAYS = "rays"
 
 
 def fused_sensor_space(
-        timesteps: int, robot_obs: spaces.Box,
-        target_obs: spaces.Box, lidar_obs: spaces.Box
-    ) -> Tuple[spaces.Dict, spaces.Dict]:
+        timesteps: int,
+        robot_obs: spaces.Box,
+        target_obs: spaces.Box,
+        lidar_obs: spaces.Box
+        ) -> Tuple[spaces.Dict, spaces.Dict]:
+    """
+    Create a combined observation space for the robot, target, and LiDAR sensors.
+
+    Parameters
+    ----------
+    timesteps : int
+        The number of timesteps in the observation.
+    robot_obs : spaces.Box
+        The observation space for the robot.
+    target_obs : spaces.Box
+        The observation space for the target.
+    lidar_obs : spaces.Box
+        The observation space for the LiDAR sensor.
+
+    Returns
+    -------
+    Tuple[spaces.Dict, spaces.Dict]
+        The normalized and original combined observation spaces.
+    """
+    # Create the maximum and minimum drive states for each timestep
     max_drive_state = np.array([
         robot_obs.high.tolist() + target_obs.high.tolist()
         for t in range(timesteps)], dtype=np.float32)
     min_drive_state = np.array([
         robot_obs.low.tolist() + target_obs.low.tolist()
         for t in range(timesteps)], dtype=np.float32)
-    max_lidar_state = np.array([lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32)
-    min_lidar_state = np.array([lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
 
+    # Create the maximum and minimum LiDAR states for each timestep
+    max_lidar_state = np.array(
+        [lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32)
+    min_lidar_state = np.array(
+        [lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
+
+    # Create the original observation spaces for the drive and LiDAR states
     orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
     orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)
-    orig_obs_space = spaces.Dict({ OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state })
+    orig_obs_space = spaces.Dict(
+        { OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state })
 
+    # Create the normalized observation spaces for the drive and LiDAR states
     box_drive_state = spaces.Box(
         low=min_drive_state / max_drive_state,
         high=max_drive_state / max_drive_state,

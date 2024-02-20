@@ -1,3 +1,19 @@
+"""
+The `sim_config.py` file defines a data class `EnvSettings` for simulation settings. 
+
+These settings include:
+- `sim_config`: Simulation configuration
+- `lidar_config`: LiDAR scanner settings
+- `robot_config`: Robot configuration (differential drive or bicycle drive)
+- `map_pool`: A pool of map definitions
+
+The `__post_init__` method checks if all properties are initialized, raising an error if not.
+
+The `robot_factory` method creates a robot instance based on the robot configuration.
+It supports `DifferentialDriveRobot` and `BicycleDriveRobot`.
+If the robot configuration is unsupported, it raises a `NotImplementedError`.
+"""
+
 from typing import Union
 from dataclasses import dataclass
 

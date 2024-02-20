@@ -81,6 +81,28 @@ def target_sensor_obs(
 
 
 def target_sensor_space(max_target_dist: float) -> spaces.Box:
+    """
+    Create a Box space for the target sensor.
+
+    The Box space represents the possible observations from the target sensor. It is
+    a 3-dimensional space, with the dimensions representing the distance to the target,
+    the angle to the target, and the trajectory angle to the next target.
+
+    Parameters
+    ----------
+    max_target_dist : float
+        The maximum possible distance to the target.
+
+    Returns
+    -------
+    spaces.Box
+        The Box space for the target sensor.
+    """
+    # Define the upper bounds for the distance, target angle, and next target angle
     high = np.array([max_target_dist, np.pi, np.pi], dtype=np.float32)
+
+    # Define the lower bounds for the distance, target angle, and next target angle
     low = np.array([0.0, -np.pi, -np.pi], dtype=np.float32)
+
+    # Return a Box space defined by the lower and upper bounds
     return spaces.Box(low=low, high=high, dtype=np.float32)

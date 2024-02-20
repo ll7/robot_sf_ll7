@@ -11,6 +11,7 @@ Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
+# TODO: Is WheelSpeedState in translation or rotation units?
 
 
 @dataclass

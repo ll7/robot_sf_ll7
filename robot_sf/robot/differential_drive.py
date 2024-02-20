@@ -140,11 +140,25 @@ class DifferentialDriveMotion:
         return self.config.wheel_radius / 2 * average_velocity * d_t
 
     def _new_orientation(
-            self, robot_orient: float, last_wheel_speeds: WheelSpeedState,
-            wheel_speeds: WheelSpeedState, d_t: float) -> float:
+            self,
+            robot_orient: float,
+            last_wheel_speeds: WheelSpeedState,
+            wheel_speeds: WheelSpeedState,
+            d_t: float
+            ) -> float:
+        """
+        Determines the new orientation of the robot after updating its wheel speeds.
+
+        :param robot_orient: The prior orientation angle of the robot.
+        :param last_wheel_speeds: The previous left and right wheel speeds.
+        :param new_wheel_speeds: The new left and right wheel speeds.
+        :param d_t: Time elapsed.
+        :return: The new orientation of the robot.
+        """
         last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
         wheel_speed_left, wheel_speed_right = wheel_speeds
 
+        # TODO: Validate that this is the correct formula for orientation change
         right_left_diff = (last_wheel_speed_right + wheel_speed_right) / 2 \
             - (last_wheel_speed_left + wheel_speed_left) / 2
         diff = self.config.wheel_radius / self.config.interaxis_length * right_left_diff * d_t

@@ -197,13 +197,17 @@ class DifferentialDriveRobot():
 
     @property
     def observation_space(self) -> spaces.Box:
-        high = np.array([self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32)
+        high = np.array(
+            [self.config.max_linear_speed, self.config.max_angular_speed]
+            , dtype=np.float32)
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def action_space(self) -> spaces.Box:
-        high = np.array([self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32)
+        high = np.array(
+            [self.config.max_linear_speed, self.config.max_angular_speed]
+            , dtype=np.float32)
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 

@@ -130,6 +130,19 @@ class PedestrianStates:
 
 @dataclass
 class PedestrianGroupings:
+    """
+    A class that represents the groupings of pedestrians.
+
+    Attributes
+    ----------
+    states : PedestrianStates
+        The states of the pedestrians.
+    groups : Dict[int, Set[int]]
+        The groups of pedestrians, represented as a dictionary where the keys are group
+        IDs and the values are sets of pedestrian IDs. Default is an empty dictionary.
+    group_by_ped_id : Dict[int, int]
+        A dictionary that maps pedestrian IDs to group IDs. Default is an empty dictionary.
+    """
     states: PedestrianStates
     groups: Dict[int, Set[int]] = field(default_factory=dict)
     group_by_ped_id: Dict[int, int] = field(default_factory=dict)

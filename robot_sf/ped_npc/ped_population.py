@@ -51,22 +51,62 @@ class PedSpawnConfig:
 
 
 def sample_route(
-        route: GlobalRoute, num_samples: int,
-        sidewalk_width: float) -> Tuple[List[Vec2D], int]:
+        route: GlobalRoute,
+        num_samples: int,
+        sidewalk_width: float
+    ) -> Tuple[List[Vec2D], int]:
+    """
+    Samples points along a given route within the bounds of a sidewalk.
 
+    Args:
+        route: A `GlobalRoute` object representing the route to sample from.
+        num_samples: The number of points to sample along the route.
+        sidewalk_width: The width of the sidewalk for constraining sample spread.
+
+    Returns:
+        A tuple containing:
+            - A list of `Vec2D` objects representing the sampled points.
+            - The section index of the route where sampling starts (sec_id).
+
+    Raises:
+        ValueError: If `num_samples` is not positive.
+    """
+
+    # Error handling
+    if num_samples <= 0:
+        raise ValueError("Number of samples must be positive.")
+
+    # Randomly choose a starting offset along the total length of the route
     sampled_offset = np.random.uniform(0, route.total_length)
-    sec_id = next(iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1)
 
+    # Find the section index that corresponds to the sampled offset
+    sec_id = next(
+        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1)
+
+    # Get start and end points of the chosen section
     start, end = route.sections[sec_id]
+
+    # Define helper functions for vector operations
     add_vecs = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
     sub_vecs = lambda v1, v2: (v1[0] - v2[0], v1[1] - v2[1])
+
+    # Clip function to constrain random spread to the sidewalk width
     clip_spread = lambda v: np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
+
+    # Calculate the center point between the start and end of the section
     center = add_vecs(start, sub_vecs(end, start))
+
+    # Define standard deviation for normal distribution based on sidewalk width
     std_dev = sidewalk_width / 4
 
+    # Sample x and y offsets from a normal distribution centered at midpoint
     x_offsets = clip_spread(np.random.normal(center[0], std_dev, (num_samples, 1)))
     y_offsets = clip_spread(np.random.normal(center[1], std_dev, (num_samples, 1)))
+
+    # Create the sampled points by combining offsets with the section's center
     points = np.concatenate((x_offsets, y_offsets), axis=1) + center
+
+    # Return sampled points as a list of Vec2D tuples and the section index
     return [(x, y) for x, y in points], sec_id
 
 

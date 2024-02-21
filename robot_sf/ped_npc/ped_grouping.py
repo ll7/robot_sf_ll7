@@ -9,31 +9,122 @@ Vec2D = Tuple[float, float]
 
 @dataclass
 class PedestrianStates:
+    """
+    A class that represents the states of pedestrians.
+
+    Attributes
+    ----------
+    pysf_states : Callable[[], np.ndarray]
+        A function that returns the current states of the pedestrians.
+
+    Properties
+    ----------
+    num_peds : int
+        The number of pedestrians.
+    ped_positions : np.ndarray
+        The positions of the pedestrians.
+    """
+
     pysf_states: Callable[[], np.ndarray]
 
     @property
     def num_peds(self) -> int:
+        """
+        Get the number of pedestrians.
+
+        Returns
+        -------
+        int
+            The number of pedestrians.
+        """
         return self.pysf_states().shape[0]
 
     @property
     def ped_positions(self) -> np.ndarray:
+        """
+        Get the positions of the pedestrians.
+
+        Returns
+        -------
+        np.ndarray
+            The positions of the pedestrians.
+        """
         return self.pysf_states()[:, 0:2]
 
     def redirect(self, ped_id: int, new_goal: Vec2D):
+        """
+        Redirect a pedestrian to a new goal.
+
+        Parameters
+        ----------
+        ped_id : int
+            The ID of the pedestrian.
+        new_goal : Vec2D
+            The new goal of the pedestrian.
+        """
         self.pysf_states()[ped_id, 4:6] = new_goal
 
     def reposition(self, ped_id: int, new_pos: Vec2D):
+        """
+        Reposition a pedestrian to a new position.
+
+        Parameters
+        ----------
+        ped_id : int
+            The ID of the pedestrian.
+        new_pos : Vec2D
+            The new position of the pedestrian.
+        """
         self.pysf_states()[ped_id, 0:2] = new_pos
 
     def goal_of(self, ped_id: int) -> Vec2D:
+        """
+        Get the goal of a pedestrian.
+
+        Parameters
+        ----------
+        ped_id : int
+            The ID of the pedestrian.
+
+        Returns
+        -------
+        Vec2D
+            The goal of the pedestrian.
+        """
         pos_x, pos_y = self.pysf_states()[ped_id, 4:6]
         return (pos_x, pos_y)
 
     def pos_of(self, ped_id: int) -> Vec2D:
+        """
+        Get the position of a pedestrian.
+
+        Parameters
+        ----------
+        ped_id : int
+            The ID of the pedestrian.
+
+        Returns
+        -------
+        Vec2D
+            The position of the pedestrian.
+        """
         pos_x, pos_y = self.pysf_states()[ped_id, 0:2]
         return (pos_x, pos_y)
 
     def pos_of_many(self, ped_ids: Set[int]) -> np.ndarray:
+        """
+        Get the positions of multiple pedestrians.
+
+        Parameters
+        ----------
+        ped_ids : Set[int]
+            The IDs of the pedestrians.
+
+        Returns
+        -------
+        np.ndarray
+            The positions of the pedestrians.
+        """
         return self.pysf_states()[list(ped_ids), 0:2]
 
 

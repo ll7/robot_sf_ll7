@@ -30,12 +30,42 @@ class PedestrianBehavior(Protocol):
 
 @dataclass
 class CrowdedZoneBehavior:
+    """
+    A class that defines the behavior of pedestrians in crowded zones.
+
+    Attributes
+    ----------
+    groups : PedestrianGroupings
+        The groups of pedestrians.
+    zone_assignments : Dict[int, int]
+        The assignments of pedestrians to zones.
+    crowded_zones : List[Zone]
+        The crowded zones.
+    goal_proximity_threshold : float
+        The distance threshold for proximity to a goal. Default is 1.
+        TODO: What is the unit of this distance?
+
+    Methods
+    -------
+    step():
+        Update the goals of groups that are close to their current goal.
+    reset():
+        Reset the goals of all groups.
+    """
+
     groups: PedestrianGroupings
     zone_assignments: Dict[int, int]
     crowded_zones: List[Zone]
     goal_proximity_threshold: float = 1
 
     def step(self):
+        """
+        Update the goals of groups that are close to their current goal.
+
+        For each group, if the distance from the group's centroid to its goal is less
+        than the goal proximity threshold, a new goal is sampled from the group's assigned
+        crowded zone and the group is redirected to this new goal.
+        """
         for gid in self.groups.group_ids:
             centroid = self.groups.group_centroid(gid)
             goal = self.groups.goal_of_group(gid)
@@ -47,6 +77,12 @@ class CrowdedZoneBehavior:
                 self.groups.redirect_group(gid, new_goal)
 
     def reset(self):
+        """
+        Reset the goals of all groups.
+
+        For each group, a new goal is sampled from the group's assigned crowded zone and
+        the group is redirected to this new goal.
+        """
         for gid in self.groups.group_ids:
             any_pid = next(iter(self.groups.groups[gid]))
             zone = self.crowded_zones[self.zone_assignments[any_pid]]

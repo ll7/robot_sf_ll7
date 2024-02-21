@@ -233,28 +233,57 @@ class RoutePointsGenerator:
         return spawn_pos, route_id, sec_id
 
 
-def populate_ped_routes(config: PedSpawnConfig, routes: List[GlobalRoute]) \
-        -> Tuple[np.ndarray, List[PedGrouping], Dict[int, GlobalRoute], List[int]]:
+def populate_ped_routes(
+        config: PedSpawnConfig,
+        routes: List[GlobalRoute]
+        )-> Tuple[
+            np.ndarray,
+            List[PedGrouping],
+            Dict[int, GlobalRoute],
+            List[int]]:
+    """
+    Populate routes with pedestrian groups according to the configuration.
 
+    Args:
+        config: A `PedSpawnConfig` object containing pedestrian spawn specifications.
+        routes: A list of `GlobalRoute` objects representing various pathways.
+
+    Returns:
+        A tuple consisting of:
+            - A numpy array representing the state information for all pedestrians.
+            - A list of sets where each set contains the indices of pedestrians in a group.
+            - A dictionary mapping group indices to their corresponding `GlobalRoute` objects.
+            - A list of initial section indices for each pedestrian group.
+    """
+    # Initialize a route points generator with the provided routes and sidewalk width
     proportional_spawn_gen = RoutePointsGenerator(routes, config.sidewalk_width)
     total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
+    # Dictionary to hold assignments of groups to routes
     route_assignments = dict()
+    # List to track the initial sections for each group
     initial_sections = []
 
     while num_unassigned_peds > 0:
+        # Determine number of members in next group based on configured probabilities
         probs = config.group_member_probs
         num_peds_in_group = np.random.choice(len(probs), p=probs) + 1
         num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
+        # Calculate range of IDs for newly assigned pedestrians
         num_assigned_peds = total_num_peds - num_unassigned_peds
         ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
+        # Add set of new pedestrian IDs to groups list
         groups.append(set(ped_ids))
 
         # spawn all group members along a uniformly sampled route with respect to the route's length
+        # Generate spawn points for current group, route ID, and section ID
         spawn_points, route_id, sec_id = proportional_spawn_gen.generate(num_peds_in_group)
+        # Determine group's goal point from the selected route and section
         group_goal = routes[route_id].sections[sec_id][1]
+        # Record initial section ID for this group
         initial_sections.append(sec_id)
+        # Assign current route to the latest group
         route_assignments[len(groups) - 1] = routes[route_id]
 
         centroid = np.mean(spawn_points, axis=0)

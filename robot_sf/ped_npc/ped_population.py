@@ -18,6 +18,18 @@ ZoneAssignments = Dict[int, int]
 
 @dataclass
 class PedSpawnConfig:
+    """Configuration for pedestrian spawning in a simulation environment.
+
+    Attributes:
+        peds_per_area_m2: The density of pedestrians per square meter area.
+        max_group_members: Maximum number of members allowed in a pedestrian group.
+        group_member_probs: A list representing the probability distribution for the
+                            number of members in a group. Each index corresponds to
+                            group size - 1, with its value being the respective probability.
+        initial_speed: The initial walking speed for pedestrians.
+        group_size_decay: The rate at which the probability of larger group sizes decays.
+        sidewalk_width: The width of the sidewalk where pedestrians can spawn.
+    """
     peds_per_area_m2: float
     max_group_members: int
     group_member_probs: List[float] = field(default_factory=list)
@@ -26,9 +38,14 @@ class PedSpawnConfig:
     sidewalk_width: float = 3.0
 
     def __post_init__(self):
+        """
+        Ensures that `group_member_probs` has exactly `max_group_members`
+        elements by creating a power-law distributed list if needed.
+        """
         if not len(self.group_member_probs) == self.max_group_members:
             # initialize group size probabilities decaying by power law
             power_dist = [self.group_size_decay**i for i in range(self.max_group_members)]
+            # Normalize the distribution so that the sum equals 1
             self.group_member_probs = [p / sum(power_dist) for p in power_dist]
 
 

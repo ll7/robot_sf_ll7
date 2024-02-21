@@ -92,6 +92,33 @@ class CrowdedZoneBehavior:
 
 @dataclass
 class FollowRouteBehavior:
+    """
+    A class that defines the behavior of pedestrian groups following a route.
+
+    Attributes
+    ----------
+    groups : PedestrianGroupings
+        The groups of pedestrians.
+    route_assignments : Dict[int, GlobalRoute]
+        The assignments of groups to routes.
+    initial_sections : List[int]
+        The initial sections of the routes.
+    goal_proximity_threshold : float
+        The distance threshold for proximity to a goal. Default is 1.
+    navigators : Dict[int, RouteNavigator]
+        The navigators for each group. Initialized in the post-init method.
+
+    Methods
+    -------
+    step():
+        Update the positions of groups and respawn any groups that have reached their
+        destination.
+    reset():
+        No action is performed in this method.
+    respawn_group_at_start(gid: int):
+        Respawn a group at the start of its route.
+    """
+
     groups: PedestrianGroupings
     route_assignments: Dict[int, GlobalRoute]
     initial_sections: List[int]
@@ -99,6 +126,12 @@ class FollowRouteBehavior:
     navigators: Dict[int, RouteNavigator] = field(init=False)
 
     def __post_init__(self):
+        """
+        Initialize the navigators for each group.
+
+        For each group, a RouteNavigator is created with the group's assigned route,
+        initial section, goal proximity threshold, and current position.
+        """
         self.navigators = {}
         for (gid, route), sec_id in zip(self.route_assignments.items(), self.initial_sections):
             group_pos = self.groups.group_centroid(gid)
@@ -106,6 +139,14 @@ class FollowRouteBehavior:
                 route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos)
 
     def step(self):
+        """
+        Update the positions of groups and respawn any groups that have reached their
+        destination.
+
+        For each group, the group's position is updated in its navigator. If the group
+        has reached its destination, it is respawned at the start of its route. If the
+        group has reached a waypoint, it is redirected to the current waypoint.
+        """
         for gid, nav in self.navigators.items():
             group_pos = self.groups.group_centroid(gid)
             nav.update_position(group_pos)
@@ -115,9 +156,24 @@ class FollowRouteBehavior:
                 self.groups.redirect_group(gid, nav.current_waypoint)
 
     def reset(self):
+        """
+        No action is performed in this method.
+        TODO: Is this method necessary? If not, remove it.
+        """
         pass
 
     def respawn_group_at_start(self, gid: int):
+        """
+        Respawn a group at the start of its route.
+
+        The group is repositioned to the spawn zone of its route, and it is redirected
+        to the first waypoint of its route. The waypoint ID of its navigator is reset to 0.
+
+        Parameters
+        ----------
+        gid : int
+            The ID of the group to respawn.
+        """
         nav = self.navigators[gid]
         num_peds = self.groups.group_size(gid)
         spawn_zone = self.route_assignments[gid].spawn_zone

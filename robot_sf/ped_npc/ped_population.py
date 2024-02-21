@@ -112,18 +112,52 @@ def sample_route(
 
 @dataclass
 class ZonePointsGenerator:
+    """
+    A generator for creating points within specified zones.
+    
+    Attributes:
+        zones: A list of `Zone` objects that represent different areas.
+        
+    Calculated attributes through __post_init__:
+        zone_areas: Computed area of each zone based on vertices.
+        _zone_probs: Normalized probabilities of choosing each zone.
+    """
+
     zones: List[Zone]
     zone_areas: List[float] = field(init=False)
     _zone_probs: List[float] = field(init=False)
 
     def __post_init__(self):
-        self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
+        # Calculate the area for each zone assuming zones are rectangular
+        # This uses an external `dist` function to measure distances
+        self.zone_areas = [
+            dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones
+        ]
+
+        # Sum the areas to use for normalizing probabilities
         total_area = sum(self.zone_areas)
+
+        # Calculate the probability for each zone based on its area
         self._zone_probs = [area / total_area for area in self.zone_areas]
-        # info: distribute proportionally by zone area
+        # Proportional distribution by zone area is considered
 
     def generate(self, num_samples: int) -> Tuple[List[Vec2D], int]:
+        """
+        Generates sample points within a randomly selected zone.
+
+        Args:
+            num_samples: The number of sample points to generate.
+
+        Returns:
+            A tuple containing:
+                - A list of `Vec2D` objects representing the generated points.
+                - The index of the zone where the points were generated (zone_id).
+        """
+
+        # Randomly select a zone based on the calculated probabilities
         zone_id = np.random.choice(len(self.zones), size=1, p=self._zone_probs)[0]
+
+        # Generate sample points using a function `sample_zone`
         return sample_zone(self.zones[zone_id], num_samples), zone_id
 
 

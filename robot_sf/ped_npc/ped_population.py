@@ -224,7 +224,7 @@ class RoutePointsGenerator:
                 - The section id of the route where the points were generated (sec_id).
         """
         # Randomly select a route based on the calculated probabilities
-        route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
+        route_id = np.random.choice(len(self.routes), size=1, p=self._route_probs)[0]
         # TODO: Fix the typo in the line above. It should be `self._route_probs` instead of `self._zone_probs`
         # TODO: write tests and check what this could change.
 

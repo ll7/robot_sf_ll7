@@ -163,24 +163,72 @@ class ZonePointsGenerator:
 
 @dataclass
 class RoutePointsGenerator:
+    """
+    A generator for creating points within specified routes with given sidewalk widths.
+    
+    Attributes:
+        routes: A list of `GlobalRoute` objects representing different paths.
+        sidewalk_width: The width of the sidewalks along the routes.
+
+    Calculated attributes through __post_init__:
+        _route_probs: Normalized probabilities of choosing each route based on length.
+    """
+
     routes: List[GlobalRoute]
     sidewalk_width: float
     _route_probs: List[float] = field(init=False)
 
     def __post_init__(self):
+        """
+        Initialize calculated fields and compute route probabilities.
+        """
+        # Calculate the probability for each route based on its length.
+        # It assumes that the area per route is approximated by multiplying
+        # the total length of the route with the sidewalk width.
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
-        self._zone_probs = [r.total_length / self.total_length for r in self.routes]
+        self._route_probs = [
+            r.total_length / self.total_length for r in self.routes
+        ]
 
     @property
     def total_length(self) -> float:
+        """
+        Calculate the total length of all routes.
+
+        Returns:
+            The sum of lengths of all routes.
+        """
         return sum([r.total_length for r in self.routes])
 
     @property
     def total_sidewalks_area(self) -> float:
+        """
+        Calculate the total sidewalk area for all routes.
+
+        Returns:
+            The total area covered by the sidewalks alongside the routes.
+        """
         return self.total_length * self.sidewalk_width
 
     def generate(self, num_samples: int) -> Tuple[List[Vec2D], int, int]:
+        """
+        Generates sample points within a randomly selected route.
+
+        Args:
+            num_samples: The number of sample points to generate.
+
+        Returns:
+            A tuple containing:
+                - A list of `Vec2D` objects representing the generated points.
+                - The index of the route where the points were generated (route_id).
+                - The section id of the route where the points were generated (sec_id).
+        """
+        # Randomly select a route based on the calculated probabilities
         route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
+        # TODO: Fix the typo in the line above. It should be `self._route_probs` instead of `self._zone_probs`
+        # TODO: write tests and check what this could change.
+
+        # Generate sample points using a function `sample_route`
         spawn_pos, sec_id = sample_route(self.routes[route_id], num_samples, self.sidewalk_width)
         return spawn_pos, route_id, sec_id
 

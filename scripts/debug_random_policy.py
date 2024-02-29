@@ -1,3 +1,6 @@
+"""
+Generate a random policy to test the environment
+"""
 from robot_sf.robot_env import RobotEnv
 
 

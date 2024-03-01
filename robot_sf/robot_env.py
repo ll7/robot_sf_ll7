@@ -33,6 +33,7 @@ from multiprocessing.pool import ThreadPool
 import numpy as np
 from gym.vector import VectorEnv
 from gym import Env, spaces
+from gym.utils import seeding
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator
 
@@ -501,6 +502,27 @@ class RobotEnv(Env):
 
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)
+
+    def seed(self, seed=None):
+        """
+        Set the seed for this env's random number generator(s).
+
+        Note:
+            Some environments use multiple pseudorandom number generators.
+            We want to capture all such seeds used in order to ensure that
+            there aren't accidental correlations between multiple generators.
+
+        Returns:
+            list<bigint>: Returns the list of seeds used in this env's random
+            number generators. The first value in the list should be the
+            "main" seed, or the value which a reproducer should pass to
+            'seed'. Often, the main seed equals the provided 'seed', but
+            this won't be true if seed=None, for example.
+
+        TODO: validate this method
+        """
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
     def exit(self):
         """

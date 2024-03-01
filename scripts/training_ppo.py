@@ -10,9 +10,10 @@ from robot_sf.tb_logging import DrivingMetricsCallback
 
 
 def training():
-    n_envs = 64
+    n_envs = 32
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
+
 
     def make_env():
         config = EnvSettings()
@@ -40,7 +41,7 @@ def training():
         )
 
     model.learn(
-        total_timesteps=50_000_000,
+        total_timesteps=1_000_000,
         progress_bar=True,
         callback=combined_callback
         )

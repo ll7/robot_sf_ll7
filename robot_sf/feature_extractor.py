@@ -31,7 +31,8 @@ class DynamicsExtractor(BaseFeaturesExtractor):
     """
 
     def __init__(
-            self, observation_space: spaces.Dict,
+            self,
+            observation_space: spaces.Dict,
             use_ray_conv: bool=True,
             num_filters: List[int]=[64, 16, 16, 16],
             kernel_sizes: List[int]=[3, 3, 3, 3],

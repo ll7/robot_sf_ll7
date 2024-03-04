@@ -329,8 +329,34 @@ def init_collision_and_sensors(
 
 
 def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
+    """
+    Initialize the action and observation spaces for the environment.
+
+    This function creates action and observation space using the factory method
+    provided in the environment
+    configuration, and then uses the robot's action space and observation space as the
+    basis for the environment's action and observation spaces. The observation space is
+    further extended with additional sensors.
+
+    Parameters
+    ----------
+    env_config : EnvSettings
+        The configuration settings for the environment.
+    map_def : MapDefinition
+        The definition of the map for the environment.
+
+    Returns
+    -------
+    Tuple[Space, Space, Space]
+        A tuple containing the action space, the extended observation space, and the
+        original observation space of the robot.
+    """
+    # Create a robot using the factory method in the environment configuration
     robot = env_config.robot_factory()
+    # Get the action space from the robot
     action_space = robot.action_space
+
+    # Extend the robot's observation space with additional sensors
     observation_space, orig_obs_space = fused_sensor_space(
         env_config.sim_config.stack_steps,
         robot.observation_space,
@@ -339,6 +365,9 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
             env_config.lidar_config.num_rays,
             env_config.lidar_config.max_scan_dist)
         )
+
+    # Return the action space, the extended observation space, and the original
+    # observation space
     return action_space, observation_space, orig_obs_space
 
 

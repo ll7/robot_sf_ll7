@@ -26,7 +26,8 @@ def fused_sensor_space(
     Parameters
     ----------
     timesteps : int
-        The number of timesteps in the observation.
+        The number of **stacked** timesteps in the observation.
+        # TODO: check if this interpretation is correct
     robot_obs : spaces.Box
         The observation space for the robot.
     target_obs : spaces.Box

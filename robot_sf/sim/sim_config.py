@@ -35,6 +35,7 @@ class SimulationSettings:
     # Goal radius
     goal_radius: float = 1.0
     # Number of steps to stack in observations
+    # TODO move "stack_steps" from SimulationSettings to ?
     stack_steps: int = 3
     # Whether to use the next goal in the path as the current goal
     use_next_goal: bool = True

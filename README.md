@@ -75,11 +75,13 @@ python3 demo_defensive.py
 ### 6. Run StableBaselines Training (Docker)
 
 ```sh
-docker-compose build && docker-compose run \
+docker compose build && docker compose run \
     robotsf-cuda python ./scripts/training_ppo.py
 ```
 
 *Note: See [this setup](./docs/GPU_SETUP.md) to install Docker with GPU support.*
+
+> Older versions use `docker-compose` instead of `docker compose`.
 
 ### 7. Edit Maps
 

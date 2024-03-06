@@ -1,3 +1,6 @@
+"""
+define the map configuration
+"""
 import os
 import json
 import random

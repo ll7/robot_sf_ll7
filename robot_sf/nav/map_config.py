@@ -157,6 +157,50 @@ class GlobalRoute:
 
 @dataclass
 class MapDefinition:
+    """
+    A class to represent a map definition.
+
+    Attributes
+    ----------
+    width : float
+        The width of the map.
+    height : float
+        The height of the map.
+    obstacles : List[Obstacle]
+        The obstacles in the map.
+    robot_spawn_zones : List[Rect]
+        The spawn zones for robots.
+    ped_spawn_zones : List[Rect]
+        The spawn zones for pedestrians.
+    robot_goal_zones : List[Rect]
+        The goal zones for robots.
+    bounds : List[Line2D]
+        The bounds of the map.
+    robot_routes : List[GlobalRoute]
+        The routes for robots.
+    ped_goal_zones : List[Rect]
+        The goal zones for pedestrians.
+    ped_crowded_zones : List[Rect]
+        The crowded zones for pedestrians.
+    ped_routes : List[GlobalRoute]
+        The routes for pedestrians.
+    obstacles_pysf : List[Line2D]
+        The obstacles in the map in pysf format.
+    robot_routes_by_spawn_id : Dict[int, List[GlobalRoute]]
+        The robot routes grouped by spawn id.
+
+    Methods
+    -------
+    __post_init__():
+        Validates the map definition and initializes the obstacles_pysf and
+            robot_routes_by_spawn_id attributes.
+    num_start_pos():
+        Returns the number of start positions.
+    max_target_dist():
+        Returns the maximum target distance.
+    find_route(spawn_id: int, goal_id: int):
+        Returns the route for the given spawn id and goal id.
+    """
     width: float
     height: float
     obstacles: List[Obstacle]
@@ -172,6 +216,11 @@ class MapDefinition:
     robot_routes_by_spawn_id: Dict[int, List[GlobalRoute]] = field(init=False)
 
     def __post_init__(self):
+        """
+        Validates the map definition and initializes the obstacles_pysf and robot_routes_by_spawn_id attributes.
+        Raises a ValueError if the width or height is less than 0, if the robot spawn zones or goal zones are empty,
+        or if the bounds are not exactly 4.
+        """
         obstacle_lines = [line for o in self.obstacles for line in o.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
@@ -191,13 +240,34 @@ class MapDefinition:
 
     @property
     def num_start_pos(self) -> int:
+        """
+        Returns the number of start positions as an integer.
+        """
         return len(set([r.spawn_id for r in self.robot_routes]))
 
     @property
     def max_target_dist(self) -> float:
+        """
+        Returns the maximum target distance as a float.
+        """
         return sqrt(2) * (max(self.width, self.height) * 2)
 
     def find_route(self, spawn_id: int, goal_id: int) -> Union[GlobalRoute, None]:
+        """
+        Returns the route for the given spawn id and goal id. If no route is found, returns None.
+
+        Parameters
+        ----------
+        spawn_id : int
+            The spawn id.
+        goal_id : int
+            The goal id.
+
+        Returns
+        -------
+        GlobalRoute or None
+            The route for the given spawn id and goal id, or None if no route is found.
+        """
         return next(filter(lambda r:
             r.goal_id == goal_id and r.spawn_id == spawn_id, self.robot_routes), None)
 

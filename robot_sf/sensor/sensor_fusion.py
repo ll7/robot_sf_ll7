@@ -6,7 +6,7 @@ from typing import Tuple, Callable, List, Dict
 from dataclasses import dataclass, field
 
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 PolarVec2D = Tuple[float, float]
 

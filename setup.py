@@ -5,15 +5,15 @@ from setuptools import setup, find_packages
 PACKAGE_NAME = "robot_sf"
 PACKAGE_VERSION = "2.0.0"
 PACKAGE_AUTHORS = "Marco Tröster"
-PACKAGE_DESCRIPTION = """This package allows implementing a "gym-style" environment
+PACKAGE_DESCRIPTION = """This package allows implementing a "gymnasium-style" environment
 for navigating a crowd with autonomous micromobility vehicles
 """
 HOME_REPO = "https://github.com/Bonifatius94/robot_env"
 EXCLUDE_FILES = []
 PACKAGE_DATA = {"robot_sf": ["maps/*.json"]}
-INSTALL_REQUIREMENTS = ["numpy", "gym", "pylint", "pytest", "scalene", "numba", "pygame",
+INSTALL_REQUIREMENTS = ["numpy", "gymnasium", "pylint", "pytest", "scalene", "numba", "pygame",
                         "stable-baselines3", "tqdm", "rich", "tensorboard"]
-
+# TODO Update this package information
 
 def get_ext_paths(root_dir, exclude_files):
     paths = []

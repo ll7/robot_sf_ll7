@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import numba
-from gym import spaces
+from gymnasium import spaces
 
 from robot_sf.nav.occupancy import ContinuousOccupancy
 

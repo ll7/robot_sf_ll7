@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Tuple
 
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 
 Vec2D = Tuple[float, float]
@@ -207,7 +207,7 @@ class DifferentialDriveRobot():
         Defines the observation space for the robot based on its configuration.
 
         Returns:
-            Box: An instance of gym.spaces.Box representing the continuous
+            Box: An instance of gymnasium.spaces.Box representing the continuous
                  observation space where each observation is a vector containing
                  linear and angular speeds.
         """
@@ -223,7 +223,7 @@ class DifferentialDriveRobot():
         Defines the action space for the robot based on its configuration.
 
         Returns:
-            Box: An instance of gym.spaces.Box representing the continuous
+            Box: An instance of gymnasium.spaces.Box representing the continuous
                  action space where each action is a vector containing
                  linear and angular speeds.
         """

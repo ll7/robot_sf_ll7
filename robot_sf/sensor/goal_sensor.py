@@ -2,7 +2,7 @@ from math import atan2, dist
 from typing import Tuple, Union
 
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]

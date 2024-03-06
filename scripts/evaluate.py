@@ -3,8 +3,8 @@ from dataclasses import dataclass
 import json
 
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium
+from gymnasium import spaces
 from tqdm import tqdm
 from stable_baselines3 import PPO, A2C
 
@@ -56,7 +56,7 @@ class EvalSettings:
 
 
 @dataclass
-class AdaptedEnv(gym.Env):
+class AdaptedEnv(gymnasium.Env):
     orig_env: RobotEnv
     config: GymAdapterSettings
 
@@ -78,7 +78,7 @@ class AdaptedEnv(gym.Env):
         return self.config.obs_adapter(obs)
 
 
-def evaluate(env: gym.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
+def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
     eval_metrics = EnvMetrics(cache_size=num_episodes)
 
     for _ in tqdm(range(num_episodes)):
@@ -97,7 +97,7 @@ def evaluate(env: gym.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
     return eval_metrics
 
 
-def prepare_env(settings: EvalSettings, difficulty: int) -> gym.Env:
+def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
     env_settings = EnvSettings()
     env_settings.sim_config.prf_config = settings.prf_config
     env_settings.sim_config.ped_density_by_difficulty = settings.ped_densities
@@ -108,7 +108,7 @@ def prepare_env(settings: EvalSettings, difficulty: int) -> gym.Env:
     return AdaptedEnv(orig_env, settings.gym_config)
 
 
-def prepare_model(model_path: str, env: gym.Env) -> DriveModel:
+def prepare_model(model_path: str, env: gymnasium.Env) -> DriveModel:
     return A2C.load(model_path, env=env)
 
 

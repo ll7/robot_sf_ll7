@@ -4,6 +4,7 @@
         "github.copilot",
         "genieai.chatgpt-vscode",
         "ms-python.python",
-        "ms-python.pylint"
+        "ms-python.pylint",
+        "github.vscode-pull-request-github"
     ]
 }

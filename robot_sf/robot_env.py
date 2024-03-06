@@ -15,7 +15,7 @@ sensor fusion, and simulation time. It also tracks various conditions such as co
 timeout condition, simulation time elapsed, and timestep count.
 
 3. `RobotEnv`: A class that represents the robot's environment. It inherits from `VectorEnv`
-from the `gym` library, which is a base class for environments that operate over
+from the `gymnasium` library, which is a base class for environments that operate over
 vectorized actions and observations. It includes methods for stepping through the environment,
 resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
@@ -31,9 +31,9 @@ from copy import deepcopy
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
-from gym.vector import VectorEnv
-from gym import Env, spaces
-from gym.utils import seeding
+from gymnasium.vector import VectorEnv
+from gymnasium import Env, spaces
+from gymnasium.utils import seeding
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator
 
@@ -373,7 +373,7 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
 
 class RobotEnv(Env):
     """
-    Representing an OpenAI Gym environment for training a self-driving robot
+    Representing a Gymnasium environment for training a self-driving robot
     with reinforcement learning.
     """
 
@@ -562,7 +562,7 @@ class RobotEnv(Env):
 
 
 class MultiRobotEnv(VectorEnv):
-    """Representing an OpenAI Gym environment for training
+    """Representing a Gymnasium environment for training
     multiple self-driving robots with reinforcement learning"""
 
     def __init__(

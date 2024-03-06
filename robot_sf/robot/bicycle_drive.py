@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Tuple
 
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 
 Vec2D = Tuple[float, float]

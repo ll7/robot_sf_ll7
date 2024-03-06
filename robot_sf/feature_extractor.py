@@ -4,7 +4,7 @@
 from typing import List
 
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 import torch as th
 from torch import nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor

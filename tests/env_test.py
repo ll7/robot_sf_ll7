@@ -1,4 +1,4 @@
-from gym import spaces
+from gymnasium import spaces
 from robot_sf.robot_env import RobotEnv, OBS_DRIVE_STATE, OBS_RAYS
 
 

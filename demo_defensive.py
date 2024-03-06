@@ -1,5 +1,5 @@
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 from stable_baselines3 import PPO
 
 from robot_sf.robot_env import RobotEnv, OBS_DRIVE_STATE, OBS_RAYS
@@ -7,8 +7,7 @@ from robot_sf.sim_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
-
-def training():
+ 
     env_config = EnvSettings(
         sim_config=SimulationSettings(stack_steps=1, difficulty=0, ped_density_by_difficulty=[0.06]),
         robot_config=DifferentialDriveSettings(radius=1.0))

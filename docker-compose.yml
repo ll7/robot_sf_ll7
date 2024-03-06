@@ -4,7 +4,13 @@ services:
     image: robotsf-cuda
     build:
       context: .
-    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
     environment:
       PYTHONUNBUFFERED: 1
     volumes:

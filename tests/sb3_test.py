@@ -1,14 +1,11 @@
 import os
 
 from stable_baselines3.ppo.ppo import PPO
-from robot_sf.robot_env import RobotEnv
-from robot_sf.feature_extractor import DynamicsExtractor
-
-from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from robot_sf.robot_env import RobotEnv
+from robot_sf.feature_extractor import DynamicsExtractor
 
 
 def test_can_load_model_snapshot():

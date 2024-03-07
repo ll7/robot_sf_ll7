@@ -7,10 +7,15 @@ from robot_sf.sim_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
- 
+def training():
     env_config = EnvSettings(
-        sim_config=SimulationSettings(stack_steps=1, difficulty=0, ped_density_by_difficulty=[0.06]),
-        robot_config=DifferentialDriveSettings(radius=1.0))
+        sim_config=SimulationSettings(
+            stack_steps=1,
+            difficulty=0,
+            ped_density_by_difficulty=[0.06]
+            ),
+        robot_config=DifferentialDriveSettings(radius=1.0)
+        )
     env = RobotEnv(env_config, debug=True)
     env.observation_space, env.action_space = prepare_gym_spaces()
     model = PPO.load("./model/run_023", env=env)

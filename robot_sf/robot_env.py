@@ -586,8 +586,10 @@ class MultiRobotEnv(VectorEnv):
 
         for sim in self.simulators:
             occupancies, sensors = init_collision_and_sensors(sim, env_config, orig_obs_space)
-            states = [RobotState(nav, occ, sen, d_t, max_ep_time)
-                      for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors)]
+            states = [
+                RobotState(nav, occ, sen, d_t, max_ep_time)
+                for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors)
+                ]
             self.states.extend(states)
 
         self.sim_worker_pool = ThreadPool(len(self.simulators))

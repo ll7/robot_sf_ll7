@@ -1,4 +1,4 @@
-
+from math import ceil
 from dataclasses import dataclass, field
 
 from robot_sf.nav.navigation import RouteNavigator

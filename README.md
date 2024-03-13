@@ -69,8 +69,8 @@ python3 -m pylint robot_sf
 ### 5. Run Visual Debugging of Pre-Trained Demo Models
 
 ```sh
-python3 demo_offensive.py
-python3 demo_defensive.py
+python3 examples/demo_offensive.py
+python3 examples/demo_defensive.py
 ```
 
 ### 6. Run StableBaselines Training (Docker)

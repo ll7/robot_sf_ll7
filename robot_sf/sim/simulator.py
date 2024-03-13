@@ -7,7 +7,7 @@ from pysocialforce.simulator import make_forces as pysf_make_forces
 from pysocialforce.config import SimulatorConfig as PySFSimConfig
 from pysocialforce.forces import Force as PySFForce, ObstacleForce
 
-from robot_sf.sim_config import SimulationSettings, EnvSettings
+from robot_sf.gym_env.env_config import SimulationSettings, EnvSettings
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce

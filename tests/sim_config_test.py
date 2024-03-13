@@ -1,5 +1,5 @@
 import pytest
-from robot_sf.sim_config import (
+from robot_sf.gym_env.env_config import (
     EnvSettings,
     SimulationSettings,
     LidarScannerSettings,

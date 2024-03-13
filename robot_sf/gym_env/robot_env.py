@@ -36,7 +36,7 @@ from gymnasium.utils import seeding
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.robot.robot_state import RobotState
-from robot_sf.sim_config import EnvSettings
+from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space

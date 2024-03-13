@@ -51,37 +51,6 @@ PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 
 
-class Robot(Protocol):
-    @property
-    def observation_space(self) -> spaces.Box:
-        raise NotImplementedError()
-
-    @property
-    def action_space(self) -> spaces.Box:
-        raise NotImplementedError()
-
-    @property
-    def pos(self) -> Vec2D:
-        raise NotImplementedError()
-
-    @property
-    def pose(self) -> RobotPose:
-        raise NotImplementedError()
-
-    @property
-    def current_speed(self) -> PolarVec2D:
-        raise NotImplementedError()
-
-    def apply_action(self, action: Any, d_t: float):
-        raise NotImplementedError()
-
-    def reset_state(self, new_pose: RobotPose):
-        raise NotImplementedError()
-
-    def parse_action(self, action: Any) -> Any:
-        raise NotImplementedError()
-
-
 def simple_reward(
         meta: dict,
         max_episode_step_discount: float=-0.1,

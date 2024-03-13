@@ -25,7 +25,7 @@ It overrides the `step_async` method to apply actions to all robots in the envir
 """
 
 
-from typing import Tuple, Callable, List, Protocol, Any
+from typing import Tuple, Callable, List
 from copy import deepcopy
 from multiprocessing.pool import ThreadPool
 

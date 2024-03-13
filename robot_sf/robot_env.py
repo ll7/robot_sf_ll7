@@ -24,7 +24,7 @@ It also defines the action and observation spaces for the robot.
 It overrides the `step_async` method to apply actions to all robots in the environment.
 """
 
-from math import ceil
+
 from typing import Tuple, Callable, List, Protocol, Any
 from copy import deepcopy
 from multiprocessing.pool import ThreadPool
@@ -33,9 +33,10 @@ import numpy as np
 from gymnasium.vector import VectorEnv
 from gymnasium import Env, spaces
 from gymnasium.utils import seeding
-from robot_sf.nav.map_config import MapDefinition
 
+from robot_sf.nav.map_config import MapDefinition
 from robot_sf.robot.robot_state import RobotState
+from robot_sf.sim.simulator import init_simulators
 from robot_sf.sim_config import EnvSettings
 from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
@@ -43,7 +44,7 @@ from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import (
     fused_sensor_space, SensorFusion, OBS_RAYS, OBS_DRIVE_STATE)
 from robot_sf.sim.sim_view import SimulationView, VisualizableAction, VisualizableSimState
-from robot_sf.sim.simulator import Simulator
+from robot_sf.sim.simulator import Simulator, init_simulators
 
 
 Vec2D = Tuple[float, float]
@@ -118,52 +119,6 @@ def simple_reward(
         reward += reach_waypoint_reward
 
     return reward
-
-
-def init_simulators(
-        env_config: EnvSettings,
-        map_def: MapDefinition,
-        num_robots: int = 1,
-        random_start_pos: bool = True
-        ) -> List[Simulator]:
-    """
-    Initialize simulators for the robot environment.
-
-    Parameters:
-    env_config (EnvSettings): Configuration settings for the environment.
-    map_def (MapDefinition): Definition of the map for the environment.
-    num_robots (int): Number of robots in the environment.
-    random_start_pos (bool): Whether to start the robots at random positions.
-
-    Returns:
-    List[Simulator]: A list of initialized Simulator objects.
-    """
-
-    # Calculate the number of simulators needed based on the number of robots and start positions
-    num_sims = ceil(num_robots / map_def.num_start_pos)
-
-    # Calculate the proximity to the goal based on the robot radius and goal radius
-    goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
-
-    # Initialize an empty list to hold the simulators
-    sims: List[Simulator] = []
-
-    # Create the required number of simulators
-    for i in range(num_sims):
-        # Determine the number of robots for this simulator
-        n = map_def.num_start_pos if i < num_sims - 1 \
-            else max(1, num_robots % map_def.num_start_pos)
-
-        # Create the robots for this simulator
-        sim_robots = [env_config.robot_factory() for _ in range(n)]
-
-        # Create the simulator with the robots and add it to the list
-        sim = Simulator(
-            env_config.sim_config, map_def, sim_robots,
-            goal_proximity, random_start_pos)
-        sims.append(sim)
-
-    return sims
 
 
 def init_collision_and_sensors(

@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO
-from robot_sf.robot_env import RobotEnv
+from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.sim_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings

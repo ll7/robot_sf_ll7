@@ -5,8 +5,9 @@ to be natively compatible with gymnasium.
 """
 
 import gymnasium
-from gymnasium import spaces
-from gymnasium.utils import seeding
+
+from robot_sf.gym_env.env_config import EnvSettings
+
 
 
 class SimpleRobotEnv(gymnasium.Env):
@@ -15,7 +16,7 @@ class SimpleRobotEnv(gymnasium.Env):
     """
 
     def __init__(
-            self
+            self,
             env_config: EnvSettings = EnvSettings()
             ):
         

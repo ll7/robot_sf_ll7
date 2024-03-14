@@ -42,7 +42,10 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import (
     fused_sensor_space, SensorFusion, OBS_RAYS, OBS_DRIVE_STATE)
-from robot_sf.sim.sim_view import SimulationView, VisualizableAction, VisualizableSimState
+from robot_sf.sim.sim_view import (
+    SimulationView,
+    VisualizableAction,
+    VisualizableSimState)
 from robot_sf.sim.simulator import Simulator, init_simulators
 from robot_sf.gym_env.reward import simple_reward
 
@@ -106,8 +109,9 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
 
     This function creates action and observation space using the factory method
     provided in the environment
-    configuration, and then uses the robot's action space and observation space as the
-    basis for the environment's action and observation spaces. The observation space is
+    configuration, and then uses the robot's action space and observation space
+    as the basis for the environment's action and observation spaces.
+    The observation space is
     further extended with additional sensors.
 
     Parameters
@@ -123,8 +127,10 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
         A tuple containing the action space, the extended observation space, and the
         original observation space of the robot.
     """
+
     # Create a robot using the factory method in the environment configuration
     robot = env_config.robot_factory()
+
     # Get the action space from the robot
     action_space = robot.action_space
 
@@ -168,6 +174,7 @@ class RobotEnv(Env):
 
         # Environment configuration details
         self.env_config = env_config
+
         # Extract first map definition; currently only supports using the first map
         map_def = env_config.map_pool.map_defs[0]
 
@@ -273,21 +280,27 @@ class RobotEnv(Env):
 
         # Prepare action visualization, if any action was executed
         action = None if not self.last_action else VisualizableAction(
-            self.simulator.robot_poses[0], self.last_action, 
+            self.simulator.robot_poses[0],
+            self.last_action,
             self.simulator.goal_pos[0])
 
         # Robot position and LIDAR scanning visualization preparation
         robot_pos = self.simulator.robot_poses[0][0]
         distances, directions = lidar_ray_scan(
-            self.simulator.robot_poses[0], self.state.occupancy,
+            self.simulator.robot_poses[0],
+            self.state.occupancy,
             self.env_config.lidar_config)
 
         # Construct ray vectors for visualization
-        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
+        ray_vecs = zip(
+            np.cos(directions) * distances,
+            np.sin(directions) * distances
+            )
         ray_vecs_np = np.array([[
             [robot_pos[0], robot_pos[1]],
             [robot_pos[0] + x, robot_pos[1] + y]
-            ] for x, y in ray_vecs])
+            ] for x, y in ray_vecs]
+            )
 
         # Prepare pedestrian action visualization
         ped_actions = zip(
@@ -357,7 +370,9 @@ class MultiRobotEnv(VectorEnv):
         max_ep_time = env_config.sim_config.sim_time_in_secs
 
         for sim in self.simulators:
-            occupancies, sensors = init_collision_and_sensors(sim, env_config, orig_obs_space)
+            occupancies, sensors = init_collision_and_sensors(
+                sim, env_config,
+                orig_obs_space)
             states = [
                 RobotState(nav, occ, sen, d_t, max_ep_time)
                 for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors)
@@ -388,7 +403,9 @@ class MultiRobotEnv(VectorEnv):
         terms = [state.is_terminal for state in self.states]
         rewards = [self.reward_func(meta) for meta in metas]
 
-        for i, (sim, state, term) in enumerate(zip(self.simulators, self.states, terms)):
+        for i, (sim, state, term) in enumerate(
+            zip(self.simulators, self.states, terms)
+            ):
             if term:
                 sim.reset_state()
                 obs[i] = state.reset()

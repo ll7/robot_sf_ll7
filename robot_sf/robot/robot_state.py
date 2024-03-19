@@ -1,3 +1,10 @@
+"""
+`RobotState`: A data class that represents the state of a robot in the simulation environment.
+It includes information about navigation, occupancy (for collision detection),
+sensor fusion, and simulation time. It also tracks various conditions such as collision states,
+timeout condition, simulation time elapsed, and timestep count.
+"""
+
 from math import ceil
 from dataclasses import dataclass, field
 

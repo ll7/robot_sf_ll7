@@ -1,5 +1,6 @@
 from gymnasium import spaces
-from robot_sf.gym_env.robot_env import RobotEnv, OBS_DRIVE_STATE, OBS_RAYS
+from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 
 
 def test_can_create_env():

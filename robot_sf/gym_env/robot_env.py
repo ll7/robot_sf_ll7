@@ -16,7 +16,6 @@ It also defines the action and observation spaces for the robot.
 4. 
 """
 
-
 from typing import Tuple, Callable
 from copy import deepcopy
 
@@ -237,6 +236,3 @@ class RobotEnv(Env):
         """
         if self.sim_ui:
             self.sim_ui.exit()
-
-
-

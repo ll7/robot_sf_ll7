@@ -54,7 +54,7 @@ class EmptyRobotEnv(Env):
         self.env_config = env_config
 
         # Extract first map definition; currently only supports using the first map
-        map_def = env_config.map_pool.map_defs[0]
+        map_def = env_config.map_pool.map_defs["uni_campus_big"]
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = \

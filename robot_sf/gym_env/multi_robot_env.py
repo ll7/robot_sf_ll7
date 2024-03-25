@@ -30,7 +30,7 @@ class MultiRobotEnv(VectorEnv):
             reward_func: Callable[[dict], float] = simple_reward,
             debug: bool = False, num_robots: int = 1):
 
-        map_def = env_config.map_pool.map_defs[0] # info: only use first map
+        map_def = env_config.map_pool.map_defs["uni_campus_big"] # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(
             env_config,
             map_def

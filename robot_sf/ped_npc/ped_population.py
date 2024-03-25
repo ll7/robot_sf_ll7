@@ -8,11 +8,10 @@ from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
 from robot_sf.ped_npc.ped_behavior import \
     PedestrianBehavior, CrowdedZoneBehavior, FollowRouteBehavior
 from robot_sf.ped_npc.ped_zone import sample_zone
+from robot_sf.nav.nav_types import Vec2D, Zone
 
 PedState = np.ndarray
 PedGrouping = Set[int]
-Vec2D = Tuple[float, float]
-Zone = Tuple[Vec2D, Vec2D, Vec2D] # rect ABC with sides |A B|, |B C| and diagonal |A C|
 ZoneAssignments = Dict[int, int]
 
 

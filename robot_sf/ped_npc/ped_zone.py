@@ -1,9 +1,7 @@
-from typing import List, Tuple
+from typing import List
 import numpy as np
 
-Vec2D = Tuple[float, float]
-Zone = Tuple[Vec2D, Vec2D, Vec2D] # rect ABC with sides |A B|, |B C| and diagonal |A C|
-
+from robot_sf.nav.nav_types import Vec2D, Zone
 
 def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
     """

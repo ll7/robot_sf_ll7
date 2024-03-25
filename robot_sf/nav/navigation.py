@@ -1,13 +1,11 @@
 from random import sample, randint
 from math import dist, atan2
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
-
-Vec2D = Tuple[float, float]
-Zone = Tuple[Vec2D, Vec2D, Vec2D]
+from robot_sf.nav.nav_types import Vec2D
 
 
 @dataclass

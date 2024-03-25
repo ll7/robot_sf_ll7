@@ -3,17 +3,11 @@
 It includes classes and protocols for defining the robot's state, actions, and 
 observations within the environment. 
 
-Key components of this module include:
-
-
-
-3. `RobotEnv`: A class that represents the robot's environment. It inherits from `VectorEnv`
+`RobotEnv`: A class that represents the robot's environment. It inherits from `VectorEnv`
 from the `gymnasium` library, which is a base class for environments that operate over
 vectorized actions and observations. It includes methods for stepping through the environment,
 resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
-
-4. 
 """
 
 from typing import Tuple, Callable

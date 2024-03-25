@@ -1,3 +1,5 @@
 # pyreverse
 
-`pyreverse -o svg --colorized .`
+```shell
+pyreverse -o svg --colorized .
+```

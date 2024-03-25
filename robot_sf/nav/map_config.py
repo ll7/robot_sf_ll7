@@ -220,8 +220,10 @@ class MapDefinition:
 
     def __post_init__(self):
         """
-        Validates the map definition and initializes the obstacles_pysf and robot_routes_by_spawn_id attributes.
-        Raises a ValueError if the width or height is less than 0, if the robot spawn zones or goal zones are empty,
+        Validates the map definition and initializes the obstacles_pysf and
+        robot_routes_by_spawn_id attributes.
+        Raises a ValueError if the width or height is less than 0,
+        if the robot spawn zones or goal zones are empty,
         or if the bounds are not exactly 4.
         """
         obstacle_lines = [line for o in self.obstacles for line in o.lines]
@@ -284,8 +286,8 @@ class MapDefinitionPool:
     ----------
     maps_folder : str
         The directory where the map files are located.
-    map_defs : List[MapDefinition]
-        The list of map definitions.
+    map_defs : Dict[str, MapDefinition]
+        The dictionary of map definitions, with the map name as the key.
 
     Methods
     -------
@@ -296,7 +298,7 @@ class MapDefinitionPool:
     """
 
     maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
-    map_defs: List[MapDefinition] = field(default_factory=list)
+    map_defs: Dict[str, MapDefinition] = field(default_factory=dict)
 
     def __post_init__(self):
         """
@@ -322,7 +324,9 @@ class MapDefinitionPool:
             map_files = [os.path.join(self.maps_folder, f) for f in os.listdir(self.maps_folder)]
 
             # Load the map definitions from the files
-            self.map_defs = [serialize_map(load_json(f)) for f in map_files]
+            self.map_defs = {
+                os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f))
+                for f in map_files}
 
         # If map_defs is still empty, raise an error
         if not self.map_defs:
@@ -338,7 +342,7 @@ class MapDefinitionPool:
             A random map definition.
         """
 
-        return random.choice(self.map_defs)
+        return random.choice(list(self.map_defs.values()))
 
 
 def serialize_map(map_structure: dict) -> MapDefinition:

@@ -9,7 +9,7 @@ from tqdm import tqdm
 from stable_baselines3 import PPO, A2C
 
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
-from robot_sf.robot_env import RobotEnv, EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv, EnvSettings
 from robot_sf.eval import EnvMetrics
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings

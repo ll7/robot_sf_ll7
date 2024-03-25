@@ -9,7 +9,7 @@ import torch as th
 from torch import nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
-from robot_sf.robot_env import OBS_DRIVE_STATE, OBS_RAYS
+from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 
 
 class DynamicsExtractor(BaseFeaturesExtractor):

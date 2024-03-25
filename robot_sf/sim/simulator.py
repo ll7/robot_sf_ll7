@@ -1,3 +1,4 @@
+from math import ceil
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
 
@@ -6,7 +7,7 @@ from pysocialforce.simulator import make_forces as pysf_make_forces
 from pysocialforce.config import SimulatorConfig as PySFSimConfig
 from pysocialforce.forces import Force as PySFForce, ObstacleForce
 
-from robot_sf.sim_config import SimulationSettings
+from robot_sf.gym_env.env_config import SimulationSettings, EnvSettings
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
@@ -102,3 +103,49 @@ class Simulator:
         for robot, nav, action in zip(self.robots, self.robot_navs, actions):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
+
+
+def init_simulators(
+        env_config: EnvSettings,
+        map_def: MapDefinition,
+        num_robots: int = 1,
+        random_start_pos: bool = True
+        ) -> List[Simulator]:
+    """
+    Initialize simulators for the robot environment.
+
+    Parameters:
+    env_config (EnvSettings): Configuration settings for the environment.
+    map_def (MapDefinition): Definition of the map for the environment.
+    num_robots (int): Number of robots in the environment.
+    random_start_pos (bool): Whether to start the robots at random positions.
+
+    Returns:
+    List[Simulator]: A list of initialized Simulator objects.
+    """
+
+    # Calculate the number of simulators needed based on the number of robots and start positions
+    num_sims = ceil(num_robots / map_def.num_start_pos)
+
+    # Calculate the proximity to the goal based on the robot radius and goal radius
+    goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
+
+    # Initialize an empty list to hold the simulators
+    sims: List[Simulator] = []
+
+    # Create the required number of simulators
+    for i in range(num_sims):
+        # Determine the number of robots for this simulator
+        n = map_def.num_start_pos if i < num_sims - 1 \
+            else max(1, num_robots % map_def.num_start_pos)
+
+        # Create the robots for this simulator
+        sim_robots = [env_config.robot_factory() for _ in range(n)]
+
+        # Create the simulator with the robots and add it to the list
+        sim = Simulator(
+            env_config.sim_config, map_def, sim_robots,
+            goal_proximity, random_start_pos)
+        sims.append(sim)
+
+    return sims

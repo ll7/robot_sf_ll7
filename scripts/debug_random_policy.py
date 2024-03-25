@@ -1,7 +1,7 @@
 """
 Generate a random policy to test the environment
 """
-from robot_sf.robot_env import RobotEnv
+from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():

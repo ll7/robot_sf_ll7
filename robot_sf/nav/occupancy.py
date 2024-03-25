@@ -17,9 +17,11 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
     Parameters
     ----------
     c_1 : Circle2D
-        The first circle, represented as a tuple of the center coordinates and the radius.
+        The first circle, represented as a tuple of the center coordinates and
+        the radius.
     c_2 : Circle2D
-        The second circle, represented as a tuple of the center coordinates and the radius.
+        The second circle, represented as a tuple of the center coordinates and
+        the radius.
 
     Returns
     -------

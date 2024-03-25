@@ -1,4 +1,4 @@
-from robot_sf.robot_env import simple_reward
+from robot_sf.gym_env.robot_env import simple_reward
 
 def test_simple_reward():
     meta = {

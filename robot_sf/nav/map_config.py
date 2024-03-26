@@ -9,8 +9,8 @@ from math import sqrt
 from typing import List, Union, Dict
 from dataclasses import dataclass, field
 
-from robot_sf.nav.nav_types import Vec2D, Line2D, Rect
-from robot_sf.nav.gloabal_route import GlobalRoute
+from robot_sf.nav.nav_types import Line2D, Rect, Vec2D
+from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.obstacle import Obstacle
 
 
@@ -124,6 +124,7 @@ class MapDefinitionPool:
     """
 
     maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
+    """The directory where the **default** map files are located."""
     map_defs: Dict[str, MapDefinition] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -137,26 +138,38 @@ class MapDefinitionPool:
 
         # If map_defs is empty, load the map definitions from the files
         if not self.map_defs:
-            # Check if the maps_folder directory exists
-            if not os.path.exists(self.maps_folder) or not os.path.isdir(self.maps_folder):
-                raise ValueError(f"Map directory '{self.maps_folder}' does not exist!")
-
-            # Function to load a JSON file
-            def load_json(path: str) -> dict:
-                with open(path, 'r', encoding='utf-8') as file:
-                    return json.load(file)
-
-            # Get the list of map files
-            map_files = [os.path.join(self.maps_folder, f) for f in os.listdir(self.maps_folder)]
-
-            # Load the map definitions from the files
-            self.map_defs = {
-                os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f))
-                for f in map_files}
+            self.map_defs = self._load_json_map_definitions_from_folder(self.maps_folder)
 
         # If map_defs is still empty, raise an error
         if not self.map_defs:
             raise ValueError('Map pool is empty! Please specify some maps!')
+
+    def _load_json_map_definitions_from_folder(
+            self,
+            maps_folder: str
+            ) -> dict[str, MapDefinition]:
+        """
+        Load json map definitions from a folder in the maps_folder directory.
+        """
+
+        # Check if the maps_folder directory exists
+        if not os.path.exists(maps_folder) or not os.path.isdir(maps_folder):
+            raise ValueError(f"Map directory '{maps_folder}' does not exist!")
+
+        # Function to load a JSON file
+        def load_json(path: str) -> dict:
+            with open(path, 'r', encoding='utf-8') as file:
+                return json.load(file)
+
+        # Get the list of map files
+        map_files = [os.path.join(maps_folder, f) for f in os.listdir(maps_folder)]
+
+        # Load the map definitions from the files
+        map_defs = {
+            os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f))
+            for f in map_files}
+
+        return map_defs
 
     def choose_random_map(self) -> MapDefinition:
         """
@@ -169,7 +182,6 @@ class MapDefinitionPool:
         """
 
         return random.choice(list(self.map_defs.values()))
-
 
 def serialize_map(map_structure: dict) -> MapDefinition:
     """
@@ -195,8 +207,9 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         return (pos[0] - min_x, pos[1] - min_y)
 
     # Normalize the obstacles
-    obstacles = [Obstacle([norm_pos(p) for p in vertices])
-                 for vertices in map_structure['obstacles']]
+    obstacles = [
+        Obstacle([norm_pos(p) for p in vertices])
+        for vertices in map_structure['obstacles']]
 
     # Function to normalize a zone
     def norm_zone(rect: Rect) -> Rect:
@@ -210,12 +223,26 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     ped_crowded_zones = [norm_zone(z) for z in map_structure['ped_crowded_zones']]
 
     # Normalize the routes
-    robot_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']],
-                                robot_spawn_zones[o['spawn_id']], robot_goal_zones[o['goal_id']])
-                    for o in map_structure['robot_routes']]
-    ped_routes = [GlobalRoute(o['spawn_id'], o['goal_id'], [norm_pos(p) for p in o['waypoints']],
-                              ped_spawn_zones[o['spawn_id']], ped_goal_zones[o['goal_id']])
-                  for o in map_structure['ped_routes']]
+    robot_routes = [
+        GlobalRoute(
+            o['spawn_id'],
+            o['goal_id'],
+            [norm_pos(p) for p in o['waypoints']],
+            robot_spawn_zones[o['spawn_id']],
+            robot_goal_zones[o['goal_id']]
+            )
+            for o in map_structure['robot_routes']
+        ]
+    ped_routes = [
+        GlobalRoute(
+            o['spawn_id'],
+            o['goal_id'],
+            [norm_pos(p) for p in o['waypoints']],
+            ped_spawn_zones[o['spawn_id']],
+            ped_goal_zones[o['goal_id']]
+            )
+            for o in map_structure['ped_routes']
+        ]
 
     # Function to reverse a route
     def reverse_route(route: GlobalRoute) -> GlobalRoute:
@@ -236,6 +263,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Return the MapDefinition object
     return MapDefinition(
-        width, height, obstacles, robot_spawn_zones,
-        ped_spawn_zones, robot_goal_zones, map_bounds, robot_routes,
-        ped_goal_zones, ped_crowded_zones, ped_routes)
+        width,
+        height,
+        obstacles,
+        robot_spawn_zones,
+        ped_spawn_zones,
+        robot_goal_zones,
+        map_bounds,
+        robot_routes,
+        ped_goal_zones,
+        ped_crowded_zones,
+        ped_routes)

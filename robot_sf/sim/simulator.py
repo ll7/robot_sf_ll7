@@ -13,7 +13,9 @@ from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
 from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
-from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveAction
+from robot_sf.robot.differential_drive import (
+    DifferentialDriveRobot,
+    DifferentialDriveAction)
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 
@@ -40,7 +42,10 @@ class Simulator:
 
     def __post_init__(self):
         pysf_config = PySFSimConfig()
-        spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
+        spawn_config = PedSpawnConfig(
+            self.config.peds_per_area_m2,
+            self.config.max_peds_per_group
+            )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau, spawn_config,
             self.map_def.ped_routes, self.map_def.ped_crowded_zones)
@@ -51,15 +56,27 @@ class Simulator:
             if self.config.prf_config.is_active:
                 for robot in self.robots:
                     self.config.prf_config.robot_radius = robot.config.radius
-                    forces.append(PedRobotForce(self.config.prf_config, sim.peds, lambda: robot.pos))
+                    forces.append(
+                        PedRobotForce(
+                            self.config.prf_config,
+                            sim.peds,
+                            lambda: robot.pos
+                            )
+                        )
             return forces
 
         self.pysf_sim = PySFSimulator(
-            self.pysf_state.pysf_states(), self.groups.groups_as_lists,
-            self.map_def.obstacles_pysf, config=pysf_config, make_forces=make_forces)
+            self.pysf_state.pysf_states(),
+            self.groups.groups_as_lists,
+            self.map_def.obstacles_pysf,
+            config=pysf_config,
+            make_forces=make_forces)
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
-        self.robot_navs = [RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots]
+        self.robot_navs = [
+            RouteNavigator(proximity_threshold=self.goal_proximity_threshold)
+            for _ in self.robots
+            ]
 
         self.reset_state()
         for behavior in self.peds_behaviors:

@@ -131,7 +131,12 @@ class SvgMapConverter:
         robot_spawn_zones: List[Rect] = []
         ped_spawn_zones: List[Rect] = []
         robot_goal_zones: List[Rect] = []
-        bounds: List[Line2D] = [0, width, 0, height] # TODO is this correct?
+        bounds: List[Line2D] = [
+            (0, width, 0, 0),           # bottom
+            (0, width, height, height), # top
+            (0, 0, 0, height),          # left
+            (width, width, 0, height)   # right
+        ]
         logger.debug(f"Bounds: {bounds}")
         robot_routes: List[GlobalRoute] = []
         ped_goal_zones: List[Rect] = []

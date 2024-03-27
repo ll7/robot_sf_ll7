@@ -34,6 +34,7 @@ class SvgRectangle:
         """
         Returns the zone of the rectangle.
         """
+        # TODO: Is this a correct zone definition?
         return (
             (self.x, self.y),
             (self.x + self.width, self.y),

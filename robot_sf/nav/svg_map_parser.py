@@ -30,8 +30,8 @@ class SvgMapConverter:
         self.svg_file_str = svg_file
         self._load_svg_root()
 
-        self._get_svg_path_info()
-        self._path_info_to_mapdefintion()
+        self._get_svg_info()
+        self._info_to_mapdefintion()
 
     def _load_svg_root(self):
         """
@@ -43,7 +43,7 @@ class SvgMapConverter:
         svg_tree = ET.parse(self.svg_file_str)
         self.svg_root = svg_tree.getroot()
 
-    def _get_svg_path_info(self):
+    def _get_svg_info(self):
         """
         Extracts path information from an SVG file.
         
@@ -83,9 +83,6 @@ class SvgMapConverter:
             if not input_string:
                 continue  # Skip paths without the 'd' attribute
 
-            label = path.attrib.get('{http://www.inkscape.org/namespaces/inkscape}label')
-            id = path.attrib.get('id')
-
             # Find all matching coordinates
             filtered_coordinates = coordinate_pattern.findall(input_string)
             if not filtered_coordinates:
@@ -99,8 +96,9 @@ class SvgMapConverter:
             path_info.append(
                 SvgPath(
                     coordinates=np_coordinates,
-                    label=label,
-                    id = id
+                    label=path.attrib.get(
+                        '{http://www.inkscape.org/namespaces/inkscape}label'),
+                    id = path.attrib.get('id')
                 )
             )
 
@@ -125,7 +123,7 @@ class SvgMapConverter:
         logger.info(f"Parsed {len(rect_info)} rects in the SVG file")
         self.rect_info = rect_info
 
-    def _path_info_to_mapdefintion(self) -> MapDefinition:
+    def _info_to_mapdefintion(self) -> MapDefinition:
 
         width: float = float(self.svg_root.attrib.get('width'))
         height: float = float(self.svg_root.attrib.get('height'))
@@ -133,7 +131,7 @@ class SvgMapConverter:
         robot_spawn_zones: List[Rect] = []
         ped_spawn_zones: List[Rect] = []
         robot_goal_zones: List[Rect] = []
-        bounds: List[Line2D] = [0, width, 0, height]
+        bounds: List[Line2D] = [0, width, 0, height] # TODO is this correct?
         logger.debug(f"Bounds: {bounds}")
         robot_routes: List[GlobalRoute] = []
         ped_goal_zones: List[Rect] = []
@@ -175,8 +173,23 @@ class SvgMapConverter:
                         goal_zone=(vertices[-1], 0, 0) # TODO
                     ))
 
+            elif path.label == 'robot_route':
+                # Convert the coordinates to a list of vertices
+                vertices = path.coordinates.tolist()
+
+                # Append the obstacle to the list
+                robot_routes.append(
+                    GlobalRoute(
+                        spawn_id=0, # TODO: What is this? value is arbitrary
+                        goal_id=0, # TODO: What is this? value is arbitrary
+                        waypoints=vertices,
+                        spawn_zone=(vertices[0], 0, 0), # TODO
+                        goal_zone=(vertices[-1], 0, 0) # TODO
+                    ))
+
 
             elif path.label == 'crowded_zone': # TODO: remove this
+                # Crowded Zones should be rectangles?
                 # Convert the coordinates to a list of vertices
                 vertices = path.coordinates.tolist()
 
@@ -201,6 +214,8 @@ class SvgMapConverter:
                 ped_goal_zones.append(rect.get_zone())
             elif rect.label == 'obstacle':
                 obstacles.append(obstacle_from_svgrectangle(rect))
+            elif rect.label == 'ped_crowded_zone':
+                ped_crowded_zones.append(rect.get_zone())
             else:
                 logger.error(
                     f"Unknown label <{rect.label}> in id <{rect.id_}>"

@@ -4,6 +4,7 @@ define the map configuration
 import os
 import json
 import random
+from loguru import logger
 
 from math import sqrt
 from typing import List, Union, Dict
@@ -12,7 +13,6 @@ from dataclasses import dataclass, field
 from robot_sf.nav.nav_types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.obstacle import Obstacle
-
 
 @dataclass
 class MapDefinition:
@@ -64,7 +64,7 @@ class MapDefinition:
         if the robot spawn zones or goal zones are empty,
         or if the bounds are not exactly 4.
         """
-        obstacle_lines = [line for o in self.obstacles for line in o.lines]
+        obstacle_lines = [line for obstacle in self.obstacles for line in obstacle.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
         self.robot_routes_by_spawn_id = dict()
@@ -74,12 +74,23 @@ class MapDefinition:
             else:
                 self.robot_routes_by_spawn_id[route.spawn_id] = [route]
 
-        if self.width < 0 or self.height < 0:
-            raise ValueError("Map width and height mustn't be zero or negative!")
-        if not self.robot_spawn_zones or not self.robot_goal_zones:
-            raise ValueError("Spawn and goal zones mustn't be empty!")
+        if self.width <= 0 or self.height <= 0:
+            logger.critical(
+                "Map width and height mustn't be zero or negative! " +
+                f"Width: {self.width}, Height: {self.height}"
+                )
+
+        if not self.robot_spawn_zones:
+            logger.error("Robot spawn zones mustn't be empty!")
+
+        if not self.robot_goal_zones:
+            logger.error("Robot goal zones mustn't be empty!")
+
         if len(self.bounds) != 4:
-            raise ValueError("Invalid bounds! Expected exactly 4 bounds!")
+            logger.critical(
+                "Invalid bounds! Expected exactly 4 bounds! "+
+                f"Found {len(self.bounds)} bounds!"
+                )
 
     @property
     def num_start_pos(self) -> int:

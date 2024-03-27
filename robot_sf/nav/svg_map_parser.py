@@ -45,12 +45,29 @@ class SvgMapConverter:
 
     def _get_svg_info(self):
         """
-        Extracts path information from an SVG file.
-        
-        returns a list of dictionaries, each containing the following keys:
+        Extracts path and rectangle information from an SVG file.
+
+        This method finds all 'path' and 'rect' elements in the SVG file and extracts their
+        coordinates, labels, and ids. The information is stored in the 'path_info' and 'rect_info'
+        attributes of the SvgMapConverter instance.
+
+        For 'path' elements, the 'd' attribute is parsed to extract the coordinates. Each path is
+        represented as a SvgPath object with the following attributes:
         - 'coordinates': a numpy array of shape (n, 2) containing the x and y coordinates
         - 'label': the 'inkscape:label' attribute of the path
         - 'id': the 'id' attribute of the path
+
+        For 'rect' elements, the 'x', 'y', 'width', and 'height' attributes are extracted.
+        Each rectangle is
+        represented as a SvgRectangle object with the following attributes:
+        - 'x': the 'x' attribute of the rectangle
+        - 'y': the 'y' attribute of the rectangle
+        - 'width': the 'width' attribute of the rectangle
+        - 'height': the 'height' attribute of the rectangle
+        - 'label': the 'inkscape:label' attribute of the rectangle
+        - 'id': the 'id' attribute of the rectangle
+
+        If the SVG root is not loaded, an error is logged and the method returns None.
         """
         # check that the svg root is loaded
         if not self.svg_root:

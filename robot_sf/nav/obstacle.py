@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List
 import numpy as np
-from robot_sf.nav.nav_types import Vec2D, Line2D
+from robot_sf.nav.nav_types import Vec2D, Line2D, SvgRectangle
 
 @dataclass
 class Obstacle:
@@ -54,3 +54,25 @@ class Obstacle:
 
         if not self.vertices:
             print('WARNING: obstacle is just a single point that cannot collide!')
+
+def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
+    """
+    Creates an obstacle from an SVG rectangle.
+
+    Parameters
+    ----------
+    svg_rectangle : SvgRectangle
+        The SVG rectangle to create the obstacle from.
+
+    Returns
+    -------
+    Obstacle
+        The obstacle created from the SVG rectangle.
+    """
+
+    return Obstacle([
+        (svg_rectangle.x, svg_rectangle.y),
+        (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y),
+        (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y + svg_rectangle.height),
+        (svg_rectangle.x, svg_rectangle.y + svg_rectangle.height)
+    ])

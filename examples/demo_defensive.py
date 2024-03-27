@@ -2,7 +2,8 @@ import numpy as np
 from gymnasium import spaces
 from stable_baselines3 import PPO
 
-from robot_sf.gym_env.robot_env import RobotEnv, OBS_DRIVE_STATE, OBS_RAYS
+from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings

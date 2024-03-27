@@ -52,7 +52,7 @@ class Simulator:
 
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
             forces = pysf_make_forces(sim, config)
-            forces = [f for f in forces if type(f) != ObstacleForce]
+            forces = [f for f in forces if not isinstance(f, ObstacleForce)]
             if self.config.prf_config.is_active:
                 for robot in self.robots:
                     self.config.prf_config.robot_radius = robot.config.radius

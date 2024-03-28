@@ -173,15 +173,18 @@ class SimulationView:
                 self.redraw_needed = True
 
     def _process_event_queue(self):
+        """Process the event queue of the pygame window."""
+        event_handler_map = {
+            pygame.QUIT: self._handle_quit,
+            pygame.VIDEORESIZE: self._handle_video_resize,
+            pygame.KEYDOWN: self._handle_keydown,
+        }
         while not self.is_exit_requested:
             for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    self.is_exit_requested = True
-                    self.is_abortion_requested = True
-                elif e.type == pygame.VIDEORESIZE:
-                    self.size_changed = True
-                    self.width, self.height = e.w, e.h
-            sleep(0.01)
+                handler = event_handler_map.get(e.type)
+                if handler:
+                    handler(e)
+            sleep(0.01)  # Consider removing or replacing with a frame rate clock
 
     def clear(self):
         self.screen.fill(BACKGROUND_COLOR)

@@ -224,10 +224,10 @@ class SimulationView:
         state = self._scale_pedestrian_state(state)
         # state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
+
         # static objects
         self._draw_obstacles()
         self._draw_grid()
-        
 
         # dynamic objects
         if self.map_def.ped_routes:

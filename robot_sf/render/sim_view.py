@@ -74,7 +74,7 @@ class SimulationView:
     offset: np.array = field(init=False, default=np.array([0, 0]))
 
     @property
-    def timestep_text_pos(self) -> Vec2D:
+    def _timestep_text_pos(self) -> Vec2D:
         return (16, 16)
 
     def __post_init__(self):

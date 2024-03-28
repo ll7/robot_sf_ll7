@@ -363,3 +363,39 @@ class SimulationView:
             pos = self.timestep_text_pos[0], \
                 self.timestep_text_pos[1] + i * self.font.get_linesize()
             self.screen.blit(text_surface, pos)
+
+    def _draw_grid(
+            self,
+            grid_increment: int=50,
+            grid_color: RgbColor=(200, 200, 200)
+            ):
+        """
+        Draw a grid on the screen.
+        :param grid_increment: The increment of the grid in pixels.
+        :param grid_color: The color of the grid lines.
+        """
+        scaled_grid_size = grid_increment*self.scaling
+        font = pygame.font.Font(None, 24)
+        # draw the vertical lines
+        start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
+        for x in range(start_x, self.width-self.offset[0], scaled_grid_size):
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (x + self.offset[0], 0),
+                (x + self.offset[0], self.height)
+                )
+            label = font.render(str(int(x/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (x + self.offset[0], 0))
+
+        # draw the horizontal lines
+        start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
+        for y in range(start_y, self.height-self.offset[1], scaled_grid_size):
+            pygame.draw.line(
+                self.screen,
+                grid_color,
+                (0, y + self.offset[1]),
+                (self.width, y + self.offset[1])
+                )
+            label = font.render(str(int(y/self.scaling)), 1, grid_color)
+            self.screen.blit(label, (0, y + self.offset[1]))

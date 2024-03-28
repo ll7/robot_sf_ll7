@@ -244,6 +244,12 @@ class SimulationView:
             (self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
+    def _scale_pedestrian_state(self, state: VisualizableSimState) \
+            -> Tuple[VisualizableSimState, Tuple[float, float]]:
+        state.pedestrian_positions *= self.scaling
+        state.ped_actions *= self.scaling
+        return state
+
     def _zoom_camera(self, state: VisualizableSimState) \
             -> Tuple[VisualizableSimState, Tuple[float, float]]:
         r_x, r_y = state.robot_pose[0]

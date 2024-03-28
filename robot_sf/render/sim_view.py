@@ -87,6 +87,12 @@ class SimulationView:
         self.surface_obstacles = self.preprocess_obstacles()
         self.clear()
 
+    def _scale_tuple(self, tup: Tuple[float, float]) -> Tuple[float, float]:
+        """scales a tuple of floats by the scaling factor and adds the offset."""
+        x = tup[0] * self.scaling + self.offset[0]
+        y = tup[1] * self.scaling + self.offset[1]
+        return (x, y)
+
     def preprocess_obstacles(self) -> pygame.Surface:
         # Scale the vertices of the obstacles
         obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]

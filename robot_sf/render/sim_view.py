@@ -391,8 +391,10 @@ class SimulationView:
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
-            pos = self.timestep_text_pos[0], \
-                self.timestep_text_pos[1] + i * self.font.get_linesize()
+            pos = (
+                self._timestep_text_pos[0],
+                self._timestep_text_pos[1] + i * self.font.get_linesize()
+            )
             self.screen.blit(text_surface, pos)
 
     def _draw_grid(

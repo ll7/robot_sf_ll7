@@ -377,7 +377,7 @@ class SimulationView:
         # TODO: show map name as well
         text = f'step: {timestep}'
         text_surface = self.font.render(text, False, TEXT_COLOR)
-        self.screen.blit(text_surface, self.timestep_text_pos)
+        self.screen.blit(text_surface, self._timestep_text_pos)
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
         text_lines = [

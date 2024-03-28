@@ -386,7 +386,8 @@ class SimulationView:
             f'x-offset: {self.offset[0]/self.scaling:.2f}',
             f'y-offset: {self.offset[1]/self.scaling:.2f}',
             f'RobotPose: {state.robot_pose}',
-            f'RobotAction: {state.action.robot_action}'
+            f'RobotAction: {state.action.robot_action}',
+            f'RobotGoal: {state.action.robot_goal}'
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)

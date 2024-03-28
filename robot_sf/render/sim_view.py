@@ -277,7 +277,11 @@ class SimulationView:
 
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
-        pygame.draw.circle(self.screen, ROBOT_COLOR, pose[0], self.robot_radius * self.scaling)
+        pygame.draw.circle(
+            self.screen,
+            ROBOT_COLOR,
+            pose[0],
+            self.robot_radius * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         # TODO: display pedestrians with an image instead of a circle

@@ -321,7 +321,12 @@ class SimulationView:
 
     def _augment_lidar(self, ray_vecs: np.ndarray):
         for p1, p2 in ray_vecs:
-            pygame.draw.line(self.screen, ROBOT_LIDAR_COLOR, p1, p2)
+            pygame.draw.line(
+                self.screen,
+                ROBOT_LIDAR_COLOR,
+                self._scale_tuple(p1),
+                self._scale_tuple(p2),
+                )
 
     def _augment_robot_action(self, action: VisualizableAction):
         r_x, r_y = action.robot_pose[0]

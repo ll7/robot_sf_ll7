@@ -121,6 +121,12 @@ class SimulationView:
         return surface
 
     def show(self):
+        """
+        Starts a separate thread to process the event queue and handles SIGINT signal.
+
+        This method starts a new thread to process the event queue in the background.
+        It also sets up a signal handler for SIGINT to handle the interruption of the program.
+        """
         self.ui_events_thread = Thread(target=self._process_event_queue)
         self.ui_events_thread.start()
 

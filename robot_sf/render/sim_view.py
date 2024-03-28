@@ -226,8 +226,9 @@ class SimulationView:
             self.surface_obstacles = self.preprocess_obstacles()
             self.redraw_needed = False
 
+        # TODO: is it correct to scale the ped state here?
         state = self._scale_pedestrian_state(state)
-        # state, offset = self._zoom_camera(state)
+
         self.screen.fill(BACKGROUND_COLOR)
 
         # static objects

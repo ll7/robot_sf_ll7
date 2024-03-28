@@ -11,6 +11,8 @@ os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 import numpy as np
 
+from loguru import logger
+
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction
 from robot_sf.nav.map_config import Obstacle
@@ -79,6 +81,7 @@ class SimulationView:
         return (16, 16)
 
     def __post_init__(self):
+        logger.info("Initializing the simulation view.")
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode(

@@ -352,10 +352,25 @@ class SimulationView:
         for route in self.map_def.ped_routes:
             pygame.draw.lines(
                 self.screen,
-                (0, 0, 255),
+                PED_ROUTE_COLOR,
                 False,
                 [self._scale_tuple((x, y))
-                for x, y in route.waypoints]
+                for x, y in route.waypoints],
+                width = 1
+                )
+
+    def _draw_robot_routes(self):
+        """
+        draw the map_def.routes on the screen
+        """
+        for route in self.map_def.robot_routes:
+            pygame.draw.lines(
+                self.screen,
+                ROBOT_ROUTE_COLOR,
+                False,
+                [self._scale_tuple((x, y))
+                for x, y in route.waypoints],
+                width = 1
                 )
 
     def _augment_timestep(self, timestep: int):

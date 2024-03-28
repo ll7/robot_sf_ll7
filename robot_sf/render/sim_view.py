@@ -369,7 +369,7 @@ class SimulationView:
                 self.screen,
                 (0, 0, 255),
                 False,
-                [(x*self.scaling + self.offset[0], y*self.scaling + self.offset[1])
+                [self._scale_tuple((x, y))
                 for x, y in route.waypoints]
                 )
 

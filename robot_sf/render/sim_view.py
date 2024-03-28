@@ -215,7 +215,7 @@ class SimulationView:
             self.redraw_needed = False
 
         state = self._scale_pedestrian_state(state)
-        state, offset = self._zoom_camera(state)
+        # state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
         # static objects
         self._draw_obstacles()
@@ -252,6 +252,7 @@ class SimulationView:
 
     def _zoom_camera(self, state: VisualizableSimState) \
             -> Tuple[VisualizableSimState, Tuple[float, float]]:
+        # TODO: remove this unused method
         r_x, r_y = state.robot_pose[0]
         x_offset = r_x * self.scaling - self.width / 2
         y_offset = r_y * self.scaling - self.height / 2

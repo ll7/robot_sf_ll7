@@ -293,10 +293,10 @@ class SimulationView:
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
-            scaled_vertices = [
-                (x*self.scaling + self.offset[0],
-                 y*self.scaling + self.offset[1]
-                 ) for x, y in obstacle.vertices_np]
+            scaled_vertices = [(
+                x*self.scaling + self.offset[0],
+                y*self.scaling + self.offset[1]
+                ) for x, y in obstacle.vertices_np]
             # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 

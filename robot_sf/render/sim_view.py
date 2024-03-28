@@ -70,6 +70,8 @@ class SimulationView:
     is_abortion_requested: bool = field(init=False, default=False)
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
+    redraw_needed: bool = field(init=False, default=False)
+    offset: np.array = field(init=False, default=np.array([0, 0]))
 
     @property
     def timestep_text_pos(self) -> Vec2D:

@@ -14,7 +14,7 @@ from robot_sf.robot.robot_state import RobotState
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 
-from robot_sf.sim.sim_view import (
+from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
     VisualizableSimState)

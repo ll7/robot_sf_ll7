@@ -72,6 +72,7 @@ class SimulationView:
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
     offset: np.array = field(init=False, default=np.array([0, 0]))
+    """The offset is already uses `scaling` as a factor."""
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

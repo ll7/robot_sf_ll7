@@ -359,7 +359,7 @@ class SimulationView:
                 p2+self.offset,
                 width=3
                 )
-            
+
     def _draw_pedestrian_routes(self):
         """
         draw the map_def.routes on the screen

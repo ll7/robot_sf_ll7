@@ -256,6 +256,7 @@ class SimulationView:
         pygame.display.update()
 
     def _resize_window(self):
+        logger.debug("Resizing the window.")
         old_surface = self.screen
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.RESIZABLE)

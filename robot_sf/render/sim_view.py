@@ -268,32 +268,6 @@ class SimulationView:
         state.ped_actions *= self.scaling
         return state
 
-    def _zoom_camera(self, state: VisualizableSimState) \
-            -> Tuple[VisualizableSimState, Tuple[float, float]]:
-        # TODO: remove this unused method
-        r_x, r_y = state.robot_pose[0]
-        x_offset = r_x * self.scaling - self.width / 2
-        y_offset = r_y * self.scaling - self.height / 2
-        state.pedestrian_positions *= self.scaling
-        state.pedestrian_positions -= [x_offset, y_offset]
-        state.ped_actions *= self.scaling
-        state.ped_actions -= [x_offset, y_offset]
-        state.ray_vecs *= self.scaling
-        state.ray_vecs -= [x_offset, y_offset]
-        state.robot_pose = ((
-            state.robot_pose[0][0] * self.scaling - x_offset,
-            state.robot_pose[0][1] * self.scaling - y_offset),
-            state.robot_pose[1])
-        if state.action:
-            state.action.robot_pose = ((
-                state.action.robot_pose[0][0] * self.scaling - x_offset,
-                state.action.robot_pose[0][1] * self.scaling - y_offset),
-                state.action.robot_pose[1])
-            state.action.robot_goal = (
-                state.action.robot_goal[0] * self.scaling - x_offset,
-                state.action.robot_goal[1] * self.scaling - y_offset)
-        return state, (x_offset, y_offset)
-
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
         pygame.draw.circle(

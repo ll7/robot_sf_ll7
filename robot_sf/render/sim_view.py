@@ -332,7 +332,13 @@ class SimulationView:
             return v_1[0] + v_2[0], v_1[1] + v_2[1]
 
         vec_x, vec_y = add_vec((r_x, r_y), from_polar(vec_length, vec_orient))
-        pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, (r_x, r_y), (vec_x, vec_y), width=3)
+        pygame.draw.line(
+            self.screen,
+            ROBOT_ACTION_COLOR,
+            self._scale_tuple((r_x, r_y)),
+            self._scale_tuple((vec_x, vec_y)),
+            width=3
+            )
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
         """Draw the actions of the pedestrians as lines."""

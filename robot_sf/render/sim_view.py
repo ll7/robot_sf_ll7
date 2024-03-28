@@ -14,6 +14,7 @@ import numpy as np
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction
 from robot_sf.nav.map_config import Obstacle
+from robot_sf.nav.map_config import MapDefinition
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -62,6 +63,7 @@ class SimulationView:
     robot_radius: float=1.0
     ped_radius: float=0.4
     goal_radius: float=1.0
+    map_def: MapDefinition = field(default_factory=MapDefinition)
     obstacles: List[Obstacle] = field(default_factory=list)
     size_changed: bool = field(init=False, default=False)
     is_exit_requested: bool = field(init=False, default=False)

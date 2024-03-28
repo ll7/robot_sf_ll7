@@ -96,6 +96,7 @@ class EmptyRobotEnv(Env):
         if debug:
             self.sim_ui = SimulationView(
                 scaling=10,
+                map_def=map_def,
                 obstacles=map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,

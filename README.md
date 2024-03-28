@@ -1,5 +1,7 @@
 # robot-sf
 
+> 2024-03-28 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
+
 ## About
 This project provides a training environment for the simulation of a robot moving
 in a pedestrian-filled space.

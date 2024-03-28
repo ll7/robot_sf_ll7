@@ -282,7 +282,12 @@ class SimulationView:
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         # TODO: display pedestrians with an image instead of a circle
         for ped_x, ped_y in ped_pos:
-            pygame.draw.circle(self.screen, PED_COLOR, (ped_x, ped_y), self.ped_radius * self.scaling)
+            pygame.draw.circle(
+                self.screen,
+                PED_COLOR,
+                (ped_x+self.offset[0], ped_y+self.offset[1]),
+                self.ped_radius * self.scaling
+                )
 
     def _draw_obstacles(self, offset: Tuple[float, float]):
         offset = offset[0] * -1, offset[1] * -1

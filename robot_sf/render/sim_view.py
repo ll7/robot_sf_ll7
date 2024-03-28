@@ -288,7 +288,7 @@ class SimulationView:
         pygame.draw.circle(
             self.screen,
             ROBOT_COLOR,
-            pose[0],
+            self._scale_tuple(pose[0]),
             self.robot_radius * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):

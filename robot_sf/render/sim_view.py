@@ -350,3 +350,16 @@ class SimulationView:
         text = f'step: {timestep}'
         text_surface = self.font.render(text, False, TEXT_COLOR)
         self.screen.blit(text_surface, self.timestep_text_pos)
+
+    def _add_text(self, timestep: int):
+        text_lines = [
+            f'step: {timestep}',
+            f'scaling: {self.scaling}',
+            f'x-offset: {self.offset[0]/self.scaling:.2f}',
+            f'y-offset: {self.offset[1]/self.scaling:.2f}'
+        ]
+        for i, text in enumerate(text_lines):
+            text_surface = self.font.render(text, False, TEXT_COLOR)
+            pos = self.timestep_text_pos[0], \
+                self.timestep_text_pos[1] + i * self.font.get_linesize()
+            self.screen.blit(text_surface, pos)

@@ -210,10 +210,21 @@ class SimulationView:
         if self.size_changed:
             self._resize_window()
             self.size_changed = False
+        if self.redraw_needed:
+            self.surface_obstacles = self.preprocess_obstacles()
+            self.redraw_needed = False
 
+        state = self._scale_pedestrian_state(state)
         state, offset = self._zoom_camera(state)
         self.screen.fill(BACKGROUND_COLOR)
-        self._draw_obstacles(offset)
+        # static objects
+        self._draw_obstacles()
+        self._draw_grid()
+        
+
+        # dynamic objects
+        if self.map_def.ped_routes:
+            self._draw_pedestrian_routes()
         self._augment_lidar(state.ray_vecs)
         self._augment_ped_actions(state.ped_actions)
         if state.action:
@@ -222,6 +233,9 @@ class SimulationView:
         self._draw_pedestrians(state.pedestrian_positions)
         self._draw_robot(state.robot_pose)
         self._augment_timestep(state.timestep)
+        self._add_text(state.timestep)
+
+        # update the display
         pygame.display.update()
 
     def _resize_window(self):

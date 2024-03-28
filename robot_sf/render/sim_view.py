@@ -232,12 +232,16 @@ class SimulationView:
         self.screen.fill(BACKGROUND_COLOR)
 
         # static objects
-        self._draw_obstacles()
-        self._draw_grid()
-
-        # dynamic objects
+        if self.map_def.obstacles:
+            self._draw_obstacles()
+        if self.map_def.robot_routes:
+            self._draw_robot_routes()
         if self.map_def.ped_routes:
             self._draw_pedestrian_routes()
+        self._draw_grid()
+
+
+        # dynamic objects
         self._augment_lidar(state.ray_vecs)
         self._augment_ped_actions(state.ped_actions)
         if state.action:

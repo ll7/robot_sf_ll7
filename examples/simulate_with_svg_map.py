@@ -58,12 +58,12 @@ def main():
     """Simulate a random policy with a map defined in SVG format."""
     logger.info("Simulating a random policy with the map.")
 
-    SVG_FILE = "maps/svg_maps/02_simple_maps.svg"
+    svg_file = "maps/svg_maps/02_simple_maps.svg"
 
     logger.info("Converting SVG map to MapDefinition object.")
-    logger.info(f"SVG file: {SVG_FILE}")
+    logger.info(f"SVG file: {svg_file}")
 
-    converter = SvgMapConverter(SVG_FILE)
+    converter = SvgMapConverter(svg_file)
     map_definition = converter.map_definition
 
     test_simulation(map_definition)

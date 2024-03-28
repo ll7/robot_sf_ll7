@@ -233,7 +233,7 @@ class SimulationView:
         self._draw_pedestrians(state.pedestrian_positions)
         self._draw_robot(state.robot_pose)
         self._augment_timestep(state.timestep)
-        self._add_text(state.timestep)
+        self._add_text(state.timestep, state)
 
         # update the display
         pygame.display.update()
@@ -351,12 +351,14 @@ class SimulationView:
         text_surface = self.font.render(text, False, TEXT_COLOR)
         self.screen.blit(text_surface, self.timestep_text_pos)
 
-    def _add_text(self, timestep: int):
+    def _add_text(self, timestep: int, state: VisualizableSimState):
         text_lines = [
             f'step: {timestep}',
             f'scaling: {self.scaling}',
             f'x-offset: {self.offset[0]/self.scaling:.2f}',
-            f'y-offset: {self.offset[1]/self.scaling:.2f}'
+            f'y-offset: {self.offset[1]/self.scaling:.2f}',
+            f'RobotPose: {state.robot_pose}',
+            f'RobotAction: {state.action.robot_action}'
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)

@@ -322,8 +322,28 @@ class SimulationView:
         pygame.draw.line(self.screen, ROBOT_ACTION_COLOR, (r_x, r_y), (vec_x, vec_y), width=3)
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
+        """Draw the actions of the pedestrians as lines."""
         for p1, p2 in ped_actions:
-            pygame.draw.line(self.screen, PED_ACTION_COLOR, p1, p2, width=3)
+            pygame.draw.line(
+                self.screen,
+                PED_ACTION_COLOR,
+                p1+self.offset,
+                p2+self.offset,
+                width=3
+                )
+            
+    def _draw_pedestrian_routes(self):
+        """
+        draw the map_def.routes on the screen
+        """
+        for route in self.map_def.ped_routes:
+            pygame.draw.lines(
+                self.screen,
+                (0, 0, 255),
+                False,
+                [(x*self.scaling + self.offset[0], y*self.scaling + self.offset[1])
+                for x, y in route.waypoints]
+                )
 
     def _augment_timestep(self, timestep: int):
         # TODO: show map name as well

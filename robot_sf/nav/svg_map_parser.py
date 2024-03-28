@@ -141,7 +141,9 @@ class SvgMapConverter:
         self.rect_info = rect_info
 
     def _info_to_mapdefintion(self) -> MapDefinition:
-
+        """
+        Create a MapDefinition object from the path and rectangle information.
+        """
         width: float = float(self.svg_root.attrib.get('width'))
         height: float = float(self.svg_root.attrib.get('height'))
         obstacles: List[Obstacle] = []

@@ -75,7 +75,7 @@ class SimulationView:
 
     @property
     def timestep_text_pos(self) -> Vec2D:
-        return (self.width - 16, 16)
+        return (16, 16)
 
     def __post_init__(self):
         pygame.init()

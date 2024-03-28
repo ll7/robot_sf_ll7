@@ -313,7 +313,11 @@ class SimulationView:
 
     def _augment_goal_position(self, robot_goal: Vec2D):
         # TODO: display pedestrians with an image instead of a circle
-        pygame.draw.circle(self.screen, ROBOT_GOAL_COLOR, robot_goal, self.goal_radius * self.scaling)
+        pygame.draw.circle(
+            self.screen,
+            ROBOT_GOAL_COLOR,
+            self._scale_tuple(robot_goal),
+            self.goal_radius * self.scaling)
 
     def _augment_lidar(self, ray_vecs: np.ndarray):
         for p1, p2 in ray_vecs:

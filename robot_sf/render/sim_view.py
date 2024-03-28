@@ -187,6 +187,12 @@ class SimulationView:
             sleep(0.01)  # Consider removing or replacing with a frame rate clock
 
     def clear(self):
+        """
+        Clears the screen and updates the display.
+
+        This method fills the screen with the background color,
+        adds text at position 0, and updates the display.
+        """
         self.screen.fill(BACKGROUND_COLOR)
         self._augment_timestep(0)
         pygame.display.update()

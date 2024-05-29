@@ -23,7 +23,8 @@
                 "mhutchie.git-graph",
                 "ms-python.pylint",
                 "genieai.chatgpt-vscode",
-                "ms-azuretools.vscode-docker"
+                "ms-azuretools.vscode-docker",
+                "eamodio.gitlens"
             ]
         },
         "settings": { 

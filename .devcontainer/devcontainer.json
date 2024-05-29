@@ -6,32 +6,27 @@
         "args": {
             "VARIANT": "sf-ll7"
         }
-    ,
+    },
     "runArgs": [
         "--network=host",
         "-e", "DISPLAY=host.docker.internal:0.0"
     ],
-    "settings": { 
-        "terminal.integrated.shell.linux": "/bin/bash"
-    },
-    "postCreateCommand": [
-        "git submodule update --init --recursive",
-        "pip install -r requirements.txt",
-        "pip install -r fast-pysf/requirements.txt",
-        "pip install -e .",
-        "pip install -e fast-pysf"
-    ]
-},
-"customizations": {
-    "vscode": {
-        "extensions": [
-            "ms-python.python",
-            "ms-vscode-remote.remote-containers",
-            "GitHub.vscode-pull-request-github",
-            "GitHub.copilot",
-            "mhutchie.git-graph",
-            "ms-python.pylint",
-            "genieai.chatgpt-vscode"
-        ]
+    "postCreateCommand": "./postCreate.sh",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-vscode-remote.remote-containers",
+                "GitHub.vscode-pull-request-github",
+                "GitHub.copilot",
+                "mhutchie.git-graph",
+                "ms-python.pylint",
+                "genieai.chatgpt-vscode",
+                "ms-azuretools.vscode-docker"
+            ]
+        },
+        "settings": { 
+            "terminal.integrated.shell.linux": "/bin/bash"
+        }
     }
 }

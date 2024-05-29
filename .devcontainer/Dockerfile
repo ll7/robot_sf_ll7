@@ -13,14 +13,5 @@ RUN apt-get update && \
 # Set the display environment variable
 ENV DISPLAY=host.docker.internal:0.0
 
-# # Copy the Pygame script into the container
-# COPY pygame_script.py /usr/src/app/
-
-# # Set the working directory
-# WORKDIR /usr/src/app
-
-# # Run the Pygame script
-# CMD ["python", "pygame_script.py"]
-
 # Update pip
 RUN pip install --upgrade pip

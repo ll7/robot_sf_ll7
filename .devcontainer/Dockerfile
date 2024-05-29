@@ -1,6 +1,9 @@
 # Use the official Python base image
 FROM python:3.9
 
+# Set git to auto adjust for the correct line endings between different operating systems
+RUN git config --global core.autocrlf true
+
 # Install necessary dependencies
 RUN apt-get update && \
     apt-get install -y python3-pip python3-dev \

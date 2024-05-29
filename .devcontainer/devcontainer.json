@@ -9,7 +9,8 @@
     },
     "runArgs": [
         "--network=host",
-        "-e", "DISPLAY=host.docker.internal:0.0"
+        "-e", "DISPLAY=host.docker.internal:0.0",
+        "--gpus=all"
     ],
     "postCreateCommand": "./postCreate.sh",
     "customizations": {

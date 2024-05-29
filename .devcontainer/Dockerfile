@@ -1,12 +1,12 @@
 # Use the official Python base image
-FROM python:3.9
+FROM nvidia/cuda:12.4.1-base-ubuntu22.04
 
 # Set git to auto adjust for the correct line endings between different operating systems
 RUN git config --global core.autocrlf true
 
 # Install necessary dependencies
 RUN apt-get update && \
-    apt-get install -y python3-pip python3-dev \
+    apt-get install -y python3 python3-pip python3-dev \
     python3-opengl libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
     libsmpeg-dev libportmidi-dev libavformat-dev libswscale-dev libjpeg-dev libfreetype6-dev
 

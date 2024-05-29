@@ -10,9 +10,6 @@ RUN apt-get update && \
     python3-opengl libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
     libsmpeg-dev libportmidi-dev libavformat-dev libswscale-dev libjpeg-dev libfreetype6-dev
 
-# Install Pygame
-RUN pip install pygame
-
 # Set the display environment variable
 ENV DISPLAY=host.docker.internal:0.0
 

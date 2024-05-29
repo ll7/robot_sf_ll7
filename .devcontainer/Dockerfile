@@ -25,4 +25,5 @@ ENV DISPLAY=host.docker.internal:0.0
 # # Run the Pygame script
 # CMD ["python", "pygame_script.py"]
 
+# Update pip
 RUN pip install --upgrade pip

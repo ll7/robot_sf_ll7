@@ -3,6 +3,7 @@
 > 2024-03-28 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
 
 ## About
+
 This project provides a training environment for the simulation of a robot moving
 in a pedestrian-filled space.
 
@@ -17,6 +18,15 @@ kinematics is driving at the campus of University of Augsburg using real
 map data from OpenStreetMap.
 
 ![](./docs/video/demo_01.gif)
+
+## Installation
+
+This project currently supports **two** methods for installation:
+1. `.devcontainer` for Visual Studio Code [.devcontainer/readme.md](./.devcontainer/readme.md)
+2. Manual installation
+
+For 1. follow the instructions in the `.devcontainer` directory.
+For 2. follow the instructions below:
 
 ## Quickstart
 

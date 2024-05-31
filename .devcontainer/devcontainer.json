@@ -10,9 +10,10 @@
     "runArgs": [
         "--network=host",
         "-e", "DISPLAY=host.docker.internal:0.0",
-        "--gpus=all"
+        "--gpus=all",
+        "-e", "HOST_OS=${localEnv:HOST_OS}"
     ],
-    "postCreateCommand": "./postCreate.sh",
+    "postCreateCommand": "chmod +x .devcontainer/postCreate.sh && .devcontainer/postCreate.sh", // make script executable and run installation
     "customizations": {
         "vscode": {
             "extensions": [

@@ -2,7 +2,9 @@
 
 1. **Install Docker**: Ensure that Docker is installed on your machine. You can download and install Docker Desktop from the official Docker website.
 
-3. **Configure X Server**: On Windows, you will need an X server to display the Pygame window. **VcXsrv** is a common choices for Windows. Install and configure an X server to allow connections from your Docker container.
+2. **Configure X Server**: On Windows, you will need an X server to display the Pygame window. **VcXsrv** is a common choices for Windows. Install and configure an X server to allow connections from your Docker container.
+
+3. **Start .devcontainer**: Open the project in Visual Studio Code and click on the green "Remote-Containers" icon in the bottom left corner. Select "Reopen in Container" to start the container.
 
 Here is a step-by-step guide:
 
@@ -43,4 +45,3 @@ export DISPLAY=:0
 This command sets the `DISPLAY` environment variable to use the X server running on your host.
 
 You should see the Pygame window appear on your Windows desktop, managed by the X server.
-

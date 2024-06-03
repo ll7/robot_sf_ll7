@@ -1,6 +1,5 @@
-#!/bin/bash
-
 ## This script is run after the devcontainer is created. It installs the necessary dependencies for the project.
+pwd
 git submodule update --init --recursive
 pip install -r ./requirements.txt
 pip install -r ./fast-pysf/requirements.txt

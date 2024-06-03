@@ -1,16 +1,19 @@
+#!/bin/bash
+set -e
+
 ## This script is run after the devcontainer is created. It installs the necessary dependencies for the project.
 pwd
-git submodule update --init --recursive
-pip install -r ./requirements.txt
-pip install -r ./fast-pysf/requirements.txt
-pip install -e .
-pip install -e ./fast-pysf
+git submodule update --init --recursive || { echo "Failed to update git submodules"; exit 1; }
+pip install -r ./requirements.txt || { echo "Failed to install requirements from ./requirements.txt"; exit 1; }
+pip install -r ./fast-pysf/requirements.txt || { echo "Failed to install requirements from ./fast-pysf/requirements.txt"; exit 1; }
+pip install -e . || { echo "Failed to install the current directory as a package"; exit 1; }
+pip install -e ./fast-pysf || { echo "Failed to install ./fast-pysf as a package"; exit 1; }
 
 # Set the display environment variable for GUI applications based on the host OS
 if [[ $HOST_OS == *"Windows"* ]]; then
     # We are in Windows
-    echo "export DISPLAY=host.docker.internal:0.0" >> ~/.bashrc
+    echo "export DISPLAY=host.docker.internal:0.0" >> ~/.bashrc || { echo "Failed to set DISPLAY environment variable for Windows"; exit 1; }
 else
     # We are in Linux
-    echo "export DISPLAY=:0" >> ~/.bashrc
+    echo "export DISPLAY=:0" >> ~/.bashrc || { echo "Failed to set DISPLAY environment variable for Linux"; exit 1; }
 fi

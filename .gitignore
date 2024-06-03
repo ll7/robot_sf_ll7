@@ -15,5 +15,5 @@ profile.json
 profiles
 pysf_tests
 pysocialforce
-recordings
+recordings/*.pkl
 wandb

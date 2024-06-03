@@ -10,8 +10,11 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
-from typing import Tuple, Callable
+import os
+import datetime
+from typing import Tuple, Callable, List
 from copy import deepcopy
+import pickle
 
 import numpy as np
 
@@ -45,7 +48,8 @@ class RobotEnv(Env):
             self,
             env_config: EnvSettings = EnvSettings(),
             reward_func: Callable[[dict], float] = simple_reward,
-            debug: bool = False
+            debug: bool = False,
+            recording_enabled: bool = False
             ):
         """
         Initialize the Robot Environment.
@@ -71,6 +75,10 @@ class RobotEnv(Env):
         # Assign the reward function and debug flag
         self.reward_func = reward_func
         self.debug = debug
+
+        # Initialize the list to store recorded states
+        self.recorded_states: List[VisualizableSimState] = []
+        self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
         self.simulator = init_simulators(
@@ -140,6 +148,11 @@ class RobotEnv(Env):
         term = self.state.is_terminal
         # Compute the reward using the provided reward function
         reward = self.reward_func(meta)
+
+        # if recording is enabled, record the state
+        if self.recording_enabled:
+            self.record()
+
         return obs, reward, term, {"step": meta["step"], "meta": meta}
 
     def reset(self):
@@ -153,19 +166,15 @@ class RobotEnv(Env):
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
+
+        # if recording is enabled, save the recording and reset the state list
+        if self.recording_enabled:
+            self.save_recording()
+            self.recorded_states = []
+
         return obs
 
-    def render(self):
-        """
-        Render the environment visually if in debug mode.
-
-        Raises RuntimeError if debug mode is not enabled.
-        """
-        if not self.sim_ui:
-            raise RuntimeError(
-                'Debug mode is not activated! Consider setting '
-                'debug=True!')
-
+    def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
         action = None if not self.last_action else VisualizableAction(
             self.simulator.robot_poses[0],
@@ -202,8 +211,40 @@ class RobotEnv(Env):
             self.state.timestep, action, self.simulator.robot_poses[0],
             deepcopy(self.simulator.ped_pos), ray_vecs_np, ped_actions_np)
 
+        return state
+
+    def render(self):
+        """
+        Render the environment visually if in debug mode.
+
+        Raises RuntimeError if debug mode is not enabled.
+        """
+        if not self.sim_ui:
+            raise RuntimeError(
+                'Debug mode is not activated! Consider setting '
+                'debug=True!')
+
+        state = self._prepare_visualizable_state()
+
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)
+
+    def record(self):
+        """
+        Records the current state as visualizable state and stores it in the list.
+        """
+        state = self._prepare_visualizable_state()
+        self.recorded_states.append(state)
+
+    def save_recording(self, filename: str = None):
+        if filename is None:
+            now = datetime.datetime.now()
+            filename = f'recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        with open(filename, 'wb') as f:
+            pickle.dump(self.recorded_states, f)
 
     def seed(self, seed=None):
         """

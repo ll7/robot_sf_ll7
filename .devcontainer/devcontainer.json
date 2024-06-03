@@ -29,7 +29,8 @@
             ]
         },
         "settings": { 
-            "terminal.integrated.shell.linux": "/bin/bash"
+            "terminal.integrated.shell.linux": "/bin/bash",
+            "python.pythonPath": "/opt/venv/bin/python3"
         }
     }
 }

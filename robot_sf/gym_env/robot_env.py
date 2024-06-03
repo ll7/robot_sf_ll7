@@ -16,6 +16,7 @@ from typing import Tuple, Callable, List
 from copy import deepcopy
 import pickle
 
+import loguru
 import numpy as np
 
 from gymnasium import Env
@@ -32,6 +33,8 @@ from robot_sf.render.sim_view import (
 from robot_sf.sim.simulator import init_simulators
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+
+logger = loguru.logger
 
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
@@ -245,6 +248,7 @@ class RobotEnv(Env):
 
         with open(filename, 'wb') as f:
             pickle.dump(self.recorded_states, f)
+            logger.info(f"Recording saved to {filename}")
 
     def seed(self, seed=None):
         """

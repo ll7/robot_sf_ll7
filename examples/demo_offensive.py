@@ -9,7 +9,7 @@ def training():
     env_config = EnvSettings(
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True))
-    env = RobotEnv(env_config, debug=True)
+    env = RobotEnv(env_config, debug=True, recording_enabled=True)
     model = PPO.load("./model/run_043", env=env)
 
     obs = env.reset()

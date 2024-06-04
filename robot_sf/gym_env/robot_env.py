@@ -240,15 +240,28 @@ class RobotEnv(Env):
         self.recorded_states.append(state)
 
     def save_recording(self, filename: str = None):
+        """
+        save the recorded states to a file
+        filname: str, must end with *.pkl
+        resets the recorded states list at the end
+        """
         if filename is None:
             now = datetime.datetime.now()
             filename = f'recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
 
+        # only save if there are recorded states
+        if len(self.recorded_states) == 0:
+            logger.warning("No states recorded, skipping save")
+            # TODO: First env.reset will always have no recorded states
+            return
+
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-        with open(filename, 'wb') as f:
-            pickle.dump(self.recorded_states, f)
+        with open(filename, 'wb') as f: # write binary
+            pickle.dump((self.recorded_states, self.map_def), f)
             logger.info(f"Recording saved to {filename}")
+            logger.info("Reset state list")
+            self.recorded_states = []
 
     def seed(self, seed=None):
         """

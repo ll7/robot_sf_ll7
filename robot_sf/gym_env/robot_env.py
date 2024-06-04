@@ -173,7 +173,6 @@ class RobotEnv(Env):
         # if recording is enabled, save the recording and reset the state list
         if self.recording_enabled:
             self.save_recording()
-            self.recorded_states = []
 
         return obs
 

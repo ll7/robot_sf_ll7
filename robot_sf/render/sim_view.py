@@ -211,6 +211,7 @@ class SimulationView:
 
     def render(self, state: VisualizableSimState):
         sleep(0.01) # limit UI update rate to 100 fps
+        # TODO: make the sleep time configurable
 
         # info: event handling needs to be processed
         #       in the main thread to access UI resources

@@ -10,7 +10,7 @@ pip install -e . || { echo "Failed to install the current directory as a package
 pip install -e ./fast-pysf || { echo "Failed to install ./fast-pysf as a package"; exit 1; }
 
 # Set the display environment variable for GUI applications based on the host OS
-if [[ $HOST_OS == *"Windows"* ]]; then
+if [ $HOST_OS == *"Windows"* ]; then
     # We are in Windows
     echo "export DISPLAY=host.docker.internal:0.0" >> ~/.bashrc || { echo "Failed to set DISPLAY environment variable for Windows"; exit 1; }
 else

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 ## This script is run after the devcontainer is created. It installs the necessary dependencies for the project.

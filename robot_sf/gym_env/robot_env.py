@@ -69,11 +69,11 @@ class RobotEnv(Env):
         self.env_config = env_config
 
         # Extract first map definition; currently only supports using the first map
-        map_def = env_config.map_pool.choose_random_map()
+        self.map_def = env_config.map_pool.choose_random_map()
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = \
-            init_spaces(env_config, map_def)
+            init_spaces(env_config, self.map_def)
 
         # Assign the reward function and debug flag
         self.reward_func = reward_func
@@ -86,7 +86,7 @@ class RobotEnv(Env):
         # Initialize simulator with a random start position
         self.simulator = init_simulators(
             env_config,
-            map_def,
+            self.map_def,
             random_start_pos=True
             )[0]
 
@@ -116,8 +116,8 @@ class RobotEnv(Env):
         if debug:
             self.sim_ui = SimulationView(
                 scaling=10,
-                map_def=map_def,
-                obstacles=map_def.obstacles,
+                map_def=self.map_def,
+                obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
                 goal_radius=env_config.sim_config.goal_radius)

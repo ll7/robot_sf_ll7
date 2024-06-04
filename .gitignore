@@ -3,6 +3,7 @@
 *.o
 *.so
 *training*.zip
+*.pyc
 .pytest_cache
 .scannerwork
 __pycache__/

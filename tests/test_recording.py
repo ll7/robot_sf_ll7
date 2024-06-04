@@ -2,6 +2,7 @@ import os
 import pickle
 
 from robot_sf.gym_env.robot_env import RobotEnv, VisualizableSimState
+from robot_sf.nav.map_config import MapDefinition
 
 def test_recording():
     env = RobotEnv(
@@ -24,10 +25,13 @@ def test_recording():
 
     # Load the recording
     with open(os.path.join('recordings', filename), 'rb') as f:
-        recorded_states = pickle.load(f)
+        recorded_states, map_def = pickle.load(f)
 
     # Check that the recording has the correct length
     assert len(recorded_states) == 10
 
     # Check that the recorded states are instances of VisualizableSimState
     assert all(isinstance(state, VisualizableSimState) for state in recorded_states)
+
+    # Check that the map definition is an instance of MapDefinition
+    assert isinstance(map_def, MapDefinition)

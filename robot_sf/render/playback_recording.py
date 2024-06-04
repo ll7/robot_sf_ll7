@@ -24,7 +24,7 @@ def load_states(filename: str) -> List[VisualizableSimState]:
         return []
 
     logger.info(f"Loading states from {filename}")
-    with open(filename) as f:
+    with open(filename, 'rb') as f: # rb = read binary
         states, map_def = pickle.load(f)
     logger.info(f"Loaded {len(states)} states")
     return states, map_def

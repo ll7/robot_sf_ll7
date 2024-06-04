@@ -1,6 +1,7 @@
 """
 playback a recorded list of states
 """
+import os
 import pickle
 from typing import List
 import loguru
@@ -16,6 +17,11 @@ def load_states(filename: str) -> List[VisualizableSimState]:
     """
     load a list of states from a file with pickle
     """
+    # Check if the file is empty
+    if os.path.getsize(filename) == 0:
+        logger.error(f"File {filename} is empty")
+        return []
+
     logger.info(f"Loading states from {filename}")
     with open(filename) as f:
         states = pickle.load(f)

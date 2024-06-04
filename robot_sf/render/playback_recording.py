@@ -9,6 +9,7 @@ from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableSimState
     )
+from robot_sf.nav.map_config import MapDefinition
 
 logger = loguru.logger
 
@@ -24,15 +25,19 @@ def load_states(filename: str) -> List[VisualizableSimState]:
 
     logger.info(f"Loading states from {filename}")
     with open(filename) as f:
-        states = pickle.load(f)
+        states, map_def = pickle.load(f)
     logger.info(f"Loaded {len(states)} states")
-    return states
+    return states, map_def
 
-def visualize_states(states: List[VisualizableSimState]):
+def visualize_states(
+        states: List[VisualizableSimState],
+        map_def: MapDefinition
+        ):
     """
-    use the SimulationView to visualize a list of states
+    use the SimulationView to render a list of states
+    on the recorded map defintion
     """
-    sim_view = SimulationView()
+    sim_view = SimulationView(map_def=map_def)
     for state in states:
         sim_view.render(state)
 
@@ -40,7 +45,5 @@ def load_states_and_visualize(filename: str):
     """
     load a list of states from a file and visualize them
     """
-    states = load_states(filename)
-    visualize_states(states)
-
-
+    states, map_def = load_states(filename)
+    visualize_states(states, map_def)

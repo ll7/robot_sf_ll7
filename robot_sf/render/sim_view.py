@@ -164,15 +164,19 @@ class SimulationView:
 
     def _handle_keydown(self, e):
         """Handle key presses for the simulation view."""
+        new_offset = 10
+        if pygame.key.get_mods() & pygame.KMOD_CTRL:
+            new_offset = 100
+
         key_action_map = {
             # scale the view
             pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + 1),
             pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - 1, 1)),
             # move the view
-            pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] - 10),
-            pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] + 10),
-            pygame.K_UP: lambda: self.offset.__setitem__(1, self.offset[1] - 10),
-            pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] + 10),
+            pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] + new_offset),
+            pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] - new_offset),
+            pygame.K_UP: lambda: self.offset.__setitem__(1, self.offset[1] + new_offset),
+            pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] - new_offset),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
         }

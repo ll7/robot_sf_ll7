@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="1920"
+   height="1080"
+   viewBox="0 0 1920 1080"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   sodipodi:docname="03_mid_object.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="0.99010417"
+     inkscape:cx="960.50499"
+     inkscape:cy="540.34718"
+     inkscape:window-width="2488"
+     inkscape:window-height="1376"
+     inkscape:window-x="2632"
+     inkscape:window-y="27"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <inkscape:path-effect
+       effect="spiro"
+       id="path-effect8"
+       is_visible="true"
+       lpeversion="1" />
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#000000"
+       id="left_obstacle"
+       width="38.77137"
+       height="627.24976"
+       x="508.73529"
+       y="266.80038"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000"
+       id="right_obstacle"
+       width="33.776138"
+       height="630.15753"
+       x="1020.7881"
+       y="270.60172"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000"
+       id="mid_obstacle"
+       width="357.7724"
+       height="56.989681"
+       x="617.02814"
+       y="537.62817"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#b1af46;fill-opacity:1"
+       id="robot_spawn_zone"
+       width="171.11224"
+       height="106.38165"
+       x="1177.4584"
+       y="207.97588"
+       inkscape:label="robot_spawn_zone" />
+    <rect
+       style="fill:#c3c3c3;fill-opacity:1"
+       id="robot_goal_zone"
+       width="181.51006"
+       height="78.108025"
+       x="1179.9108"
+       y="448.09158"
+       inkscape:label="robot_goal_zone" />
+    <rect
+       style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.728305;stroke-opacity:1"
+       id="ped_spawn_zone"
+       width="93.437576"
+       height="95.356133"
+       x="580.69202"
+       y="270.54156"
+       inkscape:label="ped_spawn_zone" />
+    <rect
+       style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:0.728305;stroke-opacity:1"
+       id="ped_spawn_zone-2"
+       width="93.437576"
+       height="95.356133"
+       x="871.46289"
+       y="278.3194"
+       inkscape:label="ped_spawn_zone" />
+    <rect
+       style="fill:#74d30e;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-opacity:1"
+       id="ped_goal_zone"
+       width="274.50281"
+       height="83.632607"
+       x="641.21179"
+       y="804.57269"
+       inkscape:label="ped_goal_zone" />
+    <path
+       style="fill:none;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-opacity:1"
+       d="M 1262.0819,275.98803 1267.5653,485.17968"
+       id="robot_route"
+       inkscape:label="robot_route" />
+    <path
+       style="fill:none;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-opacity:1"
+       d="M 630.89903,336.64529 779.39982,859.06057"
+       id="ped_route"
+       inkscape:label="ped_route_0_0" />
+    <path
+       style="fill:none;fill-opacity:1;fill-rule:nonzero;stroke:#000000;stroke-width:0.888847;stroke-opacity:1"
+       d="M 911.58555,319.95062 809.11549,849.67439"
+       id="ped_route-7"
+       inkscape:label="ped_route_1_0"
+       inkscape:transform-center-x="7.9435279"
+       inkscape:transform-center-y="42.42328" />
+  </g>
+</svg>

@@ -27,6 +27,8 @@ RgbColor = Tuple[int, int, int]
 BACKGROUND_COLOR = (255, 255, 255)
 BACKGROUND_COLOR_TRANSP = (255, 255, 255, 128)
 OBSTACLE_COLOR = (20, 30, 20, 128)
+PED_SPAWN_COLOR = (255, 204, 203)
+PED_GOAL_COLOR = (144, 238, 144)
 PED_COLOR = (255, 50, 50)
 PED_ROUTE_COLOR = (0, 0, 255)
 ROBOT_ROUTE_COLOR = (30, 30, 255)
@@ -164,14 +166,19 @@ class SimulationView:
 
     def _handle_keydown(self, e):
         """Handle key presses for the simulation view."""
-        new_offset = 10
+        new_offset = 100
+        new_scaling = 1
         if pygame.key.get_mods() & pygame.KMOD_CTRL:
-            new_offset = 100
+            new_offset = 250
+            new_scaling = 10
+
+        if pygame.key.get_mods() & pygame.KMOD_ALT:
+            new_offset = 10
 
         key_action_map = {
             # scale the view
-            pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + 1),
-            pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - 1, 1)),
+            pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + new_scaling),
+            pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - new_scaling, 1)),
             # move the view
             pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] + new_offset),
             pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] - new_offset),
@@ -243,6 +250,10 @@ class SimulationView:
             self._draw_robot_routes()
         if self.map_def.ped_routes:
             self._draw_pedestrian_routes()
+        if self.map_def.ped_spawn_zones:
+            self._draw_spawn_zones()
+        if self.map_def.ped_goal_zones:
+            self._draw_goal_zones()
         self._draw_grid()
 
 
@@ -300,6 +311,28 @@ class SimulationView:
                 ) for x, y in obstacle.vertices_np]
             # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
+
+    def _draw_spawn_zones(self):
+        # Iterate over each spawn_zone in the list of spawn_zones
+        for spawn_zone in self.map_def.ped_spawn_zones:
+            # Scale and offset the vertices of the zones
+            vertices_np = np.array(spawn_zone)
+            scaled_vertices = [(
+                self._scale_tuple((x, y))
+                ) for x, y in vertices_np]
+            # Draw the spawn zone as a polygon on the screen
+            pygame.draw.polygon(self.screen, PED_SPAWN_COLOR, scaled_vertices)
+
+    def _draw_goal_zones(self):
+        # Iterate over each goal_zone in the list of goal_zones
+        for goal_zone in self.map_def.ped_goal_zones:
+            # Scale and offset the vertices of the goal zones
+            vertices_np = np.array(goal_zone)
+            scaled_vertices = [(
+                self._scale_tuple((x, y))
+                ) for x, y in vertices_np]
+            # Draw the goal_zone as a polygon on the screen
+            pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
         # TODO: display pedestrians with an image instead of a circle
@@ -377,6 +410,13 @@ class SimulationView:
                 for x, y in route.waypoints],
                 width = 1
                 )
+
+    def _draw_coordinates(self, x, y):
+        """
+        Draws the coordinates (x, y) on the screen.
+        """
+        text = self.font.render(f'({x}, {y})', False, TEXT_COLOR)
+        self.screen.blit(text, (x, y))
 
     def _augment_timestep(self, timestep: int):
         # TODO: show map name as well

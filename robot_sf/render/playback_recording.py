@@ -37,9 +37,12 @@ def visualize_states(
     use the SimulationView to render a list of states
     on the recorded map defintion
     """
-    sim_view = SimulationView(map_def=map_def)
+    sim_view = SimulationView(map_def=map_def, caption='RobotSF Recording')
+    sim_view.show() # to activate key_events
     for state in states:
         sim_view.render(state)
+
+    sim_view.exit() # to automatically close the window
 
 def load_states_and_visualize(filename: str):
     """

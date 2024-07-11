@@ -76,6 +76,7 @@ class SimulationView:
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
     offset: np.array = field(init=False, default=np.array([0, 0]))
+    caption: str='RobotSF Simulation'
     """The offset is already uses `scaling` as a factor."""
 
     @property
@@ -88,7 +89,7 @@ class SimulationView:
         pygame.font.init()
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.RESIZABLE)
-        pygame.display.set_caption('RobotSF Simulation')
+        pygame.display.set_caption(self.caption)
         self.font = pygame.font.SysFont('Consolas', 14)
         self.surface_obstacles = self.preprocess_obstacles()
         self.clear()

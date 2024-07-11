@@ -63,6 +63,7 @@ class RobotEnv(Env):
             a dictionary as input and returns a float as reward.
         - debug (bool): If True, enables debugging information such as 
             visualizations.
+        - recording_enabled (bool): If True, enables recording of the simulation
         """
 
         # Environment configuration details

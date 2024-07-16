@@ -77,6 +77,8 @@ class SimulationView:
     redraw_needed: bool = field(init=False, default=False)
     offset: np.array = field(init=False, default=np.array([0, 0]))
     caption: str='RobotSF Simulation'
+    focus_on_robot: bool = False
+    display_help: bool = False
     """The offset is already uses `scaling` as a factor."""
 
     @property
@@ -176,6 +178,10 @@ class SimulationView:
             pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] + 10),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
+            # focus on the robot
+            pygame.K_f: lambda: setattr(self, 'focus_on_robot', not self.focus_on_robot),
+            # display help
+            pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
         }
 
         if e.key in key_action_map:
@@ -228,8 +234,8 @@ class SimulationView:
             self.surface_obstacles = self.preprocess_obstacles()
             self.redraw_needed = False
 
-        # TODO: is it correct to scale the ped state here?
-        state = self._scale_pedestrian_state(state)
+        # Adjust the view based on the focus
+        self._move_camera(state)
 
         self.screen.fill(BACKGROUND_COLOR)
 
@@ -251,8 +257,12 @@ class SimulationView:
             self._augment_goal_position(state.action.robot_goal)
         self._draw_pedestrians(state.pedestrian_positions)
         self._draw_robot(state.robot_pose)
+
+        # information
         self._augment_timestep(state.timestep)
         self._add_text(state.timestep, state)
+        if self.display_help:
+            self._add_help_text()
 
         # update the display
         pygame.display.update()
@@ -264,11 +274,13 @@ class SimulationView:
             (self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
-    def _scale_pedestrian_state(self, state: VisualizableSimState) \
-            -> Tuple[VisualizableSimState, Tuple[float, float]]:
-        state.pedestrian_positions *= self.scaling
-        state.ped_actions *= self.scaling
-        return state
+    def _move_camera(self, state: VisualizableSimState):
+        """ Moves the camera based on the focused object."""
+        if self.focus_on_robot:
+            r_x, r_y = state.robot_pose[0]
+            self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
+            self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
+        # TODO: implement moving for trained pedestrian
 
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
@@ -284,7 +296,7 @@ class SimulationView:
             pygame.draw.circle(
                 self.screen,
                 PED_COLOR,
-                (ped_x+self.offset[0], ped_y+self.offset[1]),
+                self._scale_tuple((ped_x, ped_y)),
                 self.ped_radius * self.scaling
                 )
 
@@ -342,8 +354,8 @@ class SimulationView:
             pygame.draw.line(
                 self.screen,
                 PED_ACTION_COLOR,
-                p1+self.offset,
-                p2+self.offset,
+                self._scale_tuple(p1),
+                self._scale_tuple(p2),
                 width=3
                 )
 
@@ -389,12 +401,37 @@ class SimulationView:
             f'y-offset: {self.offset[1]/self.scaling:.2f}',
             f'RobotPose: {state.robot_pose}',
             f'RobotAction: {state.action.robot_action}',
-            f'RobotGoal: {state.action.robot_goal}'
+            f'RobotGoal: {state.action.robot_goal}',
+            '(Press h for help)',
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
             pos = (
                 self._timestep_text_pos[0],
+                self._timestep_text_pos[1] + i * self.font.get_linesize()
+            )
+            self.screen.blit(text_surface, pos)
+
+    def _add_help_text(self):
+        text_lines = [
+            'Move camera: arrow keys',
+            'Move fast: CTRL + arrow keys',
+            'Move slow: ALT + arrow keys',
+            'Reset view: r',
+            'Focus robot: f',
+            'Scale up: +',
+            'Scale down: -' ,
+            'Help: h',
+        ]
+
+        # Determine max width of the text
+        text_surface = self.font.render(text_lines[1], False, TEXT_COLOR)
+        width = text_surface.get_width() + 10
+
+        for i, text in enumerate(text_lines):
+            text_surface = self.font.render(text, False, TEXT_COLOR)
+            pos = (
+                self.width - width,
                 self._timestep_text_pos[1] + i * self.font.get_linesize()
             )
             self.screen.blit(text_surface, pos)

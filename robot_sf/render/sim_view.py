@@ -93,7 +93,6 @@ class SimulationView:
             (self.width, self.height), pygame.RESIZABLE)
         pygame.display.set_caption(self.caption)
         self.font = pygame.font.SysFont('Consolas', 14)
-        self.surface_obstacles = self.preprocess_obstacles()
         self.clear()
 
     def _scale_tuple(self, tup: Tuple[float, float]) -> Tuple[float, float]:
@@ -101,39 +100,6 @@ class SimulationView:
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
         return (x, y)
-
-    def preprocess_obstacles(self) -> pygame.Surface:
-        # Scale the vertices of the obstacles
-        obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
-
-        # Initialize the minimum and maximum x and y coordinates
-        min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
-
-        # Find the minimum and maximum x and y coordinates among all the obstacles
-        for vertices in obst_vertices:
-            min_x = min(np.min(vertices[:, 0]), min_x)
-            max_x = max(np.max(vertices[:, 0]), max_x)
-            min_y = min(np.min(vertices[:, 1]), min_y)
-            max_y = max(np.max(vertices[:, 1]), max_y)
-
-        # Calculate the width and height of the surface needed to draw the obstacles
-        width, height = max_x - min_x, max_y - min_y
-
-        # Create a new surface with the calculated width and height
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
-
-        # Fill the surface with a transparent background color
-        surface.fill(BACKGROUND_COLOR_TRANSP)
-
-        # Draw each obstacle on the surface
-        for vertices in obst_vertices:
-            # Shift the vertices so that the minimum x and y coordinates are 0
-            shifted_vertices = vertices - [min_x, min_y]
-            # Draw the obstacle as a polygon with the shifted vertices
-            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in shifted_vertices])
-
-        # Return the surface with the drawn obstacles
-        return surface
 
     def show(self):
         """
@@ -231,7 +197,6 @@ class SimulationView:
             self._resize_window()
             self.size_changed = False
         if self.redraw_needed:
-            self.surface_obstacles = self.preprocess_obstacles()
             self.redraw_needed = False
 
         # Adjust the view based on the focus

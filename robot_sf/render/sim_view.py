@@ -15,11 +15,13 @@ from loguru import logger
 
 from robot_sf.robot.differential_drive import DifferentialDriveAction
 from robot_sf.robot.bicycle_drive import BicycleAction
+from robot_sf.ped_ego.unicycle_drive import UnicycleAction
 from robot_sf.nav.map_config import Obstacle
 from robot_sf.nav.map_config import MapDefinition
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
+PedPose = Tuple[Vec2D, float]
 RobotAction = Tuple[float, float]
 RgbColor = Tuple[int, int, int]
 
@@ -30,6 +32,8 @@ OBSTACLE_COLOR = (20, 30, 20, 128)
 PED_SPAWN_COLOR = (255, 204, 203)
 PED_GOAL_COLOR = (144, 238, 144)
 PED_COLOR = (255, 50, 50)
+EGO_PED_COLOR = (108, 70, 117)
+EGO_PED_ACTION_COLOR = (108, 70, 117)
 PED_ROUTE_COLOR = (0, 0, 255)
 ROBOT_ROUTE_COLOR = (30, 30, 255)
 ROBOT_COLOR = (0, 0, 200)
@@ -43,9 +47,9 @@ TEXT_COLOR = (0, 0, 0)
 
 @dataclass
 class VisualizableAction:
-    robot_pose: RobotPose
-    robot_action: Union[DifferentialDriveAction, BicycleAction]
-    robot_goal: Vec2D
+    pose: RobotPose
+    action: Union[DifferentialDriveAction, BicycleAction, UnicycleAction]
+    goal: Vec2D
 
 
 @dataclass
@@ -53,11 +57,14 @@ class VisualizableSimState:
     """Representing a collection of properties to display
     the simulator's state at a discrete timestep."""
     timestep: int
-    action: Union[VisualizableAction, None]
+    robot_action: Union[VisualizableAction, None]
     robot_pose: RobotPose
     pedestrian_positions: np.ndarray
     ray_vecs: np.ndarray
     ped_actions: np.ndarray
+    ego_ped_pose: PedPose = None
+    ego_ped_ray_vecs: np.ndarray = None
+    ego_ped_actions: Union[VisualizableAction, None] = None
     # obstacles: List[Obstacle]
 
 
@@ -80,6 +87,7 @@ class SimulationView:
     offset: np.array = field(init=False, default=np.array([0, 0]))
     caption: str='RobotSF Simulation'
     focus_on_robot: bool = False
+    focus_on_ego_ped: bool = False
     display_help: bool = False
     """The offset is already uses `scaling` as a factor."""
 
@@ -155,8 +163,9 @@ class SimulationView:
             pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] - new_offset),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
-            # focus on the robot
+            # focus on the robot or ped
             pygame.K_f: lambda: setattr(self, 'focus_on_robot', not self.focus_on_robot),
+            pygame.K_p: lambda: setattr(self, 'focus_on_ego_ped', not self.focus_on_ego_ped),
             # display help
             pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
         }
@@ -232,11 +241,16 @@ class SimulationView:
         # dynamic objects
         self._augment_lidar(state.ray_vecs)
         self._augment_ped_actions(state.ped_actions)
-        if state.action:
-            self._augment_robot_action(state.action)
-            self._augment_goal_position(state.action.robot_goal)
+        if state.robot_action:
+            self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
+            self._augment_goal_position(state.robot_action.goal)
         self._draw_pedestrians(state.pedestrian_positions)
         self._draw_robot(state.robot_pose)
+        if state.ego_ped_pose:
+            self._augment_lidar(state.ego_ped_ray_vecs)
+            self._augment_action(state.ego_ped_actions, EGO_PED_ACTION_COLOR)
+            self._draw_ego_ped(state.ego_ped_pose)
+
 
         # information
         self._augment_timestep(state.timestep)
@@ -260,13 +274,24 @@ class SimulationView:
             r_x, r_y = state.robot_pose[0]
             self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
             self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
-        # TODO: implement moving for trained pedestrian
+        if self.focus_on_ego_ped:
+            r_x, r_y = state.ego_ped_pose[0]
+            self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
+            self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
 
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
         pygame.draw.circle(
             self.screen,
             ROBOT_COLOR,
+            self._scale_tuple(pose[0]),
+            self.robot_radius * self.scaling)
+        
+    def _draw_ego_ped(self, pose: PedPose):
+        # TODO: display robot with an image instead of a circle
+        pygame.draw.circle(
+            self.screen,
+            EGO_PED_COLOR,
             self._scale_tuple(pose[0]),
             self.robot_radius * self.scaling)
 
@@ -329,11 +354,11 @@ class SimulationView:
                 self._scale_tuple(p2),
                 )
 
-    def _augment_robot_action(self, action: VisualizableAction):
-        r_x, r_y = action.robot_pose[0]
+    def _augment_action(self, action: VisualizableAction, color):
+        r_x, r_y = action.pose[0]
         # scale vector length to be always visible
-        vec_length = action.robot_action[0] * self.scaling * 3
-        vec_orient =  action.robot_pose[1]
+        vec_length = action.action[0] * self.scaling * 3
+        vec_orient =  action.pose[1]
 
         def from_polar(length: float, orient: float) -> Vec2D:
             return cos(orient) * length, sin(orient) * length
@@ -344,7 +369,7 @@ class SimulationView:
         vec_x, vec_y = add_vec((r_x, r_y), from_polar(vec_length, vec_orient))
         pygame.draw.line(
             self.screen,
-            ROBOT_ACTION_COLOR,
+            color,
             self._scale_tuple((r_x, r_y)),
             self._scale_tuple((vec_x, vec_y)),
             width=3
@@ -409,8 +434,8 @@ class SimulationView:
             f'x-offset: {self.offset[0]/self.scaling:.2f}',
             f'y-offset: {self.offset[1]/self.scaling:.2f}',
             f'RobotPose: {state.robot_pose}',
-            f'RobotAction: {state.action.robot_action}',
-            f'RobotGoal: {state.action.robot_goal}',
+            f'RobotAction: {state.robot_action.action}',
+            f'RobotGoal: {state.robot_action.goal}',
             '(Press h for help)',
         ]
         for i, text in enumerate(text_lines):
@@ -428,6 +453,7 @@ class SimulationView:
             'Move slow: ALT + arrow keys',
             'Reset view: r',
             'Focus robot: f',
+            'Focus ego_ped: p',
             'Scale up: +',
             'Scale down: -' ,
             'Help: h',

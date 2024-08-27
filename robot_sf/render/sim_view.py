@@ -38,7 +38,9 @@ ROBOT_ACTION_COLOR = (65, 105, 225)
 PED_ACTION_COLOR = (255, 50, 50)
 ROBOT_GOAL_COLOR = (0, 204, 102)
 ROBOT_LIDAR_COLOR = (238, 160, 238, 128)
-TEXT_COLOR = (0, 0, 0)
+TEXT_COLOR = (255, 255, 255)  # White text
+TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
+TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
 
 
 @dataclass
@@ -413,13 +415,27 @@ class SimulationView:
             f'RobotGoal: {state.action.robot_goal}',
             '(Press h for help)',
         ]
+        
+        # Create a surface for the text background
+        max_width = max(self.font.size(line)[0] for line in text_lines)
+        text_height = len(text_lines) * self.font.get_linesize()
+        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
+        text_surface.fill(TEXT_BACKGROUND)
+        
         for i, text in enumerate(text_lines):
-            text_surface = self.font.render(text, False, TEXT_COLOR)
-            pos = (
-                self._timestep_text_pos[0],
-                self._timestep_text_pos[1] + i * self.font.get_linesize()
-            )
-            self.screen.blit(text_surface, pos)
+            text_render = self.font.render(text, True, TEXT_COLOR)
+            text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
+            
+            pos = (5, i * self.font.get_linesize() + 5)
+            
+            # Draw text outline
+            for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
+            
+            # Draw main text
+            text_surface.blit(text_render, pos)
+        
+        self.screen.blit(text_surface, self._timestep_text_pos)
 
     def _add_help_text(self):
         text_lines = [
@@ -437,13 +453,25 @@ class SimulationView:
         text_surface = self.font.render(text_lines[1], False, TEXT_COLOR)
         width = text_surface.get_width() + 10
 
+        max_width = max(self.font.size(line)[0] for line in text_lines)
+        text_height = len(text_lines) * self.font.get_linesize()
+        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
+        text_surface.fill(TEXT_BACKGROUND)
+
         for i, text in enumerate(text_lines):
-            text_surface = self.font.render(text, False, TEXT_COLOR)
-            pos = (
-                self.width - width,
-                self._timestep_text_pos[1] + i * self.font.get_linesize()
-            )
-            self.screen.blit(text_surface, pos)
+            text_render = self.font.render(text, True, TEXT_COLOR)
+            text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
+            
+            pos = (5, i * self.font.get_linesize() + 5)
+            
+            # Draw text outline
+            for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
+            
+            # Draw main text
+            text_surface.blit(text_render, pos)
+
+        self.screen.blit(text_surface, (self.width - max_width - 10, self._timestep_text_pos[1]))
 
     def _draw_grid(
             self,

@@ -1,6 +1,8 @@
 
 # OpenStreetMap SVG Map Import
 
+Think about using `robot_sf/nav/svg_map_parser.py` instead, which I prefer.
+
 ## Usage
 
 ### Download Maps From OSM

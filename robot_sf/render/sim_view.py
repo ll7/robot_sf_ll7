@@ -334,7 +334,7 @@ class SimulationView:
     def _augment_robot_action(self, action: VisualizableAction):
         r_x, r_y = action.robot_pose[0]
         # scale vector length to be always visible
-        vec_length = action.robot_action[0] * self.scaling * 3
+        vec_length = action.robot_action[0] * self.scaling
         vec_orient =  action.robot_pose[1]
 
         def from_polar(length: float, orient: float) -> Vec2D:

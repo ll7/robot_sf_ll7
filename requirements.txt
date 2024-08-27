@@ -98,3 +98,4 @@ urllib3==2.2.1
 wandb==0.16.4
 Werkzeug==3.0.1
 loguru==0.7.2
+svgelements==1.9.6

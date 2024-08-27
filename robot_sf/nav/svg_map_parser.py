@@ -47,6 +47,8 @@ class SvgMapConverter:
         """
         Extracts path and rectangle information from an SVG file.
 
+        It is important that the SVG file uses absolute coordinates for the paths.
+
         This method finds all 'path' and 'rect' elements in the SVG file and extracts their
         coordinates, labels, and ids. The information is stored in the 'path_info' and 'rect_info'
         attributes of the SvgMapConverter instance.
@@ -162,13 +164,33 @@ class SvgMapConverter:
         ped_crowded_zones: List[Rect] = []
         ped_routes: List[GlobalRoute] = []
 
+        for rect in self.rect_info:
+            if rect.label == 'robot_spawn_zone':
+                robot_spawn_zones.append(rect.get_zone())
+            elif rect.label == 'ped_spawn_zone':
+                ped_spawn_zones.append(rect.get_zone())
+            elif rect.label == 'robot_goal_zone':
+                robot_goal_zones.append(rect.get_zone())
+            elif rect.label == 'bound':
+                bounds.append(rect.get_zone())
+            elif rect.label == 'ped_goal_zone':
+                ped_goal_zones.append(rect.get_zone())
+            elif rect.label == 'obstacle':
+                obstacles.append(obstacle_from_svgrectangle(rect))
+            elif rect.label == 'ped_crowded_zone':
+                ped_crowded_zones.append(rect.get_zone())
+            else:
+                logger.error(
+                    f"Unknown label <{rect.label}> in id <{rect.id_}>"
+                    )
+
         for path in self.path_info:
 
             # check the label of the path
             if path.label == 'obstacle':
                 # Convert the coordinates to a list of vertices
                 vertices = path.coordinates.tolist()
-                
+
                 # Check if the first and last vertices are the same
                 if not np.array_equal(vertices[0], vertices[-1]):
                     logger.warning(
@@ -183,18 +205,27 @@ class SvgMapConverter:
                 # Append the obstacle to the list
                 obstacles.append(Obstacle(vertices))
 
-            elif path.label == 'ped_route':
+            elif 'ped_route' in path.label:
                 # Convert the coordinates to a list of vertices
                 vertices = path.coordinates.tolist()
+
+                # ped_routes have a label of the form 'ped_route_<spawn>_<goal>'
+                numbers = re.findall(r'\d+', path.label)
+                if numbers:
+                    spawn = int(numbers[0])
+                    goal = int(numbers[1])
+                else:
+                    spawn = 0
+                    goal = 0
 
                 # Append the obstacle to the list
                 ped_routes.append(
                     GlobalRoute(
-                        spawn_id=0, # TODO: What is this? value is arbitrary
-                        goal_id=0, # TODO: What is this? value is arbitrary
+                        spawn_id=spawn,
+                        goal_id=goal,
                         waypoints=vertices,
-                        spawn_zone=(vertices[0], 0, 0), # TODO
-                        goal_zone=(vertices[-1], 0, 0) # TODO
+                        spawn_zone=ped_spawn_zones[spawn] if ped_spawn_zones else (vertices[0],0,0),
+                        goal_zone=ped_goal_zones[goal] if ped_goal_zones else (vertices[-1],0,0)
                     ))
 
             elif path.label == 'robot_route':
@@ -223,26 +254,6 @@ class SvgMapConverter:
             else:
                 logger.error(
                     f"Unknown label <{path.label}> in id <{path.id}>"
-                    )
-
-        for rect in self.rect_info:
-            if rect.label == 'robot_spawn_zone':
-                robot_spawn_zones.append(rect.get_zone())
-            elif rect.label == 'ped_spawn_zone':
-                ped_spawn_zones.append(rect.get_zone())
-            elif rect.label == 'robot_goal_zone':
-                robot_goal_zones.append(rect.get_zone())
-            elif rect.label == 'bound':
-                bounds.append(rect.get_zone())
-            elif rect.label == 'ped_goal_zone':
-                ped_goal_zones.append(rect.get_zone())
-            elif rect.label == 'obstacle':
-                obstacles.append(obstacle_from_svgrectangle(rect))
-            elif rect.label == 'ped_crowded_zone':
-                ped_crowded_zones.append(rect.get_zone())
-            else:
-                logger.error(
-                    f"Unknown label <{rect.label}> in id <{rect.id_}>"
                     )
 
 

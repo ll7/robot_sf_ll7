@@ -27,6 +27,8 @@ RgbColor = Tuple[int, int, int]
 BACKGROUND_COLOR = (255, 255, 255)
 BACKGROUND_COLOR_TRANSP = (255, 255, 255, 128)
 OBSTACLE_COLOR = (20, 30, 20, 128)
+PED_SPAWN_COLOR = (255, 204, 203)
+PED_GOAL_COLOR = (144, 238, 144)
 PED_COLOR = (255, 50, 50)
 PED_ROUTE_COLOR = (0, 0, 255)
 ROBOT_ROUTE_COLOR = (30, 30, 255)
@@ -76,6 +78,9 @@ class SimulationView:
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
     offset: np.array = field(init=False, default=np.array([0, 0]))
+    caption: str='RobotSF Simulation'
+    focus_on_robot: bool = False
+    display_help: bool = False
     """The offset is already uses `scaling` as a factor."""
 
     @property
@@ -88,9 +93,8 @@ class SimulationView:
         pygame.font.init()
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.RESIZABLE)
-        pygame.display.set_caption('RobotSF Simulation')
+        pygame.display.set_caption(self.caption)
         self.font = pygame.font.SysFont('Consolas', 14)
-        self.surface_obstacles = self.preprocess_obstacles()
         self.clear()
 
     def _scale_tuple(self, tup: Tuple[float, float]) -> Tuple[float, float]:
@@ -98,39 +102,6 @@ class SimulationView:
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
         return (x, y)
-
-    def preprocess_obstacles(self) -> pygame.Surface:
-        # Scale the vertices of the obstacles
-        obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
-
-        # Initialize the minimum and maximum x and y coordinates
-        min_x, max_x, min_y, max_y = np.inf, -np.inf, np.inf, -np.inf
-
-        # Find the minimum and maximum x and y coordinates among all the obstacles
-        for vertices in obst_vertices:
-            min_x = min(np.min(vertices[:, 0]), min_x)
-            max_x = max(np.max(vertices[:, 0]), max_x)
-            min_y = min(np.min(vertices[:, 1]), min_y)
-            max_y = max(np.max(vertices[:, 1]), max_y)
-
-        # Calculate the width and height of the surface needed to draw the obstacles
-        width, height = max_x - min_x, max_y - min_y
-
-        # Create a new surface with the calculated width and height
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
-
-        # Fill the surface with a transparent background color
-        surface.fill(BACKGROUND_COLOR_TRANSP)
-
-        # Draw each obstacle on the surface
-        for vertices in obst_vertices:
-            # Shift the vertices so that the minimum x and y coordinates are 0
-            shifted_vertices = vertices - [min_x, min_y]
-            # Draw the obstacle as a polygon with the shifted vertices
-            pygame.draw.polygon(surface, OBSTACLE_COLOR, [(x, y) for x, y in shifted_vertices])
-
-        # Return the surface with the drawn obstacles
-        return surface
 
     def show(self):
         """
@@ -164,17 +135,30 @@ class SimulationView:
 
     def _handle_keydown(self, e):
         """Handle key presses for the simulation view."""
+        new_offset = 100
+        new_scaling = 1
+        if pygame.key.get_mods() & pygame.KMOD_CTRL:
+            new_offset = 250
+            new_scaling = 10
+
+        if pygame.key.get_mods() & pygame.KMOD_ALT:
+            new_offset = 10
+
         key_action_map = {
             # scale the view
-            pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + 1),
-            pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - 1, 1)),
+            pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + new_scaling),
+            pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - new_scaling, 1)),
             # move the view
-            pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] - 10),
-            pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] + 10),
-            pygame.K_UP: lambda: self.offset.__setitem__(1, self.offset[1] - 10),
-            pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] + 10),
+            pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] + new_offset),
+            pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] - new_offset),
+            pygame.K_UP: lambda: self.offset.__setitem__(1, self.offset[1] + new_offset),
+            pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] - new_offset),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
+            # focus on the robot
+            pygame.K_f: lambda: setattr(self, 'focus_on_robot', not self.focus_on_robot),
+            # display help
+            pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
         }
 
         if e.key in key_action_map:
@@ -224,11 +208,10 @@ class SimulationView:
             self._resize_window()
             self.size_changed = False
         if self.redraw_needed:
-            self.surface_obstacles = self.preprocess_obstacles()
             self.redraw_needed = False
 
-        # TODO: is it correct to scale the ped state here?
-        state = self._scale_pedestrian_state(state)
+        # Adjust the view based on the focus
+        self._move_camera(state)
 
         self.screen.fill(BACKGROUND_COLOR)
 
@@ -239,6 +222,10 @@ class SimulationView:
             self._draw_robot_routes()
         if self.map_def.ped_routes:
             self._draw_pedestrian_routes()
+        if self.map_def.ped_spawn_zones:
+            self._draw_spawn_zones()
+        if self.map_def.ped_goal_zones:
+            self._draw_goal_zones()
         self._draw_grid()
 
 
@@ -250,8 +237,12 @@ class SimulationView:
             self._augment_goal_position(state.action.robot_goal)
         self._draw_pedestrians(state.pedestrian_positions)
         self._draw_robot(state.robot_pose)
+
+        # information
         self._augment_timestep(state.timestep)
         self._add_text(state.timestep, state)
+        if self.display_help:
+            self._add_help_text()
 
         # update the display
         pygame.display.update()
@@ -263,11 +254,13 @@ class SimulationView:
             (self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
-    def _scale_pedestrian_state(self, state: VisualizableSimState) \
-            -> Tuple[VisualizableSimState, Tuple[float, float]]:
-        state.pedestrian_positions *= self.scaling
-        state.ped_actions *= self.scaling
-        return state
+    def _move_camera(self, state: VisualizableSimState):
+        """ Moves the camera based on the focused object."""
+        if self.focus_on_robot:
+            r_x, r_y = state.robot_pose[0]
+            self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
+            self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
+        # TODO: implement moving for trained pedestrian
 
     def _draw_robot(self, pose: RobotPose):
         # TODO: display robot with an image instead of a circle
@@ -283,7 +276,7 @@ class SimulationView:
             pygame.draw.circle(
                 self.screen,
                 PED_COLOR,
-                (ped_x+self.offset[0], ped_y+self.offset[1]),
+                self._scale_tuple((ped_x, ped_y)),
                 self.ped_radius * self.scaling
                 )
 
@@ -296,6 +289,28 @@ class SimulationView:
                 ) for x, y in obstacle.vertices_np]
             # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
+
+    def _draw_spawn_zones(self):
+        # Iterate over each spawn_zone in the list of spawn_zones
+        for spawn_zone in self.map_def.ped_spawn_zones:
+            # Scale and offset the vertices of the zones
+            vertices_np = np.array(spawn_zone)
+            scaled_vertices = [(
+                self._scale_tuple((x, y))
+                ) for x, y in vertices_np]
+            # Draw the spawn zone as a polygon on the screen
+            pygame.draw.polygon(self.screen, PED_SPAWN_COLOR, scaled_vertices)
+
+    def _draw_goal_zones(self):
+        # Iterate over each goal_zone in the list of goal_zones
+        for goal_zone in self.map_def.ped_goal_zones:
+            # Scale and offset the vertices of the goal zones
+            vertices_np = np.array(goal_zone)
+            scaled_vertices = [(
+                self._scale_tuple((x, y))
+                ) for x, y in vertices_np]
+            # Draw the goal_zone as a polygon on the screen
+            pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
         # TODO: display pedestrians with an image instead of a circle
@@ -341,8 +356,8 @@ class SimulationView:
             pygame.draw.line(
                 self.screen,
                 PED_ACTION_COLOR,
-                p1+self.offset,
-                p2+self.offset,
+                self._scale_tuple(p1),
+                self._scale_tuple(p2),
                 width=3
                 )
 
@@ -374,6 +389,13 @@ class SimulationView:
                 width = 1
                 )
 
+    def _draw_coordinates(self, x, y):
+        """
+        Draws the coordinates (x, y) on the screen.
+        """
+        text = self.font.render(f'({x}, {y})', False, TEXT_COLOR)
+        self.screen.blit(text, (x, y))
+
     def _augment_timestep(self, timestep: int):
         # TODO: show map name as well
         text = f'step: {timestep}'
@@ -388,12 +410,37 @@ class SimulationView:
             f'y-offset: {self.offset[1]/self.scaling:.2f}',
             f'RobotPose: {state.robot_pose}',
             f'RobotAction: {state.action.robot_action}',
-            f'RobotGoal: {state.action.robot_goal}'
+            f'RobotGoal: {state.action.robot_goal}',
+            '(Press h for help)',
         ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
             pos = (
                 self._timestep_text_pos[0],
+                self._timestep_text_pos[1] + i * self.font.get_linesize()
+            )
+            self.screen.blit(text_surface, pos)
+
+    def _add_help_text(self):
+        text_lines = [
+            'Move camera: arrow keys',
+            'Move fast: CTRL + arrow keys',
+            'Move slow: ALT + arrow keys',
+            'Reset view: r',
+            'Focus robot: f',
+            'Scale up: +',
+            'Scale down: -' ,
+            'Help: h',
+        ]
+
+        # Determine max width of the text
+        text_surface = self.font.render(text_lines[1], False, TEXT_COLOR)
+        width = text_surface.get_width() + 10
+
+        for i, text in enumerate(text_lines):
+            text_surface = self.font.render(text, False, TEXT_COLOR)
+            pos = (
+                self.width - width,
                 self._timestep_text_pos[1] + i * self.font.get_linesize()
             )
             self.screen.blit(text_surface, pos)

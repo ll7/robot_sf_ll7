@@ -1,0 +1,3 @@
+{
+    "githubIssues.issueBranchTitle": "${user}/issue${issueNumber}-${sanitizedIssueTitle}"
+}

@@ -8,7 +8,26 @@ from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
-def training():
+def run_simulation():
+    """
+    Run a simulation using a pre-trained PPO model in a robot environment.
+
+    This function sets up the environment, loads a pre-trained model,
+    and runs a simulation for a fixed number of steps. It adapts the
+    observations from the environment to match the expected input of
+    the trained model.
+
+    The simulation continues until it reaches 10000 steps or the
+    environment signals it's done. The environment is reset and
+    re-rendered when it's done.
+
+    Note:
+        This function uses a model trained with OpenAI Gym. Consider
+        updating to Gymnasium and re-saving the model to avoid warnings.
+
+    Returns:
+        None
+    """
     env_config = EnvSettings(
         sim_config=SimulationSettings(
             stack_steps=1,
@@ -171,4 +190,4 @@ def prepare_gym_spaces():
 
 
 if __name__ == '__main__':
-    training()
+    run_simulation()

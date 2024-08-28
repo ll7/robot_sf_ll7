@@ -24,7 +24,7 @@ def test_can_load_model_snapshot():
     inf_env = RobotEnv()
     model2 = PPO.load(MODEL_PATH, env=inf_env)
     obs = inf_env.reset()
-    action, _ = model2.predict(obs, deterministic=True)
+    action, _ = model2.predict(obs[0], deterministic=True)
     assert action.shape == inf_env.action_space.shape
 
     if os.path.exists(MODEL_FILE) and os.path.isfile(MODEL_FILE):

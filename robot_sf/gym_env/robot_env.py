@@ -141,7 +141,6 @@ class RobotEnv(Env):
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)
-        self.last_action = action
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation

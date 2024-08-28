@@ -282,3 +282,12 @@ class SvgMapConverter:
 
     def get_map_definition(self) -> MapDefinition:
         return self.map_definition
+
+def convert_map(svg_file: str):
+    """Create MapDefinition from svg file."""
+
+    logger.info("Converting SVG map to MapDefinition object.")
+    logger.info(f"SVG file: {svg_file}")
+
+    converter = SvgMapConverter(svg_file)
+    return converter.map_definition

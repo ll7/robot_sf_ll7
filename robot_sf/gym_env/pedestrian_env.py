@@ -20,7 +20,6 @@ import loguru
 import numpy as np
 
 from gymnasium import Env
-from gymnasium.utils import seeding
 
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
@@ -52,6 +51,7 @@ class PedestrianEnv(Env):
             self,
             env_config: PedEnvSettings = PedEnvSettings(),
             reward_func: Callable[[dict], float] = simple_ped_reward,
+            robot_model = None,
             debug: bool = False,
             recording_enabled: bool = False
             ):
@@ -74,8 +74,12 @@ class PedestrianEnv(Env):
         self.map_def = env_config.map_pool.choose_random_map()
 
         # Initialize spaces based on the environment configuration and map
-        self.action_space, self.observation_space, orig_obs_space = \
+        combined_action_space, combined_observation_space, orig_obs_space = \
             init_ped_spaces(env_config, self.map_def)
+        
+        # Assign the action and observation spaces
+        self.action_space = combined_action_space[1]
+        self.observation_space = combined_observation_space[1]
 
         # Assign the reward function and debug flag
         self.reward_func = reward_func
@@ -117,10 +121,17 @@ class PedestrianEnv(Env):
             sensors[1],
             d_t,
             max_ep_time)
+        
+        # Assign the robot model
+        self.robot_model = robot_model
 
-        # Store last action executed by the robot
+        # Store last state executed by the robot
         self.last_action_robot = None
+        self.last_obs_robot = None
+
+        # Store last action executed by the pedestrian
         self.last_action_ped = None
+
 
         # If in debug mode, create a simulation view to visualize the state
         if debug:
@@ -135,7 +146,7 @@ class PedestrianEnv(Env):
             # Display the simulation UI
             self.sim_ui.show()
 
-    def step(self, action_robot, action_ped):
+    def step(self, action):
         """
         Execute one time step within the environment.
 
@@ -148,7 +159,10 @@ class PedestrianEnv(Env):
         - term: Boolean indicating if the episode has terminated.
         - info: Additional information as dictionary.
         """
+        action_ped = action
+
         # Process the action through the simulator
+        action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
         action_robot = self.simulator.robots[0].parse_action(action_robot)
         self.last_action_robot = action_robot
 
@@ -159,7 +173,7 @@ class PedestrianEnv(Env):
         self.simulator.step_once([action_robot], [action_ped])
 
         # Get updated observation
-        obs_robot = self.robot_state.step()
+        self.last_obs_robot = self.robot_state.step()
         obs_ped = self.ped_state.step()
 
         # Fetch metadata about the current state
@@ -175,26 +189,27 @@ class PedestrianEnv(Env):
         if self.recording_enabled:
             self.record()
 
-        return [obs_robot, obs_ped], reward, term, {"step": meta["step"], "meta": meta}
+        return obs_ped, reward, term, False,{"step": meta["step"], "meta": meta}
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
         """
         Reset the environment state to start a new episode.
 
         Returns:
         - obs: The initial observation after resetting the environment.
         """
+        super().reset(seed=seed,options=options)
         # Reset internal simulator state
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
-        obs_robot = self.robot_state.reset()
+        self.last_obs_robot = self.robot_state.reset()
         obs_ped = self.ped_state.reset()
 
         # if recording is enabled, save the recording and reset the state list
         if self.recording_enabled:
             self.save_recording()
 
-        return [obs_robot, obs_ped]
+        return obs_ped, {"info": "test"}
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
@@ -286,27 +301,6 @@ class PedestrianEnv(Env):
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")
             self.recorded_states = []
-
-    def seed(self, seed=None):
-        """
-        Set the seed for this env's random number generator(s).
-
-        Note:
-            Some environments use multiple pseudorandom number generators.
-            We want to capture all such seeds used in order to ensure that
-            there aren't accidental correlations between multiple generators.
-
-        Returns:
-            list<bigint>: Returns the list of seeds used in this env's random
-            number generators. The first value in the list should be the
-            "main" seed, or the value which a reproducer should pass to
-            'seed'. Often, the main seed equals the provided 'seed', but
-            this won't be true if seed=None, for example.
-
-        TODO: validate this method
-        """
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
 
     def exit(self):
         """

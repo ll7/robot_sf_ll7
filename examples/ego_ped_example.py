@@ -26,17 +26,17 @@ def test_simulation(map_definition: MapDefinition):
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
     )
-    env = PedestrianEnv(env_config, debug=True, recording_enabled=True)
 
-    model = PPO.load("./model/run_043", env=None)
+    robot_model = PPO.load("./model/run_043", env=None)
+
+    env = PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=True)
 
     obs = env.reset()
 
     logger.info("Simulating the random policy.")
     for _ in range(10000):
-        action_robot, _ = model.predict(obs[0], deterministic=True)
-        action_ped = env.action_space[1].sample()
-        obs, _, done, _ = env.step(action_robot, action_ped)
+        action_ped = env.action_space.sample()
+        obs, _, done, _ , _= env.step(action_ped)
         env.render()
 
     env.reset()
@@ -62,7 +62,7 @@ def get_file():
 
 def main():
 
-    map_def = convert_map("maps/svg_maps/04_small_mid_object.svg")
+    map_def = convert_map("maps/svg_maps/debug_01.svg")
 
     test_simulation(map_def)
 

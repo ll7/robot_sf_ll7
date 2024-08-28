@@ -1,3 +1,4 @@
+from random import sample
 from math import ceil
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
@@ -19,6 +20,7 @@ from robot_sf.robot.differential_drive import (
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian, UnicycleAction
 from robot_sf.nav.navigation import RouteNavigator, sample_route
+from robot_sf.ped_npc.ped_zone import sample_zone
 
 
 Vec2D = Tuple[float, float]
@@ -196,8 +198,9 @@ class PedSimulator(Simulator):
                 waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
-
-        self.ego_ped.reset_state((self.ego_ped.pos, self.ego_ped.pose[1])) # TODO: Check if this is correct
+        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]
+        initial_spawn = sample_zone(spawn_id, 1)[0]
+        self.ego_ped.reset_state((initial_spawn, self.ego_ped.pose[1])) # TODO: Check if this is correct
 
     def step_once(self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]):
         for behavior in self.peds_behaviors:

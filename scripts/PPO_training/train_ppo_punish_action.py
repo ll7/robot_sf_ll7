@@ -45,7 +45,7 @@ def training():
         )
 
     model.learn(
-        total_timesteps=10_000,
+        total_timesteps=10_000_000,
         progress_bar=True,
         callback=combined_callback
         )

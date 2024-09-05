@@ -89,6 +89,7 @@ class SimulationView:
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False
     display_help: bool = False
+    display_robot_info: bool = False
     """The offset is already uses `scaling` as a factor."""
 
     @property
@@ -168,6 +169,8 @@ class SimulationView:
             pygame.K_p: lambda: setattr(self, 'focus_on_ego_ped', not self.focus_on_ego_ped),
             # display help
             pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
+            # display robotinfo
+            pygame.K_q: lambda: setattr(self, 'display_robot_info', not self.display_robot_info),
         }
 
         if e.key in key_action_map:
@@ -428,16 +431,25 @@ class SimulationView:
         self.screen.blit(text_surface, self._timestep_text_pos)
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
+        if self.display_robot_info:
+            lines = [
+                f'RobotPose: {state.robot_pose}',
+                f'RobotAction: {state.robot_action.action}',
+                f'RobotGoal: {state.robot_action.goal}']
+        else:
+            lines = [
+                f'PedestrianPose: {state.ego_ped_pose}',
+                f'PedestrianAction: {state.ego_ped_actions.action}',
+                f'PedestrianGoal: {state.ego_ped_actions.goal}',
+                f'RobotPose: {state.robot_pose}',]
         text_lines = [
             f'step: {timestep}',
             f'scaling: {self.scaling}',
             f'x-offset: {self.offset[0]/self.scaling:.2f}',
             f'y-offset: {self.offset[1]/self.scaling:.2f}',
-            f'RobotPose: {state.robot_pose}',
-            f'RobotAction: {state.robot_action.action}',
-            f'RobotGoal: {state.robot_action.goal}',
-            '(Press h for help)',
         ]
+        text_lines += lines
+        text_lines += ['(Press h for help)',]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
             pos = (
@@ -456,6 +468,7 @@ class SimulationView:
             'Focus ego_ped: p',
             'Scale up: +',
             'Scale down: -' ,
+            'Display robot info: q',
             'Help: h',
         ]
 

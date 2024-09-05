@@ -164,6 +164,7 @@ class PedestrianEnv(Env):
         # Process the action through the simulator
         action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
         action_robot = self.simulator.robots[0].parse_action(action_robot)
+        action_robot = (0.0, 0.0) #TODO: remove noop after testing
         self.last_action_robot = action_robot
 
         action_ped = self.simulator.ego_ped.parse_action(action_ped)
@@ -238,7 +239,7 @@ class PedestrianEnv(Env):
         # Prepare action and LIDAR visualization for the ego pedestrian
         ego_ped_action = None if not self.last_action_ped else VisualizableAction(
             self.simulator.ego_ped_pose,
-            self.last_action_ped, None)
+            self.last_action_ped, self.simulator.ego_ped_goal_pos)
 
         ego_ped_pos = self.simulator.ego_ped_pos
         distances, directions = lidar_ray_scan(

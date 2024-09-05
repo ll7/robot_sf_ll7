@@ -32,7 +32,7 @@ def test_is_out_of_bounds():
 def test_is_collision_with_obstacle_segment_fully_contained_inside_circle():
     obstacle_pos = np.random.uniform(-10, 10, size=(1, 4))
     robot_pos = (obstacle_pos[0, 0], obstacle_pos[0, 1])
-    _map = ContinuousOccupancy(10, 10, lambda: robot_pos, lambda: None, lambda: obstacle_pos, lambda: np.array([[20, 20]]), robot_radius=2)
+    _map = ContinuousOccupancy(10, 10, lambda: robot_pos, lambda: None, lambda: obstacle_pos, lambda: np.array([[20, 20]]), agent_radius=2)
     assert _map.is_obstacle_collision
 
 
@@ -48,5 +48,11 @@ def test_is_collision_with_obstacle_segment_outside_circle():
 def test_is_collision_with_pedestrian():
     ped_pos = np.random.uniform(-10, 10, size=(2))
     robot_pos = (ped_pos[0], ped_pos[1])
-    _map = ContinuousOccupancy(40, 40, lambda: robot_pos, lambda: None, lambda: np.array([[]]), lambda: np.array([ped_pos]), robot_radius=2)
+    _map = ContinuousOccupancy(40, 40, lambda: robot_pos, lambda: None, lambda: np.array([[]]), lambda: np.array([ped_pos]), agent_radius=2)
     assert _map.is_pedestrian_collision
+
+def test_is_collision_with_agent():
+    agent_pos = np.random.uniform(-10, 10, size=(2))
+    enemy_pos = (agent_pos[0], agent_pos[1])
+    _map = ContinuousOccupancy(40, 40, lambda: agent_pos, lambda: None, lambda: np.array([[]]), lambda: np.array([]), lambda: enemy_pos, agent_radius=1)
+    assert _map.is_agent_agent_collision

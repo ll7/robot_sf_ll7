@@ -1,5 +1,6 @@
 from gymnasium import spaces
 from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 
 
@@ -22,6 +23,19 @@ def test_can_return_valid_observation():
 
 
 def test_can_simulate_with_pedestrians():
+    total_steps = 1000
+    env = RobotEnv()
+    env.reset()
+    for _ in range(total_steps):
+        rand_action = env.action_space.sample()
+        _, _, done, _, _ = env.step(rand_action)
+        if done:
+            env.reset()
+
+def test_ego_ped_env():
+    env = PedestrianEnv()
+    assert env is not None
+
     total_steps = 1000
     env = RobotEnv()
     env.reset()

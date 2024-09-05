@@ -44,7 +44,7 @@ def init_collision_and_sensors(
     occupancies = [ContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[i], lambda: sim.goal_pos[i],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
+            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos, None,
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
         for i in range(num_robots)]
 

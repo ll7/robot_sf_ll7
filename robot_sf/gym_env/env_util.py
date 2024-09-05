@@ -186,7 +186,9 @@ def init_ped_collision_and_sensors(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
             lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
-            robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
+            lambda: sim.ego_ped_pos,
+            robot_config.radius, sim_config.ped_radius,
+            sim_config.goal_radius, ego_ped_config.radius))
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     ray_sensor = lambda r_id=0: lidar_ray_scan(
@@ -205,7 +207,9 @@ def init_ped_collision_and_sensors(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.ego_ped_pos, lambda: sim.ego_ped_goal_pos,
             lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
-            ego_ped_config.radius, sim_config.ped_radius, sim_config.goal_radius))
+            lambda: sim.robot_pos[0],
+            ego_ped_config.radius, sim_config.ped_radius,
+            sim_config.goal_radius, robot_config.radius))
 
     ray_sensor = lambda: lidar_ray_scan(
         sim.ego_ped.pose, occupancies[1], lidar_config)[0]

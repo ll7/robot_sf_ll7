@@ -4,10 +4,28 @@ from dataclasses import dataclass
 import numpy as np
 import numba
 
+
 Vec2D = Tuple[float, float]
 Circle2D = Tuple[Vec2D, float]
 Line2D = Tuple[Vec2D, Vec2D]
 
+#TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
+
+@numba.njit(fastmath=True)
+def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    """
+    Calculate Euclidean distance between two 2D vectors.
+
+    Parameters:
+    vec_1 (Vec2D): First 2D vector.
+    vec_2 (Vec2D): Second 2D vector.
+
+    Returns:
+    float: Euclidean distance between vec_1 and vec_2.
+    """
+    # Subtract corresponding elements of vectors
+    # Square the results, sum them, and take square root
+    return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
 
 @numba.njit(fastmath=True)
 def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
@@ -212,6 +230,18 @@ class ContinuousOccupancy:
         agent_circle = (self.get_agent_coords(), self.agent_radius)
         goal_circle = (self.get_goal_coords(), self.goal_radius)
         return is_circle_circle_intersection(agent_circle, goal_circle)
+
+    @property
+    def distance_to_robot(self) -> bool:
+        """
+        Gets the euklidean distance to the robot.
+
+        Returns
+        -------
+        float
+            Distance to the robot.
+        """
+        return euclid_dist(self.get_enemy_coords(), self.get_agent_coords())
 
     def is_in_bounds(self, world_x: float, world_y: float) -> bool:
         """robot_circle

@@ -52,7 +52,11 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
     """
 
     # Initialize reward with a discount based on the maximum simulation steps
+
     reward = max_episode_step_discount / meta["max_sim_steps"]
+
+    distance = meta["distance_to_robot"]
+    reward += (distance / meta["max_distance"]) * -0.01
 
     # If there's a collision with a pedestrian or another robot, apply penalty
     if meta["is_pedestrian_collision"]:

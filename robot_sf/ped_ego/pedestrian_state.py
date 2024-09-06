@@ -7,6 +7,7 @@ timeout condition, simulation time elapsed, and timestep count.
 
 from math import ceil
 from dataclasses import dataclass, field
+import numpy as np
 
 from robot_sf.sensor.sensor_fusion import SensorFusion
 from robot_sf.nav.occupancy import ContinuousOccupancy
@@ -40,6 +41,7 @@ class PedestrianState:
     is_collision_with_obst: bool = field(init=False, default=False)
     is_collision_with_robot: bool = field(init=False, default=False)
     is_timeout: bool = field(init=False, default=False)
+    distance_to_robot: float = field(init=False, default=0.0)
     sim_time_elapsed: float = field(init=False, default=0.0)
     timestep: int = field(init=False, default=0)
 
@@ -54,18 +56,14 @@ class PedestrianState:
         Checks if the current state is terminal, i.e., if the robot has reached its goal,
         timed out, or collided with any object or other robots.
         """
-        return (self.is_at_goal or self.is_timeout or self.is_collision_with_robot or
-                self.is_collision_with_ped or self.is_collision_with_obst)
-
+        return (self.is_timeout or self.is_collision_with_robot or
+                self.is_collision_with_ped or self.is_collision_with_obst) # or self.is_at_goal
+    
     @property
-    def is_waypoint_complete(self) -> bool:
-        """Indicates whether the current waypoint has been reached."""
-        return False
-
-    @property
-    def is_route_complete(self) -> bool:
-        """Indicates whether the entire planned route has been completed."""
-        return False
+    def max_distance(self) -> int:
+        """Calculates the maximum number of simulation steps based on time limit."""
+        w, h = self.occupancy.width, self.occupancy.height
+        return np.sqrt(w**2 + h**2)
 
     def reset(self):
         """
@@ -81,6 +79,7 @@ class PedestrianState:
         self.is_collision_with_robot = False
         self.is_at_goal = False
         self.is_timeout = False
+        self.distance_to_robot = np.inf
         self.sensors.reset_cache()
         return self.sensors.next_obs()
 
@@ -96,6 +95,7 @@ class PedestrianState:
         self.is_collision_with_obst = self.occupancy.is_obstacle_collision
         self.is_collision_with_robot = self.occupancy.is_agent_agent_collision
         self.is_at_goal = self.occupancy.is_robot_at_goal
+        self.distance_to_robot = self.occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
         return self.sensors.next_obs()
 
@@ -113,8 +113,8 @@ class PedestrianState:
             "is_pedestrian_collision": self.is_collision_with_ped,
             "is_robot_collision": self.is_collision_with_robot,
             "is_obstacle_collision": self.is_collision_with_obst,
-            "is_robot_at_goal": self.is_waypoint_complete,
-            "is_route_complete": self.is_route_complete,
+            "distance_to_robot": self.distance_to_robot,
             "is_timesteps_exceeded": self.is_timeout,
-            "max_sim_steps": self.max_sim_steps
+            "max_sim_steps": self.max_sim_steps,
+            "max_distance": self.max_distance,
         }

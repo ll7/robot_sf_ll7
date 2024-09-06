@@ -18,6 +18,7 @@ from robot_sf.robot.bicycle_drive import BicycleAction
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction
 from robot_sf.nav.map_config import Obstacle
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.sensor.range_sensor import euclid_dist
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -437,11 +438,12 @@ class SimulationView:
                 f'RobotAction: {state.robot_action.action}',
                 f'RobotGoal: {state.robot_action.goal}']
         else:
+            distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
             lines = [
                 f'PedestrianPose: {state.ego_ped_pose}',
                 f'PedestrianAction: {state.ego_ped_actions.action}',
                 f'PedestrianGoal: {state.ego_ped_actions.goal}',
-                f'RobotPose: {state.robot_pose}',]
+                f'DistanceRobot: {distance_to_robot:.2f}',]
         text_lines = [
             f'step: {timestep}',
             f'scaling: {self.scaling}',

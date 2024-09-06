@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import List
 from enum import IntEnum
+from collections import deque
+from statistics import mean
 
 
 class EnvOutcome(IntEnum):
@@ -8,6 +10,7 @@ class EnvOutcome(IntEnum):
     TIMEOUT=1
     PEDESTRIAN_COLLISION=2
     OBSTACLE_COLLISION=3
+    ROBOT_COLLISION=4
 
 
 @dataclass
@@ -131,6 +134,99 @@ class VecEnvMetrics:
     @property
     def pedestrian_collision_rate(self) -> float:
         return sum([m.pedestrian_collision_rate for m in self.metrics]) / len(self.metrics)
+
+    def update(self, metas: List[dict]):
+        for metric, meta in zip(self.metrics, metas):
+            metric.update(meta)
+
+
+@dataclass
+class PedEnvMetrics:
+    route_outcomes: deque[EnvOutcome] = field(default_factory=lambda: deque(maxlen=10))
+    route_distances: deque[float] = field(default_factory=lambda: deque(maxlen=10))
+
+    @property
+    def total_routes(self) -> int:
+        return max(len(self.route_outcomes), 1)
+
+    @property
+    def pedestrian_collisions(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
+
+    @property
+    def obstacle_collisions(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
+
+    @property
+    def exceeded_timesteps(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
+
+    @property
+    def robot_collisions(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_COLLISION])
+
+    @property
+    def timeout_rate(self) -> float:
+        return self.exceeded_timesteps / self.total_routes
+
+    @property
+    def obstacle_collision_rate(self) -> float:
+        return self.obstacle_collisions / self.total_routes
+
+    @property
+    def pedestrian_collision_rate(self) -> float:
+        return self.pedestrian_collisions / self.total_routes
+
+    @property
+    def robot_collision_rate(self) -> float:
+        return self.robot_collisions / self.total_routes
+
+    @property
+    def route_end_distance(self) -> float:
+        return mean(self.route_distances) if self.route_distances else 0
+
+    def update(self, meta: dict):
+        is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] \
+            or meta["is_robot_collision"] or meta["is_timesteps_exceeded"]
+        if not is_end_of_route:
+            return
+
+        if meta["is_pedestrian_collision"]:
+            outcome = EnvOutcome.PEDESTRIAN_COLLISION
+        elif meta["is_obstacle_collision"]:
+            outcome = EnvOutcome.OBSTACLE_COLLISION
+        elif meta["is_robot_collision"]:
+            outcome = EnvOutcome.ROBOT_COLLISION
+        elif meta["is_timesteps_exceeded"]:
+            outcome = EnvOutcome.TIMEOUT
+        else:
+            raise NotImplementedError("unknown environment outcome")
+        self.route_outcomes.append(outcome)
+        self.route_distances.append(meta["distance_to_robot"])
+
+@dataclass
+class PedVecEnvMetrics:
+    metrics: List[PedEnvMetrics]
+
+    @property
+    def timeout_rate(self) -> float:
+        return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def obstacle_collision_rate(self) -> float:
+        return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def pedestrian_collision_rate(self) -> float:
+        return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def robot_collision_rate(self) -> float:
+        return sum(m.robot_collision_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def route_end_distance(self) -> float:
+        return sum(m.route_end_distance for m in self.metrics) / len(self.metrics)
 
     def update(self, metas: List[dict]):
         for metric, meta in zip(self.metrics, metas):

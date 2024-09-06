@@ -1,7 +1,7 @@
 """
 test robot_sf.eval.EnvMetrics
 """
-from robot_sf.eval import EnvMetrics, EnvOutcome
+from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics
 
 def test_total_routes():
     metrics = EnvMetrics()
@@ -45,6 +45,12 @@ def test_reached_intermediate_goals():
     metrics.intermediate_goal_outcomes.append(EnvOutcome.REACHED_GOAL)
     assert metrics.reached_intermediate_goals == 1
 
+def test_robot_collisions():
+    metrics = PedEnvMetrics()
+    assert metrics.robot_collisions == 0
+    metrics.route_outcomes.append(EnvOutcome.ROBOT_COLLISION)
+    assert metrics.robot_collisions == 1
+
 def test_update():
     metrics = EnvMetrics()
     meta = {
@@ -79,3 +85,16 @@ def test_on_next_route_outcome():
     }
     metrics._on_next_route_outcome(meta)
     assert metrics.completed_routes == 1
+
+def test_ped_update():
+    metrics = PedEnvMetrics()
+    meta = {
+        "is_pedestrian_collision": False,
+        "is_obstacle_collision": False,
+        "is_timesteps_exceeded": True,
+        "is_robot_collision": False,
+        "distance_to_robot": 45.0
+    }
+    metrics.update(meta)
+    assert metrics.exceeded_timesteps == 1
+    assert metrics.route_end_distance == 45.0

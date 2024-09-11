@@ -1,4 +1,4 @@
-"train a robot in robot_sf on Licca Server"
+"train a robot in robot_sf on a slurm server"
 
 """
 This script is used to train a PPO model on the CartPole-v1 environment.

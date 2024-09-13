@@ -53,7 +53,7 @@ def training():
 
     logger.info("start learning")
     model.learn(
-        total_timesteps=6_000_000,
+        total_timesteps=10_000_000,
         progress_bar=True,
         callback=combined_callback
         )

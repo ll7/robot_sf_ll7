@@ -1,12 +1,7 @@
-"train a robot in robot_sf on a slurm server"
+"""train a robot in robot_sf on a slurm server"""
 
-"""
-This script is used to train a PPO model on the CartPole-v1 environment.
-"""
 import sys
-from datetime import datetime
 
-import gymnasium as gym
 from loguru import logger
 
 from stable_baselines3 import PPO

@@ -11,7 +11,8 @@ build
 file.log
 images
 logs
-model
+# model
+SLURM/model
 profile.json
 profiles
 pysf_tests

@@ -7,7 +7,7 @@ from gymnasium import spaces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings
 from robot_sf.nav.map_config import MapDefinition
-from robot_sf.nav.occupancy import ContinuousOccupancy
+from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion
@@ -44,7 +44,7 @@ def init_collision_and_sensors(
     occupancies = [ContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[i], lambda: sim.goal_pos[i],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos, None,
+            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
         for i in range(num_robots)]
 
@@ -178,7 +178,7 @@ def init_ped_collision_and_sensors(
     lidar_config = env_config.lidar_config
     ego_ped_config = env_config.ego_ped_config
 
-    occupancies: List[ContinuousOccupancy] = []
+    occupancies: List[Union[ContinuousOccupancy,EgoPedContinuousOccupancy]] = []
     sensor_fusions: List[SensorFusion] = []
 
     # Initialize a occupancy object for the robot for collision detection
@@ -186,9 +186,7 @@ def init_ped_collision_and_sensors(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
             lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
-            lambda: sim.ego_ped_pos,
-            robot_config.radius, sim_config.ped_radius,
-            sim_config.goal_radius, ego_ped_config.radius))
+            robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     ray_sensor = lambda r_id=0: lidar_ray_scan(
@@ -203,13 +201,13 @@ def init_ped_collision_and_sensors(
         orig_obs_space[0], sim_config.use_next_goal))
 
     # Initalize occupancy and sensor fusion for the ego pedestrian
-    occupancies.append(ContinuousOccupancy(
+    occupancies.append(EgoPedContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.ego_ped_pos, lambda: sim.ego_ped_goal_pos,
             lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
-            lambda: sim.robot_pos[0],
             ego_ped_config.radius, sim_config.ped_radius,
-            sim_config.goal_radius, robot_config.radius))
+            sim_config.goal_radius,
+            lambda: sim.robot_pos[0], robot_config.radius))
 
     ray_sensor = lambda: lidar_ray_scan(
         sim.ego_ped.pose, occupancies[1], lidar_config)[0]

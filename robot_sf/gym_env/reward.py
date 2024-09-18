@@ -39,7 +39,8 @@ def simple_reward(
 def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
                       ped_coll_penalty: float=-5,
                       obst_coll_penalty: float=-2,
-                      robot_coll_reward: float=1) -> float:
+                      robot_coll_reward: float=1,
+                      robot_at_goal_penalty: float= -1) -> float:
     """
     Calculate the reward for the pedestrian's current state.
 
@@ -56,7 +57,7 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
     reward = max_episode_step_discount / meta["max_sim_steps"]
 
     distance = meta["distance_to_robot"]
-    reward += (distance / meta["max_distance"]) * -0.01
+    reward += distance * -0.001
 
     # If there's a collision with a pedestrian or another robot, apply penalty
     if meta["is_pedestrian_collision"]:
@@ -69,5 +70,8 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
     # there's a collision with a robot, apply reward
     if meta["is_robot_collision"]:
         reward += robot_coll_reward
+
+    if meta["is_robot_at_goal"]:
+        reward += robot_at_goal_penalty
 
     return reward

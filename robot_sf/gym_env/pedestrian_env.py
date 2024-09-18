@@ -76,7 +76,7 @@ class PedestrianEnv(Env):
         # Initialize spaces based on the environment configuration and map
         combined_action_space, combined_observation_space, orig_obs_space = \
             init_ped_spaces(env_config, self.map_def)
-        
+
         # Assign the action and observation spaces
         self.action_space = combined_action_space[1]
         self.observation_space = combined_observation_space[1]
@@ -93,7 +93,7 @@ class PedestrianEnv(Env):
         self.simulator = init_ped_simulators(
             env_config,
             self.map_def,
-            random_start_pos=True
+            random_start_pos=False
             )[0]
 
         # Delta time per simulation step and maximum episode time
@@ -114,14 +114,15 @@ class PedestrianEnv(Env):
             sensors[0],
             d_t,
             max_ep_time)
-        
+
         # Setup initial state of the pedestrian
         self.ped_state = PedestrianState(
-            occupancies[1],
+            occupancies[0], # robot occupancy
+            occupancies[1], # ego_ped occupancy
             sensors[1],
             d_t,
             max_ep_time)
-        
+
         # Assign the robot model
         self.robot_model = robot_model
 
@@ -164,7 +165,7 @@ class PedestrianEnv(Env):
         # Process the action through the simulator
         action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
         action_robot = self.simulator.robots[0].parse_action(action_robot)
-        action_robot = (0.0, 0.0) #TODO: remove noop after testing
+        # action_robot = (0.0, 0.0) #TODO: remove noop after testing
         self.last_action_robot = action_robot
 
         action_ped = self.simulator.ego_ped.parse_action(action_ped)
@@ -244,7 +245,7 @@ class PedestrianEnv(Env):
         ego_ped_pos = self.simulator.ego_ped_pos
         distances, directions = lidar_ray_scan(
             self.simulator.ego_ped_pose,
-            self.ped_state.occupancy,
+            self.ped_state.ego_ped_occupancy,
             self.env_config.lidar_config)
         ego_ped_ray_vecs = self.construct_ray_vectors(distances, directions, ego_ped_pos)
 

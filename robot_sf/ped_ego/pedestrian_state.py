@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from robot_sf.sensor.sensor_fusion import SensorFusion
-from robot_sf.nav.occupancy import ContinuousOccupancy
+from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 
 @dataclass
 class PedestrianState:
@@ -31,7 +31,8 @@ class PedestrianState:
     and timestep count.
     These are updated during the simulation.
     """
-    occupancy: ContinuousOccupancy
+    robot_occupancy: ContinuousOccupancy
+    ego_ped_occupancy: EgoPedContinuousOccupancy
     sensors: SensorFusion
     d_t: float
     sim_time_limit: float
@@ -40,6 +41,7 @@ class PedestrianState:
     is_collision_with_ped: bool = field(init=False, default=False)
     is_collision_with_obst: bool = field(init=False, default=False)
     is_collision_with_robot: bool = field(init=False, default=False)
+    is_robot_at_goal: bool = field(init=False, default=False)
     is_timeout: bool = field(init=False, default=False)
     distance_to_robot: float = field(init=False, default=0.0)
     sim_time_elapsed: float = field(init=False, default=0.0)
@@ -57,13 +59,7 @@ class PedestrianState:
         timed out, or collided with any object or other robots.
         """
         return (self.is_timeout or self.is_collision_with_robot or
-                self.is_collision_with_ped or self.is_collision_with_obst) # or self.is_at_goal
-    
-    @property
-    def max_distance(self) -> int:
-        """Calculates the maximum number of simulation steps based on time limit."""
-        w, h = self.occupancy.width, self.occupancy.height
-        return np.sqrt(w**2 + h**2)
+                self.is_collision_with_ped or self.is_collision_with_obst or self.is_robot_at_goal)
 
     def reset(self):
         """
@@ -77,7 +73,7 @@ class PedestrianState:
         self.is_collision_with_ped = False
         self.is_collision_with_obst = False
         self.is_collision_with_robot = False
-        self.is_at_goal = False
+        self.is_robot_at_goal = False
         self.is_timeout = False
         self.distance_to_robot = np.inf
         self.sensors.reset_cache()
@@ -91,11 +87,11 @@ class PedestrianState:
         """
         self.timestep += 1
         self.sim_time_elapsed += self.d_t
-        self.is_collision_with_ped = self.occupancy.is_pedestrian_collision
-        self.is_collision_with_obst = self.occupancy.is_obstacle_collision
-        self.is_collision_with_robot = self.occupancy.is_agent_agent_collision
-        self.is_at_goal = self.occupancy.is_robot_at_goal
-        self.distance_to_robot = self.occupancy.distance_to_robot
+        self.is_collision_with_ped = self.ego_ped_occupancy.is_pedestrian_collision
+        self.is_collision_with_obst = self.ego_ped_occupancy.is_obstacle_collision
+        self.is_collision_with_robot = self.ego_ped_occupancy.is_agent_agent_collision
+        self.is_robot_at_goal = self.robot_occupancy.is_robot_at_goal
+        self.distance_to_robot = self.ego_ped_occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
         return self.sensors.next_obs()
 
@@ -114,7 +110,7 @@ class PedestrianState:
             "is_robot_collision": self.is_collision_with_robot,
             "is_obstacle_collision": self.is_collision_with_obst,
             "distance_to_robot": self.distance_to_robot,
+            "is_robot_at_goal": self.is_robot_at_goal,
             "is_timesteps_exceeded": self.is_timeout,
             "max_sim_steps": self.max_sim_steps,
-            "max_distance": self.max_distance,
         }

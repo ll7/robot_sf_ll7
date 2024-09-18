@@ -89,6 +89,8 @@ class AdversialPedestrianMetricsCallback(BaseCallback):
                                    self.metrics.pedestrian_collision_rate, self.num_timesteps)
             self.writer.add_scalar("metrics/robot_collision_rate",
                                    self.metrics.robot_collision_rate, self.num_timesteps)
+            self.writer.add_scalar("metrics/robot_at_goal_rate",
+                                   self.metrics.robot_at_goal_rate, self.num_timesteps)
             self.writer.add_scalar("metrics/avg_distance_to_robot",
                                    self.metrics.route_end_distance, self.num_timesteps)
             self.writer.flush()

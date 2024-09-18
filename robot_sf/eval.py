@@ -143,7 +143,8 @@ class VecEnvMetrics:
 @dataclass
 class PedEnvMetrics:
     route_outcomes: deque[EnvOutcome] = field(default_factory=lambda: deque(maxlen=10))
-    route_distances: deque[float] = field(default_factory=lambda: deque(maxlen=10))
+    avg_distance: deque[float] = field(default_factory=lambda: deque(maxlen=10))
+    route_distances: list[float] = field(default_factory=list)
 
     @property
     def total_routes(self) -> int:
@@ -166,6 +167,10 @@ class PedEnvMetrics:
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_COLLISION])
 
     @property
+    def robot_at_goal(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
+
+    @property
     def timeout_rate(self) -> float:
         return self.exceeded_timesteps / self.total_routes
 
@@ -182,12 +187,18 @@ class PedEnvMetrics:
         return self.robot_collisions / self.total_routes
 
     @property
+    def robot_at_goal_rate(self) -> float:
+        return self.robot_at_goal / self.total_routes
+
+    @property
     def route_end_distance(self) -> float:
-        return mean(self.route_distances) if self.route_distances else 0
+        return mean(self.avg_distance) if self.avg_distance else 0.0
 
     def update(self, meta: dict):
+        self.route_distances.append(meta["distance_to_robot"])
         is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] \
-            or meta["is_robot_collision"] or meta["is_timesteps_exceeded"]
+                            or meta["is_robot_collision"] or meta["is_timesteps_exceeded"] or \
+                                meta["is_robot_at_goal"]
         if not is_end_of_route:
             return
 
@@ -199,10 +210,14 @@ class PedEnvMetrics:
             outcome = EnvOutcome.ROBOT_COLLISION
         elif meta["is_timesteps_exceeded"]:
             outcome = EnvOutcome.TIMEOUT
+        elif meta["is_robot_at_goal"]:
+            outcome = EnvOutcome.REACHED_GOAL
         else:
             raise NotImplementedError("unknown environment outcome")
+
         self.route_outcomes.append(outcome)
-        self.route_distances.append(meta["distance_to_robot"])
+        self.avg_distance.append(mean(self.route_distances))
+        self.route_distances.clear()
 
 @dataclass
 class PedVecEnvMetrics:
@@ -223,6 +238,10 @@ class PedVecEnvMetrics:
     @property
     def robot_collision_rate(self) -> float:
         return sum(m.robot_collision_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def robot_at_goal_rate(self) -> float:
+        return sum(m.robot_at_goal_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def route_end_distance(self) -> float:

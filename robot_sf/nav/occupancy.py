@@ -130,11 +130,9 @@ class ContinuousOccupancy:
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
-    get_enemy_coords: Callable[[], Vec2D] = None
     agent_radius: float=1.0
     ped_radius: float=0.4
     goal_radius: float=1.0
-    enemy_radius: float=1.0
 
     @property
     def obstacle_coords(self) -> np.ndarray:
@@ -201,6 +199,51 @@ class ContinuousOccupancy:
         return False
 
     @property
+    def is_robot_at_goal(self) -> bool:
+        """
+        Checks if the robot is at the goal.
+
+        Returns
+        -------
+        bool
+            True if the robot is at the goal, False otherwise.
+        """
+        agent_circle = (self.get_agent_coords(), self.agent_radius)
+        goal_circle = (self.get_goal_coords(), self.goal_radius)
+        return is_circle_circle_intersection(agent_circle, goal_circle)
+
+    def is_in_bounds(self, world_x: float, world_y: float) -> bool:
+        """robot_circle
+            The x-coordinate of the point.
+        world_y : float
+            The y-coordinate of the point.
+
+        Returns
+        -------
+        bool
+            True if the point is within the bounds of the occupancy, False otherwise.
+        """
+        return 0 <= world_x <= self.width and 0 <= world_y <= self.height
+
+
+@dataclass
+class EgoPedContinuousOccupancy(ContinuousOccupancy):
+    get_enemy_coords: Callable[[], Vec2D] = None
+    enemy_radius: float=1.0
+
+    @property
+    def distance_to_robot(self) -> bool:
+        """
+        Gets the euklidean distance to the robot.
+
+        Returns
+        -------
+        float
+            Distance to the robot.
+        """
+        return euclid_dist(self.get_enemy_coords(), self.get_agent_coords())
+
+    @property
     def is_agent_agent_collision(self) -> bool:
         """
         Checks if the agent collided with another agent.
@@ -216,42 +259,3 @@ class ContinuousOccupancy:
         agent_circle = (self.get_agent_coords(), self.agent_radius)
         enemy_circle = (self.get_enemy_coords(), self.enemy_radius)
         return is_circle_circle_intersection(agent_circle, enemy_circle)
-
-    @property
-    def is_robot_at_goal(self) -> bool:
-        """
-        Checks if the robot is at the goal.
-
-        Returns
-        -------
-        bool
-            True if the robot is at the goal, False otherwise.
-        """
-        agent_circle = (self.get_agent_coords(), self.agent_radius)
-        goal_circle = (self.get_goal_coords(), self.goal_radius)
-        return is_circle_circle_intersection(agent_circle, goal_circle)
-
-    @property
-    def distance_to_robot(self) -> bool:
-        """
-        Gets the euklidean distance to the robot.
-
-        Returns
-        -------
-        float
-            Distance to the robot.
-        """
-        return euclid_dist(self.get_enemy_coords(), self.get_agent_coords())
-
-    def is_in_bounds(self, world_x: float, world_y: float) -> bool:
-        """robot_circle
-            The x-coordinate of the point.
-        world_y : float
-            The y-coordinate of the point.
-
-        Returns
-        -------
-        bool
-            True if the point is within the bounds of the occupancy, False otherwise.
-        """
-        return 0 <= world_x <= self.width and 0 <= world_y <= self.height

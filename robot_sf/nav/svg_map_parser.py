@@ -238,8 +238,8 @@ class SvgMapConverter:
                         spawn_id=0, # TODO: What is this? value is arbitrary
                         goal_id=0, # TODO: What is this? value is arbitrary
                         waypoints=vertices,
-                        spawn_zone=(vertices[0], 0, 0), # TODO
-                        goal_zone=(vertices[-1], 0, 0) # TODO
+                        spawn_zone=robot_spawn_zones[0],
+                        goal_zone=robot_goal_zones[0]
                     ))
 
 
@@ -278,7 +278,6 @@ class SvgMapConverter:
             ped_crowded_zones,
             ped_routes
         )
-
 
     def get_map_definition(self) -> MapDefinition:
         return self.map_definition

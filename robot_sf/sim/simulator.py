@@ -1,7 +1,9 @@
-from random import sample
-from math import ceil
+from random import sample, uniform
+from math import ceil,pi, sin, cos
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
+
+import loguru
 
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.simulator import make_forces as pysf_make_forces
@@ -20,6 +22,7 @@ from robot_sf.robot.differential_drive import (
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian, UnicycleAction
 from robot_sf.nav.navigation import RouteNavigator, sample_route
+from robot_sf.nav.occupancy import is_circle_line_intersection
 from robot_sf.ped_npc.ped_zone import sample_zone
 
 
@@ -28,6 +31,8 @@ RobotAction = Union[DifferentialDriveAction, BicycleAction]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
+
+logger = loguru.logger
 
 
 @dataclass
@@ -177,19 +182,15 @@ class PedSimulator(Simulator):
     @property
     def ego_ped_pos(self) -> Vec2D:
         return self.ego_ped.pos
-    
+
     @property
     def ego_ped_pose(self) -> Vec2D:
         return self.ego_ped.pose
-    
+
     @property
     def ego_ped_goal_pos(self) -> Vec2D:
         return self.robots[0].pos
 
-    @property
-    def ped_pos(self):
-        return self.pysf_state.ped_positions
-    
     def reset_state(self):
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs)):
             collision = not nav.reached_waypoint
@@ -198,9 +199,10 @@ class PedSimulator(Simulator):
                 waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
-        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]
-        initial_spawn = sample_zone(spawn_id, 1)[0]
-        self.ego_ped.reset_state((initial_spawn, self.ego_ped.pose[1])) # TODO: Check if this is correct
+        # Ego_pedestrian reset
+        robot_spawn = self.robot_pos[0]
+        ped_spawn = self.get_proximity_point(robot_spawn, 10, 15)
+        self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1])) # TODO: Check if this is correct
 
     def step_once(self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]):
         for behavior in self.peds_behaviors:
@@ -214,12 +216,51 @@ class PedSimulator(Simulator):
 
         self.ego_ped.apply_action(ego_ped_actions[0], self.config.time_per_step_in_secs)
 
+    def get_proximity_point(self, fixed_point: Tuple[float, float],
+                        lower_bound: float, upper_bound: float) -> Tuple[float, float]:
+        """
+        Calculate a point in the proximity of another point with specified distance bounds.
+        
+        Args:
+            fixed_point (tuple): (x, y) The original point.
+            lower_bound (float): The minimum distance from the original point.
+            upper_bound (float): The maximum distance from the original point.
+            
+        Returns:
+            tuple: A tuple containing the new x and y coordinates.
+        """
+        x, y = fixed_point
+        for _ in range(10):
+            angle = uniform(0, 2 * pi)
+            distance = uniform(lower_bound, upper_bound)
+
+            new_x = x + distance * cos(angle)
+            new_y = y + distance * sin(angle)
+            if not self.is_obstacle_collision(new_x, new_y):
+                return new_x, new_y
+
+        logger.warning("Could not find a valid proximity point: {fixed_point}.")
+        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0] # Spawn in pedestrian spawn_zone
+        initial_spawn = sample_zone(spawn_id, 1)[0]
+        return initial_spawn
+
+    def is_obstacle_collision(self, x: float, y: float) -> bool:
+        if not (0 <= x <= self.map_def.width and 0 <= y <= self.map_def.height):
+            return True
+
+        collision_distance = self.ego_ped.config.radius
+        circle_agent = ((x, y), collision_distance)
+        for s_x, s_y, e_x, e_y in self.pysf_sim.env.obstacles_raw[:, :4]:
+            if is_circle_line_intersection(circle_agent, ((s_x, s_y), (e_x, e_y))):
+                return True
+        return False
+
 
 def init_ped_simulators(
         env_config: PedEnvSettings,
         map_def: MapDefinition,
         num_robots: int = 1,
-        random_start_pos: bool = True
+        random_start_pos: bool = False
         ) -> List[PedSimulator]:
     """
     Initialize simulators for the pedestrian environment.

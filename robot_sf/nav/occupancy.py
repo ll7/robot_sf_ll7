@@ -232,6 +232,18 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
     enemy_radius: float=1.0
 
     @property
+    def enemy_coords(self) -> np.ndarray:
+        """
+        Returns the enemy coordinates.
+
+        Returns
+        -------
+        np.ndarray
+            The enemy coordinates.
+        """
+        return self.get_enemy_coords()
+
+    @property
     def distance_to_robot(self) -> bool:
         """
         Gets the euklidean distance to the robot.

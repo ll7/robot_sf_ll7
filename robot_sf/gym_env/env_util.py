@@ -4,6 +4,7 @@ env_util
 from typing import List, Union
 
 from gymnasium import spaces
+import numpy as np
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings
 from robot_sf.nav.map_config import MapDefinition
@@ -185,7 +186,7 @@ def init_ped_collision_and_sensors(
     occupancies.append(ContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
+            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
 
     # Define the ray sensor, target sensor, and speed sensor for the robot

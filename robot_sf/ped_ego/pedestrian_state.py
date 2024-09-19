@@ -42,6 +42,8 @@ class PedestrianState:
     is_collision_with_obst: bool = field(init=False, default=False)
     is_collision_with_robot: bool = field(init=False, default=False)
     is_robot_at_goal: bool = field(init=False, default=False)
+    is_collision_robot_with_obstacle: bool = field(init=False, default=False)
+    is_collision_robot_with_pedestrian: bool = field(init=False, default=False)
     is_timeout: bool = field(init=False, default=False)
     distance_to_robot: float = field(init=False, default=0.0)
     sim_time_elapsed: float = field(init=False, default=0.0)
@@ -59,7 +61,8 @@ class PedestrianState:
         timed out, or collided with any object or other robots.
         """
         return (self.is_timeout or self.is_collision_with_robot or
-                self.is_collision_with_ped or self.is_collision_with_obst or self.is_robot_at_goal)
+                self.is_collision_with_ped or self.is_collision_with_obst or self.is_robot_at_goal or
+                self.is_collision_robot_with_obstacle or self.is_collision_robot_with_pedestrian)
 
     def reset(self):
         """
@@ -74,6 +77,8 @@ class PedestrianState:
         self.is_collision_with_obst = False
         self.is_collision_with_robot = False
         self.is_robot_at_goal = False
+        self.is_collision_robot_with_obstacle = False
+        self.is_collision_robot_with_pedestrian = False
         self.is_timeout = False
         self.distance_to_robot = np.inf
         self.sensors.reset_cache()
@@ -91,6 +96,8 @@ class PedestrianState:
         self.is_collision_with_obst = self.ego_ped_occupancy.is_obstacle_collision
         self.is_collision_with_robot = self.ego_ped_occupancy.is_agent_agent_collision
         self.is_robot_at_goal = self.robot_occupancy.is_robot_at_goal
+        self.is_collision_robot_with_obstacle = self.robot_occupancy.is_obstacle_collision
+        self.is_collision_robot_with_pedestrian = self.robot_occupancy.is_pedestrian_collision
         self.distance_to_robot = self.ego_ped_occupancy.distance_to_robot
         self.is_timeout = self.sim_time_elapsed > self.sim_time_limit
         return self.sensors.next_obs()
@@ -111,6 +118,8 @@ class PedestrianState:
             "is_obstacle_collision": self.is_collision_with_obst,
             "distance_to_robot": self.distance_to_robot,
             "is_robot_at_goal": self.is_robot_at_goal,
+            "is_robot_obstacle_collision": self.is_collision_robot_with_obstacle,
+            "is_robot_pedestrian_collision": self.is_collision_robot_with_pedestrian,
             "is_timesteps_exceeded": self.is_timeout,
             "max_sim_steps": self.max_sim_steps,
         }

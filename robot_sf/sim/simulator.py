@@ -245,6 +245,9 @@ class PedSimulator(Simulator):
         return initial_spawn
 
     def is_obstacle_collision(self, x: float, y: float) -> bool:
+        """
+        TODO: copy from occupancy.py
+        """
         if not (0 <= x <= self.map_def.width and 0 <= y <= self.map_def.height):
             return True
 

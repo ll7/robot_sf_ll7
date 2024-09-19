@@ -11,6 +11,8 @@ class EnvOutcome(IntEnum):
     PEDESTRIAN_COLLISION=2
     OBSTACLE_COLLISION=3
     ROBOT_COLLISION=4
+    ROBOT_OBSTACLE_COLLISION=5
+    ROBOT_PEDESTRIAN_COLLISION=6
 
 
 @dataclass
@@ -169,6 +171,14 @@ class PedEnvMetrics:
     @property
     def robot_at_goal(self) -> int:
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
+    
+    @property
+    def robot_obstacle_collisions(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_OBSTACLE_COLLISION])
+    
+    @property
+    def robot_pedestrian_collisions(self) -> int:
+        return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION])
 
     @property
     def timeout_rate(self) -> float:
@@ -189,6 +199,14 @@ class PedEnvMetrics:
     @property
     def robot_at_goal_rate(self) -> float:
         return self.robot_at_goal / self.total_routes
+    
+    @property
+    def robot_obstacle_collision_rate(self) -> float:
+        return self.robot_obstacle_collisions / self.total_routes
+    
+    @property
+    def robot_pedestrian_collision_rate(self) -> float:
+        return self.robot_pedestrian_collisions / self.total_routes
 
     @property
     def route_end_distance(self) -> float:
@@ -196,12 +214,15 @@ class PedEnvMetrics:
 
     def update(self, meta: dict):
         self.route_distances.append(meta["distance_to_robot"])
-        is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] \
-                            or meta["is_robot_collision"] or meta["is_timesteps_exceeded"] or \
-                                meta["is_robot_at_goal"]
+        is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] or \
+                                meta["is_robot_collision"] or meta["is_timesteps_exceeded"] or \
+                                meta["is_robot_at_goal"] or meta["is_robot_obstacle_collision"] or \
+                                meta["is_robot_pedestrian_collision"]
         if not is_end_of_route:
             return
 
+        # If Robot collides with ego_pedestrian, the outcome is ROBOT_COLLISION
+        # If Robot collides with pysf pedestrian, the outcome is ROBOT_PEDESTRIAN_COLLISION
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
         elif meta["is_obstacle_collision"]:
@@ -212,6 +233,10 @@ class PedEnvMetrics:
             outcome = EnvOutcome.TIMEOUT
         elif meta["is_robot_at_goal"]:
             outcome = EnvOutcome.REACHED_GOAL
+        elif meta["is_robot_obstacle_collision"]:
+            outcome = EnvOutcome.ROBOT_OBSTACLE_COLLISION
+        elif meta["is_robot_pedestrian_collision"]:
+            outcome = EnvOutcome.ROBOT_PEDESTRIAN_COLLISION
         else:
             raise NotImplementedError("unknown environment outcome")
 
@@ -242,6 +267,14 @@ class PedVecEnvMetrics:
     @property
     def robot_at_goal_rate(self) -> float:
         return sum(m.robot_at_goal_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def robot_obstacle_collision_rate(self) -> float:
+        return sum(m.robot_obstacle_collision_rate for m in self.metrics) / len(self.metrics)
+
+    @property
+    def robot_pedestrian_collision_rate(self) -> float:
+        return sum(m.robot_pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def route_end_distance(self) -> float:

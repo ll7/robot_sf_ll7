@@ -1,7 +1,10 @@
 from math import dist
 from typing import Tuple
 import numpy as np
-from robot_sf.nav.occupancy import ContinuousOccupancy
+from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
+from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.gym_env.env_config import PedEnvSettings
+from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
 
 Vec2D = Tuple[float, float]
 
@@ -54,5 +57,19 @@ def test_is_collision_with_pedestrian():
 def test_is_collision_with_agent():
     agent_pos = np.random.uniform(-10, 10, size=(2))
     enemy_pos = (agent_pos[0], agent_pos[1])
-    _map = ContinuousOccupancy(40, 40, lambda: agent_pos, lambda: None, lambda: np.array([[]]), lambda: np.array([]), lambda: enemy_pos, agent_radius=1)
+    _map = EgoPedContinuousOccupancy(40, 40, lambda: agent_pos, lambda: None, lambda: np.array([[]]), lambda: np.array([]), agent_radius=1, ped_radius=0.4,
+                                        goal_radius=1.0, get_enemy_coords=lambda: enemy_pos, enemy_radius=1.0)
     assert _map.is_agent_agent_collision
+
+
+def test_proximity_point():
+    fixed_point = (50, 50)
+    lower_bound = 15
+    upper_bound = 20
+    env_config = PedEnvSettings()
+    svg_file = "maps/svg_maps/debug_03.svg"
+    map_def = convert_map(svg_file)
+    _sim = init_ped_simulators(env_config, map_def)[0]
+    new_point = _sim.get_proximity_point(fixed_point, lower_bound=lower_bound, upper_bound=upper_bound)
+    assert lower_bound <= dist(fixed_point, new_point) <= upper_bound
+    # TODO: Add test to check with obstacle

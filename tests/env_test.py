@@ -13,7 +13,7 @@ def test_can_return_valid_observation():
     drive_state_spec: spaces.Box = env.observation_space[OBS_DRIVE_STATE]
     lidar_state_spec: spaces.Box = env.observation_space[OBS_RAYS]
 
-    obs = env.reset()
+    obs, info = env.reset()
 
     assert isinstance(obs, dict)
     assert OBS_DRIVE_STATE in obs and OBS_RAYS in obs
@@ -27,6 +27,7 @@ def test_can_simulate_with_pedestrians():
     env.reset()
     for _ in range(total_steps):
         rand_action = env.action_space.sample()
-        _, _, done, _ = env.step(rand_action)
+        _, _, terminated, truncated, _ = env.step(rand_action)
+        done = terminated or truncated
         if done:
             env.reset()

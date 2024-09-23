@@ -165,7 +165,7 @@ class RobotEnv(Env):
             self.record()
 
         # observation, reward, terminal, truncated,info
-        return obs, reward, term, False,{"step": reward_dict["step"], "meta": reward_dict}
+        return obs, reward, term, False, {"step": reward_dict["step"], "meta": reward_dict}
 
     def reset(self, seed=None, options=None):
         """

@@ -141,41 +141,53 @@ class RobotEnv(Env):
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)
-        self.last_action = action
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation
         obs = self.state.step()
         # Fetch metadata about the current state
-        meta = self.state.meta_dict()
+        reward_dict = self.state.meta_dict()
+        # add the action space to dict
+        reward_dict["action_space"] = self.action_space
+        # add action to dict
+        reward_dict["action"] = action
+        # Add last_action to reward_dict
+        reward_dict["last_action"] = self.last_action
         # Determine if the episode has reached terminal state
         term = self.state.is_terminal
         # Compute the reward using the provided reward function
-        reward = self.reward_func(meta)
+        reward = self.reward_func(reward_dict)
+        # Update last_action for next step
+        self.last_action = action
 
         # if recording is enabled, record the state
         if self.recording_enabled:
             self.record()
 
-        return obs, reward, term, {"step": meta["step"], "meta": meta}
+        # observation, reward, terminal, truncated,info
+        return obs, reward, term, False, {"step": reward_dict["step"], "meta": reward_dict}
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
         """
         Reset the environment state to start a new episode.
 
         Returns:
         - obs: The initial observation after resetting the environment.
         """
+        super().reset(seed=seed,options=options)
+        # Reset last_action
+        self.last_action = None
         # Reset internal simulator state
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
-
         # if recording is enabled, save the recording and reset the state list
         if self.recording_enabled:
             self.save_recording()
-
-        return obs
+        
+        # info is necessary for the gym environment, but useless at the moment
+        info = {"info": "test"}
+        return obs, info
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
@@ -262,27 +274,6 @@ class RobotEnv(Env):
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")
             self.recorded_states = []
-
-    def seed(self, seed=None):
-        """
-        Set the seed for this env's random number generator(s).
-
-        Note:
-            Some environments use multiple pseudorandom number generators.
-            We want to capture all such seeds used in order to ensure that
-            there aren't accidental correlations between multiple generators.
-
-        Returns:
-            list<bigint>: Returns the list of seeds used in this env's random
-            number generators. The first value in the list should be the
-            "main" seed, or the value which a reproducer should pass to
-            'seed'. Often, the main seed equals the provided 'seed', but
-            this won't be true if seed=None, for example.
-
-        TODO: validate this method
-        """
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
 
     def exit(self):
         """

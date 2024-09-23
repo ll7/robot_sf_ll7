@@ -93,7 +93,7 @@ class PedestrianEnv(Env):
         self.simulator = init_ped_simulators(
             env_config,
             self.map_def,
-            random_start_pos=False
+            random_start_pos=True
             )[0]
 
         # Delta time per simulation step and maximum episode time

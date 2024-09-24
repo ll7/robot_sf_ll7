@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
   
 #SBATCH --job-name=robot-sf
-#SBATCH --partition=epyc-gpu
-#SBATCH --time=10:00:00
+#SBATCH --partition=epyc-gpu-test
+#SBATCH --time=2:00:00
  
 # Request memory per CPU
 #SBATCH --mem-per-cpu=2G
@@ -27,4 +27,4 @@ conda activate conda_env
 # to prevent the creation of too many threads (massive slowdown!)
  
 # No need to pass number of tasks to srun
-srun python3 slurm_PPO_robot_sf.py
+srun python3 log_gpu_cpu_usage.py

@@ -75,6 +75,7 @@ class SimulationView:
     height: float=800
     scaling: float=15
     robot_radius: float=1.0
+    ego_ped_radius: float=0.4
     ped_radius: float=0.4
     goal_radius: float=1.0
     map_def: MapDefinition = field(default_factory=MapDefinition)
@@ -231,14 +232,17 @@ class SimulationView:
         # static objects
         if self.map_def.obstacles:
             self._draw_obstacles()
-        if self.map_def.robot_routes:
-            self._draw_robot_routes()
-        if self.map_def.ped_routes:
-            self._draw_pedestrian_routes()
-        if self.map_def.ped_spawn_zones:
-            self._draw_spawn_zones()
-        if self.map_def.ped_goal_zones:
-            self._draw_goal_zones()
+        
+        # debugging objects
+        # if self.map_def.robot_routes:
+        #     self._draw_robot_routes()
+        # if self.map_def.ped_routes:
+        #     self._draw_pedestrian_routes()
+        # if self.map_def.ped_spawn_zones:
+        #     self._draw_spawn_zones()
+        # if self.map_def.ped_goal_zones:
+        #     self._draw_goal_zones()
+
         self._draw_grid()
 
 
@@ -297,7 +301,7 @@ class SimulationView:
             self.screen,
             EGO_PED_COLOR,
             self._scale_tuple(pose[0]),
-            self.robot_radius * self.scaling)
+            self.ego_ped_radius * self.scaling)
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         # TODO: display pedestrians with an image instead of a circle

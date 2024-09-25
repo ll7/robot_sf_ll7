@@ -20,7 +20,9 @@ class PedestrianState:
     occupancy, sensor fusion, and simulation time.
 
     Attributes:
-        occupancy (ContinuousOccupancy): Object tracking spatial occupation, 
+        robot_occupancy (ContinuousOccupancy): Object tracking spatial occupation, 
+            for collision detection.
+        egp_ped_occupancy (EgoPedContinuousOccupancy): Object tracking spatial occupation, 
             for collision detection.
         sensors (SensorFusion): Object for managing sensor data and fusion.
         d_t (float): The simulation timestep duration.
@@ -37,7 +39,6 @@ class PedestrianState:
     d_t: float
     sim_time_limit: float
     episode: int = field(init=False, default=0)
-    is_at_goal: bool = field(init=False, default=False)
     is_collision_with_ped: bool = field(init=False, default=False)
     is_collision_with_obst: bool = field(init=False, default=False)
     is_collision_with_robot: bool = field(init=False, default=False)

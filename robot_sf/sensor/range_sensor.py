@@ -1,5 +1,5 @@
 from math import cos, sin
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -27,6 +27,7 @@ Range = Tuple[float, float]
 """Type alias for a range represented as a tuple of two floats"""
 
 
+# TODO: Refactor. this method is used in multiple places (occupancy, ped_robot_force)
 @numba.njit(fastmath=True)
 def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     """
@@ -270,7 +271,8 @@ def raycast_obstacles(
 
 @numba.njit()
 def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
-            ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray) -> np.ndarray:
+            ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray,
+            enemy_pos: Optional[np.ndarray] = None, enemy_radius: float = 0.0) -> np.ndarray:
     """Cast rays in the directions of all given angles outgoing from
     the scanner's position and detect the minimal collision distance
     with either a pedestrian or an obstacle (or in case there's no collision,
@@ -278,21 +280,11 @@ def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
-    # TODO: add raycast for other robots
-    return out_ranges
 
-@numba.njit()
-def ego_ped_raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
-            ped_pos: np.ndarray, ped_radius: float, enemy_pos: np.ndarray, enemy_radius: float,
-            ray_angles: np.ndarray) -> np.ndarray:
-    """Cast rays in the directions of all given angles outgoing from
-    the scanner's position and detect the minimal collision distance
-    with either a pedestrian or an obstacle (or in case there's no collision,
-    just return the maximum scan range)."""
-    out_ranges = np.full((ray_angles.shape[0]), np.inf)
-    raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
-    raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, enemy_pos, enemy_radius, ray_angles)
-    raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
+    # As Pedestrian detect the Robot
+    if enemy_pos is not None:
+        raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, enemy_pos, enemy_radius, ray_angles)
+    # TODO: add raycast for other robots
     return out_ranges
 
 
@@ -332,9 +324,10 @@ def lidar_ray_scan(
 
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])
-        ranges = ego_ped_raycast(
+        ranges = raycast(
             (pos_x, pos_y), obstacles, scan_dist, ped_pos,
-            occ.ped_radius, enemy_pos, occ.enemy_radius, ray_angles)
+            occ.ped_radius, ray_angles,
+            enemy_pos=enemy_pos, enemy_radius=occ.enemy_radius)
     else:
         ranges = raycast(
             (pos_x, pos_y), obstacles, scan_dist, ped_pos,

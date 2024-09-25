@@ -262,7 +262,6 @@ class PedSimulator(Simulator):
 def init_ped_simulators(
         env_config: PedEnvSettings,
         map_def: MapDefinition,
-        num_robots: int = 1,
         random_start_pos: bool = False
         ) -> List[PedSimulator]:
     """

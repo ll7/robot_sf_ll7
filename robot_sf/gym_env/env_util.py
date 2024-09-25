@@ -131,23 +131,21 @@ def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
 
     Parameters
     ----------
-    env_config : EnvSettings
+    env_config : PedEnvSettings
         The configuration settings for the environment.
     map_def : MapDefinition
         The definition of the map for the environment.
 
     Returns
     -------
-    Tuple[Space, Space, Space]
-        A tuple containing the action space, the extended observation space, and
-        the original observation space of the robot.
+    Tuple[List[Space], List[Space], List[Space]]
+        A tuple containing a list of action space, the extended observation space, and
+        the original observation space of the robot and the pedestrian.
     """
     action_space_robot, obs_space_robot, orig_obs_space_robot = create_spaces(env_config, map_def, create_robot=True)
     action_space_ped, obs_space_ped, orig_obs_space_ped = create_spaces(env_config, map_def, create_robot=False)
 
     # As a list [robot, pedestrian]
-    # Return the action space, the extended observation space, and the original
-    # observation space
     return [action_space_robot, action_space_ped], [obs_space_robot, obs_space_ped], [orig_obs_space_robot, orig_obs_space_ped]
 
 
@@ -186,7 +184,8 @@ def init_ped_collision_and_sensors(
     occupancies.append(ContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
+            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], 
+            lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))), # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
 
     # Define the ray sensor, target sensor, and speed sensor for the robot

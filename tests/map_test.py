@@ -4,7 +4,7 @@ import numpy as np
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.gym_env.env_config import PedEnvSettings
-from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
+from robot_sf.sim.simulator import init_ped_simulators
 
 Vec2D = Tuple[float, float]
 
@@ -71,5 +71,6 @@ def test_proximity_point():
     map_def = convert_map(svg_file)
     _sim = init_ped_simulators(env_config, map_def)[0]
     new_point = _sim.get_proximity_point(fixed_point, lower_bound=lower_bound, upper_bound=upper_bound)
-    assert lower_bound <= dist(fixed_point, new_point) <= upper_bound
+    distance = np.linalg.norm(np.array(fixed_point) - np.array(new_point))
+    assert lower_bound <= distance <= upper_bound
     # TODO: Add test to check with obstacle

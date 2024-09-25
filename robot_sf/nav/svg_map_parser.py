@@ -293,5 +293,9 @@ def convert_map(svg_file: str):
     logger.info("Converting SVG map to MapDefinition object.")
     logger.info(f"SVG file: {svg_file}")
 
-    converter = SvgMapConverter(svg_file)
-    return converter.map_definition
+    try:
+        converter = SvgMapConverter(svg_file)
+        return converter.map_definition
+    except Exception as e:
+        logger.error(f"Error converting SVG file: {e}")
+        return None

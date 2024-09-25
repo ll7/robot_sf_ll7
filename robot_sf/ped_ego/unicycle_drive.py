@@ -17,7 +17,7 @@ class UnicycleDriveSettings:
     A class that defines the settings for a unicycle drive pedestrian.
     """
 
-    radius: float = 1.0  # Collision radius, not relevant for kinematics
+    radius: float = 0.4  # Collision radius, not relevant for kinematics
     max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
     max_velocity: float = 3.0  # Maximum forward velocity
 

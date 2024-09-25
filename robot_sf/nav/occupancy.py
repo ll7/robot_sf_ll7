@@ -1,4 +1,4 @@
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 from dataclasses import dataclass
 
 import numpy as np
@@ -213,7 +213,11 @@ class ContinuousOccupancy:
         return is_circle_circle_intersection(agent_circle, goal_circle)
 
     def is_in_bounds(self, world_x: float, world_y: float) -> bool:
-        """robot_circle
+        """
+        Checks if a point is within the bounds of the occupancy.
+        Parameters
+        ----------
+        world_x : float
             The x-coordinate of the point.
         world_y : float
             The y-coordinate of the point.
@@ -228,7 +232,7 @@ class ContinuousOccupancy:
 
 @dataclass
 class EgoPedContinuousOccupancy(ContinuousOccupancy):
-    get_enemy_coords: Callable[[], Vec2D] = None
+    get_enemy_coords: Optional[Callable[[], Vec2D]] = None
     enemy_radius: float=1.0
 
     @property
@@ -244,7 +248,7 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
         return self.get_enemy_coords()
 
     @property
-    def distance_to_robot(self) -> bool:
+    def distance_to_robot(self) -> float:
         """
         Gets the euklidean distance to the robot.
 

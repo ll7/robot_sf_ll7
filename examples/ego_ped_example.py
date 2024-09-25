@@ -5,13 +5,13 @@ from pathlib import Path
 from loguru import logger
 from stable_baselines3 import PPO
 
-from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.render.playback_recording import load_states_and_visualize
+from robot_sf.nav.svg_map_parser import convert_map
 
 
 
@@ -39,17 +39,12 @@ def test_simulation(map_definition: MapDefinition):
         obs, _, done, _ , _= env.step(action_ped)
         env.render()
 
+        if done:
+            obs = env.reset()
+            env.render()
+
     env.reset()
     env.exit()
-
-def convert_map(svg_file: str):
-    """Create MapDefinition from svg file."""
-
-    logger.info("Converting SVG map to MapDefinition object.")
-    logger.info(f"SVG file: {svg_file}")
-
-    converter = SvgMapConverter(svg_file)
-    return converter.map_definition
 
 def get_file():
     """Get the latest recorded file."""
@@ -62,7 +57,7 @@ def get_file():
 
 def main():
 
-    map_def = convert_map("maps/svg_maps/debug_01.svg")
+    map_def = convert_map("maps/svg_maps/debug_03.svg")
 
     test_simulation(map_def)
 

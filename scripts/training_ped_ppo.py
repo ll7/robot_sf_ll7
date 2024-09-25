@@ -1,5 +1,7 @@
 import datetime
 
+import loguru
+
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -15,23 +17,24 @@ from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 
 
-def training():
-    n_envs = 10
+logger = loguru.logger
+
+def training(svg_map_path: str):
+    n_envs = 16
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
 
     def make_env():
-        map_definition = convert_map("maps/svg_maps/debug_02.svg")
+        map_definition = convert_map(svg_map_path)
         robot_model = PPO.load("./model/run_043", env=None)
 
         env_config = PedEnvSettings(
             map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
-            sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
+            sim_config=SimulationSettings(difficulty=difficulty,
+                                          ped_density_by_difficulty=ped_densities),
             robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
         )
-        env_config.sim_config.ped_density_by_difficulty = ped_densities
-        env_config.sim_config.difficulty = difficulty
         return PedestrianEnv(env_config, robot_model=robot_model)
 
     env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
@@ -61,7 +64,10 @@ def training():
     now = datetime.datetime.now()
     filename = now.strftime("%Y-%m-%d_%H-%M-%S")
     model.save(f"./model_ped/ppo_{filename}")
+    logger.info(f"Model saved as ppo_{filename}")
 
 
 if __name__ == '__main__':
-    training()
+    svg_map = "maps/svg_maps/debug_05.svg"
+
+    training(svg_map)

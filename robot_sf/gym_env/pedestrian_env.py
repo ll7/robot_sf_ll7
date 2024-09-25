@@ -3,9 +3,9 @@
 It includes classes and protocols for defining the pedetsrians's state, actions, and 
 observations within the environment. 
 
-`PedestrianEnv`: A class that represents the pedestrian's environment. It inherits from `VectorEnv` #TODO: check this
+`PedestrianEnv`: A class that represents the pedestrian's environment. It inherits from `Env`
 from the `gymnasium` library, which is a base class for environments that operate over
-vectorized actions and observations. It includes methods for stepping through the environment,
+actions and observations. It includes methods for stepping through the environment,
 resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the pedestrian.
 """
@@ -49,7 +49,7 @@ class PedestrianEnv(Env):
 
     def __init__(
             self,
-            env_config: PedEnvSettings = PedEnvSettings(),
+            env_config: PedEnvSettings = None,
             reward_func: Callable[[dict], float] = simple_ped_reward,
             robot_model = None,
             debug: bool = False,
@@ -66,6 +66,8 @@ class PedestrianEnv(Env):
             visualizations.
         - recording_enabled (bool): If True, enables recording of the simulation
         """
+        if env_config is None:
+            env_config = PedEnvSettings()
 
         # Environment configuration details
         self.env_config = env_config
@@ -124,6 +126,8 @@ class PedestrianEnv(Env):
             max_ep_time)
 
         # Assign the robot model
+        if robot_model is None:
+            raise ValueError("Please provide a valid robot_model during initialization.")
         self.robot_model = robot_model
 
         # Store last state executed by the robot
@@ -141,6 +145,7 @@ class PedestrianEnv(Env):
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
+                ego_ped_radius=env_config.ego_ped_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
                 goal_radius=env_config.sim_config.goal_radius)
 
@@ -210,7 +215,7 @@ class PedestrianEnv(Env):
         # if recording is enabled, save the recording and reset the state list
         if self.recording_enabled:
             self.save_recording()
-
+        # TODO: find fix for vec_env needing tuple
         return obs_ped, {"info": "test"}
 
     def _prepare_visualizable_state(self):

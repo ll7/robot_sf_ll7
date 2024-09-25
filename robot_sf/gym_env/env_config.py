@@ -70,7 +70,7 @@ class EnvSettings:
 @dataclass
 class PedEnvSettings(EnvSettings):
     """
-    Data class to hold environment settings for a simulation.
+    Data class to hold environment settings for a simulation that includes an ego pedestrian.
     """
     ego_ped_config: UnicycleDriveSettings = UnicycleDriveSettings()
 
@@ -79,10 +79,12 @@ class PedEnvSettings(EnvSettings):
         Check if any of the properties are not initialized (None) and raise an
         error if so.
         """
-        if not self.sim_config or not self.lidar_config \
-                or not self.robot_config or not self.map_pool \
-                or not self.ego_ped_config:
-            raise ValueError('Please make sure all properties are initialized!')
+        super().__post_init__()
+        if not self.ego_ped_config:
+            raise ValueError('Please ensure ego_ped_config is initialized!')
+
+        # Comment following line to allow different radius for ego pedestrian
+        self.ego_ped_config.radius = self.sim_config.ped_radius # Ensure radius consistency
 
     def pedestrian_factory(self) -> UnicycleDrivePedestrian:
         """

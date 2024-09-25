@@ -16,17 +16,16 @@ logger = loguru.logger
 def make_env():
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
-    map_definition = convert_map("maps/svg_maps/debug_02.svg")
+    map_definition = convert_map("maps/svg_maps/debug_03.svg")
     robot_model = PPO.load("./model/run_043", env=None)
 
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
-        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
+        sim_config=SimulationSettings(difficulty=difficulty,
+                                          ped_density_by_difficulty=ped_densities),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
     )
-    env_config.sim_config.ped_density_by_difficulty = ped_densities
-    env_config.sim_config.difficulty = difficulty
-    return PedestrianEnv(env_config, robot_model=robot_model, debug=True,)
+    return PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=False)
 
 def get_file():
     """Get the latest model file."""
@@ -39,17 +38,18 @@ def get_file():
 def run():
     env = make_env()
     filename = get_file()
+    #filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
     logger.info(f"Loading pedestrian model from {filename}")
 
     model = PPO.load(filename, env=env)
 
     obs = env.reset()
     ep_rewards = 0
+
     for _ in range(10000):
-        if isinstance(obs, tuple):
-            action, _ = model.predict(obs[0], deterministic=True)
-        else:
-            action, _ = model.predict(obs, deterministic=True)
+        if isinstance(obs, tuple): # Check env.reset()
+            obs = obs[0]
+        action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, _ , meta = env.step(action)
         ep_rewards += reward
         env.render()

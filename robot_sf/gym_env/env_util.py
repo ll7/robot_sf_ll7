@@ -2,6 +2,7 @@
 env_util
 """
 from typing import List, Union
+from enum import Enum
 
 from gymnasium import spaces
 import numpy as np
@@ -13,6 +14,10 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion
 from robot_sf.sim.simulator import Simulator, PedSimulator
+
+class AgentType(Enum):
+    ROBOT = 1
+    PEDESTRIAN = 2
 
 def init_collision_and_sensors(
         sim: Simulator,
@@ -91,18 +96,21 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
         A tuple containing the action space, the extended observation space, and
         the original observation space of the robot.
     """
-    action_space, obs_space, orig_obs_space = create_spaces(env_config, map_def, create_robot=True)
+    action_space, obs_space, orig_obs_space = create_spaces(env_config, map_def, agent_type=AgentType.ROBOT)
     # Return the action space, the extended observation space, and the original
     # observation space
     return action_space, obs_space, orig_obs_space
 
 def create_spaces(env_config: Union[EnvSettings, PedEnvSettings], map_def: MapDefinition,
-                  create_robot: bool = True):
+                  agent_type: AgentType = AgentType.ROBOT):
     # Create a agent using the factory method in the environment configuration
-    if create_robot:
+    if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
-    else:
+    elif agent_type == AgentType.PEDESTRIAN:
         agent = env_config.pedestrian_factory()
+    else:
+        raise ValueError(f"Unsupported agent type: {agent_type}")
+
 
     # Get the action space from the agent
     action_space = agent.action_space
@@ -142,8 +150,8 @@ def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
         A tuple containing a list of action space, the extended observation space, and
         the original observation space of the robot and the pedestrian.
     """
-    action_space_robot, obs_space_robot, orig_obs_space_robot = create_spaces(env_config, map_def, create_robot=True)
-    action_space_ped, obs_space_ped, orig_obs_space_ped = create_spaces(env_config, map_def, create_robot=False)
+    action_space_robot, obs_space_robot, orig_obs_space_robot = create_spaces(env_config, map_def, agent_type=AgentType.ROBOT)
+    action_space_ped, obs_space_ped, orig_obs_space_ped = create_spaces(env_config, map_def, agent_type=AgentType.PEDESTRIAN)
 
     # As a list [robot, pedestrian]
     return [action_space_robot, action_space_ped], [obs_space_robot, obs_space_ped], [orig_obs_space_robot, orig_obs_space_ped]

@@ -195,8 +195,8 @@ class PedestrianEnv(Env):
         # if recording is enabled, record the state
         if self.recording_enabled:
             self.record()
-
-        return obs_ped, reward, term, False,{"step": meta["step"], "meta": meta}
+        truncated = False
+        return obs_ped, reward, term, truncated, {"step": meta["step"], "meta": meta}
 
     def reset(self, seed=None, options=None):
         """

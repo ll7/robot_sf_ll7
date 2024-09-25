@@ -239,7 +239,7 @@ class PedSimulator(Simulator):
             if not self.is_obstacle_collision(new_x, new_y):
                 return new_x, new_y
 
-        logger.warning("Could not find a valid proximity point: {fixed_point}.")
+        logger.warning(f"Could not find a valid proximity point: {fixed_point}.")
         spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0] # Spawn in pedestrian spawn_zone
         initial_spawn = sample_zone(spawn_id, 1)[0]
         return initial_spawn

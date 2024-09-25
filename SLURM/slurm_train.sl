@@ -10,7 +10,17 @@
 #SBATCH --cpus-per-task=64
 # Request GPU Ressources (model:number)
 #SBATCH --gpus=a100:1
- 
+
+# Check if SLURM_EMAIL is set
+if [ -z "$SLURM_EMAIL" ]; then
+  echo "SLURM_EMAIL is not set. Please set it before running the script."
+else
+  # Add email notification
+  #SBATCH --mail-user=$SLURM_EMAIL
+  #SBATCH --mail-type=END,FAIL
+  echo "SLURM_EMAIL is set to $SLURM_EMAIL"
+fi
+
 # Clear all interactively loaded modules
 module purge
  

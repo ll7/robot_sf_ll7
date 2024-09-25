@@ -1,3 +1,9 @@
+"""
+This module defines the reward function for the robot environment.
+"""
+
+import numpy as np
+
 def simple_reward(
         meta: dict,
         max_episode_step_discount: float=-0.1,
@@ -34,8 +40,7 @@ def simple_reward(
         reward += reach_waypoint_reward
 
     return reward
-
-
+  
 def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
                       ped_coll_penalty: float=-5,
                       obst_coll_penalty: float=-2,
@@ -73,5 +78,47 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
 
     if meta["is_robot_at_goal"]:
         reward += robot_at_goal_penalty
+
+    return reward
+  
+def punish_action_reward(
+        meta: dict,
+        max_episode_step_discount: float=-0.1,
+        ped_coll_penalty: float=-5,
+        obst_coll_penalty: float=-2,
+        reach_waypoint_reward: float=1,
+        punish_action: bool=True,
+        punish_action_penalty: float=-0.1
+        ) -> float:
+    """
+    Calculate the reward for the robot's current state.
+
+    Parameters:
+    meta (dict): Metadata containing information about the robot's current state.
+    max_episode_step_discount (float): Discount factor for each step in the episode.
+    ped_coll_penalty (float): Penalty for colliding with a pedestrian.
+    obst_coll_penalty (float): Penalty for colliding with an obstacle.
+    reach_waypoint_reward (float): Reward for reaching a waypoint.
+    punish_action (bool): Whether to punish the robot for taking actions.
+    punish_action_penalty (float): Penalty for taking actions.
+
+    Returns:
+    float: The calculated reward.
+    """
+
+    # Initialize reward with a discount based on the maximum simulation steps
+    reward = simple_reward(
+        meta,
+        max_episode_step_discount,
+        ped_coll_penalty,
+        obst_coll_penalty,
+        reach_waypoint_reward
+        )
+
+    # punish the robot taking a different action from the last action
+    if punish_action and meta["last_action"] is not None:
+        action_diff = np.linalg.norm(np.array(meta["action"]) - np.array(meta["last_action"]))
+        if action_diff > 0:
+            reward += punish_action_penalty * action_diff
 
     return reward

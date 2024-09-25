@@ -23,19 +23,28 @@ class LogResourceUsageCallback(BaseCallback):
         """Log CPU and GPU usage at each step."""
         cpu_usage = psutil.cpu_percent()
         gpus = GPUtil.getGPUs()
-        gpu_usage = gpus[0].load * 100 if gpus else 0  # Assuming using the first GPU
+        gpu_usage = [gpu.load * 100 for gpu in gpus] if gpus else [0]
 
         # Log to TensorBoard
         self.logger.record('cpu_usage', cpu_usage)
-        self.logger.record('gpu_usage', gpu_usage)
+        for idx, usage in enumerate(gpu_usage):
+            self.logger.record(f'gpu_{idx}_usage', usage)
 
         return True
 
-def training():
-    n_envs = 64
-    ped_densities = [0.01, 0.02, 0.04, 0.08]
-    difficulty = 2
-
+def training(
+        n_envs: int = 64,
+        ped_densities: list[float] = None,
+        difficulty: int = 2
+        ):
+    """Train a robot in robot_sf.
+    Args:
+        n_envs: Number of environments to run in parallel.
+        ped_densities: List of pedestrian densities to use.
+        difficulty: Difficulty of the simulation.
+    """
+    if ped_densities is None:
+        ped_densities = [0.01, 0.02, 0.04, 0.08]
     def make_env():
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities

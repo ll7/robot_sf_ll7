@@ -17,7 +17,7 @@ if ! command -v squeue &> /dev/null; then
 fi
 
 # Run squeue command and capture its exit status
-squeue -p "$PARTITION" --start
+squeue -p "$PARTITION" --start -u $USER
 exit_status=$?
 
 # Check if squeue command was successful

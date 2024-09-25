@@ -1,5 +1,8 @@
 from gymnasium import spaces
+from stable_baselines3 import PPO
+
 from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 
 
@@ -20,7 +23,6 @@ def test_can_return_valid_observation():
     assert drive_state_spec.shape == obs[OBS_DRIVE_STATE].shape
     assert lidar_state_spec.shape == obs[OBS_RAYS].shape
 
-
 def test_can_simulate_with_pedestrians():
     total_steps = 1000
     env = RobotEnv()
@@ -29,5 +31,17 @@ def test_can_simulate_with_pedestrians():
         rand_action = env.action_space.sample()
         _, _, terminated, truncated, _ = env.step(rand_action)
         done = terminated or truncated
+        if done:
+            env.reset()
+            
+def test_ego_ped_env():
+    total_steps = 1000
+    robot_model = PPO.load("./model/run_043", env=None)
+    env = PedestrianEnv(robot_model=robot_model)
+    assert env is not None
+    env.reset()
+    for _ in range(total_steps):
+        rand_action = env.action_space.sample()
+        _, _, done, _, _ = env.step(rand_action)
         if done:
             env.reset()

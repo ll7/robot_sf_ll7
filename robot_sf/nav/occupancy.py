@@ -1,13 +1,31 @@
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Optional
 from dataclasses import dataclass
 
 import numpy as np
 import numba
 
+
 Vec2D = Tuple[float, float]
 Circle2D = Tuple[Vec2D, float]
 Line2D = Tuple[Vec2D, Vec2D]
 
+#TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
+
+@numba.njit(fastmath=True)
+def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    """
+    Calculate Euclidean distance between two 2D vectors.
+
+    Parameters:
+    vec_1 (Vec2D): First 2D vector.
+    vec_2 (Vec2D): Second 2D vector.
+
+    Returns:
+    float: Euclidean distance between vec_1 and vec_2.
+    """
+    # Subtract corresponding elements of vectors
+    # Square the results, sum them, and take square root
+    return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
 
 @numba.njit(fastmath=True)
 def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
@@ -90,15 +108,15 @@ class ContinuousOccupancy:
         The width of the occupancy.
     height : float
         The height of the occupancy.
-    get_robot_coords : Callable[[], Vec2D]
-        A function to get the robot coordinates.
+    get_agent_coords : Callable[[], Vec2D]
+        A function to get the agent coordinates.
     get_goal_coords : Callable[[], Vec2D]
         A function to get the goal coordinates.
     get_obstacle_coords : Callable[[], np.ndarray]
         A function to get the obstacle coordinates.
     get_pedestrian_coords : Callable[[], np.ndarray]
         A function to get the pedestrian coordinates.
-    robot_radius : float, optional
+    agent_radius : float, optional
         The robot radius, by default 1.0.
     ped_radius : float, optional
         The pedestrian radius, by default 0.4.
@@ -108,11 +126,11 @@ class ContinuousOccupancy:
 
     width: float
     height: float
-    get_robot_coords: Callable[[], Vec2D]
+    get_agent_coords: Callable[[], Vec2D]
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
-    robot_radius: float=1.0
+    agent_radius: float=1.0
     ped_radius: float=0.4
     goal_radius: float=1.0
 
@@ -150,14 +168,14 @@ class ContinuousOccupancy:
         bool
             True if there is a collision with an obstacle, False otherwise.
         """
-        robot_x, robot_y = self.get_robot_coords()
-        if not self.is_in_bounds(robot_x, robot_y):
+        agent_x, agent_y = self.get_agent_coords()
+        if not self.is_in_bounds(agent_x, agent_y):
             return True
 
-        collision_distance = self.robot_radius
-        circle_robot = ((robot_x, robot_y), collision_distance)
+        collision_distance = self.agent_radius
+        circle_agent = ((agent_x, agent_y), collision_distance)
         for s_x, s_y, e_x, e_y in self.obstacle_coords:
-            if is_circle_line_intersection(circle_robot, ((s_x, s_y), (e_x, e_y))):
+            if is_circle_line_intersection(circle_agent, ((s_x, s_y), (e_x, e_y))):
                 return True
         return False
 
@@ -171,20 +189,13 @@ class ContinuousOccupancy:
         bool
             True if there is a collision with a pedestrian, False otherwise.
         """
-        collision_distance = self.robot_radius
+        collision_distance = self.agent_radius
         ped_radius = self.ped_radius
-        circle_robot = (self.get_robot_coords(), collision_distance)
+        circle_agent = (self.get_agent_coords(), collision_distance)
         for ped_x, ped_y in self.pedestrian_coords:
             circle_ped = ((ped_x, ped_y), ped_radius)
-            if is_circle_circle_intersection(circle_robot, circle_ped):
+            if is_circle_circle_intersection(circle_agent, circle_ped):
                 return True
-        return False
-
-    @property
-    def is_robot_robot_collision(self) -> bool:
-        """
-        ! Not Implemented !
-        """
         return False
 
     @property
@@ -197,14 +208,13 @@ class ContinuousOccupancy:
         bool
             True if the robot is at the goal, False otherwise.
         """
-        robot_circle = (self.get_robot_coords(), self.robot_radius)
+        agent_circle = (self.get_agent_coords(), self.agent_radius)
         goal_circle = (self.get_goal_coords(), self.goal_radius)
-        return is_circle_circle_intersection(robot_circle, goal_circle)
+        return is_circle_circle_intersection(agent_circle, goal_circle)
 
     def is_in_bounds(self, world_x: float, world_y: float) -> bool:
         """
         Checks if a point is within the bounds of the occupancy.
-
         Parameters
         ----------
         world_x : float
@@ -218,3 +228,50 @@ class ContinuousOccupancy:
             True if the point is within the bounds of the occupancy, False otherwise.
         """
         return 0 <= world_x <= self.width and 0 <= world_y <= self.height
+
+
+@dataclass
+class EgoPedContinuousOccupancy(ContinuousOccupancy):
+    get_enemy_coords: Optional[Callable[[], Vec2D]] = None
+    enemy_radius: float=1.0
+
+    @property
+    def enemy_coords(self) -> np.ndarray:
+        """
+        Returns the enemy coordinates.
+
+        Returns
+        -------
+        np.ndarray
+            The enemy coordinates.
+        """
+        return self.get_enemy_coords()
+
+    @property
+    def distance_to_robot(self) -> float:
+        """
+        Gets the euklidean distance to the robot.
+
+        Returns
+        -------
+        float
+            Distance to the robot.
+        """
+        return euclid_dist(self.get_enemy_coords(), self.get_agent_coords())
+
+    @property
+    def is_agent_agent_collision(self) -> bool:
+        """
+        Checks if the agent collided with another agent.
+
+        Returns
+        -------
+        bool
+            True if the agent collided with another agent, False otherwise.
+        """
+        if self.get_enemy_coords is None:
+            return False
+
+        agent_circle = (self.get_agent_coords(), self.agent_radius)
+        enemy_circle = (self.get_enemy_coords(), self.enemy_radius)
+        return is_circle_circle_intersection(agent_circle, enemy_circle)

@@ -2,6 +2,9 @@
 
 # Script to query jobs in a specified SLURM partition
 
+# date and time
+echo "Partion queue at $(date)"
+
 # Default partition name
 PARTITION="epyc-gpu-test"
 

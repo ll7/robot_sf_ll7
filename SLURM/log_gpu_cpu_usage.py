@@ -3,6 +3,7 @@
 import sys
 import psutil
 import GPUtil
+import os
 from loguru import logger
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -16,24 +17,23 @@ from robot_sf.tb_logging import DrivingMetricsCallback
 class LogResourceUsageCallback(BaseCallback):
     """Custom callback to log CPU and GPU usage to TensorBoard."""
 
-    def __init__(self, verbose=0):
-        super(LogResourceUsageCallback, self).__init__(verbose)
-
     def _on_step(self) -> bool:
-        """Log CPU and GPU usage at each step."""
+        """Log CPU and GPU usage and memory utilization at each step."""
         cpu_usage = psutil.cpu_percent()
         gpus = GPUtil.getGPUs()
         gpu_usage = [gpu.load * 100 for gpu in gpus] if gpus else [0]
+        gpu_memory_util = [gpu.memoryUtil * 100 for gpu in gpus] if gpus else [0]
 
         # Log to TensorBoard
         self.logger.record('cpu_usage', cpu_usage)
-        for idx, usage in enumerate(gpu_usage):
+        for idx, (usage, mem_util) in enumerate(zip(gpu_usage, gpu_memory_util)):
             self.logger.record(f'gpu_{idx}_usage', usage)
+            self.logger.record(f'gpu_{idx}_memory_util', mem_util)
 
         return True
 
 def training(
-        n_envs: int = 64,
+        n_envs: int = os.cpu_count(),
         ped_densities: list[float] = None,
         difficulty: int = 2
         ):
@@ -43,6 +43,7 @@ def training(
         ped_densities: List of pedestrian densities to use.
         difficulty: Difficulty of the simulation.
     """
+    logger.info(f"Number of CPUs: {n_envs}")
     if ped_densities is None:
         ped_densities = [0.01, 0.02, 0.04, 0.08]
     def make_env():

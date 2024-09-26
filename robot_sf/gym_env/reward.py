@@ -52,6 +52,10 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
     Parameters:
     meta (dict): Metadata containing information about the pedestrian's current state.
     max_episode_step_discount (float): Discount factor for each step in the episode.
+    ped_coll_penalty (float): Penalty for colliding with a pedestrian.
+    obst_coll_penalty (float): Penalty for colliding with an obstacle.
+    robot_coll_reward (float): Reward for colliding with a robot.
+    robot_at_goal_penalty (float): Penalty if the robot reaches his goal.
 
     Returns:
     float: The calculated reward.
@@ -76,6 +80,7 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
     if meta["is_robot_collision"]:
         reward += robot_coll_reward
 
+    # If the robot has reached its goal, apply penalty
     if meta["is_robot_at_goal"]:
         reward += robot_at_goal_penalty
 

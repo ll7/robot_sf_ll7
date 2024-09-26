@@ -1,7 +1,4 @@
 """Simulate a hardcoded deterministic policy with four actions."""
-import os
-from pathlib import Path
-from math import pi
 
 from stable_baselines3 import PPO
 import loguru

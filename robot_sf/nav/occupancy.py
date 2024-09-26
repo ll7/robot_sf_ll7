@@ -232,6 +232,35 @@ class ContinuousOccupancy:
 
 @dataclass
 class EgoPedContinuousOccupancy(ContinuousOccupancy):
+    """
+    A class, which extends the continuous occupancy for the ego pedestrian.
+
+    Attributes
+    ----------
+    width : float
+        The width of the occupancy.
+    height : float
+        The height of the occupancy.
+    get_agent_coords : Callable[[], Vec2D]
+        A function to get the agent coordinates.
+    get_goal_coords : Callable[[], Vec2D]
+        A function to get the goal coordinates.
+    get_obstacle_coords : Callable[[], np.ndarray]
+        A function to get the obstacle coordinates.
+    get_pedestrian_coords : Callable[[], np.ndarray]
+        A function to get the pedestrian coordinates.
+    agent_radius : float, optional
+        The robot radius, by default 1.0.
+    ped_radius : float, optional
+        The pedestrian radius, by default 0.4.
+    goal_radius : float, optional
+        The goal radius, by default 1.0.
+    get_enemy_coords : Optional[Callable[[], Vec2D]]
+        The coordinates of the opposing agent.
+    enemy_radius : optional, float=1.0
+        The radius of the opposing agent.
+    """
+
     get_enemy_coords: Optional[Callable[[], Vec2D]] = None
     enemy_radius: float=1.0
 

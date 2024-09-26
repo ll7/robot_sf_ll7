@@ -1,6 +1,4 @@
 """Simulate the trained robot and a trained pedestrian."""
-import os
-from pathlib import Path
 
 from stable_baselines3 import PPO
 import loguru

@@ -234,7 +234,7 @@ class SimulationView:
         # static objects
         if self.map_def.obstacles:
             self._draw_obstacles()
-        
+
         # debugging objects
         # if self.map_def.robot_routes:
         #     self._draw_robot_routes()
@@ -296,7 +296,7 @@ class SimulationView:
             ROBOT_COLOR,
             self._scale_tuple(pose[0]),
             self.robot_radius * self.scaling)
-        
+
     def _draw_ego_ped(self, pose: PedPose):
         # TODO: display robot with an image instead of a circle
         pygame.draw.circle(
@@ -468,16 +468,16 @@ class SimulationView:
         for i, text in enumerate(text_lines):
             text_render = self.font.render(text, True, TEXT_COLOR)
             text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
-            
+
             pos = (5, i * self.font.get_linesize() + 5)
-            
+
             # Draw text outline
             for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
                 text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
-            
+
             # Draw main text
             text_surface.blit(text_render, pos)
-        
+
         self.screen.blit(text_surface, self._timestep_text_pos)
 
     def _add_help_text(self):
@@ -496,7 +496,6 @@ class SimulationView:
 
         # Determine max width of the text
         text_surface = self.font.render(text_lines[1], False, TEXT_COLOR)
-        width = text_surface.get_width() + 10
 
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()
@@ -506,13 +505,13 @@ class SimulationView:
         for i, text in enumerate(text_lines):
             text_render = self.font.render(text, True, TEXT_COLOR)
             text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
-            
+
             pos = (5, i * self.font.get_linesize() + 5)
-            
+
             # Draw text outline
             for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
                 text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
-            
+
             # Draw main text
             text_surface.blit(text_render, pos)
 

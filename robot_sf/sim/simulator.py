@@ -177,6 +177,13 @@ def init_simulators(
 
 @dataclass
 class PedSimulator(Simulator):
+    """
+    A pedestrian simulator, whic extends the base simulator.
+
+    Args:
+        ego_ped (UnicycleDrivePedestrian): The ego pedestrian in the environment.
+
+    """
     ego_ped: UnicycleDrivePedestrian
 
     @property
@@ -246,7 +253,7 @@ class PedSimulator(Simulator):
 
     def is_obstacle_collision(self, x: float, y: float) -> bool:
         """
-        TODO: copy from occupancy.py
+        TODO: this method is copied from occupancy.py
         """
         if not (0 <= x <= self.map_def.width and 0 <= y <= self.map_def.height):
             return True

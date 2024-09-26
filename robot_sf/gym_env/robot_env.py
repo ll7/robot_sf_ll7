@@ -259,7 +259,9 @@ class RobotEnv(Env):
         """
         if filename is None:
             now = datetime.datetime.now()
-            filename = f'recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+            # get current working directory
+            cwd = os.getcwd()
+            filename = f'{cwd}/recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
 
         # only save if there are recorded states
         if len(self.recorded_states) == 0:

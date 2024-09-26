@@ -7,7 +7,7 @@ from robot_sf.eval import EnvMetrics, VecEnvMetrics, PedEnvMetrics, PedVecEnvMet
 
 class BaseMetricsCallback(BaseCallback):
     def __init__(self):
-        super(BaseMetricsCallback, self).__init__()
+        super().__init__()
         self.writer: Optional[SummaryWriter] = None
         self._log_freq = 1000  # log every 1000 calls
 
@@ -36,7 +36,7 @@ class BaseMetricsCallback(BaseCallback):
 class DrivingMetricsCallback(BaseMetricsCallback):
 
     def __init__(self, num_envs: int):
-        super(DrivingMetricsCallback, self).__init__()
+        super().__init__()
         self.metrics = VecEnvMetrics([EnvMetrics() for _ in range(num_envs)])
 
     def _on_step(self) -> bool:
@@ -60,7 +60,7 @@ class DrivingMetricsCallback(BaseMetricsCallback):
 class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
 
     def __init__(self, num_envs: int):
-        super(AdversialPedestrianMetricsCallback, self).__init__()
+        super().__init__()
         self.metrics = PedVecEnvMetrics([PedEnvMetrics() for _ in range(num_envs)])
 
     def _on_step(self) -> bool:

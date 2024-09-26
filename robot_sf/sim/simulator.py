@@ -202,7 +202,7 @@ class PedSimulator(Simulator):
         # Ego_pedestrian reset
         robot_spawn = self.robot_pos[0]
         ped_spawn = self.get_proximity_point(robot_spawn, 10, 15)
-        self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1])) # TODO: Check if this is correct
+        self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
     def step_once(self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]):
         for behavior in self.peds_behaviors:

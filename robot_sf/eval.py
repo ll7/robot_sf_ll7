@@ -119,23 +119,23 @@ class VecEnvMetrics:
 
     @property
     def route_completion_rate(self) -> float:
-        return sum([m.route_completion_rate for m in self.metrics]) / len(self.metrics)
+        return sum(m.route_completion_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def interm_goal_completion_rate(self) -> float:
-        return sum([m.interm_goal_completion_rate for m in self.metrics]) / len(self.metrics)
+        return sum(m.interm_goal_completion_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def timeout_rate(self) -> float:
-        return sum([m.timeout_rate for m in self.metrics]) / len(self.metrics)
+        return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def obstacle_collision_rate(self) -> float:
-        return sum([m.obstacle_collision_rate for m in self.metrics]) / len(self.metrics)
+        return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def pedestrian_collision_rate(self) -> float:
-        return sum([m.pedestrian_collision_rate for m in self.metrics]) / len(self.metrics)
+        return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     def update(self, metas: List[dict]):
         for metric, meta in zip(self.metrics, metas):
@@ -171,11 +171,11 @@ class PedEnvMetrics:
     @property
     def robot_at_goal(self) -> int:
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
-    
+
     @property
     def robot_obstacle_collisions(self) -> int:
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_OBSTACLE_COLLISION])
-    
+
     @property
     def robot_pedestrian_collisions(self) -> int:
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION])
@@ -199,11 +199,11 @@ class PedEnvMetrics:
     @property
     def robot_at_goal_rate(self) -> float:
         return self.robot_at_goal / self.total_routes
-    
+
     @property
     def robot_obstacle_collision_rate(self) -> float:
         return self.robot_obstacle_collisions / self.total_routes
-    
+
     @property
     def robot_pedestrian_collision_rate(self) -> float:
         return self.robot_pedestrian_collisions / self.total_routes

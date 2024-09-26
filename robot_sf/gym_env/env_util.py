@@ -96,7 +96,8 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
         A tuple containing the action space, the extended observation space, and
         the original observation space of the robot.
     """
-    action_space, obs_space, orig_obs_space = create_spaces(env_config, map_def, agent_type=AgentType.ROBOT)
+    action_space, obs_space, orig_obs_space = \
+        create_spaces(env_config, map_def, agent_type=AgentType.ROBOT)
     # Return the action space, the extended observation space, and the original
     # observation space
     return action_space, obs_space, orig_obs_space
@@ -150,11 +151,14 @@ def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
         A tuple containing a list of action space, the extended observation space, and
         the original observation space of the robot and the pedestrian.
     """
-    action_space_robot, obs_space_robot, orig_obs_space_robot = create_spaces(env_config, map_def, agent_type=AgentType.ROBOT)
-    action_space_ped, obs_space_ped, orig_obs_space_ped = create_spaces(env_config, map_def, agent_type=AgentType.PEDESTRIAN)
+    action_space_robot, obs_space_robot, orig_obs_space_robot = \
+        create_spaces(env_config, map_def, agent_type=AgentType.ROBOT)
+    action_space_ped, obs_space_ped, orig_obs_space_ped = \
+        create_spaces(env_config, map_def, agent_type=AgentType.PEDESTRIAN)
 
     # As a list [robot, pedestrian]
-    return [action_space_robot, action_space_ped], [obs_space_robot, obs_space_ped], [orig_obs_space_robot, orig_obs_space_ped]
+    return [action_space_robot, action_space_ped], \
+        [obs_space_robot, obs_space_ped], [orig_obs_space_robot, orig_obs_space_ped]
 
 
 def init_ped_collision_and_sensors(
@@ -192,8 +196,9 @@ def init_ped_collision_and_sensors(
     occupancies.append(ContinuousOccupancy(
             sim.map_def.width, sim.map_def.height,
             lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], 
-            lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))), # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
+            lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
+            lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
+            # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
             robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
@@ -220,7 +225,7 @@ def init_ped_collision_and_sensors(
     ray_sensor = lambda: lidar_ray_scan(
         sim.ego_ped.pose, occupancies[1], lidar_config)[0]
     target_sensor = lambda: target_sensor_obs(
-        sim.ego_ped.pose, sim.ego_ped_goal_pos, sim.ego_ped_goal_pos) # TODO: What next goal to choose?
+        sim.ego_ped.pose, sim.ego_ped_goal_pos, None) # TODO: What next goal to choose?
     speed_sensor = lambda: sim.ego_ped.current_speed
 
     sensor_fusions.append(SensorFusion(

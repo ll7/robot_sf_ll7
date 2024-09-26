@@ -40,11 +40,11 @@ def simple_reward(
         reward += reach_waypoint_reward
 
     return reward
-  
+
 def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
                       ped_coll_penalty: float=-5,
-                      obst_coll_penalty: float=-2,
-                      robot_coll_reward: float=1,
+                      obst_coll_penalty: float=-5,
+                      robot_coll_reward: float=5,
                       robot_at_goal_penalty: float= -1) -> float:
     """
     Calculate the reward for the pedestrian's current state.
@@ -80,7 +80,7 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
         reward += robot_at_goal_penalty
 
     return reward
-  
+
 def punish_action_reward(
         meta: dict,
         max_episode_step_discount: float=-0.1,

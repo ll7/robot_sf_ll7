@@ -67,7 +67,7 @@ class MapDefinition:
         obstacle_lines = [line for obstacle in self.obstacles for line in obstacle.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
-        self.robot_routes_by_spawn_id = dict()
+        self.robot_routes_by_spawn_id = {}
         for route in self.robot_routes:
             if route.spawn_id in self.robot_routes_by_spawn_id:
                 self.robot_routes_by_spawn_id[route.spawn_id].append(route)
@@ -97,7 +97,7 @@ class MapDefinition:
         """
         Returns the number of start positions as an integer.
         """
-        return len(set([r.spawn_id for r in self.robot_routes]))
+        return len({r.spawn_id for r in self.robot_routes})
 
     @property
     def max_target_dist(self) -> float:

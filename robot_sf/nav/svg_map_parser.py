@@ -233,7 +233,8 @@ class SvgMapConverter:
                         spawn_id=spawn,
                         goal_id=goal,
                         waypoints=vertices,
-                        spawn_zone=robot_spawn_zones[spawn] if robot_spawn_zones else (vertices[0],0,0),
+                        spawn_zone= \
+                            robot_spawn_zones[spawn] if robot_spawn_zones else (vertices[0],0,0),
                         goal_zone=robot_goal_zones[goal] if robot_goal_zones else (vertices[-1],0,0)
                     ))
 

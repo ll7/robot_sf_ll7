@@ -1,5 +1,5 @@
 """
-`PedestrianState`: A data class that represents the state of a pedestrian in the simulation environment.
+`PedestrianState`: A data class representing the state of a pedestrian in the simulation environment
 It includes information about occupancy (for collision detection),
 sensor fusion, and simulation time. It also tracks various conditions such as collision states,
 timeout condition, simulation time elapsed, and timestep count.
@@ -62,12 +62,13 @@ class PedestrianState:
         timed out, or collided with any object or other robots.
         """
         return (self.is_timeout or self.is_collision_with_robot or
-                self.is_collision_with_ped or self.is_collision_with_obst or self.is_robot_at_goal or
-                self.is_collision_robot_with_obstacle or self.is_collision_robot_with_pedestrian)
+                self.is_collision_with_ped or self.is_collision_with_obst or
+                self.is_robot_at_goal or self.is_collision_robot_with_obstacle or
+                self.is_collision_robot_with_pedestrian)
 
     def reset(self):
         """
-        Resets the pedestrian's state for a new simulation episode, incrementing the episode counter,
+        Resets the pedestrians state for a new simulation episode, incrementing the episode counter,
         resetting the timestep and elapsed time, clearing collision and goal flags, and refreshing
         sensor data for the initial observation.
         """

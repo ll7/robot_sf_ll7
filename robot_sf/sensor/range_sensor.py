@@ -170,7 +170,7 @@ class LidarScannerSettings:
             raise ValueError("Max. scan distance mustn't be negative or zero!")
         if self.num_rays <= 0:
             raise ValueError("Amount of LiDAR rays mustn't be negative or zero!")
-        if any([not 0 <= prob <= 1 for prob in self.scan_noise]):
+        if any(not 0 <= prob <= 1 for prob in self.scan_noise):
             raise ValueError("Scan noise probabilities must be within [0, 1]!")
 
         self.angle_opening = (-np.pi * self.visual_angle_portion, np.pi * self.visual_angle_portion)
@@ -283,7 +283,8 @@ def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
 
     # As Pedestrian detect the Robot
     if enemy_pos is not None:
-        raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, enemy_pos, enemy_radius, ray_angles)
+        raycast_pedestrians(out_ranges, scanner_pos, max_scan_range,
+                            enemy_pos, enemy_radius, ray_angles)
     # TODO: add raycast for other robots
     return out_ranges
 

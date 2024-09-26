@@ -100,9 +100,11 @@ def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
     Parameters
     ----------
     v_1 : Vec2D
-        The first 2D vector. This is a tuple or list of two numbers representing the x and y coordinates.
+        The first 2D vector. This is a tuple or list of two numbers representing 
+        the x and y coordinates.
     v_2 : Vec2D
-        The second 2D vector. This is a tuple or list of two numbers representing the x and y coordinates.
+        The second 2D vector. This is a tuple or list of two numbers representing 
+        the x and y coordinates.
 
     Returns
     -------

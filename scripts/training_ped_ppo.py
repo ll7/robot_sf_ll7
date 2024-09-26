@@ -20,7 +20,7 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 logger = loguru.logger
 
 def training(svg_map_path: str):
-    n_envs = 16
+    n_envs = 20
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
@@ -57,7 +57,7 @@ def training(svg_map_path: str):
         )
 
     model.learn(
-        total_timesteps=600_000,
+        total_timesteps=10_000_000,
         progress_bar=True,
         callback=combined_callback
         )
@@ -68,6 +68,6 @@ def training(svg_map_path: str):
 
 
 if __name__ == '__main__':
-    svg_map = "maps/svg_maps/debug_05.svg"
+    SVG_MAP = "maps/svg_maps/debug_06.svg"
 
-    training(svg_map)
+    training(SVG_MAP)

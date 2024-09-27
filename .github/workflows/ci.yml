@@ -12,13 +12,13 @@ jobs:
     steps:
       # clone the source code containing the package version generation script
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@main
         with:
           submodules: true
 
       # make sure python is set up properly
       - name: Install Python (with dependencies)
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@main
         with:
           python-version: '3.10'
 

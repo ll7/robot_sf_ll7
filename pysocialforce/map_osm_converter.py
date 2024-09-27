@@ -32,7 +32,8 @@ def extract_buildings_as_obstacle(
     root = tree.getroot()
 
     # The scale factor applied during the export
-    scale_factor = map_scale_factor / 1350 * 1 / 4.08  # TODO: Replace this with the actual scale factor
+    # TODO: Replace this with the actual scale factor
+    scale_factor = map_scale_factor / 1350 * 1 / 4.08
     logger.debug("Scale factor: %s", scale_factor)
 
     # Identify all elements with the specified color

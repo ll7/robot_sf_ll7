@@ -10,9 +10,9 @@ def test_can_simulate_with_empty_map_no_peds():
 
 def test_can_simulate_with_populated_map():
     obstacle01 = pysf.map_config.Obstacle(
-        [(10, 10), (15,10), (15, 15), (10, 15)])
+        [(10, 10), (15, 10), (15, 15), (10, 15)])
     obstacle02 = pysf.map_config.Obstacle(
-        [(20, 10), (25,10), (25, 15), (20, 15)])
+        [(20, 10), (25, 10), (25, 15), (20, 15)])
 
     route01 = pysf.map_config.GlobalRoute(
         [(0, 0), (10, 10), (20, 10), (30, 0)])

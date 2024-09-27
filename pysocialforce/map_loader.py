@@ -8,6 +8,7 @@ from pysocialforce.map_config import MapDefinition, GlobalRoute, Obstacle
 # Configure logger
 logger = logging.getLogger(__name__)
 
+
 def load_map(file_path: str) -> MapDefinition:
     """Load map data from the given file path."""
 

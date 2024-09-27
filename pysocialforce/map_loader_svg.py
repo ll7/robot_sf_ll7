@@ -8,10 +8,11 @@ from pysocialforce.map_config import MapDefinition, Obstacle, GlobalRoute, Zone
 
 logger = logging.getLogger(__name__)
 
+
 def svg_path_info(svg_file):
     """
     Extracts path information from an SVG file.
-    
+
     returns a list of dictionaries, each containing the following keys:
     - 'coordinates': a numpy array of shape (n, 2) containing the x and y coordinates
     - 'label': the 'inkscape:label' attribute of the path
@@ -27,7 +28,7 @@ def svg_path_info(svg_file):
     namespaces = {
         'svg': 'http://www.w3.org/2000/svg',
         'inkscape': 'http://www.inkscape.org/namespaces/inkscape'
-    }
+        }
 
     # Find all 'path' elements in the SVG file
     paths = svg_root.findall('.//svg:path', namespaces)
@@ -62,6 +63,7 @@ def svg_path_info(svg_file):
 
     return path_info
 
+
 def path_info_to_mapdefintion(path_info):
     """
     Convert the path information to a MapDefinition object.
@@ -81,7 +83,7 @@ def path_info_to_mapdefintion(path_info):
         if path['label'] == 'obstacle':
             # Convert the coordinates to a list of vertices
             vertices = path['coordinates'].tolist()
-            
+
             # Check if the first and last verices are the same
             if not np.array_equal(vertices[0], vertices[-1]):
                 logger.warning(
@@ -102,7 +104,6 @@ def path_info_to_mapdefintion(path_info):
 
             # Append the obstacle to the list
             routes.append(GlobalRoute(vertices))
-
 
         elif path['label'] == 'crowded_zone':
             # Convert the coordinates to a list of vertices

@@ -11,7 +11,7 @@ from pysocialforce.ped_behavior import \
 PedState = np.ndarray
 PedGrouping = Set[int]
 Vec2D = Tuple[float, float]
-Zone = Tuple[Vec2D, Vec2D, Vec2D] # rect ABC with sides |A B|, |B C| and diagonal |A C|
+Zone = Tuple[Vec2D, Vec2D, Vec2D]  # rect ABC with sides |A B|, |B C| and diagonal |A C|
 ZoneAssignments = Dict[int, int]
 
 
@@ -21,8 +21,8 @@ class PedSpawnConfig:
     Configuration class for pedestrian spawning.
     """
 
-    peds_per_area_m2: float=0.04
-    max_group_members: int=5
+    peds_per_area_m2: float = 0.04
+    max_group_members: int = 5
     group_member_probs: List[float] = field(default_factory=list)
     initial_speed: float = 0.5
     group_size_decay: float = 0.3
@@ -54,17 +54,18 @@ def sample_group_spawn_on_route(
     Returns:
         Tuple[List[Vec2D], int]: A tuple containing a list of sampled points and the section ID of the sampled point.
     """
-    
+
     sampled_offset = np.random.uniform(0, route.total_length)
-    sec_id = next(iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1)
+    sec_id = next(
+        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1)
     sec_offset = sampled_offset - route.section_offsets[sec_id]
     sec_len = route.section_lengths[sec_id]
 
     start, end = route.sections[sec_id]
-    add_vecs = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
-    sub_vecs = lambda v1, v2: (v1[0] - v2[0], v1[1] - v2[1])
-    scale_vec = lambda v, f: (v[0] * f, v[1] * f)
-    clip_spread = lambda v: np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
+    def add_vecs(v1, v2): return (v1[0] + v2[0], v1[1] + v2[1])
+    def sub_vecs(v1, v2): return (v1[0] - v2[0], v1[1] - v2[1])
+    def scale_vec(v, f): return (v[0] * f, v[1] * f)
+    def clip_spread(v): return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
     center = add_vecs(start, scale_vec(sub_vecs(end, start), sec_offset / sec_len))
     std_dev = sidewalk_width / 4
 
@@ -129,7 +130,8 @@ class RoutePointsGenerator:
 
     def generate(self, num_samples: int) -> Tuple[List[Vec2D], int, int]:
         route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
-        spawn_pos, sec_id = sample_group_spawn_on_route(self.routes[route_id], num_samples, self.sidewalk_width)
+        spawn_pos, sec_id = sample_group_spawn_on_route(
+            self.routes[route_id], num_samples, self.sidewalk_width)
         return spawn_pos, route_id, sec_id
 
 
@@ -229,9 +231,9 @@ def populate_crowded_zones(config: PedSpawnConfig, crowded_zones: List[Zone]) \
 
 
 def populate_simulation(
-        tau: float, spawn_config: PedSpawnConfig,
-        ped_routes: List[GlobalRoute], ped_crowded_zones: List[Zone]
-    ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
+    tau: float, spawn_config: PedSpawnConfig,
+    ped_routes: List[GlobalRoute], ped_crowded_zones: List[Zone]
+        ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
     """
     Populates the simulation with pedestrians based on the given parameters.
 

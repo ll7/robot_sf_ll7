@@ -12,10 +12,11 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+
 def extract_buildings_as_obstacle(
         map_full_name,
-        building_rgb_color_str:str = 'rgb(85.098039%,81.568627%,78.823529%)',
-        map_scale_factor:float = 5000):
+        building_rgb_color_str: str = 'rgb(85.098039%,81.568627%,78.823529%)',
+        map_scale_factor: float = 5000):
     """
     Extracts the buildings from the SVG file and saves them to a new SVG file.
     Args:
@@ -31,7 +32,7 @@ def extract_buildings_as_obstacle(
     root = tree.getroot()
 
     # The scale factor applied during the export
-    scale_factor =  map_scale_factor/1350 * 1/4.08 # TODO: Replace this with the actual scale factor
+    scale_factor = map_scale_factor / 1350 * 1 / 4.08  # TODO: Replace this with the actual scale factor
     logger.debug("Scale factor: %s", scale_factor)
 
     # Identify all elements with the specified color
@@ -39,12 +40,11 @@ def extract_buildings_as_obstacle(
     elements = []
     # Iterate over all elements in the root object
     for elem in root.iter():
-    # Check if the element has a 'style' attribute and if the 'style' attribute
-    # contains the building_rgb_color_str
+        # Check if the element has a 'style' attribute and if the 'style' attribute
+        # contains the building_rgb_color_str
         if 'style' in elem.attrib and building_rgb_color_str in elem.attrib['style']:
-        # If the condition is met, add the element to the list
+            # If the condition is met, add the element to the list
             elements.append(elem)
-
 
     # Create a new SVG file with just the elements
     new_root = ET.Element('svg', xmlns="http://www.w3.org/2000/svg")
@@ -60,7 +60,7 @@ def extract_buildings_as_obstacle(
         new_root.attrib['viewBox'] = ' '.join(map(str, viewbox))
 
     for elem in elements:
-    # Check if the element is a path
+        # Check if the element is a path
         if elem.tag.endswith('path'):
             # Parse the d attribute
             d = elem.attrib['d']
@@ -86,6 +86,7 @@ def extract_buildings_as_obstacle(
 
     return new_root
 
+
 def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
     """
     Adds a scale bar to the root element of an SVG image.
@@ -106,7 +107,7 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
         color = "rgb(0,0,0)" if (i // line_length) % 2 == 0 else "rgb(100%,100%,100%)"
         ET.SubElement(
             root,
-            'line', 
+            'line',
             x1=str(i),
             y1="10",
             x2=str(i + line_length),
@@ -118,6 +119,7 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
     scale_text.text = str(line_length) + " m"
 
     return root
+
 
 def save_root_as_svg(root: ET.Element, filename: str, add_conversion_time: bool = False):
     """

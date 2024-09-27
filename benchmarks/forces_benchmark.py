@@ -22,7 +22,7 @@ class SimSettings:
     sim_steps: int
     num_peds: int
     num_groups: float
-    group_cov: List[List[float]] # shape (2, 2)
+    group_cov: List[List[float]]  # shape (2, 2)
     num_obstacles: int
 
     def sample(self) -> SimConfig:

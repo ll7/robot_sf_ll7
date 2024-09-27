@@ -24,7 +24,14 @@ def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D
 def test_scanner_detects_single_pedestrian():
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
-    occupancy = ContinuousOccupancy(10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians)
+    occupancy = ContinuousOccupancy(
+        10,
+        10,
+        lambda: None,
+        lambda: None,
+        lambda: np.array([[]]),
+        lambda: pedestrians,
+    )
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scan, _ = lidar_ray_scan(((0, 0), pi), occupancy, settings)

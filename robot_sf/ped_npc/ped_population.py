@@ -197,7 +197,7 @@ class RoutePointsGenerator:
         Returns:
             The sum of lengths of all routes.
         """
-        return sum([r.total_length for r in self.routes])
+        return sum(r.total_length for r in self.routes)
 
     @property
     def total_sidewalks_area(self) -> float:
@@ -224,8 +224,6 @@ class RoutePointsGenerator:
         """
         # Randomly select a route based on the calculated probabilities
         route_id = np.random.choice(len(self.routes), size=1, p=self._route_probs)[0]
-        # TODO: Fix the typo in the line above. It should be `self._route_probs` instead of `self._zone_probs`
-        # TODO: write tests and check what this could change.
 
         # Generate sample points using a function `sample_route`
         spawn_pos, sec_id = sample_route(self.routes[route_id], num_samples, self.sidewalk_width)
@@ -260,7 +258,7 @@ def populate_ped_routes(
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
     # Dictionary to hold assignments of groups to routes
-    route_assignments = dict()
+    route_assignments = {}
     # List to track the initial sections for each group
     initial_sections = []
 
@@ -304,7 +302,7 @@ def populate_crowded_zones(config: PedSpawnConfig, crowded_zones: List[Zone]) \
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
-    zone_assignments = dict()
+    zone_assignments = {}
 
     while num_unassigned_peds > 0:
         probs = config.group_member_probs

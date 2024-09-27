@@ -89,6 +89,7 @@ def ped_robot_force(
             out_forces[i] = potential_field_force(distance, dx_dist, dy_dist)
 
 
+#TODO: REFACTOR TO UTILS FILE -> euclid_dist is defined in range_sensor.py
 @numba.njit(fastmath=True)
 def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
     """
@@ -99,9 +100,11 @@ def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
     Parameters
     ----------
     v_1 : Vec2D
-        The first 2D vector. This is a tuple or list of two numbers representing the x and y coordinates.
+        The first 2D vector. This is a tuple or list of two numbers representing 
+        the x and y coordinates.
     v_2 : Vec2D
-        The second 2D vector. This is a tuple or list of two numbers representing the x and y coordinates.
+        The second 2D vector. This is a tuple or list of two numbers representing 
+        the x and y coordinates.
 
     Returns
     -------

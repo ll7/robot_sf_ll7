@@ -1,5 +1,5 @@
 """get a labled svg map and parse it to a map definition object"""
-from typing import List
+from typing import List, Tuple
 import xml.etree.ElementTree as ET
 import re
 import numpy as np
@@ -209,14 +209,7 @@ class SvgMapConverter:
                 # Convert the coordinates to a list of vertices
                 vertices = path.coordinates.tolist()
 
-                # ped_routes have a label of the form 'ped_route_<spawn>_<goal>'
-                numbers = re.findall(r'\d+', path.label)
-                if numbers:
-                    spawn = int(numbers[0])
-                    goal = int(numbers[1])
-                else:
-                    spawn = 0
-                    goal = 0
+                spawn, goal = self.__get_path_number(path.label)
 
                 # Append the obstacle to the list
                 ped_routes.append(
@@ -228,20 +221,22 @@ class SvgMapConverter:
                         goal_zone=ped_goal_zones[goal] if ped_goal_zones else (vertices[-1],0,0)
                     ))
 
-            elif path.label == 'robot_route':
+            elif 'robot_route' in path.label:
                 # Convert the coordinates to a list of vertices
                 vertices = path.coordinates.tolist()
+
+                spawn, goal = self.__get_path_number(path.label)
 
                 # Append the obstacle to the list
                 robot_routes.append(
                     GlobalRoute(
-                        spawn_id=0, # TODO: What is this? value is arbitrary
-                        goal_id=0, # TODO: What is this? value is arbitrary
+                        spawn_id=spawn,
+                        goal_id=goal,
                         waypoints=vertices,
-                        spawn_zone=(vertices[0], 0, 0), # TODO
-                        goal_zone=(vertices[-1], 0, 0) # TODO
+                        spawn_zone= \
+                            robot_spawn_zones[spawn] if robot_spawn_zones else (vertices[0],0,0),
+                        goal_zone=robot_goal_zones[goal] if robot_goal_zones else (vertices[-1],0,0)
                     ))
-
 
             elif path.label == 'crowded_zone': # TODO: remove this
                 # Crowded Zones should be rectangles?
@@ -279,6 +274,29 @@ class SvgMapConverter:
             ped_routes
         )
 
-
     def get_map_definition(self) -> MapDefinition:
         return self.map_definition
+
+    def __get_path_number(self, route: str) -> Tuple[int, int]:
+         # routes have a label of the form 'ped_route_<spawn>_<goal>'
+        numbers = re.findall(r'\d+', route)
+        if numbers:
+            spawn = int(numbers[0])
+            goal = int(numbers[1])
+        else:
+            spawn = 0
+            goal = 0
+        return spawn, goal
+
+def convert_map(svg_file: str):
+    """Create MapDefinition from svg file."""
+
+    logger.info("Converting SVG map to MapDefinition object.")
+    logger.info(f"SVG file: {svg_file}")
+
+    try:
+        converter = SvgMapConverter(svg_file)
+        return converter.map_definition
+    except Exception as e:
+        logger.error(f"Error converting SVG file: {e}")
+        return None

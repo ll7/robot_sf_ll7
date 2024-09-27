@@ -1,7 +1,7 @@
 """
 `pedestrian_env.py` is a module that defines the simulation environment for a pedestrian.
-It includes classes and protocols for defining the pedetsrians's state, actions, and 
-observations within the environment. 
+It includes classes and protocols for defining the pedetsrians's state, actions, and
+observations within the environment.
 
 `PedestrianEnv`: A class that represents the pedestrian's environment. It inherits from `Env`
 from the `gymnasium` library, which is a base class for environments that operate over
@@ -51,7 +51,7 @@ class PedestrianEnv(Env):
             self,
             env_config: PedEnvSettings = None,
             reward_func: Callable[[dict], float] = simple_ped_reward,
-            robot_model = None,
+            robot_model=None,
             debug: bool = False,
             recording_enabled: bool = False
             ):
@@ -62,7 +62,7 @@ class PedestrianEnv(Env):
         - env_config (PedEnvSettings): Configuration for environment settings.
         - reward_func (Callable[[dict], float]): Reward function that takes
             a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as 
+        - debug (bool): If True, enables debugging information such as
             visualizations.
         - recording_enabled (bool): If True, enables recording of the simulation
         """
@@ -119,8 +119,8 @@ class PedestrianEnv(Env):
 
         # Setup initial state of the pedestrian
         self.ped_state = PedestrianState(
-            occupancies[0], # robot occupancy
-            occupancies[1], # ego_ped occupancy
+            occupancies[0],  # robot occupancy
+            occupancies[1],  # ego_ped occupancy
             sensors[1],
             d_t,
             max_ep_time)
@@ -136,7 +136,6 @@ class PedestrianEnv(Env):
 
         # Store last action executed by the pedestrian
         self.last_action_ped = None
-
 
         # If in debug mode, create a simulation view to visualize the state
         if debug:
@@ -205,7 +204,7 @@ class PedestrianEnv(Env):
         Returns:
         - obs: The initial observation after resetting the environment.
         """
-        super().reset(seed=seed,options=options)
+        super().reset(seed=seed, options=options)
         # Reset internal simulator state
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
@@ -303,7 +302,7 @@ class PedestrianEnv(Env):
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-        with open(filename, 'wb') as f: # write binary
+        with open(filename, 'wb') as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")

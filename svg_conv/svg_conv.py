@@ -16,10 +16,10 @@ def paths_of_svg(svg: SVG) -> List[Path]:
 
 def filter_paths_by_color(paths: List[Path], color: ColorRGB) -> List[Path]:
     red, green, blue = color
-    paths = [e for e in paths \
-             if e.fill.red == red \
-                and e.fill.green == green \
-                and e.fill.blue == blue]
+    paths = [e for e in paths
+             if e.fill.red == red
+             and e.fill.green == green
+             and e.fill.blue == blue]
     return paths
 
 
@@ -41,7 +41,7 @@ def serialize_mapjson(poly_points: List[List[Vec2D]]) -> str:
         'obstacles': obstacles,
         'x_margin': x_margin,
         'y_margin': y_margin
-    }
+        }
 
     return json.dumps(map_obj)
 
@@ -74,8 +74,8 @@ your own use case."""
 
 
 def main():
-    file_exists = lambda path: os.path.exists(path) and os.path.isfile(path)
-    has_fileext = lambda path, ext: "." + path.split(".")[-1] == ext
+    def file_exists(path): return os.path.exists(path) and os.path.isfile(path)
+    def has_fileext(path, ext): return "." + path.split(".")[-1] == ext
     if len(sys.argv) == 3 and file_exists(sys.argv[1]) \
             and has_fileext(sys.argv[1], ".svg") and has_fileext(sys.argv[2], ".json"):
         convert_map(input_svg_file=sys.argv[1], output_json_file=sys.argv[2])

@@ -15,9 +15,11 @@ from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion
 from robot_sf.sim.simulator import Simulator, PedSimulator
 
+
 class AgentType(Enum):
     ROBOT = 1
     PEDESTRIAN = 2
+
 
 def init_collision_and_sensors(
         sim: Simulator,
@@ -48,21 +50,22 @@ def init_collision_and_sensors(
 
     # Initialize occupancy objects for each robot for collision detection
     occupancies = [ContinuousOccupancy(
-            sim.map_def.width, sim.map_def.height,
-            lambda: sim.robot_pos[i], lambda: sim.goal_pos[i],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
-            robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
+        sim.map_def.width, sim.map_def.height,
+        lambda: sim.robot_pos[i], lambda: sim.goal_pos[i],
+        lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
+        robot_config.radius, sim_config.ped_radius, sim_config.goal_radius)
         for i in range(num_robots)]
 
     # Initialize sensor fusion objects for each robot for sensor data handling
     sensor_fusions: List[SensorFusion] = []
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
-        ray_sensor = lambda r_id=r_id: lidar_ray_scan(
+        def ray_sensor(r_id=r_id): return lidar_ray_scan(
             sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
-        target_sensor = lambda r_id=r_id: target_sensor_obs(
+        def target_sensor(r_id=r_id): return target_sensor_obs(
             sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
-        speed_sensor = lambda r_id=r_id: sim.robots[r_id].current_speed
+
+        def speed_sensor(r_id=r_id): return sim.robots[r_id].current_speed
 
         # Create the sensor fusion object and add it to the list
         sensor_fusions.append(SensorFusion(
@@ -102,6 +105,7 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
     # observation space
     return action_space, obs_space, orig_obs_space
 
+
 def create_spaces(env_config: Union[EnvSettings, PedEnvSettings], map_def: MapDefinition,
                   agent_type: AgentType = AgentType.ROBOT):
     # Create a agent using the factory method in the environment configuration
@@ -111,7 +115,6 @@ def create_spaces(env_config: Union[EnvSettings, PedEnvSettings], map_def: MapDe
         agent = env_config.pedestrian_factory()
     else:
         raise ValueError(f"Unsupported agent type: {agent_type}")
-
 
     # Get the action space from the agent
     action_space = agent.action_space
@@ -126,6 +129,7 @@ def create_spaces(env_config: Union[EnvSettings, PedEnvSettings], map_def: MapDe
             env_config.lidar_config.max_scan_dist)
         )
     return action_space, observation_space, orig_obs_space
+
 
 def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
     """
@@ -189,24 +193,25 @@ def init_ped_collision_and_sensors(
     lidar_config = env_config.lidar_config
     ego_ped_config = env_config.ego_ped_config
 
-    occupancies: List[Union[ContinuousOccupancy,EgoPedContinuousOccupancy]] = []
+    occupancies: List[Union[ContinuousOccupancy, EgoPedContinuousOccupancy]] = []
     sensor_fusions: List[SensorFusion] = []
 
     # Initialize a occupancy object for the robot for collision detection
     occupancies.append(ContinuousOccupancy(
-            sim.map_def.width, sim.map_def.height,
-            lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
-            lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
-            # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
-            robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
+        sim.map_def.width, sim.map_def.height,
+        lambda: sim.robot_pos[0], lambda: sim.goal_pos[0],
+        lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
+        lambda: np.vstack((sim.ped_pos, np.array([sim.ego_ped_pos]))),
+        # Add ego pedestrian to pedestrian positions, np.vstack might lead to performance issues
+        robot_config.radius, sim_config.ped_radius, sim_config.goal_radius))
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
-    ray_sensor = lambda r_id=0: lidar_ray_scan(
+    def ray_sensor(r_id=0): return lidar_ray_scan(
         sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
-    target_sensor = lambda r_id=0: target_sensor_obs(
+    def target_sensor(r_id=0): return target_sensor_obs(
         sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
-    speed_sensor = lambda r_id=0: sim.robots[r_id].current_speed
+
+    def speed_sensor(r_id=0): return sim.robots[r_id].current_speed
 
     # Initialize a sensor fusion object for the robot for sensor data handling
     sensor_fusions.append(SensorFusion(
@@ -215,22 +220,23 @@ def init_ped_collision_and_sensors(
 
     # Initalize occupancy and sensor fusion for the ego pedestrian
     occupancies.append(EgoPedContinuousOccupancy(
-            sim.map_def.width, sim.map_def.height,
-            lambda: sim.ego_ped_pos, lambda: sim.ego_ped_goal_pos,
-            lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
-            ego_ped_config.radius, sim_config.ped_radius,
-            sim_config.goal_radius,
-            lambda: sim.robot_pos[0], robot_config.radius))
+        sim.map_def.width, sim.map_def.height,
+        lambda: sim.ego_ped_pos, lambda: sim.ego_ped_goal_pos,
+        lambda: sim.pysf_sim.env.obstacles_raw[:, :4], lambda: sim.ped_pos,
+        ego_ped_config.radius, sim_config.ped_radius,
+        sim_config.goal_radius,
+        lambda: sim.robot_pos[0], robot_config.radius))
 
-    ray_sensor = lambda: lidar_ray_scan(
+    def ray_sensor(): return lidar_ray_scan(
         sim.ego_ped.pose, occupancies[1], lidar_config)[0]
-    target_sensor = lambda: target_sensor_obs(
-        sim.ego_ped.pose, sim.ego_ped_goal_pos, None) # TODO: What next goal to choose?
-    speed_sensor = lambda: sim.ego_ped.current_speed
+    def target_sensor(): return target_sensor_obs(
+        sim.ego_ped.pose, sim.ego_ped_goal_pos, None)  # TODO: What next goal to choose?
+
+    def speed_sensor(): return sim.ego_ped.current_speed
 
     sensor_fusions.append(SensorFusion(
         ray_sensor, speed_sensor, target_sensor,
-        orig_obs_space[1], False)) # Ego pedestrian does not have a next goal
+        orig_obs_space[1], False))  # Ego pedestrian does not have a next goal
 
     # Format: [robot, ego_pedestrian]
     return occupancies, sensor_fusions

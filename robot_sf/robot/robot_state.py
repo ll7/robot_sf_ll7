@@ -12,6 +12,7 @@ from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.sensor.sensor_fusion import SensorFusion
 from robot_sf.nav.occupancy import ContinuousOccupancy
 
+
 @dataclass
 class RobotState:
     """
@@ -21,7 +22,7 @@ class RobotState:
 
     Attributes:
         nav (RouteNavigator): Object managing navigation and route planning.
-        occupancy (ContinuousOccupancy): Object tracking spatial occupation, 
+        occupancy (ContinuousOccupancy): Object tracking spatial occupation,
             for collision detection.
         sensors (SensorFusion): Object for managing sensor data and fusion.
         d_t (float): The simulation timestep duration.
@@ -120,4 +121,4 @@ class RobotState:
             "is_route_complete": self.is_route_complete,
             "is_timesteps_exceeded": self.is_timeout,
             "max_sim_steps": self.max_sim_steps
-        }
+            }

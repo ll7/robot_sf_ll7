@@ -11,9 +11,8 @@ from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 
-
-
 logger.info("Simulate a random policy with a map defined in SVG format.")
+
 
 def test_simulation(map_definition: MapDefinition):
     """Test the simulation with a random policy."""
@@ -54,12 +53,13 @@ def test_simulation(map_definition: MapDefinition):
             env.render()
     env.exit()
 
+
 def main():
     """Simulate a random policy with a map defined in SVG format."""
     logger.info("Simulating a random policy with the map.")
 
-    #svg_file = "maps/svg_maps/02_simple_maps.svg"
-    #svg_file = "maps/svg_maps/03_mid_object.svg"
+    # svg_file = "maps/svg_maps/02_simple_maps.svg"
+    # svg_file = "maps/svg_maps/03_mid_object.svg"
     svg_file = "maps/svg_maps/04_small_mid_object.svg"
 
     logger.info("Converting SVG map to MapDefinition object.")
@@ -71,6 +71,7 @@ def main():
     test_simulation(map_definition)
 
     logger.info("MapDefinition object created.")
+
 
 if __name__ == "__main__":
     main()

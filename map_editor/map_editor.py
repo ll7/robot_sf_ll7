@@ -13,8 +13,8 @@ from map_editor.map_file_parser import \
     parse_mapfile_text, VisualizableMapConfig
 
 Vec2D = Tuple[float, float]
-Range2D = Tuple[float, float] # (low, high)
-MapBounds = Tuple[Range2D, Range2D] # ((min_x, max_x), (min_y, max_y))
+Range2D = Tuple[float, float]  # (low, high)
+MapBounds = Tuple[Range2D, Range2D]  # ((min_x, max_x), (min_y, max_y))
 Rect = Tuple[Vec2D, Vec2D, Vec2D]
 
 
@@ -69,8 +69,8 @@ class MapCanvas:
         scaling = self.map_to_canvas_scaling()
 
         def rect_points(rect: Rect) -> List[Vec2D]:
-            add_vec = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
-            sub_vec = lambda v1, v2: (v1[0] - v2[0], v1[1] - v2[1])
+            def add_vec(v1, v2): return (v1[0] + v2[0], v1[1] + v2[1])
+            def sub_vec(v1, v2): return (v1[0] - v2[0], v1[1] - v2[1])
             p1, p2, p3 = rect
             p4 = add_vec(sub_vec(p3, p2), p1)
             return [p1, p2, p3, p4]
@@ -97,11 +97,14 @@ class MapCanvas:
         def draw_waypoint(p: Vec2D, r: float, color="black", fill=None):
             (x, y), r = scale(p), r * scaling
             fill = fill if fill else color
-            self.canvas.create_oval(x-r, y-r, x+r, y+r, outline=color, fill=fill)
+            self.canvas.create_oval(x - r, y - r, x + r, y + r, outline=color, fill=fill)
 
         for s_x, e_x, s_y, e_y in map_config.obstacles:
             if (s_x, s_y) != (e_x, e_y):
-                self.canvas.create_line(scale((s_x, s_y)), scale((e_x, e_y)), fill=MapCanvas.OBSTACLE_COLOR)
+                self.canvas.create_line(
+                    scale(
+                        (s_x, s_y)), scale(
+                        (e_x, e_y)), fill=MapCanvas.OBSTACLE_COLOR)
 
         for i, rect in enumerate(map_config.robot_spawn_zones):
             draw_zone(i, rect_points(rect), MapCanvas.ROBOT_SPAWN_COLOR)
@@ -128,14 +131,14 @@ class MapCanvas:
 
 
 class MapToolbarMode(IntEnum):
-    NONE            = 0
+    NONE = 0
     NEW_ROBOT_SPAWN = 1
-    NEW_ROBOT_GOAL  = 2
+    NEW_ROBOT_GOAL = 2
     NEW_ROBOT_ROUTE = 3
-    NEW_PED_SPAWN   = 4
-    NEW_PED_GOAL    = 5
-    NEW_PED_ROUTE   = 6
-    NEW_OBSTACLE    = 7
+    NEW_PED_SPAWN = 4
+    NEW_PED_GOAL = 5
+    NEW_PED_ROUTE = 6
+    NEW_OBSTACLE = 7
 
 
 class MapEditorToolbar:
@@ -146,7 +149,7 @@ class MapEditorToolbar:
         self.on_mode_changed = on_mode_changed
         self.mode = MapToolbarMode.NONE
 
-        self.buttons_by_mode = { }
+        self.buttons_by_mode = {}
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_SPAWN] = tk.Button(
             frame, text="Robot Spawn", command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_SPAWN))
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_GOAL] = tk.Button(
@@ -256,7 +259,7 @@ class MapEditor:
             if map_config:
                 try:
                     self.map_canvas.render(map_config)
-                except:
+                except BaseException:
                     print("unable to draw map")
 
         def reload_map_as_daemon(frequency_hz: float, is_term: Callable[[], bool]):

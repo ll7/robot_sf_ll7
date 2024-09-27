@@ -1,20 +1,18 @@
+from robot_sf.tb_logging import DrivingMetricsCallback, VecEnvMetrics
+from robot_sf.feature_extractor import DynamicsExtractor
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv, simple_reward
+from stable_baselines3.common.callbacks import CallbackList, BaseCallback
+from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3 import PPO
+import numpy as np
 import sys
 import logging
 from typing import List
 
 import optuna
 optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
-
-import numpy as np
-from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.callbacks import CallbackList, BaseCallback
-
-from robot_sf.gym_env.robot_env import RobotEnv, simple_reward
-from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.feature_extractor import DynamicsExtractor
-from robot_sf.tb_logging import DrivingMetricsCallback, VecEnvMetrics
 
 
 class DriveQualityCallback(BaseCallback):
@@ -30,7 +28,8 @@ class DriveQualityCallback(BaseCallback):
     def score(self) -> float:
         steps_per_threshold = zip(self.completion_thresholds, self.steps_to_reach_threshold)
         reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
-        threshold_scores = sum([t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds])
+        threshold_scores = sum([t * (2 + (self.max_steps - s) / self.max_steps)
+                               for t, s in reached_thresholds])
         return threshold_scores / (sum(self.completion_thresholds) * 3)
 
     def _on_training_start(self):
@@ -41,13 +40,14 @@ class DriveQualityCallback(BaseCallback):
         if curr_step % self.log_freq == 0:
             for i, completion_threshold in enumerate(self.completion_thresholds):
                 if self.metrics.route_completion_rate >= completion_threshold:
-                    self.steps_to_reach_threshold[i] = min(curr_step, self.steps_to_reach_threshold[i])
-        return True # info: don't request early abort
+                    self.steps_to_reach_threshold[i] = min(
+                        curr_step, self.steps_to_reach_threshold[i])
+        return True  # info: don't request early abort
 
 
 def training_score(
-        study_name: str, hparams: dict, max_steps: int=5_000_000, difficulty: int=1,
-        route_completion_thresholds: List[float]=[i / 100 for i in range(1, 101)]):
+        study_name: str, hparams: dict, max_steps: int = 5_000_000, difficulty: int = 1,
+        route_completion_thresholds: List[float] = [i / 100 for i in range(1, 101)]):
 
     def make_env():
         config = EnvSettings()
@@ -55,7 +55,8 @@ def training_score(
         config.sim_config.stack_steps = hparams["num_stacked_steps"]
         config.sim_config.time_per_step_in_secs = hparams["d_t"]
         config.sim_config.use_next_goal = hparams["use_next_goal"]
-        reward_func = lambda meta: simple_reward(
+
+        def reward_func(meta): return simple_reward(
             meta, hparams["step_discount"], hparams["ped_coll_penalty"],
             hparams["obst_coll_penalty"], hparams["reach_wp_reward"])
         return RobotEnv(config, reward_func=reward_func)
@@ -65,11 +66,11 @@ def training_score(
     policy_kwargs = dict(
         features_extractor_class=DynamicsExtractor,
         features_extractor_kwargs=dict(
-            use_ray_conv = hparams["use_ray_conv"],
-            num_filters = hparams["num_filters"],
-            kernel_sizes = hparams["kernel_sizes"],
-            dropout_rates = hparams["dropout_rates"]
-        ))
+            use_ray_conv=hparams["use_ray_conv"],
+            num_filters=hparams["num_filters"],
+            kernel_sizes=hparams["kernel_sizes"],
+            dropout_rates=hparams["dropout_rates"]
+            ))
     model = PPO("MultiInputPolicy", env, tensorboard_log=f"./logs/{study_name}/",
                 n_steps=hparams["n_steps"], n_epochs=hparams["n_epochs"],
                 use_sde=hparams["use_sde"], policy_kwargs=policy_kwargs)
@@ -82,7 +83,7 @@ def training_score(
     return threshold_callback.score
 
 
-def suggest_ppo_params(trial: optuna.Trial, tune: bool=False) -> dict:
+def suggest_ppo_params(trial: optuna.Trial, tune: bool = False) -> dict:
     if tune:
         n_envs = trial.suggest_categorical("n_envs", [32, 40, 48, 56, 64])
         n_epochs = trial.suggest_int("n_epochs", 2, 20)
@@ -90,14 +91,20 @@ def suggest_ppo_params(trial: optuna.Trial, tune: bool=False) -> dict:
         use_sde = trial.suggest_categorical("use_sde", [True, False])
         use_ray_conv = trial.suggest_categorical("use_ray_conv", [True, False])
         if use_ray_conv:
-            num_filters = [trial.suggest_categorical(f"num_filters_{i}", [8, 16, 32, 64, 128, 256]) for i in range(4)]
-            kernel_sizes = [trial.suggest_categorical(f"kernel_sizes_{i}", [3, 5, 7, 9]) for i in range(4)]
+            num_filters = [
+                trial.suggest_categorical(
+                    f"num_filters_{i}", [
+                        8, 16, 32, 64, 128, 256]) for i in range(4)]
+            kernel_sizes = [
+                trial.suggest_categorical(
+                    f"kernel_sizes_{i}", [
+                        3, 5, 7, 9]) for i in range(4)]
             dropout_rates = [trial.suggest_float(f"dropout_rates_{i}", 0.0, 1.0) for i in range(4)]
         else:
             num_filters = []
             kernel_sizes = []
             dropout_rates = []
-    else: # use defaults
+    else:  # use defaults
         n_envs = 64
         n_epochs = 10
         n_steps = 1024
@@ -116,16 +123,16 @@ def suggest_ppo_params(trial: optuna.Trial, tune: bool=False) -> dict:
         "num_filters": num_filters,
         "kernel_sizes": kernel_sizes,
         "dropout_rates": dropout_rates,
-    }
+        }
 
 
-def suggest_simulation_params(trial: optuna.Trial, tune: bool=False) -> dict:
+def suggest_simulation_params(trial: optuna.Trial, tune: bool = False) -> dict:
     if tune:
         num_stacked_steps = trial.suggest_int("num_stacked_steps", 1, 5)
         num_lidar_rays = trial.suggest_categorical("num_lidar_rays", [144, 176, 208, 272])
         d_t = trial.suggest_categorical("d_t", [0.1, 0.2, 0.3, 0.4, 0.5])
         use_next_goal = trial.suggest_categorical("use_next_goal", [True, False])
-    else: # use defaults
+    else:  # use defaults
         num_stacked_steps = 3
         num_lidar_rays = 272
         d_t = 0.1
@@ -136,17 +143,17 @@ def suggest_simulation_params(trial: optuna.Trial, tune: bool=False) -> dict:
         "num_lidar_rays": num_lidar_rays,
         "d_t": d_t,
         "use_next_goal": use_next_goal,
-    }
+        }
 
 
-def suggest_reward_params(trial: optuna.Trial, tune: bool=False) -> dict:
+def suggest_reward_params(trial: optuna.Trial, tune: bool = False) -> dict:
     if tune:
         ped_coll_penalty = trial.suggest_int("ped_coll_penalty", -10, -1)
         obst_coll_penalty = trial.suggest_int("obst_coll_penalty", -10, -1)
         step_discount = trial.suggest_float("step_discount", -1.0, 0.0)
         reach_wp_reward = 1.0
         # reach_wp_reward = trial.suggest_int("reach_wp_reward", 1, 10)
-    else: # use defaults
+    else:  # use defaults
         ped_coll_penalty = -2.0
         obst_coll_penalty = -2.0
         step_discount = -0.1
@@ -157,7 +164,7 @@ def suggest_reward_params(trial: optuna.Trial, tune: bool=False) -> dict:
         "obst_coll_penalty": obst_coll_penalty,
         "step_discount": step_discount,
         "reach_wp_reward": reach_wp_reward
-    }
+        }
 
 
 def objective(trial: optuna.Trial, study_name: str) -> float:

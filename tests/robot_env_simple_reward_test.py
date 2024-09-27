@@ -1,5 +1,6 @@
 from robot_sf.gym_env.robot_env import simple_reward
 
+
 def test_simple_reward():
     meta = {
         "step": 0,
@@ -12,7 +13,7 @@ def test_simple_reward():
         "is_route_complete": False,
         "is_timesteps_exceeded": False,
         "max_sim_steps": 1000
-    }
+        }
 
     reward = simple_reward(meta)
     assert reward == 0.9999

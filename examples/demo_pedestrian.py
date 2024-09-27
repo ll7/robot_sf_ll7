@@ -12,6 +12,7 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 
 logger = loguru.logger
 
+
 def make_env(map_name: str, robot_model: str):
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
@@ -21,9 +22,9 @@ def make_env(map_name: str, robot_model: str):
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(difficulty=difficulty,
-                                          ped_density_by_difficulty=ped_densities),
+                                      ped_density_by_difficulty=ped_densities),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-    )
+        )
     return PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=False)
 
 
@@ -38,13 +39,14 @@ def run(filename: str, map_name: str, robot_model: str):
 
     for _ in range(10000):
         action, _ = model.predict(obs, deterministic=True)
-        obs, _, done, _ , _ = env.step(action)
+        obs, _, done, _, _ = env.step(action)
         env.render()
 
         if done:
             obs, _ = env.reset()
             env.render()
     env.exit()
+
 
 if __name__ == '__main__':
     SVG_MAP = "maps/svg_maps/debug_06.svg"

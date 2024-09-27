@@ -48,12 +48,11 @@ class PedSpawnConfig:
             self.group_member_probs = [p / sum(power_dist) for p in power_dist]
 
 
-
 def sample_route(
-        route: GlobalRoute,
-        num_samples: int,
-        sidewalk_width: float
-    ) -> Tuple[List[Vec2D], int]:
+    route: GlobalRoute,
+    num_samples: int,
+    sidewalk_width: float
+        ) -> Tuple[List[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
 
@@ -86,11 +85,11 @@ def sample_route(
     start, end = route.sections[sec_id]
 
     # Define helper functions for vector operations
-    add_vecs = lambda v1, v2: (v1[0] + v2[0], v1[1] + v2[1])
-    sub_vecs = lambda v1, v2: (v1[0] - v2[0], v1[1] - v2[1])
+    def add_vecs(v1, v2): return (v1[0] + v2[0], v1[1] + v2[1])
+    def sub_vecs(v1, v2): return (v1[0] - v2[0], v1[1] - v2[1])
 
     # Clip function to constrain random spread to the sidewalk width
-    clip_spread = lambda v: np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
+    def clip_spread(v): return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
     # Calculate the center point between the start and end of the section
     center = add_vecs(start, sub_vecs(end, start))
@@ -113,10 +112,10 @@ def sample_route(
 class ZonePointsGenerator:
     """
     A generator for creating points within specified zones.
-    
+
     Attributes:
         zones: A list of `Zone` objects that represent different areas.
-        
+
     Calculated attributes through __post_init__:
         zone_areas: Computed area of each zone based on vertices.
         _zone_probs: Normalized probabilities of choosing each zone.
@@ -131,7 +130,7 @@ class ZonePointsGenerator:
         # This uses an external `dist` function to measure distances
         self.zone_areas = [
             dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones
-        ]
+            ]
 
         # Sum the areas to use for normalizing probabilities
         total_area = sum(self.zone_areas)
@@ -164,7 +163,7 @@ class ZonePointsGenerator:
 class RoutePointsGenerator:
     """
     A generator for creating points within specified routes with given sidewalk widths.
-    
+
     Attributes:
         routes: A list of `GlobalRoute` objects representing different paths.
         sidewalk_width: The width of the sidewalks along the routes.
@@ -187,7 +186,7 @@ class RoutePointsGenerator:
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
         self._route_probs = [
             r.total_length / self.total_length for r in self.routes
-        ]
+            ]
 
     @property
     def total_length(self) -> float:
@@ -233,7 +232,7 @@ class RoutePointsGenerator:
 def populate_ped_routes(
         config: PedSpawnConfig,
         routes: List[GlobalRoute]
-        )-> Tuple[
+        ) -> Tuple[
             np.ndarray,
             List[PedGrouping],
             Dict[int, GlobalRoute],
@@ -332,9 +331,9 @@ def populate_crowded_zones(config: PedSpawnConfig, crowded_zones: List[Zone]) \
 
 
 def populate_simulation(
-        tau: float, spawn_config: PedSpawnConfig,
-        ped_routes: List[GlobalRoute], ped_crowded_zones: List[Zone]
-    ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
+    tau: float, spawn_config: PedSpawnConfig,
+    ped_routes: List[GlobalRoute], ped_crowded_zones: List[Zone]
+        ) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
 
     crowd_ped_states_np, crowd_groups, zone_assignments = \
         populate_crowded_zones(spawn_config, ped_crowded_zones)

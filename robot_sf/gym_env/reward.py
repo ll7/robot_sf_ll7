@@ -4,12 +4,13 @@ This module defines the reward function for the robot environment.
 
 import numpy as np
 
+
 def simple_reward(
         meta: dict,
-        max_episode_step_discount: float=-0.1,
-        ped_coll_penalty: float=-5,
-        obst_coll_penalty: float=-2,
-        reach_waypoint_reward: float=1) -> float:
+        max_episode_step_discount: float = -0.1,
+        ped_coll_penalty: float = -5,
+        obst_coll_penalty: float = -2,
+        reach_waypoint_reward: float = 1) -> float:
     """
     Calculate the reward for the robot's current state.
 
@@ -41,11 +42,12 @@ def simple_reward(
 
     return reward
 
-def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
-                      ped_coll_penalty: float=-5,
-                      obst_coll_penalty: float=-5,
-                      robot_coll_reward: float=5,
-                      robot_at_goal_penalty: float= -1) -> float:
+
+def simple_ped_reward(meta: dict, max_episode_step_discount: float = -0.1,
+                      ped_coll_penalty: float = -5,
+                      obst_coll_penalty: float = -5,
+                      robot_coll_reward: float = 5,
+                      robot_at_goal_penalty: float = -1) -> float:
     """
     Calculate the reward for the pedestrian's current state.
 
@@ -86,14 +88,15 @@ def simple_ped_reward(meta: dict, max_episode_step_discount: float=-0.1,
 
     return reward
 
+
 def punish_action_reward(
         meta: dict,
-        max_episode_step_discount: float=-0.1,
-        ped_coll_penalty: float=-5,
-        obst_coll_penalty: float=-2,
-        reach_waypoint_reward: float=1,
-        punish_action: bool=True,
-        punish_action_penalty: float=-0.1
+        max_episode_step_discount: float = -0.1,
+        ped_coll_penalty: float = -5,
+        obst_coll_penalty: float = -2,
+        reach_waypoint_reward: float = 1,
+        punish_action: bool = True,
+        punish_action_penalty: float = -0.1
         ) -> float:
     """
     Calculate the reward for the robot's current state.

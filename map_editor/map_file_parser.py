@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
-Range2D = Tuple[float, float] # (low, high)
+Range2D = Tuple[float, float]  # (low, high)
 Vec2D = Tuple[float, float]
 Rect = Tuple[Vec2D, Vec2D, Vec2D]
 
@@ -46,24 +46,29 @@ def determine_mapfile_version(text: str) -> Union[str, None]:
     try:
         map_data: dict = json.loads(text)
 
-        required_toplevel_keys = { "x_margin", "y_margin" }
+        required_toplevel_keys = {"x_margin", "y_margin"}
         if not contains_all(set(map_data.keys()), required_toplevel_keys):
             return None
 
-        obsolete_v0_toplevel_keys = { "Obstacles", "NumberObstacles", "Created" }
+        obsolete_v0_toplevel_keys = {"Obstacles", "NumberObstacles", "Created"}
         if any([k for k in obsolete_v0_toplevel_keys if k in map_data]):
             return MAP_VERSION_V0
 
-        required_v1_keys = { "obstacles", "ped_spawn_zones", "robot_spawn_zones", "robot_goal_zones", "robot_routes" }
+        required_v1_keys = {
+            "obstacles",
+            "ped_spawn_zones",
+            "robot_spawn_zones",
+            "robot_goal_zones",
+            "robot_routes"}
         if not contains_all(set(map_data.keys()), required_v1_keys):
             return MAP_VERSION_V0
 
-        required_v2_keys = { "ped_routes", "ped_goal_zones", "ped_crowded_zones" }
+        required_v2_keys = {"ped_routes", "ped_goal_zones", "ped_crowded_zones"}
         if not contains_all(set(map_data.keys()), required_v2_keys):
             return MAP_VERSION_V1
 
         return MAP_VERSION_V2
-    except:
+    except BaseException:
         return None
 
 
@@ -88,7 +93,7 @@ def parse_mapfile_text_v0(text: str) -> Union[VisualizableMapConfig, None]:
         y_margin = (y_margin[0], y_margin[1])
 
         return VisualizableMapConfig(x_margin, y_margin, obstacles)
-    except:
+    except BaseException:
         return None
 
 
@@ -123,7 +128,7 @@ def parse_mapfile_text_v1(text: str) -> Union[VisualizableMapConfig, None]:
             x_margin, y_margin, obstacles,
             robot_spawn_zones, robot_goal_zones, routes,
             ped_spawn_zones)
-    except:
+    except BaseException:
         return None
 
 
@@ -162,7 +167,7 @@ def parse_mapfile_text_v2(text: str) -> Union[VisualizableMapConfig, None]:
             x_margin, y_margin, obstacles,
             robot_spawn_zones, robot_goal_zones, robot_routes,
             ped_spawn_zones, ped_goal_zones, ped_routes, ped_crowded_zones)
-    except:
+    except BaseException:
         return None
 
 
@@ -170,7 +175,7 @@ parsers_by_version = {
     MAP_VERSION_V0: parse_mapfile_text_v0,
     MAP_VERSION_V1: parse_mapfile_text_v1,
     MAP_VERSION_V2: parse_mapfile_text_v2,
-}
+    }
 
 
 def parse_mapfile_text(text: str) -> Union[VisualizableMapConfig, None]:

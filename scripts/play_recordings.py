@@ -13,9 +13,8 @@ from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.render.playback_recording import load_states_and_visualize
 
 
-
-
 logger.info("Play recordings")
+
 
 def get_latest_file():
     """Get the latest recorded file."""
@@ -24,16 +23,17 @@ def get_latest_file():
         os.listdir('recordings'), key=lambda x: os.path.getctime(os.path.join('recordings', x)))
     return Path('recordings', filename)
 
+
 def get_all_files():
     """Get a list of all recorded files sorted alphabetically."""
     return sorted(
         [Path('recordings', filename) for filename in os.listdir('recordings')
          if filename != 'README.md'])
 
-def get_specific_file(filename:str):
+
+def get_specific_file(filename: str):
     """Get specific recorded file."""
     return Path('recordings', filename)
-
 
 
 def main():

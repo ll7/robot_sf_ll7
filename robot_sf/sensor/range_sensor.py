@@ -91,12 +91,12 @@ def lineseg_line_intersection_distance(
 
 @numba.njit(fastmath=True)
 def circle_line_intersection_distance(
-    circle: Circle2D,
-    origin: Vec2D,
-    ray_vec: Vec2D
-    ) -> float:
+        circle: Circle2D,
+        origin: Vec2D,
+        ray_vec: Vec2D
+        ) -> float:
     """
-    Calculate the distance from the origin to the intersection point between 
+    Calculate the distance from the origin to the intersection point between
     a circle and a ray vector.
 
     Parameters:
@@ -105,7 +105,7 @@ def circle_line_intersection_distance(
     ray_vec (Vec2D): The ray vector.
 
     Returns:
-    float: The distance to the nearest intersection point, or infinity if no 
+    float: The distance to the nearest intersection point, or infinity if no
     intersection.
     """
     # Unpack circle center and radius, and ray vector
@@ -139,8 +139,8 @@ def circle_line_intersection_distance(
     mu_2 = (-b + disc_root) / (2 * a)
 
     # Compute cross points S1, S2 and distances to the origin
-    s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y  + t_y
-    s2_x, s2_y = mu_2 * s_x + t_x, mu_2 * s_y  + t_y
+    s1_x, s1_y = mu_1 * s_x + t_x, mu_1 * s_y + t_y
+    s2_x, s2_y = mu_2 * s_x + t_x, mu_2 * s_y + t_y
     dist_1 = euclid_dist((p1_x, p1_y), (s1_x, s1_y))
     dist_2 = euclid_dist((p1_x, p1_y), (s2_x, s2_y))
 
@@ -149,7 +149,7 @@ def circle_line_intersection_distance(
         return min(dist_1, dist_2)
     elif mu_1 >= 0:
         return dist_1
-    else: # if mu_2 >= 0:
+    else:  # if mu_2 >= 0:
         return dist_2
 
 
@@ -321,7 +321,7 @@ def lidar_ray_scan(
     lower = robot_orient + settings.angle_opening[0]
     upper = robot_orient + settings.angle_opening[1]
     ray_angles = np.linspace(lower, upper, settings.num_rays + 1)[:-1]
-    ray_angles = np.array([(angle + np.pi*2) % (np.pi*2) for angle in ray_angles])
+    ray_angles = np.array([(angle + np.pi * 2) % (np.pi * 2) for angle in ray_angles])
 
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])
@@ -332,7 +332,7 @@ def lidar_ray_scan(
     else:
         ranges = raycast(
             (pos_x, pos_y), obstacles, scan_dist, ped_pos,
-           occ.ped_radius, ray_angles)
+            occ.ped_radius, ray_angles)
     range_postprocessing(ranges, scan_noise, scan_dist)
     return ranges, ray_angles
 

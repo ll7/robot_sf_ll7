@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from robot_sf.nav.nav_types import Vec2D, Rect
 
+
 @dataclass
 class GlobalRoute:
     """

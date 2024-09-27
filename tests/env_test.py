@@ -23,6 +23,7 @@ def test_can_return_valid_observation():
     assert drive_state_spec.shape == obs[OBS_DRIVE_STATE].shape
     assert lidar_state_spec.shape == obs[OBS_RAYS].shape
 
+
 def test_can_simulate_with_pedestrians():
     total_steps = 1000
     env = RobotEnv()
@@ -33,7 +34,8 @@ def test_can_simulate_with_pedestrians():
         done = terminated or truncated
         if done:
             env.reset()
-            
+
+
 def test_ego_ped_env():
     total_steps = 1000
     robot_model = PPO.load("./model/run_043", env=None)

@@ -17,7 +17,7 @@ def test_create_map():
         lambda: None,
         lambda: np.array([[]]),
         lambda: np.array([[]]),
-    )
+        )
     assert _map is not None
 
 
@@ -29,7 +29,7 @@ def test_is_in_bounds():
         lambda: None,
         lambda: np.array([[]]),
         lambda: np.array([[]]),
-    )
+        )
     assert _map.is_in_bounds(0, 0)
     assert _map.is_in_bounds(10, 0)
     assert _map.is_in_bounds(0, 10)
@@ -46,7 +46,7 @@ def test_is_out_of_bounds():
         lambda: None,
         lambda: np.array([]),
         lambda: np.array([[]]),
-    )
+        )
     assert not _map.is_in_bounds(10.0000001, 10)
     assert not _map.is_in_bounds(10, 10.0000001)
     assert not _map.is_in_bounds(-10.0000001, 10)
@@ -64,13 +64,13 @@ def test_is_collision_with_obstacle_segment_fully_contained_inside_circle():
         lambda: obstacle_pos,
         lambda: np.array([[20, 20]]),
         agent_radius=2,
-    )
+        )
     assert _map.is_obstacle_collision
 
 
 def test_is_collision_with_obstacle_segment_outside_circle():
     obstacle_pos = np.random.uniform(-10, 10, size=(1, 4))
-    middle = np.squeeze((obstacle_pos[0: :2] + obstacle_pos[0: 2:]) / 2)
+    middle = np.squeeze((obstacle_pos[0::2] + obstacle_pos[0: 2:]) / 2)
     robot_pos = (middle[0], middle[1])
     radius = dist(obstacle_pos[0, :2], obstacle_pos[0, 2:]) / 2.1
     _map = ContinuousOccupancy(
@@ -81,7 +81,7 @@ def test_is_collision_with_obstacle_segment_outside_circle():
         lambda: obstacle_pos,
         lambda: np.array([[20, 20]]),
         radius,
-    )
+        )
     assert _map.is_obstacle_collision
 
 
@@ -96,8 +96,9 @@ def test_is_collision_with_pedestrian():
         lambda: np.array([[]]),
         lambda: np.array([ped_pos]),
         agent_radius=2,
-    )
+        )
     assert _map.is_pedestrian_collision
+
 
 def test_is_collision_with_agent():
     agent_pos = np.random.uniform(-10, 10, size=(2))
@@ -114,7 +115,7 @@ def test_is_collision_with_agent():
         goal_radius=1.0,
         get_enemy_coords=lambda: enemy_pos,
         enemy_radius=1.0,
-    )
+        )
     assert _map.is_agent_agent_collision
 
 
@@ -128,7 +129,7 @@ def test_proximity_point():
     _sim = init_ped_simulators(env_config, map_def)[0]
     new_point = _sim.get_proximity_point(
         fixed_point, lower_bound=lower_bound, upper_bound=upper_bound
-    )
+        )
     distance = np.linalg.norm(np.array(fixed_point) - np.array(new_point))
     assert lower_bound <= distance <= upper_bound
     # TODO: Add test to check with obstacle

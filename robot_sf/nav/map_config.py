@@ -14,6 +14,7 @@ from robot_sf.nav.nav_types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.obstacle import Obstacle
 
+
 @dataclass
 class MapDefinition:
     """
@@ -88,7 +89,7 @@ class MapDefinition:
 
         if len(self.bounds) != 4:
             logger.critical(
-                "Invalid bounds! Expected exactly 4 bounds! "+
+                "Invalid bounds! Expected exactly 4 bounds! " +
                 f"Found {len(self.bounds)} bounds!"
                 )
 
@@ -111,7 +112,7 @@ class MapDefinition:
         Returns the route for the given spawn id and goal id. If no route is found, returns None.
         """
         return next(filter(lambda r:
-            r.goal_id == goal_id and r.spawn_id == spawn_id, self.robot_routes), None)
+                           r.goal_id == goal_id and r.spawn_id == spawn_id, self.robot_routes), None)
 
 
 @dataclass
@@ -194,6 +195,7 @@ class MapDefinitionPool:
 
         return random.choice(list(self.map_defs.values()))
 
+
 def serialize_map(map_structure: dict) -> MapDefinition:
     """
     Converts a map structure dictionary into a MapDefinition object.
@@ -242,7 +244,7 @@ def serialize_map(map_structure: dict) -> MapDefinition:
             robot_spawn_zones[o['spawn_id']],
             robot_goal_zones[o['goal_id']]
             )
-            for o in map_structure['robot_routes']
+        for o in map_structure['robot_routes']
         ]
     ped_routes = [
         GlobalRoute(
@@ -252,7 +254,7 @@ def serialize_map(map_structure: dict) -> MapDefinition:
             ped_spawn_zones[o['spawn_id']],
             ped_goal_zones[o['goal_id']]
             )
-            for o in map_structure['ped_routes']
+        for o in map_structure['ped_routes']
         ]
 
     # Function to reverse a route
@@ -268,7 +270,7 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     # Define the map bounds
     map_bounds = [
         (0, width, 0, 0),           # bottom
-        (0, width, height, height), # top
+        (0, width, height, height),  # top
         (0, 0, 0, height),          # left
         (width, width, 0, height)]  # right
 

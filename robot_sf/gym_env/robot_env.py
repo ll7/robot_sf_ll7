@@ -1,7 +1,7 @@
 """
 `robot_env.py` is a module that defines the simulation environment for a robot or multiple robots.
-It includes classes and protocols for defining the robot's state, actions, and 
-observations within the environment. 
+It includes classes and protocols for defining the robot's state, actions, and
+observations within the environment.
 
 `RobotEnv`: A class that represents the robot's environment. It inherits from `VectorEnv`
 from the `gymnasium` library, which is a base class for environments that operate over
@@ -61,7 +61,7 @@ class RobotEnv(Env):
         - env_config (EnvSettings): Configuration for environment settings.
         - reward_func (Callable[[dict], float]): Reward function that takes
             a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as 
+        - debug (bool): If True, enables debugging information such as
             visualizations.
         - recording_enabled (bool): If True, enables recording of the simulation
         """
@@ -174,7 +174,7 @@ class RobotEnv(Env):
         Returns:
         - obs: The initial observation after resetting the environment.
         """
-        super().reset(seed=seed,options=options)
+        super().reset(seed=seed, options=options)
         # Reset last_action
         self.last_action = None
         # Reset internal simulator state
@@ -184,7 +184,7 @@ class RobotEnv(Env):
         # if recording is enabled, save the recording and reset the state list
         if self.recording_enabled:
             self.save_recording()
-        
+
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
         return obs, info
@@ -271,7 +271,7 @@ class RobotEnv(Env):
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-        with open(filename, 'wb') as f: # write binary
+        with open(filename, 'wb') as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")

@@ -19,11 +19,11 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 
 logger = loguru.logger
 
+
 def training(svg_map_path: str):
     n_envs = 20
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
-
 
     def make_env():
         map_definition = convert_map(svg_map_path)
@@ -34,7 +34,7 @@ def training(svg_map_path: str):
             sim_config=SimulationSettings(difficulty=difficulty,
                                           ped_density_by_difficulty=ped_densities),
             robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-        )
+            )
         return PedestrianEnv(env_config, robot_model=robot_model)
 
     env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)

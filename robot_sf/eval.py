@@ -6,13 +6,13 @@ from statistics import mean
 
 
 class EnvOutcome(IntEnum):
-    REACHED_GOAL=0
-    TIMEOUT=1
-    PEDESTRIAN_COLLISION=2
-    OBSTACLE_COLLISION=3
-    ROBOT_COLLISION=4
-    ROBOT_OBSTACLE_COLLISION=5
-    ROBOT_PEDESTRIAN_COLLISION=6
+    REACHED_GOAL = 0
+    TIMEOUT = 1
+    PEDESTRIAN_COLLISION = 2
+    OBSTACLE_COLLISION = 3
+    ROBOT_COLLISION = 4
+    ROBOT_OBSTACLE_COLLISION = 5
+    ROBOT_PEDESTRIAN_COLLISION = 6
 
 
 @dataclass
@@ -215,9 +215,9 @@ class PedEnvMetrics:
     def update(self, meta: dict):
         self.route_distances.append(meta["distance_to_robot"])
         is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] or \
-                                meta["is_robot_collision"] or meta["is_timesteps_exceeded"] or \
-                                meta["is_robot_at_goal"] or meta["is_robot_obstacle_collision"] or \
-                                meta["is_robot_pedestrian_collision"]
+            meta["is_robot_collision"] or meta["is_timesteps_exceeded"] or \
+            meta["is_robot_at_goal"] or meta["is_robot_obstacle_collision"] or \
+            meta["is_robot_pedestrian_collision"]
         if not is_end_of_route:
             return
 
@@ -243,6 +243,7 @@ class PedEnvMetrics:
         self.route_outcomes.append(outcome)
         self.avg_distance.append(mean(self.route_distances))
         self.route_distances.clear()
+
 
 @dataclass
 class PedVecEnvMetrics:

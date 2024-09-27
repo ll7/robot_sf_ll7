@@ -80,7 +80,7 @@ class SvgMapConverter:
         namespaces = {
             'svg': 'http://www.w3.org/2000/svg',
             'inkscape': 'http://www.inkscape.org/namespaces/inkscape'
-        }
+            }
 
         # Find all 'path' elements in the SVG file
         paths = self.svg_root.findall('.//svg:path', namespaces)
@@ -117,9 +117,9 @@ class SvgMapConverter:
                     coordinates=np_coordinates,
                     label=path.attrib.get(
                         '{http://www.inkscape.org/namespaces/inkscape}label'),
-                    id = path.attrib.get('id')
+                    id=path.attrib.get('id')
+                    )
                 )
-            )
 
         # Iterate over each 'rect' element
         for rect in rects:
@@ -134,8 +134,8 @@ class SvgMapConverter:
                         '{http://www.inkscape.org/namespaces/inkscape}label'
                         ),
                     rect.attrib.get('id')
+                    )
                 )
-            )
 
         logger.info(f"Parsed {len(path_info)} paths in the SVG file")
         self.path_info = path_info
@@ -154,10 +154,10 @@ class SvgMapConverter:
         robot_goal_zones: List[Rect] = []
         bounds: List[Line2D] = [
             (0, width, 0, 0),           # bottom
-            (0, width, height, height), # top
+            (0, width, height, height),  # top
             (0, 0, 0, height),          # left
             (width, width, 0, height)   # right
-        ]
+            ]
         logger.debug(f"Bounds: {bounds}")
         robot_routes: List[GlobalRoute] = []
         ped_goal_zones: List[Rect] = []
@@ -194,10 +194,10 @@ class SvgMapConverter:
                 # Check if the first and last vertices are the same
                 if not np.array_equal(vertices[0], vertices[-1]):
                     logger.warning(
-                        "The first and last vertices of the obstacle in "+
+                        "The first and last vertices of the obstacle in " +
                         f"<{path.id}> are not the same. " +
                         "Adding the first vertex to the end to close the polygon."
-                    )
+                        )
                     # Add the first vertex to the end to close the polygon
                     vertices.append(vertices[0])
                     # TODO is it really necessary to close the polygon?
@@ -217,9 +217,10 @@ class SvgMapConverter:
                         spawn_id=spawn,
                         goal_id=goal,
                         waypoints=vertices,
-                        spawn_zone=ped_spawn_zones[spawn] if ped_spawn_zones else (vertices[0],0,0),
-                        goal_zone=ped_goal_zones[goal] if ped_goal_zones else (vertices[-1],0,0)
-                    ))
+                        spawn_zone=ped_spawn_zones[spawn] if ped_spawn_zones else (
+                            vertices[0], 0, 0),
+                        goal_zone=ped_goal_zones[goal] if ped_goal_zones else (vertices[-1], 0, 0)
+                        ))
 
             elif 'robot_route' in path.label:
                 # Convert the coordinates to a list of vertices
@@ -233,12 +234,13 @@ class SvgMapConverter:
                         spawn_id=spawn,
                         goal_id=goal,
                         waypoints=vertices,
-                        spawn_zone= \
-                            robot_spawn_zones[spawn] if robot_spawn_zones else (vertices[0],0,0),
-                        goal_zone=robot_goal_zones[goal] if robot_goal_zones else (vertices[-1],0,0)
-                    ))
+                        spawn_zone=robot_spawn_zones[spawn] if robot_spawn_zones else (
+                            vertices[0], 0, 0),
+                        goal_zone=robot_goal_zones[goal] if robot_goal_zones else (
+                            vertices[-1], 0, 0)
+                        ))
 
-            elif path.label == 'crowded_zone': # TODO: remove this
+            elif path.label == 'crowded_zone':  # TODO: remove this
                 # Crowded Zones should be rectangles?
                 # Convert the coordinates to a list of vertices
                 vertices = path.coordinates.tolist()
@@ -250,8 +252,6 @@ class SvgMapConverter:
                 logger.error(
                     f"Unknown label <{path.label}> in id <{path.id}>"
                     )
-
-
 
         if not obstacles:
             logger.warning("No obstacles found in the SVG file")
@@ -272,13 +272,13 @@ class SvgMapConverter:
             ped_goal_zones,
             ped_crowded_zones,
             ped_routes
-        )
+            )
 
     def get_map_definition(self) -> MapDefinition:
         return self.map_definition
 
     def __get_path_number(self, route: str) -> Tuple[int, int]:
-         # routes have a label of the form 'ped_route_<spawn>_<goal>'
+        # routes have a label of the form 'ped_route_<spawn>_<goal>'
         numbers = re.findall(r'\d+', route)
         if numbers:
             spawn = int(numbers[0])
@@ -287,6 +287,7 @@ class SvgMapConverter:
             spawn = 0
             goal = 0
         return spawn, goal
+
 
 def convert_map(svg_file: str):
     """Create MapDefinition from svg file."""

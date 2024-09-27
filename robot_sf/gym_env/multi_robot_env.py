@@ -30,7 +30,7 @@ class MultiRobotEnv(VectorEnv):
             reward_func: Callable[[dict], float] = simple_reward,
             debug: bool = False, num_robots: int = 1):
 
-        map_def = env_config.map_pool.map_defs["uni_campus_big"] # info: only use first map
+        map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(
             env_config,
             map_def
@@ -79,7 +79,7 @@ class MultiRobotEnv(VectorEnv):
         actions_per_simulator = []
         for sim in self.simulators:
             num_robots = len(sim.robots)
-            actions_per_simulator.append(actions[i:i+num_robots])
+            actions_per_simulator.append(actions[i:i + num_robots])
             i += num_robots
 
         self.sim_worker_pool.map(
@@ -89,20 +89,20 @@ class MultiRobotEnv(VectorEnv):
         obs = self.obs_worker_pool.map(lambda s: s.step(), self.states)
 
         metas = [state.meta_dict() for state in self.states]
-        masked_metas = [{ "step": meta["step"], "meta": meta } for meta in metas]
+        masked_metas = [{"step": meta["step"], "meta": meta} for meta in metas]
         masked_metas = (*masked_metas,)
         terms = [state.is_terminal for state in self.states]
         rewards = [self.reward_func(meta) for meta in metas]
 
         for i, (sim, state, term) in enumerate(
-            zip(self.simulators, self.states, terms)
-            ):
+                zip(self.simulators, self.states, terms)
+                ):
             if term:
                 sim.reset_state()
                 obs[i] = state.reset()
 
-        obs = { OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
-                OBS_RAYS: np.array([o[OBS_RAYS] for o in obs])}
+        obs = {OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
+               OBS_RAYS: np.array([o[OBS_RAYS] for o in obs])}
 
         return obs, rewards, terms, masked_metas
 
@@ -110,11 +110,11 @@ class MultiRobotEnv(VectorEnv):
         self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
         obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
 
-        obs = { OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
-                OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]) }
+        obs = {OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
+               OBS_RAYS: np.array([o[OBS_RAYS] for o in obs])}
         return obs
 
-    def render(self, robot_id: int=0):
+    def render(self, robot_id: int = 0):
         # TODO: add support for PyGame rendering
         pass
 

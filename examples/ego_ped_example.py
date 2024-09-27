@@ -14,9 +14,8 @@ from robot_sf.render.playback_recording import load_states_and_visualize
 from robot_sf.nav.svg_map_parser import convert_map
 
 
-
-
 logger.info("Simulate the trained robot and a pedestrian with a random policy.")
+
 
 def test_simulation(map_definition: MapDefinition):
 
@@ -25,7 +24,7 @@ def test_simulation(map_definition: MapDefinition):
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-    )
+        )
 
     robot_model = PPO.load("./model/run_043", env=None)
 
@@ -36,7 +35,7 @@ def test_simulation(map_definition: MapDefinition):
     logger.info("Simulating the random policy.")
     for _ in range(10000):
         action_ped = env.action_space.sample()
-        obs, _, done, _ , _= env.step(action_ped)
+        obs, _, done, _, _ = env.step(action_ped)
         env.render()
 
         if done:
@@ -46,13 +45,13 @@ def test_simulation(map_definition: MapDefinition):
     env.reset()
     env.exit()
 
+
 def get_file():
     """Get the latest recorded file."""
 
     filename = max(
         os.listdir('recordings'), key=lambda x: os.path.getctime(os.path.join('recordings', x)))
     return Path('recordings', filename)
-
 
 
 def main():

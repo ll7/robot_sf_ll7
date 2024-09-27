@@ -111,8 +111,11 @@ class MapDefinition:
         """
         Returns the route for the given spawn id and goal id. If no route is found, returns None.
         """
-        return next(filter(lambda r:
-                           r.goal_id == goal_id and r.spawn_id == spawn_id, self.robot_routes), None)
+        return next(
+            filter(
+                lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
+                self.robot_routes),
+            None)
 
 
 @dataclass

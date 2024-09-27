@@ -4,10 +4,11 @@ import pickle
 from robot_sf.gym_env.robot_env import RobotEnv, VisualizableSimState
 from robot_sf.nav.map_config import MapDefinition
 
+
 def test_recording():
     env = RobotEnv(
         recording_enabled=True
-    )
+        )
     env.reset()
 
     # Run the simulation for a few timesteps

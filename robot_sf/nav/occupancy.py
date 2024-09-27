@@ -9,7 +9,8 @@ Vec2D = Tuple[float, float]
 Circle2D = Tuple[Vec2D, float]
 Line2D = Tuple[Vec2D, Vec2D]
 
-#TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
+# TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
+
 
 @numba.njit(fastmath=True)
 def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
@@ -26,6 +27,7 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root
     return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
+
 
 @numba.njit(fastmath=True)
 def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
@@ -130,9 +132,9 @@ class ContinuousOccupancy:
     get_goal_coords: Callable[[], Vec2D]
     get_obstacle_coords: Callable[[], np.ndarray]
     get_pedestrian_coords: Callable[[], np.ndarray]
-    agent_radius: float=1.0
-    ped_radius: float=0.4
-    goal_radius: float=1.0
+    agent_radius: float = 1.0
+    ped_radius: float = 0.4
+    goal_radius: float = 1.0
 
     @property
     def obstacle_coords(self) -> np.ndarray:
@@ -262,7 +264,7 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
     """
 
     get_enemy_coords: Optional[Callable[[], Vec2D]] = None
-    enemy_radius: float=1.0
+    enemy_radius: float = 1.0
 
     @property
     def enemy_coords(self) -> np.ndarray:

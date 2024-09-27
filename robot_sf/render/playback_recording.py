@@ -24,10 +24,11 @@ def load_states(filename: str) -> List[VisualizableSimState]:
         return []
 
     logger.info(f"Loading states from {filename}")
-    with open(filename, 'rb') as f: # rb = read binary
+    with open(filename, 'rb') as f:  # rb = read binary
         states, map_def = pickle.load(f)
     logger.info(f"Loaded {len(states)} states")
     return states, map_def
+
 
 def visualize_states(
         states: List[VisualizableSimState],
@@ -38,11 +39,12 @@ def visualize_states(
     on the recorded map defintion
     """
     sim_view = SimulationView(map_def=map_def, caption='RobotSF Recording')
-    sim_view.show() # to activate key_events
+    sim_view.show()  # to activate key_events
     for state in states:
         sim_view.render(state)
 
-    sim_view.exit() # to automatically close the window
+    sim_view.exit()  # to automatically close the window
+
 
 def load_states_and_visualize(filename: str):
     """

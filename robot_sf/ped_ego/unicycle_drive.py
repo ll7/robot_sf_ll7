@@ -56,7 +56,7 @@ class UnicycleDriveState:
         return (self.velocity, self.orient)
 
 
-UnicycleAction = Tuple[float, float] # (acceleration, steering angle)
+UnicycleAction = Tuple[float, float]  # (acceleration, steering angle)
 
 
 @dataclass
@@ -70,7 +70,7 @@ class UnicycleMotion:
     def move(self, state: UnicycleDriveState, action: UnicycleAction, d_t: float):
         """
         Update the state of the unicycle given an action and time duration.
-        
+
         Args:
             state (UnicycleDriveState): The current state of the unicycle.
             action (UnicycleAction): The action to take, contains acceleration
@@ -109,7 +109,7 @@ class UnicycleMotion:
     def _norm_angle(self, angle: float) -> float:
         """
         Normalize an angle to be within the range [-π, π].
-        
+
         Args:
             angle (float): The angle to normalize.
 

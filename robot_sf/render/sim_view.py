@@ -1,3 +1,12 @@
+from robot_sf.sensor.range_sensor import euclid_dist
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import Obstacle
+from robot_sf.ped_ego.unicycle_drive import UnicycleAction
+from robot_sf.robot.bicycle_drive import BicycleAction
+from robot_sf.robot.differential_drive import DifferentialDriveAction
+from loguru import logger
+import numpy as np
+import pygame
 from time import sleep
 from math import sin, cos
 from typing import Tuple, Union, List
@@ -8,17 +17,6 @@ from signal import signal, SIGINT
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
-import pygame
-import numpy as np
-
-from loguru import logger
-
-from robot_sf.robot.differential_drive import DifferentialDriveAction
-from robot_sf.robot.bicycle_drive import BicycleAction
-from robot_sf.ped_ego.unicycle_drive import UnicycleAction
-from robot_sf.nav.map_config import Obstacle
-from robot_sf.nav.map_config import MapDefinition
-from robot_sf.sensor.range_sensor import euclid_dist
 
 Vec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
@@ -73,13 +71,13 @@ class VisualizableSimState:
 
 @dataclass
 class SimulationView:
-    width: float=1200
-    height: float=800
-    scaling: float=15
-    robot_radius: float=1.0
-    ego_ped_radius: float=0.4
-    ped_radius: float=0.4
-    goal_radius: float=1.0
+    width: float = 1200
+    height: float = 800
+    scaling: float = 15
+    robot_radius: float = 1.0
+    ego_ped_radius: float = 0.4
+    ped_radius: float = 0.4
+    goal_radius: float = 1.0
     map_def: MapDefinition = field(default_factory=MapDefinition)
     obstacles: List[Obstacle] = field(default_factory=list)
     size_changed: bool = field(init=False, default=False)
@@ -89,7 +87,7 @@ class SimulationView:
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
     offset: np.array = field(init=False, default=np.array([0, 0]))
-    caption: str='RobotSF Simulation'
+    caption: str = 'RobotSF Simulation'
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False
     display_help: bool = False
@@ -175,7 +173,7 @@ class SimulationView:
             pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
             # display robotinfo
             pygame.K_q: lambda: setattr(self, 'display_robot_info', not self.display_robot_info),
-        }
+            }
 
         if e.key in key_action_map:
             key_action_map[e.key]()
@@ -190,7 +188,7 @@ class SimulationView:
             pygame.QUIT: self._handle_quit,
             pygame.VIDEORESIZE: self._handle_video_resize,
             pygame.KEYDOWN: self._handle_keydown,
-        }
+            }
         while not self.is_exit_requested:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
@@ -210,7 +208,7 @@ class SimulationView:
         pygame.display.update()
 
     def render(self, state: VisualizableSimState):
-        sleep(0.01) # limit UI update rate to 100 fps
+        sleep(0.01)  # limit UI update rate to 100 fps
         # TODO: make the sleep time configurable
 
         # info: event handling needs to be processed
@@ -247,7 +245,6 @@ class SimulationView:
 
         self._draw_grid()
 
-
         # dynamic objects
         self._augment_lidar(state.ray_vecs)
         self._augment_ped_actions(state.ped_actions)
@@ -260,7 +257,6 @@ class SimulationView:
             self._augment_lidar(state.ego_ped_ray_vecs)
             self._augment_action(state.ego_ped_actions, EGO_PED_ACTION_COLOR)
             self._draw_ego_ped(state.ego_ped_pose)
-
 
         # information
         self._augment_timestep(state.timestep)
@@ -368,7 +364,7 @@ class SimulationView:
         r_x, r_y = action.pose[0]
         # scale vector length to be always visible
         vec_length = action.action[0] * self.scaling
-        vec_orient =  action.pose[1]
+        vec_orient = action.pose[1]
 
         def from_polar(length: float, orient: float) -> Vec2D:
             return cos(orient) * length, sin(orient) * length
@@ -406,8 +402,8 @@ class SimulationView:
                 PED_ROUTE_COLOR,
                 False,
                 [self._scale_tuple((x, y))
-                for x, y in route.waypoints],
-                width = 1
+                 for x, y in route.waypoints],
+                width=1
                 )
 
     def _draw_robot_routes(self):
@@ -420,8 +416,8 @@ class SimulationView:
                 ROBOT_ROUTE_COLOR,
                 False,
                 [self._scale_tuple((x, y))
-                for x, y in route.waypoints],
-                width = 1
+                 for x, y in route.waypoints],
+                width=1
                 )
 
     def _draw_coordinates(self, x, y):
@@ -455,7 +451,7 @@ class SimulationView:
             f'scaling: {self.scaling}',
             f'x-offset: {self.offset[0]/self.scaling:.2f}',
             f'y-offset: {self.offset[1]/self.scaling:.2f}',
-        ]
+            ]
         text_lines += lines
         text_lines += ['(Press h for help)',]
 
@@ -489,10 +485,10 @@ class SimulationView:
             'Focus robot: f',
             'Focus ego_ped: p',
             'Scale up: +',
-            'Scale down: -' ,
+            'Scale down: -',
             'Display robot info: q',
             'Help: h',
-        ]
+            ]
 
         # Determine max width of the text
         text_surface = self.font.render(text_lines[1], False, TEXT_COLOR)
@@ -519,36 +515,36 @@ class SimulationView:
 
     def _draw_grid(
             self,
-            grid_increment: int=50,
-            grid_color: RgbColor=(200, 200, 200)
+            grid_increment: int = 50,
+            grid_color: RgbColor = (200, 200, 200)
             ):
         """
         Draw a grid on the screen.
         :param grid_increment: The increment of the grid in pixels.
         :param grid_color: The color of the grid lines.
         """
-        scaled_grid_size = grid_increment*self.scaling
+        scaled_grid_size = grid_increment * self.scaling
         font = pygame.font.Font(None, 24)
         # draw the vertical lines
         start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
-        for x in range(start_x, self.width-self.offset[0], scaled_grid_size):
+        for x in range(start_x, self.width - self.offset[0], scaled_grid_size):
             pygame.draw.line(
                 self.screen,
                 grid_color,
                 (x + self.offset[0], 0),
                 (x + self.offset[0], self.height)
                 )
-            label = font.render(str(int(x/self.scaling)), 1, grid_color)
+            label = font.render(str(int(x / self.scaling)), 1, grid_color)
             self.screen.blit(label, (x + self.offset[0], 0))
 
         # draw the horizontal lines
         start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
-        for y in range(start_y, self.height-self.offset[1], scaled_grid_size):
+        for y in range(start_y, self.height - self.offset[1], scaled_grid_size):
             pygame.draw.line(
                 self.screen,
                 grid_color,
                 (0, y + self.offset[1]),
                 (self.width, y + self.offset[1])
                 )
-            label = font.render(str(int(y/self.scaling)), 1, grid_color)
+            label = font.render(str(int(y / self.scaling)), 1, grid_color)
             self.screen.blit(label, (0, y + self.offset[1]))

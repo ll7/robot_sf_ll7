@@ -8,6 +8,7 @@ Rect = Tuple[Vec2D, Vec2D, Vec2D]
 # rect ABC with sides |A B|, |B C| and diagonal |A C|
 Zone = Tuple[Vec2D, Vec2D, Vec2D]
 
+
 @dataclass
 class SvgRectangle:
     """
@@ -39,7 +40,8 @@ class SvgRectangle:
             (self.x, self.y),
             (self.x + self.width, self.y),
             (self.x + self.width, self.y + self.height)
-        )
+            )
+
 
 @dataclass
 class SvgPath:

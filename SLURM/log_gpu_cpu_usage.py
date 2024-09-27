@@ -14,6 +14,7 @@ from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.tb_logging import DrivingMetricsCallback
 
+
 class LogResourceUsageCallback(BaseCallback):
     """Custom callback to log CPU and GPU usage to TensorBoard."""
 
@@ -32,6 +33,7 @@ class LogResourceUsageCallback(BaseCallback):
 
         return True
 
+
 def training(
         n_envs: int = os.cpu_count(),
         ped_densities: list[float] = None,
@@ -46,6 +48,7 @@ def training(
     logger.info(f"Number of CPUs: {n_envs}")
     if ped_densities is None:
         ped_densities = [0.01, 0.02, 0.04, 0.08]
+
     def make_env():
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities
@@ -60,16 +63,16 @@ def training(
         env,
         tensorboard_log="./logs/ppo_logs/",
         policy_kwargs=policy_kwargs
-    )
+        )
     save_model_callback = CheckpointCallback(
         500_000 // n_envs,
         "./model/backup",
         "ppo_model"
-    )
+        )
     collect_metrics_callback = DrivingMetricsCallback(n_envs)
     combined_callback = CallbackList(
         [save_model_callback, collect_metrics_callback, LogResourceUsageCallback()]
-    )
+        )
 
     logger.info("Start learning")
 
@@ -77,11 +80,11 @@ def training(
         total_timesteps=1_000_000,
         progress_bar=True,
         callback=combined_callback
-    )
-
+        )
 
     logger.info("Save model")
     model.save("./model/ppo_model")
+
 
 if __name__ == '__main__':
     logger.info(f"Python path: {sys.executable}")

@@ -14,9 +14,8 @@ from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.render.playback_recording import load_states_and_visualize
 
 
-
-
 logger.info("Simulate a random policy with a map defined in SVG format.")
+
 
 def test_simulation(map_definition: MapDefinition):
     """Test the simulation with a random policy."""
@@ -38,6 +37,7 @@ def test_simulation(map_definition: MapDefinition):
     env.reset()  # Save the recording
     env.exit()
 
+
 def convert_map(svg_file: str):
     """Create MapDefinition from svg file."""
 
@@ -47,13 +47,13 @@ def convert_map(svg_file: str):
     converter = SvgMapConverter(svg_file)
     return converter.map_definition
 
+
 def get_file():
     """Get the latest recorded file."""
 
     filename = max(
         os.listdir('recordings'), key=lambda x: os.path.getctime(os.path.join('recordings', x)))
     return Path('recordings', filename)
-
 
 
 def main():

@@ -1,5 +1,5 @@
 """
-The `sim_config.py` file defines `EnvSettings` and `PedEnvSettings` for simulation settings. 
+The `sim_config.py` file defines `EnvSettings` and `PedEnvSettings` for simulation settings.
 
 These settings include:
 - `sim_config`: Simulation configuration
@@ -84,7 +84,7 @@ class PedEnvSettings(EnvSettings):
             raise ValueError('Please ensure ego_ped_config is initialized!')
 
         # Comment following line to allow different radius for ego pedestrian
-        self.ego_ped_config.radius = self.sim_config.ped_radius # Ensure radius consistency
+        self.ego_ped_config.radius = self.sim_config.ped_radius  # Ensure radius consistency
 
     def pedestrian_factory(self) -> UnicycleDrivePedestrian:
         """

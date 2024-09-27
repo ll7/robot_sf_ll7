@@ -125,7 +125,7 @@ def evaluation_series(model_path: str, settings: EvalSettings):
             "obstacle_collision_rate": eval_metrics.obstacle_collision_rate,
             "pedestrian_collision_rate": eval_metrics.pedestrian_collision_rate,
             "timeout_rate": eval_metrics.timeout_rate,
-        }
+            }
         print(f"run with difficulty {difficulty} completed with metrics:", metrics)
 
         all_metrics[difficulty] = metrics
@@ -138,32 +138,32 @@ def main():
     obs_space, action_space = prepare_gym_spaces()
 
     gym_settings = GymAdapterSettings(
-        obs_space = obs_space,
-        action_space = action_space,
-        obs_timesteps = 1,
-        squeeze_obs = True,
-        cut_2nd_target_angle = True,
-        return_dict = False)
+        obs_space=obs_space,
+        action_space=action_space,
+        obs_timesteps=1,
+        squeeze_obs=True,
+        cut_2nd_target_angle=True,
+        return_dict=False)
 
     vehicle_config = DifferentialDriveSettings(
-        radius = 1.0,
-        max_linear_speed = 0.5,
-        max_angular_speed = 0.5,
-        wheel_radius = 0.05,
-        interaxis_length = 0.3)
+        radius=1.0,
+        max_linear_speed=0.5,
+        max_angular_speed=0.5,
+        wheel_radius=0.05,
+        interaxis_length=0.3)
 
     prf_config = PedRobotForceConfig(
-        is_active = True,
-        robot_radius = 1.0,
-        activation_threshold = 2.0,
-        force_multiplier = 10.0)
+        is_active=True,
+        robot_radius=1.0,
+        activation_threshold=2.0,
+        force_multiplier=10.0)
 
     settings = EvalSettings(
-        num_episodes = 100,
-        ped_densities = [0.00, 0.02, 0.08, 1.00],
-        vehicle_config = vehicle_config,
-        prf_config = prf_config,
-        gym_config = gym_settings)
+        num_episodes=100,
+        ped_densities=[0.00, 0.02, 0.08, 1.00],
+        vehicle_config=vehicle_config,
+        prf_config=prf_config,
+        gym_config=gym_settings)
 
     evaluation_series(model_path, settings)
 

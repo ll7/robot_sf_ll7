@@ -46,7 +46,7 @@ class EmptyRobotEnv(Env):
         - env_config (EnvSettings): Configuration for environment settings.
         - reward_func (Callable[[dict], float]): Reward function that takes
             a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as 
+        - debug (bool): If True, enables debugging information such as
             visualizations.
         """
 

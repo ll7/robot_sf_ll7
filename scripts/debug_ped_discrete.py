@@ -19,11 +19,12 @@ LEFT_CURVE: UnicycleAction = (0, 0.5)
 RIGHT_CURVE: UnicycleAction = (0, -0.5)
 NO_OP = (0.0, 0.0)
 
+
 def select_action(obs: dict) -> UnicycleAction:
     drive_state = obs["drive_state"][0]
     target_angle = drive_state[3]
 
-    if drive_state[0] < 1: # velocity
+    if drive_state[0] < 1:  # velocity
         return ACCELERATION
     elif abs(target_angle) > 0.1:
         if target_angle > 0:
@@ -32,6 +33,7 @@ def select_action(obs: dict) -> UnicycleAction:
             return RIGHT_CURVE
     else:
         return NO_OP
+
 
 def make_env():
     ped_densities = [0.01, 0.02, 0.04, 0.08]
@@ -43,7 +45,7 @@ def make_env():
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-    )
+        )
     env_config.sim_config.ped_density_by_difficulty = ped_densities
     env_config.sim_config.difficulty = difficulty
     return PedestrianEnv(env_config, robot_model=robot_model, debug=True,)
@@ -59,7 +61,7 @@ def run():
             action = select_action(obs[0])
         else:
             action = select_action(obs)
-        obs, reward, done, _ , meta = env.step(action)
+        obs, reward, done, _, meta = env.step(action)
         ep_rewards += reward
         env.render()
 

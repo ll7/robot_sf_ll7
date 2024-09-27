@@ -15,7 +15,6 @@ def training():
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
-
     def make_env():
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities

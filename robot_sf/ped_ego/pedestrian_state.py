@@ -12,6 +12,7 @@ import numpy as np
 from robot_sf.sensor.sensor_fusion import SensorFusion
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 
+
 @dataclass
 class PedestrianState:
     """
@@ -20,9 +21,9 @@ class PedestrianState:
     occupancy, sensor fusion, and simulation time.
 
     Attributes:
-        robot_occupancy (ContinuousOccupancy): Object tracking spatial occupation, 
+        robot_occupancy (ContinuousOccupancy): Object tracking spatial occupation,
             for collision detection.
-        egp_ped_occupancy (EgoPedContinuousOccupancy): Object tracking spatial occupation, 
+        egp_ped_occupancy (EgoPedContinuousOccupancy): Object tracking spatial occupation,
             for collision detection.
         sensors (SensorFusion): Object for managing sensor data and fusion.
         d_t (float): The simulation timestep duration.
@@ -124,4 +125,4 @@ class PedestrianState:
             "is_robot_pedestrian_collision": self.is_collision_robot_with_pedestrian,
             "is_timesteps_exceeded": self.is_timeout,
             "max_sim_steps": self.max_sim_steps,
-        }
+            }

@@ -1,5 +1,5 @@
 from random import sample, uniform
-from math import ceil,pi, sin, cos
+from math import ceil, pi, sin, cos
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
 
@@ -175,6 +175,7 @@ def init_simulators(
 
     return sims
 
+
 @dataclass
 class PedSimulator(Simulator):
     """
@@ -224,15 +225,15 @@ class PedSimulator(Simulator):
         self.ego_ped.apply_action(ego_ped_actions[0], self.config.time_per_step_in_secs)
 
     def get_proximity_point(self, fixed_point: Tuple[float, float],
-                        lower_bound: float, upper_bound: float) -> Tuple[float, float]:
+                            lower_bound: float, upper_bound: float) -> Tuple[float, float]:
         """
         Calculate a point in the proximity of another point with specified distance bounds.
-        
+
         Args:
             fixed_point (tuple): (x, y) The original point.
             lower_bound (float): The minimum distance from the original point.
             upper_bound (float): The maximum distance from the original point.
-            
+
         Returns:
             tuple: A tuple containing the new x and y coordinates.
         """
@@ -247,7 +248,7 @@ class PedSimulator(Simulator):
                 return new_x, new_y
 
         logger.warning(f"Could not find a valid proximity point: {fixed_point}.")
-        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0] # Spawn in pedestrian spawn_zone
+        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]  # Spawn in pedestrian spawn_zone
         initial_spawn = sample_zone(spawn_id, 1)[0]
         return initial_spawn
 
@@ -293,7 +294,7 @@ def init_ped_simulators(
     # Create the pedestrian for this simulator
     sim_ped = env_config.pedestrian_factory()
 
-        # Create the simulator with the robots and add it to the list
+    # Create the simulator with the robots and add it to the list
     sim = PedSimulator(
         env_config.sim_config, map_def, [sim_robot],
         goal_proximity, random_start_pos, ego_ped=sim_ped)

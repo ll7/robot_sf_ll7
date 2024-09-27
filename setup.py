@@ -15,6 +15,7 @@ INSTALL_REQUIREMENTS = ["numpy", "gymnasium", "pylint", "pytest", "scalene", "nu
                         "stable-baselines3", "tqdm", "rich", "tensorboard"]
 # TODO Update this package information
 
+
 def get_ext_paths(root_dir, exclude_files):
     paths = []
 
@@ -22,7 +23,7 @@ def get_ext_paths(root_dir, exclude_files):
         for filename in files:
             if os.path.splitext(filename)[1] != ".py":
                 continue
-            if filename=="__init__.py":
+            if filename == "__init__.py":
                 continue
 
             file_path = os.path.join(root, filename)
@@ -48,4 +49,4 @@ setup(
     zip_safe=False,
     include_package_data=True,
     python_requires=">=3.8"
-)
+    )

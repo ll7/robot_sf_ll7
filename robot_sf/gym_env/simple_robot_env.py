@@ -9,7 +9,6 @@ import gymnasium
 from robot_sf.gym_env.env_config import EnvSettings
 
 
-
 class SimpleRobotEnv(gymnasium.Env):
     """
     A simple robot environment based on gymnasium.Env.
@@ -19,23 +18,22 @@ class SimpleRobotEnv(gymnasium.Env):
             self,
             env_config: EnvSettings = EnvSettings()
             ):
-        
+
         self.info = {}
 
         # Action space
         # TODO: Action space depends on the robot type? Differential drive or bicycle model?
         self.action_space = self._define_action_space()
-        
+
         # Observation Space
         self.observation_space = self._define_observation_space()
-        
+
     def _define_action_space(self):
         """
         Action Space:
         - 2 actions: move forward, turn
         """
         return gymnasium.spaces.Discrete(2)
-
 
     def _define_observation_space(self):
         """
@@ -46,19 +44,18 @@ class SimpleRobotEnv(gymnasium.Env):
         - lidar observations
         """
         return gymnasium.spaces.Discrete(5)
-    
+
     def _get_observation(self):
         """
         Get the current observation
         """
         return self.observation
-    
+
     def _get_info(self):
         """
         Get the current info
         """
         return self.info
-
 
     def step(self, action):
         pass
@@ -67,9 +64,6 @@ class SimpleRobotEnv(gymnasium.Env):
         # seed for self.np_random
         super().reset(seed=seed)
 
-
-
-        
         observation = self_get_observation()
         info = self._get_info()
         return observation, info
@@ -79,4 +73,3 @@ class SimpleRobotEnv(gymnasium.Env):
 
     def close(self):
         pass
-

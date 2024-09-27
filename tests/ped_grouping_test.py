@@ -11,11 +11,14 @@ Vec2D = Tuple[float, float]
 def intersect(s1: Set, s2: Set) -> Set:
     return {e for e in s1 if e in s2}
 
+
 def contains_all(s: Set, comp: Set) -> bool:
     return len(intersect(s, comp)) >= len(comp)
 
+
 def contains_none(s: Set, comp: Set) -> bool:
     return len(intersect(s, comp)) == 0
+
 
 def set_except(s1: Set, s2: Set) -> Set:
     return {e for e in s1 if e not in s2}
@@ -34,7 +37,7 @@ def init_groups():
 
         # standalone pedestrian
         [5, 6, 0, 0, 7, 5],
-    ])
+        ])
     states = PedestrianStates(lambda: pysf_data)
     groups = PedestrianGroupings(states)
     groups.new_group({0, 1, 2})

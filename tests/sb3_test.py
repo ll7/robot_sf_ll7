@@ -7,6 +7,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.feature_extractor import DynamicsExtractor
 
+
 def test_can_load_model_snapshot():
     MODEL_PATH = "./temp/ppo_model"
     MODEL_FILE = f"{MODEL_PATH}.zip"
@@ -29,7 +30,7 @@ def test_can_load_model_snapshot():
 
     obs, info = inf_env.reset()
     action, _ = model2.predict(obs, deterministic=True)
-    
+
     assert action.shape == inf_env.action_space.shape
 
     if os.path.exists(MODEL_FILE) and os.path.isfile(MODEL_FILE):

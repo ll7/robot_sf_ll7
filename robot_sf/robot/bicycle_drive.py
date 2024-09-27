@@ -56,7 +56,7 @@ class BicycleDriveState:
         return (self.velocity, self.orient)
 
 
-BicycleAction = Tuple[float, float] # (acceleration, steering angle)
+BicycleAction = Tuple[float, float]  # (acceleration, steering angle)
 
 
 @dataclass
@@ -71,7 +71,7 @@ class BicycleMotion:
     def move(self, state: BicycleDriveState, action: BicycleAction, d_t: float):
         """
         Update the state of the bicycle given an action and time duration.
-        
+
         Args:
             state (BicycleDriveState): The current state of the bicycle.
             action (BicycleAction): The action to take, contains acceleration
@@ -110,7 +110,7 @@ class BicycleMotion:
     def _norm_angle(self, angle: float) -> float:
         """
         Normalize an angle to be within the range [-π, π].
-        
+
         Args:
             angle (float): The angle to normalize.
 

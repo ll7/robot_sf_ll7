@@ -5,6 +5,7 @@ from stable_baselines3.common.logger import TensorBoardOutputFormat, SummaryWrit
 
 from robot_sf.eval import EnvMetrics, VecEnvMetrics, PedEnvMetrics, PedVecEnvMetrics
 
+
 class BaseMetricsCallback(BaseCallback):
     def __init__(self):
         super().__init__()
@@ -33,6 +34,7 @@ class BaseMetricsCallback(BaseCallback):
     def _on_step(self) -> bool:
         raise NotImplementedError
 
+
 class DrivingMetricsCallback(BaseMetricsCallback):
 
     def __init__(self, num_envs: int):
@@ -54,7 +56,7 @@ class DrivingMetricsCallback(BaseMetricsCallback):
             self.writer.add_scalar("metrics/pedestrian_collision_rate",
                                    self.metrics.pedestrian_collision_rate, self.num_timesteps)
             self.writer.flush()
-        return True # info: don't request early abort
+        return True  # info: don't request early abort
 
 
 class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
@@ -84,4 +86,4 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
             self.writer.add_scalar("metrics/avg_distance_to_robot",
                                    self.metrics.route_end_distance, self.num_timesteps)
             self.writer.flush()
-        return True # info: don't request early abort
+        return True  # info: don't request early abort

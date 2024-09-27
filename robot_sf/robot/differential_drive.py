@@ -10,14 +10,14 @@ from gymnasium import spaces
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
-WheelSpeedState = Tuple[float, float] # tuple of (left, right) speeds
+WheelSpeedState = Tuple[float, float]  # tuple of (left, right) speeds
 # TODO: Is WheelSpeedState in translation or rotation units?
 
 
 @dataclass
 class DifferentialDriveSettings:
     """
-    Configuration settings for a differential drive robot, including physical 
+    Configuration settings for a differential drive robot, including physical
     characteristics and speed limitations.
     """
 
@@ -37,7 +37,7 @@ class DifferentialDriveSettings:
         Post-initialization processing to ensure valid configuration values.
 
         Raises:
-            ValueError: If any of the provided settings are not within the 
+            ValueError: If any of the provided settings are not within the
                         expected positive, non-zero ranges.
         """
         if self.radius <= 0:
@@ -47,11 +47,11 @@ class DifferentialDriveSettings:
         if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
             raise ValueError(
                 "Robot's max. linear and angular speeds must be positive and non-zero!"
-            )
+                )
         if self.interaxis_length <= 0:
             raise ValueError(
                 "Robot's interaxis length must be positive and non-zero!"
-            )
+                )
 
 
 @dataclass
@@ -62,7 +62,7 @@ class DifferentialDriveState:
     wheel_speeds: WheelSpeedState = field(default=(0, 0))
 
 
-DifferentialDriveAction = Tuple[float, float] # (linear velocity, angular velocity)
+DifferentialDriveAction = Tuple[float, float]  # (linear velocity, angular velocity)
 
 
 @dataclass
@@ -75,9 +75,9 @@ class DifferentialDriveMotion:
 
     def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float):
         """
-        Updates the robot's state including position and velocity based on 
+        Updates the robot's state including position and velocity based on
         the action taken and elapsed time.
-        
+
         :param state: The current state of the differential drive.
         :param action: The desired change in velocity and orientation (dx, dtheta).
         :param d_t: The time elapsed since the last update in seconds.
@@ -187,7 +187,7 @@ class DifferentialDriveMotion:
 @dataclass
 class DifferentialDriveRobot():
     """
-    A robot with differential drive behavior that defines its movement, 
+    A robot with differential drive behavior that defines its movement,
     action and observation space.
     """
 

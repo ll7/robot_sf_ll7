@@ -19,6 +19,7 @@ class PedestrianBehavior(Protocol):
     !!! Not Implemented !!!
     TODO: What is the purpose of this class?
     """
+
     def step(self):
         raise NotImplementedError()
 

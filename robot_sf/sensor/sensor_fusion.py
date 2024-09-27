@@ -59,7 +59,7 @@ def fused_sensor_space(
     orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
     orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)
     orig_obs_space = spaces.Dict(
-        { OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state })
+        {OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state})
 
     # Create the normalized observation spaces for the drive and LiDAR states
     box_drive_state = spaces.Box(
@@ -70,7 +70,7 @@ def fused_sensor_space(
         low=min_lidar_state / max_lidar_state,
         high=max_lidar_state / max_lidar_state,
         dtype=np.float32)
-    norm_obs_space = spaces.Dict({ OBS_DRIVE_STATE: box_drive_state, OBS_RAYS: box_lidar_state })
+    norm_obs_space = spaces.Dict({OBS_DRIVE_STATE: box_drive_state, OBS_RAYS: box_lidar_state})
 
     return norm_obs_space, orig_obs_space
 
@@ -147,7 +147,7 @@ class SensorFusion:
             target_distance,
             target_angle,
             next_target_angle
-        ])
+            ])
 
         # info: populate cache with same states -> no movement
         # If the caches are empty, fill them with the current states

@@ -86,7 +86,7 @@ def test_is_collision_with_obstacle_segment_outside_circle():
 
 
 def test_is_collision_with_pedestrian():
-    ped_pos = np.random.uniform(-10, 10, size=(2))
+    ped_pos = np.random.uniform(-10, 10, size=2)
     robot_pos = (ped_pos[0], ped_pos[1])
     _map = ContinuousOccupancy(
         40,
@@ -101,7 +101,7 @@ def test_is_collision_with_pedestrian():
 
 
 def test_is_collision_with_agent():
-    agent_pos = np.random.uniform(-10, 10, size=(2))
+    agent_pos = np.random.uniform(-10, 10, size=2)
     enemy_pos = (agent_pos[0], agent_pos[1])
     _map = EgoPedContinuousOccupancy(
         40,

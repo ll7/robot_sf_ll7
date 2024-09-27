@@ -69,8 +69,10 @@ class MapCanvas:
         scaling = self.map_to_canvas_scaling()
 
         def rect_points(rect: Rect) -> List[Vec2D]:
-            def add_vec(v1, v2): return (v1[0] + v2[0], v1[1] + v2[1])
-            def sub_vec(v1, v2): return (v1[0] - v2[0], v1[1] - v2[1])
+            def add_vec(v1, v2):
+                return (v1[0] + v2[0], v1[1] + v2[1])
+            def sub_vec(v1, v2):
+                return (v1[0] - v2[0], v1[1] - v2[1])
             p1, p2, p3 = rect
             p4 = add_vec(sub_vec(p3, p2), p1)
             return [p1, p2, p3, p4]
@@ -151,17 +153,35 @@ class MapEditorToolbar:
 
         self.buttons_by_mode = {}
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_SPAWN] = tk.Button(
-            frame, text="Robot Spawn", command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_SPAWN))
+            frame,
+            text="Robot Spawn",
+            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_SPAWN)
+            )
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_GOAL] = tk.Button(
-            frame, text="Robot Goal", command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_GOAL))
+            frame,
+            text="Robot Goal",
+            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_GOAL)
+            )
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_ROUTE] = tk.Button(
-            frame, text="Robot Route", command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_ROUTE))
+            frame,
+            text="Robot Route",
+            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_ROUTE)
+            )
         self.buttons_by_mode[MapToolbarMode.NEW_PED_SPAWN] = tk.Button(
-            frame, text="Ped Spawn", command=lambda: self.change_mode(MapToolbarMode.NEW_PED_SPAWN))
+            frame,
+            text="Ped Spawn",
+            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_SPAWN)
+            )
         self.buttons_by_mode[MapToolbarMode.NEW_PED_GOAL] = tk.Button(
-            frame, text="Ped Goal", command=lambda: self.change_mode(MapToolbarMode.NEW_PED_GOAL))
+            frame,
+            text="Ped Goal",
+            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_GOAL)
+            )
         self.buttons_by_mode[MapToolbarMode.NEW_PED_ROUTE] = tk.Button(
-            frame, text="Ped Route", command=lambda: self.change_mode(MapToolbarMode.NEW_PED_ROUTE))
+            frame,
+            text="Ped Route",
+            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_ROUTE)
+            )
 
     @property
     def buttons(self) -> Iterable[tk.Button]:

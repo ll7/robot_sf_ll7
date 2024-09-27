@@ -1,7 +1,7 @@
 [tool.autopep8]
 max_line_length = 100
-verbose = true
+verbose = false
 hang-closing = true
 in-place = true
 recursive = true
-aggressive = 3
+aggressive = 4

@@ -49,8 +49,13 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
     cached_angles = np.linspace(0, 2 * pi, lidar_n_rays + 1)[:-1]
     ped_pos = np.array([rotate((2.4, 0), (0, 0), rot) for rot in cached_angles])
     occupancy = ContinuousOccupancy(
-        10, 10, lambda: None, lambda: None, lambda: np.array(
-            [[]]), lambda: ped_pos)
+        10,
+        10,
+        lambda: None,
+        lambda: None,
+        lambda: np.array([[]]),
+        lambda: ped_pos,
+        )
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
     scan, _ = lidar_ray_scan(((0, 0), 0), occupancy, settings)

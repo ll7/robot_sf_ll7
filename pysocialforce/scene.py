@@ -124,7 +124,7 @@ class PedState:
 class EnvState:
     """State of the environment obstacles"""
     _orig_obstacles: List[Line2D]
-    _resolution: float=10
+    _resolution: float = 10
     _obstacles_linspace: List[np.ndarray] = field(init=False)
     _obstacles_raw: np.ndarray = field(init=False)
 
@@ -170,7 +170,7 @@ class EnvState:
         def orient(line):
             start_x, end_x, start_y, end_y = line
             vec_x, vec_y = end_x - start_x, end_y - start_y
-            return (atan2(vec_y, vec_x) + 2*pi) % (2*pi)
+            return (atan2(vec_y, vec_x) + 2 * pi) % (2 * pi)
 
         def unit_vec(orient):
             return cos(orient), sin(orient)
@@ -179,7 +179,7 @@ class EnvState:
             return np.array([])
 
         line_orients = np.array([orient(line) for line in obs_lines])
-        ortho_orients = (line_orients + pi/2) % (2*pi)
+        ortho_orients = (line_orients + pi / 2) % (2 * pi)
         ortho_vecs = np.array([unit_vec(orient) for orient in ortho_orients])
 
         obstacles = np.zeros((len(obs_lines), 6))

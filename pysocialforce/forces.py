@@ -89,31 +89,31 @@ class DesiredForce:
         relexation_time: float = self.config.relaxation_time
         # Threshold distance to consider a goal as reached
         goal_threshold = self.config.goal_threshold
-        
+
         # Get current position, velocity, and goal for each pedestrian
         pos = self.peds.pos()
         vel = self.peds.vel()
         goal = self.peds.goal()
-        
+
         # Calculate normalized direction vector and distance to the goal
         direction, dist = normalize(goal - pos)
-        
+
         # Initialize force array with zeros for each pedestrian
         force = np.zeros((self.peds.size(), 2))
-        
+
         # For pedestrians further than the goal threshold from their goal,
         # calculate the force based on the desired speed and current velocity
         force[dist > goal_threshold] = (
             direction *
             self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
-        )[dist > goal_threshold, :]
-        
+            )[dist > goal_threshold, :]
+
         # For pedestrians within the goal threshold, apply a braking force
         force[dist <= goal_threshold] = -1.0 * vel[dist <= goal_threshold]
-        
+
         # Divide the force by the relaxation time to get the final force value
         force /= relexation_time
-        
+
         # Multiply by a factor from the configuration to scale the force
         return force * self.config.factor
 
@@ -144,13 +144,13 @@ class SocialForce:
 
 @njit(fastmath=True)
 def social_force(
-        ped_positions: np.ndarray,
-        ped_velocities: np.ndarray,
-        activation_threshold: float,
-        n: int, n_prime: int,
-        lambda_importance: float,
-        gamma: float
-) -> np.ndarray:
+    ped_positions: np.ndarray,
+    ped_velocities: np.ndarray,
+    activation_threshold: float,
+    n: int, n_prime: int,
+    lambda_importance: float,
+    gamma: float
+        ) -> np.ndarray:
     """
     Calculates the social force acting on each pedestrian.
 
@@ -202,12 +202,12 @@ def social_force(
 
 @njit(fastmath=True)
 def social_force_single_ped(
-        pos_diffs: np.ndarray,
-        vel_diffs: np.ndarray,
-        n: int, n_prime:
-        int, lambda_importance:
-        float, gamma: float
-) -> Point2D:
+    pos_diffs: np.ndarray,
+    vel_diffs: np.ndarray,
+    n: int, n_prime:
+    int, lambda_importance:
+    float, gamma: float
+        ) -> Point2D:
     """
     Calculates the social force exerted on a single pedestrian.
 
@@ -233,13 +233,13 @@ def social_force_single_ped(
 
 @njit(fastmath=True)
 def social_force_ped_ped(
-        pos_diff: Point2D,
-        vel_diff: Point2D,
-        n: int,
-        n_prime: int,
-        lambda_importance: float,
-        gamma: float
-) -> Point2D:
+    pos_diff: Point2D,
+    vel_diff: Point2D,
+    n: int,
+    n_prime: int,
+    lambda_importance: float,
+    gamma: float
+        ) -> Point2D:
     """
     Calculates the social force between two pedestrians.
 
@@ -257,14 +257,14 @@ def social_force_ped_ped(
     # Decompose position and velocity differences into components
     pos_diff_x, pos_diff_y = pos_diff
     vel_diff_x, vel_diff_y = vel_diff
-    
+
     # Calculate normalized direction vector and its length from position diff
     (diff_dir_x, diff_dir_y), diff_length = norm_vec((pos_diff_x, pos_diff_y))
-    
+
     # Compute interaction vector based on velocity difference and direction
     interaction_vec_x = lambda_importance * vel_diff_x + diff_dir_x
     interaction_vec_y = lambda_importance * vel_diff_y + diff_dir_y
-    
+
     # Normalize the interaction vector and get its length
     interaction_dir, interaction_length = norm_vec(
         (interaction_vec_x, interaction_vec_y))
@@ -284,14 +284,14 @@ def social_force_ped_ped(
     # Compute the magnitude of the angle component of the social force
     force_angle_amount = -theta_sign * \
         exp(-1.0 * diff_length / B - (n * B * theta)**2)
-    
+
     # Calculate the x and y components of the velocity force
     force_velocity_x = interaction_dir_x * force_velocity_amount
     force_velocity_y = interaction_dir_y * force_velocity_amount
     # Calculate the x and y components of the angle force
     force_angle_x = -interaction_dir_y * force_angle_amount
     force_angle_y = interaction_dir_x * force_angle_amount
-    
+
     # Return the total social force as a combination of both components
     return force_velocity_x + force_angle_x, force_velocity_y + force_angle_y
 
@@ -336,11 +336,11 @@ class ObstacleForce:
 
 @njit(fastmath=True)
 def all_obstacle_forces(
-        out_forces: np.ndarray,
-        ped_positions: np.ndarray,
-        obstacles: np.ndarray,
-        ped_radius: float
-):
+    out_forces: np.ndarray,
+    ped_positions: np.ndarray,
+    obstacles: np.ndarray,
+    ped_radius: float
+        ):
     """
     Calculates the forces exerted by all obstacles on each pedestrian.
 
@@ -481,8 +481,8 @@ def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> Tuple[float, f
 class GroupCoherenceForceAlt:
     """
     Alternative group coherence force as specified in pedsim_ros
-    This class represents the computation of an alternative model for the group 
-    coherence force, which is a social force that aims to keep the members of a 
+    This class represents the computation of an alternative model for the group
+    coherence force, which is a social force that aims to keep the members of a
     group together.
     """
 
@@ -490,9 +490,9 @@ class GroupCoherenceForceAlt:
         """
         Initialize the GroupCoherenceForceAlt object.
 
-        :param config: An instance of GroupCoherenceForceConfig containing the 
+        :param config: An instance of GroupCoherenceForceConfig containing the
             configuration parameters for the coherence force.
-        :param peds: An instance of PedState representing the state 
+        :param peds: An instance of PedState representing the state
             (position, velocity, etc.) of all pedestrians.
         """
         # Store the pedestrian states which includes positions and velocities.
@@ -530,7 +530,8 @@ class GroupCoherenceForceAlt:
             # Compute the norms (magnitudes) of those vectors.
             norms = np.linalg.norm(force_vec, axis=1)
 
-            # Apply a softening factor based on the distance from the centroid, using hyperbolic tangent.
+            # Apply a softening factor based on the distance from the centroid, using
+            # hyperbolic tangent.
             softened_factor = (np.tanh(norms - threshold) + 1) / 2
 
             # Calculate the actual forces applying the softening factor to the force vectors.
@@ -589,7 +590,7 @@ class GroupRepulsiveForce:
 class GroupGazeForceAlt:
     """
     Group gaze force
-    A class representing the alternative method to compute group gaze force which is 
+    A class representing the alternative method to compute group gaze force which is
     a social force that models the interaction within a group of pedestrians.
     """
 
@@ -604,13 +605,14 @@ class GroupGazeForceAlt:
 
     def __call__(self):
         """
-        Calculates and returns the group gaze forces for all pedestrian groups. 
+        Calculates and returns the group gaze forces for all pedestrian groups.
         This method allows an instance of the class to be called as a function.
 
-        :return: A numpy array containing the forces applied to each pedestrian 
+        :return: A numpy array containing the forces applied to each pedestrian
             due to group gaze.
         """
-        # Initialize a zero matrix for the forces with dimensions equal to the number of pedestrians by 2 (for x and y components).
+        # Initialize a zero matrix for the forces with dimensions equal to the
+        # number of pedestrians by 2 (for x and y components).
         forces = np.zeros((self.peds.size(), 2))
 
         # If there are no groups, return the zero-initialized forces array.
@@ -624,7 +626,8 @@ class GroupGazeForceAlt:
         # Iterate over each group in the pedestrian groups.
         for group in self.peds.groups:
             group_size = len(group)
-            # If the group size is less than or equal to 1, skip this group as it does not exert group force.
+            # If the group size is less than or equal to 1, skip this group as it does
+            # not exert group force.
             if group_size <= 1:
                 continue
             # Compute the group gaze force for the current group and assign it to the forces array.
@@ -636,10 +639,10 @@ class GroupGazeForceAlt:
 
 @njit(fastmath=True)
 def group_gaze_force(
-        member_pos: np.ndarray,
-        member_directions: np.ndarray,
-        member_dist: np.ndarray
-) -> np.ndarray:
+    member_pos: np.ndarray,
+    member_directions: np.ndarray,
+    member_dist: np.ndarray
+        ) -> np.ndarray:
     """
     Calculates the group gaze force for each member in a group.
 
@@ -654,7 +657,8 @@ def group_gaze_force(
     # Determine the number of members in the group based on the array shape.
     group_size = member_pos.shape[0]
 
-    # Initialize a zero array to store the output forces for each member, size Nx2 for N members and 2D forces.
+    # Initialize a zero array to store the output forces for each member, size
+    # Nx2 for N members and 2D forces.
     out_forces = np.zeros((group_size, 2))
 
     # Iterate over all group members to calculate the force that each should experience.
@@ -663,7 +667,8 @@ def group_gaze_force(
         other_member_pos = member_pos[np.arange(group_size) != i, :2]
         mass_center_without_ped = centroid(other_member_pos)
 
-        # Compute the relative vector pointing from the current member's position to this center of mass.
+        # Compute the relative vector pointing from the current member's position
+        # to this center of mass.
         relative_com_x = mass_center_without_ped[0] - member_pos[i, 0]
         relative_com_y = mass_center_without_ped[1] - member_pos[i, 1]
 
@@ -680,7 +685,8 @@ def group_gaze_force(
         # aforementioned dot product, normalized by the member’s desired separation distance.
         factor = com_dist * element_prod / member_dist[i]
 
-        # Project the computed factor onto the pedestrian's direction to obtain the force components.
+        # Project the computed factor onto the pedestrian's direction to obtain
+        # the force components.
         force_x, force_y = ped_dir_x * factor, ped_dir_y * factor
 
         # Assign the calculated force to the output array for the current member.
@@ -749,8 +755,8 @@ def centroid(vecs: np.ndarray) -> Tuple[float, float]:
     """
     Compute the centroid of a set of points in 2D space.
 
-    The centroid is calculated as the arithmetic mean (average) 
-    of all the points. It is often referred to as the "center of gravity" or 
+    The centroid is calculated as the arithmetic mean (average)
+    of all the points. It is often referred to as the "center of gravity" or
     "geometric center" of a two-dimensional shape.
 
     Parameters:

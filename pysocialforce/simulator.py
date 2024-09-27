@@ -36,22 +36,22 @@ def make_forces(sim: pysf.Simulator, config: SimulatorConfig) -> List[pysf.force
         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
         pysf.forces.SocialForce(config.social_force_config, sim.peds),
         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
-    ]
+        ]
     group_forces = [
         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
-    ]
+        ]
     return force_list + group_forces if enable_group else force_list
 
 
 class Simulator_v2:
     def __init__(
             self,
-            map_definition: MapDefinition=EMPTY_MAP,
-            config: SimulatorConfig=SimulatorConfig(),
-            make_forces: Callable[[Simulator, SimulatorConfig], List[forces.Force]]=make_forces,
-            populate: SimPopulator=lambda s, m: \
+            map_definition: MapDefinition = EMPTY_MAP,
+            config: SimulatorConfig = SimulatorConfig(),
+            make_forces: Callable[[Simulator, SimulatorConfig], List[forces.Force]] = make_forces,
+            populate: SimPopulator = lambda s, m:
             populate_simulation(
                 s.scene_config.tau, s.ped_spawn_config,
                 m.routes, m.crowded_zones),
@@ -136,7 +136,7 @@ class Simulator_v2:
         for behavior in self.behaviors:
             behavior.step()
 
-    def step(self, n: int=1):
+    def step(self, n: int = 1):
         """
         Performs n steps in the simulation.
 
@@ -154,10 +154,10 @@ class Simulator_v2:
 
 class Simulator:
     def __init__(self, state: np.ndarray,
-                 groups: List[List[int]]=None,
-                 obstacles: List[Line2D]=None,
-                 config: SimulatorConfig=SimulatorConfig(),
-                 make_forces: Callable[[Simulator, SimulatorConfig], List[forces.Force]]=make_forces,
+                 groups: List[List[int]] = None,
+                 obstacles: List[Line2D] = None,
+                 config: SimulatorConfig = SimulatorConfig(),
+                 make_forces: Callable[[Simulator, SimulatorConfig], List[forces.Force]] = make_forces,
                  on_step: Callable[[int, SimState], None] = lambda t, s: None):
         self.config = config
         self.on_step = on_step
@@ -179,7 +179,7 @@ class Simulator:
         warn('For performance reasons This function does not retrieve the whole \
               state history (it used to facilitate video recordings). \
               Please use the on_step callback for recording purposes instead!',
-              DeprecationWarning, stacklevel=2)
+             DeprecationWarning, stacklevel=2)
         return self.peds.get_states()
 
     def get_length(self):

@@ -1,10 +1,11 @@
 import numpy as np
-from pysocialforce.forces import centroid # Import the centroid function from its module
+from pysocialforce.forces import centroid  # Import the centroid function from its module
 import unittest
+
 
 class TestCentroidFunction(unittest.TestCase):
     """TestCentroidFucntion"""
-    
+
     def test_single_point(self):
         """Test that the centroid of a single point is the point itself."""
         points = np.array([[1, 2]])
@@ -35,6 +36,7 @@ class TestCentroidFunction(unittest.TestCase):
         points = np.array([], dtype=np.float64).reshape(0, 2)
         with self.assertRaises(ValueError):
             centroid(points)
+
 
 # This allows the test code to be executed when the script is run directly
 if __name__ == '__main__':

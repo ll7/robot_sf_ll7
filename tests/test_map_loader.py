@@ -7,6 +7,7 @@ import pytest
 from pysocialforce.map_loader import load_map
 from pysocialforce.map_config import MapDefinition
 
+
 def test_load_map():
     # Test with a valid map file
     map_file = 'tests/test_maps/map_regular.json'
@@ -30,6 +31,7 @@ def test_load_map():
     map_file = 'tests/test_maps/map_no_crowded_zone.json'
     map_definition = load_map(map_file)
     assert len(map_definition.crowded_zones) == 0
+
 
 def test_load_map_with_invalid_file():
     # Test with a non-existent file

@@ -1,6 +1,6 @@
 """
 ped_grouping.py
-Handles the 
+Handles the
 - PedstrianStates
 - PedestrianGroupings
 """

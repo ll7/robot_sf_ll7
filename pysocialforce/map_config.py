@@ -8,7 +8,7 @@ Vec2D = Tuple[float, float]
 Line2D = Tuple[float, float, float, float]
 Circle = Tuple[Vec2D, float]
 Rect = Tuple[Vec2D, Vec2D, Vec2D]
-Zone = Tuple[Vec2D, Vec2D, Vec2D] # rect ABC with sides |A B|, |B C| and diagonal |A C|
+Zone = Tuple[Vec2D, Vec2D, Vec2D]  # rect ABC with sides |A B|, |B C| and diagonal |A C|
 
 
 def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
@@ -43,7 +43,7 @@ def sample_circle(circle: Circle, num_samples: int) -> List[Vec2D]:
         List[Vec2D]: A list of sampled points within the zone.
     """
     center, radius = circle
-    rot = np.random.uniform(0, np.pi*2, (num_samples, 1))
+    rot = np.random.uniform(0, np.pi * 2, (num_samples, 1))
     radius = np.random.uniform(0, radius, (num_samples, 1))
     rel_x, rel_y = np.cos(rot) * radius, np.sin(rot) * radius
     points = np.concatenate((rel_x, rel_y), axis=1) + np.array([center])
@@ -72,7 +72,8 @@ class Obstacle:
         self.vertices_np = np.array(self.vertices)
         edges = list(zip(self.vertices[:-1], self.vertices[1:])) \
             + [(self.vertices[-1], self.vertices[0])]
-        edges = list(filter(lambda l: l[0] != l[1], edges)) # remove fake lines that are just points
+        # remove fake lines that are just points
+        edges = list(filter(lambda l: l[0] != l[1], edges))
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
         self.lines = lines
 
@@ -96,7 +97,7 @@ class GlobalRoute:
 
             ValueError: If the route contains no waypoints.
         """
-        
+
         if len(self.waypoints) < 1:
             raise ValueError(f'Route contains no waypoints!')
 

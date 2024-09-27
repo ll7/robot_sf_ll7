@@ -21,7 +21,7 @@ class RouteNavigator:
 
     waypoints: List[Vec2D] = field(default_factory=list)
     waypoint_id: int = 0
-    proximity_threshold: float = 1.0 # info: should be set to vehicle radius + goal radius
+    proximity_threshold: float = 1.0  # info: should be set to vehicle radius + goal radius
     pos: Vec2D = field(default=(0, 0))
     reached_waypoint: bool = False
 

@@ -19,5 +19,8 @@
             "query": "state:open repo:${owner}/${repository} sort:created-desc"
         }
     ],
-    "ltex.language": "en-US"
+    "ltex.language": "en-US",
+    "editor.rulers": [
+        100
+    ]
 }

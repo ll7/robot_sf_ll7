@@ -30,7 +30,7 @@ def test_simulation(map_definition: MapDefinition):
 
     env = PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=True)
 
-    obs = env.reset()
+    obs, _ = env.reset()
 
     logger.info("Simulating the random policy.")
     for _ in range(10000):
@@ -39,7 +39,7 @@ def test_simulation(map_definition: MapDefinition):
         env.render()
 
         if done:
-            obs = env.reset()
+            obs, _ = env.reset()
             env.render()
 
     env.reset()
@@ -56,7 +56,7 @@ def get_file():
 
 def main():
 
-    map_def = convert_map("maps/svg_maps/debug_03.svg")
+    map_def = convert_map("maps/svg_maps/debug_06.svg")
 
     test_simulation(map_def)
 

@@ -124,7 +124,7 @@ docker-compose build && docker-compose run \
 
 The pedestrian is an adversarial agent who tries to find weak points in the vehicle's policy.
 
-The Environment is build according to gymnasium rules, so that multiple RL algorithms can be used to train the pedestrian.
+The Environment is built according to gymnasium rules, so that multiple RL algorithms can be used to train the pedestrian.
 
 It is important to know that the pedestrian always spawns near the robot.
 

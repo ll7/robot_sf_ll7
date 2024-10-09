@@ -40,14 +40,15 @@ Set the label to **obstacle**
 
 #### Robot
 
-The robot needs a spawn zone to define his starting position and a goal zone he needs to reach to finish the episode. Multiple zones can be used.\
+The robot needs a spawn zone to define his starting position and a goal zone he needs to reach to finish the episode.\
+Multiple zones can be used.\
 Draw them by using the rectangle tool.\
 Set the labels to **robot_spawn_zone** and **robot_goal_zone**
 
 The robot path defines the route the robot takes, while reaching the goal zone.\
 Use the pen tool for this and perform multiple left clicks to set waypoints along the path.\
 The path should not start or end inside the spawn/goal zone, but just before it.\
-Set the label to **robot_route_\<spawn\>_\<goal\>**.\
+Set the label to **robot_route_\<spawn\>_\<goal\>**
 
 (e.g. robot_route_1_0 -> Using Spawn 1 and Goal 0.\
 The zone numbers are counted from bottom to top in the list on the right-hand side)
@@ -55,14 +56,14 @@ The zone numbers are counted from bottom to top in the list on the right-hand si
 #### NPC Pedestrians
 
 The Pedestrians also need a spawn/goal zone. If they reach the goal they will spawn again at the start\
-The labels for this are: **ped_spawn_zone** and **ped_goal_zone**\
+Set the labels to **ped_spawn_zone** and **ped_goal_zone**
 
-For the path you dont need to set specific waypoints, just make sure the path doesnt collide with an obstacle.
-The label: **ped_route_\<spawn\>_\<goal\>**.
+For the path you don't need to set specific waypoints, just make sure the path doesn't collide with an obstacle.\
+Set the label to **ped_route_\<spawn\>_\<goal\>**
 
 ### Colors
 
-The Colors can be found here [sim_view.py](../robot_sf/render/sim_view.py)
+The Colors can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
 
 ### New Features
 

@@ -128,6 +128,8 @@ The Environment is build according to gymnasium rules, so that multiple RL algor
 
 It is important to know that the pedestrian always spawns near the robot.
 
+![demo_ped](./docs/video/demo_ped.gif)
+
 ```sh
 python3 examples/demo_pedestrian.py
 ```

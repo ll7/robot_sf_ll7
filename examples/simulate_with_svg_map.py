@@ -40,16 +40,16 @@ def test_simulation(map_definition: MapDefinition):
         ray_state = np.squeeze(ray_state)
         return np.concatenate((ray_state, drive_state), axis=0)
 
-    obs = env.reset()
+    obs, _ = env.reset()
     logger.info("Simulating the random policy.")
     for _ in range(10000):
         obs = obs_adapter(obs)
         action = env.action_space.sample()
-        obs, _, done, _ = env.step(action)
+        obs, _, done, _, _ = env.step(action)
         env.render()
 
         if done:
-            obs = env.reset()
+            obs, _ = env.reset()
             env.render()
     env.exit()
 
@@ -58,9 +58,7 @@ def main():
     """Simulate a random policy with a map defined in SVG format."""
     logger.info("Simulating a random policy with the map.")
 
-    # svg_file = "maps/svg_maps/02_simple_maps.svg"
-    # svg_file = "maps/svg_maps/03_mid_object.svg"
-    svg_file = "maps/svg_maps/04_small_mid_object.svg"
+    svg_file = "maps/svg_maps/debug_06.svg"
 
     logger.info("Converting SVG map to MapDefinition object.")
     logger.info(f"SVG file: {svg_file}")

@@ -50,15 +50,15 @@ def run_simulation():
         ray_state = np.squeeze(ray_state)
         return np.concatenate((ray_state, drive_state), axis=0)
 
-    obs = env.reset()
+    obs, _ = env.reset()
     for _ in range(10000):
         obs = obs_adapter(obs)
         action, _ = model.predict(obs, deterministic=True)
-        obs, _, done, _ = env.step(action)
+        obs, _, done, _, _ = env.step(action)
         env.render()
 
         if done:
-            obs = env.reset()
+            obs, _ = env.reset()
             env.render()
     env.exit()
 

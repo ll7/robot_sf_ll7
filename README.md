@@ -85,6 +85,8 @@ python3 examples/demo_offensive.py
 python3 examples/demo_defensive.py
 ```
 
+[Visualization](./docs/SIM_VIEW.md)
+
 ### 6. Run StableBaselines Training (Docker)
 
 ```sh
@@ -98,6 +100,9 @@ docker compose build && docker compose run \
 
 ### 7. Edit Maps
 
+The preferred way to create maps: [SVG Editor](./docs/SVG_MAP_EDITOR.md)
+
+This Method is deprecated:
 ```sh
 sudo apt-get update && sudo apt-get install -y python3-tk
 ```
@@ -114,3 +119,19 @@ python3 -m map_editor
 docker-compose build && docker-compose run \
     robotsf-cuda python ./scripts/hparam_opt.py
 ```
+
+### 9. Extension: Pedestrian as Adversarial-Agent
+
+The pedestrian is an adversarial agent who tries to find weak points in the vehicle's policy.
+
+The Environment is built according to gymnasium rules, so that multiple RL algorithms can be used to train the pedestrian.
+
+It is important to know that the pedestrian always spawns near the robot.
+
+![demo_ped](./docs/video/demo_ped.gif)
+
+```sh
+python3 examples/demo_pedestrian.py
+```
+
+[Visualization](./docs/SIM_VIEW.md)

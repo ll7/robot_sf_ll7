@@ -205,6 +205,9 @@ class PedestrianEnv(Env):
         - obs: The initial observation after resetting the environment.
         """
         super().reset(seed=seed, options=options)
+        # Reset last actions
+        self.last_action_robot = None
+        self.last_action_ped = None
         # Reset internal simulator state
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation

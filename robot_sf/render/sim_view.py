@@ -65,7 +65,7 @@ class VisualizableSimState:
     ped_actions: np.ndarray
     ego_ped_pose: PedPose = None
     ego_ped_ray_vecs: np.ndarray = None
-    ego_ped_actions: Union[VisualizableAction, None] = None
+    ego_ped_action: Union[VisualizableAction, None] = None
     # obstacles: List[Obstacle]
 
 
@@ -91,7 +91,7 @@ class SimulationView:
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False
     display_help: bool = False
-    display_robot_info: bool = False
+    display_robot_info: int = 0
     """The offset is already uses `scaling` as a factor."""
 
     @property
@@ -172,7 +172,8 @@ class SimulationView:
             # display help
             pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
             # display robotinfo
-            pygame.K_q: lambda: setattr(self, 'display_robot_info', not self.display_robot_info),
+            pygame.K_q: lambda: setattr(self, 'display_robot_info',
+                                        (self.display_robot_info + 1) % 3),
             }
 
         if e.key in key_action_map:
@@ -204,7 +205,6 @@ class SimulationView:
         adds text at position 0, and updates the display.
         """
         self.screen.fill(BACKGROUND_COLOR)
-        self._augment_timestep(0)
         pygame.display.update()
 
     def render(self, state: VisualizableSimState):
@@ -255,11 +255,11 @@ class SimulationView:
         self._draw_robot(state.robot_pose)
         if state.ego_ped_pose:
             self._augment_lidar(state.ego_ped_ray_vecs)
-            self._augment_action(state.ego_ped_actions, EGO_PED_ACTION_COLOR)
+            if state.ego_ped_action:
+                self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
             self._draw_ego_ped(state.ego_ped_pose)
 
         # information
-        self._augment_timestep(state.timestep)
         self._add_text(state.timestep, state)
         if self.display_help:
             self._add_help_text()
@@ -280,7 +280,7 @@ class SimulationView:
             r_x, r_y = state.robot_pose[0]
             self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
             self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
-        if self.focus_on_ego_ped:
+        if self.focus_on_ego_ped and state.ego_ped_pose:
             r_x, r_y = state.ego_ped_pose[0]
             self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
             self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
@@ -427,25 +427,23 @@ class SimulationView:
         text = self.font.render(f'({x}, {y})', False, TEXT_COLOR)
         self.screen.blit(text, (x, y))
 
-    def _augment_timestep(self, timestep: int):
-        # TODO: show map name as well
-        text = f'step: {timestep}'
-        text_surface = self.font.render(text, False, TEXT_COLOR)
-        self.screen.blit(text_surface, self._timestep_text_pos)
-
     def _add_text(self, timestep: int, state: VisualizableSimState):
-        if self.display_robot_info:
-            lines = [
+        lines = []
+        if self.display_robot_info == 1 and state.robot_action:
+            lines += [
                 f'RobotPose: {state.robot_pose}',
-                f'RobotAction: {state.robot_action.action}',
-                f'RobotGoal: {state.robot_action.goal}']
-        else:
-            distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
-            lines = [
-                f'PedestrianPose: {state.ego_ped_pose}',
-                f'PedestrianAction: {state.ego_ped_actions.action}',
-                f'PedestrianGoal: {state.ego_ped_actions.goal}',
-                f'DistanceRobot: {distance_to_robot:.2f}',]
+                f'RobotAction: {state.robot_action.action if state.robot_action else None}',
+                f'RobotGoal: {state.robot_action.goal if state.robot_action else None}',]
+        elif self.display_robot_info == 2:
+            if state.ego_ped_pose and state.ego_ped_action:
+                distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
+                lines += [
+                    f'PedestrianPose: {state.ego_ped_pose}',
+                    f'PedestrianAction: {state.ego_ped_action.action}',
+                    f'PedestrianGoal: {state.ego_ped_action.goal}',
+                    f'DistanceRobot: {distance_to_robot:.2f}',]
+            else:
+                self.display_robot_info = 0
         text_lines = [
             f'step: {timestep}',
             f'scaling: {self.scaling}',

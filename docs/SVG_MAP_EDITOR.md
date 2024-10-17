@@ -63,7 +63,17 @@ Set the label to **ped_route_\<spawn\>_\<goal\>**
 
 ### Colors
 
-The Colors can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
+Colors used in the example map:
+
+- obstacle: #000000
+- robot_spawn_zone: #ffdf00
+- robot_goal_zone: #ff6c00
+- robot_route: #0300d5 and #0078d5
+- ped_spawn_zone: #23ff00
+- ped_goal_zone: #107400
+- ped_route: #c40202
+
+The colors for the simulation can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
 
 ### New Features
 

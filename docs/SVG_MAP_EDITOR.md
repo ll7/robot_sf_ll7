@@ -61,9 +61,9 @@ Set the labels to **ped_spawn_zone** and **ped_goal_zone**
 For the path you don't need to set specific waypoints, just make sure the path doesn't collide with an obstacle.\
 Set the label to **ped_route_\<spawn\>_\<goal\>**
 
-### Colors
+### Colours
 
-Colors used in the example map:
+Colours used in the example map:
 
 - obstacle: #000000
 - robot_spawn_zone: #ffdf00
@@ -73,7 +73,7 @@ Colors used in the example map:
 - ped_goal_zone: #107400
 - ped_route: #c40202
 
-The colors for the simulation can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
+The colours for the simulation can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
 
 ### New Features
 

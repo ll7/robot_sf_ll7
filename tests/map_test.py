@@ -124,7 +124,7 @@ def test_proximity_point():
     lower_bound = 15
     upper_bound = 20
     env_config = PedEnvSettings()
-    svg_file = "maps/svg_maps/debug_03.svg"
+    svg_file = "maps/svg_maps/debug_06.svg"
     map_def = convert_map(svg_file)
     _sim = init_ped_simulators(env_config, map_def)[0]
     new_point = _sim.get_proximity_point(

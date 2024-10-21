@@ -2,15 +2,12 @@
 import os
 from pathlib import Path
 
-import numpy as np
 from loguru import logger
 
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
-from robot_sf.gym_env.env_config import SimulationSettings, EnvSettings
+from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
-from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
-from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.render.playback_recording import load_states_and_visualize
 
 

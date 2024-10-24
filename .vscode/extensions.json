@@ -4,6 +4,8 @@
         "ms-python.python",
         "ms-python.pylint",
         "github.vscode-pull-request-github",
-        "ms-toolsai.tensorboard"
+        "ms-toolsai.tensorboard",
+        "njpwerner.autodocstring",
+        "ms-python.black-formatter"
     ]
 }

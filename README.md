@@ -23,10 +23,19 @@ map data from OpenStreetMap.
 
 This project currently supports **two** methods for installation:
 1. `.devcontainer` for Visual Studio Code [.devcontainer/readme.md](./.devcontainer/readme.md)
-2. Manual installation
+2. local installation
 
 For 1. follow the instructions in the `.devcontainer` directory.
 For 2. follow the instructions below:
+
+### Local Installation
+
+Install python >= 3.8 and <= 3.12.
+
+```sh
+sudo apt-get update && sudo apt-get install -y python3.12 python3-pip
+pip install virtualenv
+```
 
 ## Quickstart
 

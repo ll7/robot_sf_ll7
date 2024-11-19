@@ -11,7 +11,6 @@ scalene
 torch
 tqdm
 wandb
-loguru
 svgelements
 stable-baselines3[extra]
 shimmy

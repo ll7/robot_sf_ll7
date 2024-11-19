@@ -74,61 +74,134 @@ class SimulationView:
     width: float = 1200
     height: float = 800
     scaling: float = 15
-    robot_radius: float = 1.0
+    robot_radius: float = 1.0 
     ego_ped_radius: float = 0.4
     ped_radius: float = 0.4
     goal_radius: float = 1.0
     map_def: MapDefinition = field(default_factory=MapDefinition)
     obstacles: List[Obstacle] = field(default_factory=list)
-    size_changed: bool = field(init=False, default=False)
-    is_exit_requested: bool = field(init=False, default=False)
-    is_abortion_requested: bool = field(init=False, default=False)
-    screen: pygame.surface.Surface = field(init=False)
-    font: pygame.font.Font = field(init=False)
-    redraw_needed: bool = field(init=False, default=False)
-    offset: np.ndarray = field(default_factory=lambda: np.array([0, 0]))
     caption: str = 'RobotSF Simulation'
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False
-    display_help: bool = False
-    display_robot_info: int = 0
-    """The offset is already uses `scaling` as a factor."""
+    
+    # Add UI state fields
+    screen: pygame.surface.Surface = field(init=False)
+    font: pygame.font.Font = field(init=False)
+    size_changed: bool = field(init=False, default=False)
+    redraw_needed: bool = field(init=False, default=False)
+    is_exit_requested: bool = field(init=False, default=False)
+    is_abortion_requested: bool = field(init=False, default=False)
+    offset: np.ndarray = field(default_factory=lambda: np.array([0, 0]))
+    display_robot_info: int = field(default=0)  # Add this line
+    display_help: bool = field(default=False)   # Also add this for help text
+
+    def __post_init__(self):
+        """Initialize PyGame components."""
+        logger.info("Initializing the simulation view.")
+        pygame.init()
+        pygame.font.init()
+        self.screen = pygame.display.set_mode((int(self.width), int(self.height)), pygame.RESIZABLE)
+        pygame.display.set_caption(self.caption)
+        self.font = pygame.font.Font(None, 36)
+
+    def show(self):
+        """Start the simulation view."""
+        pass  # Remove threading since we'll handle events in render()
+
+    def render(self, state: VisualizableSimState):
+        """Render one frame and handle events."""
+        # Handle events on main thread
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self._handle_quit()
+            elif event.type == pygame.VIDEORESIZE:
+                self._handle_video_resize(event)
+            elif event.type == pygame.KEYDOWN:
+                self._handle_keydown(event)
+
+        if self.is_exit_requested:
+            pygame.quit()
+            if self.is_abortion_requested:
+                exit()
+            return
+
+        sleep(0.01)  # limit UI update rate to 100 fps
+        # TODO: make the sleep time configurable
+
+        # info: event handling needs to be processed
+        #       in the main thread to access UI resources
+        if self.is_exit_requested:
+            pygame.quit()
+            self.ui_events_thread.join()
+            if self.is_abortion_requested:
+                exit()
+        if self.size_changed:
+            self._resize_window()
+            self.size_changed = False
+        if self.redraw_needed:
+            self.redraw_needed = False
+
+        # Adjust the view based on the focus
+        self._move_camera(state)
+
+        self.screen.fill(BACKGROUND_COLOR)
+
+        # static objects
+        if self.map_def.obstacles:
+            self._draw_obstacles()
+
+        # debugging objects
+        # if self.map_def.robot_routes:
+        #     self._draw_robot_routes()
+        # if self.map_def.ped_routes:
+        #     self._draw_pedestrian_routes()
+        # if self.map_def.ped_spawn_zones:
+        #     self._draw_spawn_zones()
+        # if self.map_def.ped_goal_zones:
+        #     self._draw_goal_zones()
+
+        self._draw_grid()
+
+        # dynamic objects
+        self._augment_lidar(state.ray_vecs)
+        self._augment_ped_actions(state.ped_actions)
+        if state.robot_action:
+            self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
+            self._augment_goal_position(state.robot_action.goal)
+        self._draw_pedestrians(state.pedestrian_positions)
+        self._draw_robot(state.robot_pose)
+        if state.ego_ped_pose:
+            self._augment_lidar(state.ego_ped_ray_vecs)
+            if state.ego_ped_action:
+                self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
+            self._draw_ego_ped(state.ego_ped_pose)
+
+        # information
+        self._add_text(state.timestep, state)
+        if self.display_help:
+            self._add_help_text()
+
+        # update the display
+        pygame.display.update()
+
+    def handle_events(self):
+        """Handle PyGame events on the main thread"""
+        if threading.current_thread() is not self._main_thread:
+            raise RuntimeError("PyGame events must be handled on the main thread")
+        
+        for event in pygame.event.get():
+            # Handle events...
+            pass
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
         return (16, 16)
-
-    def __post_init__(self):
-        logger.info("Initializing the simulation view.")
-        pygame.init()
-        pygame.font.init()
-        self.screen = pygame.display.set_mode(
-            (self.width, self.height), pygame.RESIZABLE)
-        pygame.display.set_caption(self.caption)
-        self.font = pygame.font.SysFont('Consolas', 14)
-        self.clear()
 
     def _scale_tuple(self, tup: Tuple[float, float]) -> Tuple[float, float]:
         """scales a tuple of floats by the scaling factor and adds the offset."""
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
         return (x, y)
-
-    def show(self):
-        """
-        Starts a separate thread to process the event queue and handles SIGINT signal.
-
-        This method starts a new thread to process the event queue in the background.
-        It also sets up a signal handler for SIGINT to handle the interruption of the program.
-        """
-        self.ui_events_thread = Thread(target=self._process_event_queue)
-        self.ui_events_thread.start()
-
-        def handle_sigint(signum, frame):
-            self.is_exit_requested = True
-            self.is_abortion_requested = True
-
-        signal(SIGINT, handle_sigint)
 
     def exit(self):
         self.is_exit_requested = True
@@ -205,66 +278,6 @@ class SimulationView:
         adds text at position 0, and updates the display.
         """
         self.screen.fill(BACKGROUND_COLOR)
-        pygame.display.update()
-
-    def render(self, state: VisualizableSimState):
-        sleep(0.01)  # limit UI update rate to 100 fps
-        # TODO: make the sleep time configurable
-
-        # info: event handling needs to be processed
-        #       in the main thread to access UI resources
-        if self.is_exit_requested:
-            pygame.quit()
-            self.ui_events_thread.join()
-            if self.is_abortion_requested:
-                exit()
-        if self.size_changed:
-            self._resize_window()
-            self.size_changed = False
-        if self.redraw_needed:
-            self.redraw_needed = False
-
-        # Adjust the view based on the focus
-        self._move_camera(state)
-
-        self.screen.fill(BACKGROUND_COLOR)
-
-        # static objects
-        if self.map_def.obstacles:
-            self._draw_obstacles()
-
-        # debugging objects
-        # if self.map_def.robot_routes:
-        #     self._draw_robot_routes()
-        # if self.map_def.ped_routes:
-        #     self._draw_pedestrian_routes()
-        # if self.map_def.ped_spawn_zones:
-        #     self._draw_spawn_zones()
-        # if self.map_def.ped_goal_zones:
-        #     self._draw_goal_zones()
-
-        self._draw_grid()
-
-        # dynamic objects
-        self._augment_lidar(state.ray_vecs)
-        self._augment_ped_actions(state.ped_actions)
-        if state.robot_action:
-            self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
-            self._augment_goal_position(state.robot_action.goal)
-        self._draw_pedestrians(state.pedestrian_positions)
-        self._draw_robot(state.robot_pose)
-        if state.ego_ped_pose:
-            self._augment_lidar(state.ego_ped_ray_vecs)
-            if state.ego_ped_action:
-                self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
-            self._draw_ego_ped(state.ego_ped_pose)
-
-        # information
-        self._add_text(state.timestep, state)
-        if self.display_help:
-            self._add_help_text()
-
-        # update the display
         pygame.display.update()
 
     def _resize_window(self):

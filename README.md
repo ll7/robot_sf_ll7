@@ -30,7 +30,7 @@ For 2. follow the instructions below:
 
 ### Local Installation
 
-Install python >= 3.8 and <= 3.12.
+Install python >= 3.9 and <= 3.12.
 
 ```sh
 sudo apt-get update && sudo apt-get install -y python3.12 python3-pip

@@ -8,16 +8,7 @@ from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 @dataclass
 class SimulationSettings:
     """
-    Class to hold the settings for a simulation.
-
-    This class contains various settings that control the behavior of the simulation,
-    such as the simulation time, the time per step, the pedestrian speed multiplier, the
-    difficulty level, the maximum number of pedestrians per group, the pedestrian radius,
-    the goal radius, the number of steps to stack in observations, whether to use the next
-    goal in the path as the current goal, the pedestrian-robot force configuration, and the
-    pedestrian density by difficulty level.
-
-    After initialization, the `__post_init__` method is called to validate the settings.
+    Configuration settings for the simulation.
     """
 
     # Simulation time in seconds
@@ -40,9 +31,11 @@ class SimulationSettings:
     # Whether to use the next goal in the path as the current goal
     use_next_goal: bool = True
     # Pedestrian-robot force configuration
-    prf_config: PedRobotForceConfig = PedRobotForceConfig(is_active=True)
+    prf_config: PedRobotForceConfig = field(default_factory=PedRobotForceConfig)
     # Pedestrian density by difficulty level
-    ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.08])
+    ped_density_by_difficulty: List[float] = field(
+        default_factory=lambda: [0.01, 0.02, 0.04, 0.08]
+    )
 
     def __post_init__(self):
         """
@@ -53,7 +46,9 @@ class SimulationSettings:
         """
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
-            raise ValueError("Simulation length for episodes mustn't be negative or zero!")
+            raise ValueError(
+                "Simulation length for episodes mustn't be negative or zero!"
+            )
         # Check that the time per step is positive
         if self.time_per_step_in_secs <= 0:
             raise ValueError("Step time mustn't be negative or zero!")
@@ -62,7 +57,9 @@ class SimulationSettings:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")
         # Check that the maximum number of pedestrians per group is positive
         if self.max_peds_per_group <= 0:
-            raise ValueError("Maximum pedestrians per group mustn't be negative or zero!")
+            raise ValueError(
+                "Maximum pedestrians per group mustn't be negative or zero!"
+            )
         # Check that the pedestrian radius is positive
         if self.ped_radius <= 0:
             raise ValueError("Pedestrian radius mustn't be negative or zero!")
@@ -71,7 +68,9 @@ class SimulationSettings:
             raise ValueError("Goal radius mustn't be negative or zero!")
         # Check that the difficulty level is within the valid range
         if not 0 <= self.difficulty < len(self.ped_density_by_difficulty):
-            raise ValueError("No pedestrian density registered for selected difficulty level!")
+            raise ValueError(
+                "No pedestrian density registered for selected difficulty level!"
+            )
         # Check that the pedestrian-robot force configuration is specified
         if not self.prf_config:
             raise ValueError("Pedestrian-Robot-Force settings need to be specified!")

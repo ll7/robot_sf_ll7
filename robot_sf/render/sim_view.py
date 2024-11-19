@@ -86,7 +86,7 @@ class SimulationView:
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
-    offset: np.array = field(init=False, default=np.array([0, 0]))
+    offset: np.array = field(default_factory=np.array([0, 0]))
     caption: str = 'RobotSF Simulation'
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False

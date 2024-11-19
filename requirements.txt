@@ -1,8 +1,8 @@
-numpy
-toml
-numba
-scipy
-matplotlib
-Pillow
-tk
-pygame
+numpy>=1.26.4
+toml>=0.10.2
+numba>=0.60.0
+scipy>=1.14.1
+matplotlib>=3.9.2
+Pillow>=11.0.0
+tk>=0.1.0
+pygame>=2.6.1

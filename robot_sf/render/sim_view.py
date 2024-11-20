@@ -12,12 +12,7 @@ from math import sin, cos
 from typing import Tuple, Union, List
 from dataclasses import dataclass, field
 
-# from threading import Thread
-# from signal import signal, SIGINT
-
 import os
-
-# from datetime import datetime
 
 # Make moviepy optional
 try:

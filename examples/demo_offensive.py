@@ -5,7 +5,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 
 
-def training():
+def demo_offensive_policy():
     env_config = EnvSettings(
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True))
@@ -25,4 +25,4 @@ def training():
 
 
 if __name__ == '__main__':
-    training()
+    demo_offensive_policy()

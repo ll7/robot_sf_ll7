@@ -29,7 +29,8 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
-    VisualizableSimState)
+    VisualizableSimState,
+)
 from robot_sf.sim.simulator import init_ped_simulators
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
@@ -48,13 +49,13 @@ class PedestrianEnv(Env):
     """
 
     def __init__(
-            self,
-            env_config: PedEnvSettings = None,
-            reward_func: Callable[[dict], float] = simple_ped_reward,
-            robot_model=None,
-            debug: bool = False,
-            recording_enabled: bool = False
-            ):
+        self,
+        env_config: PedEnvSettings = None,
+        reward_func: Callable[[dict], float] = simple_ped_reward,
+        robot_model=None,
+        debug: bool = False,
+        recording_enabled: bool = False,
+    ):
         """
         Initialize the pedestrian Environment.
 
@@ -76,8 +77,9 @@ class PedestrianEnv(Env):
         self.map_def = env_config.map_pool.choose_random_map()
 
         # Initialize spaces based on the environment configuration and map
-        combined_action_space, combined_observation_space, orig_obs_space = \
+        combined_action_space, combined_observation_space, orig_obs_space = (
             init_ped_spaces(env_config, self.map_def)
+        )
 
         # Assign the action and observation spaces
         self.action_space = combined_action_space[1]
@@ -93,10 +95,8 @@ class PedestrianEnv(Env):
 
         # Initialize simulator with a random start position
         self.simulator = init_ped_simulators(
-            env_config,
-            self.map_def,
-            random_start_pos=True
-            )[0]
+            env_config, self.map_def, random_start_pos=True
+        )[0]
 
         # Delta time per simulation step and maximum episode time
         d_t = env_config.sim_config.time_per_step_in_secs
@@ -104,18 +104,13 @@ class PedestrianEnv(Env):
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_ped_collision_and_sensors(
-            self.simulator,
-            env_config,
-            orig_obs_space
-            )
+            self.simulator, env_config, orig_obs_space
+        )
 
         # Setup initial state of the robot
         self.robot_state = RobotState(
-            self.simulator.robot_navs[0],
-            occupancies[0],
-            sensors[0],
-            d_t,
-            max_ep_time)
+            self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time
+        )
 
         # Setup initial state of the pedestrian
         self.ped_state = PedestrianState(
@@ -123,11 +118,14 @@ class PedestrianEnv(Env):
             occupancies[1],  # ego_ped occupancy
             sensors[1],
             d_t,
-            max_ep_time)
+            max_ep_time,
+        )
 
         # Assign the robot model
         if robot_model is None:
-            raise ValueError("Please provide a valid robot_model during initialization.")
+            raise ValueError(
+                "Please provide a valid robot_model during initialization."
+            )
         self.robot_model = robot_model
 
         # Store last state executed by the robot
@@ -146,7 +144,8 @@ class PedestrianEnv(Env):
                 robot_radius=env_config.robot_config.radius,
                 ego_ped_radius=env_config.ego_ped_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
-                goal_radius=env_config.sim_config.goal_radius)
+                goal_radius=env_config.sim_config.goal_radius,
+            )
 
             # Display the simulation UI
             self.sim_ui.show()
@@ -167,7 +166,9 @@ class PedestrianEnv(Env):
         action_ped = action
 
         # Process the action through the simulator
-        action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
+        action_robot, _ = self.robot_model.predict(
+            self.last_obs_robot, deterministic=True
+        )
         action_robot = self.simulator.robots[0].parse_action(action_robot)
         # action_robot = (0.0, 0.0) #TODO: remove noop after testing
         self.last_action_robot = action_robot
@@ -222,17 +223,23 @@ class PedestrianEnv(Env):
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
-        robot_action = None if not self.last_action_robot else VisualizableAction(
-            self.simulator.robot_poses[0],
-            self.last_action_robot,
-            self.simulator.goal_pos[0])
+        robot_action = (
+            None
+            if not self.last_action_robot
+            else VisualizableAction(
+                self.simulator.robot_poses[0],
+                self.last_action_robot,
+                self.simulator.goal_pos[0],
+            )
+        )
 
         # Robot position and LIDAR scanning visualization preparation
         robot_pos = self.simulator.robot_poses[0][0]
         distances, directions = lidar_ray_scan(
             self.simulator.robot_poses[0],
             self.robot_state.occupancy,
-            self.env_config.lidar_config)
+            self.env_config.lidar_config,
+        )
 
         # Construct ray vectors for visualization
         robot_ray_vecs = self.construct_ray_vectors(distances, directions, robot_pos)
@@ -240,27 +247,43 @@ class PedestrianEnv(Env):
         # Prepare npc_pedestrian action visualization
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() +
-            self.simulator.pysf_sim.peds.vel() * 2)
+            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+        )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 
         # Prepare action and LIDAR visualization for the ego pedestrian
-        ego_ped_action = None if not self.last_action_ped else VisualizableAction(
-            self.simulator.ego_ped_pose,
-            self.last_action_ped, self.simulator.ego_ped_goal_pos)
+        ego_ped_action = (
+            None
+            if not self.last_action_ped
+            else VisualizableAction(
+                self.simulator.ego_ped_pose,
+                self.last_action_ped,
+                self.simulator.ego_ped_goal_pos,
+            )
+        )
 
         ego_ped_pos = self.simulator.ego_ped_pos
         distances, directions = lidar_ray_scan(
             self.simulator.ego_ped_pose,
             self.ped_state.ego_ped_occupancy,
-            self.env_config.lidar_config)
-        ego_ped_ray_vecs = self.construct_ray_vectors(distances, directions, ego_ped_pos)
+            self.env_config.lidar_config,
+        )
+        ego_ped_ray_vecs = self.construct_ray_vectors(
+            distances, directions, ego_ped_pos
+        )
 
         # Package the state for visualization
         state = VisualizableSimState(
-            self.robot_state.timestep, robot_action, self.simulator.robot_poses[0],
-            deepcopy(self.simulator.ped_pos), robot_ray_vecs, ped_actions_np,
-            self.simulator.ego_ped_pose, ego_ped_ray_vecs, ego_ped_action)
+            self.robot_state.timestep,
+            robot_action,
+            self.simulator.robot_poses[0],
+            deepcopy(self.simulator.ped_pos),
+            robot_ray_vecs,
+            ped_actions_np,
+            self.simulator.ego_ped_pose,
+            ego_ped_ray_vecs,
+            ego_ped_action,
+        )
 
         return state
 
@@ -272,8 +295,8 @@ class PedestrianEnv(Env):
         """
         if not self.sim_ui:
             raise RuntimeError(
-                'Debug mode is not activated! Consider setting '
-                'debug=True!')
+                "Debug mode is not activated! Consider setting " "debug=True!"
+            )
 
         state = self._prepare_visualizable_state()
 
@@ -305,7 +328,7 @@ class PedestrianEnv(Env):
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-        with open(filename, 'wb') as f:  # write binary
+        with open(filename, "wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")
@@ -316,16 +339,11 @@ class PedestrianEnv(Env):
         Clean up and exit the simulation UI, if it exists.
         """
         if self.sim_ui:
-            self.sim_ui.exit()
+            self.sim_ui.exit_simulation()
 
     def construct_ray_vectors(self, distances, directions, pos):
-        ray_vecs = zip(
-            np.cos(directions) * distances,
-            np.sin(directions) * distances
-            )
-        ray_vecs_np = np.array([[
-            [pos[0], pos[1]],
-            [pos[0] + x, pos[1] + y]
-            ] for x, y in ray_vecs]
-            )
+        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
+        ray_vecs_np = np.array(
+            [[[pos[0], pos[1]], [pos[0] + x, pos[1] + y]] for x, y in ray_vecs]
+        )
         return ray_vecs_np

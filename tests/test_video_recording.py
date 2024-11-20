@@ -15,7 +15,7 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
     not MOVIEPY_AVAILABLE, reason="MoviePy/ffmpeg not available for video recording"
 )
 def test_video_recording(
-    delte_video: bool = True,
+    delete_video: bool = True,
 ):
     """Test that video recording works and creates/deletes files properly."""
 
@@ -46,7 +46,7 @@ def test_video_recording(
     try:
         # Run simulation for a few frames
         env.reset()
-        for _ in range(10):
+        for _ in range(100):
             action = env.action_space.sample()
             _, _, done, _, _ = env.step(action)
             env.render()  # Need to call render to capture frames
@@ -54,7 +54,7 @@ def test_video_recording(
                 env.reset()
 
         # Close env to trigger video creation
-        env.sim_ui.exit()
+        env.sim_ui.exit_simulation()
         logger.debug("exit the simulation")
 
         # Verify video was created
@@ -62,7 +62,7 @@ def test_video_recording(
 
     finally:
         # Clean up
-        if video_path.exists() and delte_video:
+        if video_path.exists() and delete_video:
             video_path.unlink()
         assert not video_path.exists(), "Video file was not deleted"
 
@@ -72,4 +72,4 @@ def test_video_recording(
 
 
 if __name__ == "__main__":
-    test_video_recording(delte_video=False)
+    test_video_recording(delete_video=False)

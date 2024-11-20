@@ -11,10 +11,12 @@ from time import sleep
 from math import sin, cos
 from typing import Tuple, Union, List
 from dataclasses import dataclass, field
+
 # from threading import Thread
 # from signal import signal, SIGINT
 
 import os
+
 # from datetime import datetime
 
 # Make moviepy optional
@@ -212,11 +214,16 @@ class SimulationView:
         y = tup[1] * self.scaling + self.offset[1]
         return (x, y)
 
-    def exit(self):
+    def exit_simulation(self, return_frames: bool = False):
         """Exit the simulation."""
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
+        if return_frames:
+            intermediate_frames = self.frames
         self._handle_quit()
+        if return_frames:
+            logger.debug("Returning intermediate frames.")
+            return intermediate_frames
 
     def _handle_quit(self, e=None):
         """Handle the quit event of the pygame window."""

@@ -1,51 +1,75 @@
 """Test video recording functionality of the simulation view."""
 
-import os
 from pathlib import Path
 import pytest
-import numpy as np
+from loguru import logger
 
-from robot_sf.gym_env.robot_env import RobotEnv, VisualizableSimState
-from robot_sf.render.sim_view import MOVIEPY_AVAILABLE, SimulationView
-from robot_sf.sim.robot import RobotPose
+from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 
 
-@pytest.mark.skipif(not MOVIEPY_AVAILABLE, 
-                   reason="MoviePy/ffmpeg not available for video recording")
-def test_video_recording():
+@pytest.mark.skipif(
+    not MOVIEPY_AVAILABLE, reason="MoviePy/ffmpeg not available for video recording"
+)
+def test_video_recording(
+    delte_video: bool = True,
+):
     """Test that video recording works and creates/deletes files properly."""
+
     # Create recordings directory if it doesn't exist
     recordings_dir = Path("recordings")
     recordings_dir.mkdir(exist_ok=True)
 
-    # Create view directly with recording enabled
-    video_path = recordings_dir / "test_video.mp4"
-    sim_view = SimulationView(record_video=True, video_path=str(video_path))
-
-    # Create dummy state
-    state = VisualizableSimState(
-        timestep=0,
-        robot_pose=RobotPose(x=0, y=0, theta=0),
-        pedestrian_positions=np.zeros((1, 2)),
-        ray_vecs=np.zeros((16, 2)),
-        robot_action=None,
-        ped_actions=np.zeros((1, 2)),
+    # Create environment settings
+    env_config = EnvSettings(
+        sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
+        robot_config=BicycleDriveSettings(
+            radius=0.5, max_accel=3.0, allow_backwards=True
+        ),
     )
 
-    # Render some frames
-    for _ in range(10):
-        sim_view.render(state)
+    # Create environment with video recording enabled
+    video_path = recordings_dir / "test_video.mp4"
+    logger.debug(f"Video path: {video_path}")
+    env = RobotEnv(
+        env_config=env_config,
+        debug=True,
+        recording_enabled=True,
+        record_video=True,
+        video_path=str(video_path),
+        video_fps=int(1 / env_config.sim_config.time_per_step_in_secs),
+    )
 
-    # Close view to trigger video save
-    sim_view._handle_quit()
+    try:
+        # Run simulation for a few frames
+        env.reset()
+        for _ in range(10):
+            action = env.action_space.sample()
+            _, _, done, _, _ = env.step(action)
+            env.render()  # Need to call render to capture frames
+            if done:
+                env.reset()
 
-    # Verify video was created
-    assert video_path.exists(), "Video file was not created"
+        # Close env to trigger video creation
+        env.sim_ui.exit()
+        logger.debug("exit the simulation")
 
-    # Clean up
-    video_path.unlink()
-    assert not video_path.exists(), "Video file was not deleted"
+        # Verify video was created
+        assert video_path.exists(), "Video file was not created"
 
-    # Clean up recordings dir if empty
-    if not any(recordings_dir.iterdir()):
-        recordings_dir.rmdir()
+    finally:
+        # Clean up
+        if video_path.exists() and delte_video:
+            video_path.unlink()
+        assert not video_path.exists(), "Video file was not deleted"
+
+        # Clean up recordings dir if empty
+        if recordings_dir.exists() and not any(recordings_dir.iterdir()):
+            recordings_dir.rmdir()
+
+
+if __name__ == "__main__":
+    test_video_recording(delte_video=False)

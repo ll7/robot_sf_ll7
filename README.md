@@ -22,7 +22,7 @@ map data from OpenStreetMap.
 ## Installation
 
 This project currently supports **two** methods for installation:
-1. `.devcontainer` for Visual Studio Code [.devcontainer/readme.md](./.devcontainer/readme.md)
+1. `.devcontainer` for Visual Studio Code [.devcontainer/readme.md](./.devcontainer/readme.md) **Outdated**
 2. local installation
 
 For 1. follow the instructions in the `.devcontainer` directory.
@@ -35,6 +35,14 @@ Install python >= 3.10 and <= 3.12.
 ```sh
 sudo apt-get update && sudo apt-get install -y python3.12 python3-pip
 pip install virtualenv
+```
+
+### FFMPEG
+
+For video recording of the simulation, ffmpeg is required.
+
+```sh
+sudo apt-get install -y ffmpeg
 ```
 
 ## Quickstart

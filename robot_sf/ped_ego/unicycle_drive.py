@@ -38,8 +38,8 @@ class UnicycleDriveSettings:
 @dataclass
 class UnicycleDriveState:
     """A class that represents the state of a unicycle drive pedestrian."""
-    pose: PedPose
-    velocity: float = field(default=0)
+    pose: PedPose = field(default_factory=lambda: ((0.0, 0.0), 0.0))
+    velocity: PolarVec2D = field(default_factory=lambda: (0.0, 0.0))
 
     @property
     def pos(self) -> Vec2D:
@@ -121,11 +121,11 @@ class UnicycleMotion:
 
 
 @dataclass
-class UnicycleDrivePedestrian():
+class UnicycleDrivePedestrian:
     """Representing a pedestrian with unicycle driving behavior"""
 
     config: UnicycleDriveSettings
-    state: UnicycleDriveState = field(default=UnicycleDriveState(((0, 0), 0), 0))
+    state: UnicycleDriveState = field(default_factory=UnicycleDriveState)
     movement: UnicycleMotion = field(init=False)
 
     def __post_init__(self):

@@ -122,11 +122,11 @@ class BicycleMotion:
 
 
 @dataclass
-class BicycleDriveRobot():
+class BicycleDriveRobot:
     """Representing a robot with bicycle driving behavior"""
 
     config: BicycleDriveSettings
-    state: BicycleDriveState = field(default=BicycleDriveState(((0, 0), 0), 0))
+    state: BicycleDriveState = field(default_factory=lambda: BicycleDriveState(pose=((0.0, 0.0), 0.0)))
     movement: BicycleMotion = field(init=False)
 
     def __post_init__(self):

@@ -19,7 +19,7 @@ The `pedestrian_factory` method creates a pedestrian instance based on the confi
 """
 
 from typing import Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.sensor.range_sensor import LidarScannerSettings
@@ -36,11 +36,11 @@ class EnvSettings:
     """
     Data class to hold environment settings for a simulation.
     """
-    sim_config: SimulationSettings = SimulationSettings()
-    lidar_config: LidarScannerSettings = LidarScannerSettings()
-    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = \
-        DifferentialDriveSettings()
-    map_pool: MapDefinitionPool = MapDefinitionPool()
+    sim_config: SimulationSettings = field(default_factory=SimulationSettings)
+    lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
+    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
+        default_factory=DifferentialDriveSettings)
+    map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
 
     def __post_init__(self):
         """
@@ -72,7 +72,7 @@ class PedEnvSettings(EnvSettings):
     """
     Data class to hold environment settings for a simulation that includes an ego pedestrian.
     """
-    ego_ped_config: UnicycleDriveSettings = UnicycleDriveSettings()
+    ego_ped_config: UnicycleDriveSettings = field(default_factory=UnicycleDriveSettings)
 
     def __post_init__(self):
         """

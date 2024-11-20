@@ -56,10 +56,10 @@ class DifferentialDriveSettings:
 
 @dataclass
 class DifferentialDriveState:
-    pose: RobotPose
-    velocity: PolarVec2D = field(default=(0, 0))
-    last_wheel_speeds: WheelSpeedState = field(default=(0, 0))
-    wheel_speeds: WheelSpeedState = field(default=(0, 0))
+    pose: RobotPose = ((0.0, 0.0), 0.0)
+    velocity: PolarVec2D = (0.0, 0.0)
+    last_wheel_speeds: WheelSpeedState = (0.0, 0.0)
+    wheel_speeds: WheelSpeedState = (0.0, 0.0)
 
 
 DifferentialDriveAction = Tuple[float, float]  # (linear velocity, angular velocity)
@@ -193,7 +193,7 @@ class DifferentialDriveRobot():
 
     config: DifferentialDriveSettings  # Configuration settings for the robot
     # Default state of the robot on initialization
-    state: DifferentialDriveState = field(default=DifferentialDriveState(((0, 0), 0)))
+    state: DifferentialDriveState = field(default_factory=DifferentialDriveState)
     # Movement logic for the robot based on the config; initialized post-creation
     movement: DifferentialDriveMotion = field(init=False)
 

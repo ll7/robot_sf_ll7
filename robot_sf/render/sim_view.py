@@ -11,20 +11,22 @@ from time import sleep
 from math import sin, cos
 from typing import Tuple, Union, List
 from dataclasses import dataclass, field
-from threading import Thread
-from signal import signal, SIGINT
+# from threading import Thread
+# from signal import signal, SIGINT
 
 import os
-from datetime import datetime
+# from datetime import datetime
 
 # Make moviepy optional
 try:
-    from moviepy.editor import ImageSequenceClip
+    from moviepy import ImageSequenceClip
+
     MOVIEPY_AVAILABLE = True
 except ImportError:
     MOVIEPY_AVAILABLE = False
     logger.warning(
-        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?")
+        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?"
+    )
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
@@ -97,6 +99,7 @@ class SimulationView:
     focus_on_ego_ped: bool = False
     record_video: bool = False
     video_path: str = None
+    video_fps: int = 10
     frames: List[np.ndarray] = field(default_factory=list)
 
     # Add UI state fields
@@ -115,14 +118,21 @@ class SimulationView:
         logger.info("Initializing the simulation view.")
         pygame.init()
         pygame.font.init()
-        self.screen = pygame.display.set_mode(
-            (int(self.width), int(self.height)), pygame.RESIZABLE
-        )
-        pygame.display.set_caption(self.caption)
+        if self.record_video:
+            # Create offscreen surface for recording
+            self.screen = pygame.Surface((int(self.width), int(self.height)))
+            logger.info("Created offscreen surface for video recording")
+        else:
+            # Create window for display
+            self.screen = pygame.display.set_mode(
+                (int(self.width), int(self.height)), pygame.RESIZABLE
+            )
+            pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
     def show(self):
         """Start the simulation view."""
+        logger.error("This method is no longer implemented. What did we break?")
         pass  # Remove threading since we'll handle events in render()
 
     def render(self, state: VisualizableSimState):
@@ -156,22 +166,22 @@ class SimulationView:
         self._draw_grid()
 
         # dynamic objects
-        if hasattr(state, 'ray_vecs'):
+        if hasattr(state, "ray_vecs"):
             self._augment_lidar(state.ray_vecs)
-        if hasattr(state, 'ped_actions'):
+        if hasattr(state, "ped_actions"):
             self._augment_ped_actions(state.ped_actions)
-        if hasattr(state, 'robot_action') and state.robot_action:
+        if hasattr(state, "robot_action") and state.robot_action:
             self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
-            if hasattr(state.robot_action, 'goal'):
+            if hasattr(state.robot_action, "goal"):
                 self._augment_goal_position(state.robot_action.goal)
-        if hasattr(state, 'pedestrian_positions'):
+        if hasattr(state, "pedestrian_positions"):
             self._draw_pedestrians(state.pedestrian_positions)
-        if hasattr(state, 'robot_pose'):
+        if hasattr(state, "robot_pose"):
             self._draw_robot(state.robot_pose)
-        if hasattr(state, 'ego_ped_pose') and state.ego_ped_pose:
-            if hasattr(state, 'ego_ped_ray_vecs'):
+        if hasattr(state, "ego_ped_pose") and state.ego_ped_pose:
+            if hasattr(state, "ego_ped_ray_vecs"):
                 self._augment_lidar(state.ego_ped_ray_vecs)
-            if hasattr(state, 'ego_ped_action') and state.ego_ped_action:
+            if hasattr(state, "ego_ped_action") and state.ego_ped_action:
                 self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
             self._draw_ego_ped(state.ego_ped_pose)
 
@@ -182,12 +192,15 @@ class SimulationView:
 
         if self.record_video:
             # Capture frame
+            logger.debug("trying to record a frame")
             frame_data = pygame.surfarray.array3d(self.screen)
             frame_data = frame_data.swapaxes(0, 1)
             self.frames.append(frame_data)
+            logger.debug(f"Recorded frames {len(self.frames)}")
         else:
             # Normal display update
             pygame.display.update()
+            logger.debug("Updated display. Not recording a video.")
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
@@ -200,7 +213,10 @@ class SimulationView:
         return (x, y)
 
     def exit(self):
+        """Exit the simulation."""
+        logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
+        self._handle_quit()
 
     def _handle_quit(self, e=None):
         """Handle the quit event of the pygame window."""
@@ -208,6 +224,8 @@ class SimulationView:
         self.is_abortion_requested = True
         if self.record_video and self.frames:
             if MOVIEPY_AVAILABLE:
+                logger.debug("Writing video file.")
+                # TODO: get the correct fps from the simulation
                 clip = ImageSequenceClip(self.frames, fps=100)
                 clip.write_videofile(self.video_path)
                 self.frames = []

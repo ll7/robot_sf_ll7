@@ -52,7 +52,10 @@ class RobotEnv(Env):
             env_config: EnvSettings = EnvSettings(),
             reward_func: Callable[[dict], float] = simple_reward,
             debug: bool = False,
-            recording_enabled: bool = False
+            recording_enabled: bool = False,
+            record_video: bool = False,
+            video_path: str = None,
+            video_fps: int = 10
             ):
         """
         Initialize the Robot Environment.
@@ -64,6 +67,8 @@ class RobotEnv(Env):
         - debug (bool): If True, enables debugging information such as
             visualizations.
         - recording_enabled (bool): If True, enables recording of the simulation
+        - record_video: If True, saves simulation as video file
+        - video_path: Path where to save the video file
         """
 
         # Environment configuration details
@@ -113,18 +118,22 @@ class RobotEnv(Env):
         # Store last action executed by the robot
         self.last_action = None
 
-        # If in debug mode, create a simulation view to visualize the state
-        if debug:
+        # If in debug mode or video recording is enabled, create simulation view
+        if debug or record_video:
             self.sim_ui = SimulationView(
                 scaling=10,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
-                goal_radius=env_config.sim_config.goal_radius)
+                goal_radius=env_config.sim_config.goal_radius,
+                record_video=record_video,
+                video_path=video_path,
+                video_fps=video_fps)
 
-            # Display the simulation UI
-            self.sim_ui.show()
+            # Only show window if in debug mode
+            if debug:
+                self.sim_ui.show()
 
     def step(self, action):
         """

@@ -3,6 +3,7 @@ Generate a random policy to test the environment
 """
 
 from robot_sf.gym_env.robot_env import RobotEnv
+from loguru import logger
 
 
 def benchmark():
@@ -23,7 +24,7 @@ def benchmark():
 
         if done:
             episode += 1
-            print(f"end of episode {episode}, total rewards {ep_rewards}")
+            logger.info(f"end of episode {episode}, total rewards {ep_rewards}")
             ep_rewards = 0
             _ = env.reset()
     env.exit()

@@ -15,6 +15,16 @@ from threading import Thread
 from signal import signal, SIGINT
 
 import os
+from datetime import datetime
+
+# Make moviepy optional
+try:
+    from moviepy.editor import ImageSequenceClip
+    MOVIEPY_AVAILABLE = True
+except ImportError:
+    MOVIEPY_AVAILABLE = False
+    logger.warning(
+        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?")
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
@@ -85,6 +95,9 @@ class SimulationView:
     caption: str = "RobotSF Simulation"
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False
+    record_video: bool = False
+    video_path: str = None
+    frames: List[np.ndarray] = field(default_factory=list)
 
     # Add UI state fields
     screen: pygame.surface.Surface = field(init=False)
@@ -167,8 +180,14 @@ class SimulationView:
         if self.display_help:
             self._add_help_text()
 
-        # update the display
-        pygame.display.update()
+        if self.record_video:
+            # Capture frame
+            frame_data = pygame.surfarray.array3d(self.screen)
+            frame_data = frame_data.swapaxes(0, 1)
+            self.frames.append(frame_data)
+        else:
+            # Normal display update
+            pygame.display.update()
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
@@ -187,6 +206,11 @@ class SimulationView:
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
+        if self.record_video and self.frames:
+            if MOVIEPY_AVAILABLE:
+                clip = ImageSequenceClip(self.frames, fps=100)
+                clip.write_videofile(self.video_path)
+                self.frames = []
 
     def _handle_video_resize(self, e):
         """Handle the resize event of the pygame window."""

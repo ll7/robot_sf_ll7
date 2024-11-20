@@ -29,7 +29,8 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
-    VisualizableSimState)
+    VisualizableSimState,
+)
 from robot_sf.sim.simulator import init_simulators
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
@@ -48,12 +49,15 @@ class RobotEnv(Env):
     """
 
     def __init__(
-            self,
-            env_config: EnvSettings = EnvSettings(),
-            reward_func: Callable[[dict], float] = simple_reward,
-            debug: bool = False,
-            recording_enabled: bool = False
-            ):
+        self,
+        env_config: EnvSettings = EnvSettings(),
+        reward_func: Callable[[dict], float] = simple_reward,
+        debug: bool = False,
+        recording_enabled: bool = False,
+        record_video: bool = False,
+        video_path: str = None,
+        video_fps: int = 10,
+    ):
         """
         Initialize the Robot Environment.
 
@@ -64,6 +68,8 @@ class RobotEnv(Env):
         - debug (bool): If True, enables debugging information such as
             visualizations.
         - recording_enabled (bool): If True, enables recording of the simulation
+        - record_video: If True, saves simulation as video file
+        - video_path: Path where to save the video file
         """
 
         # Environment configuration details
@@ -73,8 +79,9 @@ class RobotEnv(Env):
         self.map_def = env_config.map_pool.choose_random_map()
 
         # Initialize spaces based on the environment configuration and map
-        self.action_space, self.observation_space, orig_obs_space = \
-            init_spaces(env_config, self.map_def)
+        self.action_space, self.observation_space, orig_obs_space = init_spaces(
+            env_config, self.map_def
+        )
 
         # Assign the reward function and debug flag
         self.reward_func = reward_func
@@ -86,10 +93,8 @@ class RobotEnv(Env):
 
         # Initialize simulator with a random start position
         self.simulator = init_simulators(
-            env_config,
-            self.map_def,
-            random_start_pos=True
-            )[0]
+            env_config, self.map_def, random_start_pos=True
+        )[0]
 
         # Delta time per simulation step and maximum episode time
         d_t = env_config.sim_config.time_per_step_in_secs
@@ -97,34 +102,34 @@ class RobotEnv(Env):
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_collision_and_sensors(
-            self.simulator,
-            env_config,
-            orig_obs_space
-            )
+            self.simulator, env_config, orig_obs_space
+        )
 
         # Setup initial state of the robot
         self.state = RobotState(
-            self.simulator.robot_navs[0],
-            occupancies[0],
-            sensors[0],
-            d_t,
-            max_ep_time)
+            self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time
+        )
 
         # Store last action executed by the robot
         self.last_action = None
 
-        # If in debug mode, create a simulation view to visualize the state
-        if debug:
+        # If in debug mode or video recording is enabled, create simulation view
+        if debug or record_video:
             self.sim_ui = SimulationView(
                 scaling=10,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
-                goal_radius=env_config.sim_config.goal_radius)
+                goal_radius=env_config.sim_config.goal_radius,
+                record_video=record_video,
+                video_path=video_path,
+                video_fps=video_fps,
+            )
 
-            # Display the simulation UI
-            self.sim_ui.show()
+            # Only show window if in debug mode
+            if debug:
+                self.sim_ui.show()
 
     def step(self, action):
         """
@@ -165,7 +170,13 @@ class RobotEnv(Env):
             self.record()
 
         # observation, reward, terminal, truncated,info
-        return obs, reward, term, False, {"step": reward_dict["step"], "meta": reward_dict}
+        return (
+            obs,
+            reward,
+            term,
+            False,
+            {"step": reward_dict["step"], "meta": reward_dict},
+        )
 
     def reset(self, seed=None, options=None):
         """
@@ -191,40 +202,49 @@ class RobotEnv(Env):
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
-        action = None if not self.last_action else VisualizableAction(
-            self.simulator.robot_poses[0],
-            self.last_action,
-            self.simulator.goal_pos[0])
+        action = (
+            None
+            if not self.last_action
+            else VisualizableAction(
+                self.simulator.robot_poses[0],
+                self.last_action,
+                self.simulator.goal_pos[0],
+            )
+        )
 
         # Robot position and LIDAR scanning visualization preparation
         robot_pos = self.simulator.robot_poses[0][0]
         distances, directions = lidar_ray_scan(
             self.simulator.robot_poses[0],
             self.state.occupancy,
-            self.env_config.lidar_config)
+            self.env_config.lidar_config,
+        )
 
         # Construct ray vectors for visualization
-        ray_vecs = zip(
-            np.cos(directions) * distances,
-            np.sin(directions) * distances
-            )
-        ray_vecs_np = np.array([[
-            [robot_pos[0], robot_pos[1]],
-            [robot_pos[0] + x, robot_pos[1] + y]
-            ] for x, y in ray_vecs]
-            )
+        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
+        ray_vecs_np = np.array(
+            [
+                [[robot_pos[0], robot_pos[1]], [robot_pos[0] + x, robot_pos[1] + y]]
+                for x, y in ray_vecs
+            ]
+        )
 
         # Prepare pedestrian action visualization
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() +
-            self.simulator.pysf_sim.peds.vel() * 2)
+            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+        )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 
         # Package the state for visualization
         state = VisualizableSimState(
-            self.state.timestep, action, self.simulator.robot_poses[0],
-            deepcopy(self.simulator.ped_pos), ray_vecs_np, ped_actions_np)
+            self.state.timestep,
+            action,
+            self.simulator.robot_poses[0],
+            deepcopy(self.simulator.ped_pos),
+            ray_vecs_np,
+            ped_actions_np,
+        )
 
         return state
 
@@ -236,8 +256,8 @@ class RobotEnv(Env):
         """
         if not self.sim_ui:
             raise RuntimeError(
-                'Debug mode is not activated! Consider setting '
-                'debug=True!')
+                "Debug mode is not activated! Consider setting " "debug=True!"
+            )
 
         state = self._prepare_visualizable_state()
 
@@ -271,7 +291,7 @@ class RobotEnv(Env):
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-        with open(filename, 'wb') as f:  # write binary
+        with open(filename, "wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")
@@ -282,4 +302,4 @@ class RobotEnv(Env):
         Clean up and exit the simulation UI, if it exists.
         """
         if self.sim_ui:
-            self.sim_ui.exit()
+            self.sim_ui.exit_simulation()

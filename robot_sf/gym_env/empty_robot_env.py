@@ -17,7 +17,8 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
-    VisualizableSimState)
+    VisualizableSimState,
+)
 from robot_sf.sim.simulator import init_simulators
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
@@ -34,11 +35,11 @@ class EmptyRobotEnv(Env):
     """
 
     def __init__(
-            self,
-            env_config: EnvSettings = EnvSettings(),
-            reward_func: Callable[[dict], float] = simple_reward,
-            debug: bool = False
-            ):
+        self,
+        env_config: EnvSettings = EnvSettings(),
+        reward_func: Callable[[dict], float] = simple_reward,
+        debug: bool = False,
+    ):
         """
         Initialize the Robot Environment.
 
@@ -57,18 +58,15 @@ class EmptyRobotEnv(Env):
         map_def = env_config.map_pool.map_defs["uni_campus_big"]
 
         # Initialize spaces based on the environment configuration and map
-        self.action_space, self.observation_space, orig_obs_space = \
-            init_spaces(env_config, map_def)
+        self.action_space, self.observation_space, orig_obs_space = init_spaces(
+            env_config, map_def
+        )
 
         # Assign the reward function and debug flag
         self.reward_func, self.debug = reward_func, debug
 
         # Initialize simulator with a random start position
-        self.simulator = init_simulators(
-            env_config,
-            map_def,
-            random_start_pos=True
-            )[0]
+        self.simulator = init_simulators(env_config, map_def, random_start_pos=True)[0]
 
         # Delta time per simulation step and maximum episode time
         d_t = env_config.sim_config.time_per_step_in_secs
@@ -76,18 +74,13 @@ class EmptyRobotEnv(Env):
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_collision_and_sensors(
-            self.simulator,
-            env_config,
-            orig_obs_space
-            )
+            self.simulator, env_config, orig_obs_space
+        )
 
         # Setup initial state of the robot
         self.state = RobotState(
-            self.simulator.robot_navs[0],
-            occupancies[0],
-            sensors[0],
-            d_t,
-            max_ep_time)
+            self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time
+        )
 
         # Store last action executed by the robot
         self.last_action = None
@@ -100,7 +93,8 @@ class EmptyRobotEnv(Env):
                 obstacles=map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
                 ped_radius=env_config.sim_config.ped_radius,
-                goal_radius=env_config.sim_config.goal_radius)
+                goal_radius=env_config.sim_config.goal_radius,
+            )
 
             # Display the simulation UI
             self.sim_ui.show()
@@ -154,44 +148,53 @@ class EmptyRobotEnv(Env):
         """
         if not self.sim_ui:
             raise RuntimeError(
-                'Debug mode is not activated! Consider setting '
-                'debug=True!')
+                "Debug mode is not activated! Consider setting " "debug=True!"
+            )
 
         # Prepare action visualization, if any action was executed
-        action = None if not self.last_action else VisualizableAction(
-            self.simulator.robot_poses[0],
-            self.last_action,
-            self.simulator.goal_pos[0])
+        action = (
+            None
+            if not self.last_action
+            else VisualizableAction(
+                self.simulator.robot_poses[0],
+                self.last_action,
+                self.simulator.goal_pos[0],
+            )
+        )
 
         # Robot position and LIDAR scanning visualization preparation
         robot_pos = self.simulator.robot_poses[0][0]
         distances, directions = lidar_ray_scan(
             self.simulator.robot_poses[0],
             self.state.occupancy,
-            self.env_config.lidar_config)
+            self.env_config.lidar_config,
+        )
 
         # Construct ray vectors for visualization
-        ray_vecs = zip(
-            np.cos(directions) * distances,
-            np.sin(directions) * distances
-            )
-        ray_vecs_np = np.array([[
-            [robot_pos[0], robot_pos[1]],
-            [robot_pos[0] + x, robot_pos[1] + y]
-            ] for x, y in ray_vecs]
-            )
+        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
+        ray_vecs_np = np.array(
+            [
+                [[robot_pos[0], robot_pos[1]], [robot_pos[0] + x, robot_pos[1] + y]]
+                for x, y in ray_vecs
+            ]
+        )
 
         # Prepare pedestrian action visualization
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() +
-            self.simulator.pysf_sim.peds.vel() * 2)
+            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+        )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 
         # Package the state for visualization
         state = VisualizableSimState(
-            self.state.timestep, action, self.simulator.robot_poses[0],
-            deepcopy(self.simulator.ped_pos), ray_vecs_np, ped_actions_np)
+            self.state.timestep,
+            action,
+            self.simulator.robot_poses[0],
+            deepcopy(self.simulator.ped_pos),
+            ray_vecs_np,
+            ped_actions_np,
+        )
 
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)
@@ -222,4 +225,4 @@ class EmptyRobotEnv(Env):
         Clean up and exit the simulation UI, if it exists.
         """
         if self.sim_ui:
-            self.sim_ui.exit()
+            self.sim_ui.exit_simulation()

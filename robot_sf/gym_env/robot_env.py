@@ -142,6 +142,7 @@ class RobotEnv(Env):
         - obs: Observation after taking the action.
         - reward: Calculated reward for the taken action.
         - term: Boolean indicating if the episode has terminated.
+        - truncated: Boolean indicating if the episode was truncated.
         - info: Additional information as dictionary.
         """
         # Process the action through the simulator

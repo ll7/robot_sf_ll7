@@ -199,6 +199,8 @@ class SimulationView:
             frame_data = frame_data.swapaxes(0, 1)
             self.frames.append(frame_data)
             logger.debug(f"Recorded frames {len(self.frames)}")
+            if len(self.frames) > 2000:
+                logger.warning("Too many frames recorded. Stopping video recording.")
         else:
             # Normal display update
             pygame.display.update()
@@ -229,13 +231,14 @@ class SimulationView:
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
-        if self.record_video and self.frames:
-            if MOVIEPY_AVAILABLE:
-                logger.debug("Writing video file.")
-                # TODO: get the correct fps from the simulation
-                clip = ImageSequenceClip(self.frames, fps=100)
-                clip.write_videofile(self.video_path)
-                self.frames = []
+        if self.record_video and self.frames and MOVIEPY_AVAILABLE:
+            logger.debug("Writing video file.")
+            # TODO: get the correct fps from the simulation
+            clip = ImageSequenceClip(self.frames, fps=self.video_fps)
+            clip.write_videofile(self.video_path)
+            self.frames = []
+        elif self.record_video and self.frames and not MOVIEPY_AVAILABLE:
+            logger.warning("MoviePy is not available. Cannot write video file.")
 
     def _handle_video_resize(self, e):
         """Handle the resize event of the pygame window."""

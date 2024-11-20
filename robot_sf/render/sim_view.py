@@ -15,7 +15,8 @@ from threading import Thread
 from signal import signal, SIGINT
 
 import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 
 Vec2D = Tuple[float, float]
@@ -57,6 +58,7 @@ class VisualizableAction:
 class VisualizableSimState:
     """Representing a collection of properties to display
     the simulator's state at a discrete timestep."""
+
     timestep: int
     robot_action: Union[VisualizableAction, None]
     robot_pose: RobotPose
@@ -74,16 +76,16 @@ class SimulationView:
     width: float = 1200
     height: float = 800
     scaling: float = 15
-    robot_radius: float = 1.0 
+    robot_radius: float = 1.0
     ego_ped_radius: float = 0.4
     ped_radius: float = 0.4
     goal_radius: float = 1.0
     map_def: MapDefinition = field(default_factory=MapDefinition)
     obstacles: List[Obstacle] = field(default_factory=list)
-    caption: str = 'RobotSF Simulation'
+    caption: str = "RobotSF Simulation"
     focus_on_robot: bool = False
     focus_on_ego_ped: bool = False
-    
+
     # Add UI state fields
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
@@ -93,14 +95,16 @@ class SimulationView:
     is_abortion_requested: bool = field(init=False, default=False)
     offset: np.ndarray = field(default_factory=lambda: np.array([0, 0]))
     display_robot_info: int = field(default=0)  # Add this line
-    display_help: bool = field(default=False)   # Also add this for help text
+    display_help: bool = field(default=False)  # Also add this for help text
 
     def __post_init__(self):
         """Initialize PyGame components."""
         logger.info("Initializing the simulation view.")
         pygame.init()
         pygame.font.init()
-        self.screen = pygame.display.set_mode((int(self.width), int(self.height)), pygame.RESIZABLE)
+        self.screen = pygame.display.set_mode(
+            (int(self.width), int(self.height)), pygame.RESIZABLE
+        )
         pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
@@ -126,20 +130,6 @@ class SimulationView:
             return
 
         sleep(0.01)  # limit UI update rate to 100 fps
-        # TODO: make the sleep time configurable
-
-        # info: event handling needs to be processed
-        #       in the main thread to access UI resources
-        if self.is_exit_requested:
-            pygame.quit()
-            self.ui_events_thread.join()
-            if self.is_abortion_requested:
-                exit()
-        if self.size_changed:
-            self._resize_window()
-            self.size_changed = False
-        if self.redraw_needed:
-            self.redraw_needed = False
 
         # Adjust the view based on the focus
         self._move_camera(state)
@@ -150,29 +140,25 @@ class SimulationView:
         if self.map_def.obstacles:
             self._draw_obstacles()
 
-        # debugging objects
-        # if self.map_def.robot_routes:
-        #     self._draw_robot_routes()
-        # if self.map_def.ped_routes:
-        #     self._draw_pedestrian_routes()
-        # if self.map_def.ped_spawn_zones:
-        #     self._draw_spawn_zones()
-        # if self.map_def.ped_goal_zones:
-        #     self._draw_goal_zones()
-
         self._draw_grid()
 
         # dynamic objects
-        self._augment_lidar(state.ray_vecs)
-        self._augment_ped_actions(state.ped_actions)
-        if state.robot_action:
+        if hasattr(state, 'ray_vecs'):
+            self._augment_lidar(state.ray_vecs)
+        if hasattr(state, 'ped_actions'):
+            self._augment_ped_actions(state.ped_actions)
+        if hasattr(state, 'robot_action') and state.robot_action:
             self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
-            self._augment_goal_position(state.robot_action.goal)
-        self._draw_pedestrians(state.pedestrian_positions)
-        self._draw_robot(state.robot_pose)
-        if state.ego_ped_pose:
-            self._augment_lidar(state.ego_ped_ray_vecs)
-            if state.ego_ped_action:
+            if hasattr(state.robot_action, 'goal'):
+                self._augment_goal_position(state.robot_action.goal)
+        if hasattr(state, 'pedestrian_positions'):
+            self._draw_pedestrians(state.pedestrian_positions)
+        if hasattr(state, 'robot_pose'):
+            self._draw_robot(state.robot_pose)
+        if hasattr(state, 'ego_ped_pose') and state.ego_ped_pose:
+            if hasattr(state, 'ego_ped_ray_vecs'):
+                self._augment_lidar(state.ego_ped_ray_vecs)
+            if hasattr(state, 'ego_ped_action') and state.ego_ped_action:
                 self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
             self._draw_ego_ped(state.ego_ped_pose)
 
@@ -183,15 +169,6 @@ class SimulationView:
 
         # update the display
         pygame.display.update()
-
-    def handle_events(self):
-        """Handle PyGame events on the main thread"""
-        if threading.current_thread() is not self._main_thread:
-            raise RuntimeError("PyGame events must be handled on the main thread")
-        
-        for event in pygame.event.get():
-            # Handle events...
-            pass
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
@@ -205,7 +182,6 @@ class SimulationView:
 
     def exit(self):
         self.is_exit_requested = True
-        self.ui_events_thread.join()
 
     def _handle_quit(self, e=None):
         """Handle the quit event of the pygame window."""
@@ -230,24 +206,39 @@ class SimulationView:
 
         key_action_map = {
             # scale the view
-            pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + new_scaling),
-            pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - new_scaling, 1)),
+            pygame.K_PLUS: lambda: setattr(self, "scaling", self.scaling + new_scaling),
+            pygame.K_MINUS: lambda: setattr(
+                self, "scaling", max(self.scaling - new_scaling, 1)
+            ),
             # move the view
-            pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] + new_offset),
-            pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] - new_offset),
-            pygame.K_UP: lambda: self.offset.__setitem__(1, self.offset[1] + new_offset),
-            pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] - new_offset),
+            pygame.K_LEFT: lambda: self.offset.__setitem__(
+                0, self.offset[0] + new_offset
+            ),
+            pygame.K_RIGHT: lambda: self.offset.__setitem__(
+                0, self.offset[0] - new_offset
+            ),
+            pygame.K_UP: lambda: self.offset.__setitem__(
+                1, self.offset[1] + new_offset
+            ),
+            pygame.K_DOWN: lambda: self.offset.__setitem__(
+                1, self.offset[1] - new_offset
+            ),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
             # focus on the robot or ped
-            pygame.K_f: lambda: setattr(self, 'focus_on_robot', not self.focus_on_robot),
-            pygame.K_p: lambda: setattr(self, 'focus_on_ego_ped', not self.focus_on_ego_ped),
+            pygame.K_f: lambda: setattr(
+                self, "focus_on_robot", not self.focus_on_robot
+            ),
+            pygame.K_p: lambda: setattr(
+                self, "focus_on_ego_ped", not self.focus_on_ego_ped
+            ),
             # display help
-            pygame.K_h: lambda: setattr(self, 'display_help', not self.display_help),
+            pygame.K_h: lambda: setattr(self, "display_help", not self.display_help),
             # display robotinfo
-            pygame.K_q: lambda: setattr(self, 'display_robot_info',
-                                        (self.display_robot_info + 1) % 3),
-            }
+            pygame.K_q: lambda: setattr(
+                self, "display_robot_info", (self.display_robot_info + 1) % 3
+            ),
+        }
 
         if e.key in key_action_map:
             key_action_map[e.key]()
@@ -262,7 +253,7 @@ class SimulationView:
             pygame.QUIT: self._handle_quit,
             pygame.VIDEORESIZE: self._handle_video_resize,
             pygame.KEYDOWN: self._handle_keydown,
-            }
+        }
         while not self.is_exit_requested:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
@@ -284,11 +275,12 @@ class SimulationView:
         logger.debug("Resizing the window.")
         old_surface = self.screen
         self.screen = pygame.display.set_mode(
-            (self.width, self.height), pygame.RESIZABLE)
+            (self.width, self.height), pygame.RESIZABLE
+        )
         self.screen.blit(old_surface, (0, 0))
 
     def _move_camera(self, state: VisualizableSimState):
-        """ Moves the camera based on the focused object."""
+        """Moves the camera based on the focused object."""
         if self.focus_on_robot:
             r_x, r_y = state.robot_pose[0]
             self.offset[0] = int(r_x * self.scaling - self.width / 2) * -1
@@ -304,7 +296,8 @@ class SimulationView:
             self.screen,
             ROBOT_COLOR,
             self._scale_tuple(pose[0]),
-            self.robot_radius * self.scaling)
+            self.robot_radius * self.scaling,
+        )
 
     def _draw_ego_ped(self, pose: PedPose):
         # TODO: display robot with an image instead of a circle
@@ -312,7 +305,8 @@ class SimulationView:
             self.screen,
             EGO_PED_COLOR,
             self._scale_tuple(pose[0]),
-            self.ego_ped_radius * self.scaling)
+            self.ego_ped_radius * self.scaling,
+        )
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         # TODO: display pedestrians with an image instead of a circle
@@ -321,16 +315,16 @@ class SimulationView:
                 self.screen,
                 PED_COLOR,
                 self._scale_tuple((ped_x, ped_y)),
-                self.ped_radius * self.scaling
-                )
+                self.ped_radius * self.scaling,
+            )
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
-            scaled_vertices = [(
-                self._scale_tuple((x, y))
-                ) for x, y in obstacle.vertices_np]
+            scaled_vertices = [
+                (self._scale_tuple((x, y))) for x, y in obstacle.vertices_np
+            ]
             # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
@@ -339,9 +333,7 @@ class SimulationView:
         for spawn_zone in self.map_def.ped_spawn_zones:
             # Scale and offset the vertices of the zones
             vertices_np = np.array(spawn_zone)
-            scaled_vertices = [(
-                self._scale_tuple((x, y))
-                ) for x, y in vertices_np]
+            scaled_vertices = [(self._scale_tuple((x, y))) for x, y in vertices_np]
             # Draw the spawn zone as a polygon on the screen
             pygame.draw.polygon(self.screen, PED_SPAWN_COLOR, scaled_vertices)
 
@@ -350,9 +342,7 @@ class SimulationView:
         for goal_zone in self.map_def.ped_goal_zones:
             # Scale and offset the vertices of the goal zones
             vertices_np = np.array(goal_zone)
-            scaled_vertices = [(
-                self._scale_tuple((x, y))
-                ) for x, y in vertices_np]
+            scaled_vertices = [(self._scale_tuple((x, y))) for x, y in vertices_np]
             # Draw the goal_zone as a polygon on the screen
             pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
@@ -362,7 +352,8 @@ class SimulationView:
             self.screen,
             ROBOT_GOAL_COLOR,
             self._scale_tuple(robot_goal),
-            self.goal_radius * self.scaling)
+            self.goal_radius * self.scaling,
+        )
 
     def _augment_lidar(self, ray_vecs: np.ndarray):
         for p1, p2 in ray_vecs:
@@ -371,7 +362,7 @@ class SimulationView:
                 ROBOT_LIDAR_COLOR,
                 self._scale_tuple(p1),
                 self._scale_tuple(p2),
-                )
+            )
 
     def _augment_action(self, action: VisualizableAction, color):
         r_x, r_y = action.pose[0]
@@ -391,8 +382,8 @@ class SimulationView:
             color,
             self._scale_tuple((r_x, r_y)),
             self._scale_tuple((vec_x, vec_y)),
-            width=3
-            )
+            width=3,
+        )
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
         """Draw the actions of the pedestrians as lines."""
@@ -402,8 +393,8 @@ class SimulationView:
                 PED_ACTION_COLOR,
                 self._scale_tuple(p1),
                 self._scale_tuple(p2),
-                width=3
-                )
+                width=3,
+            )
 
     def _draw_pedestrian_routes(self):
         """
@@ -414,10 +405,9 @@ class SimulationView:
                 self.screen,
                 PED_ROUTE_COLOR,
                 False,
-                [self._scale_tuple((x, y))
-                 for x, y in route.waypoints],
-                width=1
-                )
+                [self._scale_tuple((x, y)) for x, y in route.waypoints],
+                width=1,
+            )
 
     def _draw_robot_routes(self):
         """
@@ -428,48 +418,55 @@ class SimulationView:
                 self.screen,
                 ROBOT_ROUTE_COLOR,
                 False,
-                [self._scale_tuple((x, y))
-                 for x, y in route.waypoints],
-                width=1
-                )
+                [self._scale_tuple((x, y)) for x, y in route.waypoints],
+                width=1,
+            )
 
     def _draw_coordinates(self, x, y):
         """
         Draws the coordinates (x, y) on the screen.
         """
-        text = self.font.render(f'({x}, {y})', False, TEXT_COLOR)
+        text = self.font.render(f"({x}, {y})", False, TEXT_COLOR)
         self.screen.blit(text, (x, y))
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
         lines = []
         if self.display_robot_info == 1 and state.robot_action:
             lines += [
-                f'RobotPose: {state.robot_pose}',
-                f'RobotAction: {state.robot_action.action if state.robot_action else None}',
-                f'RobotGoal: {state.robot_action.goal if state.robot_action else None}',]
+                f"RobotPose: {state.robot_pose}",
+                f"RobotAction: {state.robot_action.action if state.robot_action else None}",
+                f"RobotGoal: {state.robot_action.goal if state.robot_action else None}",
+            ]
         elif self.display_robot_info == 2:
             if state.ego_ped_pose and state.ego_ped_action:
-                distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
+                distance_to_robot = euclid_dist(
+                    state.ego_ped_pose[0], state.robot_pose[0]
+                )
                 lines += [
-                    f'PedestrianPose: {state.ego_ped_pose}',
-                    f'PedestrianAction: {state.ego_ped_action.action}',
-                    f'PedestrianGoal: {state.ego_ped_action.goal}',
-                    f'DistanceRobot: {distance_to_robot:.2f}',]
+                    f"PedestrianPose: {state.ego_ped_pose}",
+                    f"PedestrianAction: {state.ego_ped_action.action}",
+                    f"PedestrianGoal: {state.ego_ped_action.goal}",
+                    f"DistanceRobot: {distance_to_robot:.2f}",
+                ]
             else:
                 self.display_robot_info = 0
         text_lines = [
-            f'step: {timestep}',
-            f'scaling: {self.scaling}',
-            f'x-offset: {self.offset[0]/self.scaling:.2f}',
-            f'y-offset: {self.offset[1]/self.scaling:.2f}',
-            ]
+            f"step: {timestep}",
+            f"scaling: {self.scaling}",
+            f"x-offset: {self.offset[0]/self.scaling:.2f}",
+            f"y-offset: {self.offset[1]/self.scaling:.2f}",
+        ]
         text_lines += lines
-        text_lines += ['(Press h for help)',]
+        text_lines += [
+            "(Press h for help)",
+        ]
 
         # Create a surface for the text background
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()
-        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
+        text_surface = pygame.Surface(
+            (max_width + 10, text_height + 10), pygame.SRCALPHA
+        )
         text_surface.fill(TEXT_BACKGROUND)
 
         for i, text in enumerate(text_lines):
@@ -489,24 +486,26 @@ class SimulationView:
 
     def _add_help_text(self):
         text_lines = [
-            'Move camera: arrow keys',
-            'Move fast: CTRL + arrow keys',
-            'Move slow: ALT + arrow keys',
-            'Reset view: r',
-            'Focus robot: f',
-            'Focus ego_ped: p',
-            'Scale up: +',
-            'Scale down: -',
-            'Display robot info: q',
-            'Help: h',
-            ]
+            "Move camera: arrow keys",
+            "Move fast: CTRL + arrow keys",
+            "Move slow: ALT + arrow keys",
+            "Reset view: r",
+            "Focus robot: f",
+            "Focus ego_ped: p",
+            "Scale up: +",
+            "Scale down: -",
+            "Display robot info: q",
+            "Help: h",
+        ]
 
         # Determine max width of the text
         text_surface = self.font.render(text_lines[1], False, TEXT_COLOR)
 
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()
-        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
+        text_surface = pygame.Surface(
+            (max_width + 10, text_height + 10), pygame.SRCALPHA
+        )
         text_surface.fill(TEXT_BACKGROUND)
 
         for i, text in enumerate(text_lines):
@@ -522,13 +521,13 @@ class SimulationView:
             # Draw main text
             text_surface.blit(text_render, pos)
 
-        self.screen.blit(text_surface, (self.width - max_width - 10, self._timestep_text_pos[1]))
+        self.screen.blit(
+            text_surface, (self.width - max_width - 10, self._timestep_text_pos[1])
+        )
 
     def _draw_grid(
-            self,
-            grid_increment: int = 50,
-            grid_color: RgbColor = (200, 200, 200)
-            ):
+        self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)
+    ):
         """
         Draw a grid on the screen.
         :param grid_increment: The increment of the grid in pixels.
@@ -543,8 +542,8 @@ class SimulationView:
                 self.screen,
                 grid_color,
                 (x + self.offset[0], 0),
-                (x + self.offset[0], self.height)
-                )
+                (x + self.offset[0], self.height),
+            )
             label = font.render(str(int(x / self.scaling)), 1, grid_color)
             self.screen.blit(label, (x + self.offset[0], 0))
 
@@ -555,7 +554,7 @@ class SimulationView:
                 self.screen,
                 grid_color,
                 (0, y + self.offset[1]),
-                (self.width, y + self.offset[1])
-                )
+                (self.width, y + self.offset[1]),
+            )
             label = font.render(str(int(y / self.scaling)), 1, grid_color)
             self.screen.blit(label, (0, y + self.offset[1]))

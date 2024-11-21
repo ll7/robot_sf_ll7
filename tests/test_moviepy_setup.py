@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 import numpy as np
-from moviepy import ImageSequenceClip, 
+from moviepy import ImageSequenceClip, VideoFileClip
 from loguru import logger
 
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE

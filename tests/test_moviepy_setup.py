@@ -6,8 +6,11 @@ import numpy as np
 from moviepy import ImageSequenceClip, VideoFileClip
 
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
-@pytest.mark.skipif(not MOVIEPY_AVAILABLE, 
-                   reason="Moviepy not installed. Run: pip install moviepy")
+
+
+@pytest.mark.skipif(
+    not MOVIEPY_AVAILABLE, reason="Moviepy not installed. Run: pip install moviepy"
+)
 def test_moviepy_ffmpeg_setup():
     """Test if moviepy and ffmpeg are properly configured."""
     # Create test directory
@@ -17,7 +20,7 @@ def test_moviepy_ffmpeg_setup():
     try:
         # Create frames
         frames = []
-        for i in range(10):
+        for i in range(11):
             frame = np.zeros((100, 100, 3), dtype=np.uint8)
             x = int(50 + 30 * np.cos(i / 10 * 2 * np.pi))
             y = int(50 + 30 * np.sin(i / 10 * 2 * np.pi))

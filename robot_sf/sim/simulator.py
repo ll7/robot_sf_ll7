@@ -18,7 +18,8 @@ from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
 from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
-    DifferentialDriveAction)
+    DifferentialDriveAction,
+)
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian, UnicycleAction
 from robot_sf.nav.navigation import RouteNavigator, sample_route
@@ -37,6 +38,11 @@ logger = loguru.logger
 
 @dataclass
 class Simulator:
+    """
+    Simulator class to manage the simulation environment, including robots,
+    pedestrians, and their interactions based on the provided configuration.
+    """
+
     config: SimulationSettings
     map_def: MapDefinition
     robots: List[Robot]
@@ -49,16 +55,28 @@ class Simulator:
     peds_behaviors: List[PedestrianBehavior] = field(init=False)
 
     def __post_init__(self):
+        """
+        Initializes the simulator components after dataclass initialization.
+        Sets up pedestrian states, groups, behaviors, simulation forces,
+        and robot navigators.
+        """
         pysf_config = PySFSimConfig()
         spawn_config = PedSpawnConfig(
-            self.config.peds_per_area_m2,
-            self.config.max_peds_per_group
-            )
+            self.config.peds_per_area_m2, self.config.max_peds_per_group
+        )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
-            pysf_config.scene_config.tau, spawn_config,
-            self.map_def.ped_routes, self.map_def.ped_crowded_zones)
+            pysf_config.scene_config.tau,
+            spawn_config,
+            self.map_def.ped_routes,
+            self.map_def.ped_crowded_zones,
+        )
 
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
+            """
+            Creates and configures the forces to be applied in the simulation,
+            excluding obstacle forces and adding pedestrian-robot interaction forces
+            if PRF is active.
+            """
             forces = pysf_make_forces(sim, config)
             forces = [f for f in forces if not isinstance(f, ObstacleForce)]
             if self.config.prf_config.is_active:
@@ -66,11 +84,9 @@ class Simulator:
                     self.config.prf_config.robot_radius = robot.config.radius
                     forces.append(
                         PedRobotForce(
-                            self.config.prf_config,
-                            sim.peds,
-                            lambda: robot.pos
-                            )
+                            self.config.prf_config, sim.peds, lambda: robot.pos
                         )
+                    )
             return forces
 
         self.pysf_sim = PySFSimulator(
@@ -78,13 +94,14 @@ class Simulator:
             self.groups.groups_as_lists,
             self.map_def.obstacles_pysf,
             config=pysf_config,
-            make_forces=make_forces)
+            make_forces=make_forces,
+        )
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold)
             for _ in self.robots
-            ]
+        ]
 
         self.reset_state()
         for behavior in self.peds_behaviors:
@@ -92,34 +109,61 @@ class Simulator:
 
     @property
     def goal_pos(self) -> List[Vec2D]:
+        """
+        Returns the current goal positions for all robot navigators.
+        """
         return [n.current_waypoint for n in self.robot_navs]
 
     @property
     def next_goal_pos(self) -> List[Union[Vec2D, None]]:
+        """
+        Returns the next goal positions for all robot navigators.
+        """
         return [n.next_waypoint for n in self.robot_navs]
 
     @property
     def robot_poses(self) -> List[RobotPose]:
+        """
+        Returns the current poses of all robots.
+        """
         return [r.pose for r in self.robots]
 
     @property
     def robot_pos(self) -> List[Vec2D]:
+        """
+        Returns the current positions of all robots.
+        """
         return [r.pose[0] for r in self.robots]
 
     @property
     def ped_pos(self):
+        """
+        Returns the current positions of all pedestrians.
+        """
         return self.pysf_state.ped_positions
 
     def reset_state(self):
+        """
+        Resets the state of all robots and their navigators.
+        Assigns new routes and resets robot positions if collision occurs
+        or a robot has reached its final goal.
+        """
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
+                waypoints = sample_route(
+                    self.map_def, None if self.random_start_pos else i
+                )
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: List[RobotAction]):
+        """
+        Performs a single simulation step by updating pedestrian behaviors,
+        computing and applying forces, updating pedestrian positions,
+        and applying robot actions and navigation updates.
+        """
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
@@ -131,11 +175,11 @@ class Simulator:
 
 
 def init_simulators(
-        env_config: EnvSettings,
-        map_def: MapDefinition,
-        num_robots: int = 1,
-        random_start_pos: bool = True
-        ) -> List[Simulator]:
+    env_config: EnvSettings,
+    map_def: MapDefinition,
+    num_robots: int = 1,
+    random_start_pos: bool = True,
+) -> List[Simulator]:
     """
     Initialize simulators for the robot environment.
 
@@ -161,16 +205,19 @@ def init_simulators(
     # Create the required number of simulators
     for i in range(num_sims):
         # Determine the number of robots for this simulator
-        n = map_def.num_start_pos if i < num_sims - 1 \
+        n = (
+            map_def.num_start_pos
+            if i < num_sims - 1
             else max(1, num_robots % map_def.num_start_pos)
+        )
 
         # Create the robots for this simulator
         sim_robots = [env_config.robot_factory() for _ in range(n)]
 
         # Create the simulator with the robots and add it to the list
         sim = Simulator(
-            env_config.sim_config, map_def, sim_robots,
-            goal_proximity, random_start_pos)
+            env_config.sim_config, map_def, sim_robots, goal_proximity, random_start_pos
+        )
         sims.append(sim)
 
     return sims
@@ -185,6 +232,7 @@ class PedSimulator(Simulator):
         ego_ped (UnicycleDrivePedestrian): The ego pedestrian in the environment.
 
     """
+
     ego_ped: UnicycleDrivePedestrian
 
     @property
@@ -204,7 +252,9 @@ class PedSimulator(Simulator):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
+                waypoints = sample_route(
+                    self.map_def, None if self.random_start_pos else i
+                )
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
         # Ego_pedestrian reset
@@ -212,7 +262,9 @@ class PedSimulator(Simulator):
         ped_spawn = self.get_proximity_point(robot_spawn, 10, 15)
         self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
-    def step_once(self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]):
+    def step_once(
+        self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]
+    ):
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
@@ -224,8 +276,9 @@ class PedSimulator(Simulator):
 
         self.ego_ped.apply_action(ego_ped_actions[0], self.config.time_per_step_in_secs)
 
-    def get_proximity_point(self, fixed_point: Tuple[float, float],
-                            lower_bound: float, upper_bound: float) -> Tuple[float, float]:
+    def get_proximity_point(
+        self, fixed_point: Tuple[float, float], lower_bound: float, upper_bound: float
+    ) -> Tuple[float, float]:
         """
         Calculate a point in the proximity of another point with specified distance bounds.
 
@@ -248,7 +301,9 @@ class PedSimulator(Simulator):
                 return new_x, new_y
 
         logger.warning(f"Could not find a valid proximity point: {fixed_point}.")
-        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]  # Spawn in pedestrian spawn_zone
+        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[
+            0
+        ]  # Spawn in pedestrian spawn_zone
         initial_spawn = sample_zone(spawn_id, 1)[0]
         return initial_spawn
 
@@ -268,10 +323,8 @@ class PedSimulator(Simulator):
 
 
 def init_ped_simulators(
-        env_config: PedEnvSettings,
-        map_def: MapDefinition,
-        random_start_pos: bool = False
-        ) -> List[PedSimulator]:
+    env_config: PedEnvSettings, map_def: MapDefinition, random_start_pos: bool = False
+) -> List[PedSimulator]:
     """
     Initialize simulators for the pedestrian environment.
 
@@ -296,7 +349,12 @@ def init_ped_simulators(
 
     # Create the simulator with the robots and add it to the list
     sim = PedSimulator(
-        env_config.sim_config, map_def, [sim_robot],
-        goal_proximity, random_start_pos, ego_ped=sim_ped)
+        env_config.sim_config,
+        map_def,
+        [sim_robot],
+        goal_proximity,
+        random_start_pos,
+        ego_ped=sim_ped,
+    )
 
     return [sim]

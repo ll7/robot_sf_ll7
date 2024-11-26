@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 import time
 import json
 import platform
@@ -13,11 +13,15 @@ from stable_baselines3 import PPO
 
 @dataclass
 class BenchmarkMetrics:
+    """Metrics collected during benchmark runs"""
+
     steps_per_second: float
     avg_step_time_ms: float
     total_episodes: int
     system_info: Dict
     config_hash: str
+    observation_space_info: Dict
+    used_random_actions: bool = False
 
     def to_dict(self) -> Dict:
         return {
@@ -26,11 +30,20 @@ class BenchmarkMetrics:
             "total_episodes": self.total_episodes,
             "system_info": self.system_info,
             "config_hash": self.config_hash,
+            "observation_space_info": self.observation_space_info,
+            "used_random_actions": self.used_random_actions,
         }
 
 
-def run_standardized_benchmark(num_steps: int = 10000) -> BenchmarkMetrics:
-    """Run a standardized simulation benchmark."""
+def run_standardized_benchmark(
+    num_steps: int = 2_000, model_path: Optional[str] = "./model/run_043"
+) -> BenchmarkMetrics:
+    """Run a standardized simulation benchmark.
+
+    Args:
+        num_steps: Number of simulation steps to run
+        model_path: Path to the model file. If None, uses random actions
+    """
     # Fixed configuration
     env_config = EnvSettings()
     env_config.sim_config.difficulty = 2
@@ -38,24 +51,58 @@ def run_standardized_benchmark(num_steps: int = 10000) -> BenchmarkMetrics:
 
     # Initialize environment
     env = RobotEnv(env_config)
-    model = PPO.load("./model/run_043", env=env)
+
+    # Record observation space info
+    obs_space_info = {
+        "drive_state_shape": env.observation_space["drive_state"].shape,
+        "rays_shape": env.observation_space["rays"].shape,
+        "drive_state_bounds": {
+            "low": env.observation_space["drive_state"].low.tolist(),
+            "high": env.observation_space["drive_state"].high.tolist(),
+        },
+    }
+
+    # Try to load model, fall back to random actions if fails
+    used_random_actions = False
+    if model_path:
+        try:
+            model = PPO.load(model_path, env=env)
+            logger.info("Successfully loaded model")
+        except (ValueError, Exception) as e:
+            logger.warning(f"Failed to load model: {e}")
+            logger.info("Falling back to random actions")
+            model = None
+            used_random_actions = True
+    else:
+        model = None
+        used_random_actions = True
 
     # Track timing
     step_times = []
     episodes = 0
     obs = env.reset()
 
-    for _ in range(num_steps):
+    logger.info("Starting benchmark run...")
+    for i in range(num_steps):
         start = time.perf_counter()
 
-        action, _ = model.predict(obs, deterministic=True)
+        # Get action from model or random
+        if model:
+            action, _ = model.predict(obs, deterministic=True)
+        else:
+            action = env.action_space.sample()
+
         obs, _, done, _, _ = env.step(action)
 
-        step_times.append(time.perf_counter() - start)
+        step_time = time.perf_counter() - start
+        step_times.append(step_time)
 
         if done:
             episodes += 1
             obs = env.reset()
+
+        if i % 1000 == 0:
+            logger.debug(f"Completed {i}/{num_steps} steps")
 
     # Calculate metrics
     avg_step_time = np.mean(step_times)
@@ -68,54 +115,26 @@ def run_standardized_benchmark(num_steps: int = 10000) -> BenchmarkMetrics:
         "python_version": platform.python_version(),
         "cpu_count": psutil.cpu_count(),
         "memory_gb": psutil.virtual_memory().total / (1024**3),
+        "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
     }
 
     # Generate config hash
     config_str = str(env_config.sim_config.__dict__)
-    config_hash = hash(config_str)
+    config_hash = str(hash(config_str))
 
     return BenchmarkMetrics(
         steps_per_second=steps_per_sec,
         avg_step_time_ms=avg_step_time * 1000,
         total_episodes=episodes,
         system_info=system_info,
-        config_hash=str(config_hash),
+        config_hash=config_hash,
+        observation_space_info=obs_space_info,
+        used_random_actions=used_random_actions,
     )
 
 
-def save_benchmark_results(
-    benchmark_metrics: BenchmarkMetrics, baseline_file: str = "benchmark_baseline.json"
-):
-    """Save benchmark results and compare to baseline."""
-
-    # Load baseline if exists
-    try:
-        with open(baseline_file, "r", encoding="utf-8") as f:
-            baseline = json.load(f)
-    except FileNotFoundError:
-        baseline = None
-
-    # Current results
-    results = {"timestamp": time.time(), "metrics": benchmark_metrics.to_dict()}
-
-    # Calculate relative performance
-    if baseline and baseline["metrics"]["config_hash"] == benchmark_metrics.config_hash:
-        relative_perf = (
-            benchmark_metrics.steps_per_second / baseline["metrics"]["steps_per_second"]
-        )
-        results["relative_performance"] = relative_perf
-
-    # Save results
-    with open(
-        f"benchmark_results_{time.strftime('%Y%m%d_%H%M%S')}.json",
-        "w",
-        encoding="utf-8",
-    ) as f:
-        json.dump(results, f, indent=2)
-
-
 def create_baseline():
-    """Create a baseline benchmark for future comparisons."""
+    """Create a new baseline benchmark."""
     baseline_metrics = run_standardized_benchmark()
 
     with open("benchmark_baseline.json", "w", encoding="utf-8") as f:
@@ -126,15 +145,26 @@ def create_baseline():
         )
 
 
+def save_benchmark_results(results: BenchmarkMetrics):
+    """Save benchmark results to a JSON file."""
+    with open("benchmark_results.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {"timestamp": time.time(), "metrics": results.to_dict()},
+            f,
+            indent=2,
+        )
+
+
 if __name__ == "__main__":
     logger.info("Running standardized benchmark...")
+
     # Run benchmark
     metrics = run_standardized_benchmark()
 
     logger.info(f"Steps per second: {metrics.steps_per_second:.2f}")
     logger.info(f"Average step time: {metrics.avg_step_time_ms:.2f} ms")
     logger.info(f"Total episodes: {metrics.total_episodes}")
+    logger.info(f"Used random actions: {metrics.used_random_actions}")
 
-    logger.info("Saving benchmark results...")
-    # Save and compare to baseline
+    # Save results
     save_benchmark_results(metrics)

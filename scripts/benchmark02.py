@@ -165,6 +165,7 @@ def save_benchmark_results(
                 )
                 f.seek(0)
                 json.dump(data, f, indent=2)
+                f.truncate()
         except FileNotFoundError:
             with open(json_file, "w", encoding="utf-8") as f:
                 json.dump(

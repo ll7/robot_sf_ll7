@@ -143,34 +143,56 @@ def run_standardized_benchmark(
     )
 
 
-def create_baseline():
-    """Create a new baseline benchmark."""
-    baseline_metrics = run_standardized_benchmark()
-
-    with open("benchmark_baseline.json", "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-                "metrics": baseline_metrics.to_dict(),
-            },
-            f,
-            indent=2,
-        )
-
-
 def save_benchmark_results(
-    results: BenchmarkMetrics, json_file: str = "benchmark_results.json"
+    results: BenchmarkMetrics,
+    json_file: str = "benchmark_results.json",
+    append: bool = True,
 ):
     """Save benchmark results to a JSON file."""
-    with open(json_file, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-                "metrics": results.to_dict(),
-            },
-            f,
-            indent=2,
-        )
+    if append:
+        try:
+            with open(json_file, "r+", encoding="utf-8") as f:
+                data = json.load(f)
+                if not isinstance(data, list):
+                    data = [data]
+                data.append(
+                    {
+                        "timestamp": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime()
+                        ),
+                        "metrics": results.to_dict(),
+                    }
+                )
+                f.seek(0)
+                json.dump(data, f, indent=2)
+        except FileNotFoundError:
+            with open(json_file, "w", encoding="utf-8") as f:
+                json.dump(
+                    [
+                        {
+                            "timestamp": time.strftime(
+                                "%Y-%m-%d %H:%M:%S", time.localtime()
+                            ),
+                            "metrics": results.to_dict(),
+                        }
+                    ],
+                    f,
+                    indent=2,
+                )
+    else:
+        with open(json_file, "w", encoding="utf-8") as f:
+            json.dump(
+                [
+                    {
+                        "timestamp": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime()
+                        ),
+                        "metrics": results.to_dict(),
+                    }
+                ],
+                f,
+                indent=2,
+            )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,184 @@
+[
+  {
+    "timestamp": "2024-11-26 15:16:51",
+    "metrics": {
+      "steps_per_second": 61.76119723423083,
+      "avg_step_time_ms": 16.191395969988662,
+      "total_episodes": 16,
+      "system_info": {
+        "platform": "macOS-15.1.1-arm64-arm-64bit",
+        "processor": "arm",
+        "python_version": "3.12.7",
+        "cpu_count": 14,
+        "memory_gb": 24.0,
+        "cpu_freq": {
+          "current": 4,
+          "min": 1,
+          "max": 4
+        }
+      },
+      "config_hash": "5070639080499893366",
+      "observation_space_info": {
+        "drive_state_shape": [
+          3,
+          5
+        ],
+        "rays_shape": [
+          3,
+          272
+        ],
+        "drive_state_bounds": {
+          "low": [
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ]
+          ],
+          "high": [
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          ]
+        }
+      },
+      "used_random_actions": true,
+      "env_info": {
+        "difficulty": 2,
+        "ped_density_by_difficulty": [
+          0.02,
+          0.04,
+          0.08
+        ],
+        "map_name": [
+          "uni_campus_big"
+        ]
+      }
+    }
+  },
+  {
+    "timestamp": "2024-11-26 15:20:11",
+    "metrics": {
+      "steps_per_second": 64.21469955469131,
+      "avg_step_time_ms": 15.572758370508382,
+      "total_episodes": 10,
+      "system_info": {
+        "platform": "macOS-15.1.1-arm64-arm-64bit",
+        "processor": "arm",
+        "python_version": "3.12.7",
+        "cpu_count": 14,
+        "memory_gb": 24.0,
+        "cpu_freq": {
+          "current": 4,
+          "min": 1,
+          "max": 4
+        }
+      },
+      "config_hash": "1929142745803813092",
+      "observation_space_info": {
+        "drive_state_shape": [
+          3,
+          5
+        ],
+        "rays_shape": [
+          3,
+          272
+        ],
+        "drive_state_bounds": {
+          "low": [
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ]
+          ],
+          "high": [
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          ]
+        }
+      },
+      "used_random_actions": true,
+      "env_info": {
+        "difficulty": 2,
+        "ped_density_by_difficulty": [
+          0.02,
+          0.04,
+          0.08
+        ],
+        "map_name": [
+          "uni_campus_big"
+        ]
+      }
+    }
+  }
+]

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Optional
 import time
 import json
@@ -148,7 +148,19 @@ def save_benchmark_results(
     json_file: str = "benchmark_results.json",
     append: bool = True,
 ):
-    """Save benchmark results to a JSON file."""
+    """
+    Save benchmark results to a JSON file.
+
+    Parameters:
+    results (BenchmarkMetrics): The benchmark metrics to save.
+    json_file (str): The path to the JSON file where results will be saved.
+        Defaults to "benchmark_results.json".
+    append (bool): If True, append the results to the existing file.
+        If False, overwrite the file. Defaults to True.
+
+    Raises:
+    FileNotFoundError: If the file does not exist and append is True, a new file will be created.
+    """
     if append:
         try:
             with open(json_file, "r+", encoding="utf-8") as f:
@@ -166,6 +178,7 @@ def save_benchmark_results(
                 f.seek(0)
                 json.dump(data, f, indent=2)
                 f.truncate()
+            logger.info(f"Appended results to {json_file}")
         except FileNotFoundError:
             with open(json_file, "w", encoding="utf-8") as f:
                 json.dump(
@@ -180,6 +193,7 @@ def save_benchmark_results(
                     f,
                     indent=2,
                 )
+            logger.warning(f"Appending failed. Created new file {json_file}")
     else:
         with open(json_file, "w", encoding="utf-8") as f:
             json.dump(
@@ -194,6 +208,7 @@ def save_benchmark_results(
                 f,
                 indent=2,
             )
+        logger.info(f"Saved results to {json_file}")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ class BenchmarkMetrics:
     config_hash: str
     observation_space_info: Dict
     used_random_actions: bool = False
-    env_info: Dict = None
+    env_info: Dict = field(default_factory=dict)
 
     def to_dict(self) -> Dict:
         return {

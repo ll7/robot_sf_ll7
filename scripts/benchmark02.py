@@ -22,6 +22,7 @@ class BenchmarkMetrics:
     config_hash: str
     observation_space_info: Dict
     used_random_actions: bool = False
+    env_info: Dict = None
 
     def to_dict(self) -> Dict:
         return {
@@ -32,6 +33,7 @@ class BenchmarkMetrics:
             "config_hash": self.config_hash,
             "observation_space_info": self.observation_space_info,
             "used_random_actions": self.used_random_actions,
+            "env_info": self.env_info,
         }
 
 
@@ -118,6 +120,13 @@ def run_standardized_benchmark(
         "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
     }
 
+    # Environment info
+    env_info = {
+        "difficulty": env_config.sim_config.difficulty,
+        "ped_density_by_difficulty": env_config.sim_config.ped_density_by_difficulty,
+        "map_name": list(env_config.map_pool.map_defs.keys()),
+    }
+
     # Generate config hash
     config_str = str(env_config.sim_config.__dict__)
     config_hash = str(hash(config_str))
@@ -130,6 +139,7 @@ def run_standardized_benchmark(
         config_hash=config_hash,
         observation_space_info=obs_space_info,
         used_random_actions=used_random_actions,
+        env_info=env_info,
     )
 
 
@@ -139,17 +149,25 @@ def create_baseline():
 
     with open("benchmark_baseline.json", "w", encoding="utf-8") as f:
         json.dump(
-            {"timestamp": time.time(), "metrics": baseline_metrics.to_dict()},
+            {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                "metrics": baseline_metrics.to_dict(),
+            },
             f,
             indent=2,
         )
 
 
-def save_benchmark_results(results: BenchmarkMetrics):
+def save_benchmark_results(
+    results: BenchmarkMetrics, json_file: str = "benchmark_results.json"
+):
     """Save benchmark results to a JSON file."""
-    with open("benchmark_results.json", "w", encoding="utf-8") as f:
+    with open(json_file, "w", encoding="utf-8") as f:
         json.dump(
-            {"timestamp": time.time(), "metrics": results.to_dict()},
+            {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                "metrics": results.to_dict(),
+            },
             f,
             indent=2,
         )

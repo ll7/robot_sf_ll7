@@ -70,7 +70,7 @@ def run_standardized_benchmark(
         try:
             model = PPO.load(model_path, env=env)
             logger.info("Successfully loaded model")
-        except (ValueError, Exception) as e:
+        except ValueError as e:
             logger.warning(f"Failed to load model: {e}")
             logger.info("Falling back to random actions")
             model = None

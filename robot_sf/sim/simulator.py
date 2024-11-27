@@ -68,7 +68,7 @@ class Simulator:
     pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
     peds_behaviors: List[PedestrianBehavior] = field(init=False)
-    peds_have_obstacle_forces: bool = field(init=False)
+    peds_have_obstacle_forces: bool
 
     def __post_init__(self):
         """
@@ -86,6 +86,14 @@ class Simulator:
             self.map_def.ped_routes,
             self.map_def.ped_crowded_zones,
         )
+
+        if self.peds_have_obstacle_forces is None:
+            logger.warning(
+                "The peds_have_obstacle_forces attribute is not set. "
+                "This may lead to unexpected behavior."
+                "Setting it to False by default."
+            )
+            self.peds_have_obstacle_forces = False
 
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
             """
@@ -235,7 +243,12 @@ def init_simulators(
 
         # Create the simulator with the robots and add it to the list
         sim = Simulator(
-            env_config.sim_config, map_def, sim_robots, goal_proximity, random_start_pos
+            config=env_config.sim_config,
+            map_def=map_def,
+            robots=sim_robots,
+            goal_proximity_threshold=goal_proximity,
+            random_start_pos=random_start_pos,
+            peds_have_obstacle_forces=False,
         )
         sims.append(sim)
 
@@ -374,6 +387,7 @@ def init_ped_simulators(
         goal_proximity,
         random_start_pos,
         ego_ped=sim_ped,
+        peds_have_obstacle_forces=False,
     )
 
     return [sim]

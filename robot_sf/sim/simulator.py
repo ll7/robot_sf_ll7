@@ -41,6 +41,21 @@ class Simulator:
     """
     Simulator class to manage the simulation environment, including robots,
     pedestrians, and their interactions based on the provided configuration.
+
+    Args:
+        config (SimulationSettings): Configuration settings for the simulation.
+        map_def (MapDefinition): Definition of the map for the environment.
+        robots (List[Robot]): List of robots in the environment.
+        goal_proximity_threshold (float): Proximity to the goal for the robots.
+        random_start_pos (bool): Whether to start the robots at random positions.
+
+        robot_navs (List[RouteNavigator]): List of robot routes.
+        pysf_sim (PySFSimulator): PySocialForce simulator object.
+        pysf_state (PedestrianStates): PySocialForce pedestrian states.
+        groups (PedestrianGroupings): PySocialForce pedestrian groups.
+        peds_behaviors (List[PedestrianBehavior]): List of pedestrian behaviors.
+        peds_have_obstacle_forces (bool): Whether pedestrians have obstacle forces.
+            Activating this increases the simulation duration by 40%.
     """
 
     config: SimulationSettings
@@ -53,6 +68,7 @@ class Simulator:
     pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
     peds_behaviors: List[PedestrianBehavior] = field(init=False)
+    peds_have_obstacle_forces: bool = field(init=False)
 
     def __post_init__(self):
         """
@@ -78,7 +94,10 @@ class Simulator:
             if PRF is active.
             """
             forces = pysf_make_forces(sim, config)
-            forces = [f for f in forces if not isinstance(f, ObstacleForce)]
+
+            if self.peds_have_obstacle_forces:
+                # Should pedestrians have obstacle forces?
+                forces = [f for f in forces if not isinstance(f, ObstacleForce)]
             if self.config.prf_config.is_active:
                 for robot in self.robots:
                     self.config.prf_config.robot_radius = robot.config.radius

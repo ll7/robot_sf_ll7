@@ -204,6 +204,7 @@ class PedestrianEnv(Env):
 
         Returns:
         - obs: The initial observation after resetting the environment.
+        - info: Empty dictionary.
         """
         super().reset(seed=seed, options=options)
         # Reset last actions

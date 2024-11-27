@@ -110,6 +110,9 @@ def run_standardized_benchmark(
     avg_step_time = np.mean(step_times)
     steps_per_sec = 1.0 / avg_step_time
 
+    env.close()
+    logger.info("Benchmark run complete. env closed. return metrics")
+
     # System info
     system_info = {
         "platform": platform.platform(),

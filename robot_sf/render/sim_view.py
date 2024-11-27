@@ -199,7 +199,6 @@ class SimulationView:
         else:
             # Normal display update
             pygame.display.update()
-            logger.debug("Updated display. Not recording a video.")
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

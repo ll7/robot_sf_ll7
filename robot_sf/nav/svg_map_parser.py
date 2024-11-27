@@ -72,7 +72,7 @@ class SvgMapConverter:
         If the SVG root is not loaded, an error is logged and the method returns None.
         """
         # check that the svg root is loaded
-        if not self.svg_root:
+        if self.svg_root is None:
             logger.error("SVG root not loaded")
             return
 

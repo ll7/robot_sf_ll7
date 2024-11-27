@@ -30,16 +30,16 @@ def test_simulation(map_definition: MapDefinition):
 
     env = PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=True)
 
-    obs, _ = env.reset()
+    _, _ = env.reset()
 
     logger.info("Simulating the random policy.")
     for _ in range(10000):
         action_ped = env.action_space.sample()
-        obs, _, done, _, _ = env.step(action_ped)
+        _, _, done, _, _ = env.step(action_ped)
         env.render()
 
         if done:
-            obs, _ = env.reset()
+            _, _ = env.reset()
             env.render()
 
     env.reset()

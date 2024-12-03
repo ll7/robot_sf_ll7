@@ -24,7 +24,15 @@ class RobotEnvWithPedestrianObstacleForces(RobotEnv):
         # Load the default map
         if map_def is None:
             logger.warning("No map_def provided. Using default map")
-            map_def = convert_map("maps/svg_maps/example_map_with_obstacles.svg")
+            default_map_path = "maps/svg_maps/example_map_with_obstacles.svg"
+            try:
+                map_def = convert_map(default_map_path)
+            except FileNotFoundError:
+                logger.error(f"Default map not found at {default_map_path}")
+                raise
+            except Exception as e:
+                logger.error(f"Failed to load default map: {str(e)}")
+                raise
 
         # create map pool with one map
         map_pool = MapDefinitionPool(map_defs={"my_map": map_def})

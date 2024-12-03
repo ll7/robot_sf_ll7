@@ -206,6 +206,7 @@ def init_simulators(
     map_def: MapDefinition,
     num_robots: int = 1,
     random_start_pos: bool = True,
+    peds_have_obstacle_forces: bool = False,
 ) -> List[Simulator]:
     """
     Initialize simulators for the robot environment.
@@ -215,6 +216,7 @@ def init_simulators(
     map_def (MapDefinition): Definition of the map for the environment.
     num_robots (int): Number of robots in the environment.
     random_start_pos (bool): Whether to start the robots at random positions.
+
 
     Returns:
     List[Simulator]: A list of initialized Simulator objects.
@@ -248,7 +250,7 @@ def init_simulators(
             robots=sim_robots,
             goal_proximity_threshold=goal_proximity,
             random_start_pos=random_start_pos,
-            peds_have_obstacle_forces=False,
+            peds_have_obstacle_forces=peds_have_obstacle_forces,
         )
         sims.append(sim)
 

@@ -28,7 +28,8 @@
         "editor.formatOnSave": true
     },
     "python.testing.pytestArgs": [
-        "tests"
+        "tests",
+        "test_pygame"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,

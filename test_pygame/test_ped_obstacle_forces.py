@@ -14,7 +14,7 @@ def test_pedestrian_obstacle_avoidance():
     map_def = convert_map("maps/svg_maps/example_map_with_obstacles.svg")
     logger.debug(f"type map_def: {type(map_def)}")
     env = RobotEnvWithPedestrianObstacleForces(map_def=map_def, debug=True)
-    logger.info("created envirnoment")
+    logger.info("created environment")
     env.reset()
     for _ in range(1000):
         rand_action = env.action_space.sample()

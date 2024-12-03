@@ -103,8 +103,9 @@ class Simulator:
             """
             forces = pysf_make_forces(sim, config)
 
-            if self.peds_have_obstacle_forces:
-                # Should pedestrians have obstacle forces?
+            if self.peds_have_obstacle_forces is False:
+                logger.info("Peds have no obstacle forces.")
+                # if peds have no obstacle forces, we filter the obstacle forces and remove them
                 forces = [f for f in forces if not isinstance(f, ObstacleForce)]
             if self.config.prf_config.is_active:
                 for robot in self.robots:
@@ -221,6 +222,12 @@ def init_simulators(
     Returns:
     List[Simulator]: A list of initialized Simulator objects.
     """
+    # assert that the map_def has the correct type
+    try:
+        assert isinstance(map_def, MapDefinition)
+    except AssertionError:
+        # rasie type error and print the type of map_def
+        raise TypeError(f"map_def should be of type MapDefinition, got {type(map_def)}")
 
     # Calculate the number of simulators needed based on the number of robots and start positions
     num_sims = ceil(num_robots / map_def.num_start_pos)

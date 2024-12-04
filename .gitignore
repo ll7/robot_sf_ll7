@@ -19,3 +19,4 @@ pysf_tests
 pysocialforce
 recordings/*.pkl
 wandb
+*.DS_Store

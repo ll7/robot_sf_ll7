@@ -41,6 +41,21 @@ class Simulator:
     """
     Simulator class to manage the simulation environment, including robots,
     pedestrians, and their interactions based on the provided configuration.
+
+    Args:
+        config (SimulationSettings): Configuration settings for the simulation.
+        map_def (MapDefinition): Definition of the map for the environment.
+        robots (List[Robot]): List of robots in the environment.
+        goal_proximity_threshold (float): Proximity to the goal for the robots.
+        random_start_pos (bool): Whether to start the robots at random positions.
+
+        robot_navs (List[RouteNavigator]): List of robot routes.
+        pysf_sim (PySFSimulator): PySocialForce simulator object.
+        pysf_state (PedestrianStates): PySocialForce pedestrian states.
+        groups (PedestrianGroupings): PySocialForce pedestrian groups.
+        peds_behaviors (List[PedestrianBehavior]): List of pedestrian behaviors.
+        peds_have_obstacle_forces (bool): Whether pedestrians have obstacle forces.
+            Activating this increases the simulation duration by 40%.
     """
 
     config: SimulationSettings
@@ -53,6 +68,7 @@ class Simulator:
     pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
     peds_behaviors: List[PedestrianBehavior] = field(init=False)
+    peds_have_obstacle_forces: bool
 
     def __post_init__(self):
         """
@@ -71,6 +87,14 @@ class Simulator:
             self.map_def.ped_crowded_zones,
         )
 
+        if self.peds_have_obstacle_forces is None:
+            logger.warning(
+                "The peds_have_obstacle_forces attribute is not set. "
+                "This may lead to unexpected behavior."
+                "Setting it to False by default."
+            )
+            self.peds_have_obstacle_forces = False
+
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
             """
             Creates and configures the forces to be applied in the simulation,
@@ -78,7 +102,11 @@ class Simulator:
             if PRF is active.
             """
             forces = pysf_make_forces(sim, config)
-            forces = [f for f in forces if not isinstance(f, ObstacleForce)]
+
+            if self.peds_have_obstacle_forces is False:
+                logger.info("Peds have no obstacle forces.")
+                # if peds have no obstacle forces, we filter the obstacle forces and remove them
+                forces = [f for f in forces if not isinstance(f, ObstacleForce)]
             if self.config.prf_config.is_active:
                 for robot in self.robots:
                     self.config.prf_config.robot_radius = robot.config.radius
@@ -179,6 +207,7 @@ def init_simulators(
     map_def: MapDefinition,
     num_robots: int = 1,
     random_start_pos: bool = True,
+    peds_have_obstacle_forces: bool = False,
 ) -> List[Simulator]:
     """
     Initialize simulators for the robot environment.
@@ -189,9 +218,16 @@ def init_simulators(
     num_robots (int): Number of robots in the environment.
     random_start_pos (bool): Whether to start the robots at random positions.
 
+
     Returns:
     List[Simulator]: A list of initialized Simulator objects.
     """
+    # assert that the map_def has the correct type
+    try:
+        assert isinstance(map_def, MapDefinition)
+    except AssertionError:
+        # rasie type error and print the type of map_def
+        raise TypeError(f"map_def should be of type MapDefinition, got {type(map_def)}")
 
     # Calculate the number of simulators needed based on the number of robots and start positions
     num_sims = ceil(num_robots / map_def.num_start_pos)
@@ -216,7 +252,12 @@ def init_simulators(
 
         # Create the simulator with the robots and add it to the list
         sim = Simulator(
-            env_config.sim_config, map_def, sim_robots, goal_proximity, random_start_pos
+            config=env_config.sim_config,
+            map_def=map_def,
+            robots=sim_robots,
+            goal_proximity_threshold=goal_proximity,
+            random_start_pos=random_start_pos,
+            peds_have_obstacle_forces=peds_have_obstacle_forces,
         )
         sims.append(sim)
 
@@ -355,6 +396,7 @@ def init_ped_simulators(
         goal_proximity,
         random_start_pos,
         ego_ped=sim_ped,
+        peds_have_obstacle_forces=False,
     )
 
     return [sim]

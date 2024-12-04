@@ -72,7 +72,7 @@ class SvgMapConverter:
         If the SVG root is not loaded, an error is logged and the method returns None.
         """
         # check that the svg root is loaded
-        if not self.svg_root:
+        if self.svg_root is None:
             logger.error("SVG root not loaded")
             return
 
@@ -260,6 +260,7 @@ class SvgMapConverter:
         if not ped_crowded_zones:
             logger.warning("No crowded zones found in the SVG file")
 
+        logger.debug("Creating MapDefinition object")
         self.map_definition = MapDefinition(
             width,
             height,
@@ -273,8 +274,19 @@ class SvgMapConverter:
             ped_crowded_zones,
             ped_routes
             )
+        logger.debug(f"MapDefinition object created: {type(self.map_definition)}")
 
     def get_map_definition(self) -> MapDefinition:
+        """
+        Return the MapDefinition object.
+        """
+        # verify that the map definition is the correct type
+        try:
+            assert isinstance(self.map_definition, MapDefinition)
+        except AssertionError:
+            raise TypeError(
+                f"Map definition is not of type MapDefinition: {type(self.map_definition)}"
+                )
         return self.map_definition
 
     def __get_path_number(self, route: str) -> Tuple[int, int]:
@@ -297,7 +309,11 @@ def convert_map(svg_file: str):
 
     try:
         converter = SvgMapConverter(svg_file)
+        assert isinstance(converter.map_definition, MapDefinition)
         return converter.map_definition
+    except AssertionError:
+        logger.error("Error converting SVG file: MapDefinition object not created.")
+        logger.error(f"type converter.map_definition: {type(converter.map_definition)}")
     except Exception as e:
         logger.error(f"Error converting SVG file: {e}")
         return None

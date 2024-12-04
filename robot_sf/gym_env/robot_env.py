@@ -56,7 +56,8 @@ class RobotEnv(Env):
         recording_enabled: bool = False,
         record_video: bool = False,
         video_path: str = None,
-        video_fps: int = 10,
+        video_fps: int = 10,  # TODO: Read from env settings
+        peds_have_obstacle_forces: bool = False,
     ):
         """
         Initialize the Robot Environment.
@@ -93,7 +94,10 @@ class RobotEnv(Env):
 
         # Initialize simulator with a random start position
         self.simulator = init_simulators(
-            env_config, self.map_def, random_start_pos=True
+            env_config,
+            self.map_def,
+            random_start_pos=True,
+            peds_have_obstacle_forces=peds_have_obstacle_forces,
         )[0]
 
         # Delta time per simulation step and maximum episode time

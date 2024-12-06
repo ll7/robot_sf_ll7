@@ -56,7 +56,7 @@ class RobotEnv(Env):
         recording_enabled: bool = False,
         record_video: bool = False,
         video_path: str = None,
-        video_fps: int = 10,  # TODO: Read from env settings
+        video_fps: float = None,
         peds_have_obstacle_forces: bool = False,
     ):
         """
@@ -75,6 +75,11 @@ class RobotEnv(Env):
 
         # Environment configuration details
         self.env_config = env_config
+
+        # Set video FPS if not provided
+        if video_fps is None:
+            video_fps = 1/self.env_config.sim_config.time_per_step_in_secs
+            logger.info(f"Video FPS not provided, setting to {video_fps}")
 
         # Extract first map definition; currently only supports using the first map
         self.map_def = env_config.map_pool.choose_random_map()

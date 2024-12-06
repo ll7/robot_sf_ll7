@@ -96,7 +96,7 @@ class SimulationView:
     focus_on_ego_ped: bool = False
     record_video: bool = False
     video_path: str = None
-    video_fps: int = 10
+    video_fps: float = 10.0
     frames: List[np.ndarray] = field(default_factory=list)
 
     # Add UI state fields

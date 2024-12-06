@@ -7,7 +7,6 @@ from enum import Enum
 
 from gymnasium import spaces
 import numpy as np
-from loguru import logger
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings
 from robot_sf.nav.map_config import MapDefinition

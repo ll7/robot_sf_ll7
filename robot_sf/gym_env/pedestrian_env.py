@@ -324,7 +324,6 @@ class PedestrianEnv(Env):
         # only save if there are recorded states
         if len(self.recorded_states) == 0:
             logger.warning("No states recorded, skipping save")
-            # TODO: First env.reset will always have no recorded states
             return
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)

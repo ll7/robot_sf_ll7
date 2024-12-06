@@ -39,8 +39,7 @@ def test_video_recording(
         debug=True,
         recording_enabled=True,
         record_video=True,
-        video_path=str(video_path),
-        video_fps=int(1 / env_config.sim_config.time_per_step_in_secs),
+        video_path=str(video_path)
     )
 
     try:

@@ -7,6 +7,7 @@ from enum import Enum
 
 from gymnasium import spaces
 import numpy as np
+from loguru import logger
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings
 from robot_sf.nav.map_config import MapDefinition
@@ -240,14 +241,17 @@ def init_ped_collision_and_sensors(
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     def ray_sensor(r_id=0):
+        logger.debug("ray_sensor: This is the first implementation called")
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
     def target_sensor(r_id=0):
+        logger.debug("target_sensor: This is the first implementation called")
         return target_sensor_obs(
             sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id]
         )
 
     def speed_sensor(r_id=0):
+        logger.debug("speed_sensor: This is the first implementation called")
         return sim.robots[r_id].current_speed
 
     # Initialize a sensor fusion object for the robot for sensor data handling
@@ -278,19 +282,28 @@ def init_ped_collision_and_sensors(
         )
     )
 
-    def ray_sensor():
+    def ray_sensor_ego_ped():
+        logger.debug("ray_sensor: This is the second implementation called")
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
-    def target_sensor():
+    def target_sensor_ego_ped():
+        logger.debug("target_sensor: This is the second implementation called")
         return target_sensor_obs(
             sim.ego_ped.pose, sim.ego_ped_goal_pos, None
         )  # TODO: What next goal to choose?
 
-    def speed_sensor():
+    def speed_sensor_ego_ped():
+        logger.debug("speed_sensor: This is the second implementation called")
         return sim.ego_ped.current_speed
 
     sensor_fusions.append(
-        SensorFusion(ray_sensor, speed_sensor, target_sensor, orig_obs_space[1], False)
+        SensorFusion(
+            ray_sensor_ego_ped,
+            speed_sensor_ego_ped,
+            target_sensor_ego_ped,
+            orig_obs_space[1],
+            False,
+        )
     )  # Ego pedestrian does not have a next goal
 
     # Format: [robot, ego_pedestrian]

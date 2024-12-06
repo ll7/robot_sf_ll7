@@ -136,10 +136,6 @@ class RobotEnv(Env):
                 video_fps=video_fps,
             )
 
-            # Only show window if in debug mode
-            if debug:
-                self.sim_ui.show()
-
     def step(self, action):
         """
         Execute one time step within the environment.

@@ -96,9 +96,6 @@ class EmptyRobotEnv(Env):
                 goal_radius=env_config.sim_config.goal_radius,
             )
 
-            # Display the simulation UI
-            self.sim_ui.show()
-
     def step(self, action):
         """
         Execute one time step within the environment.

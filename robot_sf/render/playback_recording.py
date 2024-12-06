@@ -34,7 +34,6 @@ def visualize_states(states: List[VisualizableSimState], map_def: MapDefinition)
     on the recorded map defintion
     """
     sim_view = SimulationView(map_def=map_def, caption="RobotSF Recording")
-    sim_view.show()  # to activate key_events
     for state in states:
         sim_view.render(state)
 

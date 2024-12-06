@@ -98,6 +98,7 @@ class SimulationView:
     video_path: str = None
     video_fps: float = 10.0
     frames: List[np.ndarray] = field(default_factory=list)
+    clock: pygame.time.Clock = field(init=False)
 
     # Add UI state fields
     screen: pygame.surface.Surface = field(init=False)
@@ -115,6 +116,7 @@ class SimulationView:
         logger.info("Initializing the simulation view.")
         pygame.init()
         pygame.font.init()
+        self.clock = pygame.time.Clock()
         if self.record_video:
             # Create offscreen surface for recording
             self.screen = pygame.Surface((int(self.width), int(self.height)))
@@ -211,7 +213,7 @@ class SimulationView:
             # Normal display update
             pygame.display.update()
             # Limit the frame rate
-            sleep(sleep_time)
+            self.clock.tick(1/sleep_time)
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

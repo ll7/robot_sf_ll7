@@ -92,7 +92,7 @@ class SimulationView:
     map_def: MapDefinition = field(default_factory=MapDefinition)
     obstacles: List[Obstacle] = field(default_factory=list)
     caption: str = "RobotSF Simulation"
-    focus_on_robot: bool = False
+    focus_on_robot: bool = True
     focus_on_ego_ped: bool = False
     record_video: bool = False
     video_path: str = None

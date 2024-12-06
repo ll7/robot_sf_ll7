@@ -65,8 +65,25 @@ class VisualizableAction:
 
 @dataclass
 class VisualizableSimState:
-    """Representing a collection of properties to display
-    the simulator's state at a discrete timestep."""
+    """
+    VisualizableSimState represents a collection of properties to display
+    the simulator's state at a discrete timestep.
+
+    Attributes:
+        timestep (int): The discrete timestep of the simulation.
+        robot_action (Union[VisualizableAction, None]):
+            The action taken by the robot at this timestep.
+        robot_pose (RobotPose): The pose of the robot at this timestep.
+        pedestrian_positions (np.ndarray): The positions of pedestrians at this timestep.
+        ray_vecs (np.ndarray): The ray vectors associated with the robot's sensors.
+        ped_actions (np.ndarray): The actions taken by pedestrians at this timestep.
+        ego_ped_pose (PedPose, optional):
+            The pose of the ego pedestrian at this timestep. Defaults to None.
+        ego_ped_ray_vecs (np.ndarray, optional):
+            The ray vectors associated with the ego pedestrian's sensors. Defaults to None.
+        ego_ped_action (Union[VisualizableAction, None], optional):
+            The action taken by the ego pedestrian at this timestep. Defaults to None.
+    """
 
     timestep: int
     robot_action: Union[VisualizableAction, None]
@@ -77,11 +94,49 @@ class VisualizableSimState:
     ego_ped_pose: PedPose = None
     ego_ped_ray_vecs: np.ndarray = None
     ego_ped_action: Union[VisualizableAction, None] = None
-    # obstacles: List[Obstacle]
 
 
 @dataclass
 class SimulationView:
+    """
+    SimulationView class for rendering the simulation using PyGame.
+
+    Attributes:
+        width (float): Width of the simulation window.
+        height (float): Height of the simulation window.
+        scaling (float): Scaling factor for rendering.
+        robot_radius (float): Radius of the robot.
+        ego_ped_radius (float): Radius of the ego pedestrian.
+        ped_radius (float): Radius of the pedestrian.
+        goal_radius (float): Radius of the goal.
+        map_def (MapDefinition): Definition of the map.
+        obstacles (List[Obstacle]): List of obstacles in the simulation.
+        caption (str): Caption of the simulation window.
+        focus_on_robot (bool): Whether to focus the camera on the robot.
+        focus_on_ego_ped (bool): Whether to focus the camera on the ego pedestrian.
+        record_video (bool): Whether to record the simulation as a video.
+        video_path (str): Path to save the recorded video.
+        video_fps (float): Frames per second for the recorded video.
+        frames (List[np.ndarray]): List of frames recorded for the video.
+        clock (pygame.time.Clock): PyGame clock for controlling frame rate.
+        screen (pygame.surface.Surface): PyGame surface for rendering.
+        font (pygame.font.Font): PyGame font for rendering text.
+        size_changed (bool): Whether the window size has changed.
+        redraw_needed (bool): Whether a redraw is needed.
+        is_exit_requested (bool): Whether an exit is requested.
+        is_abortion_requested (bool): Whether an abortion is requested.
+        offset (np.ndarray): Offset for the camera.
+        display_robot_info (int): Level of robot information to display.
+        display_help (bool): Whether to display help text.
+
+    Methods:
+        __post_init__(): Initialize PyGame components.
+        render(state: VisualizableSimState, sleep_time: float = 0.01):
+            Render one frame and handle events.
+        exit_simulation(return_frames: bool = False): Exit the simulation.
+        clear(): Clears the screen and updates the display.
+    """
+
     width: float = 1200
     height: float = 800
     scaling: float = 15
@@ -213,7 +268,7 @@ class SimulationView:
             # Normal display update
             pygame.display.update()
             # Limit the frame rate
-            self.clock.tick(1/sleep_time)
+            self.clock.tick(1 / sleep_time)
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

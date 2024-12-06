@@ -98,6 +98,7 @@ class SimulationView:
     video_path: str = None
     video_fps: float = 10.0
     frames: List[np.ndarray] = field(default_factory=list)
+    clock: pygame.time.Clock = field(init=False)
 
     # Add UI state fields
     screen: pygame.surface.Surface = field(init=False)
@@ -115,6 +116,7 @@ class SimulationView:
         logger.info("Initializing the simulation view.")
         pygame.init()
         pygame.font.init()
+        self.clock = pygame.time.Clock()
         if self.record_video:
             # Create offscreen surface for recording
             self.screen = pygame.Surface((int(self.width), int(self.height)))
@@ -127,13 +129,26 @@ class SimulationView:
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
-    def show(self):
-        """Start the simulation view."""
-        logger.error("This method is no longer implemented. What did we break?")
-        pass  # Remove threading since we'll handle events in render()
+    def render(self, state: VisualizableSimState, sleep_time: float = 0.01):
+        """
+        Render one frame and handle events.
 
-    def render(self, state: VisualizableSimState):
-        """Render one frame and handle events."""
+        Args:
+            state (VisualizableSimState): The current state of the simulation to be visualized.
+            sleep_time (float, optional): Time to sleep between frames to control the frame rate.
+                Defaults to 0.01.
+
+        Handles:
+            - Pygame events such as QUIT, VIDEORESIZE, and KEYDOWN.
+            - Camera movement based on the simulation state.
+            - Drawing of static objects, grid, dynamic objects, and additional information.
+            - Video recording if enabled.
+
+        Notes:
+            - If an exit is requested, the function will quit pygame and exit the program if an
+                abortion is requested.
+            - The function limits the frame rate by sleeping for the specified sleep_time.
+        """
         # Handle events on main thread
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -148,8 +163,6 @@ class SimulationView:
             if self.is_abortion_requested:
                 exit()
             return
-
-        sleep(0.01)  # limit UI update rate to 100 fps
 
         # Adjust the view based on the focus
         self._move_camera(state)
@@ -199,6 +212,8 @@ class SimulationView:
         else:
             # Normal display update
             pygame.display.update()
+            # Limit the frame rate
+            self.clock.tick(1/sleep_time)
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

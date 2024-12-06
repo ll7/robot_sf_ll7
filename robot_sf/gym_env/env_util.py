@@ -278,19 +278,25 @@ def init_ped_collision_and_sensors(
         )
     )
 
-    def ray_sensor():
+    def ray_sensor_ego_ped():
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
-    def target_sensor():
+    def target_sensor_ego_ped():
         return target_sensor_obs(
             sim.ego_ped.pose, sim.ego_ped_goal_pos, None
         )  # TODO: What next goal to choose?
 
-    def speed_sensor():
+    def speed_sensor_ego_ped():
         return sim.ego_ped.current_speed
 
     sensor_fusions.append(
-        SensorFusion(ray_sensor, speed_sensor, target_sensor, orig_obs_space[1], False)
+        SensorFusion(
+            ray_sensor_ego_ped,
+            speed_sensor_ego_ped,
+            target_sensor_ego_ped,
+            orig_obs_space[1],
+            False,
+        )
     )  # Ego pedestrian does not have a next goal
 
     # Format: [robot, ego_pedestrian]

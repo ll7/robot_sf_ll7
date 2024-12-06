@@ -47,3 +47,9 @@ def test_ego_ped_env():
         _, _, done, _, _ = env.step(rand_action)
         if done:
             env.reset()
+
+if __name__ == "__main__":
+    # test_can_create_env()
+    # test_can_return_valid_observation()
+    # test_can_simulate_with_pedestrians()
+    test_ego_ped_env()

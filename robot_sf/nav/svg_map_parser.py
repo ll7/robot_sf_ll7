@@ -290,7 +290,7 @@ class SvgMapConverter:
         return self.map_definition
 
     def __get_path_number(self, route: str) -> Tuple[int, int]:
-        # routes have a label of the form 'ped_route_<spawn>_<goal>'
+        """routes have a label of the form 'ped_route_<spawn>_<goal>'"""
         numbers = re.findall(r'\d+', route)
         if numbers:
             spawn = int(numbers[0])

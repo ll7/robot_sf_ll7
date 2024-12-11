@@ -60,7 +60,7 @@ def load_states_and_visualize(filename: str):
     visualize_states(states, map_def)
 
 
-def load_states_and_record_video(state_file: str, vide_save_path: str, video_fps: float = 10):
+def load_states_and_record_video(state_file: str, video_save_path: str, video_fps: float = 10):
     """
     load a list of states from a file and record a video
     """

@@ -257,11 +257,9 @@ class SimulationView:
 
         if self.record_video:
             # Capture frame
-            logger.debug("trying to record a frame")
             frame_data = pygame.surfarray.array3d(self.screen)
             frame_data = frame_data.swapaxes(0, 1)
             self.frames.append(frame_data)
-            logger.debug(f"Recorded frames {len(self.frames)}")
             if len(self.frames) > 2000:
                 logger.warning("Too many frames recorded. Stopping video recording.")
         else:

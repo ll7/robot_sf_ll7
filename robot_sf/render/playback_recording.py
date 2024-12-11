@@ -14,7 +14,27 @@ logger = loguru.logger
 
 def load_states(filename: str) -> List[VisualizableSimState]:
     """
-    load a list of states from a file with pickle `*.pkl` format
+    Load a list of states from a pickle file.
+
+    This function reads a pickle file containing simulation states and map definition,
+    performs validation checks, and returns them if valid.
+
+    Args:
+        filename (str): Path to the pickle file containing the states
+
+    Returns:
+        Tuple[List[VisualizableSimState], MapDefinition]: A tuple containing:
+            - List of VisualizableSimState objects representing simulation states
+            - MapDefinition object containing the map information
+
+    Raises:
+        TypeError: If loaded states are not VisualizableSimState objects or map_def
+            is not MapDefinition
+
+    Notes:
+        The pickle file must contain a tuple of (states, map_def) where:
+        - states is a list of VisualizableSimState objects
+        - map_def is a MapDefinition object
     """
     # Check if the file is empty
     if os.path.getsize(filename) == 0:
@@ -60,9 +80,30 @@ def load_states_and_visualize(filename: str):
     visualize_states(states, map_def)
 
 
-def load_states_and_record_video(state_file: str, video_save_path: str, video_fps: float = 10):
+def load_states_and_record_video(
+    state_file: str, video_save_path: str, video_fps: float = 10
+):
     """
-    load a list of states from a file and record a video
+    Load robot states from a file and create a video recording of the simulation.
+
+    This function reads saved robot states from a file, initializes a simulation view,
+    and records each state to create a video visualization of the robot's movement.
+
+    Args:
+        state_file (str): Path to the file containing saved robot states and map definition
+        video_save_path (str): Path where the output video file should be saved
+        video_fps (float, optional): Frames per second for the output video. Defaults to 10.
+
+    Returns:
+        None
+
+    Note:
+        The states file should contain both the robot states and map definition in a
+            compatible format.
+        The video will be written when the simulation view is closed via exit_simulation().
+
+    Example:
+        >>> load_states_and_record_video("states.pkl", "output.mp4", video_fps=30)
     """
     logger.info(f"Loading states from {state_file}")
     states, map_def = load_states(state_file)

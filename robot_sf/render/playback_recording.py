@@ -1,5 +1,19 @@
-"""
-playback a recorded list of states
+"""Robot Simulation State Playback Module
+
+This module provides functionality to replay and visualize recorded robot simulation states.
+It supports both interactive visualization and video recording of simulation playbacks.
+
+Key Features:
+    - Load simulation states from pickle files
+    - Validate simulation state data
+    - Visualize states interactively
+    - Record simulation playback as video
+    - Support for map definitions and robot states
+
+Notes:
+    The pickle files should contain a tuple of (states, map_def) where:
+    - states: List[VisualizableSimState] - Sequence of simulation states
+    - map_def: MapDefinition - Configuration of the simulation environment
 """
 
 import os

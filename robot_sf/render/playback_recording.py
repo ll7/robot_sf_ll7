@@ -70,7 +70,7 @@ def load_states_and_record_video(state_file: str, video_save_path: str, video_fp
         map_def=map_def,
         caption="RobotSF Recording",
         record_video=True,
-        video_path=vide_save_path,
+        video_path=video_save_path,
         video_fps=video_fps,
     )
     for state in states:

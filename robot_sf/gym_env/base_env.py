@@ -96,3 +96,16 @@ class BaseEnv(Env):
         info = None
 
         return (obs, reward, terminal, truncated, info)
+    
+    def reset(self, seed=None, options=None):
+        """
+        Reset the environment to start a new episode.
+        """
+        super().reset(seed=seed, options=options)
+        
+        # Reset internal simulator state
+        self.simulator.reset_state()
+
+        if self.recording_enabled:
+            self.save_recording()
+        return None

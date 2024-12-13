@@ -96,16 +96,118 @@ class BaseEnv(Env):
         info = None
 
         return (obs, reward, terminal, truncated, info)
-    
+
     def reset(self, seed=None, options=None):
         """
         Reset the environment to start a new episode.
         """
         super().reset(seed=seed, options=options)
-        
+
         # Reset internal simulator state
         self.simulator.reset_state()
 
         if self.recording_enabled:
             self.save_recording()
         return None
+
+    def _prepare_visualizable_state(self):
+        # Prepare action visualization, if any action was executed
+        action = (
+            None
+            if not self.last_action
+            else VisualizableAction(
+                self.simulator.robot_poses[0],
+                self.last_action,
+                self.simulator.goal_pos[0],
+            )
+        )
+
+        # Robot position and LIDAR scanning visualization preparation
+        robot_pos = self.simulator.robot_poses[0][0]
+        distances, directions = lidar_ray_scan(
+            self.simulator.robot_poses[0],
+            self.state.occupancy,
+            self.env_config.lidar_config,
+        )
+
+        # Construct ray vectors for visualization
+        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
+        ray_vecs_np = np.array(
+            [
+                [[robot_pos[0], robot_pos[1]], [robot_pos[0] + x, robot_pos[1] + y]]
+                for x, y in ray_vecs
+            ]
+        )
+
+        # Prepare pedestrian action visualization
+        ped_actions = zip(
+            self.simulator.pysf_sim.peds.pos(),
+            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+        )
+        ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
+
+        # Package the state for visualization
+        state = VisualizableSimState(
+            self.state.timestep,
+            action,
+            self.simulator.robot_poses[0],
+            deepcopy(self.simulator.ped_pos),
+            ray_vecs_np,
+            ped_actions_np,
+        )
+
+    def render(self):
+        """
+        Render the environment visually if in debug mode.
+
+        Raises RuntimeError if debug mode is not enabled.
+        """
+        if not self.sim_ui:
+            raise RuntimeError(
+                "Debug mode is not activated! Consider setting " "debug=True!"
+            )
+
+        state = self._prepare_visualizable_state()
+
+        # Execute rendering of the state through the simulation UI
+        self.sim_ui.render(state)
+
+    def record(self):
+        """
+        Records the current state as visualizable state and stores it in the list.
+        """
+        state = self._prepare_visualizable_state()
+        self.recorded_states.append(state)
+
+    def save_recording(self, filename: str = None):
+        """
+        save the recorded states to a file
+        filname: str, must end with *.pkl
+        resets the recorded states list at the end
+        """
+        if filename is None:
+            now = datetime.datetime.now()
+            # get current working directory
+            cwd = os.getcwd()
+            filename = f'{cwd}/recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+
+        # only save if there are recorded states
+        if len(self.recorded_states) == 0:
+            logger.warning("No states recorded, skipping save")
+            # TODO: First env.reset will always have no recorded states
+            return
+
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        with open(filename, "wb") as f:  # write binary
+            pickle.dump((self.recorded_states, self.map_def), f)
+            logger.info(f"Recording saved to {filename}")
+            logger.info("Reset state list")
+            self.recorded_states = []
+
+    def exit(self):
+        """
+        Clean up and exit the simulation UI, if it exists.
+        """
+        if self.sim_ui:
+            self.sim_ui.exit_simulation()

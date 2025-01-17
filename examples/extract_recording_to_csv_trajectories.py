@@ -104,6 +104,40 @@ def get_map_bounds(bounds):
 
     return x_min, x_max, y_min, y_max
 
+
+def visualize_kde_of_pedestrians_on_map(
+    pedestrian_positions: np.ndarray, map_def: MapDefinition
+):
+    """Visualize KDE for pedestrian positions on a map"""
+
+    # Get map dimensions
+    x_min, x_max, y_min, y_max = get_map_bounds(map_def.bounds)
+    logger.info(f"Map bounds: x=[{x_min}, {x_max}], y=[{y_min}, {y_max}]")
+
+    # Calculate KDE
+    # gaussian_kde expects shape (n_features, n_samples) but our data is (n_samples, n_features)
+    # Therefore we transpose the array from shape (n_points, 2) to (2, n_points)
+    pedestrian_kde = gaussian_kde(pedestrian_positions.T)
+
+    # Create grid based on map bounds
+    grid_x, grid_y = np.linspace(x_min, x_max, 100), np.linspace(y_min, y_max, 100)
+    grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
+    grid_points = np.vstack([grid_xx.ravel(), grid_yy.ravel()])
+
+    _, ax = plt.subplots(1, 1, figsize=(6, 5))
+
+    kde_vals = pedestrian_kde(grid_points).reshape(grid_xx.shape)
+    ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis")
+
+    ax.scatter(pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=10, c="black")
+    ax.set_title("Pedestrian Positions KDE")
+    ax.axis("equal")
+    ax.grid(True)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    plt.show()
+
+
 def main():
     try:
         # Load pedestrian positions (implement according to your data source)

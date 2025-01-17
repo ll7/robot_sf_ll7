@@ -193,7 +193,7 @@ def visualize_kde_of_pedestrians_on_map(
 def main():
     try:
         # Load pedestrian positions (implement according to your data source)
-        states, map_def = load_states("examples/recordings/2024-11-19_20-39-32.pkl")
+        states, map_def = load_states("examples/recordings/2024-12-06_15-39-44.pkl")
 
         pedestrian_positions = extract_pedestrian_positions(states)
 

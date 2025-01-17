@@ -152,11 +152,9 @@ def main():
         logger.info(f"Pedestrian positions shape: {pedestrian_positions.shape}")
 
 
-        # Compare pedestrian positions
-        kl_div = compare_position_with_dataset(
-            single_pedestrian_position, dataset_pedestrian_positions
-        )
-        logger.info(f"KL Divergence: {kl_div:.4f}")
+        # Visualize KDE
+        visualize_kde_of_pedestrians_on_map(pedestrian_positions, map_def)
+
 
     except Exception as e:
         logger.error(f"Error during execution: {str(e)}")

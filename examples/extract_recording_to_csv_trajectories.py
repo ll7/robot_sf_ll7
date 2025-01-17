@@ -115,9 +115,8 @@ def main():
             logger.error("Need at least 2 positions for comparison")
             return
 
-        # Split into dataset and single pedestrian position
-        dataset_pedestrian_positions = pedestrian_positions[:-1]
-        single_pedestrian_position = pedestrian_positions[-1]
+        logger.info(f"Pedestrian positions shape: {pedestrian_positions.shape}")
+
 
         # Compare pedestrian positions
         kl_div = compare_position_with_dataset(

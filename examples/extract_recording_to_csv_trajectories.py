@@ -15,34 +15,7 @@ from robot_sf.nav.map_config import MapDefinition
 
 
 
-def get_map_bounds(map_def: MapDefinition):
-    """Extract minimum and maximum coordinates from map_definition.
 
-    Args:
-        map_def (MapDefinition): Map definition object containing map bounds.
-
-    Returns:
-        tuple: Contains minimum and maximum coordinates as (x_min, x_max, y_min, y_max).
-                - x_min (float): Minimum x coordinate
-                - x_max (float): Maximum x coordinate
-                - y_min (float): Minimum y coordinate
-                - y_max (float): Maximum y coordinate
-    """
-    bounds = map_def.bounds
-
-    # Flatten list of tuples into separate x and y coordinates
-    x_coords = []
-    y_coords = []
-
-    for x_start, x_end, y_start, y_end in bounds:
-        x_coords.extend([x_start, x_end])
-        y_coords.extend([y_start, y_end])
-
-    # Get min/max values
-    x_min, x_max = min(x_coords), max(x_coords)
-    y_min, y_max = min(y_coords), max(y_coords)
-
-    return x_min, x_max, y_min, y_max
 
 
 def kde_plot_grid_creation(
@@ -96,7 +69,7 @@ def visualize_kde_of_pedestrians_on_map(
     """Visualize KDE for pedestrian positions on a map"""
 
     # Get map dimensions
-    x_min, x_max, y_min, y_max = get_map_bounds(map_def)
+    x_min, x_max, y_min, y_max = map_def.get_map_bounds()
     logger.info(f"Map bounds: x=[{x_min}, {x_max}], y=[{y_min}, {y_max}]")
 
     # Calculate KDE

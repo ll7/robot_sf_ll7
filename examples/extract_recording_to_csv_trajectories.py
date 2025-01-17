@@ -7,6 +7,7 @@ Afterwards, compare one pedestrian_postion with the gaussian_kde and use Kullbac
 from collections import defaultdict
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableSimState
+from robot_sf.nav.map_config import MapDefinition
 import numpy as np
 from loguru import logger
 from typing import List

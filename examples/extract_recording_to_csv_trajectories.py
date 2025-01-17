@@ -32,60 +32,6 @@ def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarr
 
     return np.array(pedestrian_positions)
 
-
-def compute_kde(positions: np.ndarray) -> gaussian_kde:
-    """Compute KDE for positions"""
-    return gaussian_kde(positions.T)
-
-
-def kl_divergence_kde(
-    kde1: gaussian_kde, kde2: gaussian_kde, grid_points: np.ndarray
-) -> float:
-    """Calculate KL divergence between two KDEs"""
-    p = kde1(grid_points)
-    q = kde2(grid_points)
-    p /= np.sum(p)
-    q /= np.sum(q)
-    return np.sum(p * np.log(p / q))
-
-
-def compare_position_with_dataset(
-    single_position: np.ndarray, dataset_positions: List[np.ndarray]
-) -> float:
-    """Compare single position with dataset using KL divergence"""
-    # Setup evaluation grid
-    grid_x, grid_y = np.linspace(-20, 20, 100), np.linspace(-20, 20, 100)
-    grid_xx, grid_yy = np.meshgrid(grid_x, grid_y)
-    grid_points = np.vstack([grid_xx.ravel(), grid_yy.ravel()])
-
-    # Compute KDEs
-    single_kde = compute_kde(single_position)
-    dataset_kde = compute_kde(np.concatenate(dataset_positions))
-
-    # Visualize KDEs
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-    kde_vals_single = single_kde(grid_points).reshape(grid_xx.shape)
-    ax1.contourf(grid_xx, grid_yy, kde_vals_single, cmap="viridis")
-    ax1.scatter(single_position[:, 0], single_position[:, 1], alpha=0.5)
-    ax1.set_title("Single Position KDE")
-    ax1.axis("equal")
-
-    kde_vals_dataset = dataset_kde(grid_points).reshape(grid_xx.shape)
-    ax2.contourf(grid_xx, grid_yy, kde_vals_dataset, cmap="viridis")
-    for pos in dataset_positions:
-        ax2.scatter(pos[:, 0], pos[:, 1], alpha=0.5)
-    ax2.set_title("Dataset KDE")
-    ax2.axis("equal")
-
-    kl_div = kl_divergence_kde(single_kde, dataset_kde, grid_points)
-    plt.suptitle(f"KL Divergence: {kl_div:.4f}")
-    plt.tight_layout()
-    plt.show()
-
-    return kl_div
-
-
 def get_map_bounds(bounds):
     """Extract minimum and maximum coordinates from map bounds array.
 

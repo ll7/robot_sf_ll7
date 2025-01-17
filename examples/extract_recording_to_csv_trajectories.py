@@ -155,6 +155,13 @@ def kde_plot_grid_creation(
     return grid_xx, grid_yy, grid_points
 
 
+def plot_map_obstacles(ax, map_def: MapDefinition):
+    """Plot map obstacles on map"""
+    for obstacle in map_def.obstacles:
+        vertices = np.array(obstacle.vertices)
+        ax.fill(vertices[:, 0], vertices[:, 1], "black")
+
+
 def visualize_kde_of_pedestrians_on_map(
     pedestrian_positions: np.ndarray, map_def: MapDefinition
 ):
@@ -182,6 +189,10 @@ def visualize_kde_of_pedestrians_on_map(
     ax.scatter(
         pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=10, c="black"
     )
+
+    # Plot map obstacles
+    plot_map_obstacles(ax, map_def)
+
     ax.set_title("Pedestrian Positions KDE")
     ax.axis("equal")
     ax.grid(True)

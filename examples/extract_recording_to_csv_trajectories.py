@@ -4,33 +4,15 @@ Load a saved recording and visualize the gaussian_kde for the pedestrian positio
 Afterwards, compare one pedestrian_postion with the gaussian_kde and use Kullback-Leibler divergence to compare the two.
 """
 
-from robot_sf.render.playback_recording import load_states
-from robot_sf.render.sim_view import VisualizableSimState
-from robot_sf.nav.map_config import MapDefinition
 import numpy as np
 from loguru import logger
-from typing import List
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
+from robot_sf.render.playback_recording import load_states
+from robot_sf.data_analysis.recording_analysis import extract_pedestrian_positions
+from robot_sf.nav.map_config import MapDefinition
 
-def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarray:
-    """Extract pedestrian positions from recorded states."""
-    pedestrian_positions = []
-
-    for state in states:
-        pedestrian_positions.extend(state.pedestrian_positions)
-
-    # validate that pedestrian_positions has the shape (n, 2)
-    if len(pedestrian_positions) == 0:
-        logger.error("No pedestrian positions found in states")
-        return np.array([])
-    if not all(len(pos) == 2 for pos in pedestrian_positions):
-        logger.error("Invalid pedestrian positions found in states")
-        return np.array([])
-    logger.info(f"Extracted {len(pedestrian_positions)} pedestrian positions")
-
-    return np.array(pedestrian_positions)
 
 
 def get_map_bounds(bounds):

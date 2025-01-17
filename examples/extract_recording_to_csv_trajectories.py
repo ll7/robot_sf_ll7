@@ -88,6 +88,22 @@ def compare_position_with_dataset(
     return kl_div
 
 
+def get_map_bounds(bounds):
+    """Extract min/max coordinates from map bounds array"""
+    # Flatten list of tuples into separate x and y coordinates
+    x_coords = []
+    y_coords = []
+
+    for x_start, x_end, y_start, y_end in bounds:
+        x_coords.extend([x_start, x_end])
+        y_coords.extend([y_start, y_end])
+
+    # Get min/max values
+    x_min, x_max = min(x_coords), max(x_coords)
+    y_min, y_max = min(y_coords), max(y_coords)
+
+    return x_min, x_max, y_min, y_max
+
 def main():
     try:
         # Load pedestrian positions (implement according to your data source)

@@ -4,6 +4,7 @@ loguru>=0.7.2
 numba>=0.60.0
 numpy>=1.26.4
 optuna>=4.1.0
+pandas>=2.2.3
 psutil>=6.1.0
 pygame>=2.6.1
 pytest>=8.3.3

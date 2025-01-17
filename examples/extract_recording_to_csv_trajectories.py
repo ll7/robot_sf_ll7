@@ -89,7 +89,19 @@ def compare_position_with_dataset(
 
 
 def get_map_bounds(bounds):
-    """Extract min/max coordinates from map bounds array"""
+    """Extract minimum and maximum coordinates from map bounds array.
+
+    Args:
+        bounds (list): List of tuples containing map boundary coordinates.
+                      Each tuple contains (x_start, x_end, y_start, y_end).
+
+    Returns:
+        tuple: Contains minimum and maximum coordinates as (x_min, x_max, y_min, y_max).
+                - x_min (float): Minimum x coordinate
+                - x_max (float): Maximum x coordinate
+                - y_min (float): Minimum y coordinate
+                - y_max (float): Maximum y coordinate
+    """
     # Flatten list of tuples into separate x and y coordinates
     x_coords = []
     y_coords = []

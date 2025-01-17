@@ -2,6 +2,7 @@
 Use a recording and plot the kde of the pedestrian positions on a map.
 """
 
+import argparse
 from loguru import logger
 
 
@@ -13,9 +14,17 @@ from robot_sf.data_analysis.recording_analysis import (
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Plot KDE of pedestrian positions.")
+    parser.add_argument(
+        "--recording",
+        type=str,
+        default="examples/recordings/2024-12-06_15-39-44.pkl",
+        help="Path to the recording file"
+    )
+    args = parser.parse_args()
     try:
         # Load pedestrian positions (implement according to your data source)
-        states, map_def = load_states("examples/recordings/2024-12-06_15-39-44.pkl")
+        states, map_def = load_states(args.recording)
 
         pedestrian_positions = extract_pedestrian_positions(states)
 

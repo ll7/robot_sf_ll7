@@ -37,6 +37,12 @@ def main():
         # Visualize KDE
         visualize_kde_of_pedestrians_on_map(pedestrian_positions, map_def)
 
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {str(e)}")
+        raise
+    except ValueError as e:
+        logger.error(f"Value error: {str(e)}")
+        raise
     except Exception as e:
         logger.error(f"Error during execution: {str(e)}")
         raise

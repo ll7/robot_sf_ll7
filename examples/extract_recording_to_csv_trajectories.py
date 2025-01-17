@@ -14,10 +14,6 @@ from robot_sf.data_analysis.recording_analysis import extract_pedestrian_positio
 from robot_sf.nav.map_config import MapDefinition
 
 
-
-
-
-
 def kde_plot_grid_creation(
     x_min, x_max, y_min, y_max, number_of_grid_points: int = 100
 ):
@@ -56,13 +52,6 @@ def kde_plot_grid_creation(
     return grid_xx, grid_yy, grid_points
 
 
-def plot_map_obstacles(ax, map_def: MapDefinition):
-    """Plot map obstacles on map"""
-    for obstacle in map_def.obstacles:
-        vertices = np.array(obstacle.vertices)
-        ax.fill(vertices[:, 0], vertices[:, 1], "black")
-
-
 def visualize_kde_of_pedestrians_on_map(
     pedestrian_positions: np.ndarray, map_def: MapDefinition
 ):
@@ -92,7 +81,8 @@ def visualize_kde_of_pedestrians_on_map(
     )
 
     # Plot map obstacles
-    plot_map_obstacles(ax, map_def)
+    # plot_map_obstacles(ax, map_def)
+    map_def.plot_map_obstacles(ax)
 
     ax.set_title("Pedestrian Positions KDE")
     ax.axis("equal")

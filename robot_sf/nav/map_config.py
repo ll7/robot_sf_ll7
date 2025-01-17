@@ -5,6 +5,7 @@ define the map configuration
 import os
 import json
 import random
+import numpy as np
 from loguru import logger
 
 from math import sqrt
@@ -146,6 +147,13 @@ class MapDefinition:
         y_min, y_max = min(y_coords), max(y_coords)
 
         return x_min, x_max, y_min, y_max
+
+    def plot_map_obstacles(self, ax):
+        """Plot map obstacles on map"""
+        logger.debug(f"Type of ax: {type(ax)}")
+        for obstacle in self.obstacles:
+            vertices = np.array(obstacle.vertices)
+            ax.fill(vertices[:, 0], vertices[:, 1], "black")
 
 
 @dataclass

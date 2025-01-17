@@ -174,10 +174,14 @@ def visualize_kde_of_pedestrians_on_map(
 
     _, ax = plt.subplots(1, 1, figsize=(6, 5))
 
-    kde_vals = pedestrian_kde(grid_points).reshape(grid_xx.shape)
+    kde_vals = pedestrian_kde(grid_points).reshape(
+        grid_xx.shape
+    )  # 5. Reshape back to 2D for plotting
     ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis")
 
-    ax.scatter(pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=10, c="black")
+    ax.scatter(
+        pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=10, c="black"
+    )
     ax.set_title("Pedestrian Positions KDE")
     ax.axis("equal")
     ax.grid(True)

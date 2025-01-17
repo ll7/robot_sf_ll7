@@ -128,7 +128,7 @@ def kde_plot_grid_creation(
     x_max (float): Maximum value for the x-axis.
     y_min (float): Minimum value for the y-axis.
     y_max (float): Maximum value for the y-axis.
-    number_of_grid_points (int, optional): 
+    number_of_grid_points (int, optional):
         Number of points along each axis for the grid. Default is 100.
 
     Returns:

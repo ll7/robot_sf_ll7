@@ -15,12 +15,11 @@ from robot_sf.nav.map_config import MapDefinition
 
 
 
-def get_map_bounds(bounds):
-    """Extract minimum and maximum coordinates from map bounds array.
+def get_map_bounds(map_def: MapDefinition):
+    """Extract minimum and maximum coordinates from map_definition.
 
     Args:
-        bounds (list): List of tuples containing map boundary coordinates.
-            Each tuple contains (x_start, x_end, y_start, y_end).
+        map_def (MapDefinition): Map definition object containing map bounds.
 
     Returns:
         tuple: Contains minimum and maximum coordinates as (x_min, x_max, y_min, y_max).
@@ -29,6 +28,8 @@ def get_map_bounds(bounds):
                 - y_min (float): Minimum y coordinate
                 - y_max (float): Maximum y coordinate
     """
+    bounds = map_def.bounds
+
     # Flatten list of tuples into separate x and y coordinates
     x_coords = []
     y_coords = []
@@ -95,7 +96,7 @@ def visualize_kde_of_pedestrians_on_map(
     """Visualize KDE for pedestrian positions on a map"""
 
     # Get map dimensions
-    x_min, x_max, y_min, y_max = get_map_bounds(map_def.bounds)
+    x_min, x_max, y_min, y_max = get_map_bounds(map_def)
     logger.info(f"Map bounds: x=[{x_min}, {x_max}], y=[{y_min}, {y_max}]")
 
     # Calculate KDE

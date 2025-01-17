@@ -214,7 +214,6 @@ def main():
 
         logger.info(f"Pedestrian positions shape: {pedestrian_positions.shape}")
 
-
         # Visualize KDE
         visualize_kde_of_pedestrians_on_map(pedestrian_positions, map_def)
 

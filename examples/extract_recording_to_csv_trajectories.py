@@ -187,7 +187,7 @@ def visualize_kde_of_pedestrians_on_map(
     ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis")
 
     ax.scatter(
-        pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=10, c="black"
+        pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=1, c="black"
     )
 
     # Plot map obstacles

@@ -1,5 +1,5 @@
 """
-Use a recording and plot the kde of the pedestrian postions on a map.
+Use a recording and plot the kde of the pedestrian positions on a map.
 """
 
 from loguru import logger

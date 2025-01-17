@@ -20,7 +20,7 @@ def get_map_bounds(bounds):
 
     Args:
         bounds (list): List of tuples containing map boundary coordinates.
-                      Each tuple contains (x_start, x_end, y_start, y_end).
+            Each tuple contains (x_start, x_end, y_start, y_end).
 
     Returns:
         tuple: Contains minimum and maximum coordinates as (x_min, x_max, y_min, y_max).

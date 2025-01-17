@@ -4,7 +4,6 @@ Load a saved recording and visualize the gaussian_kde for the pedestrian positio
 Afterwards, compare one pedestrian_postion with the gaussian_kde and use Kullback-Leibler divergence to compare the two.
 """
 
-from collections import defaultdict
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableSimState
 from robot_sf.nav.map_config import MapDefinition
@@ -13,7 +12,6 @@ from loguru import logger
 from typing import List
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
-import pandas as pd
 
 
 def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarray:

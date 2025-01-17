@@ -1,7 +1,5 @@
 """
-Use the existing abilities to record the visualizable sim state.
-Load a saved recording and visualize the gaussian_kde for the pedestrian position.
-Afterwards, compare one pedestrian_postion with the gaussian_kde and use Kullback-Leibler divergence to compare the two.
+Use a recording and plot the kde of the pedestrian postions on a map.
 """
 
 from loguru import logger

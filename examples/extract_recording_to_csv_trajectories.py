@@ -32,6 +32,7 @@ def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarr
 
     return np.array(pedestrian_positions)
 
+
 def get_map_bounds(bounds):
     """Extract minimum and maximum coordinates from map bounds array.
 

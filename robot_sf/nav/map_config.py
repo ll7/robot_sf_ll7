@@ -7,6 +7,7 @@ import json
 import random
 import numpy as np
 from loguru import logger
+import matplotlib.axes
 
 from math import sqrt
 from typing import List, Union, Dict
@@ -149,8 +150,18 @@ class MapDefinition:
         return x_min, x_max, y_min, y_max
 
     def plot_map_obstacles(self, ax):
-        """Plot map obstacles on map"""
-        logger.debug(f"Type of ax: {type(ax)}")
+        """Plot map obstacles on the given matplotlib axis.
+
+        Args:
+            ax: matplotlib.axes.Axes
+                The axis on which to plot the obstacles.
+
+        Raises:
+            TypeError: If ax is not a matplotlib.axes.Axes object.
+        """
+
+        if not isinstance(ax, matplotlib.axes.Axes):
+            raise TypeError("ax must be a matplotlib.axes.Axes object")
         for obstacle in self.obstacles:
             vertices = np.array(obstacle.vertices)
             ax.fill(vertices[:, 0], vertices[:, 1], "black")

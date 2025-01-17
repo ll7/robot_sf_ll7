@@ -107,7 +107,8 @@ def get_map_bounds(bounds):
 def main():
     try:
         # Load pedestrian positions (implement according to your data source)
-        states, _ = load_states("examples/recordings/2024-11-19_20-39-32.pkl")
+        states, map_def = load_states("examples/recordings/2024-11-19_20-39-32.pkl")
+
         pedestrian_positions = extract_pedestrian_positions(states)
 
         if len(pedestrian_positions) < 2:

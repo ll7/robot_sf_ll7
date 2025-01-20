@@ -89,7 +89,9 @@ def kde_plot_grid_creation(
 
 
 def visualize_kde_of_pedestrians_on_map(
-    pedestrian_positions: np.ndarray, map_def: MapDefinition
+    pedestrian_positions: np.ndarray,
+    map_def: MapDefinition,
+    kde_bandwith_method: str = "scott",
 ):
     """Visualize KDE for pedestrian positions on a map"""
 
@@ -100,7 +102,7 @@ def visualize_kde_of_pedestrians_on_map(
     # Calculate KDE
     # gaussian_kde expects shape (n_features, n_samples) but our data is (n_samples, n_features)
     # Therefore we transpose the array from shape (n_points, 2) to (2, n_points)
-    pedestrian_kde = gaussian_kde(pedestrian_positions.T)
+    pedestrian_kde = gaussian_kde(pedestrian_positions.T, bw_method=kde_bandwith_method)
 
     # Create grid based on map bounds
     grid_xx, grid_yy, grid_points = kde_plot_grid_creation(x_min, x_max, y_min, y_max)
@@ -110,7 +112,16 @@ def visualize_kde_of_pedestrians_on_map(
     kde_vals = pedestrian_kde(grid_points).reshape(
         grid_xx.shape
     )  # 5. Reshape back to 2D for plotting
-    ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis")
+
+    # Normalize KDE values to probabilities
+    kde_vals = kde_vals / kde_vals.sum()
+
+    # Create contour plot with colorbar
+    contour = ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis", levels=20)
+    colorbar = plt.colorbar(contour, ax=ax)
+    colorbar.set_label("Probability Density")
+
+    # ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis")
 
     ax.scatter(
         pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=1, c="red"

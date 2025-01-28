@@ -48,8 +48,8 @@ class BaseEnv(Env):
         # Extract first map definition; currently only supports using the first map
         self.map_def = env_config.map_pool.choose_random_map()
 
-    def render():
-        pass
+    def render(self):
+        raise NotImplementedError
 
-    def step():
-        pass
+    def step(self, action):
+        raise NotImplementedError

@@ -10,11 +10,8 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
-import os
-import datetime
 from typing import Tuple, Callable
 from copy import deepcopy
-import pickle
 
 import loguru
 import numpy as np
@@ -214,6 +211,7 @@ class RobotEnvFromBase(BaseEnv):
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
             self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+            # TODO Clarify why the factor of 2 is used
         )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 
@@ -237,7 +235,7 @@ class RobotEnvFromBase(BaseEnv):
         """
         if not self.sim_ui:
             raise RuntimeError(
-                "Debug mode is not activated! Consider setting " "debug=True!"
+                "Debug mode is not activated! Consider setting `debug=True!`"
             )
 
         state = self._prepare_visualizable_state()
@@ -251,29 +249,3 @@ class RobotEnvFromBase(BaseEnv):
         """
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
-
-    def save_recording(self, filename: str = None):
-        """
-        save the recorded states to a file
-        filname: str, must end with *.pkl
-        resets the recorded states list at the end
-        """
-        if filename is None:
-            now = datetime.datetime.now()
-            # get current working directory
-            cwd = os.getcwd()
-            filename = f'{cwd}/recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
-
-        # only save if there are recorded states
-        if len(self.recorded_states) == 0:
-            logger.warning("No states recorded, skipping save")
-            # TODO: First env.reset will always have no recorded states
-            return
-
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-
-        with open(filename, "wb") as f:  # write binary
-            pickle.dump((self.recorded_states, self.map_def), f)
-            logger.info(f"Recording saved to {filename}")
-            logger.info("Reset state list")
-            self.recorded_states = []

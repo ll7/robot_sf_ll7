@@ -3,9 +3,9 @@ Base environment for the simulation environment.
 Provides common functionality for all robot-based environments.
 """
 
-# from typing import List, Optional
-# import datetime
-# import pickle
+import os
+import datetime
+import pickle
 
 from typing import List
 from loguru import logger
@@ -85,3 +85,29 @@ class BaseEnv(Env):
         """
         if self.sim_ui:
             self.sim_ui.exit_simulation()
+
+    def save_recording(self, filename: str = None):
+        """
+        save the recorded states to a file
+        filname: str, must end with *.pkl
+        resets the recorded states list at the end
+        """
+        if filename is None:
+            now = datetime.datetime.now()
+            # get current working directory
+            cwd = os.getcwd()
+            filename = f'{cwd}/recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+
+        # only save if there are recorded states
+        if len(self.recorded_states) == 0:
+            logger.warning("No states recorded, skipping save")
+            # TODO: First env.reset will always have no recorded states
+            return
+
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        with open(filename, "wb") as f:  # write binary
+            pickle.dump((self.recorded_states, self.map_def), f)
+            logger.info(f"Recording saved to {filename}")
+            logger.info("Reset state list")
+            self.recorded_states = []

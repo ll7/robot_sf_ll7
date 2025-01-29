@@ -1,10 +1,13 @@
 """
 define the map configuration
 """
+
 import os
 import json
 import random
+import numpy as np
 from loguru import logger
+import matplotlib.axes
 
 from math import sqrt
 from typing import List, Union, Dict
@@ -65,7 +68,9 @@ class MapDefinition:
         if the robot spawn zones or goal zones are empty,
         or if the bounds are not exactly 4.
         """
-        obstacle_lines = [line for obstacle in self.obstacles for line in obstacle.lines]
+        obstacle_lines = [
+            line for obstacle in self.obstacles for line in obstacle.lines
+        ]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
         self.robot_routes_by_spawn_id = {}
@@ -77,9 +82,9 @@ class MapDefinition:
 
         if self.width <= 0 or self.height <= 0:
             logger.critical(
-                "Map width and height mustn't be zero or negative! " +
-                f"Width: {self.width}, Height: {self.height}"
-                )
+                "Map width and height mustn't be zero or negative! "
+                + f"Width: {self.width}, Height: {self.height}"
+            )
 
         if not self.robot_spawn_zones:
             logger.error("Robot spawn zones mustn't be empty!")
@@ -89,9 +94,9 @@ class MapDefinition:
 
         if len(self.bounds) != 4:
             logger.critical(
-                "Invalid bounds! Expected exactly 4 bounds! " +
-                f"Found {len(self.bounds)} bounds!"
-                )
+                "Invalid bounds! Expected exactly 4 bounds! "
+                + f"Found {len(self.bounds)} bounds!"
+            )
 
     @property
     def num_start_pos(self) -> int:
@@ -114,8 +119,52 @@ class MapDefinition:
         return next(
             filter(
                 lambda r: r.goal_id == goal_id and r.spawn_id == spawn_id,
-                self.robot_routes),
-            None)
+                self.robot_routes,
+            ),
+            None,
+        )
+
+    def get_map_bounds(self):
+        """Returns the min and max of x and y bounds.
+
+        Returns:
+            tuple: Contains minimum and maximum coordinates as (x_min, x_max, y_min, y_max).
+                    - x_min (float): Minimum x coordinate
+                    - x_max (float): Maximum x coordinate
+                    - y_min (float): Minimum y coordinate
+                    - y_max (float): Maximum y coordinate
+        """
+
+        # Flatten list of tuples into separate x and y coordinates
+        x_coords = []
+        y_coords = []
+
+        for x_start, x_end, y_start, y_end in self.bounds:
+            x_coords.extend([x_start, x_end])
+            y_coords.extend([y_start, y_end])
+
+        # Get min/max values
+        x_min, x_max = min(x_coords), max(x_coords)
+        y_min, y_max = min(y_coords), max(y_coords)
+
+        return x_min, x_max, y_min, y_max
+
+    def plot_map_obstacles(self, ax):
+        """Plot map obstacles on the given matplotlib axis.
+
+        Args:
+            ax: matplotlib.axes.Axes
+                The axis on which to plot the obstacles.
+
+        Raises:
+            TypeError: If ax is not a matplotlib.axes.Axes object.
+        """
+
+        if not isinstance(ax, matplotlib.axes.Axes):
+            raise TypeError("ax must be a matplotlib.axes.Axes object")
+        for obstacle in self.obstacles:
+            vertices = np.array(obstacle.vertices)
+            ax.fill(vertices[:, 0], vertices[:, 1], "black")
 
 
 @dataclass
@@ -153,16 +202,17 @@ class MapDefinitionPool:
 
         # If map_defs is empty, load the map definitions from the files
         if not self.map_defs:
-            self.map_defs = self._load_json_map_definitions_from_folder(self.maps_folder)
+            self.map_defs = self._load_json_map_definitions_from_folder(
+                self.maps_folder
+            )
 
         # If map_defs is still empty, raise an error
         if not self.map_defs:
-            raise ValueError('Map pool is empty! Please specify some maps!')
+            raise ValueError("Map pool is empty! Please specify some maps!")
 
     def _load_json_map_definitions_from_folder(
-            self,
-            maps_folder: str
-            ) -> dict[str, MapDefinition]:
+        self, maps_folder: str
+    ) -> dict[str, MapDefinition]:
         """
         Load json map definitions from a folder in the maps_folder directory.
         """
@@ -173,7 +223,7 @@ class MapDefinitionPool:
 
         # Function to load a JSON file
         def load_json(path: str) -> dict:
-            with open(path, 'r', encoding='utf-8') as file:
+            with open(path, "r", encoding="utf-8") as file:
                 return json.load(file)
 
         # Get the list of map files
@@ -182,7 +232,8 @@ class MapDefinitionPool:
         # Load the map definitions from the files
         map_defs = {
             os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f))
-            for f in map_files}
+            for f in map_files
+        }
 
         return map_defs
 
@@ -215,7 +266,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     """
 
     # Extract the x and y margins and calculate the width and height
-    (min_x, max_x), (min_y, max_y) = map_structure['x_margin'], map_structure['y_margin']
+    (min_x, max_x), (min_y, max_y) = (
+        map_structure["x_margin"],
+        map_structure["y_margin"],
+    )
     width, height = max_x - min_x, max_y - min_y
 
     # Function to normalize a position
@@ -225,46 +279,51 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     # Normalize the obstacles
     obstacles = [
         Obstacle([norm_pos(p) for p in vertices])
-        for vertices in map_structure['obstacles']]
+        for vertices in map_structure["obstacles"]
+    ]
 
     # Function to normalize a zone
     def norm_zone(rect: Rect) -> Rect:
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
     # Normalize the zones
-    robot_goal_zones = [norm_zone(z) for z in map_structure['robot_goal_zones']]
-    robot_spawn_zones = [norm_zone(z) for z in map_structure['robot_spawn_zones']]
-    ped_goal_zones = [norm_zone(z) for z in map_structure['ped_goal_zones']]
-    ped_spawn_zones = [norm_zone(z) for z in map_structure['ped_spawn_zones']]
-    ped_crowded_zones = [norm_zone(z) for z in map_structure['ped_crowded_zones']]
+    robot_goal_zones = [norm_zone(z) for z in map_structure["robot_goal_zones"]]
+    robot_spawn_zones = [norm_zone(z) for z in map_structure["robot_spawn_zones"]]
+    ped_goal_zones = [norm_zone(z) for z in map_structure["ped_goal_zones"]]
+    ped_spawn_zones = [norm_zone(z) for z in map_structure["ped_spawn_zones"]]
+    ped_crowded_zones = [norm_zone(z) for z in map_structure["ped_crowded_zones"]]
 
     # Normalize the routes
     robot_routes = [
         GlobalRoute(
-            o['spawn_id'],
-            o['goal_id'],
-            [norm_pos(p) for p in o['waypoints']],
-            robot_spawn_zones[o['spawn_id']],
-            robot_goal_zones[o['goal_id']]
-            )
-        for o in map_structure['robot_routes']
-        ]
+            o["spawn_id"],
+            o["goal_id"],
+            [norm_pos(p) for p in o["waypoints"]],
+            robot_spawn_zones[o["spawn_id"]],
+            robot_goal_zones[o["goal_id"]],
+        )
+        for o in map_structure["robot_routes"]
+    ]
     ped_routes = [
         GlobalRoute(
-            o['spawn_id'],
-            o['goal_id'],
-            [norm_pos(p) for p in o['waypoints']],
-            ped_spawn_zones[o['spawn_id']],
-            ped_goal_zones[o['goal_id']]
-            )
-        for o in map_structure['ped_routes']
-        ]
+            o["spawn_id"],
+            o["goal_id"],
+            [norm_pos(p) for p in o["waypoints"]],
+            ped_spawn_zones[o["spawn_id"]],
+            ped_goal_zones[o["goal_id"]],
+        )
+        for o in map_structure["ped_routes"]
+    ]
 
     # Function to reverse a route
     def reverse_route(route: GlobalRoute) -> GlobalRoute:
         return GlobalRoute(
-            route.goal_id, route.spawn_id, list(reversed(route.waypoints)),
-            route.goal_zone, route.spawn_zone)
+            route.goal_id,
+            route.spawn_id,
+            list(reversed(route.waypoints)),
+            route.goal_zone,
+            route.spawn_zone,
+        )
 
     # Reverse the robot routes and add them to the list of routes
     rev_robot_routes = [reverse_route(r) for r in robot_routes]
@@ -272,10 +331,11 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Define the map bounds
     map_bounds = [
-        (0, width, 0, 0),           # bottom
+        (0, width, 0, 0),  # bottom
         (0, width, height, height),  # top
-        (0, 0, 0, height),          # left
-        (width, width, 0, height)]  # right
+        (0, 0, 0, height),  # left
+        (width, width, 0, height),
+    ]  # right
 
     # Return the MapDefinition object
     return MapDefinition(
@@ -289,4 +349,5 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         robot_routes,
         ped_goal_zones,
         ped_crowded_zones,
-        ped_routes)
+        ped_routes,
+    )

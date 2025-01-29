@@ -12,22 +12,18 @@ It also defines the action and observation spaces for the robot.
 
 import os
 import datetime
-from typing import Tuple, Callable, List
+from typing import Tuple, Callable
 from copy import deepcopy
 import pickle
 
 import loguru
 import numpy as np
 
-# from gymnasium import Env
-# from gymnasium.utils import seeding
-
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.render.sim_view import (
-    SimulationView,
     VisualizableAction,
     VisualizableSimState,
 )
@@ -72,17 +68,15 @@ class RobotEnvFromBase(BaseEnv):
         - record_video: If True, saves simulation as video file
         - video_path: Path where to save the video file
         """
-
-        # Environment configuration details
-        self.env_config = env_config
-
-        # Set video FPS if not provided
-        if video_fps is None:
-            video_fps = 1/self.env_config.sim_config.time_per_step_in_secs
-            logger.info(f"Video FPS not provided, setting to {video_fps}")
-
-        # Extract first map definition; currently only supports using the first map
-        self.map_def = env_config.map_pool.choose_random_map()
+        super().__init__(
+            env_config=env_config,
+            debug=debug,
+            recording_enabled=recording_enabled,
+            record_video=record_video,
+            video_path=video_path,
+            video_fps=video_fps,
+            peds_have_obstacle_forces=peds_have_obstacle_forces,
+        )
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = init_spaces(
@@ -91,11 +85,6 @@ class RobotEnvFromBase(BaseEnv):
 
         # Assign the reward function and debug flag
         self.reward_func = reward_func
-        self.debug = debug
-
-        # Initialize the list to store recorded states
-        self.recorded_states: List[VisualizableSimState] = []
-        self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
         self.simulator = init_simulators(
@@ -121,20 +110,6 @@ class RobotEnvFromBase(BaseEnv):
 
         # Store last action executed by the robot
         self.last_action = None
-
-        # If in debug mode or video recording is enabled, create simulation view
-        if debug or record_video:
-            self.sim_ui = SimulationView(
-                scaling=10,
-                map_def=self.map_def,
-                obstacles=self.map_def.obstacles,
-                robot_radius=env_config.robot_config.radius,
-                ped_radius=env_config.sim_config.ped_radius,
-                goal_radius=env_config.sim_config.goal_radius,
-                record_video=record_video,
-                video_path=video_path,
-                video_fps=video_fps,
-            )
 
     def step(self, action):
         """
@@ -302,10 +277,3 @@ class RobotEnvFromBase(BaseEnv):
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")
             self.recorded_states = []
-
-    def exit(self):
-        """
-        Clean up and exit the simulation UI, if it exists.
-        """
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()

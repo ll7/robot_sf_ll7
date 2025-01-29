@@ -13,7 +13,6 @@ It also defines the action and observation spaces for the robot.
 from typing import Tuple, Callable
 from copy import deepcopy
 
-import loguru
 import numpy as np
 
 from robot_sf.robot.robot_state import RobotState
@@ -28,7 +27,6 @@ from robot_sf.sim.simulator import init_simulators
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
 
-logger = loguru.logger
 
 Vec2D = Tuple[float, float]
 PolarVec2D = Tuple[float, float]

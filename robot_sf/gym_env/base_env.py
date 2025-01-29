@@ -1,6 +1,6 @@
 """
 Base environment for the simulation environment.
-Provides common functionality for all robot-based environments.
+Provides common functionality for all environments.
 """
 
 import os

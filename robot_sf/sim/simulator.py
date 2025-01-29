@@ -3,7 +3,7 @@ from math import ceil, pi, sin, cos
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
 
-import loguru
+from loguru import logger
 
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.simulator import make_forces as pysf_make_forces
@@ -33,7 +33,6 @@ PolarVec2D = Tuple[float, float]
 RobotPose = Tuple[Vec2D, float]
 Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
 
-logger = loguru.logger
 
 
 @dataclass

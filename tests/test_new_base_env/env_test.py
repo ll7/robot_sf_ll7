@@ -9,6 +9,9 @@ from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 def test_can_create_env():
     env = RobotEnvFromBase()
     assert env is not None
+    assert env.action_space is not None
+    assert env.observation_space is not None
+    assert isinstance(env.observation_space, spaces.Dict)
 
 
 def test_can_return_valid_observation():

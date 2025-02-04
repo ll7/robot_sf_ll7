@@ -11,8 +11,8 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 
-from robot_sf.robot_env import RobotEnv
-from robot_sf.sim_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.tb_logging import DrivingMetricsCallback
 
@@ -36,7 +36,6 @@ wandb_run = wandb.init(
     name="init ppo robot_sf",
     notes="Initial training of ppo robot_sf",
     resume="allow",
-    magic=True,
     mode="online",
     sync_tensorboard=True,
     monitor_gym=True

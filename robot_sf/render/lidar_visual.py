@@ -22,6 +22,12 @@ def render_lidar(
     Returns:
         ray_vecs_np: (N, 2, 2) array of ray start and end point positions.
     """
+    # Validate inputs
+    if len(distances) != len(directions):
+        raise ValueError("The lengths of distances and directions must match.")
+    if np.isnan(distances).any() or np.isnan(directions).any():
+        raise ValueError("Distances and directions must not contain NaN values.")
+
     # Compute the endpoints for each ray visualization
     x_offsets = np.cos(directions) * distances
     y_offsets = np.sin(directions) * distances

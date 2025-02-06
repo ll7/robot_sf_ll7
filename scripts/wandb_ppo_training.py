@@ -6,6 +6,9 @@ Documentation can be found in `docs/wandb.md`
 import wandb
 from wandb.integration.sb3 import WandbCallback
 
+import datetime
+from loguru import logger
+
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -21,9 +24,9 @@ wandb_config = {
     "algorithm": "ppo",
     "difficulty": 2,
     "ped_densities": [0.01, 0.02, 0.04, 0.08],
-    "n_envs": 32,
-    "total_timesteps": 10_000_000
-    }
+    "n_envs": 2,
+    "total_timesteps": 10_000_000,
+}
 
 # Start a new run to track and log to W&B.
 wandb_run = wandb.init(
@@ -38,8 +41,8 @@ wandb_run = wandb.init(
     resume="allow",
     mode="online",
     sync_tensorboard=True,
-    monitor_gym=True
-    )
+    monitor_gym=True,
+)
 
 
 N_ENVS = wandb_config["n_envs"]
@@ -48,43 +51,64 @@ DIFFICULTY = wandb_config["difficulty"]
 
 
 def make_env():
-    config = EnvSettings()
-    config.sim_config.ped_density_by_difficulty = ped_densities
-    config.sim_config.difficulty = DIFFICULTY
-    return RobotEnv(config)
+    env_config = EnvSettings()
+    env_config.sim_config.ped_density_by_difficulty = ped_densities
+    env_config.sim_config.difficulty = DIFFICULTY
+    return RobotEnv(env_config)
 
 
-env = make_vec_env(make_env, n_envs=N_ENVS, vec_env_cls=SubprocVecEnv)
+# config = {
+#     "env": "robot_sf/RobotEnv",
+#     "algorithm": "ppo",
+#     "difficulty": DIFFICULTY,
+#     "ped_densities": ped_densities,
+#     "n_envs": N_ENVS,
+#     "total_timesteps": wandb_config,
+# }
 
-policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
-model = PPO(
-    "MultiInputPolicy",
-    env,
-    tensorboard_log="./logs/ppo_logs/",
-    policy_kwargs=policy_kwargs
+
+def main():
+
+    start_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    logger.info(f"Start time: {start_time}")
+
+    env = make_vec_env(make_env, n_envs=N_ENVS, vec_env_cls=SubprocVecEnv)
+
+    policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
+    model = PPO(
+        "MultiInputPolicy",
+        env,
+        tensorboard_log="./logs/ppo_logs/",
+        policy_kwargs=policy_kwargs,
     )
-save_model_callback = CheckpointCallback(
-    500_000 // N_ENVS,
-    "./model/backup",
-    "ppo_model"
-    )
-collect_metrics_callback = DrivingMetricsCallback(N_ENVS)
-
-wandb_callback = WandbCallback(
-    gradient_save_freq=20_000,
-    model_save_path=f"models/{wandb_run.id}",
-    verbose=2,
+    save_model_callback = CheckpointCallback(
+        500_000 // N_ENVS, "./model/backup", "ppo_model"
     )
 
-combined_callback = CallbackList(
-    [save_model_callback, collect_metrics_callback, wandb_callback]
+    collect_metrics_callback = DrivingMetricsCallback(N_ENVS)
+
+    wandb_callback = WandbCallback(
+        gradient_save_freq=20_000,
+        model_save_path=f"models/{wandb_run.id}",
+        verbose=2,
     )
 
-model.learn(
-    total_timesteps=wandb_config["total_timesteps"],
-    progress_bar=True,
-    callback=combined_callback
+    combined_callback = CallbackList(
+        [save_model_callback, collect_metrics_callback, wandb_callback]
     )
-model.save("./model/ppo_model")
 
-wandb_run.finish()
+    model.learn(
+        total_timesteps=wandb_config["total_timesteps"],
+        progress_bar=True,
+        callback=combined_callback,
+    )
+    model.save("./model/ppo_model")
+
+    wandb_run.finish()
+
+    end_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    logger.info(f"End time: {end_time}")
+
+
+if __name__ == "__main__":
+    pass

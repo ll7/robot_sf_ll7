@@ -7,10 +7,14 @@ timeout condition, simulation time elapsed, and timestep count.
 
 from math import ceil
 from dataclasses import dataclass, field
-
+from typing import Union
 from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.sensor.sensor_fusion import SensorFusion
 from robot_sf.nav.occupancy import ContinuousOccupancy
+from robot_sf.robot.differential_drive import DifferentialDriveRobot
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot
+
+Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
 
 
 @dataclass

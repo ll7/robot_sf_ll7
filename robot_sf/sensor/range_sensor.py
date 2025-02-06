@@ -7,24 +7,7 @@ import numba
 from gymnasium import spaces
 
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
-
-Vec2D = Tuple[float, float]
-"""Type alias for a 2D vector represented as a tuple of two floats"""
-
-Line2D = Tuple[Vec2D, Vec2D]
-"""Type alias for a 2D line represented as a tuple of two 2D vectors (start and end points)"""
-
-Circle2D = Tuple[Vec2D, float]
-"""Type alias for a 2D circle represented as a tuple of a 2D vector (center) and a float (radius)"""
-
-RobotPose = Tuple[Vec2D, float]
-"""
-Type alias for a robot's pose represented as a tuple of a 2D vector (position)
-and a float (orientation)
-"""
-
-Range = Tuple[float, float]
-"""Type alias for a range represented as a tuple of two floats"""
+from robot_sf.util.types import Vec2D, Line2D, Circle2D, RobotPose, Range
 
 
 # TODO: Refactor. this method is used in multiple places (occupancy, ped_robot_force)

@@ -5,7 +5,7 @@ from math import dist
 
 from dataclasses import dataclass
 
-from robot_sf.nav.nav_types import Vec2D, Rect
+from robot_sf.util.types import Vec2D, Rect
 
 
 @dataclass

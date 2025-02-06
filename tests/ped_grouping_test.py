@@ -1,11 +1,8 @@
-from typing import Set, Tuple
+from typing import Set
 
 import numpy as np
 
-from robot_sf.ped_npc.ped_grouping \
-    import PedestrianGroupings, PedestrianStates
-
-Vec2D = Tuple[float, float]
+from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 
 
 def intersect(s1: Set, s2: Set) -> Set:
@@ -25,19 +22,19 @@ def set_except(s1: Set, s2: Set) -> Set:
 
 
 def init_groups():
-    pysf_data = np.array([
-        # group of 3 pedestrians
-        [0, 1, 0, 0, 10, 10],
-        [0.5, 1, 0, 0, 10, 10],
-        [1, 1, 0, 0, 10, 10],
-
-        # group of 2 pedestrians
-        [2, 3, 0, 0, 10, 1],
-        [3, 2, 0, 0, 10, 1],
-
-        # standalone pedestrian
-        [5, 6, 0, 0, 7, 5],
-        ])
+    pysf_data = np.array(
+        [
+            # group of 3 pedestrians
+            [0, 1, 0, 0, 10, 10],
+            [0.5, 1, 0, 0, 10, 10],
+            [1, 1, 0, 0, 10, 10],
+            # group of 2 pedestrians
+            [2, 3, 0, 0, 10, 1],
+            [3, 2, 0, 0, 10, 1],
+            # standalone pedestrian
+            [5, 6, 0, 0, 7, 5],
+        ]
+    )
     states = PedestrianStates(lambda: pysf_data)
     groups = PedestrianGroupings(states)
     groups.new_group({0, 1, 2})

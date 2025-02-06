@@ -34,6 +34,7 @@ from robot_sf.render.sim_view import (
 from robot_sf.sim.simulator import init_simulators
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+from robot_sf.render.lidar_visual import render_lidar
 
 logger = loguru.logger
 
@@ -78,7 +79,7 @@ class RobotEnv(Env):
 
         # Set video FPS if not provided
         if video_fps is None:
-            video_fps = 1/self.env_config.sim_config.time_per_step_in_secs
+            video_fps = 1 / self.env_config.sim_config.time_per_step_in_secs
             logger.info(f"Video FPS not provided, setting to {video_fps}")
 
         # Extract first map definition; currently only supports using the first map
@@ -227,13 +228,7 @@ class RobotEnv(Env):
         )
 
         # Construct ray vectors for visualization
-        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
-        ray_vecs_np = np.array(
-            [
-                [[robot_pos[0], robot_pos[1]], [robot_pos[0] + x, robot_pos[1] + y]]
-                for x, y in ray_vecs
-            ]
-        )
+        ray_vecs_np = render_lidar(robot_pos, distances, directions)
 
         # Prepare pedestrian action visualization
         ped_actions = zip(

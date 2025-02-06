@@ -34,6 +34,7 @@ from robot_sf.render.sim_view import (
 from robot_sf.sim.simulator import init_ped_simulators
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
+from robot_sf.render.lidar_visual import render_lidar
 
 logger = loguru.logger
 
@@ -240,7 +241,7 @@ class PedestrianEnv(Env):
         )
 
         # Construct ray vectors for visualization
-        robot_ray_vecs = self.construct_ray_vectors(distances, directions, robot_pos)
+        robot_ray_vecs = render_lidar(distances, directions, robot_pos)
 
         # Prepare npc_pedestrian action visualization
         ped_actions = zip(
@@ -266,9 +267,7 @@ class PedestrianEnv(Env):
             self.ped_state.ego_ped_occupancy,
             self.env_config.lidar_config,
         )
-        ego_ped_ray_vecs = self.construct_ray_vectors(
-            distances, directions, ego_ped_pos
-        )
+        ego_ped_ray_vecs = render_lidar(distances, directions, ego_ped_pos)
 
         # Package the state for visualization
         state = VisualizableSimState(
@@ -337,10 +336,3 @@ class PedestrianEnv(Env):
         """
         if self.sim_ui:
             self.sim_ui.exit_simulation()
-
-    def construct_ray_vectors(self, distances, directions, pos):
-        ray_vecs = zip(np.cos(directions) * distances, np.sin(directions) * distances)
-        ray_vecs_np = np.array(
-            [[[pos[0], pos[1]], [pos[0] + x, pos[1] + y]] for x, y in ray_vecs]
-        )
-        return ray_vecs_np

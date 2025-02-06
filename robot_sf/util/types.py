@@ -4,8 +4,6 @@ Module specifying types used in robot_sf
 
 from typing import Tuple, Union, Set, Dict
 import numpy as np
-from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveAction
-from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 
 # Geometry types
 Vec2D = Tuple[float, float]
@@ -42,6 +40,8 @@ Range = Tuple[float, float]
 """Type alias for a range represented as a tuple of two floats"""
 
 # Robot types
+DifferentialDriveAction = Tuple[float, float]  # (linear velocity, angular velocity)
+BicycleAction = Tuple[float, float]  # (acceleration, steering angle)
 RobotAction = Union[DifferentialDriveAction, BicycleAction]
 RobotPose = Tuple[Vec2D, float]
 """
@@ -49,7 +49,6 @@ Type alias for a robot's pose represented as a tuple of a 2D vector (position)
 and a float (orientation)
 """
 
-Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
 
 # Pedestrian types
 PedPose = Tuple[Vec2D, float]

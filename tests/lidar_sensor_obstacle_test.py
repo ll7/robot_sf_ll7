@@ -1,17 +1,14 @@
 from math import pi, cos, sin
-from typing import Tuple
 
 import numpy as np
 from pytest import approx
 
 from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan, LidarScannerSettings
+from robot_sf.util.types import Point2D
 
 
 NO_SCAN_NOISE = [0.0, 0.0]
-Vec2D = Tuple[float, float]
-Point2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
 
 
 def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D:

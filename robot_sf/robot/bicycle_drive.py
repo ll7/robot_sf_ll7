@@ -1,14 +1,12 @@
 from math import atan2, sin, cos, tan
 from dataclasses import dataclass, field
-from typing import Tuple
 
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.util.types import Vec2D, PolarVec2D, RobotPose, BicycleAction
 
-Vec2D = Tuple[float, float]
-PolarVec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
+
 
 
 @dataclass
@@ -56,7 +54,7 @@ class BicycleDriveState:
         return (self.velocity, self.orient)
 
 
-BicycleAction = Tuple[float, float]  # (acceleration, steering angle)
+
 
 
 @dataclass

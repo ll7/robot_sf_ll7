@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 
-from robot_sf.nav.nav_types import Vec2D, Zone
+from robot_sf.util.types import Vec2D, Zone
 
 
 def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:

@@ -6,10 +6,9 @@ from typing import Tuple
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.util.types import Vec2D, PolarVec2D, RobotPose, DifferentialDriveAction
 
-Vec2D = Tuple[float, float]
-PolarVec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
+
 WheelSpeedState = Tuple[float, float]  # tuple of (left, right) speeds
 # TODO: Is WheelSpeedState in translation or rotation units?
 
@@ -62,7 +61,7 @@ class DifferentialDriveState:
     wheel_speeds: WheelSpeedState = (0.0, 0.0)
 
 
-DifferentialDriveAction = Tuple[float, float]  # (linear velocity, angular velocity)
+
 
 
 @dataclass

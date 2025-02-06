@@ -38,10 +38,6 @@ from robot_sf.render.lidar_visual import render_lidar
 
 logger = loguru.logger
 
-Vec2D = Tuple[float, float]
-PolarVec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
-
 
 class RobotEnv(Env):
     """

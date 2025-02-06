@@ -4,8 +4,9 @@ from dataclasses import dataclass
 import numpy as np
 import numba
 from pysocialforce.scene import PedState
+# FIXME: This import is not working
 
-Vec2D = Tuple[float, float]
+from robot_sf.util.types import Vec2D
 
 
 @dataclass

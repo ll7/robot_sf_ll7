@@ -1,21 +1,15 @@
 import os
 from enum import IntEnum
 from time import sleep
-from dataclasses import dataclass
-from typing import Tuple, Callable, Union, List, Iterable
+from typing import Callable, Union, List, Iterable
 from threading import Thread
 
 import tkinter as tk
 import tkinter.scrolledtext as tks
 import numpy as np
 
-from map_editor.map_file_parser import \
-    parse_mapfile_text, VisualizableMapConfig
-
-Vec2D = Tuple[float, float]
-Range2D = Tuple[float, float]  # (low, high)
-MapBounds = Tuple[Range2D, Range2D]  # ((min_x, max_x), (min_y, max_y))
-Rect = Tuple[Vec2D, Vec2D, Vec2D]
+from map_editor.map_file_parser import parse_mapfile_text, VisualizableMapConfig
+from robot_sf.util.types import Vec2D, Rect
 
 
 class MapCanvas:
@@ -46,8 +40,8 @@ class MapCanvas:
             map_x, map_y = x * scaling + min_x, y * scaling + min_y
             print(f"[{map_x:.2f}, {map_y:.2f}]")
 
-        self.canvas.bind('<Motion>', track_mouse_pos)
-        self.canvas.bind('<Button-1>', print_map_coords)
+        self.canvas.bind("<Motion>", track_mouse_pos)
+        self.canvas.bind("<Button-1>", print_map_coords)
 
     def pack(self):
         self.canvas.pack()
@@ -71,8 +65,10 @@ class MapCanvas:
         def rect_points(rect: Rect) -> List[Vec2D]:
             def add_vec(v1, v2):
                 return (v1[0] + v2[0], v1[1] + v2[1])
+
             def sub_vec(v1, v2):
                 return (v1[0] - v2[0], v1[1] - v2[1])
+
             p1, p2, p3 = rect
             p4 = add_vec(sub_vec(p3, p2), p1)
             return [p1, p2, p3, p4]
@@ -88,25 +84,34 @@ class MapCanvas:
             self.canvas.create_line(scale(p3), scale(p4), fill=color)
             self.canvas.create_line(scale(p4), scale(p1), fill=color)
 
-            min_x, max_x = min(p1[0], p2[0], p3[0], p4[0]), max(p1[0], p2[0], p3[0], p4[0])
-            min_y, max_y = min(p1[1], p2[1], p3[1], p4[1]), max(p1[1], p2[1], p3[1], p4[1])
+            min_x, max_x = min(p1[0], p2[0], p3[0], p4[0]), max(
+                p1[0], p2[0], p3[0], p4[0]
+            )
+            min_y, max_y = min(p1[1], p2[1], p3[1], p4[1]), max(
+                p1[1], p2[1], p3[1], p4[1]
+            )
             middle = min_x + (max_x - min_x) / 2, min_y + (max_y - min_y) / 2
             middle = scale(middle)
             self.canvas.create_text(
-                middle[0], middle[1], text=str(zone_id),
-                fill="black", font=('Helvetica 10 bold'))
+                middle[0],
+                middle[1],
+                text=str(zone_id),
+                fill="black",
+                font=("Helvetica 10 bold"),
+            )
 
         def draw_waypoint(p: Vec2D, r: float, color="black", fill=None):
             (x, y), r = scale(p), r * scaling
             fill = fill if fill else color
-            self.canvas.create_oval(x - r, y - r, x + r, y + r, outline=color, fill=fill)
+            self.canvas.create_oval(
+                x - r, y - r, x + r, y + r, outline=color, fill=fill
+            )
 
         for s_x, e_x, s_y, e_y in map_config.obstacles:
             if (s_x, s_y) != (e_x, e_y):
                 self.canvas.create_line(
-                    scale(
-                        (s_x, s_y)), scale(
-                        (e_x, e_y)), fill=MapCanvas.OBSTACLE_COLOR)
+                    scale((s_x, s_y)), scale((e_x, e_y)), fill=MapCanvas.OBSTACLE_COLOR
+                )
 
         for i, rect in enumerate(map_config.robot_spawn_zones):
             draw_zone(i, rect_points(rect), MapCanvas.ROBOT_SPAWN_COLOR)
@@ -147,7 +152,9 @@ class MapEditorToolbar:
     COLOR_BTN_DEFAULT = "gray"
     COLOR_BTN_HIGHLIGHTED = "yellow"
 
-    def __init__(self, frame: tk.Frame, on_mode_changed: Callable[[MapToolbarMode], None]):
+    def __init__(
+        self, frame: tk.Frame, on_mode_changed: Callable[[MapToolbarMode], None]
+    ):
         self.on_mode_changed = on_mode_changed
         self.mode = MapToolbarMode.NONE
 
@@ -155,33 +162,33 @@ class MapEditorToolbar:
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_SPAWN] = tk.Button(
             frame,
             text="Robot Spawn",
-            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_SPAWN)
-            )
+            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_SPAWN),
+        )
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_GOAL] = tk.Button(
             frame,
             text="Robot Goal",
-            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_GOAL)
-            )
+            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_GOAL),
+        )
         self.buttons_by_mode[MapToolbarMode.NEW_ROBOT_ROUTE] = tk.Button(
             frame,
             text="Robot Route",
-            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_ROUTE)
-            )
+            command=lambda: self.change_mode(MapToolbarMode.NEW_ROBOT_ROUTE),
+        )
         self.buttons_by_mode[MapToolbarMode.NEW_PED_SPAWN] = tk.Button(
             frame,
             text="Ped Spawn",
-            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_SPAWN)
-            )
+            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_SPAWN),
+        )
         self.buttons_by_mode[MapToolbarMode.NEW_PED_GOAL] = tk.Button(
             frame,
             text="Ped Goal",
-            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_GOAL)
-            )
+            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_GOAL),
+        )
         self.buttons_by_mode[MapToolbarMode.NEW_PED_ROUTE] = tk.Button(
             frame,
             text="Ped Route",
-            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_ROUTE)
-            )
+            command=lambda: self.change_mode(MapToolbarMode.NEW_PED_ROUTE),
+        )
 
     @property
     def buttons(self) -> Iterable[tk.Button]:
@@ -198,10 +205,13 @@ class MapEditorToolbar:
         else:
             self.mode = new_mode
 
-        for (mode, btn) in self.buttons_by_mode.items():
+        for mode, btn in self.buttons_by_mode.items():
             highlight = mode == self.mode
-            new_bg = MapEditorToolbar.COLOR_BTN_HIGHLIGHTED if highlight \
+            new_bg = (
+                MapEditorToolbar.COLOR_BTN_HIGHLIGHTED
+                if highlight
                 else MapEditorToolbar.COLOR_BTN_DEFAULT
+            )
             btn.configure(background=new_bg)
 
         self.on_mode_changed(self.mode)
@@ -272,8 +282,11 @@ class MapEditor:
 
         def reload_map():
             config_content = self.text_editor.text
-            map_config = parse_mapfile_text(config_content) \
-                if config_content != self.last_text else None
+            map_config = (
+                parse_mapfile_text(config_content)
+                if config_content != self.last_text
+                else None
+            )
             self.last_config = map_config if map_config else self.last_config
             self.last_text = config_content if map_config else self.last_text
             if map_config:

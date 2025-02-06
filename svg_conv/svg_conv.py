@@ -11,20 +11,18 @@ your own use case."""
 import os
 import sys
 import json
-from typing import Tuple, List
+from typing import List
 
 from svgelements import SVG, Point, Path
 
-
-Vec2D = Tuple[float, float]
-ColorRGB = Tuple[int, int, int]
+from robot_sf.util.types import Vec2D, RgbColor
 
 
 def paths_of_svg(svg: SVG) -> List[Path]:
     return [e for e in svg.elements() if isinstance(e, Path)]
 
 
-def filter_paths_by_color(paths: List[Path], color: ColorRGB) -> List[Path]:
+def filter_paths_by_color(paths: List[Path], color: RgbColor) -> List[Path]:
     red, green, blue = color
     paths = [
         e

@@ -24,10 +24,6 @@ from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
 from robot_sf.render.lidar_visual import render_lidar
 
-Vec2D = Tuple[float, float]
-PolarVec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
-
 
 class EmptyRobotEnv(Env):
     """

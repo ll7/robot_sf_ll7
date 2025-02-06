@@ -1,12 +1,9 @@
 from math import dist
-from typing import Tuple
 import numpy as np
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.sim.simulator import init_ped_simulators
-
-Vec2D = Tuple[float, float]
 
 
 def test_create_map():

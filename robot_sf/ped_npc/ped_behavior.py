@@ -11,7 +11,7 @@ from robot_sf.nav.map_config import GlobalRoute
 from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings
-from robot_sf.nav.nav_types import Zone
+from robot_sf.util.types import Zone
 
 
 class PedestrianBehavior(Protocol):

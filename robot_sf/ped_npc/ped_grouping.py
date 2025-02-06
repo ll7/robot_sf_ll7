@@ -1,10 +1,10 @@
-from typing import List, Set, Dict, Tuple, Callable
+from typing import List, Set, Dict, Callable
 from dataclasses import dataclass, field
 from copy import deepcopy
 
 import numpy as np
 
-Vec2D = Tuple[float, float]
+from robot_sf.util.types import Vec2D
 
 
 @dataclass

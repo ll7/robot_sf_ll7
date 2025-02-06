@@ -114,3 +114,18 @@ def test_render_lidar_parametrized(robot_pos, distances, directions):
 
     result = render_lidar(robot_pos, distances, directions)
     np.testing.assert_allclose(result, expected)
+
+
+def test_render_lidar_invalid_inputs():
+    robot_pos = [0, 0]
+    # Test mismatched lengths
+    distances = np.array([1, 2])
+    directions = np.array([0])
+    with pytest.raises(ValueError):
+        render_lidar(robot_pos, distances, directions)
+
+    # Test NaN values
+    distances = np.array([1, np.nan])
+    directions = np.array([0, 0])
+    with pytest.raises(ValueError):
+        render_lidar(robot_pos, distances, directions)

@@ -7,8 +7,6 @@ from gymnasium import spaces
 from robot_sf.util.types import Vec2D, PolarVec2D, RobotPose, BicycleAction
 
 
-
-
 @dataclass
 class BicycleDriveSettings:
     """
@@ -36,6 +34,7 @@ class BicycleDriveSettings:
 @dataclass
 class BicycleDriveState:
     """A class that represents the state of a bicycle drive robot."""
+
     pose: RobotPose
     velocity: float = field(default=0)
 
@@ -52,9 +51,6 @@ class BicycleDriveState:
     def current_speed(self) -> PolarVec2D:
         """Get the current speed and orientation of the robot."""
         return (self.velocity, self.orient)
-
-
-
 
 
 @dataclass
@@ -84,12 +80,18 @@ class BicycleMotion:
         velocity = state.velocity
 
         # Apply limits to the acceleration and calculate new velocity
-        acceleration = np.clip(acceleration, -self.config.max_accel, self.config.max_accel)
+        acceleration = np.clip(
+            acceleration, -self.config.max_accel, self.config.max_accel
+        )
         new_velocity = velocity + d_t * acceleration
-        new_velocity = np.clip(new_velocity, self.config.min_velocity, self.config.max_velocity)
+        new_velocity = np.clip(
+            new_velocity, self.config.min_velocity, self.config.max_velocity
+        )
 
         # Apply limits to the steering angle
-        steering_angle = np.clip(steering_angle, -self.config.max_steer, self.config.max_steer)
+        steering_angle = np.clip(
+            steering_angle, -self.config.max_steer, self.config.max_steer
+        )
 
         # Calculate angular velocity based on velocity and steering angle
         angular_velocity = new_velocity * tan(steering_angle) / self.config.wheelbase
@@ -124,7 +126,9 @@ class BicycleDriveRobot:
     """Representing a robot with bicycle driving behavior"""
 
     config: BicycleDriveSettings
-    state: BicycleDriveState = field(default_factory=lambda: BicycleDriveState(pose=((0.0, 0.0), 0.0)))
+    state: BicycleDriveState = field(
+        default_factory=lambda: BicycleDriveState(pose=((0.0, 0.0), 0.0))
+    )
     movement: BicycleMotion = field(init=False)
 
     def __post_init__(self):
@@ -132,14 +136,22 @@ class BicycleDriveRobot:
 
     @property
     def observation_space(self) -> spaces.Box:
-        high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
-        low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
+        high = np.array(
+            [self.config.max_velocity, self.config.max_steer], dtype=np.float32
+        )
+        low = np.array(
+            [self.config.min_velocity, -self.config.max_steer], dtype=np.float32
+        )
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def action_space(self) -> spaces.Box:
-        high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
-        low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
+        high = np.array(
+            [self.config.max_accel, self.config.max_steer], dtype=np.float32
+        )
+        low = np.array(
+            [-self.config.max_accel, -self.config.max_steer], dtype=np.float32
+        )
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property

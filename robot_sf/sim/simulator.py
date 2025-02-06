@@ -24,7 +24,6 @@ from robot_sf.util.types import Vec2D, RobotAction, RobotPose
 from robot_sf.robot.robot_state import Robot
 
 
-
 @dataclass
 class Simulator:
     """

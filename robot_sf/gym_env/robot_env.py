@@ -12,7 +12,7 @@ It also defines the action and observation spaces for the robot.
 
 import os
 import datetime
-from typing import Tuple, Callable, List
+from typing import Callable, List
 from copy import deepcopy
 import pickle
 
@@ -20,7 +20,6 @@ import loguru
 import numpy as np
 
 from gymnasium import Env
-from gymnasium.utils import seeding
 
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.gym_env.env_config import EnvSettings

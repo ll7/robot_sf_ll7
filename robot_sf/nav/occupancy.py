@@ -1,13 +1,10 @@
-from typing import Callable, Tuple, Optional
+from typing import Callable, Optional
 from dataclasses import dataclass
 
 import numpy as np
 import numba
 
-
-Vec2D = Tuple[float, float]
-Circle2D = Tuple[Vec2D, float]
-Line2D = Tuple[Vec2D, Vec2D]
+from robot_sf.util.types import Vec2D, Line2D, Circle2D
 
 # TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
 

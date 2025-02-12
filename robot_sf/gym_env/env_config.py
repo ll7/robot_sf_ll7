@@ -25,21 +25,21 @@ from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.robot.differential_drive import (
     DifferentialDriveSettings,
-    DifferentialDriveRobot)
-from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings, UnicycleDrivePedestrian
+    DifferentialDriveRobot,
+)
+from robot_sf.ped_ego.unicycle_drive import (
+    UnicycleDriveSettings,
+    UnicycleDrivePedestrian,
+)
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings, BicycleDriveRobot
 from robot_sf.sim.sim_config import SimulationSettings
 
 
 @dataclass
-class EnvSettings:
-    """
-    Data class to hold environment settings for a simulation.
-    """
+class BaseEnvSettings:
+    """Base environment settings."""
+
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
-    lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
-    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
-        default_factory=DifferentialDriveSettings)
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
 
     def __post_init__(self):
@@ -47,9 +47,31 @@ class EnvSettings:
         Check if any of the properties are not initialized (None) and raise an
         error if so.
         """
-        if not self.sim_config or not self.lidar_config \
-                or not self.robot_config or not self.map_pool:
-            raise ValueError('Please make sure all properties are initialized!')
+        if not self.sim_config or not self.map_pool:
+            raise ValueError("Please make sure all properties are initialized!")
+
+
+@dataclass
+class RobotEnvSettings(BaseEnvSettings):
+    """Robot-specific environment settings."""
+
+    lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
+    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
+        default_factory=DifferentialDriveSettings
+    )
+
+    def __post_init__(self):
+        """
+        Check if any of the properties are not initialized (None) and raise an
+        error if so.
+        """
+        if (
+            not self.sim_config
+            or not self.lidar_config
+            or not self.robot_config
+            or not self.map_pool
+        ):
+            raise ValueError("Please make sure all properties are initialized!")
 
     def robot_factory(self) -> Union[DifferentialDriveRobot, BicycleDriveRobot]:
         """
@@ -64,7 +86,51 @@ class EnvSettings:
             return BicycleDriveRobot(self.robot_config)
         else:
             raise NotImplementedError(
-                f"unsupported robot type {type(self.robot_config)}!")
+                f"unsupported robot type {type(self.robot_config)}!"
+            )
+
+
+@dataclass
+class EnvSettings:
+    """
+    Data class to hold environment settings for a simulation.
+    """
+
+    sim_config: SimulationSettings = field(default_factory=SimulationSettings)
+    lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
+    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
+        default_factory=DifferentialDriveSettings
+    )
+    map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
+
+    def __post_init__(self):
+        """
+        Check if any of the properties are not initialized (None) and raise an
+        error if so.
+        """
+        if (
+            not self.sim_config
+            or not self.lidar_config
+            or not self.robot_config
+            or not self.map_pool
+        ):
+            raise ValueError("Please make sure all properties are initialized!")
+
+    def robot_factory(self) -> Union[DifferentialDriveRobot, BicycleDriveRobot]:
+        """
+        Factory method to create a robot instance based on the type of robot
+        configuration provided.
+        :return: robot instance.
+        """
+
+        if isinstance(self.robot_config, DifferentialDriveSettings):
+            return DifferentialDriveRobot(self.robot_config)
+        elif isinstance(self.robot_config, BicycleDriveSettings):
+            return BicycleDriveRobot(self.robot_config)
+        else:
+            raise NotImplementedError(
+                f"unsupported robot type {type(self.robot_config)}!"
+            )
 
 
 @dataclass
@@ -72,6 +138,7 @@ class PedEnvSettings(EnvSettings):
     """
     Data class to hold environment settings for a simulation that includes an ego pedestrian.
     """
+
     ego_ped_config: UnicycleDriveSettings = field(default_factory=UnicycleDriveSettings)
 
     def __post_init__(self):
@@ -81,10 +148,12 @@ class PedEnvSettings(EnvSettings):
         """
         super().__post_init__()
         if not self.ego_ped_config:
-            raise ValueError('Please ensure ego_ped_config is initialized!')
+            raise ValueError("Please ensure ego_ped_config is initialized!")
 
         # Comment following line to allow different radius for ego pedestrian
-        self.ego_ped_config.radius = self.sim_config.ped_radius  # Ensure radius consistency
+        self.ego_ped_config.radius = (
+            self.sim_config.ped_radius
+        )  # Ensure radius consistency
 
     def pedestrian_factory(self) -> UnicycleDrivePedestrian:
         """
@@ -97,4 +166,5 @@ class PedEnvSettings(EnvSettings):
             return UnicycleDrivePedestrian(self.ego_ped_config)
         else:
             raise NotImplementedError(
-                f"unsupported pedestrian type {type(self.ego_ped_config)}!")
+                f"unsupported pedestrian type {type(self.ego_ped_config)}!"
+            )

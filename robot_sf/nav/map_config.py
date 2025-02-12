@@ -13,7 +13,7 @@ from math import sqrt
 from typing import List, Union, Dict
 from dataclasses import dataclass, field
 
-from robot_sf.nav.nav_types import Line2D, Rect, Vec2D
+from robot_sf.util.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.obstacle import Obstacle
 

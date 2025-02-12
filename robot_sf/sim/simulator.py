@@ -3,7 +3,7 @@ from math import ceil, pi, sin, cos
 from dataclasses import dataclass, field
 from typing import List, Tuple, Union
 
-import loguru
+from loguru import logger
 
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.simulator import make_forces as pysf_make_forces
@@ -16,24 +16,12 @@ from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
 from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
-from robot_sf.robot.differential_drive import (
-    DifferentialDriveRobot,
-    DifferentialDriveAction,
-)
-from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleAction
 from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian, UnicycleAction
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 from robot_sf.nav.occupancy import is_circle_line_intersection
 from robot_sf.ped_npc.ped_zone import sample_zone
-
-
-Vec2D = Tuple[float, float]
-RobotAction = Union[DifferentialDriveAction, BicycleAction]
-PolarVec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
-Robot = Union[DifferentialDriveRobot, BicycleDriveRobot]
-
-logger = loguru.logger
+from robot_sf.util.types import Vec2D, RobotAction, RobotPose
+from robot_sf.robot.robot_state import Robot
 
 
 @dataclass

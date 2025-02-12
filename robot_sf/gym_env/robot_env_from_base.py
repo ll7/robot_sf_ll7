@@ -1,5 +1,13 @@
 """
-An empty environment for the robot to drive to several goals.
+`robot_env.py` is a module that defines the simulation environment for a robot or multiple robots.
+It includes classes and protocols for defining the robot's state, actions, and
+observations within the environment.
+
+`RobotEnv`: A class that represents the robot's environment. It inherits from `VectorEnv`
+from the `gymnasium` library, which is a base class for environments that operate over
+vectorized actions and observations. It includes methods for stepping through the environment,
+resetting it, rendering it, and closing it.
+It also defines the action and observation spaces for the robot.
 """
 
 from typing import Tuple, Callable
@@ -7,15 +15,11 @@ from copy import deepcopy
 
 import numpy as np
 
-from gymnasium import Env
-from gymnasium.utils import seeding
-
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sensor.range_sensor import lidar_ray_scan
-
+from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.render.sim_view import (
-    SimulationView,
     VisualizableAction,
     VisualizableSimState,
 )
@@ -25,7 +29,7 @@ from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
 from robot_sf.render.lidar_visual import render_lidar
 
 
-class EmptyRobotEnv(Env):
+class RobotEnvFromBase(BaseEnv):
     """
     Representing a Gymnasium environment for training a self-driving robot
     with reinforcement learning.
@@ -36,6 +40,11 @@ class EmptyRobotEnv(Env):
         env_config: EnvSettings = EnvSettings(),
         reward_func: Callable[[dict], float] = simple_reward,
         debug: bool = False,
+        recording_enabled: bool = False,
+        record_video: bool = False,
+        video_path: str = None,
+        video_fps: float = None,
+        peds_have_obstacle_forces: bool = False,
     ):
         """
         Initialize the Robot Environment.
@@ -46,24 +55,35 @@ class EmptyRobotEnv(Env):
             a dictionary as input and returns a float as reward.
         - debug (bool): If True, enables debugging information such as
             visualizations.
+        - recording_enabled (bool): If True, enables recording of the simulation
+        - record_video: If True, saves simulation as video file
+        - video_path: Path where to save the video file
         """
-
-        # Environment configuration details
-        self.env_config = env_config
-
-        # Extract first map definition; currently only supports using the first map
-        map_def = env_config.map_pool.map_defs["uni_campus_big"]
+        super().__init__(
+            env_config=env_config,
+            debug=debug,
+            recording_enabled=recording_enabled,
+            record_video=record_video,
+            video_path=video_path,
+            video_fps=video_fps,
+            peds_have_obstacle_forces=peds_have_obstacle_forces,
+        )
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = init_spaces(
-            env_config, map_def
+            env_config, self.map_def
         )
 
         # Assign the reward function and debug flag
-        self.reward_func, self.debug = reward_func, debug
+        self.reward_func = reward_func
 
         # Initialize simulator with a random start position
-        self.simulator = init_simulators(env_config, map_def, random_start_pos=True)[0]
+        self.simulator = init_simulators(
+            env_config,
+            self.map_def,
+            random_start_pos=True,
+            peds_have_obstacle_forces=peds_have_obstacle_forces,
+        )[0]
 
         # Delta time per simulation step and maximum episode time
         d_t = env_config.sim_config.time_per_step_in_secs
@@ -82,17 +102,6 @@ class EmptyRobotEnv(Env):
         # Store last action executed by the robot
         self.last_action = None
 
-        # If in debug mode, create a simulation view to visualize the state
-        if debug:
-            self.sim_ui = SimulationView(
-                scaling=10,
-                map_def=map_def,
-                obstacles=map_def.obstacles,
-                robot_radius=env_config.robot_config.radius,
-                ped_radius=env_config.sim_config.ped_radius,
-                goal_radius=env_config.sim_config.goal_radius,
-            )
-
     def step(self, action):
         """
         Execute one time step within the environment.
@@ -104,47 +113,66 @@ class EmptyRobotEnv(Env):
         - obs: Observation after taking the action.
         - reward: Calculated reward for the taken action.
         - term: Boolean indicating if the episode has terminated.
+        - truncated: Boolean indicating if the episode was truncated.
         - info: Additional information as dictionary.
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)
-        self.last_action = action
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation
         obs = self.state.step()
         # Fetch metadata about the current state
-        meta = self.state.meta_dict()
+        reward_dict = self.state.meta_dict()
+        # add the action space to dict
+        reward_dict["action_space"] = self.action_space
+        # add action to dict
+        reward_dict["action"] = action
+        # Add last_action to reward_dict
+        reward_dict["last_action"] = self.last_action
         # Determine if the episode has reached terminal state
         term = self.state.is_terminal
         # Compute the reward using the provided reward function
-        reward = self.reward_func(meta)
-        return obs, reward, term, {"step": meta["step"], "meta": meta}
+        reward = self.reward_func(reward_dict)
+        # Update last_action for next step
+        self.last_action = action
 
-    def reset(self):
+        # if recording is enabled, record the state
+        if self.recording_enabled:
+            self.record()
+
+        # observation, reward, terminal, truncated,info
+        return (
+            obs,
+            reward,
+            term,
+            False,
+            {"step": reward_dict["step"], "meta": reward_dict},
+        )
+
+    def reset(self, seed=None, options=None):
         """
         Reset the environment state to start a new episode.
 
         Returns:
         - obs: The initial observation after resetting the environment.
         """
+        super().reset(seed=seed, options=options)
+        # Reset last_action
+        self.last_action = None
         # Reset internal simulator state
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
-        return obs
+        # if recording is enabled, save the recording and reset the state list
+        if self.recording_enabled:
+            self.save_recording()
 
-    def render(self):
-        """
-        Render the environment visually if in debug mode.
+        # info is necessary for the gym environment, but useless at the moment
+        info = {"info": "test"}
+        return obs, info
 
-        Raises RuntimeError if debug mode is not enabled.
-        """
-        if not self.sim_ui:
-            raise RuntimeError(
-                "Debug mode is not activated! Consider setting " "debug=True!"
-            )
-
+    def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
         action = (
             None
@@ -171,6 +199,7 @@ class EmptyRobotEnv(Env):
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
             self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+            # TODO Clarify why the factor of 2 is used
         )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 
@@ -184,33 +213,27 @@ class EmptyRobotEnv(Env):
             ped_actions_np,
         )
 
+        return state
+
+    def render(self):
+        """
+        Render the environment visually if in debug mode.
+
+        Raises RuntimeError if debug mode is not enabled.
+        """
+        if not self.sim_ui:
+            raise RuntimeError(
+                "Debug mode is not activated! Consider setting `debug=True!`"
+            )
+
+        state = self._prepare_visualizable_state()
+
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)
 
-    def seed(self, seed=None):
+    def record(self):
         """
-        Set the seed for this env's random number generator(s).
-
-        Note:
-            Some environments use multiple pseudorandom number generators.
-            We want to capture all such seeds used in order to ensure that
-            there aren't accidental correlations between multiple generators.
-
-        Returns:
-            list<bigint>: Returns the list of seeds used in this env's random
-            number generators. The first value in the list should be the
-            "main" seed, or the value which a reproducer should pass to
-            'seed'. Often, the main seed equals the provided 'seed', but
-            this won't be true if seed=None, for example.
-
-        TODO: validate this method
+        Records the current state as visualizable state and stores it in the list.
         """
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
-
-    def exit(self):
-        """
-        Clean up and exit the simulation UI, if it exists.
-        """
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()
+        state = self._prepare_visualizable_state()
+        self.recorded_states.append(state)

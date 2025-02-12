@@ -1,9 +1,3 @@
-from robot_sf.sensor.range_sensor import euclid_dist
-from robot_sf.nav.map_config import MapDefinition
-from robot_sf.nav.map_config import Obstacle
-from robot_sf.ped_ego.unicycle_drive import UnicycleAction
-from robot_sf.robot.bicycle_drive import BicycleAction
-from robot_sf.robot.differential_drive import DifferentialDriveAction
 from loguru import logger
 import numpy as np
 import pygame
@@ -13,6 +7,14 @@ from typing import Tuple, Union, List
 from dataclasses import dataclass, field
 
 import os
+
+from robot_sf.sensor.range_sensor import euclid_dist
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import Obstacle
+from robot_sf.ped_ego.unicycle_drive import UnicycleAction
+from robot_sf.robot.bicycle_drive import BicycleAction
+from robot_sf.util.types import Vec2D, RobotPose, PedPose, RgbColor, DifferentialDriveAction
+
 
 # Make moviepy optional
 try:
@@ -26,13 +28,6 @@ except ImportError:
     )
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
-
-
-Vec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
-PedPose = Tuple[Vec2D, float]
-RobotAction = Tuple[float, float]
-RgbColor = Tuple[int, int, int]
 
 
 BACKGROUND_COLOR = (255, 255, 255)

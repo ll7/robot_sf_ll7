@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
-from robot_sf.nav.nav_types import Vec2D
+from robot_sf.util.types import Vec2D
 
 
 @dataclass

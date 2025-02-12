@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 import numpy as np
 from gymnasium import spaces
 from collections import deque
+from robot_sf.util.types import PolarVec2D
 
-PolarVec2D = Tuple[float, float]
 
 OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"

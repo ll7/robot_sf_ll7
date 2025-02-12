@@ -1,5 +1,4 @@
 from math import pi, cos, sin
-from typing import Tuple
 
 import numpy as np
 from pytest import approx
@@ -7,7 +6,6 @@ from pytest import approx
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.sensor.range_sensor import lidar_ray_scan, LidarScannerSettings
 from robot_sf.util.types import Point2D
-
 
 NO_SCAN_NOISE = [0.0, 0.0]
 

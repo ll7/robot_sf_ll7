@@ -8,7 +8,8 @@ from loguru import logger
 from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.nav_types import Line2D, Rect, Zone, SvgRectangle, SvgPath
+from robot_sf.nav.nav_types import SvgRectangle, SvgPath
+from robot_sf.util.types import Line2D, Rect, Zone
 
 
 class SvgMapConverter:

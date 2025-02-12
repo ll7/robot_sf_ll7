@@ -2,15 +2,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import timeit
 
-from robot_sf.data_analysis.generate_dataset import extract_key_from_json
+from robot_sf.data_analysis.generate_dataset import (
+    extract_key_from_json,
+    extract_key_from_json_as_ndarray,
+)
 
 
 def plot_all_npc_ped_positions(filename: str):
     """Plot all NPC pedestrian positions from the given JSON file."""
 
     # Extract pedestrian positions
-    ped_positions = extract_key_from_json(filename, "pedestrian_positions")
-    ped_positions_array = np.array(ped_positions)
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
     x_vals = ped_positions_array[:, :, 0]
     y_vals = ped_positions_array[:, :, 1]

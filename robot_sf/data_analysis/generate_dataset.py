@@ -90,7 +90,7 @@ def convert_to_serializable(obj):
         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable!")
 
 
-def extract_key_from_json(filename: str, key: str):
+def extract_key_from_json(filename: str, key: str) -> list:
     """
     Extract values associated with the given key from a JSON file.
 
@@ -105,6 +105,25 @@ def extract_key_from_json(filename: str, key: str):
         data = json.load(file)
 
     return [item[key] for item in data]
+
+
+def extract_key_from_json_as_ndarray(filename: str, key: str) -> np.ndarray:
+    """
+    Extract values from JSON into numpy array.
+
+    Args:
+        filename (str): Path to the JSON file.
+        key (str): The key to extract values for.
+
+    Returns:
+        np.ndarray: A NumPy array of values associated with the given key.
+    """
+    data = extract_key_from_json(filename, key)
+
+    # Convert positions to NumPy arrays
+    np_array = np.array(data)
+
+    return np_array
 
 
 def get_file():

@@ -5,3 +5,7 @@ hang-closing = true
 in-place = true
 recursive = true
 aggressive = 4
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]

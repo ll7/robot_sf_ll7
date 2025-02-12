@@ -10,7 +10,8 @@ from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableSimState, VisualizableAction
 
 
-def main():
+def run():
+    """Convert the latest recorded file to JSON format."""
     filename = get_file()
     save_to_json(filename)
 
@@ -117,4 +118,4 @@ def get_file():
 
 
 if __name__ == "__main__":
-    main()
+    run()

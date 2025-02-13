@@ -1,7 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import norm
 
-from robot_sf.data_analysis.generate_dataset import extract_key_from_json_as_ndarray
+
+from robot_sf.data_analysis.generate_dataset import (
+    extract_key_from_json,
+    extract_key_from_json_as_ndarray,
+)
 
 
 def plot_single_splitted_traj(filename: str, ped_idx: int = 0):
@@ -174,11 +179,301 @@ def subplot_single_splitted_traj_acc(filename: str, ped_idx: float = 0):
     plt.savefig(f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}.png")
 
 
+def plot_acceleration_distribution(filename: str):
+    """
+    Calculate and plot the probability distribution of the acceleration of all pedestrians.
+    """
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+    _, num_pedestrians, _ = ped_positions_array.shape
+
+    all_accelerations = []
+
+    for ped_idx in range(num_pedestrians):
+        x_vals = ped_positions_array[:, ped_idx, 0]
+        y_vals = ped_positions_array[:, ped_idx, 1]
+
+        distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
+        start_idx = 0
+        for i, dist in enumerate(distances):
+            if dist > 2:  # Threshold for abnormal distance
+                velocities = calculate_velocity(
+                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                )
+                acceleration = calculate_acceleration(velocities)
+                all_accelerations.extend(acceleration)
+                start_idx = i + 1
+
+        velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
+        acceleration = calculate_acceleration(velocities)
+        all_accelerations.extend(acceleration)
+
+    max_acceleration = max(all_accelerations)
+    print(f"Maximum Acceleration: {max_acceleration}")
+
+    # Plot the histogram of accelerations
+    plt.hist(all_accelerations, bins=60, density=True, alpha=0.6, color="g")
+
+    # Fit a normal distribution to the data
+    mu, std = norm.fit(all_accelerations)
+
+    # Plot the PDF
+    xmin, xmax = plt.xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = norm.pdf(x, mu, std)
+    plt.plot(x, p, "k", linewidth=2)
+
+    plt.xlabel("Acceleration")
+    plt.ylabel("Probability Density")
+    plt.title("Probability Distribution of Pedestrian Accelerations")
+    # plt.savefig("robot_sf/data_analysis/plots/acceleration_distribution.png")
+    plt.show()
+
+
+def plot_velocity_distribution(filename: str):
+    """
+    Calculate and plot the probability distribution of the velocity of all pedestrians.
+    """
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+    _, num_pedestrians, _ = ped_positions_array.shape
+
+    all_velocities = []
+
+    for ped_idx in range(num_pedestrians):
+        x_vals = ped_positions_array[:, ped_idx, 0]
+        y_vals = ped_positions_array[:, ped_idx, 1]
+
+        distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
+        start_idx = 0
+        for i, dist in enumerate(distances):
+            if dist > 2:  # Threshold for abnormal distance
+                velocities = calculate_velocity(
+                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                )
+                all_velocities.extend(velocities)
+                start_idx = i + 1
+
+        velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
+        all_velocities.extend(velocities)
+
+    max_velocity = max(all_velocities)
+    print(f"Maximum Velocity: {max_velocity}")
+
+    # Plot the histogram of velocities
+    plt.hist(all_velocities, bins=60, density=True, alpha=0.6, color="b")
+
+    # Fit a normal distribution to the data
+    mu, std = norm.fit(all_velocities)
+
+    # Plot the PDF
+    xmin, xmax = plt.xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = norm.pdf(x, mu, std)
+    plt.plot(x, p, "k", linewidth=2)
+
+    plt.xlabel("Velocity")
+    plt.ylabel("Probability Density")
+    plt.title("Probability Distribution of Pedestrian Velocities")
+    # plt.savefig("robot_sf/data_analysis/plots/velocity_distribution.png")
+    plt.show()
+
+
+def subplot_velocity_distribution(filename: str):
+    """
+    Calculate and plot the probability distribution of the velocity of all pedestrians.
+    """
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
+    _, num_pedestrians, _ = ped_positions_array.shape
+
+    all_npc_velocities = []
+    ego_velocities = calculate_velocity(ego_positions[:, 0], ego_positions[:, 1])
+
+    for ped_idx in range(num_pedestrians):
+        x_vals = ped_positions_array[:, ped_idx, 0]
+        y_vals = ped_positions_array[:, ped_idx, 1]
+
+        distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
+        start_idx = 0
+        for i, dist in enumerate(distances):
+            if dist > 2:  # Threshold for abnormal distance
+                velocities = calculate_velocity(
+                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                )
+                all_npc_velocities.extend(velocities)
+                start_idx = i + 1
+
+        velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
+        all_npc_velocities.extend(velocities)
+
+    max_ego = max(ego_velocities)
+    max_npc = max(all_npc_velocities)
+    print(f"Maximum Velocity Ego: {max_ego}, NPC: {max_npc}")
+
+    # Plot the histogram of velocities
+    _, axes = plt.subplots(1, 2, figsize=(18, 6))
+
+    axes[0].hist(all_npc_velocities, bins=60, density=True, alpha=0.6, color="b")
+    mu_npc, std_npc = norm.fit(all_npc_velocities)
+    x_npc = np.linspace(0, max_npc, 100)
+    p_npc = norm.pdf(x_npc, mu_npc, std_npc)
+    axes[0].plot(x_npc, p_npc, "k", linewidth=2)
+    axes[0].set_title("Probability Distribution of NPC Pedestrian Velocities")
+    axes[0].set_xlabel("Velocity")
+    axes[0].set_ylabel("Probability Density")
+
+    axes[1].hist(ego_velocities, bins=60, density=True, alpha=0.6, color="r")
+    mu_ego, std_ego = norm.fit(ego_velocities)
+    x_ego = np.linspace(0, max_ego, 100)
+    p_ego = norm.pdf(x_ego, mu_ego, std_ego)
+    axes[1].plot(x_ego, p_ego, "k", linewidth=2)
+    axes[1].set_title("Probability Distribution of Ego Pedestrian Velocities")
+    axes[1].set_xlabel("Velocity")
+    axes[1].set_ylabel("Probability Density")
+
+    plt.tight_layout()
+    plt.savefig("robot_sf/data_analysis/plots/velocity_distribution_comparison.png")
+    plt.show()
+
+
+def subplot_acceleration_distribution(filename: str):
+    """
+    Calculate and plot the probability distribution of the acceleration of all pedestrians.
+    """
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
+    _, num_pedestrians, _ = ped_positions_array.shape
+
+    all_npc_accelerations = []
+    ego_velocities = calculate_velocity(ego_positions[:, 0], ego_positions[:, 1])
+    ego_accelerations = calculate_acceleration(ego_velocities)
+
+    for ped_idx in range(num_pedestrians):
+        x_vals = ped_positions_array[:, ped_idx, 0]
+        y_vals = ped_positions_array[:, ped_idx, 1]
+
+        distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
+        start_idx = 0
+        for i, dist in enumerate(distances):
+            if dist > 2:  # Threshold for abnormal distance
+                velocities = calculate_velocity(
+                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                )
+                accelerations = calculate_acceleration(velocities)
+                all_npc_accelerations.extend(accelerations)
+                start_idx = i + 1
+
+        velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
+        accelerations = calculate_acceleration(velocities)
+        all_npc_accelerations.extend(accelerations)
+
+    max_ego = max(ego_accelerations)
+    max_npc = max(all_npc_accelerations)
+    print(f"Maximum Acceleration Ego: {max_ego}, NPC: {max_npc}")
+
+    # Plot the histogram of accelerations
+    _, axes = plt.subplots(1, 2, figsize=(18, 6))
+
+    axes[0].hist(all_npc_accelerations, bins=60, density=True, alpha=0.6, color="b")
+    mu_npc, std_npc = norm.fit(all_npc_accelerations)
+    x_npc = np.linspace(0, max_npc, 100)
+    p_npc = norm.pdf(x_npc, mu_npc, std_npc)
+    axes[0].plot(x_npc, p_npc, "k", linewidth=2)
+    axes[0].set_title("Probability Distribution of NPC Pedestrian Accelerations")
+    axes[0].set_xlabel("Acceleration")
+    axes[0].set_ylabel("Probability Density")
+
+    axes[1].hist(ego_accelerations, bins=60, density=True, alpha=0.6, color="r")
+    mu_ego, std_ego = norm.fit(ego_accelerations)
+    x_ego = np.linspace(0, max_ego, 100)
+    p_ego = norm.pdf(x_ego, mu_ego, std_ego)
+    axes[1].plot(x_ego, p_ego, "k", linewidth=2)
+    axes[1].set_title("Probability Distribution of Ego Pedestrian Accelerations")
+    axes[1].set_xlabel("Acceleration")
+    axes[1].set_ylabel("Probability Density")
+
+    plt.tight_layout()
+    plt.savefig("robot_sf/data_analysis/plots/acceleration_distribution_comparison.png")
+    plt.show()
+
+
+def subplot_velocity_distribution_with_positions(filename: str):
+    """
+    Calculate and plot the probability distribution of the velocity of all pedestrians,
+    and plot the positions of NPC pedestrians color-coded by their velocities.
+    """
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+    _, num_pedestrians, _ = ped_positions_array.shape
+
+    all_npc_velocities = []
+    all_npc_positions = []
+
+    for ped_idx in range(num_pedestrians):
+        x_vals = ped_positions_array[:, ped_idx, 0]
+        y_vals = ped_positions_array[:, ped_idx, 1]
+
+        distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
+        start_idx = 0
+        for i, dist in enumerate(distances):
+            if dist > 2:  # Threshold for abnormal distance
+                velocities = calculate_velocity(
+                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                )
+                all_npc_velocities.extend(velocities)
+                all_npc_positions.extend(
+                    zip(x_vals[start_idx + 1 : i + 1], y_vals[start_idx + 1 : i + 1])
+                )
+                start_idx = i + 1
+
+        velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
+        all_npc_velocities.extend(velocities)
+        all_npc_positions.extend(zip(x_vals[start_idx + 1 :], y_vals[start_idx + 1 :]))
+
+    max_velocity = max(all_npc_velocities)
+    print(f"Maximum Velocity: {max_velocity}")
+
+    # Plot the histogram of velocities
+    fig, axes = plt.subplots(1, 2, figsize=(27, 6))
+
+    axes[0].hist(all_npc_velocities, bins=60, density=True, alpha=0.6, color="b")
+    mu_npc, std_npc = norm.fit(all_npc_velocities)
+    x_npc = np.linspace(0, max_velocity, 100)
+    p_npc = norm.pdf(x_npc, mu_npc, std_npc)
+    axes[0].plot(x_npc, p_npc, "k", linewidth=2)
+    axes[0].set_title("Probability Distribution of NPC Pedestrian Velocities")
+    axes[0].set_xlabel("Velocity")
+    axes[0].set_ylabel("Probability Density")
+
+    # Plot the positions of NPC pedestrians color-coded by their velocities
+    all_npc_positions = np.array(all_npc_positions)
+    scatter = axes[1].scatter(
+        all_npc_positions[:, 0],
+        all_npc_positions[:, 1],
+        c=all_npc_velocities,
+        cmap="viridis",
+        alpha=0.6,
+    )
+    axes[1].set_title("NPC Pedestrian Positions Color-Coded by Velocity")
+    axes[1].set_xlabel("X Position")
+    axes[1].set_ylabel("Y Position")
+    fig.colorbar(scatter, ax=axes[1], label="Velocity")
+
+    plt.tight_layout()
+    plt.savefig("robot_sf/data_analysis/plots/velocity_distribution_with_positions.png")
+    plt.show()
+
+
 def main():
     filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
-    plot_all_splitted_traj(filename)
+    # filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
+    # plot_all_splitted_traj(filename)
     # plot_single_splitted_traj(filename, ped_idx=15)
     # subplot_single_splitted_traj_acc(filename, ped_idx=3)
+    # plot_acceleration_distribution(filename)
+    # plot_velocity_distribution(filename)
+
+    # subplot_velocity_distribution(filename)
+    # subplot_acceleration_distribution(filename)
+    subplot_velocity_distribution_with_positions(filename)
 
 
 if __name__ == "__main__":

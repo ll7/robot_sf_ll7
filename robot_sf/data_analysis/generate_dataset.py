@@ -25,10 +25,7 @@ def save_to_json(filename_pkl: str):
 
     """
     match = re.search(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", str(filename_pkl))
-    if match:
-        match = match.group(1)
-    else:
-        match = "unknown"
+    match = match.group(1) if match else "unknown"
     filename_json = f"robot_sf/data_analysis/datasets/{match}.json"
 
     states, _ = load_states(filename_pkl)

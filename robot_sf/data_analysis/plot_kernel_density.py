@@ -8,12 +8,12 @@ from robot_sf.data_analysis.generate_dataset import (
 )
 
 
-def plot_kde_on_map(filename: str):
+def plot_kde_on_map(filename: str, bandwidth: float = 1.0):
     """Plot the Kernel Density Estimation of pedestrian positions on a map."""
     peds_data = extract_key_from_json_as_ndarray(filename, "pedestrian_positions").reshape(-1, 2)
 
     # Fit the KernelDensity model (with Gaussian kernel)
-    kde = KernelDensity(kernel="gaussian", bandwidth=1)  # Adjust bandwidth as needed
+    kde = KernelDensity(kernel="gaussian", bandwidth=bandwidth)  # Adjust bandwidth as needed
     kde.fit(peds_data)
 
     # Create a grid of points to evaluate the density on
@@ -59,26 +59,26 @@ def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
     return axis_grid, density
 
 
-def plot_kde_in_x_y(filename: str):
+def plot_kde_in_x_y(filename: str, bandwidth: float = 0.1):
     """Plot the Kernel Density Estimation of npc and ego positions in X and Y axes."""
     peds_data = extract_key_from_json_as_ndarray(filename, "pedestrian_positions").reshape(-1, 2)
     ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 
     # Perform KDE on npc data x positions
     x_positions = peds_data[:, 0].reshape(-1, 1)
-    x_grid_npc, density_npc_x = perform_kde_on_axis(x_positions)
+    x_grid_npc, density_npc_x = perform_kde_on_axis(x_positions, bandwidth)
 
     # Perform KDE on ego_pedestrian x positions
     x_positions_ego = ego_data[:, 0].reshape(-1, 1)
-    x_grid_ego, density_ego_x = perform_kde_on_axis(x_positions_ego)
+    x_grid_ego, density_ego_x = perform_kde_on_axis(x_positions_ego, bandwidth)
 
     # Perform KDE on npc data y positions
     y_positions = peds_data[:, 1].reshape(-1, 1)
-    y_grid_npc, density_npc_y = perform_kde_on_axis(y_positions)
+    y_grid_npc, density_npc_y = perform_kde_on_axis(y_positions, bandwidth)
 
     # Perform KDE on ego_pedestrian y positions
     y_positions_ego = ego_data[:, 1].reshape(-1, 1)
-    y_grid_ego, density_ego_y = perform_kde_on_axis(y_positions_ego)
+    y_grid_ego, density_ego_y = perform_kde_on_axis(y_positions_ego, bandwidth)
 
     # Plotting the results side by side
     _, axes = plt.subplots(1, 2, figsize=(18, 6))

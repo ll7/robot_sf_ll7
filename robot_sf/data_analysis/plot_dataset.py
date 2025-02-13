@@ -14,6 +14,7 @@ def plot_all_npc_ped_positions(filename: str):
     # Extract pedestrian positions
     ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
+    # E.g.: For only 100 timesteps x_vals = ped_positions_array[:100, :, 0]
     x_vals = ped_positions_array[:, :, 0]
     y_vals = ped_positions_array[:, :, 1]
 
@@ -30,8 +31,13 @@ def plot_all_npc_ped_positions(filename: str):
     plt.savefig("robot_sf/data_analysis/plots/all_npc_pedestrian_positions.png")
 
 
-def plot_all_npc_ped_velocities(filename: str, raw: bool):
-    """Plot all NPC pedestrian velocities from the given JSON file."""
+def plot_all_npc_ped_velocities(filename: str, raw: bool = True):
+    """
+    Plot all NPC pedestrian velocities from the given JSON file.
+    Based on the actions of the npc pedestrians.
+
+    Args: raw (bool): If raw is True, dont use the applied scaling factor (for visual purpose).
+    """
 
     # Extract pedestrian actions
     ped_actions = extract_key_from_json(filename, "ped_actions")
@@ -82,10 +88,15 @@ def plot_ego_ped_velocity(filename):
         item["action"][0] for item in extract_key_from_json(filename, "ego_ped_action")
     ]
 
-    ego_ped_velocity = np.cumsum(ego_ped_acceleration)
+    ego_ped_velocity = []
+    cumulative_sum = 0.0
+    for acc in ego_ped_acceleration:
+        cumulative_sum += acc
+        # Clip, because the ego pedestrian can't go faster than 3 m/s
+        cumulative_sum = np.clip(cumulative_sum, None, 3)
+        ego_ped_velocity.append(cumulative_sum)
 
-    # Clip the velocity to a maximum of 3
-    ego_ped_velocity = np.clip(ego_ped_velocity, None, 3)
+    ego_ped_velocity = np.array(ego_ped_velocity)
 
     plt.plot(ego_ped_velocity, label="Velocity")
     plt.xlabel("Timestep")
@@ -114,6 +125,9 @@ def main():
     # f'plot_ego_ped_velocity(filename="{directory}/2025-01-16_11-47-44.json")'
 
     print_execution_time(f'plot_ego_ped_velocity(filename="{directory}/2025-01-16_11-47-44.json")')
+    print_execution_time(
+        f'plot_ego_ped_acceleration(filename="{directory}/2025-01-16_11-47-44.json")'
+    )
 
 
 if __name__ == "__main__":

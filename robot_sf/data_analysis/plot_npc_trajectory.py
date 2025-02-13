@@ -118,7 +118,7 @@ def calculate_acceleration(velocities: np.ndarray, time_interval: float = 0.1) -
     return accelerations
 
 
-def subplot_single_splitted_traj_acc(filename: str, ped_idx: float = 0):
+def subplot_single_splitted_traj_acc(filename: str, ped_idx: int = 0):
     """
     Plot from JSON file for a single pedestrian id trajectories, velocity and acceleration.
     """
@@ -273,7 +273,7 @@ def plot_velocity_distribution(filename: str):
     plt.xlabel("Velocity")
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Velocities")
-    # plt.savefig("robot_sf/data_analysis/plots/velocity_distribution.png")
+    plt.savefig("robot_sf/data_analysis/plots/velocity_distribution.png")
     plt.show()
 
 
@@ -368,14 +368,17 @@ def subplot_acceleration_distribution(filename: str):
 
     max_ego = max(ego_accelerations)
     max_npc = max(all_npc_accelerations)
+    min_ego = min(ego_accelerations)
+    min_npc = min(all_npc_accelerations)
     print(f"Maximum Acceleration Ego: {max_ego}, NPC: {max_npc}")
+    print(f"Minimum Acceleration Ego: {min_ego}, NPC: {min_npc}")
 
     # Plot the histogram of accelerations
     _, axes = plt.subplots(1, 2, figsize=(18, 6))
 
     axes[0].hist(all_npc_accelerations, bins=60, density=True, alpha=0.6, color="b")
     mu_npc, std_npc = norm.fit(all_npc_accelerations)
-    x_npc = np.linspace(0, max_npc, 100)
+    x_npc = np.linspace(min_npc, max_npc, 100)
     p_npc = norm.pdf(x_npc, mu_npc, std_npc)
     axes[0].plot(x_npc, p_npc, "k", linewidth=2)
     axes[0].set_title("Probability Distribution of NPC Pedestrian Accelerations")
@@ -384,7 +387,7 @@ def subplot_acceleration_distribution(filename: str):
 
     axes[1].hist(ego_accelerations, bins=60, density=True, alpha=0.6, color="r")
     mu_ego, std_ego = norm.fit(ego_accelerations)
-    x_ego = np.linspace(0, max_ego, 100)
+    x_ego = np.linspace(min_ego, max_ego, 100)
     p_ego = norm.pdf(x_ego, mu_ego, std_ego)
     axes[1].plot(x_ego, p_ego, "k", linewidth=2)
     axes[1].set_title("Probability Distribution of Ego Pedestrian Accelerations")
@@ -463,17 +466,17 @@ def subplot_velocity_distribution_with_positions(filename: str):
 
 
 def main():
-    filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
-    # filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
+    # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
+    filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
     # plot_all_splitted_traj(filename)
     # plot_single_splitted_traj(filename, ped_idx=15)
     # subplot_single_splitted_traj_acc(filename, ped_idx=3)
     # plot_acceleration_distribution(filename)
     # plot_velocity_distribution(filename)
 
-    # subplot_velocity_distribution(filename)
+    subplot_velocity_distribution(filename)
     # subplot_acceleration_distribution(filename)
-    subplot_velocity_distribution_with_positions(filename)
+    # subplot_velocity_distribution_with_positions(filename)
 
 
 if __name__ == "__main__":

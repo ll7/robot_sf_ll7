@@ -18,7 +18,7 @@ profiles
 pysf_tests
 pysocialforce
 recordings/*.pkl
-robotsf/data_analysis/plots/*.png
-robotsf/data_analysis/datasets/*.json
+robot_sf/data_analysis/plots/*.png
+robot_sf/data_analysis/datasets/*.json
 wandb
 *.DS_Store

@@ -39,7 +39,14 @@ def save_to_json(filename_pkl: str):
 
     Args:
         filename_pkl (str): The path to the recorded data in pickle format (*.pkl).
+
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
     """
+    # Verify that the file exists
+    if not os.path.exists(filename_pkl):
+        raise FileNotFoundError(f"File {filename_pkl} not found!")
+
     # Extract timestamp from filename using regular expression
     match = re.search(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", str(filename_pkl))
     timestamp = match.group(1) if match else "unknown"

@@ -1,3 +1,13 @@
+"""
+Module for converting the latest simulation recording from pickle to JSON format.
+
+This module performs the following:
+- Finds the most recent recording file in the 'recordings' folder.
+- Loads the simulation states from that file.
+- Converts the simulation states into a JSON serializable format.
+- Saves the converted data as a JSON file named after the recording's timestamp.
+"""
+
 import os
 import json
 import re
@@ -11,25 +21,34 @@ from robot_sf.render.sim_view import VisualizableSimState, VisualizableAction
 
 
 def run():
-    """Convert the latest recorded file to JSON format."""
+    """
+    Main entry point of the module.
+
+    Converts the most recent recording file from pickle format to a JSON dataset.
+    """
     filename = get_file()
     save_to_json(filename)
 
 
 def save_to_json(filename_pkl: str):
     """
-    Save the given data to a JSON file named after the recording timestamp.
+    Save simulation states from a pickle recording file to a JSON file.
+
+    The JSON file is named based on the recording timestamp extracted from the filename.
+    If no timestamp can be extracted, 'unknown' is used.
 
     Args:
-        filename_pkl (str): Filename of recorded data in pickle format. (*.pkl)
-
+        filename_pkl (str): The path to the recorded data in pickle format (*.pkl).
     """
+    # Extract timestamp from filename using regular expression
     match = re.search(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", str(filename_pkl))
-    match = match.group(1) if match else "unknown"
-    filename_json = f"robot_sf/data_analysis/datasets/{match}.json"
+    timestamp = match.group(1) if match else "unknown"
+    filename_json = f"robot_sf/data_analysis/datasets/{timestamp}.json"
 
+    # Load simulation states and map definition, which is not used
     states, _ = load_states(filename_pkl)
 
+    # Write the states into a JSON file using a custom serializer
     with open(filename_json, "w", encoding="utf-8") as file:
         json.dump(states, file, indent=4, default=convert_to_serializable)
 
@@ -38,22 +57,26 @@ def save_to_json(filename_pkl: str):
 
 def convert_to_serializable(obj):
     """
-    Recursively converts various types of objects into JSON serializable formats.
+    Recursively convert non-JSON-serializable objects into serializable ones.
+
+    Works with VisualizableSimState, VisualizableAction, numpy arrays, numpy scalar types,
+    and nested lists or tuples. Custom conversion is applied to select attributes
+    for simulation states and actions.
 
     Args:
-        obj: The object to be converted. It can be an instance of VisualizableSimState, ...
+        obj: The object to be converted.
 
     Returns:
-        A JSON serializable representation of the input object.
+        A JSON-serializable representation of the object.
 
     Raises:
-        TypeError: If the object type is not supported for conversion.
-
+        TypeError: If the object cannot be converted to a serializable format.
     Notes:
         keys_sim_state and keys_action are used to filter out unwanted keys.
         If you want them just add them to the list.
         Keys can be found in the VisualizableSimState and VisualizableAction classes.
     """
+    # Only include desired keys for simulation states and actions
     keys_sim_state = [
         "timestep",
         "pedestrian_positions",
@@ -89,14 +112,14 @@ def convert_to_serializable(obj):
 
 def extract_key_from_json(filename: str, key: str) -> list:
     """
-    Extract values associated with the given key from a JSON file.
+    Extract a list of values associated with a given key from a JSON file.
 
     Args:
         filename (str): Path to the JSON file.
-        key (str): The key to extract values for.
+        key (str): The key for which values should be extracted.
 
     Returns:
-        list: A list of values associated with the given key.
+        list: A list of values corresponding to the key in each JSON object.
     """
     with open(filename, "r", encoding="utf-8") as file:
         data = json.load(file)
@@ -106,26 +129,29 @@ def extract_key_from_json(filename: str, key: str) -> list:
 
 def extract_key_from_json_as_ndarray(filename: str, key: str) -> np.ndarray:
     """
-    Extract values from JSON into numpy array.
+    Extract values for a given key from a JSON file and return them as a NumPy array.
 
     Args:
         filename (str): Path to the JSON file.
-        key (str): The key to extract values for.
+        key (str): The key for which values should be extracted.
 
     Returns:
-        np.ndarray: A NumPy array of values associated with the given key.
+        np.ndarray: A NumPy array of values associated with the key.
     """
     data = extract_key_from_json(filename, key)
-
-    # Convert positions to NumPy arrays
+    # Convert the list of positions to a NumPy array.
     np_array = np.array(data)
-
     return np_array
 
 
-def get_file():
-    """Get the latest recorded file."""
+def get_file() -> Path:
+    """
+    Get the most recent recording file from the 'recordings' directory.
 
+    Returns:
+        Path: A Path object pointing to the latest file.
+    """
+    # Find the file with the most recent creation time in the recordings folder.
     filename = max(
         os.listdir("recordings"),
         key=lambda x: os.path.getctime(os.path.join("recordings", x)),

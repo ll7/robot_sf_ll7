@@ -6,7 +6,7 @@ To perform data analysis on a specific episode, you need to follow the steps
 
 A JSON File can be created by running the [generate_dataset.py](../robot_sf/data_analysis/generate_dataset.py) script.
 
-By just running the scriot, the latest recorded .pkl file will be converted.
+By just running the script, the latest recorded `*.pkl` file will be converted.
 
 For a specific file adjust the filename argument.
 

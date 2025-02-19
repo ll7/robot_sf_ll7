@@ -231,7 +231,7 @@ class PedestrianEnv(Env):
         )
 
         # Construct ray vectors for visualization
-        robot_ray_vecs = render_lidar(distances, directions, robot_pos)
+        robot_ray_vecs = render_lidar(robot_pos, distances, directions)
 
         # Prepare npc_pedestrian action visualization
         ped_actions = zip(
@@ -256,7 +256,7 @@ class PedestrianEnv(Env):
             self.ped_state.ego_ped_occupancy,
             self.env_config.lidar_config,
         )
-        ego_ped_ray_vecs = render_lidar(distances, directions, ego_ped_pos)
+        ego_ped_ray_vecs = render_lidar(ego_ped_pos, distances, directions)
 
         # Package the state for visualization
         state = VisualizableSimState(

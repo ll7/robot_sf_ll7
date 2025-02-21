@@ -10,7 +10,7 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
-from typing import Tuple, Callable
+from typing import Callable
 from copy import deepcopy
 
 import numpy as np

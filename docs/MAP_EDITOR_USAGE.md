@@ -1,5 +1,9 @@
-
 # robot-sf
+
+**DEPRECATED**
+
+> [!CAUTION]
+> DEPRECATED: This method is no longer supported! Use [svg editor](./SVG_MAP_EDITOR.md) instead.
 
 ## Map Editor
 

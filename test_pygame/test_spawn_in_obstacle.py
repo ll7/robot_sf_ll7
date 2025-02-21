@@ -1,5 +1,5 @@
 """
-Test what happens if pedestrian and robot spwan in an obstacle.
+Test what happens if pedestrian and robot spawn in an obstacle.
 """
 
 from robot_sf.gym_env.robot_env_with_pedestrian_obstacle_forces import (
@@ -25,6 +25,6 @@ def test_spawn_in_obstacle():
 
 
 if __name__ == "__main__":
-    logger.info("Testing Pedestrian and Obstacle forces")
+    logger.info("Testing Spawn in Obstacle")
     test_spawn_in_obstacle()
     logger.info("All tests passed")

@@ -1,13 +1,3 @@
-HELP_MSG = """This tool converts SVG maps from OpenStreetMap to JSON maps that can be imported
-into the RobotSF simulator.
-
-USAGE
-  python3 svg_conv.py <osm_input_file.svg> <output_file.json>
-
-The converter extracts all polygons of given colors, which is currently
-only the borders of houses (brown). Feel free to modify this script to support
-your own use case."""
-
 import os
 import sys
 import json
@@ -17,6 +7,15 @@ from svgelements import SVG, Point, Path
 
 from robot_sf.util.types import Vec2D, RgbColor
 
+HELP_MSG = """This tool converts SVG maps from OpenStreetMap to JSON maps that can be imported
+into the RobotSF simulator.
+
+USAGE
+  python3 svg_conv.py <osm_input_file.svg> <output_file.json>
+
+The converter extracts all polygons of given colors, which is currently
+only the borders of houses (brown). Feel free to modify this script to support
+your own use case."""
 
 def paths_of_svg(svg: SVG) -> List[Path]:
     return [e for e in svg.elements() if isinstance(e, Path)]

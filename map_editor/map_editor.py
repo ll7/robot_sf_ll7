@@ -6,7 +6,6 @@ from threading import Thread
 
 import tkinter as tk
 import tkinter.scrolledtext as tks
-import numpy as np
 
 from map_editor.map_file_parser import parse_mapfile_text, VisualizableMapConfig
 from robot_sf.util.types import Vec2D, Rect

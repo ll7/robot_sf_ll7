@@ -28,17 +28,26 @@ jobs:
       - name: Install pip dependencies
         run: |
           python -m pip install pip --upgrade
-          python -m pip install wheel==0.37.1 setuptools==59.6.0
-          python -m pip install -r ./fast-pysf/requirements.txt
-          python -m pip install -r ./requirements.txt
+          pip install uv
+          uv --version
+          uv venv --python 3.12
+          source .venv/bin/activate
+          uv pip install wheel==0.37.1 setuptools==59.6.0
+          uv pip install -r ./fast-pysf/requirements.txt
+          uv pip install -r ./requirements.txt
 
       - name: Register modules under test
         run: |
-          cd fast-pysf && python -m pip install . && cd ..
-          python -m pip install .
+          source .venv/bin/activate
+          cd fast-pysf && uv pip install . && cd ..
+          uv pip install .
 
       - name: Run tests
-        run: python -m pytest tests
+        run: |
+          source .venv/bin/activate
+          python -m pytest tests
 
       - name: Run linter
-        run: python -m pylint robot_sf
+        run: |
+          source .venv/bin/activate
+          python -m pylint robot_sf

@@ -12,7 +12,7 @@ It also defines the action and observation spaces for the pedestrian.
 
 import os
 import datetime
-from typing import Tuple, Callable, List
+from typing import Callable, List
 from copy import deepcopy
 import pickle
 

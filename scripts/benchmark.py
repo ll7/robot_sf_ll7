@@ -10,7 +10,7 @@ def benchmark():
     model = PPO.load("./model/ppo_model", env=env)
     obs = env.reset()
 
-    peds_sim = env.sim_env
+    _peds_sim = env.sim_env
 
     env.step(env.action_space.sample())
     env.reset()

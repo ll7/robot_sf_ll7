@@ -1,10 +1,3 @@
-[project]
-name = "robot_sf"
-requires-python = ">=3.10"
-readme = "README.md"
-license = { file = "LICENSE" }
-version = "2.0.1"
-
 [tool.autopep8]
 max_line_length = 100
 verbose = false

@@ -11,8 +11,19 @@ for navigating a crowd with autonomous micromobility vehicles
 HOME_REPO = "https://github.com/Bonifatius94/robot_env"
 EXCLUDE_FILES = []
 PACKAGE_DATA = {"robot_sf": ["maps/*.json"]}
-INSTALL_REQUIREMENTS = ["numpy", "gymnasium", "pylint", "pytest", "scalene", "numba", "pygame",
-                        "stable-baselines3", "tqdm", "rich", "tensorboard"]
+INSTALL_REQUIREMENTS = [
+    "numpy",
+    "gymnasium",
+    "pylint",
+    "pytest",
+    "scalene",
+    "numba",
+    "pygame",
+    "stable-baselines3",
+    "tqdm",
+    "rich",
+    "tensorboard",
+]
 # TODO Update this package information
 
 
@@ -48,5 +59,5 @@ setup(
     install_requires=INSTALL_REQUIREMENTS,
     zip_safe=False,
     include_package_data=True,
-    python_requires=">=3.10"
-    )
+    python_requires=">=3.10",
+)

@@ -138,7 +138,7 @@ class SvgMapConverter:
         logger.info(f"Parsed {len(rect_info)} rects in the SVG file")
         self.rect_info = rect_info
 
-    def _info_to_mapdefintion(self) -> MapDefinition:
+    def _info_to_mapdefintion(self) -> MapDefinition:  # noqa: C901
         """
         Create a MapDefinition object from the path and rectangle information.
         """

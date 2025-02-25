@@ -82,7 +82,7 @@ def run_standardized_benchmark(
     # Track timing
     step_times = []
     episodes = 0
-    obs = env.reset()
+    obs, _ = env.reset()
 
     logger.info("Starting benchmark run...")
     for i in range(num_steps):
@@ -101,8 +101,8 @@ def run_standardized_benchmark(
 
         if done:
             episodes += 1
-            obs = env.reset()
-
+            obs, _ = env.reset()
+        
         if i % 1000 == 0:
             logger.debug(f"Completed {i}/{num_steps} steps")
 
@@ -218,7 +218,9 @@ if __name__ == "__main__":
     logger.info("Running standardized benchmark...")
 
     # Run benchmark
-    metrics = run_standardized_benchmark()
+    metrics = run_standardized_benchmark(
+        model_path="model/ppo_model_retrained_10m_2025-02-01.zip"
+    )
 
     logger.info(f"Steps per second: {metrics.steps_per_second:.2f}")
     logger.info(f"Average step time: {metrics.avg_step_time_ms:.2f} ms")

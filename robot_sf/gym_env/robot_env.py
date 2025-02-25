@@ -152,10 +152,23 @@ class RobotEnv(BaseEnv):
 
     def reset(self, seed=None, options=None):
         """
-        Reset the environment state to start a new episode.
+        Reset the environment to an initial state to begin a new episode.
+
+        This method performs the following operations:
+        1. Calls the superclass reset method with the provided seed and options.
+        2. Clears the stored last action.
+        3. Resets the internal state of the simulator.
+        4. Resets the environment's state to obtain the initial observation.
+        5. If recording is enabled, saves the current recording.
+
+        Parameters:
+            seed (Optional[int]): The seed value for environment reset.
+            options (Optional[dict]): Additional options for the reset process.
 
         Returns:
-        - obs: The initial observation after resetting the environment.
+            tuple: A tuple containing:
+                - obs: The initial observation after the environment reset.
+                - info (dict): A dictionary with auxiliary information.
         """
         super().reset(seed=seed, options=options)
         # Reset last_action

@@ -179,7 +179,7 @@ class SimulationView:
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
-    def render(self, state: VisualizableSimState, sleep_time: float = 0.01):
+    def render(self, state: VisualizableSimState, sleep_time: float = 0.01):  # noqa: C901
         """
         Render one frame and handle events.
 

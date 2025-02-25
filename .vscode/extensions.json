@@ -6,6 +6,7 @@
         "github.vscode-pull-request-github",
         "ms-toolsai.tensorboard",
         "njpwerner.autodocstring",
-        "ms-python.black-formatter"
+        "ms-python.black-formatter",
+        "charliermarsh.ruff"
     ]
 }

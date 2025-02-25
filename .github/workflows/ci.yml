@@ -38,11 +38,16 @@ jobs:
 
       - name: Register modules under test
         run: |
+          source .venv/bin/activate
           cd fast-pysf && uv pip install . && cd ..
           uv pip install .
 
       - name: Run tests
-        run: python -m pytest tests
+        run: |
+          source .venv/bin/activate
+          python -m pytest tests
 
       - name: Run linter
-        run: python -m pylint robot_sf
+        run: |
+          source .venv/bin/activate
+          python -m pylint robot_sf

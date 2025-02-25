@@ -2,7 +2,7 @@
 An empty environment for the robot to drive to several goals.
 """
 
-from typing import Tuple, Callable
+from typing import Callable
 from copy import deepcopy
 
 import numpy as np

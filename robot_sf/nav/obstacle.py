@@ -48,7 +48,7 @@ class Obstacle:
         ]
 
         # Remove fake lines that are just points
-        edges = list(filter(lambda l: l[0] != l[1], edges))
+        edges = list(filter(lambda edge: edge[0] != edge[1], edges))
 
         # Create lines from edges
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]

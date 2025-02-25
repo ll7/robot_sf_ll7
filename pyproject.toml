@@ -1,3 +1,7 @@
+[project]
+name = "robot_sf"
+version = "3.0.0"
+
 [tool.autopep8]
 max_line_length = 100
 verbose = false

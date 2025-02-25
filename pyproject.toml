@@ -1,3 +1,33 @@
+[project]
+name = "robot_sf"
+version = "2.0.0"
+description = """
+This package allows implementing a "gymnasium-style" environment
+for navigating a crowd with autonomous micromobility vehicles
+"""
+authors = [
+    {name = "Marco Tröster", email = "marco.troester.student@uni-augsburg.de"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "gymnasium",
+    "pylint",
+    "pytest",
+    "scalene",
+    "numba",
+    "pygame",
+    "stable-baselines3",
+    "tqdm",
+    "rich",
+    "tensorboard",
+]
+license = {text = "GPLv3"}
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.autopep8]
 max_line_length = 100
 verbose = false

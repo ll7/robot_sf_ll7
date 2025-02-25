@@ -51,3 +51,19 @@ jobs:
         run: |
           source .venv/bin/activate
           python -m pylint robot_sf
+
+  ruff_linting:
+    runs-on: ubuntu-latest
+    steps:
+      # clone the source code containing the package version generation script
+      - name: Checkout source code
+        uses: actions/checkout@main
+        with:
+          submodules: true
+
+      - name: Run Ruff
+        uses: astral-sh/ruff-action@v3
+      - name: Ruff Check
+        run: ruff check
+      - name: Ruff Format
+        run: ruff format

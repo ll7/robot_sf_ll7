@@ -14,7 +14,7 @@ def benchmark():
 
     env.step(env.action_space.sample())
     env.reset()
-    print('start of simulation')
+    print("start of simulation")
 
     start_time = time.perf_counter()
     scalene_profiler.start()
@@ -30,15 +30,16 @@ def benchmark():
         if done:
             episode += 1
             print(
-                f'end of episode {episode}, total rewards {ep_rewards:.3f}, remaining steps {total_steps - step}')
+                f"end of episode {episode}, total rewards {ep_rewards:.3f}, remaining steps {total_steps - step}"
+            )
             ep_rewards = 0
             obs = env.reset()
 
-    print('end of simulation')
+    print("end of simulation")
     scalene_profiler.stop()
 
     end_time = time.perf_counter()
-    print(f'benchmark took {end_time - start_time} seconds')
+    print(f"benchmark took {end_time - start_time} seconds")
 
 
 if __name__ == "__main__":

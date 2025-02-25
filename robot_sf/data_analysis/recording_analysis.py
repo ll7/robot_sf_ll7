@@ -50,9 +50,7 @@ def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarr
     return np.array(pedestrian_positions)
 
 
-def kde_plot_grid_creation(
-    x_min, x_max, y_min, y_max, number_of_grid_points: int = 100
-):
+def kde_plot_grid_creation(x_min, x_max, y_min, y_max, number_of_grid_points: int = 100):
     """
     Create a grid of points for Kernel Density Estimation (KDE) plotting.
 
@@ -123,9 +121,7 @@ def visualize_kde_of_pedestrians_on_map(
 
     # ax.contourf(grid_xx, grid_yy, kde_vals, cmap="viridis")
 
-    ax.scatter(
-        pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=1, c="red"
-    )
+    ax.scatter(pedestrian_positions[:, 0], pedestrian_positions[:, 1], alpha=1, s=1, c="red")
 
     # Plot map obstacles
     # plot_map_obstacles(ax, map_def)

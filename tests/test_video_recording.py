@@ -26,9 +26,7 @@ def test_video_recording(
     # Create environment settings
     env_config = EnvSettings(
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
-        robot_config=BicycleDriveSettings(
-            radius=0.5, max_accel=3.0, allow_backwards=True
-        ),
+        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
 
     # Create environment with video recording enabled
@@ -39,7 +37,7 @@ def test_video_recording(
         debug=True,
         recording_enabled=True,
         record_video=True,
-        video_path=str(video_path)
+        video_path=str(video_path),
     )
 
     try:

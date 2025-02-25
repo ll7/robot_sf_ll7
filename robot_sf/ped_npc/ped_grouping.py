@@ -143,6 +143,7 @@ class PedestrianGroupings:
     group_by_ped_id : Dict[int, int]
         A dictionary that maps pedestrian IDs to group IDs. Default is an empty dictionary.
     """
+
     states: PedestrianStates
     groups: Dict[int, Set[int]] = field(default_factory=dict)
     group_by_ped_id: Dict[int, int] = field(default_factory=dict)

@@ -316,31 +316,17 @@ class SimulationView:
         key_action_map = {
             # scale the view
             pygame.K_PLUS: lambda: setattr(self, "scaling", self.scaling + new_scaling),
-            pygame.K_MINUS: lambda: setattr(
-                self, "scaling", max(self.scaling - new_scaling, 1)
-            ),
+            pygame.K_MINUS: lambda: setattr(self, "scaling", max(self.scaling - new_scaling, 1)),
             # move the view
-            pygame.K_LEFT: lambda: self.offset.__setitem__(
-                0, self.offset[0] + new_offset
-            ),
-            pygame.K_RIGHT: lambda: self.offset.__setitem__(
-                0, self.offset[0] - new_offset
-            ),
-            pygame.K_UP: lambda: self.offset.__setitem__(
-                1, self.offset[1] + new_offset
-            ),
-            pygame.K_DOWN: lambda: self.offset.__setitem__(
-                1, self.offset[1] - new_offset
-            ),
+            pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] + new_offset),
+            pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] - new_offset),
+            pygame.K_UP: lambda: self.offset.__setitem__(1, self.offset[1] + new_offset),
+            pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] - new_offset),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
             # focus on the robot or ped
-            pygame.K_f: lambda: setattr(
-                self, "focus_on_robot", not self.focus_on_robot
-            ),
-            pygame.K_p: lambda: setattr(
-                self, "focus_on_ego_ped", not self.focus_on_ego_ped
-            ),
+            pygame.K_f: lambda: setattr(self, "focus_on_robot", not self.focus_on_robot),
+            pygame.K_p: lambda: setattr(self, "focus_on_ego_ped", not self.focus_on_ego_ped),
             # display help
             pygame.K_h: lambda: setattr(self, "display_help", not self.display_help),
             # display robotinfo
@@ -383,9 +369,7 @@ class SimulationView:
     def _resize_window(self):
         logger.debug("Resizing the window.")
         old_surface = self.screen
-        self.screen = pygame.display.set_mode(
-            (self.width, self.height), pygame.RESIZABLE
-        )
+        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
     def _move_camera(self, state: VisualizableSimState):
@@ -431,9 +415,7 @@ class SimulationView:
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
-            scaled_vertices = [
-                (self._scale_tuple((x, y))) for x, y in obstacle.vertices_np
-            ]
+            scaled_vertices = [(self._scale_tuple((x, y))) for x, y in obstacle.vertices_np]
             # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
@@ -548,9 +530,7 @@ class SimulationView:
             ]
         elif self.display_robot_info == 2:
             if state.ego_ped_pose and state.ego_ped_action:
-                distance_to_robot = euclid_dist(
-                    state.ego_ped_pose[0], state.robot_pose[0]
-                )
+                distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
                 lines += [
                     f"PedestrianPose: {state.ego_ped_pose}",
                     f"PedestrianAction: {state.ego_ped_action.action}",
@@ -562,8 +542,8 @@ class SimulationView:
         text_lines = [
             f"step: {timestep}",
             f"scaling: {self.scaling}",
-            f"x-offset: {self.offset[0]/self.scaling:.2f}",
-            f"y-offset: {self.offset[1]/self.scaling:.2f}",
+            f"x-offset: {self.offset[0] / self.scaling:.2f}",
+            f"y-offset: {self.offset[1] / self.scaling:.2f}",
         ]
         text_lines += lines
         text_lines += [
@@ -573,9 +553,7 @@ class SimulationView:
         # Create a surface for the text background
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()
-        text_surface = pygame.Surface(
-            (max_width + 10, text_height + 10), pygame.SRCALPHA
-        )
+        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
         text_surface.fill(TEXT_BACKGROUND)
 
         for i, text in enumerate(text_lines):
@@ -612,9 +590,7 @@ class SimulationView:
 
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()
-        text_surface = pygame.Surface(
-            (max_width + 10, text_height + 10), pygame.SRCALPHA
-        )
+        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
         text_surface.fill(TEXT_BACKGROUND)
 
         for i, text in enumerate(text_lines):
@@ -630,13 +606,9 @@ class SimulationView:
             # Draw main text
             text_surface.blit(text_render, pos)
 
-        self.screen.blit(
-            text_surface, (self.width - max_width - 10, self._timestep_text_pos[1])
-        )
+        self.screen.blit(text_surface, (self.width - max_width - 10, self._timestep_text_pos[1]))
 
-    def _draw_grid(
-        self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)
-    ):
+    def _draw_grid(self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)):
         """
         Draw a grid on the screen.
         :param grid_increment: The increment of the grid in pixels.

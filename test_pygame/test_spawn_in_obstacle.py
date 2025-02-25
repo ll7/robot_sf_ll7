@@ -8,6 +8,7 @@ from robot_sf.gym_env.robot_env_with_pedestrian_obstacle_forces import (
 from robot_sf.nav.svg_map_parser import convert_map
 from loguru import logger
 
+
 def test_spawn_in_obstacle():
     logger.info("Testing Spawn in Obstacle")
     map_def = convert_map("maps/svg_maps/test_spawn_in_obstacle.svg")

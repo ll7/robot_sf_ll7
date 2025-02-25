@@ -2,12 +2,7 @@ from robot_sf.nav.navigation import RouteNavigator
 
 
 def west_east_route():
-    return [
-        (0, 1),
-        (2, 1),
-        (4, 1),
-        (6, 1)
-        ]
+    return [(0, 1), (2, 1), (4, 1), (6, 1)]
 
 
 def test_can_detect_when_waypoint_reached():

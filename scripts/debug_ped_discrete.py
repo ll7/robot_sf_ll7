@@ -44,11 +44,15 @@ def make_env():
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
-        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-        )
+        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+    )
     env_config.sim_config.ped_density_by_difficulty = ped_densities
     env_config.sim_config.difficulty = difficulty
-    return PedestrianEnv(env_config, robot_model=robot_model, debug=True,)
+    return PedestrianEnv(
+        env_config,
+        robot_model=robot_model,
+        debug=True,
+    )
 
 
 def run():
@@ -73,5 +77,5 @@ def run():
     env.exit()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run()

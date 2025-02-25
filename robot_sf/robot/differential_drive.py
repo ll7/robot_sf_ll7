@@ -1,4 +1,5 @@
 """Differential Drive Robot Model"""
+
 from math import sin, cos
 from dataclasses import dataclass, field
 from typing import Tuple
@@ -46,11 +47,9 @@ class DifferentialDriveSettings:
         if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
             raise ValueError(
                 "Robot's max. linear and angular speeds must be positive and non-zero!"
-                )
+            )
         if self.interaxis_length <= 0:
-            raise ValueError(
-                "Robot's interaxis length must be positive and non-zero!"
-                )
+            raise ValueError("Robot's interaxis length must be positive and non-zero!")
 
 
 @dataclass
@@ -61,15 +60,13 @@ class DifferentialDriveState:
     wheel_speeds: WheelSpeedState = (0.0, 0.0)
 
 
-
-
-
 @dataclass
 class DifferentialDriveMotion:
     """
     Class providing functionality for simulating or controlling the motion
     of a differential drive robot based on its settings and current state.
     """
+
     config: DifferentialDriveSettings
 
     def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float):
@@ -120,11 +117,8 @@ class DifferentialDriveMotion:
         return new_left_wheel_speed, new_right_wheel_speed
 
     def _covered_distance(
-            self,
-            last_wheel_speeds: WheelSpeedState,
-            new_wheel_speeds: WheelSpeedState,
-            d_t: float
-            ) -> float:
+        self, last_wheel_speeds: WheelSpeedState, new_wheel_speeds: WheelSpeedState, d_t: float
+    ) -> float:
         """
         Computes the distance covered by the robot over the time interval `d_t`.
 
@@ -140,12 +134,12 @@ class DifferentialDriveMotion:
         return self.config.wheel_radius / 2 * average_velocity * d_t
 
     def _new_orientation(
-            self,
-            robot_orient: float,
-            last_wheel_speeds: WheelSpeedState,
-            wheel_speeds: WheelSpeedState,
-            d_t: float
-            ) -> float:
+        self,
+        robot_orient: float,
+        last_wheel_speeds: WheelSpeedState,
+        wheel_speeds: WheelSpeedState,
+        d_t: float,
+    ) -> float:
         """
         Determines the new orientation of the robot after updating its wheel speeds.
 
@@ -159,8 +153,9 @@ class DifferentialDriveMotion:
         wheel_speed_left, wheel_speed_right = wheel_speeds
 
         # TODO: Validate that this is the correct formula for orientation change
-        right_left_diff = (last_wheel_speed_right + wheel_speed_right) / 2 \
-            - (last_wheel_speed_left + wheel_speed_left) / 2
+        right_left_diff = (last_wheel_speed_right + wheel_speed_right) / 2 - (
+            last_wheel_speed_left + wheel_speed_left
+        ) / 2
         diff = self.config.wheel_radius / self.config.interaxis_length * right_left_diff * d_t
         new_orient = robot_orient + diff
         return new_orient
@@ -184,7 +179,7 @@ class DifferentialDriveMotion:
 
 
 @dataclass
-class DifferentialDriveRobot():
+class DifferentialDriveRobot:
     """
     A robot with differential drive behavior that defines its movement,
     action and observation space.
@@ -211,8 +206,8 @@ class DifferentialDriveRobot():
                  linear and angular speeds.
         """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed],
-            dtype=np.float32)
+            [self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32
+        )
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
@@ -227,8 +222,8 @@ class DifferentialDriveRobot():
                  linear and angular speeds.
         """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed],
-            dtype=np.float32)
+            [self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32
+        )
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 

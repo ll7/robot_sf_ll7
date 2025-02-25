@@ -2,6 +2,7 @@
 The `sensor_fusion.py` file defines a `SensorFusion` class that combines data from multiple sensors.
 It also provides a function `fused_sensor_space` to create a combined observation space.
 """
+
 from typing import Tuple, Callable, List, Dict
 from dataclasses import dataclass, field
 
@@ -16,11 +17,8 @@ OBS_RAYS = "rays"
 
 
 def fused_sensor_space(
-        timesteps: int,
-        robot_obs: spaces.Box,
-        target_obs: spaces.Box,
-        lidar_obs: spaces.Box
-        ) -> Tuple[spaces.Dict, spaces.Dict]:
+    timesteps: int, robot_obs: spaces.Box, target_obs: spaces.Box, lidar_obs: spaces.Box
+) -> Tuple[spaces.Dict, spaces.Dict]:
     """
     Create a combined observation space for the robot, target, and LiDAR sensors.
 
@@ -42,34 +40,39 @@ def fused_sensor_space(
         The normalized and original combined observation spaces.
     """
     # Create the maximum and minimum drive states for each timestep
-    max_drive_state = np.array([
-        robot_obs.high.tolist() + target_obs.high.tolist()
-        for t in range(timesteps)], dtype=np.float32)
-    min_drive_state = np.array([
-        robot_obs.low.tolist() + target_obs.low.tolist()
-        for t in range(timesteps)], dtype=np.float32)
+    max_drive_state = np.array(
+        [robot_obs.high.tolist() + target_obs.high.tolist() for t in range(timesteps)],
+        dtype=np.float32,
+    )
+    min_drive_state = np.array(
+        [robot_obs.low.tolist() + target_obs.low.tolist() for t in range(timesteps)],
+        dtype=np.float32,
+    )
 
     # Create the maximum and minimum LiDAR states for each timestep
     max_lidar_state = np.array(
-        [lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32)
-    min_lidar_state = np.array(
-        [lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
+        [lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32
+    )
+    min_lidar_state = np.array([lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
 
     # Create the original observation spaces for the drive and LiDAR states
     orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
     orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)
     orig_obs_space = spaces.Dict(
-        {OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state})
+        {OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state}
+    )
 
     # Create the normalized observation spaces for the drive and LiDAR states
     box_drive_state = spaces.Box(
         low=min_drive_state / max_drive_state,
         high=max_drive_state / max_drive_state,
-        dtype=np.float32)
+        dtype=np.float32,
+    )
     box_lidar_state = spaces.Box(
         low=min_lidar_state / max_lidar_state,
         high=max_lidar_state / max_lidar_state,
-        dtype=np.float32)
+        dtype=np.float32,
+    )
     norm_obs_space = spaces.Dict({OBS_DRIVE_STATE: box_drive_state, OBS_RAYS: box_lidar_state})
 
     return norm_obs_space, orig_obs_space
@@ -113,8 +116,9 @@ class SensorFusion:
         # Initialize the number of steps to cache based on the LiDAR observation space
         self.cache_steps = self.unnormed_obs_space[OBS_RAYS].shape[0]
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)
-        self.stacked_lidar_state = \
-            np.zeros((self.cache_steps, len(self.lidar_sensor())), dtype=np.float32)
+        self.stacked_lidar_state = np.zeros(
+            (self.cache_steps, len(self.lidar_sensor())), dtype=np.float32
+        )
         self.drive_state_cache = deque(maxlen=self.cache_steps)
         self.lidar_state_cache = deque(maxlen=self.cache_steps)
 
@@ -141,13 +145,9 @@ class SensorFusion:
         next_target_angle = next_target_angle if self.use_next_goal else 0.0
 
         # Combine the robot speed and target sensor data into the drive state
-        drive_state = np.array([
-            speed_x,
-            speed_rot,
-            target_distance,
-            target_angle,
-            next_target_angle
-            ])
+        drive_state = np.array(
+            [speed_x, speed_rot, target_distance, target_angle, next_target_angle]
+        )
 
         # info: populate cache with same states -> no movement
         # If the caches are empty, fill them with the current states
@@ -169,8 +169,8 @@ class SensorFusion:
         max_lidar = self.unnormed_obs_space[OBS_RAYS].high
         return {
             OBS_DRIVE_STATE: self.stacked_drive_state / max_drive,
-            OBS_RAYS: self.stacked_lidar_state / max_lidar
-            }
+            OBS_RAYS: self.stacked_lidar_state / max_lidar,
+        }
 
     def reset_cache(self):
         """

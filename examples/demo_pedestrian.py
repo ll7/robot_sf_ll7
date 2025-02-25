@@ -21,10 +21,11 @@ def make_env(map_name: str, robot_model: str):
 
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
-        sim_config=SimulationSettings(difficulty=difficulty,
-                                      ped_density_by_difficulty=ped_densities),
-        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-        )
+        sim_config=SimulationSettings(
+            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+        ),
+        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+    )
     return PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=False)
 
 
@@ -48,7 +49,7 @@ def run(filename: str, map_name: str, robot_model: str):
     env.exit()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     SVG_MAP = "maps/svg_maps/debug_06.svg"
     PED_MODEL = "./model_ped/ppo_ped_02.zip"
     ROBOT_MODEL = "./model/run_043"

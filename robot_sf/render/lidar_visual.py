@@ -6,9 +6,7 @@ import numpy as np
 from robot_sf.util.types import Vec2D
 
 
-def render_lidar(
-    robot_pos: Vec2D, distances: np.ndarray, directions: np.ndarray
-) -> np.ndarray:
+def render_lidar(robot_pos: Vec2D, distances: np.ndarray, directions: np.ndarray) -> np.ndarray:
     """
     Render the LIDAR scanning visualization using vectorized NumPy operations.
 

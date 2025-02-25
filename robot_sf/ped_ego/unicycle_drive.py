@@ -34,6 +34,7 @@ class UnicycleDriveSettings:
 @dataclass
 class UnicycleDriveState:
     """A class that represents the state of a unicycle drive pedestrian."""
+
     pose: PedPose = field(default_factory=lambda: ((0.0, 0.0), 0.0))
     velocity: PolarVec2D = field(default_factory=lambda: (0.0, 0.0))
 
@@ -50,9 +51,6 @@ class UnicycleDriveState:
     def current_speed(self) -> PolarVec2D:
         """Get the current speed and orientation of the pedestrian."""
         return (self.velocity, self.orient)
-
-
-
 
 
 @dataclass

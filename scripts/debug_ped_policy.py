@@ -22,10 +22,11 @@ def make_env():
 
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
-        sim_config=SimulationSettings(difficulty=difficulty,
-                                      ped_density_by_difficulty=ped_densities),
-        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True)
-        )
+        sim_config=SimulationSettings(
+            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+        ),
+        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+    )
     return PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=False)
 
 
@@ -33,8 +34,9 @@ def get_file():
     """Get the latest model file."""
 
     filename = max(
-        os.listdir('model_ped'), key=lambda x: os.path.getctime(os.path.join('model_ped', x)))
-    return Path('model_ped', filename)
+        os.listdir("model_ped"), key=lambda x: os.path.getctime(os.path.join("model_ped", x))
+    )
+    return Path("model_ped", filename)
 
 
 def run():
@@ -73,5 +75,5 @@ def extract_info(meta: dict, reward: float) -> str:
     return f"Episode: {eps_num}, Steps: {steps}, Done: {done}, Reward: {reward}, Distance: {dis}"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     run()

@@ -1,6 +1,7 @@
 """
 test robot_sf.eval.EnvMetrics
 """
+
 from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics
 
 
@@ -67,8 +68,8 @@ def test_update():
         "is_obstacle_collision": False,
         "is_robot_at_goal": True,
         "is_timesteps_exceeded": False,
-        "is_route_complete": True
-        }
+        "is_route_complete": True,
+    }
     metrics.update(meta)
     assert metrics.completed_routes == 1
     assert metrics.reached_intermediate_goals == 1
@@ -80,8 +81,8 @@ def test_on_next_intermediate_outcome():
         "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
         "is_robot_at_goal": True,
-        "is_timesteps_exceeded": False
-        }
+        "is_timesteps_exceeded": False,
+    }
     metrics._on_next_intermediate_outcome(meta)
     assert metrics.reached_intermediate_goals == 1
 
@@ -92,8 +93,8 @@ def test_on_next_route_outcome():
         "is_pedestrian_collision": False,
         "is_obstacle_collision": False,
         "is_route_complete": True,
-        "is_timesteps_exceeded": False
-        }
+        "is_timesteps_exceeded": False,
+    }
     metrics._on_next_route_outcome(meta)
     assert metrics.completed_routes == 1
 
@@ -105,8 +106,8 @@ def test_ped_update():
         "is_obstacle_collision": False,
         "is_timesteps_exceeded": True,
         "is_robot_collision": False,
-        "distance_to_robot": 45.0
-        }
+        "distance_to_robot": 45.0,
+    }
     metrics.update(meta)
     assert metrics.exceeded_timesteps == 1
     assert metrics.route_end_distance == 45.0

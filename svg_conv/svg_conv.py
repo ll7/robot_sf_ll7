@@ -25,9 +25,7 @@ def paths_of_svg(svg: SVG) -> List[Path]:
 def filter_paths_by_color(paths: List[Path], color: RgbColor) -> List[Path]:
     red, green, blue = color
     paths = [
-        e
-        for e in paths
-        if e.fill.red == red and e.fill.green == green and e.fill.blue == blue
+        e for e in paths if e.fill.red == red and e.fill.green == green and e.fill.blue == blue
     ]
     return paths
 

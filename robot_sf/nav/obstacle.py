@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass, field
 from typing import List
 import numpy as np
@@ -38,14 +37,15 @@ class Obstacle:
         """
 
         if not self.vertices:
-            raise ValueError('No vertices specified for obstacle!')
+            raise ValueError("No vertices specified for obstacle!")
 
         # Convert vertices to numpy array
         self.vertices_np = np.array(self.vertices)
 
         # Create edges from vertices
-        edges = list(zip(self.vertices[:-1], self.vertices[1:])) \
-            + [(self.vertices[-1], self.vertices[0])]
+        edges = list(zip(self.vertices[:-1], self.vertices[1:])) + [
+            (self.vertices[-1], self.vertices[0])
+        ]
 
         # Remove fake lines that are just points
         edges = list(filter(lambda l: l[0] != l[1], edges))
@@ -55,7 +55,7 @@ class Obstacle:
         self.lines = lines
 
         if not self.vertices:
-            print('WARNING: obstacle is just a single point that cannot collide!')
+            print("WARNING: obstacle is just a single point that cannot collide!")
 
 
 def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
@@ -73,9 +73,11 @@ def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
         The obstacle created from the SVG rectangle.
     """
 
-    return Obstacle([
-        (svg_rectangle.x, svg_rectangle.y),
-        (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y),
-        (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y + svg_rectangle.height),
-        (svg_rectangle.x, svg_rectangle.y + svg_rectangle.height)
-        ])
+    return Obstacle(
+        [
+            (svg_rectangle.x, svg_rectangle.y),
+            (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y),
+            (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y + svg_rectangle.height),
+            (svg_rectangle.x, svg_rectangle.y + svg_rectangle.height),
+        ]
+    )

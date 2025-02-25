@@ -94,9 +94,7 @@ def load_states_and_visualize(filename: str):
     visualize_states(states, map_def)
 
 
-def load_states_and_record_video(
-    state_file: str, video_save_path: str, video_fps: float = 10
-):
+def load_states_and_record_video(state_file: str, video_save_path: str, video_fps: float = 10):
     """
     Load robot states from a file and create a video recording of the simulation.
 

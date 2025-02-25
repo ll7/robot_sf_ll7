@@ -44,10 +44,8 @@ def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
 
 
 def target_sensor_obs(
-        robot_pose: RobotPose,
-        goal_pos: Vec2D,
-        next_goal_pos: Union[Vec2D, None]
-        ) -> Tuple[float, float, float]:
+    robot_pose: RobotPose, goal_pos: Vec2D, next_goal_pos: Union[Vec2D, None]
+) -> Tuple[float, float, float]:
     """
     Calculate the observations for the target sensor.
 
@@ -72,8 +70,11 @@ def target_sensor_obs(
     target_distance, target_angle = rel_pos(robot_pose, goal_pos)
 
     # Calculate the trajectory angle to the next goal, or 0.0 if there is no next goal
-    next_target_angle = calculate_trajectory_angle(robot_pos, goal_pos, next_goal_pos) \
-        if next_goal_pos is not None else 0.0
+    next_target_angle = (
+        calculate_trajectory_angle(robot_pos, goal_pos, next_goal_pos)
+        if next_goal_pos is not None
+        else 0.0
+    )
 
     return target_distance, target_angle, next_target_angle
 

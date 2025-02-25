@@ -7,7 +7,8 @@ from robot_sf.gym_env.env_config import (
     BicycleDriveSettings,
     MapDefinitionPool,
     DifferentialDriveRobot,
-    BicycleDriveRobot)
+    BicycleDriveRobot,
+)
 
 
 def test_env_settings_initialization():
@@ -20,7 +21,7 @@ def test_env_settings_initialization():
 
 def test_env_settings_post_init():
     with pytest.raises(ValueError):
-        env_settings = EnvSettings(sim_config=None)
+        _env_settings = EnvSettings(sim_config=None)
 
 
 def test_robot_factory():

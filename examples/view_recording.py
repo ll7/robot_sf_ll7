@@ -1,4 +1,5 @@
 """Simulate a random policy with a map defined in SVG format and view the recording."""
+
 import os
 from pathlib import Path
 
@@ -18,9 +19,7 @@ def test_simulation(map_definition: MapDefinition):
     """Test the simulation with a random policy."""
 
     logger.info("Creating the environment.")
-    env_config = EnvSettings(
-        map_pool=MapDefinitionPool(map_defs={"my_map": map_definition})
-        )
+    env_config = EnvSettings(map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}))
     env = RobotEnv(env_config, debug=True, recording_enabled=True)  # Activate recording
 
     env.reset()
@@ -49,8 +48,9 @@ def get_file():
     """Get the latest recorded file."""
 
     filename = max(
-        os.listdir('recordings'), key=lambda x: os.path.getctime(os.path.join('recordings', x)))
-    return Path('recordings', filename)
+        os.listdir("recordings"), key=lambda x: os.path.getctime(os.path.join("recordings", x))
+    )
+    return Path("recordings", filename)
 
 
 def main():

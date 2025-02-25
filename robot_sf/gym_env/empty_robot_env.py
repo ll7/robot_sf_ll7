@@ -55,9 +55,7 @@ class EmptyRobotEnv(Env):
         map_def = env_config.map_pool.map_defs["uni_campus_big"]
 
         # Initialize spaces based on the environment configuration and map
-        self.action_space, self.observation_space, orig_obs_space = init_spaces(
-            env_config, map_def
-        )
+        self.action_space, self.observation_space, orig_obs_space = init_spaces(env_config, map_def)
 
         # Assign the reward function and debug flag
         self.reward_func, self.debug = reward_func, debug
@@ -141,9 +139,7 @@ class EmptyRobotEnv(Env):
         Raises RuntimeError if debug mode is not enabled.
         """
         if not self.sim_ui:
-            raise RuntimeError(
-                "Debug mode is not activated! Consider setting " "debug=True!"
-            )
+            raise RuntimeError("Debug mode is not activated! Consider setting debug=True!")
 
         # Prepare action visualization, if any action was executed
         action = (

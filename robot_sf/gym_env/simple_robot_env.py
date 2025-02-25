@@ -14,11 +14,7 @@ class SimpleRobotEnv(gymnasium.Env):
     A simple robot environment based on gymnasium.Env.
     """
 
-    def __init__(
-            self,
-            env_config: EnvSettings = EnvSettings()
-            ):
-
+    def __init__(self, env_config: EnvSettings = EnvSettings()):
         self.info = {}
 
         # Action space
@@ -64,11 +60,11 @@ class SimpleRobotEnv(gymnasium.Env):
         # seed for self.np_random
         super().reset(seed=seed)
 
-        observation = self_get_observation()
+        observation = self._get_observation()
         info = self._get_info()
         return observation, info
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass
 
     def close(self):

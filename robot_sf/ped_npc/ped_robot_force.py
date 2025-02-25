@@ -25,19 +25,17 @@ class PedRobotForce:
     this force can be used for adverserial trainings as well."""
 
     def __init__(
-            self,
-            config: PedRobotForceConfig,
-            peds: PedState,
-            get_robot_pos: Callable[[], Vec2D]
-            ):
+        self, config: PedRobotForceConfig, peds: PedState, get_robot_pos: Callable[[], Vec2D]
+    ):
         self.config = config
         self.peds = peds
         self.get_robot_pos = get_robot_pos
         self.last_forces = 0.0
 
     def __call__(self) -> np.ndarray:
-        threshold = self.config.activation_threshold \
-            + self.peds.agent_radius + self.config.robot_radius
+        threshold = (
+            self.config.activation_threshold + self.peds.agent_radius + self.config.robot_radius
+        )
         ped_positions = self.peds.pos()
         robot_pos = self.get_robot_pos()
         forces = np.zeros((self.peds.size(), 2))
@@ -49,11 +47,8 @@ class PedRobotForce:
 
 @numba.njit(fastmath=True)
 def ped_robot_force(
-        out_forces: np.ndarray,
-        ped_positions: np.ndarray,
-        robot_pos: Vec2D,
-        threshold: float
-        ):
+    out_forces: np.ndarray, ped_positions: np.ndarray, robot_pos: Vec2D, threshold: float
+):
     """
     Compute the forces exerted on pedestrians by a robot.
 
@@ -113,11 +108,11 @@ def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
         The Euclidean distance between `v_1` and `v_2`.
     """
     # Compute the difference in x coordinates and square it
-    x_diff_sq = (v_1[0] - v_2[0])**2
+    x_diff_sq = (v_1[0] - v_2[0]) ** 2
     # Compute the difference in y coordinates and square it
-    y_diff_sq = (v_1[1] - v_2[1])**2
+    y_diff_sq = (v_1[1] - v_2[1]) ** 2
     # Return the square root of the sum of the squared differences
-    return (x_diff_sq + y_diff_sq)**0.5
+    return (x_diff_sq + y_diff_sq) ** 0.5
 
 
 @numba.njit(fastmath=True)
@@ -129,10 +124,6 @@ def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
 
 
 @numba.njit(fastmath=True)
-def potential_field_force(
-        dist: float,
-        dx_dist: float,
-        dy_dist: float
-        ) -> Tuple[float, float]:
+def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> Tuple[float, float]:
     der_potential = 1 / pow(dist, 3)
     return der_potential * dx_dist, der_potential * dy_dist

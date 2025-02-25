@@ -19,7 +19,7 @@ def main():
         "--recording",
         type=str,
         default="examples/recordings/2024-12-06_15-39-44.pkl",
-        help="Path to the recording file"
+        help="Path to the recording file",
     )
     args = parser.parse_args()
     try:

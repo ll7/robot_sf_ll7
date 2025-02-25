@@ -55,7 +55,7 @@ class MapCanvas:
     def canvas_to_map_scaling(self) -> float:
         return 1 / self.map_to_canvas_scaling()
 
-    def render(self, map_config: VisualizableMapConfig):
+    def render(self, map_config: VisualizableMapConfig):  # noqa: C901
         self.last_map_bounds = (map_config.x_margin, map_config.y_margin)
         self.canvas.delete("all")
         self.canvas.configure(bg=MapCanvas.BG_COLOR)

@@ -1,5 +1,4 @@
 from math import pi, cos, sin
-from typing import Tuple
 
 import numpy as np
 from pytest import approx

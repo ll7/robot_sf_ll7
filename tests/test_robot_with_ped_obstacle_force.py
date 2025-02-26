@@ -5,13 +5,13 @@ pytest test for robot_env_with_pedestrian_obstacle_forces.py
 # from gymnasium import spaces
 # from stable_baselines3 import PPO
 
-from robot_sf.gym_env.robot_env_with_pedestrian_obstacle_forces import (
-    RobotEnvWithPedestrianObstacleForces,
-)
-
 # from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 # from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
 from loguru import logger
+
+from robot_sf.gym_env.robot_env_with_pedestrian_obstacle_forces import (
+    RobotEnvWithPedestrianObstacleForces,
+)
 
 
 def test_can_create_env():

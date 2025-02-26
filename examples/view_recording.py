@@ -5,12 +5,11 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.nav.svg_map_parser import SvgMapConverter
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.render.playback_recording import load_states_and_visualize
-
 
 logger.info("Simulate a random policy with a map defined in SVG format.")
 

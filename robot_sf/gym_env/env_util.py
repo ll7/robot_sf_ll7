@@ -2,19 +2,19 @@
 env_util
 """
 
-from typing import List, Union
 from enum import Enum
+from typing import List, Union
 
-from gymnasium import spaces
 import numpy as np
+from gymnasium import spaces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
-from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
-from robot_sf.sensor.sensor_fusion import fused_sensor_space, SensorFusion
-from robot_sf.sim.simulator import Simulator, PedSimulator
+from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
+from robot_sf.sensor.sensor_fusion import SensorFusion, fused_sensor_space
+from robot_sf.sim.simulator import PedSimulator, Simulator
 
 
 class AgentType(Enum):

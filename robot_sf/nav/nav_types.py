@@ -1,5 +1,6 @@
-from typing import Tuple
 from dataclasses import dataclass
+from typing import Tuple
+
 from robot_sf.util.types import Vec2D, Zone
 
 

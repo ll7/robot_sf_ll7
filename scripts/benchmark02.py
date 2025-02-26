@@ -1,14 +1,16 @@
-from dataclasses import dataclass, field
-from typing import Dict, Optional
-import time
 import json
 import platform
-import psutil
+import time
+from dataclasses import dataclass, field
+from typing import Dict, Optional
+
 import numpy as np
+import psutil
 from loguru import logger
-from robot_sf.gym_env.robot_env import RobotEnv
-from robot_sf.gym_env.env_config import EnvSettings
 from stable_baselines3 import PPO
+
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv
 
 
 @dataclass

@@ -1,21 +1,19 @@
 import datetime
 
 import loguru
-
 from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 
-from robot_sf.gym_env.pedestrian_env import PedestrianEnv
-from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.feature_extractor import DynamicsExtractor
-from robot_sf.tb_logging import AdversialPedestrianMetricsCallback
-from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.gym_env.env_config import PedEnvSettings
+from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.nav.map_config import MapDefinitionPool
-from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
-
+from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.tb_logging import AdversialPedestrianMetricsCallback
 
 logger = loguru.logger
 

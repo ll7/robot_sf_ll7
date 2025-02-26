@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
-from typing import List
-from enum import IntEnum
 from collections import deque
+from dataclasses import dataclass, field
+from enum import IntEnum
 from statistics import mean
+from typing import List
 
 
 class EnvOutcome(IntEnum):

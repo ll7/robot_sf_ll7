@@ -1,20 +1,18 @@
-from loguru import logger
+import os
+from dataclasses import dataclass, field
+from math import cos, sin
+from time import sleep
+from typing import List, Tuple, Union
+
 import numpy as np
 import pygame
-from time import sleep
-from math import sin, cos
-from typing import Tuple, Union, List
-from dataclasses import dataclass, field
+from loguru import logger
 
-import os
-
-from robot_sf.sensor.range_sensor import euclid_dist
-from robot_sf.nav.map_config import MapDefinition
-from robot_sf.nav.map_config import Obstacle
+from robot_sf.nav.map_config import MapDefinition, Obstacle
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction
 from robot_sf.robot.bicycle_drive import BicycleAction
-from robot_sf.util.types import Vec2D, RobotPose, PedPose, RgbColor, DifferentialDriveAction
-
+from robot_sf.sensor.range_sensor import euclid_dist
+from robot_sf.util.types import DifferentialDriveAction, PedPose, RgbColor, RobotPose, Vec2D
 
 # Make moviepy optional
 try:

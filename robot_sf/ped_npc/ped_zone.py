@@ -1,4 +1,5 @@
 from typing import List
+
 import numpy as np
 
 from robot_sf.util.types import Vec2D, Zone

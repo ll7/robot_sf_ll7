@@ -1,14 +1,13 @@
 """Differential Drive Robot Model"""
 
-from math import sin, cos
 from dataclasses import dataclass, field
+from math import cos, sin
 from typing import Tuple
 
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import Vec2D, PolarVec2D, RobotPose, DifferentialDriveAction
-
+from robot_sf.util.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
 WheelSpeedState = Tuple[float, float]  # tuple of (left, right) speeds
 # TODO: Is WheelSpeedState in translation or rotation units?

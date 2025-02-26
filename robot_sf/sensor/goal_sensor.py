@@ -4,7 +4,7 @@ from typing import Tuple, Union
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import Vec2D, PolarVec2D, RobotPose
+from robot_sf.util.types import PolarVec2D, RobotPose, Vec2D
 
 
 def norm_angle(angle: float) -> float:

@@ -3,14 +3,14 @@ The `sensor_fusion.py` file defines a `SensorFusion` class that combines data fr
 It also provides a function `fused_sensor_space` to create a combined observation space.
 """
 
-from typing import Tuple, Callable, List, Dict
+from collections import deque
 from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 from gymnasium import spaces
-from collections import deque
-from robot_sf.util.types import PolarVec2D
 
+from robot_sf.util.types import PolarVec2D
 
 OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"

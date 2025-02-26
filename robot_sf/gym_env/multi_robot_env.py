@@ -3,22 +3,19 @@
 It overrides the `step_async` method to apply actions to all robots in the environment.
 """
 
+from multiprocessing.pool import ThreadPool
 from typing import Callable, List
 
-from multiprocessing.pool import ThreadPool
-
 import numpy as np
-
-from gymnasium.vector import VectorEnv
 from gymnasium import spaces
+from gymnasium.vector import VectorEnv
 
-from robot_sf.robot.robot_state import RobotState
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
-from robot_sf.sim.simulator import init_simulators
-from robot_sf.gym_env.reward import simple_reward
-
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+from robot_sf.gym_env.reward import simple_reward
+from robot_sf.robot.robot_state import RobotState
+from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
+from robot_sf.sim.simulator import init_simulators
 
 
 class MultiRobotEnv(VectorEnv):

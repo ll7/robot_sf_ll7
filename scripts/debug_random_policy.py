@@ -2,8 +2,9 @@
 Generate a random policy to test the environment
 """
 
-from robot_sf.gym_env.robot_env import RobotEnv
 from loguru import logger
+
+from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():

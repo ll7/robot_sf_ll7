@@ -1,19 +1,19 @@
-from typing import List, Union
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
+from typing import List, Union
 
-import numpy as np
 import gymnasium
+import numpy as np
 from gymnasium import spaces
+from stable_baselines3 import A2C, PPO
 from tqdm import tqdm
-from stable_baselines3 import PPO, A2C
 
-from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
-from robot_sf.gym_env.robot_env import RobotEnv, EnvSettings
 from robot_sf.eval import EnvMetrics
+from robot_sf.gym_env.robot_env import EnvSettings, RobotEnv
+from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
-from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
+from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 DriveModel = Union[PPO, A2C]
 VehicleConfig = Union[DifferentialDriveSettings, BicycleDriveSettings]

@@ -1,15 +1,16 @@
 """get a labled svg map and parse it to a map definition object"""
 
-from typing import List, Tuple
-import xml.etree.ElementTree as ET
 import re
+import xml.etree.ElementTree as ET
+from typing import List, Tuple
+
 import numpy as np
 from loguru import logger
 
-from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
-from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.nav_types import SvgRectangle, SvgPath
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.nav_types import SvgPath, SvgRectangle
+from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 from robot_sf.util.types import Line2D, Rect, Zone
 
 

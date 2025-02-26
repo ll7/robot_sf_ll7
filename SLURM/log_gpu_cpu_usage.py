@@ -1,17 +1,19 @@
 """Train a robot in robot_sf on a SLURM server with resource tracking."""
 
-import sys
-import psutil
-import GPUtil
 import os
+import sys
+
+import GPUtil
+import psutil
 from loguru import logger
 from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList, BaseCallback
-from robot_sf.gym_env.robot_env import RobotEnv
-from robot_sf.gym_env.env_config import EnvSettings
+
 from robot_sf.feature_extractor import DynamicsExtractor
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.tb_logging import DrivingMetricsCallback
 
 

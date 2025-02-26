@@ -2,11 +2,12 @@
 Visually test the Pedestrian and Obstacle forces
 """
 
+from loguru import logger
+
 from robot_sf.gym_env.robot_env_with_pedestrian_obstacle_forces import (
     RobotEnvWithPedestrianObstacleForces,
 )
 from robot_sf.nav.svg_map_parser import convert_map
-from loguru import logger
 
 
 def test_pedestrian_obstacle_avoidance():

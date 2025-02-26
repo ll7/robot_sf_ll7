@@ -1,29 +1,27 @@
 import numpy as np
 
 # FILE: robot_sf/util/test_types.py
-
-
 from robot_sf.util.types import (
-    Vec2D,
-    Range2D,
-    Line2D,
-    Point2D,
+    BicycleAction,
     Circle2D,
+    DifferentialDriveAction,
+    Line2D,
     MapBounds,
-    Rect,
-    Zone,
+    PedGrouping,
+    PedPose,
+    PedState,
+    Point2D,
     PolarVec2D,
     Range,
-    DifferentialDriveAction,
-    BicycleAction,
+    Range2D,
+    Rect,
+    RgbColor,
     RobotAction,
     RobotPose,
-    PedPose,
     UnicycleAction,
-    PedState,
-    PedGrouping,
+    Vec2D,
+    Zone,
     ZoneAssignments,
-    RgbColor,
 )
 
 

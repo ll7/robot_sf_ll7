@@ -2,14 +2,15 @@
 Anaylsis of the data recorded from the simulation.
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
 from typing import List
+
+import matplotlib.pyplot as plt
+import numpy as np
 from loguru import logger
 from scipy.stats import gaussian_kde
 
-from robot_sf.render.sim_view import VisualizableSimState
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.render.sim_view import VisualizableSimState
 
 
 def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarray:

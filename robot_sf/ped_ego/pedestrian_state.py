@@ -5,12 +5,13 @@ sensor fusion, and simulation time. It also tracks various conditions such as co
 timeout condition, simulation time elapsed, and timestep count.
 """
 
-from math import ceil
 from dataclasses import dataclass, field
+from math import ceil
+
 import numpy as np
 
-from robot_sf.sensor.sensor_fusion import SensorFusion
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
+from robot_sf.sensor.sensor_fusion import SensorFusion
 
 
 @dataclass

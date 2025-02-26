@@ -1,6 +1,6 @@
-from typing import List, Set, Dict, Callable
-from dataclasses import dataclass, field
 from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Set
 
 import numpy as np
 

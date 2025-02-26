@@ -10,31 +10,29 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the pedestrian.
 """
 
-import os
 import datetime
-from typing import Callable, List
-from copy import deepcopy
+import os
 import pickle
+from copy import deepcopy
+from typing import Callable, List
 
 import loguru
 import numpy as np
-
 from gymnasium import Env
 
-from robot_sf.robot.robot_state import RobotState
-from robot_sf.ped_ego.pedestrian_state import PedestrianState
 from robot_sf.gym_env.env_config import PedEnvSettings
-from robot_sf.sensor.range_sensor import lidar_ray_scan
-
+from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
+from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.ped_ego.pedestrian_state import PedestrianState
+from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
     VisualizableSimState,
 )
+from robot_sf.robot.robot_state import RobotState
+from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import init_ped_simulators
-from robot_sf.gym_env.reward import simple_ped_reward
-from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
-from robot_sf.render.lidar_visual import render_lidar
 
 logger = loguru.logger
 

@@ -1,10 +1,10 @@
-from math import atan2, sin, cos, tan
 from dataclasses import dataclass, field
+from math import atan2, cos, sin, tan
 
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import Vec2D, PolarVec2D, RobotPose, BicycleAction
+from robot_sf.util.types import BicycleAction, PolarVec2D, RobotPose, Vec2D
 
 
 @dataclass

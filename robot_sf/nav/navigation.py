@@ -1,6 +1,6 @@
-from random import sample, randint
-from math import dist, atan2
 from dataclasses import dataclass, field
+from math import atan2, dist
+from random import randint, sample
 from typing import List, Optional
 
 from robot_sf.nav.map_config import MapDefinition

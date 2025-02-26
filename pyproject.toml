@@ -21,12 +21,12 @@ dependencies = [
     "tqdm",
     "rich",
     "tensorboard",
-    "ruff",
+    "ruff>=0.9.7",
 ]
 license = {text = "GPLv3"}
 
 [build-system]
-requires = ["setuptools>=45", "wheel", "ruff==0.9.7"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.autopep8]
@@ -38,6 +38,7 @@ recursive = true
 aggressive = 4
 
 [tool.ruff]
+required-version = "0.9.7"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",

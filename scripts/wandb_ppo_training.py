@@ -3,17 +3,19 @@ Train ppo robot and log to wandb
 Documentation can be found in `docs/wandb.md`
 """
 
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO  # noqa: I001
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 import wandb
+from wandb.integration.sb3 import WandbCallback
+
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.tb_logging import DrivingMetricsCallback
-from wandb.integration.sb3 import WandbCallback
+
 
 wandb_config = {
     "env": "robot_sf",

@@ -17,6 +17,7 @@ The converter extracts all polygons of given colors, which is currently
 only the borders of houses (brown). Feel free to modify this script to support
 your own use case."""
 
+
 def paths_of_svg(svg: SVG) -> List[Path]:
     return [e for e in svg.elements() if isinstance(e, Path)]
 

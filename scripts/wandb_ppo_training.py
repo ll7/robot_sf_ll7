@@ -10,8 +10,8 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 import wandb
 from robot_sf.feature_extractor import DynamicsExtractor
-from robot_sf.robot_env import RobotEnv
-from robot_sf.sim_config import EnvSettings
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.tb_logging import DrivingMetricsCallback
 from wandb.integration.sb3 import WandbCallback
 

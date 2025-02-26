@@ -38,6 +38,5 @@ def test_load_states_and_record_video(delete_video: bool = True):
             output_path.unlink()
 
 
-
 if __name__ == "__main__":
     test_load_states_and_record_video(delete_video=False)

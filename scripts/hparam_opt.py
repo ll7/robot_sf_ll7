@@ -12,6 +12,7 @@ import logging
 from typing import List
 
 import optuna
+
 optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
 
 
@@ -28,8 +29,9 @@ class DriveQualityCallback(BaseCallback):
     def score(self) -> float:
         steps_per_threshold = zip(self.completion_thresholds, self.steps_to_reach_threshold)
         reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
-        threshold_scores = sum([t * (2 + (self.max_steps - s) / self.max_steps)
-                               for t, s in reached_thresholds])
+        threshold_scores = sum(
+            [t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds]
+        )
         return threshold_scores / (sum(self.completion_thresholds) * 3)
 
     def _on_training_start(self):
@@ -41,14 +43,18 @@ class DriveQualityCallback(BaseCallback):
             for i, completion_threshold in enumerate(self.completion_thresholds):
                 if self.metrics.route_completion_rate >= completion_threshold:
                     self.steps_to_reach_threshold[i] = min(
-                        curr_step, self.steps_to_reach_threshold[i])
+                        curr_step, self.steps_to_reach_threshold[i]
+                    )
         return True  # info: don't request early abort
 
 
 def training_score(
-        study_name: str, hparams: dict, max_steps: int = 5_000_000, difficulty: int = 1,
-        route_completion_thresholds: List[float] = [i / 100 for i in range(1, 101)]):
-
+    study_name: str,
+    hparams: dict,
+    max_steps: int = 5_000_000,
+    difficulty: int = 1,
+    route_completion_thresholds: List[float] = [i / 100 for i in range(1, 101)],
+):
     def make_env():
         config = EnvSettings()
         config.sim_config.difficulty = difficulty
@@ -56,9 +62,15 @@ def training_score(
         config.sim_config.time_per_step_in_secs = hparams["d_t"]
         config.sim_config.use_next_goal = hparams["use_next_goal"]
 
-        def reward_func(meta): return simple_reward(
-            meta, hparams["step_discount"], hparams["ped_coll_penalty"],
-            hparams["obst_coll_penalty"], hparams["reach_wp_reward"])
+        def reward_func(meta):
+            return simple_reward(
+                meta,
+                hparams["step_discount"],
+                hparams["ped_coll_penalty"],
+                hparams["obst_coll_penalty"],
+                hparams["reach_wp_reward"],
+            )
+
         return RobotEnv(config, reward_func=reward_func)
 
     env = make_vec_env(make_env, n_envs=hparams["n_envs"], vec_env_cls=SubprocVecEnv)
@@ -69,14 +81,22 @@ def training_score(
             use_ray_conv=hparams["use_ray_conv"],
             num_filters=hparams["num_filters"],
             kernel_sizes=hparams["kernel_sizes"],
-            dropout_rates=hparams["dropout_rates"]
-            ))
-    model = PPO("MultiInputPolicy", env, tensorboard_log=f"./logs/{study_name}/",
-                n_steps=hparams["n_steps"], n_epochs=hparams["n_epochs"],
-                use_sde=hparams["use_sde"], policy_kwargs=policy_kwargs)
+            dropout_rates=hparams["dropout_rates"],
+        ),
+    )
+    model = PPO(
+        "MultiInputPolicy",
+        env,
+        tensorboard_log=f"./logs/{study_name}/",
+        n_steps=hparams["n_steps"],
+        n_epochs=hparams["n_epochs"],
+        use_sde=hparams["use_sde"],
+        policy_kwargs=policy_kwargs,
+    )
     collect_metrics_callback = DrivingMetricsCallback(hparams["n_envs"])
     threshold_callback = DriveQualityCallback(
-        collect_metrics_callback.metrics, route_completion_thresholds, max_steps)
+        collect_metrics_callback.metrics, route_completion_thresholds, max_steps
+    )
     combined_callback = CallbackList([collect_metrics_callback, threshold_callback])
 
     model.learn(total_timesteps=max_steps, progress_bar=True, callback=combined_callback)
@@ -92,13 +112,12 @@ def suggest_ppo_params(trial: optuna.Trial, tune: bool = False) -> dict:
         use_ray_conv = trial.suggest_categorical("use_ray_conv", [True, False])
         if use_ray_conv:
             num_filters = [
-                trial.suggest_categorical(
-                    f"num_filters_{i}", [
-                        8, 16, 32, 64, 128, 256]) for i in range(4)]
+                trial.suggest_categorical(f"num_filters_{i}", [8, 16, 32, 64, 128, 256])
+                for i in range(4)
+            ]
             kernel_sizes = [
-                trial.suggest_categorical(
-                    f"kernel_sizes_{i}", [
-                        3, 5, 7, 9]) for i in range(4)]
+                trial.suggest_categorical(f"kernel_sizes_{i}", [3, 5, 7, 9]) for i in range(4)
+            ]
             dropout_rates = [trial.suggest_float(f"dropout_rates_{i}", 0.0, 1.0) for i in range(4)]
         else:
             num_filters = []
@@ -123,7 +142,7 @@ def suggest_ppo_params(trial: optuna.Trial, tune: bool = False) -> dict:
         "num_filters": num_filters,
         "kernel_sizes": kernel_sizes,
         "dropout_rates": dropout_rates,
-        }
+    }
 
 
 def suggest_simulation_params(trial: optuna.Trial, tune: bool = False) -> dict:
@@ -143,7 +162,7 @@ def suggest_simulation_params(trial: optuna.Trial, tune: bool = False) -> dict:
         "num_lidar_rays": num_lidar_rays,
         "d_t": d_t,
         "use_next_goal": use_next_goal,
-        }
+    }
 
 
 def suggest_reward_params(trial: optuna.Trial, tune: bool = False) -> dict:
@@ -163,8 +182,8 @@ def suggest_reward_params(trial: optuna.Trial, tune: bool = False) -> dict:
         "ped_coll_penalty": ped_coll_penalty,
         "obst_coll_penalty": obst_coll_penalty,
         "step_discount": step_discount,
-        "reach_wp_reward": reach_wp_reward
-        }
+        "reach_wp_reward": reach_wp_reward,
+    }
 
 
 def objective(trial: optuna.Trial, study_name: str) -> float:
@@ -185,10 +204,13 @@ def generate_storage_url(study_name: str) -> str:
 
 def tune_hparams(study_name: str):
     study = optuna.create_study(
-        study_name=study_name, direction="maximize",
-        storage=generate_storage_url(study_name), load_if_exists=True)
+        study_name=study_name,
+        direction="maximize",
+        storage=generate_storage_url(study_name),
+        load_if_exists=True,
+    )
     study.optimize(lambda t: objective(t, study_name), n_trials=100, gc_after_trial=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     tune_hparams("reward-opt")

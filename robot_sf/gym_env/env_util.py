@@ -68,9 +68,7 @@ def init_collision_and_sensors(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
-            return lidar_ray_scan(
-                sim.robots[r_id].pose, occupancies[r_id], lidar_config
-            )[0]
+            return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
             return target_sensor_obs(
@@ -147,9 +145,7 @@ def create_spaces(
         env_config.sim_config.stack_steps,
         agent.observation_space,
         target_sensor_space(map_def.max_target_dist),
-        lidar_sensor_space(
-            env_config.lidar_config.num_rays, env_config.lidar_config.max_scan_dist
-        ),
+        lidar_sensor_space(env_config.lidar_config.num_rays, env_config.lidar_config.max_scan_dist),
     )
     return action_space, observation_space, orig_obs_space
 
@@ -243,9 +239,7 @@ def init_ped_collision_and_sensors(
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
     def target_sensor(r_id=0):
-        return target_sensor_obs(
-            sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id]
-        )
+        return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
     def speed_sensor(r_id=0):
         return sim.robots[r_id].current_speed

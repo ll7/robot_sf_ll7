@@ -34,6 +34,7 @@ class PedestrianState:
     and timestep count.
     These are updated during the simulation.
     """
+
     robot_occupancy: ContinuousOccupancy
     ego_ped_occupancy: EgoPedContinuousOccupancy
     sensors: SensorFusion
@@ -62,10 +63,15 @@ class PedestrianState:
         Checks if the current state is terminal, i.e., if the robot has reached its goal,
         timed out, or collided with any object or other robots.
         """
-        return (self.is_timeout or self.is_collision_with_robot or
-                self.is_collision_with_ped or self.is_collision_with_obst or
-                self.is_robot_at_goal or self.is_collision_robot_with_obstacle or
-                self.is_collision_robot_with_pedestrian)
+        return (
+            self.is_timeout
+            or self.is_collision_with_robot
+            or self.is_collision_with_ped
+            or self.is_collision_with_obst
+            or self.is_robot_at_goal
+            or self.is_collision_robot_with_obstacle
+            or self.is_collision_robot_with_pedestrian
+        )
 
     def reset(self):
         """
@@ -125,4 +131,4 @@ class PedestrianState:
             "is_robot_pedestrian_collision": self.is_collision_robot_with_pedestrian,
             "is_timesteps_exceeded": self.is_timeout,
             "max_sim_steps": self.max_sim_steps,
-            }
+        }

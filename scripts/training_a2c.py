@@ -11,5 +11,5 @@ def training():
     model.save("./model/a2c_model")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     training()

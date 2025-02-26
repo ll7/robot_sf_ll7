@@ -77,9 +77,7 @@ def parse_mapfile_text_v0(text: str) -> Union[VisualizableMapConfig, None]:
         all_lines = list()
         for obstacle in map_data["Obstacles"]:
             vertices: List[Vec2D] = map_data["Obstacles"][obstacle]["Vertex"]
-            edges = list(zip(vertices[:-1], vertices[1:])) + [
-                (vertices[-1], vertices[0])
-            ]
+            edges = list(zip(vertices[:-1], vertices[1:])) + [(vertices[-1], vertices[0])]
             for (s_x, s_y), (e_x, e_y) in edges:
                 line = [s_x, e_x, s_y, e_y]
                 all_lines.append(line)
@@ -103,9 +101,7 @@ def parse_mapfile_text_v1(text: str) -> Union[VisualizableMapConfig, None]:
         all_lines = list()
         for vertices in map_data["obstacles"]:
             vertices: List[Vec2D]
-            edges = list(zip(vertices[:-1], vertices[1:])) + [
-                (vertices[-1], vertices[0])
-            ]
+            edges = list(zip(vertices[:-1], vertices[1:])) + [(vertices[-1], vertices[0])]
             for (s_x, s_y), (e_x, e_y) in edges:
                 line = [s_x, e_x, s_y, e_y]
                 all_lines.append(line)
@@ -146,9 +142,7 @@ def parse_mapfile_text_v2(text: str) -> Union[VisualizableMapConfig, None]:
         all_lines = list()
         for vertices in map_data["obstacles"]:
             vertices: List[Vec2D]
-            edges = list(zip(vertices[:-1], vertices[1:])) + [
-                (vertices[-1], vertices[0])
-            ]
+            edges = list(zip(vertices[:-1], vertices[1:])) + [(vertices[-1], vertices[0])]
             for (s_x, s_y), (e_x, e_y) in edges:
                 line = [s_x, e_x, s_y, e_y]
                 all_lines.append(line)
@@ -159,8 +153,7 @@ def parse_mapfile_text_v2(text: str) -> Union[VisualizableMapConfig, None]:
             for o in map_data["robot_routes"]
         ]
         ped_routes = [
-            GlobalRoute(o["spawn_id"], o["goal_id"], o["waypoints"])
-            for o in map_data["ped_routes"]
+            GlobalRoute(o["spawn_id"], o["goal_id"], o["waypoints"]) for o in map_data["ped_routes"]
         ]
 
         x_margin = map_data["x_margin"]

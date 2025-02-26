@@ -24,28 +24,15 @@ def training():
 
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
     model = PPO(
-        "MultiInputPolicy",
-        env,
-        tensorboard_log="./logs/ppo_logs/",
-        policy_kwargs=policy_kwargs
-        )
-    save_model_callback = CheckpointCallback(
-        500_000 // n_envs,
-        "./model/backup",
-        "ppo_model"
-        )
+        "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+    )
+    save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")
     collect_metrics_callback = DrivingMetricsCallback(n_envs)
-    combined_callback = CallbackList(
-        [save_model_callback, collect_metrics_callback]
-        )
+    combined_callback = CallbackList([save_model_callback, collect_metrics_callback])
 
-    model.learn(
-        total_timesteps=10_000_000,
-        progress_bar=True,
-        callback=combined_callback
-        )
+    model.learn(total_timesteps=10_000_000, progress_bar=True, callback=combined_callback)
     model.save("./model/ppo_model")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     training()

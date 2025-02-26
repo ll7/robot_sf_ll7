@@ -3,6 +3,7 @@ ped_behavior.py
 - Defines the behavior of pedestrian groups
 - Pedestrian groups can be assigned to follow a route or to move around a crowded zone
 """
+
 from math import dist
 from typing import List, Dict, Protocol
 from dataclasses import dataclass, field
@@ -135,7 +136,8 @@ class FollowRouteBehavior:
         for (gid, route), sec_id in zip(self.route_assignments.items(), self.initial_sections):
             group_pos = self.groups.group_centroid(gid)
             self.navigators[gid] = RouteNavigator(
-                route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos)
+                route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos
+            )
 
     def step(self):
         """

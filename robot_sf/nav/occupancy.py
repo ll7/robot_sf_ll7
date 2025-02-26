@@ -23,7 +23,7 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     """
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root
-    return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
+    return ((vec_1[0] - vec_2[0]) ** 2 + (vec_1[1] - vec_2[1]) ** 2) ** 0.5
 
 
 @numba.njit(fastmath=True)
@@ -53,10 +53,10 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
     center_2, radius_2 = c_2
 
     # Calculate the square of the distance between the centers of the circles
-    dist_sq = (center_1[0] - center_2[0])**2 + (center_1[1] - center_2[1])**2
+    dist_sq = (center_1[0] - center_2[0]) ** 2 + (center_1[1] - center_2[1]) ** 2
 
     # Calculate the square of the sum of the radii of the circles
-    rad_sum_sq = (radius_1 + radius_2)**2
+    rad_sum_sq = (radius_1 + radius_2) ** 2
 
     # The circles intersect if the square of the distance between their centers
     # is less than or equal to the square of the sum of their radii

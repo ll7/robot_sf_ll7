@@ -85,9 +85,7 @@ class RobotEnvSettings(BaseEnvSettings):
         elif isinstance(self.robot_config, BicycleDriveSettings):
             return BicycleDriveRobot(self.robot_config)
         else:
-            raise NotImplementedError(
-                f"unsupported robot type {type(self.robot_config)}!"
-            )
+            raise NotImplementedError(f"unsupported robot type {type(self.robot_config)}!")
 
 
 @dataclass
@@ -128,9 +126,7 @@ class EnvSettings:
         elif isinstance(self.robot_config, BicycleDriveSettings):
             return BicycleDriveRobot(self.robot_config)
         else:
-            raise NotImplementedError(
-                f"unsupported robot type {type(self.robot_config)}!"
-            )
+            raise NotImplementedError(f"unsupported robot type {type(self.robot_config)}!")
 
 
 @dataclass
@@ -151,9 +147,7 @@ class PedEnvSettings(EnvSettings):
             raise ValueError("Please ensure ego_ped_config is initialized!")
 
         # Comment following line to allow different radius for ego pedestrian
-        self.ego_ped_config.radius = (
-            self.sim_config.ped_radius
-        )  # Ensure radius consistency
+        self.ego_ped_config.radius = self.sim_config.ped_radius  # Ensure radius consistency
 
     def pedestrian_factory(self) -> UnicycleDrivePedestrian:
         """
@@ -165,6 +159,4 @@ class PedEnvSettings(EnvSettings):
         if isinstance(self.ego_ped_config, UnicycleDriveSettings):
             return UnicycleDrivePedestrian(self.ego_ped_config)
         else:
-            raise NotImplementedError(
-                f"unsupported pedestrian type {type(self.ego_ped_config)}!"
-            )
+            raise NotImplementedError(f"unsupported pedestrian type {type(self.ego_ped_config)}!")

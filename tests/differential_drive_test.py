@@ -1,6 +1,9 @@
 from math import pi
-from robot_sf.robot.differential_drive \
-    import DifferentialDriveMotion, DifferentialDriveState, DifferentialDriveSettings
+from robot_sf.robot.differential_drive import (
+    DifferentialDriveMotion,
+    DifferentialDriveState,
+    DifferentialDriveSettings,
+)
 
 
 def norm_angle(angle: float) -> float:
@@ -18,7 +21,7 @@ def test_can_drive_right_curve():
     right_curve_action = (1, -0.5)
     motion.move(state, right_curve_action, 1.0)
     pos_after, orient_after = state.pose
-    assert pos_after[0] > 0 and pos_after[1] < 0    # position in 4th quadrant
+    assert pos_after[0] > 0 and pos_after[1] < 0  # position in 4th quadrant
     assert 1.5 * pi < norm_angle(orient_after) < 2 * pi  # orientation in 4th quadrant
 
 

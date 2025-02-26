@@ -12,7 +12,7 @@ It also defines the action and observation spaces for the pedestrian.
 
 import os
 import datetime
-from typing import Tuple, Callable, List
+from typing import Callable, List
 from copy import deepcopy
 import pickle
 
@@ -280,7 +280,7 @@ class PedestrianEnv(Env):
         Raises RuntimeError if debug mode is not enabled.
         """
         if not self.sim_ui:
-            raise RuntimeError("Debug mode is not activated! Consider setting " "debug=True!")
+            raise RuntimeError("Debug mode is not activated! Consider setting debug=True!")
 
         state = self._prepare_visualizable_state()
 
@@ -302,7 +302,7 @@ class PedestrianEnv(Env):
         """
         if filename is None:
             now = datetime.datetime.now()
-            filename = f'recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+            filename = f"recordings/{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
 
         # only save if there are recorded states
         if len(self.recorded_states) == 0:

@@ -59,8 +59,10 @@ class RouteNavigator:
             True if the destination has been reached, False otherwise.
         """
 
-        return len(self.waypoints) == 0 or \
-            dist(self.waypoints[-1], self.pos) <= self.proximity_threshold
+        return (
+            len(self.waypoints) == 0
+            or dist(self.waypoints[-1], self.pos) <= self.proximity_threshold
+        )
 
     @property
     def current_waypoint(self) -> Vec2D:
@@ -86,8 +88,11 @@ class RouteNavigator:
             The next waypoint, or None if there is no next waypoint.
         """
 
-        return self.waypoints[self.waypoint_id + 1] \
-            if self.waypoint_id + 1 < len(self.waypoints) else None
+        return (
+            self.waypoints[self.waypoint_id + 1]
+            if self.waypoint_id + 1 < len(self.waypoints)
+            else None
+        )
 
     @property
     def initial_orientation(self) -> float:
@@ -100,8 +105,9 @@ class RouteNavigator:
             The initial orientation.
         """
 
-        return atan2(self.waypoints[1][1] - self.waypoints[0][1],
-                     self.waypoints[1][0] - self.waypoints[0][0])
+        return atan2(
+            self.waypoints[1][1] - self.waypoints[0][1], self.waypoints[1][0] - self.waypoints[0][0]
+        )
 
     def update_position(self, pos: Vec2D):
         """
@@ -133,9 +139,7 @@ class RouteNavigator:
         self.waypoint_id = 0
 
 
-def sample_route(
-        map_def: MapDefinition,
-        spawn_id: Optional[int] = None) -> List[Vec2D]:
+def sample_route(map_def: MapDefinition, spawn_id: Optional[int] = None) -> List[Vec2D]:
     """
     Samples a route from the given map definition.
 
@@ -153,8 +157,7 @@ def sample_route(
     """
 
     # If no spawn_id is provided, choose a random one
-    spawn_id = spawn_id if spawn_id is not None else \
-        randint(0, map_def.num_start_pos - 1)
+    spawn_id = spawn_id if spawn_id is not None else randint(0, map_def.num_start_pos - 1)
 
     # Get the routes for the chosen spawn_id
     routes = map_def.robot_routes_by_spawn_id[spawn_id]

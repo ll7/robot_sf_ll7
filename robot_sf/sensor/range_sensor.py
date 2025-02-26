@@ -25,12 +25,11 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     """
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root
-    return ((vec_1[0] - vec_2[0])**2 + (vec_1[1] - vec_2[1])**2)**0.5
+    return ((vec_1[0] - vec_2[0]) ** 2 + (vec_1[1] - vec_2[1]) ** 2) ** 0.5
 
 
 @numba.njit(fastmath=True)
-def lineseg_line_intersection_distance(
-        segment: Line2D, sensor_pos: Vec2D, ray_vec: Vec2D) -> float:
+def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_vec: Vec2D) -> float:
     """
     Calculate the distance from the sensor position to the intersection point
     between a line segment and a ray vector.
@@ -73,11 +72,7 @@ def lineseg_line_intersection_distance(
 
 
 @numba.njit(fastmath=True)
-def circle_line_intersection_distance(
-        circle: Circle2D,
-        origin: Vec2D,
-        ray_vec: Vec2D
-        ) -> float:
+def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
     """
     Calculate the distance from the origin to the intersection point between
     a circle and a ray vector.
@@ -148,7 +143,7 @@ class LidarScannerSettings:
 
     def __post_init__(self):
         if not 0 < self.visual_angle_portion <= 1:
-            raise ValueError('Scan angle portion needs to be within (0, 1]!')
+            raise ValueError("Scan angle portion needs to be within (0, 1]!")
         if self.max_scan_dist <= 0:
             raise ValueError("Max. scan distance mustn't be negative or zero!")
         if self.num_rays <= 0:
@@ -161,13 +156,13 @@ class LidarScannerSettings:
 
 @numba.njit(fastmath=True)
 def raycast_pedestrians(
-        out_ranges: np.ndarray,
-        scanner_pos: Vec2D,
-        max_scan_range: float,
-        ped_positions: np.ndarray,
-        ped_radius: float,
-        ray_angles: np.ndarray
-        ):
+    out_ranges: np.ndarray,
+    scanner_pos: Vec2D,
+    max_scan_range: float,
+    ped_positions: np.ndarray,
+    ped_radius: float,
+    ray_angles: np.ndarray,
+):
     """
     Perform raycasting to detect pedestrians within the scanner's range.
 
@@ -193,8 +188,7 @@ def raycast_pedestrians(
     """
 
     # Check if pedestrian positions array is empty or not 2D
-    if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 \
-            or ped_positions.shape[1] != 2:
+    if len(ped_positions.shape) != 2 or ped_positions.shape[0] == 0 or ped_positions.shape[1] != 2:
         return
 
     # Convert scanner position to numpy array
@@ -219,8 +213,7 @@ def raycast_pedestrians(
     # in the direction of the ray
     for i, angle in enumerate(ray_angles):
         unit_vec = cos(angle), sin(angle)
-        cos_sims = close_ped_pos[:, 0] * unit_vec[0] \
-            + close_ped_pos[:, 1] * unit_vec[1]
+        cos_sims = close_ped_pos[:, 0] * unit_vec[0] + close_ped_pos[:, 1] * unit_vec[1]
 
         # Find pedestrians in the direction of the ray
         ped_dir_mask = np.where(cos_sims >= 0)[0]
@@ -231,16 +224,14 @@ def raycast_pedestrians(
         # distance to the pedestrian's edge and update the output range
         for pos in relevant_ped_pos:
             ped_circle = ((pos[0], pos[1]), ped_radius)
-            coll_dist = circle_line_intersection_distance(
-                ped_circle, (0.0, 0.0), unit_vec)
+            coll_dist = circle_line_intersection_distance(ped_circle, (0.0, 0.0), unit_vec)
             out_ranges[i] = min(coll_dist, out_ranges[i])
 
 
 @numba.njit(fastmath=True)
 def raycast_obstacles(
-        out_ranges: np.ndarray, scanner_pos: Vec2D,
-        obstacles: np.ndarray, ray_angles: np.ndarray):
-
+    out_ranges: np.ndarray, scanner_pos: Vec2D, obstacles: np.ndarray, ray_angles: np.ndarray
+):
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
 
@@ -253,9 +244,16 @@ def raycast_obstacles(
 
 
 @numba.njit()
-def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
-            ped_pos: np.ndarray, ped_radius: float, ray_angles: np.ndarray,
-            enemy_pos: Optional[np.ndarray] = None, enemy_radius: float = 0.0) -> np.ndarray:
+def raycast(
+    scanner_pos: Vec2D,
+    obstacles: np.ndarray,
+    max_scan_range: float,
+    ped_pos: np.ndarray,
+    ped_radius: float,
+    ray_angles: np.ndarray,
+    enemy_pos: Optional[np.ndarray] = None,
+    enemy_radius: float = 0.0,
+) -> np.ndarray:
     """Cast rays in the directions of all given angles outgoing from
     the scanner's position and detect the minimal collision distance
     with either a pedestrian or an obstacle (or in case there's no collision,
@@ -266,8 +264,9 @@ def raycast(scanner_pos: Vec2D, obstacles: np.ndarray, max_scan_range: float,
 
     # As Pedestrian detect the Robot
     if enemy_pos is not None:
-        raycast_pedestrians(out_ranges, scanner_pos, max_scan_range,
-                            enemy_pos, enemy_radius, ray_angles)
+        raycast_pedestrians(
+            out_ranges, scanner_pos, max_scan_range, enemy_pos, enemy_radius, ray_angles
+        )
     # TODO: add raycast for other robots
     return out_ranges
 
@@ -285,9 +284,8 @@ def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_sca
 
 
 def lidar_ray_scan(
-        pose: RobotPose,
-        occ: ContinuousOccupancy,
-        settings: LidarScannerSettings) -> Tuple[np.ndarray, np.ndarray]:
+    pose: RobotPose, occ: ContinuousOccupancy, settings: LidarScannerSettings
+) -> Tuple[np.ndarray, np.ndarray]:
     """Representing a simulated radial LiDAR scanner operating
     in a 2D plane on a continuous occupancy with explicit objects.
 
@@ -309,13 +307,17 @@ def lidar_ray_scan(
     if isinstance(occ, EgoPedContinuousOccupancy):
         enemy_pos = np.array([occ.enemy_coords])
         ranges = raycast(
-            (pos_x, pos_y), obstacles, scan_dist, ped_pos,
-            occ.ped_radius, ray_angles,
-            enemy_pos=enemy_pos, enemy_radius=occ.enemy_radius)
+            (pos_x, pos_y),
+            obstacles,
+            scan_dist,
+            ped_pos,
+            occ.ped_radius,
+            ray_angles,
+            enemy_pos=enemy_pos,
+            enemy_radius=occ.enemy_radius,
+        )
     else:
-        ranges = raycast(
-            (pos_x, pos_y), obstacles, scan_dist, ped_pos,
-            occ.ped_radius, ray_angles)
+        ranges = raycast((pos_x, pos_y), obstacles, scan_dist, ped_pos, occ.ped_radius, ray_angles)
     range_postprocessing(ranges, scan_noise, scan_dist)
     return ranges, ray_angles
 

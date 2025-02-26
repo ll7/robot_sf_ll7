@@ -65,9 +65,7 @@ class Simulator:
         and robot navigators.
         """
         pysf_config = PySFSimConfig()
-        spawn_config = PedSpawnConfig(
-            self.config.peds_per_area_m2, self.config.max_peds_per_group
-        )
+        spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau,
             spawn_config,
@@ -99,9 +97,7 @@ class Simulator:
                 for robot in self.robots:
                     self.config.prf_config.robot_radius = robot.config.radius
                     forces.append(
-                        PedRobotForce(
-                            self.config.prf_config, sim.peds, lambda: robot.pos
-                        )
+                        PedRobotForce(self.config.prf_config, sim.peds, lambda: robot.pos)
                     )
             return forces
 
@@ -115,8 +111,7 @@ class Simulator:
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.robot_navs = [
-            RouteNavigator(proximity_threshold=self.goal_proximity_threshold)
-            for _ in self.robots
+            RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
         ]
 
         self.reset_state()
@@ -168,9 +163,7 @@ class Simulator:
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(
-                    self.map_def, None if self.random_start_pos else i
-                )
+                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
@@ -281,9 +274,7 @@ class PedSimulator(Simulator):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
-                waypoints = sample_route(
-                    self.map_def, None if self.random_start_pos else i
-                )
+                waypoints = sample_route(self.map_def, None if self.random_start_pos else i)
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
         # Ego_pedestrian reset
@@ -291,9 +282,7 @@ class PedSimulator(Simulator):
         ped_spawn = self.get_proximity_point(robot_spawn, 10, 15)
         self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
-    def step_once(
-        self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]
-    ):
+    def step_once(self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]):
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
@@ -330,9 +319,7 @@ class PedSimulator(Simulator):
                 return new_x, new_y
 
         logger.warning(f"Could not find a valid proximity point: {fixed_point}.")
-        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[
-            0
-        ]  # Spawn in pedestrian spawn_zone
+        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]  # Spawn in pedestrian spawn_zone
         initial_spawn = sample_zone(spawn_id, 1)[0]
         return initial_spawn
 

@@ -1,4 +1,3 @@
-
 from typing import List, Tuple
 from math import dist
 
@@ -53,11 +52,11 @@ class GlobalRoute:
         """
 
         if self.spawn_id < 0:
-            raise ValueError('Spawn id needs to be an integer >= 0!')
+            raise ValueError("Spawn id needs to be an integer >= 0!")
         if self.goal_id < 0:
-            raise ValueError('Goal id needs to be an integer >= 0!')
+            raise ValueError("Goal id needs to be an integer >= 0!")
         if len(self.waypoints) < 1:
-            raise ValueError(f'Route {self.spawn_id} -> {self.goal_id} contains no waypoints!')
+            raise ValueError(f"Route {self.spawn_id} -> {self.goal_id} contains no waypoints!")
 
     @property
     def sections(self) -> List[Tuple[Vec2D, Vec2D]]:

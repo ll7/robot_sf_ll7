@@ -68,9 +68,7 @@ class MapDefinition:
         if the robot spawn zones or goal zones are empty,
         or if the bounds are not exactly 4.
         """
-        obstacle_lines = [
-            line for obstacle in self.obstacles for line in obstacle.lines
-        ]
+        obstacle_lines = [line for obstacle in self.obstacles for line in obstacle.lines]
         self.obstacles_pysf = obstacle_lines + self.bounds
 
         self.robot_routes_by_spawn_id = {}
@@ -94,8 +92,7 @@ class MapDefinition:
 
         if len(self.bounds) != 4:
             logger.critical(
-                "Invalid bounds! Expected exactly 4 bounds! "
-                + f"Found {len(self.bounds)} bounds!"
+                "Invalid bounds! Expected exactly 4 bounds! " + f"Found {len(self.bounds)} bounds!"
             )
 
     @property
@@ -202,17 +199,13 @@ class MapDefinitionPool:
 
         # If map_defs is empty, load the map definitions from the files
         if not self.map_defs:
-            self.map_defs = self._load_json_map_definitions_from_folder(
-                self.maps_folder
-            )
+            self.map_defs = self._load_json_map_definitions_from_folder(self.maps_folder)
 
         # If map_defs is still empty, raise an error
         if not self.map_defs:
             raise ValueError("Map pool is empty! Please specify some maps!")
 
-    def _load_json_map_definitions_from_folder(
-        self, maps_folder: str
-    ) -> dict[str, MapDefinition]:
+    def _load_json_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
         """
         Load json map definitions from a folder in the maps_folder directory.
         """
@@ -231,8 +224,7 @@ class MapDefinitionPool:
 
         # Load the map definitions from the files
         map_defs = {
-            os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f))
-            for f in map_files
+            os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f)) for f in map_files
         }
 
         return map_defs
@@ -278,8 +270,7 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Normalize the obstacles
     obstacles = [
-        Obstacle([norm_pos(p) for p in vertices])
-        for vertices in map_structure["obstacles"]
+        Obstacle([norm_pos(p) for p in vertices]) for vertices in map_structure["obstacles"]
     ]
 
     # Function to normalize a zone

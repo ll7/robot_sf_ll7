@@ -453,5 +453,187 @@
         ]
       }
     }
+  },
+  {
+    "timestamp": "2025-02-24 14:50:22",
+    "metrics": {
+      "steps_per_second": 21.43968238566803,
+      "avg_step_time_ms": 46.64248201122973,
+      "total_episodes": 15,
+      "system_info": {
+        "platform": "Linux-6.8.0-52-generic-x86_64-with-glibc2.35",
+        "processor": "x86_64",
+        "python_version": "3.12.8",
+        "cpu_count": 32,
+        "memory_gb": 62.699092864990234,
+        "cpu_freq": {
+          "current": 3371.0709375000006,
+          "min": 2200.0,
+          "max": 3700.0
+        }
+      },
+      "config_hash": "-4749099549779058788",
+      "observation_space_info": {
+        "drive_state_shape": [
+          3,
+          5
+        ],
+        "rays_shape": [
+          3,
+          272
+        ],
+        "drive_state_bounds": {
+          "low": [
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ]
+          ],
+          "high": [
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          ]
+        }
+      },
+      "used_random_actions": true,
+      "env_info": {
+        "difficulty": 2,
+        "ped_density_by_difficulty": [
+          0.02,
+          0.04,
+          0.08
+        ],
+        "map_name": [
+          "uni_campus_big"
+        ]
+      }
+    }
+  },
+  {
+    "timestamp": "2025-02-24 15:02:20",
+    "metrics": {
+      "steps_per_second": 20.553264989185227,
+      "avg_step_time_ms": 48.65407031564973,
+      "total_episodes": 2,
+      "system_info": {
+        "platform": "Linux-6.8.0-52-generic-x86_64-with-glibc2.35",
+        "processor": "x86_64",
+        "python_version": "3.12.8",
+        "cpu_count": 32,
+        "memory_gb": 62.699092864990234,
+        "cpu_freq": {
+          "current": 2762.6420625,
+          "min": 2200.0,
+          "max": 3700.0
+        }
+      },
+      "config_hash": "2391117736133681228",
+      "observation_space_info": {
+        "drive_state_shape": [
+          3,
+          5
+        ],
+        "rays_shape": [
+          3,
+          272
+        ],
+        "drive_state_bounds": {
+          "low": [
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ],
+            [
+              0.0,
+              -1.0,
+              0.0,
+              -1.0,
+              -1.0
+            ]
+          ],
+          "high": [
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          ]
+        }
+      },
+      "used_random_actions": false,
+      "env_info": {
+        "difficulty": 2,
+        "ped_density_by_difficulty": [
+          0.02,
+          0.04,
+          0.08
+        ],
+        "map_name": [
+          "uni_campus_big"
+        ]
+      }
+    }
   }
 ]

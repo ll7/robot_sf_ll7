@@ -24,7 +24,8 @@ class BaseMetricsCallback(BaseCallback):
         if self.logger is not None:
             output_formats = self.logger.output_formats
             tb_formatter: TensorBoardOutputFormat = next(
-                filter(lambda f: isinstance(f, TensorBoardOutputFormat), output_formats), None)
+                filter(lambda f: isinstance(f, TensorBoardOutputFormat), output_formats), None
+            )
             self.writer = tb_formatter.writer if tb_formatter else None
 
         if self.writer is None:
@@ -36,7 +37,6 @@ class BaseMetricsCallback(BaseCallback):
 
 
 class DrivingMetricsCallback(BaseMetricsCallback):
-
     def __init__(self, num_envs: int):
         super().__init__()
         self.metrics = VecEnvMetrics([EnvMetrics() for _ in range(num_envs)])
@@ -45,22 +45,34 @@ class DrivingMetricsCallback(BaseMetricsCallback):
         self.metrics.update(self.meta_dicts)
 
         if self.writer is not None and self.is_logging_step:
-            self.writer.add_scalar("metrics/route_completion_rate",
-                                   self.metrics.route_completion_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/interm_goal_completion_rate",
-                                   self.metrics.interm_goal_completion_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/timeout_rate",
-                                   self.metrics.timeout_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/obstacle_collision_rate",
-                                   self.metrics.obstacle_collision_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/pedestrian_collision_rate",
-                                   self.metrics.pedestrian_collision_rate, self.num_timesteps)
+            self.writer.add_scalar(
+                "metrics/route_completion_rate",
+                self.metrics.route_completion_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/interm_goal_completion_rate",
+                self.metrics.interm_goal_completion_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/timeout_rate", self.metrics.timeout_rate, self.num_timesteps
+            )
+            self.writer.add_scalar(
+                "metrics/obstacle_collision_rate",
+                self.metrics.obstacle_collision_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/pedestrian_collision_rate",
+                self.metrics.pedestrian_collision_rate,
+                self.num_timesteps,
+            )
             self.writer.flush()
         return True  # info: don't request early abort
 
 
 class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
-
     def __init__(self, num_envs: int):
         super().__init__()
         self.metrics = PedVecEnvMetrics([PedEnvMetrics() for _ in range(num_envs)])
@@ -69,21 +81,39 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
         self.metrics.update(self.meta_dicts)
 
         if self.writer is not None and self.is_logging_step:
-            self.writer.add_scalar("metrics/timeout_rate",
-                                   self.metrics.timeout_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/obstacle_collision_rate",
-                                   self.metrics.obstacle_collision_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/pedestrian_collision_rate",
-                                   self.metrics.pedestrian_collision_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/robot_collision_rate",
-                                   self.metrics.robot_collision_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/robot_at_goal_rate",
-                                   self.metrics.robot_at_goal_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/robot_obstacle_collision_rate",
-                                   self.metrics.robot_obstacle_collision_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/robot_pedestrian_collision_rate",
-                                   self.metrics.robot_pedestrian_collision_rate, self.num_timesteps)
-            self.writer.add_scalar("metrics/avg_distance_to_robot",
-                                   self.metrics.route_end_distance, self.num_timesteps)
+            self.writer.add_scalar(
+                "metrics/timeout_rate", self.metrics.timeout_rate, self.num_timesteps
+            )
+            self.writer.add_scalar(
+                "metrics/obstacle_collision_rate",
+                self.metrics.obstacle_collision_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/pedestrian_collision_rate",
+                self.metrics.pedestrian_collision_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/robot_collision_rate",
+                self.metrics.robot_collision_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/robot_at_goal_rate", self.metrics.robot_at_goal_rate, self.num_timesteps
+            )
+            self.writer.add_scalar(
+                "metrics/robot_obstacle_collision_rate",
+                self.metrics.robot_obstacle_collision_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/robot_pedestrian_collision_rate",
+                self.metrics.robot_pedestrian_collision_rate,
+                self.num_timesteps,
+            )
+            self.writer.add_scalar(
+                "metrics/avg_distance_to_robot", self.metrics.route_end_distance, self.num_timesteps
+            )
             self.writer.flush()
         return True  # info: don't request early abort

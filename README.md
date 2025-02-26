@@ -21,20 +21,41 @@ map data from OpenStreetMap.
 
 ## Installation
 
-This project currently supports **two** methods for installation:
-1. `.devcontainer` for Visual Studio Code [.devcontainer/readme.md](./.devcontainer/readme.md) **Outdated**
-2. local installation
-
-For 1. follow the instructions in the `.devcontainer` directory.
-For 2. follow the instructions below:
+This project currently only supports local installation. The [.devcontainer installation](./.devcontainer/readme.md) is deprecated.
 
 ### Local Installation
 
-Install python >= 3.10 and <= 3.12.
+Install python >= 3.10 and <= 3.12. Python **3.12** is recommended.
+The following assumes that you are using the [uv python package manger](https://docs.astral.sh/uv/).
 
 ```sh
-sudo apt-get update && sudo apt-get install -y python3.12 python3-pip
-pip install virtualenv
+# Install pip
+sudo apt-get update && sudo apt-get install -y python3-pip
+
+# Install uv
+pip install uv
+```
+
+### Clone Source Code
+
+```sh
+git clone --recurse-submodules https://github.com/Bonifatius94/robot-sf
+cd robot-sf
+```
+
+### Create a `uv venv`
+
+```sh
+uv venv --python 3.12
+source .venv/bin/activate
+```
+
+### Install Dependencies
+
+```sh
+uv pip install pip --upgrade
+uv pip install -r requirements.txt
+uv pip install -r fast-pysf/requirements.txt
 ```
 
 ### FFMPEG
@@ -45,39 +66,20 @@ For video recording of the simulation, ffmpeg is required.
 sudo apt-get install -y ffmpeg
 ```
 
-## Quickstart
-
-### 1. Clone Source Code
+### Install your local packages in `editable` mode
 
 ```sh
-git clone --recurse-submodules https://github.com/Bonifatius94/robot-sf
-cd robot-sf
+uv pip install -e fast-pysf/. # pysocialforce
+uv pip install -e . # robot_sf
 ```
+### Tests
 
-### 2. Install Dependencies
+#### Pysocialforce Tests (**currently not working**)
 
-```sh
-python3 -m pip install pip --upgrade
-python3 -m pip install -r requirements.txt
-python3 -m pip install -r fast-pysf/requirements.txt
-```
+> [!WARNING]  
+> Currently not working. See https://github.com/ll7/robot_sf_ll7/issues/1
 
-### 3. Register *robot_sf* and *pysocialforce* Packages
-
-```sh
-pushd ./fast-pysf
-    python3 -m pip install .
-popd
-python3 -m pip install .
-```
-
-*Note: This needs to be repeated to propagate robot_sf changes on a host deployment.
-Otherwise the calling scope might run an old version of robot_sf.
-Dockerized deployments will recognize when a change requires a rebuild.*
-
-Alternatively create soft links for fast-pysf. The modules and tests are
-automatically detected by the interpreter if the calling scope is located
-at the repository's root directory which is very useful e.g. for debugging.
+Add symbolic link for pysocialforce and navigate to tests directory:
 
 ```sh
 ln -s fast-pysf/pysocialforce pysocialforce
@@ -88,11 +90,17 @@ popd
 
 *Note: The outlined command might differ on Windows, e.g. try mklink*
 
-### 4. Run Linter / Tests
+#### Run Linter / Tests
 
 ```sh
-python3 -m pytest tests
-python3 -m pylint robot_sf
+pytest tests
+pylint robot_sf
+```
+
+#### GUI Tests
+
+```sh
+pytest test_pygame
 ```
 
 ### 5. Run Visual Debugging of Pre-Trained Demo Models
@@ -118,17 +126,6 @@ docker compose build && docker compose run \
 ### 7. Edit Maps
 
 The preferred way to create maps: [SVG Editor](./docs/SVG_MAP_EDITOR.md)
-
-This Method is deprecated:
-```sh
-sudo apt-get update && sudo apt-get install -y python3-tk
-```
-
-```sh
-python3 -m map_editor
-```
-
-*Note: See [this documentation](./docs/MAP_EDITOR_USAGE.md) on how to use the map editor.*
 
 ### 8. Optimize Training Hyperparams (Docker)
 

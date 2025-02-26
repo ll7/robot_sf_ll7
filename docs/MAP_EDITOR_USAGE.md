@@ -1,5 +1,20 @@
-
 # robot-sf
+
+**DEPRECATED**
+
+> [!CAUTION]
+> DEPRECATED: This method is no longer supported! Use [svg editor](./SVG_MAP_EDITOR.md) instead.
+
+This Method is deprecated:
+```sh
+sudo apt-get update && sudo apt-get install -y python3-tk
+```
+
+```sh
+python3 -m map_editor
+```
+
+*Note: See this documentation on how to use the map editor.*
 
 ## Map Editor
 

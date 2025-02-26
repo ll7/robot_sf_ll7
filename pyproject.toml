@@ -21,6 +21,7 @@ dependencies = [
     "tqdm",
     "rich",
     "tensorboard",
+    "ruff",
 ]
 license = {text = "GPLv3"}
 

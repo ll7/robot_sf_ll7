@@ -12,8 +12,8 @@ def test_simple_reward():
         "is_robot_at_goal": True,
         "is_route_complete": False,
         "is_timesteps_exceeded": False,
-        "max_sim_steps": 1000
-        }
+        "max_sim_steps": 1000,
+    }
 
     reward = simple_reward(meta)
     assert reward == 0.9999

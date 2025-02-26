@@ -12,7 +12,7 @@ It also defines the action and observation spaces for the pedestrian.
 
 import os
 import datetime
-from typing import Tuple, Callable, List
+from typing import Callable, List
 from copy import deepcopy
 import pickle
 
@@ -74,8 +74,8 @@ class PedestrianEnv(Env):
         self.map_def = env_config.map_pool.choose_random_map()
 
         # Initialize spaces based on the environment configuration and map
-        combined_action_space, combined_observation_space, orig_obs_space = (
-            init_ped_spaces(env_config, self.map_def)
+        combined_action_space, combined_observation_space, orig_obs_space = init_ped_spaces(
+            env_config, self.map_def
         )
 
         # Assign the action and observation spaces
@@ -91,9 +91,7 @@ class PedestrianEnv(Env):
         self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
-        self.simulator = init_ped_simulators(
-            env_config, self.map_def, random_start_pos=True
-        )[0]
+        self.simulator = init_ped_simulators(env_config, self.map_def, random_start_pos=True)[0]
 
         # Delta time per simulation step and maximum episode time
         d_t = env_config.sim_config.time_per_step_in_secs
@@ -120,9 +118,7 @@ class PedestrianEnv(Env):
 
         # Assign the robot model
         if robot_model is None:
-            raise ValueError(
-                "Please provide a valid robot_model during initialization."
-            )
+            raise ValueError("Please provide a valid robot_model during initialization.")
         self.robot_model = robot_model
 
         # Store last state executed by the robot
@@ -160,9 +156,7 @@ class PedestrianEnv(Env):
         action_ped = action
 
         # Process the action through the simulator
-        action_robot, _ = self.robot_model.predict(
-            self.last_obs_robot, deterministic=True
-        )
+        action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
         action_robot = self.simulator.robots[0].parse_action(action_robot)
         # action_robot = (0.0, 0.0) #TODO: remove noop after testing
         self.last_action_robot = action_robot
@@ -287,9 +281,7 @@ class PedestrianEnv(Env):
         Raises RuntimeError if debug mode is not enabled.
         """
         if not self.sim_ui:
-            raise RuntimeError(
-                "Debug mode is not activated! Consider setting " "debug=True!"
-            )
+            raise RuntimeError("Debug mode is not activated! Consider setting debug=True!")
 
         state = self._prepare_visualizable_state()
 
@@ -311,7 +303,7 @@ class PedestrianEnv(Env):
         """
         if filename is None:
             now = datetime.datetime.now()
-            filename = f'recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+            filename = f"recordings/{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
 
         # only save if there are recorded states
         if len(self.recorded_states) == 0:

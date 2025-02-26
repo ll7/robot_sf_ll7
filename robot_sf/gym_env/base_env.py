@@ -96,7 +96,7 @@ class BaseEnv(Env):
             now = datetime.datetime.now()
             # get current working directory
             cwd = os.getcwd()
-            filename = f'{cwd}/recordings/{now.strftime("%Y-%m-%d_%H-%M-%S")}.pkl'
+            filename = f"{cwd}/recordings/{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
 
         # only save if there are recorded states
         if len(self.recorded_states) == 0:

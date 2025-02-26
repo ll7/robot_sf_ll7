@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 # FILE: robot_sf/util/test_types.py
 

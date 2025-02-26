@@ -102,7 +102,7 @@ def run_standardized_benchmark(
         if done:
             episodes += 1
             obs, _ = env.reset()
-        
+
         if i % 1000 == 0:
             logger.debug(f"Completed {i}/{num_steps} steps")
 
@@ -172,9 +172,7 @@ def save_benchmark_results(
                     data = [data]
                 data.append(
                     {
-                        "timestamp": time.strftime(
-                            "%Y-%m-%d %H:%M:%S", time.localtime()
-                        ),
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                         "metrics": results.to_dict(),
                     }
                 )
@@ -187,9 +185,7 @@ def save_benchmark_results(
                 json.dump(
                     [
                         {
-                            "timestamp": time.strftime(
-                                "%Y-%m-%d %H:%M:%S", time.localtime()
-                            ),
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                             "metrics": results.to_dict(),
                         }
                     ],
@@ -202,9 +198,7 @@ def save_benchmark_results(
             json.dump(
                 [
                     {
-                        "timestamp": time.strftime(
-                            "%Y-%m-%d %H:%M:%S", time.localtime()
-                        ),
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                         "metrics": results.to_dict(),
                     }
                 ],
@@ -218,9 +212,7 @@ if __name__ == "__main__":
     logger.info("Running standardized benchmark...")
 
     # Run benchmark
-    metrics = run_standardized_benchmark(
-        model_path="model/ppo_model_retrained_10m_2025-02-01.zip"
-    )
+    metrics = run_standardized_benchmark(model_path="model/ppo_model_retrained_10m_2025-02-01.zip")
 
     logger.info(f"Steps per second: {metrics.steps_per_second:.2f}")
     logger.info(f"Average step time: {metrics.avg_step_time_ms:.2f} ms")

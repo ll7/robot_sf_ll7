@@ -70,10 +70,18 @@ class EnvMetrics:
         return self.pedestrian_collisions / self.total_routes
 
     def update(self, meta: dict):
-        is_end_of_interm_goal = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] \
-            or meta["is_robot_at_goal"] or meta["is_timesteps_exceeded"]
-        is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] \
-            or meta["is_route_complete"] or meta["is_timesteps_exceeded"]
+        is_end_of_interm_goal = (
+            meta["is_pedestrian_collision"]
+            or meta["is_obstacle_collision"]
+            or meta["is_robot_at_goal"]
+            or meta["is_timesteps_exceeded"]
+        )
+        is_end_of_route = (
+            meta["is_pedestrian_collision"]
+            or meta["is_obstacle_collision"]
+            or meta["is_route_complete"]
+            or meta["is_timesteps_exceeded"]
+        )
 
         if is_end_of_interm_goal:
             self._on_next_intermediate_outcome(meta)
@@ -214,10 +222,15 @@ class PedEnvMetrics:
 
     def update(self, meta: dict):
         self.route_distances.append(meta["distance_to_robot"])
-        is_end_of_route = meta["is_pedestrian_collision"] or meta["is_obstacle_collision"] or \
-            meta["is_robot_collision"] or meta["is_timesteps_exceeded"] or \
-            meta["is_robot_at_goal"] or meta["is_robot_obstacle_collision"] or \
-            meta["is_robot_pedestrian_collision"]
+        is_end_of_route = (
+            meta["is_pedestrian_collision"]
+            or meta["is_obstacle_collision"]
+            or meta["is_robot_collision"]
+            or meta["is_timesteps_exceeded"]
+            or meta["is_robot_at_goal"]
+            or meta["is_robot_obstacle_collision"]
+            or meta["is_robot_pedestrian_collision"]
+        )
         if not is_end_of_route:
             return
 

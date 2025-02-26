@@ -1,4 +1,3 @@
-
 # WARNING: don't move this script or else loading trained SB3 policies might not work
 
 from typing import List
@@ -31,13 +30,13 @@ class DynamicsExtractor(BaseFeaturesExtractor):
     """
 
     def __init__(
-            self,
-            observation_space: spaces.Dict,
-            use_ray_conv: bool = True,
-            num_filters: List[int] = [64, 16, 16, 16],
-            kernel_sizes: List[int] = [3, 3, 3, 3],
-            dropout_rates: List[float] = [0.3, 0.3, 0.3, 0.3]
-            ):
+        self,
+        observation_space: spaces.Dict,
+        use_ray_conv: bool = True,
+        num_filters: List[int] = [64, 16, 16, 16],
+        kernel_sizes: List[int] = [3, 3, 3, 3],
+        dropout_rates: List[float] = [0.3, 0.3, 0.3, 0.3],
+    ):
         # Extract the ray and drive state spaces from the observation space
         rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
         drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
@@ -45,8 +44,9 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         # Calculate the number of features for the drive state and rays
         drive_state_features = np.prod(drive_state_space.shape)
         num_rays = rays_space.shape[1]
-        ray_features = num_filters[3] * (num_rays // 16) \
-            if use_ray_conv else np.prod(rays_space.shape)
+        ray_features = (
+            num_filters[3] * (num_rays // 16) if use_ray_conv else np.prod(rays_space.shape)
+        )
 
         # Calculate the total number of features
         total_features = ray_features + drive_state_features
@@ -72,12 +72,7 @@ class DynamicsExtractor(BaseFeaturesExtractor):
                 raise ValueError("kernel size must be odd!")
             return int((kernel_size - 1) / 2)
 
-        def conv_block(
-                in_channels: int,
-                out_channels: int,
-                kernel_size: int,
-                dropout_rate: float
-                ):
+        def conv_block(in_channels: int, out_channels: int, kernel_size: int, dropout_rate: float):
             """
             Create a convolutional block.
 
@@ -100,15 +95,16 @@ class DynamicsExtractor(BaseFeaturesExtractor):
             return [
                 nn.Conv1d(in_channels, out_channels, kernel_size, 2, padding(kernel_size)),
                 nn.ReLU(),
-                nn.Dropout(dropout_rate)
-                ]
+                nn.Dropout(dropout_rate),
+            ]
 
         if use_ray_conv:
             in_channels = [rays_space.shape[0]] + num_filters[:-1]
             out_channels = num_filters
             args_of_blocks = zip(in_channels, out_channels, kernel_sizes, dropout_rates)
-            layers = [layer for args in args_of_blocks for layer in conv_block(
-                *args)] + [nn.Flatten()]
+            layers = [layer for args in args_of_blocks for layer in conv_block(*args)] + [
+                nn.Flatten()
+            ]
             self.ray_extractor = nn.Sequential(*layers)
         else:
             self.ray_extractor = nn.Sequential(nn.Flatten())

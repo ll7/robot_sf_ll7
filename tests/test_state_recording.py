@@ -6,9 +6,7 @@ from robot_sf.nav.map_config import MapDefinition
 
 
 def test_recording():
-    env = RobotEnv(
-        recording_enabled=True
-        )
+    env = RobotEnv(recording_enabled=True)
     env.reset()
 
     # Run the simulation for a few timesteps
@@ -21,11 +19,12 @@ def test_recording():
 
     # Check that the file was created
     filename = max(
-        os.listdir('recordings'), key=lambda x: os.path.getctime(os.path.join('recordings', x)))
-    assert os.path.exists(os.path.join('recordings', filename))
+        os.listdir("recordings"), key=lambda x: os.path.getctime(os.path.join("recordings", x))
+    )
+    assert os.path.exists(os.path.join("recordings", filename))
 
     # Load the recording
-    with open(os.path.join('recordings', filename), 'rb') as f:
+    with open(os.path.join("recordings", filename), "rb") as f:
         recorded_states, map_def = pickle.load(f)
 
     # Check that the recording has the correct length

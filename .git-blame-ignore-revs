@@ -1,0 +1,5 @@
+# https://black.readthedocs.io/en/stable/guides/introducing_black_to_your_project.html#avoiding-ruining-git-blame
+# https://github.com/orgs/community/discussions/5033
+# https://stackoverflow.com/questions/53502654/how-do-i-run-a-code-formatter-over-my-source-without-modifying-git-history
+# Use ruff for formating.
+3e27f6bb7fd514ad63abb763ece1382d0ceb3f4e

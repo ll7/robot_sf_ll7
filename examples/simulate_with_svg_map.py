@@ -20,13 +20,11 @@ def test_simulation(map_definition: MapDefinition):
     logger.info("Creating the environment.")
     env_config = EnvSettings(
         sim_config=SimulationSettings(
-            stack_steps=1,
-            difficulty=0,
-            ped_density_by_difficulty=[0.06]
-            ),
+            stack_steps=1, difficulty=0, ped_density_by_difficulty=[0.06]
+        ),
         robot_config=DifferentialDriveSettings(radius=1.0),
-        map_pool=MapDefinitionPool(map_defs={"my_map": map_definition})
-        )
+        map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
+    )
     env = RobotEnv(env_config, debug=True)
     # env.observation_space, env.action_space = prepare_gym_spaces()
     # model = PPO.load("./model/run_023", env=env)

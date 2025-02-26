@@ -40,6 +40,4 @@ class RobotEnvWithPedestrianObstacleForces(RobotEnv):
         # create environment settings
         env_config = EnvSettings(map_pool=map_pool)
 
-        super().__init__(
-            env_config=env_config, debug=debug, peds_have_obstacle_forces=True
-        )
+        super().__init__(env_config=env_config, debug=debug, peds_have_obstacle_forces=True)

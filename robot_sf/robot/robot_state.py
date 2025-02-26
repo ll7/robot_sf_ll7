@@ -37,6 +37,7 @@ class RobotState:
     and timestep count.
     These are updated during the simulation.
     """
+
     nav: RouteNavigator
     occupancy: ContinuousOccupancy
     sensors: SensorFusion
@@ -62,8 +63,13 @@ class RobotState:
         Checks if the current state is terminal, i.e., if the robot has reached its goal,
         timed out, or collided with any object or other robots.
         """
-        return (self.is_at_goal or self.is_timeout or self.is_collision_with_robot or
-                self.is_collision_with_ped or self.is_collision_with_obst)
+        return (
+            self.is_at_goal
+            or self.is_timeout
+            or self.is_collision_with_robot
+            or self.is_collision_with_ped
+            or self.is_collision_with_obst
+        )
 
     @property
     def is_waypoint_complete(self) -> bool:
@@ -124,5 +130,5 @@ class RobotState:
             "is_robot_at_goal": self.is_waypoint_complete,
             "is_route_complete": self.is_route_complete,
             "is_timesteps_exceeded": self.is_timeout,
-            "max_sim_steps": self.max_sim_steps
-            }
+            "max_sim_steps": self.max_sim_steps,
+        }

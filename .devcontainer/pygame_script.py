@@ -1,4 +1,5 @@
 """GUI window with Pygame for .devcontainer debugging purposes."""
+
 import pygame
 import sys
 
@@ -7,7 +8,7 @@ pygame.init()
 
 # Set up the display
 screen = pygame.display.set_mode((640, 480))
-pygame.display.set_caption('Pygame Window')
+pygame.display.set_caption("Pygame Window")
 
 # Main game loop
 running = True

@@ -22,8 +22,8 @@ wandb_config = {
     "difficulty": 2,
     "ped_densities": [0.01, 0.02, 0.04, 0.08],
     "n_envs": 32,
-    "total_timesteps": 10_000_000
-    }
+    "total_timesteps": 10_000_000,
+}
 
 # Start a new run to track and log to W&B.
 wandb_run = wandb.init(
@@ -39,8 +39,8 @@ wandb_run = wandb.init(
     magic=True,
     mode="online",
     sync_tensorboard=True,
-    monitor_gym=True
-    )
+    monitor_gym=True,
+)
 
 
 N_ENVS = wandb_config["n_envs"]
@@ -59,33 +59,22 @@ env = make_vec_env(make_env, n_envs=N_ENVS, vec_env_cls=SubprocVecEnv)
 
 policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
 model = PPO(
-    "MultiInputPolicy",
-    env,
-    tensorboard_log="./logs/ppo_logs/",
-    policy_kwargs=policy_kwargs
-    )
-save_model_callback = CheckpointCallback(
-    500_000 // N_ENVS,
-    "./model/backup",
-    "ppo_model"
-    )
+    "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+)
+save_model_callback = CheckpointCallback(500_000 // N_ENVS, "./model/backup", "ppo_model")
 collect_metrics_callback = DrivingMetricsCallback(N_ENVS)
 
 wandb_callback = WandbCallback(
     gradient_save_freq=20_000,
     model_save_path=f"models/{wandb_run.id}",
     verbose=2,
-    )
+)
 
-combined_callback = CallbackList(
-    [save_model_callback, collect_metrics_callback, wandb_callback]
-    )
+combined_callback = CallbackList([save_model_callback, collect_metrics_callback, wandb_callback])
 
 model.learn(
-    total_timesteps=wandb_config["total_timesteps"],
-    progress_bar=True,
-    callback=combined_callback
-    )
+    total_timesteps=wandb_config["total_timesteps"], progress_bar=True, callback=combined_callback
+)
 model.save("./model/ppo_model")
 
 wandb_run.finish()

@@ -6,5 +6,5 @@ def main():
     app.launch()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -8,7 +8,8 @@ from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 def demo_offensive_policy():
     env_config = EnvSettings(
         sim_config=SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.02]),
-        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True))
+        robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
+    )
     env = RobotEnv(env_config, debug=True, recording_enabled=False)
     model = PPO.load("./model/run_043", env=env)
 
@@ -24,5 +25,5 @@ def demo_offensive_policy():
     env.exit()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     demo_offensive_policy()

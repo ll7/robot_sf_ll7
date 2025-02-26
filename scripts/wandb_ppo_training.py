@@ -35,7 +35,6 @@ wandb_run = wandb.init(
     name="init ppo robot_sf",
     notes="Initial training of ppo robot_sf",
     resume="allow",
-    magic=True,
     mode="online",
     sync_tensorboard=True,
     monitor_gym=True,

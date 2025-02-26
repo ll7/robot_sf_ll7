@@ -1,11 +1,11 @@
-from typing import Tuple, Callable
 from dataclasses import dataclass
+from typing import Callable, Tuple
 
-import numpy as np
 import numba
+import numpy as np
 from pysocialforce.scene import PedState
-# FIXME: This import is not working
 
+# FIXME: This import is not working
 from robot_sf.util.types import Vec2D
 
 

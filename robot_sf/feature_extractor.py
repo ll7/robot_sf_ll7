@@ -3,12 +3,12 @@
 from typing import List
 
 import numpy as np
-from gymnasium import spaces
 import torch as th
-from torch import nn
+from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from torch import nn
 
-from robot_sf.sensor.sensor_fusion import OBS_RAYS, OBS_DRIVE_STATE
+from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 
 class DynamicsExtractor(BaseFeaturesExtractor):

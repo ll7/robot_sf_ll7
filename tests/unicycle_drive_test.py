@@ -1,9 +1,10 @@
 from math import pi
+
 from robot_sf.ped_ego.unicycle_drive import (
-    UnicycleMotion,
-    UnicycleDriveState,
-    UnicycleDriveSettings,
     UnicycleAction,
+    UnicycleDriveSettings,
+    UnicycleDriveState,
+    UnicycleMotion,
 )
 
 

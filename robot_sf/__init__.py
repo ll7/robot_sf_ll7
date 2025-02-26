@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 csfp = os.path.abspath(os.path.dirname(__file__))
 if csfp not in sys.path:

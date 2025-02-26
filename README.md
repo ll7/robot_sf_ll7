@@ -72,6 +72,13 @@ sudo apt-get install -y ffmpeg
 uv pip install -e fast-pysf/. # pysocialforce
 uv pip install -e . # robot_sf
 ```
+
+### Install Pre-Commit Hook
+
+```sh
+pre-commit install
+```
+
 ### Tests
 
 #### Pysocialforce Tests (**currently not working**)

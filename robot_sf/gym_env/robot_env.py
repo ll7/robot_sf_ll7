@@ -10,23 +10,23 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
-from typing import Callable
 from copy import deepcopy
+from typing import Callable
 
 import numpy as np
 
-from robot_sf.robot.robot_state import RobotState
-from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.gym_env.base_env import BaseEnv
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+from robot_sf.gym_env.reward import simple_reward
+from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
     VisualizableAction,
     VisualizableSimState,
 )
+from robot_sf.robot.robot_state import RobotState
+from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import init_simulators
-from robot_sf.gym_env.reward import simple_reward
-from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
-from robot_sf.render.lidar_visual import render_lidar
 
 
 class RobotEnv(BaseEnv):

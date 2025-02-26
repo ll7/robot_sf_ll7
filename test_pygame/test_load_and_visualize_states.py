@@ -4,7 +4,6 @@ load a recording and play it back
 
 import loguru
 
-
 from robot_sf.render.playback_recording import load_states_and_visualize
 
 logger = loguru.logger

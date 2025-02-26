@@ -1,17 +1,18 @@
-from math import dist, atan2, sin, cos, ceil
 from dataclasses import dataclass, field
-from typing import Tuple, List, Dict
+from math import atan2, ceil, cos, dist, sin
+from typing import Dict, List, Tuple
+
 import numpy as np
 
 from robot_sf.nav.map_config import GlobalRoute
-from robot_sf.ped_npc.ped_grouping import PedestrianStates, PedestrianGroupings
 from robot_sf.ped_npc.ped_behavior import (
-    PedestrianBehavior,
     CrowdedZoneBehavior,
     FollowRouteBehavior,
+    PedestrianBehavior,
 )
+from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import sample_zone
-from robot_sf.util.types import Vec2D, Zone, PedState, PedGrouping, ZoneAssignments
+from robot_sf.util.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 
 
 @dataclass

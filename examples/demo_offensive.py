@@ -1,8 +1,9 @@
 from stable_baselines3 import PPO
-from robot_sf.gym_env.robot_env import RobotEnv
+
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.sim.sim_config import SimulationSettings
 
 
 def demo_offensive_policy():

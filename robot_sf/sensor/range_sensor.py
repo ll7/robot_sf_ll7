@@ -1,13 +1,13 @@
-from math import cos, sin
-from typing import List, Tuple, Optional
 from dataclasses import dataclass, field
+from math import cos, sin
+from typing import List, Optional, Tuple
 
-import numpy as np
 import numba
+import numpy as np
 from gymnasium import spaces
 
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
-from robot_sf.util.types import Vec2D, Line2D, Circle2D, RobotPose, Range
+from robot_sf.util.types import Circle2D, Line2D, Range, RobotPose, Vec2D
 
 
 # TODO: Refactor. this method is used in multiple places (occupancy, ped_robot_force)

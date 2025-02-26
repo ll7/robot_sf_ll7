@@ -5,7 +5,6 @@ from loguru import logger
 
 from robot_sf.render.playback_recording import load_states_and_visualize
 
-
 logger.info("Play recordings")
 
 

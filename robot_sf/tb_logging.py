@@ -1,9 +1,9 @@
-from typing import Optional, List
+from typing import List, Optional
 
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.logger import TensorBoardOutputFormat, SummaryWriter
+from stable_baselines3.common.logger import SummaryWriter, TensorBoardOutputFormat
 
-from robot_sf.eval import EnvMetrics, VecEnvMetrics, PedEnvMetrics, PedVecEnvMetrics
+from robot_sf.eval import EnvMetrics, PedEnvMetrics, PedVecEnvMetrics, VecEnvMetrics
 
 
 class BaseMetricsCallback(BaseCallback):

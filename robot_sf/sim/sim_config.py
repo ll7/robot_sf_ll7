@@ -1,6 +1,6 @@
+from dataclasses import dataclass, field
 from math import ceil
 from typing import List
-from dataclasses import dataclass, field
 
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 

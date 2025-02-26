@@ -2,27 +2,25 @@
 An empty environment for the robot to drive to several goals.
 """
 
-from typing import Callable
 from copy import deepcopy
+from typing import Callable
 
 import numpy as np
-
 from gymnasium import Env
 from gymnasium.utils import seeding
 
-from robot_sf.robot.robot_state import RobotState
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.sensor.range_sensor import lidar_ray_scan
-
+from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+from robot_sf.gym_env.reward import simple_reward
+from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
     VisualizableSimState,
 )
+from robot_sf.robot.robot_state import RobotState
+from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import init_simulators
-from robot_sf.gym_env.reward import simple_reward
-from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
-from robot_sf.render.lidar_visual import render_lidar
 
 
 class EmptyRobotEnv(Env):

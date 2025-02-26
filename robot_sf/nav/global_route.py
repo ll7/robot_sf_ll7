@@ -1,10 +1,8 @@
-from typing import List, Tuple
-from math import dist
-
-
 from dataclasses import dataclass
+from math import dist
+from typing import List, Tuple
 
-from robot_sf.util.types import Vec2D, Rect
+from robot_sf.util.types import Rect, Vec2D
 
 
 @dataclass

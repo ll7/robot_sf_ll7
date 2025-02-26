@@ -1,14 +1,13 @@
 import os
-from enum import IntEnum
-from time import sleep
-from typing import Callable, Union, List, Iterable
-from threading import Thread
-
 import tkinter as tk
 import tkinter.scrolledtext as tks
+from enum import IntEnum
+from threading import Thread
+from time import sleep
+from typing import Callable, Iterable, List, Union
 
-from map_editor.map_file_parser import parse_mapfile_text, VisualizableMapConfig
-from robot_sf.util.types import Vec2D, Rect
+from map_editor.map_file_parser import VisualizableMapConfig, parse_mapfile_text
+from robot_sf.util.types import Rect, Vec2D
 
 
 class MapCanvas:

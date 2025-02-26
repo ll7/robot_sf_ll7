@@ -3,6 +3,7 @@ This module implements the rendering of the lidar sensor.
 """
 
 import numpy as np
+
 from robot_sf.util.types import Vec2D
 
 

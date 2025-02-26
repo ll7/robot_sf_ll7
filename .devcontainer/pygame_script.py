@@ -1,7 +1,8 @@
 """GUI window with Pygame for .devcontainer debugging purposes."""
 
-import pygame
 import sys
+
+import pygame
 
 # Initialize Pygame
 pygame.init()

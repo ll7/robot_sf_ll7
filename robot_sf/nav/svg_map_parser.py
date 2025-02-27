@@ -250,6 +250,7 @@ class SvgMapConverter:
             else:
                 logger.error(f"Unknown label <{path.label}> in id <{path.id}>")
 
+        # Log a warning if no obstacles, routes, or crowded zones were found
         if not obstacles:
             logger.warning("No obstacles found in the SVG file")
         if not ped_routes:

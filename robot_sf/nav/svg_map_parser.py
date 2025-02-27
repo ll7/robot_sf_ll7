@@ -139,12 +139,71 @@ class SvgMapConverter:
         logger.info(f"Parsed {len(rect_info)} rects in the SVG file")
         self.rect_info = rect_info
 
-    def _info_to_mapdefintion(self) -> MapDefinition:  # noqa: C901
+    def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
+        """Process a path labeled as obstacle."""
+        vertices = path.coordinates.tolist()
+
+        if not np.array_equal(vertices[0], vertices[-1]):
+            logger.warning(
+                f"Closing polygon: first and last vertices of obstacle <{path.id}> differ"
+            )
+            vertices.append(vertices[0])
+
+        return Obstacle(vertices)
+
+    def _process_route_path(
+        self, path: SvgPath, spawn_zones: List[Rect], goal_zones: List[Rect]
+    ) -> GlobalRoute:
+        """Process a path labeled as route (pedestrian or robot)."""
+        vertices = path.coordinates.tolist()
+        spawn, goal = self.__get_path_number(path.label)
+
+        return GlobalRoute(
+            spawn_id=spawn,
+            goal_id=goal,
+            waypoints=vertices,
+            spawn_zone=spawn_zones[spawn] if spawn_zones else (vertices[0], 0, 0),
+            goal_zone=goal_zones[goal] if goal_zones else (vertices[-1], 0, 0),
+        )
+
+    def _process_crowded_zone_path(self, path: SvgPath) -> Zone:
+        """Process a path labeled as crowded zone."""
+        return Zone(path.coordinates.tolist())
+
+    def _process_rects(
+        self, width: float, height: float
+    ) -> Tuple[
+        List[Obstacle], List[Rect], List[Rect], List[Rect], List[Line2D], List[Rect], List[Rect]
+    ]:
         """
-        Create a MapDefinition object from the path and rectangle information.
+        Process rectangle elements from the SVG file and create game objects.
+
+        Categorizes rectangles based on their labels and converts them into appropriate game
+        objects:
+        - Obstacles: Walls and static barriers
+        - Spawn zones: Starting positions for robots and pedestrians
+        - Goal zones: Target areas for robots and pedestrians
+        - Bounds: Map boundaries (automatically creates edges plus any additional bounds)
+        - Crowded zones: Areas with high pedestrian density
+
+        Args:
+            width (float): Width of the SVG map
+            height (float): Height of the SVG map
+
+        Returns:
+            Tuple containing:
+            - obstacles: List of Obstacle objects
+            - robot_spawn_zones: List of rectangle zones where robots can spawn
+            - ped_spawn_zones: List of rectangle zones where pedestrians can spawn
+            - robot_goal_zones: List of rectangle zones marking robot goals
+            - bounds: List of line segments defining map boundaries
+            - ped_goal_zones: List of rectangle zones marking pedestrian goals
+            - ped_crowded_zones: List of rectangle zones with high pedestrian density
+
+        Note:
+            Map bounds are automatically created for the edges of the map, additional bounds
+            can be defined in the SVG file using the 'bound' label.
         """
-        width: float = float(self.svg_root.attrib.get("width"))
-        height: float = float(self.svg_root.attrib.get("height"))
         obstacles: List[Obstacle] = []
         robot_spawn_zones: List[Rect] = []
         ped_spawn_zones: List[Rect] = []
@@ -156,10 +215,8 @@ class SvgMapConverter:
             (width, width, 0, height),  # right
         ]
         logger.debug(f"Bounds: {bounds}")
-        robot_routes: List[GlobalRoute] = []
         ped_goal_zones: List[Rect] = []
         ped_crowded_zones: List[Rect] = []
-        ped_routes: List[GlobalRoute] = []
 
         for rect in self.rect_info:
             if rect.label == "robot_spawn_zone":
@@ -179,78 +236,65 @@ class SvgMapConverter:
             else:
                 logger.error(f"Unknown label <{rect.label}> in id <{rect.id_}>")
 
+        return (
+            obstacles,
+            robot_spawn_zones,
+            ped_spawn_zones,
+            robot_goal_zones,
+            bounds,
+            ped_goal_zones,
+            ped_crowded_zones,
+        )
+
+    def _info_to_mapdefintion(self) -> MapDefinition:
+        """
+        Create a MapDefinition object from the path and rectangle information.
+        """
+        width: float = float(self.svg_root.attrib.get("width"))
+        height: float = float(self.svg_root.attrib.get("height"))
+
+        # Process rectangles first
+        (
+            obstacles,
+            robot_spawn_zones,
+            ped_spawn_zones,
+            robot_goal_zones,
+            bounds,
+            ped_goal_zones,
+            ped_crowded_zones,
+        ) = self._process_rects(width, height)
+
+        # Initialize routes
+        robot_routes: List[GlobalRoute] = []
+        ped_routes: List[GlobalRoute] = []
+
+        # Process paths
+        path_processors = {
+            "obstacle": lambda p: obstacles.append(self._process_obstacle_path(p)),
+            "ped_route": lambda p: ped_routes.append(
+                self._process_route_path(p, ped_spawn_zones, ped_goal_zones)
+            ),
+            "robot_route": lambda p: robot_routes.append(
+                self._process_route_path(p, robot_spawn_zones, robot_goal_zones)
+            ),
+            "crowded_zone": lambda p: ped_crowded_zones.append(self._process_crowded_zone_path(p)),
+        }
+
         for path in self.path_info:
-            # check the label of the path
-            if path.label == "obstacle":
-                # Convert the coordinates to a list of vertices
-                vertices = path.coordinates.tolist()
-
-                # Check if the first and last vertices are the same
-                if not np.array_equal(vertices[0], vertices[-1]):
-                    logger.warning(
-                        "The first and last vertices of the obstacle in "
-                        + f"<{path.id}> are not the same. "
-                        + "Adding the first vertex to the end to close the polygon."
-                    )
-                    # Add the first vertex to the end to close the polygon
-                    vertices.append(vertices[0])
-                    # TODO is it really necessary to close the polygon?
-
-                # Append the obstacle to the list
-                obstacles.append(Obstacle(vertices))
-
-            elif "ped_route" in path.label:
-                # Convert the coordinates to a list of vertices
-                vertices = path.coordinates.tolist()
-
-                spawn, goal = self.__get_path_number(path.label)
-
-                # Append the obstacle to the list
-                ped_routes.append(
-                    GlobalRoute(
-                        spawn_id=spawn,
-                        goal_id=goal,
-                        waypoints=vertices,
-                        spawn_zone=ped_spawn_zones[spawn]
-                        if ped_spawn_zones
-                        else (vertices[0], 0, 0),
-                        goal_zone=ped_goal_zones[goal] if ped_goal_zones else (vertices[-1], 0, 0),
-                    )
-                )
-
-            elif "robot_route" in path.label:
-                # Convert the coordinates to a list of vertices
-                vertices = path.coordinates.tolist()
-
-                spawn, goal = self.__get_path_number(path.label)
-
-                # Append the obstacle to the list
-                robot_routes.append(
-                    GlobalRoute(
-                        spawn_id=spawn,
-                        goal_id=goal,
-                        waypoints=vertices,
-                        spawn_zone=robot_spawn_zones[spawn]
-                        if robot_spawn_zones
-                        else (vertices[0], 0, 0),
-                        goal_zone=robot_goal_zones[goal]
-                        if robot_goal_zones
-                        else (vertices[-1], 0, 0),
-                    )
-                )
-
-            elif path.label == "crowded_zone":  # TODO: remove this
-                # Crowded Zones should be rectangles?
-                # Convert the coordinates to a list of vertices
-                vertices = path.coordinates.tolist()
-
-                # Append the crowded zone to the list
-                ped_crowded_zones.append(Zone(vertices))
-
+            label = path.label
+            if "ped_route" in label:
+                processor = path_processors["ped_route"]
+            elif "robot_route" in label:
+                processor = path_processors["robot_route"]
             else:
-                logger.error(f"Unknown label <{path.label}> in id <{path.id}>")
+                processor = path_processors.get(label)
 
-        # Log a warning if no obstacles, routes, or crowded zones were found
+            if processor:
+                processor(path)
+            else:
+                logger.error(f"Unknown label <{label}> in id <{path.id}>")
+
+        # Log warnings if required elements are missing
         if not obstacles:
             logger.warning("No obstacles found in the SVG file")
         if not ped_routes:

@@ -42,6 +42,7 @@ class InteractivePlayback(SimulationView):
         self,
         states: List[VisualizableSimState],
         map_def: MapDefinition,
+        sleep_time: float = 0.1,  # Default to 0.1 explicitly
         caption: str = "RobotSF Interactive Playback",
     ):
         """
@@ -50,11 +51,13 @@ class InteractivePlayback(SimulationView):
         Args:
             states: List of VisualizableSimState objects to playback
             map_def: Map definition for the simulation
+            sleep_time: Time to sleep between frames (default: 0.1s)
             caption: Window caption
         """
         super().__init__(map_def=map_def, caption=caption)
         self.states = states
         self.current_frame = 0
+        self.sleep_time = sleep_time  # Store this directly as an instance variable
         self.is_playing = False
         self.playback_speed = 1.0
         self.total_frames = len(states)
@@ -110,37 +113,6 @@ class InteractivePlayback(SimulationView):
 
         self.screen.blit(text_surface, (self.width - max_width - 10, y_offset))
 
-    def _add_playback_status(self):
-        """Add playback status information to the screen."""
-        status_lines = [
-            f"Frame: {self.current_frame + 1}/{self.total_frames}",
-            f"Playing: {'Yes' if self.is_playing else 'No'}",
-            f"Speed: {self.playback_speed:.1f}x",
-        ]
-
-        max_width = max(self.font.size(line)[0] for line in status_lines)
-        text_height = len(status_lines) * self.font.get_linesize()
-        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
-        text_surface.fill(TEXT_BACKGROUND)
-
-        for i, text in enumerate(status_lines):
-            text_render = self.font.render(text, True, TEXT_COLOR)
-            text_outline = self.font.render(text, True, (0, 0, 0))
-
-            pos = (5, i * self.font.get_linesize() + 5)
-
-            # Draw text outline
-            for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
-
-            # Draw main text
-            text_surface.blit(text_render, pos)
-
-        # Position at the bottom right of the screen
-        pos_x = self.width - max_width - 10
-        pos_y = self.height - text_height - 10
-        self.screen.blit(text_surface, (pos_x, pos_y))
-
     def _handle_keydown(self, e):
         """Handle key presses for both simulation view and playback controls."""
         # Check for playback control keys
@@ -186,16 +158,16 @@ class InteractivePlayback(SimulationView):
         # If not a playback control key, let parent handle it
         super()._handle_keydown(e)
 
-    def render_current_frame(self, sleep_time: float = 0.01):
+    def render_current_frame(self):
         """Render the current frame."""
         if 0 <= self.current_frame < len(self.states):
-            super().render(self.states[self.current_frame], sleep_time)
-            self._add_playback_status()
+            # Use the instance sleep_time variable
+            super().render(self.states[self.current_frame], self.sleep_time)
             pygame.display.update()
         else:
             logger.error(f"Invalid frame index: {self.current_frame}")
 
-    def update(self, sleep_time: float = 0.01):
+    def update(self):
         """Update the playback state and render the current frame."""
         current_time = pygame.time.get_ticks()
 
@@ -221,8 +193,8 @@ class InteractivePlayback(SimulationView):
         else:
             self.last_update_time = current_time
 
-        # Render the current frame
-        self.render_current_frame(sleep_time)
+        # Render the current frame - no sleep_time needed
+        self.render_current_frame()
 
     def run(self):
         """Run the interactive playback loop."""
@@ -241,7 +213,7 @@ class InteractivePlayback(SimulationView):
             if self.is_exit_requested:
                 break
 
-            self.update(0.01)  # Update at ~100Hz
+            self.update()  # No sleep_time parameter needed
 
             # Limit the frame rate to avoid excessive CPU usage
             self.clock.tick(60)

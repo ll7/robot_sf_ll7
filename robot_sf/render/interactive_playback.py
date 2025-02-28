@@ -246,6 +246,42 @@ class InteractivePlayback(SimulationView):
             # Limit the frame rate to avoid excessive CPU usage
             self.clock.tick(60)
 
+    def _add_text(self, timestep: int, state: VisualizableSimState):
+        """Override parent _add_text to include playback information"""
+        # First call the parent method to add standard text
+        super()._add_text(timestep, state)
+
+        # Then add our playback-specific text
+        # This ensures text is rendered in one place consistently
+        status_lines = [
+            f"Frame: {self.current_frame + 1}/{self.total_frames}",
+            f"Playing: {'Yes' if self.is_playing else 'No'}",
+            f"Speed: {self.playback_speed:.1f}x",
+        ]
+
+        max_width = max(self.font.size(line)[0] for line in status_lines)
+        text_height = len(status_lines) * self.font.get_linesize()
+        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
+        text_surface.fill(TEXT_BACKGROUND)
+
+        for i, text in enumerate(status_lines):
+            text_render = self.font.render(text, True, TEXT_COLOR)
+            text_outline = self.font.render(text, True, (0, 0, 0))
+
+            pos = (5, i * self.font.get_linesize() + 5)
+
+            # Draw text outline
+            for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
+
+            # Draw main text
+            text_surface.blit(text_render, pos)
+
+        # Position at the bottom right of the screen
+        pos_x = self.width - max_width - 10
+        pos_y = self.height - text_height - 10
+        self.screen.blit(text_surface, (pos_x, pos_y))
+
 
 def load_and_play_interactively(filename: str):
     """

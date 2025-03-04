@@ -268,6 +268,7 @@ class PedestrianEnv(Env):
             self.simulator.ego_ped_pose,
             ego_ped_ray_vecs,
             ego_ped_action,
+            time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,
         )
 
         return state

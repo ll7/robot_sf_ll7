@@ -85,10 +85,6 @@ class RobotEnv(BaseEnv):
             peds_have_obstacle_forces=peds_have_obstacle_forces,
         )[0]
 
-        # Delta time per simulation step and maximum episode time
-        d_t = env_config.sim_config.time_per_step_in_secs
-        max_ep_time = env_config.sim_config.sim_time_in_secs
-
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_collision_and_sensors(
             self.simulator, env_config, orig_obs_space
@@ -96,7 +92,11 @@ class RobotEnv(BaseEnv):
 
         # Setup initial state of the robot
         self.state = RobotState(
-            self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time
+            self.simulator.robot_navs[0],
+            occupancies[0],
+            sensors[0],
+            env_config.sim_config.time_per_step_in_secs,
+            env_config.sim_config.sim_time_in_secs,
         )
 
         # Store last action executed by the robot

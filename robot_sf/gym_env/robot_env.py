@@ -218,12 +218,13 @@ class RobotEnv(BaseEnv):
 
         # Package the state for visualization
         state = VisualizableSimState(
-            self.state.timestep,
-            action,
-            self.simulator.robot_poses[0],
-            deepcopy(self.simulator.ped_pos),
-            ray_vecs_np,
-            ped_actions_np,
+            timestep=self.state.timestep,
+            robot_action=action,
+            robot_pose=self.simulator.robot_poses[0],
+            pedestrian_positions=deepcopy(self.simulator.ped_pos),
+            ray_vecs=ray_vecs_np,
+            ped_actions=ped_actions_np,
+            time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,
         )
 
         return state

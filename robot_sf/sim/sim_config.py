@@ -11,29 +11,39 @@ class SimulationSettings:
     Configuration settings for the simulation.
     """
 
-    # Simulation time in seconds
     sim_time_in_secs: float = 200.0
-    # Time per step in seconds
+    """Simulation time in seconds"""
+
     time_per_step_in_secs: float = 0.1
-    # Pedestrian speed multiplier
+    """Time per step in seconds"""
+
     peds_speed_mult: float = 1.3
-    # Difficulty level
+    """Pedestrian speed multiplier"""
+
     difficulty: int = 0
-    # Maximum number of pedestrians per group
+    """Difficulty level"""
+
     max_peds_per_group: int = 6
-    # Pedestrian radius
+    """Maximum number of pedestrians per group"""
+
     ped_radius: float = 0.4
-    # Goal radius
+    """Pedestrian radius"""
+
     goal_radius: float = 1.0
-    # Number of steps to stack in observations
-    # TODO move "stack_steps" from SimulationSettings to ?
+    """Goal radius"""
+
     stack_steps: int = 3
-    # Whether to use the next goal in the path as the current goal
+    """Number of steps to stack in observations
+    TODO move "stack_steps" from SimulationSettings to ?"""
+
     use_next_goal: bool = True
-    # Pedestrian-robot force configuration
+    """Whether to use the next goal in the path as the current goal"""
+
     prf_config: PedRobotForceConfig = field(default_factory=PedRobotForceConfig)
-    # Pedestrian density by difficulty level
+    """Pedestrian-robot force configuration"""
+
     ped_density_by_difficulty: List[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.08])
+    """Pedestrian density by difficulty level"""
 
     def __post_init__(self):
         """

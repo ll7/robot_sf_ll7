@@ -93,6 +93,12 @@ class VisualizableSimState:
     time_per_step_in_secs: float = None
     """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
 
+    def __post_init__(self):
+        """validate the visualizable state"""
+        if self.time_per_step_in_secs is None:
+            logger.warning("time_per_step_in_secs is None, defaulting to 0.1s.")
+            self.time_per_step_in_secs = 0.1
+
 
 @dataclass
 class SimulationView:

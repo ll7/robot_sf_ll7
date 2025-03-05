@@ -1,20 +1,29 @@
-import timeit
+"""
+This module provides basic functions to plot pedestrian data extracted from numpy arrays.
+
+Key Features:
+    - Plot all NPC pedestrian positions
+    - Plot all NPC pedestrian velocities
+    - Plot ego pedestrian acceleration
+    - Plot ego pedestrian velocity
+
+"""
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,
-    extract_key_from_json_as_ndarray,
 )
 
 
-def plot_all_npc_ped_positions(filename: str):
-    """Plot all NPC pedestrian positions from the given JSON file."""
+def plot_all_npc_ped_positions(ped_positions_array: np.ndarray):
+    """
+    Plot all NPC pedestrian positions from the given position array.
 
-    # Extract pedestrian positions
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
-
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+    """
     # E.g.: For only 100 timesteps x_vals = ped_positions_array[:100, :, 0]
     x_vals = ped_positions_array[:, :, 0]
     y_vals = ped_positions_array[:, :, 1]
@@ -32,17 +41,15 @@ def plot_all_npc_ped_positions(filename: str):
     plt.savefig("robot_sf/data_analysis/plots/all_npc_pedestrian_positions.png")
 
 
-def plot_all_npc_ped_velocities(filename: str, raw: bool = True):
+def plot_all_npc_ped_velocities(ped_actions: list, raw: bool = True):
     """
-    Plot all NPC pedestrian velocities from the given JSON file.
+    Plot all NPC pedestrian velocities from the given list of actions.
     Based on the actions of the npc pedestrians.
 
-    Args: raw (bool): If raw is True, dont use the applied scaling factor (for visual purpose).
+    Args:
+        ped_actions (list): List of pedestrian actions.
+        raw (bool): If raw is True, dont use the applied scaling factor (for visual purpose).
     """
-
-    # Extract pedestrian actions
-    ped_actions = extract_key_from_json(filename, "ped_actions")
-
     velocity_list = []
     for timestep, actions in enumerate(ped_actions):
         if actions:  # Check if positions list is not empty
@@ -69,11 +76,13 @@ def plot_all_npc_ped_velocities(filename: str, raw: bool = True):
     plt.savefig(f"robot_sf/data_analysis/plots/{title}.png")
 
 
-def plot_ego_ped_acceleration(filename: str):
-    """Plot the acceleration of the ego pedestrian."""
-    ego_ped_acceleration = [
-        item["action"][0] for item in extract_key_from_json(filename, "ego_ped_action")
-    ]
+def plot_ego_ped_acceleration(ego_ped_acceleration: list):
+    """
+    Plot the acceleration of the ego pedestrian.
+
+    Args:
+        ego_ped_acceleration (list): List of ego pedestrian accelerations.
+    """
 
     plt.plot(ego_ped_acceleration, label="Acceleration")
     plt.xlabel("Timestep")
@@ -83,11 +92,13 @@ def plot_ego_ped_acceleration(filename: str):
     plt.savefig("robot_sf/data_analysis/plots/ego_ped_acc.png")
 
 
-def plot_ego_ped_velocity(filename):
-    """Plot the velocity of the ego pedestrian."""
-    ego_ped_acceleration = [
-        item["action"][0] for item in extract_key_from_json(filename, "ego_ped_action")
-    ]
+def plot_ego_ped_velocity(ego_ped_acceleration: list):
+    """
+    Plot the velocity of the ego pedestrian based on the acceleration.
+
+    Args:
+        ego_ped_acceleration (list): List of ego pedestrian accelerations.
+    """
 
     ego_ped_velocity = []
     cumulative_sum = 0.0
@@ -108,27 +119,20 @@ def plot_ego_ped_velocity(filename):
     plt.show()
 
 
-def print_execution_time(function_call: str):
-    """Print the execution time of the given function call."""
-    execution_time = timeit.timeit(
-        function_call,
-        globals=globals(),
-        number=1,
-    )
-    print(f"Execution time: {execution_time} seconds")
-
-
 def main():
-    directory = "robot_sf/data_analysis/datasets"
-    # f'plot_all_npc_ped_positions(filename="{directory}/2025-02-06_10-24-12.json")'
-    # f'plot_all_npc_ped_velocities(filename="{directory}/2025-02-06_10-24-12.json", raw=True)'
-    # f'plot_ego_ped_acceleration(filename="{directory}/2025-01-16_11-47-44.json")'
-    # f'plot_ego_ped_velocity(filename="{directory}/2025-01-16_11-47-44.json")'
+    # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
+    filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
 
-    print_execution_time(f'plot_ego_ped_velocity(filename="{directory}/2025-01-16_11-47-44.json")')
-    print_execution_time(
-        f'plot_ego_ped_acceleration(filename="{directory}/2025-01-16_11-47-44.json")'
-    )
+    # ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+    # ped_actions = extract_key_from_json(filename, "ped_actions")
+    ego_ped_acceleration = [
+        item["action"][0] for item in extract_key_from_json(filename, "ego_ped_action")
+    ]
+
+    # plot_all_npc_ped_positions(ped_positions_array)
+    # plot_all_npc_ped_velocities(ped_actions, raw=True)
+    plot_ego_ped_acceleration(ego_ped_acceleration)
+    # plot_ego_ped_velocity(ego_ped_acceleration)
 
 
 if __name__ == "__main__":

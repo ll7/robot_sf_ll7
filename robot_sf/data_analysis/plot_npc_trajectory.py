@@ -1,5 +1,19 @@
+"""
+Module to analyze and visualize the trajectories, velocities, and accelerations of pedestrians
+from numpy arrays.
+
+Key Features:
+    - Plot the trajectories of NPC pedestrians.
+    - Split trajectories when the distance between two consecutive points is greater than normal and
+        create a new trajectory segment.
+    - Calculate and plot the velocity and acceleration of pedestrians.
+    - Calculate and plot the probability distribution of the velocity and acceleration of
+        the NPC pedestrians.
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
+from loguru import logger
 from scipy.stats import norm
 
 from robot_sf.data_analysis.generate_dataset import (
@@ -8,14 +22,18 @@ from robot_sf.data_analysis.generate_dataset import (
 )
 
 
-def plot_single_splitted_traj(filename: str, ped_idx: int = 0):
+def plot_single_splitted_traj(ped_positions_array: np.ndarray, ped_idx: int = 0):
     """
-    Plot from JSON file from a single pedestrian id the multiple trajectories.
+    Plot from position_array from a single pedestrian id the multiple trajectories.
     Split when the distance between two consecutive points is greater than normal.
 
-    ped_positions_array shape: (timesteps, num_pedestrians, 2)
+    Notes: A simulation pedestrian teleports to the spawn if the route is finished and starts a new
+            route.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_idx (int): Which simulation pedestrian is inspected
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
     x_vals = ped_positions_array[:, ped_idx, 0]
     y_vals = ped_positions_array[:, ped_idx, 1]
@@ -48,14 +66,14 @@ def plot_single_splitted_traj(filename: str, ped_idx: int = 0):
     plt.savefig(f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj.png")
 
 
-def plot_all_splitted_traj(filename: str):
+def plot_all_splitted_traj(ped_positions_array: np.ndarray):
     """
-    Plot from JSON file all npc pedestrian trajectories.
+    Plot from position_array all npc pedestrian trajectories.
     Split when the distance between two consecutive points is greater than normal.
 
-    ped_positions_array shape: (timesteps, num_pedestrians, 2)
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
     _, num_pedestrians, _ = ped_positions_array.shape
 
     for ped_idx in range(num_pedestrians):
@@ -92,9 +110,13 @@ def plot_all_splitted_traj(filename: str):
 
 
 def calculate_velocity(
-    x_vals: np.ndarray, y_vals: np.ndarray, time_interval: float = 0.1
+    x_vals: np.ndarray, y_vals: np.ndarray, time_interval: float = None
 ) -> np.ndarray:
     """Calculate the velocity of a pedestrian given their x and y positions."""
+    if time_interval is None:
+        logger.warning("Time interval not provided. Using default value of 0.1 seconds.")
+        time_interval = 0.1
+
     # Calculate the differences between consecutive points
     dx = np.diff(x_vals)
     dy = np.diff(y_vals)
@@ -106,9 +128,13 @@ def calculate_velocity(
     return velocities
 
 
-def calculate_acceleration(velocities: np.ndarray, time_interval: float = 0.1) -> np.ndarray:
+def calculate_acceleration(velocities: np.ndarray, time_interval: float = None) -> np.ndarray:
     """Calculate the acceleration of a pedestrian given their velocities."""
     # Calculate the differences between consecutive velocities
+    if time_interval is None:
+        logger.warning("Time interval not provided. Using default value of 0.1 seconds.")
+        time_interval = 0.1
+
     dv = np.diff(velocities)
 
     # Calculate the acceleration
@@ -117,13 +143,15 @@ def calculate_acceleration(velocities: np.ndarray, time_interval: float = 0.1) -
     return accelerations
 
 
-def subplot_single_splitted_traj_acc(filename: str, ped_idx: int = 0):
+def subplot_single_splitted_traj_acc(ped_positions_array: np.ndarray, ped_idx: int = 0):
     """
-    Plot from JSON file for a single pedestrian id trajectories, velocity and acceleration.
+    Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_idx (int): Which simulation pedestrian is inspected
     """
     _, axes = plt.subplots(1, 3, figsize=(18, 6))
-
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
     x_vals = ped_positions_array[:, ped_idx, 0]
     y_vals = ped_positions_array[:, ped_idx, 1]
@@ -178,11 +206,13 @@ def subplot_single_splitted_traj_acc(filename: str, ped_idx: int = 0):
     plt.savefig(f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}.png")
 
 
-def plot_acceleration_distribution(filename: str):
+def plot_acceleration_distribution(ped_positions_array: np.ndarray):
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
     _, num_pedestrians, _ = ped_positions_array.shape
 
     all_accelerations = []
@@ -224,15 +254,17 @@ def plot_acceleration_distribution(filename: str):
     plt.xlabel("Acceleration")
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Accelerations")
-    # plt.savefig("robot_sf/data_analysis/plots/acceleration_distribution.png")
+    plt.savefig("robot_sf/data_analysis/plots/acceleration_distribution.png")
     plt.show()
 
 
-def plot_velocity_distribution(filename: str):
+def plot_velocity_distribution(ped_positions_array: np.ndarray):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
     _, num_pedestrians, _ = ped_positions_array.shape
 
     all_velocities = []
@@ -276,12 +308,17 @@ def plot_velocity_distribution(filename: str):
     plt.show()
 
 
-def subplot_velocity_distribution(filename: str):
+def subplot_velocity_distribution_with_ego_ped(
+    ped_positions_array: np.ndarray, ego_positions: np.ndarray
+):
     """
-    Calculate and plot the probability distribution of the velocity of all pedestrians.
+    Calculate and plot the probability distribution of the velocity of all pedestrians
+    in comparison to the ego pedestrian.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ego_positions (np.ndarray): shape: (timesteps, 2)
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
-    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
     _, num_pedestrians, _ = ped_positions_array.shape
 
     all_npc_velocities = []
@@ -334,12 +371,14 @@ def subplot_velocity_distribution(filename: str):
     plt.show()
 
 
-def subplot_acceleration_distribution(filename: str):
+def subplot_acceleration_distribution(ped_positions_array: np.ndarray, ego_positions: np.ndarray):
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ego_positions (np.ndarray): shape: (timesteps, 2)
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
-    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
     _, num_pedestrians, _ = ped_positions_array.shape
 
     all_npc_accelerations = []
@@ -398,12 +437,14 @@ def subplot_acceleration_distribution(filename: str):
     plt.show()
 
 
-def subplot_velocity_distribution_with_positions(filename: str):
+def subplot_velocity_distribution_with_positions(ped_positions_array: np.ndarray):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians,
     and plot the positions of NPC pedestrians color-coded by their velocities.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
     """
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
     _, num_pedestrians, _ = ped_positions_array.shape
 
     all_npc_velocities = []
@@ -467,15 +508,20 @@ def subplot_velocity_distribution_with_positions(filename: str):
 def main():
     # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
     filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
-    # plot_all_splitted_traj(filename)
-    # plot_single_splitted_traj(filename, ped_idx=15)
-    # subplot_single_splitted_traj_acc(filename, ped_idx=3)
-    # plot_acceleration_distribution(filename)
-    # plot_velocity_distribution(filename)
 
-    subplot_velocity_distribution(filename)
-    # subplot_acceleration_distribution(filename)
-    # subplot_velocity_distribution_with_positions(filename)
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+
+    # plot_all_splitted_traj(ped_positions_array)
+    # plot_single_splitted_traj(ped_positions_array, ped_idx=15)
+    # subplot_single_splitted_traj_acc(ped_positions_array, ped_idx=3)
+    # plot_acceleration_distribution(ped_positions_array)
+    # plot_velocity_distribution(ped_positions_array)
+
+    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
+
+    subplot_velocity_distribution_with_ego_ped(ped_positions_array, ego_positions)
+    # subplot_acceleration_distribution(ped_positions_array, ego_positions)
+    # subplot_velocity_distribution_with_positions(ped_positions_array)
 
 
 if __name__ == "__main__":

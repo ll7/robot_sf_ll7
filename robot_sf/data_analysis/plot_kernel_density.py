@@ -1,3 +1,12 @@
+"""
+This module provides functions to perform Kernel Density Estimation (KDE) on pedestrian data
+extracted from JSON datasets.
+
+Key Features:
+    - Plot KDE on the whole map
+    - Plot KDE on X and Y axes only
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KernelDensity
@@ -8,9 +17,15 @@ from robot_sf.data_analysis.generate_dataset import (
 )
 
 
-def plot_kde_on_map(filename: str, bandwidth: float = 1.0):
-    """Plot the Kernel Density Estimation of pedestrian positions on a map."""
-    peds_data = extract_key_from_json_as_ndarray(filename, "pedestrian_positions").reshape(-1, 2)
+def plot_kde_on_map(ped_positions_array: np.ndarray, bandwidth: float = 1.0):
+    """
+    Plot the Kernel Density Estimation of pedestrian positions on a map.
+
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+    """
+    peds_data = ped_positions_array.reshape(-1, 2)
 
     # Fit the KernelDensity model (with Gaussian kernel)
     kde = KernelDensity(kernel="gaussian", bandwidth=bandwidth)  # Adjust bandwidth as needed
@@ -42,7 +57,13 @@ def plot_kde_on_map(filename: str, bandwidth: float = 1.0):
 
 
 def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
-    """Perform Kernel Density Estimation on a 1D axis."""
+    """
+    Perform Kernel Density Estimation on a 1D axis.
+
+    Args:
+        data (np.ndarray): shape: (n_samples, 1)
+        bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+    """
     kde = KernelDensity(kernel="gaussian", bandwidth=bandwidth)
     kde.fit(data)
 
@@ -59,11 +80,16 @@ def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
     return axis_grid, density
 
 
-def plot_kde_in_x_y(filename: str, bandwidth: float = 0.1):
-    """Plot the Kernel Density Estimation of npc and ego positions in X and Y axes."""
-    peds_data = extract_key_from_json_as_ndarray(filename, "pedestrian_positions").reshape(-1, 2)
-    ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
+def plot_kde_in_x_y(ped_positions_array: np.ndarray, ego_data: np.ndarray, bandwidth: float = 0.1):
+    """
+    Plot the Kernel Density Estimation of npc and ego positions in X and Y axes.
 
+    Args:
+        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ego_data (np.ndarray): shape: (timesteps, 2)
+        bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+    """
+    peds_data = ped_positions_array.reshape(-1, 2)
     # Perform KDE on npc data x positions
     x_positions = peds_data[:, 0].reshape(-1, 1)
     x_grid_npc, density_npc_x = perform_kde_on_axis(x_positions, bandwidth)
@@ -114,8 +140,14 @@ def plot_kde_in_x_y(filename: str, bandwidth: float = 0.1):
 def main():
     # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
     filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
-    plot_kde_on_map(filename)
-    plot_kde_in_x_y(filename)
+
+    pedestrian_pos = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+
+    plot_kde_on_map(pedestrian_pos)
+
+    ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
+
+    plot_kde_in_x_y(pedestrian_pos, ego_data)
 
 
 if __name__ == "__main__":

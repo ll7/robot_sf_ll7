@@ -61,32 +61,43 @@ class VisualizableSimState:
     """
     VisualizableSimState represents a collection of properties to display
     the simulator's state at a discrete timestep.
-
-    Attributes:
-        timestep (int): The discrete timestep of the simulation.
-        robot_action (Union[VisualizableAction, None]):
-            The action taken by the robot at this timestep.
-        robot_pose (RobotPose): The pose of the robot at this timestep.
-        pedestrian_positions (np.ndarray): The positions of pedestrians at this timestep.
-        ray_vecs (np.ndarray): The ray vectors associated with the robot's sensors.
-        ped_actions (np.ndarray): The actions taken by pedestrians at this timestep.
-        ego_ped_pose (PedPose, optional):
-            The pose of the ego pedestrian at this timestep. Defaults to None.
-        ego_ped_ray_vecs (np.ndarray, optional):
-            The ray vectors associated with the ego pedestrian's sensors. Defaults to None.
-        ego_ped_action (Union[VisualizableAction, None], optional):
-            The action taken by the ego pedestrian at this timestep. Defaults to None.
     """
 
     timestep: int
+    """The discrete timestep of the simulation."""
+
     robot_action: Union[VisualizableAction, None]
+    """The action taken by the robot at this timestep."""
+
     robot_pose: RobotPose
+    """The pose of the robot at this timestep."""
+
     pedestrian_positions: np.ndarray
+    """The positions of pedestrians at this timestep."""
+
     ray_vecs: np.ndarray
+    """The ray vectors associated with the robot's sensors."""
+
     ped_actions: np.ndarray
+    """The actions taken by pedestrians at this timestep."""
+
     ego_ped_pose: PedPose = None
+    """The pose of the ego pedestrian at this timestep. Defaults to None."""
+
     ego_ped_ray_vecs: np.ndarray = None
+    """The ray vectors associated with the ego pedestrian's sensors. Defaults to None."""
+
     ego_ped_action: Union[VisualizableAction, None] = None
+    """The action taken by the ego pedestrian at this timestep. Defaults to None."""
+
+    time_per_step_in_secs: float = None
+    """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
+
+    def __post_init__(self):
+        """validate the visualizable state"""
+        if self.time_per_step_in_secs is None:
+            logger.warning("time_per_step_in_secs is None, defaulting to 0.1s.")
+            self.time_per_step_in_secs = 0.1
 
 
 @dataclass

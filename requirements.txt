@@ -18,3 +18,4 @@ shimmy>=2.0.0
 moviepy>=2.0.0
 setuptools>=75.5.0
 pre-commit>=4.1.0
+scikit-learn>=1.6.1

@@ -1,17 +1,18 @@
-from robot_sf.tb_logging import DrivingMetricsCallback, VecEnvMetrics
+import logging
+import sys
+from typing import List
+
+import numpy as np
+import optuna
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv
+
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv, simple_reward
-from stable_baselines3.common.callbacks import CallbackList, BaseCallback
-from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3 import PPO
-import numpy as np
-import sys
-import logging
-from typing import List
-
-import optuna
+from robot_sf.tb_logging import DrivingMetricsCallback, VecEnvMetrics
 
 optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
 

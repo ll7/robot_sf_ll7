@@ -2,11 +2,12 @@
 Test what happens if pedestrian and robot spawn in an obstacle.
 """
 
+from loguru import logger
+
 from robot_sf.gym_env.robot_env_with_pedestrian_obstacle_forces import (
     RobotEnvWithPedestrianObstacleForces,
 )
 from robot_sf.nav.svg_map_parser import convert_map
-from loguru import logger
 
 
 def test_spawn_in_obstacle():

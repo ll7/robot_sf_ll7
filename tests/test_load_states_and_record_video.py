@@ -1,10 +1,12 @@
 """pytest for load_states_and_record_video.py"""
 
-import pytest
 import datetime
+from pathlib import Path
+
+import pytest
+
 from robot_sf.render.playback_recording import load_states_and_record_video
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
-from pathlib import Path
 
 
 @pytest.mark.skipif(

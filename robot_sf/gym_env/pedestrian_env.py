@@ -10,31 +10,29 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the pedestrian.
 """
 
-import os
 import datetime
-from typing import Callable, List
-from copy import deepcopy
+import os
 import pickle
+from copy import deepcopy
+from typing import Callable, List
 
 import loguru
 import numpy as np
-
 from gymnasium import Env
 
-from robot_sf.robot.robot_state import RobotState
-from robot_sf.ped_ego.pedestrian_state import PedestrianState
 from robot_sf.gym_env.env_config import PedEnvSettings
-from robot_sf.sensor.range_sensor import lidar_ray_scan
-
+from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
+from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.ped_ego.pedestrian_state import PedestrianState
+from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
     SimulationView,
     VisualizableAction,
     VisualizableSimState,
 )
+from robot_sf.robot.robot_state import RobotState
+from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import init_ped_simulators
-from robot_sf.gym_env.reward import simple_ped_reward
-from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
-from robot_sf.render.lidar_visual import render_lidar
 
 logger = loguru.logger
 
@@ -93,10 +91,6 @@ class PedestrianEnv(Env):
         # Initialize simulator with a random start position
         self.simulator = init_ped_simulators(env_config, self.map_def, random_start_pos=True)[0]
 
-        # Delta time per simulation step and maximum episode time
-        d_t = env_config.sim_config.time_per_step_in_secs
-        max_ep_time = env_config.sim_config.sim_time_in_secs
-
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_ped_collision_and_sensors(
             self.simulator, env_config, orig_obs_space
@@ -104,16 +98,20 @@ class PedestrianEnv(Env):
 
         # Setup initial state of the robot
         self.robot_state = RobotState(
-            self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time
+            nav=self.simulator.robot_navs[0],
+            occupancy=occupancies[0],
+            sensors=sensors[0],
+            d_t=env_config.sim_config.time_per_step_in_secs,
+            sim_time_limit=env_config.sim_config.sim_time_in_secs,
         )
 
         # Setup initial state of the pedestrian
         self.ped_state = PedestrianState(
-            occupancies[0],  # robot occupancy
-            occupancies[1],  # ego_ped occupancy
-            sensors[1],
-            d_t,
-            max_ep_time,
+            robot_occupancy=occupancies[0],  # robot occupancy
+            ego_ped_occupancy=occupancies[1],  # ego_ped occupancy
+            sensors=sensors[1],
+            d_t=env_config.sim_config.time_per_step_in_secs,
+            sim_time_limit=env_config.sim_config.sim_time_in_secs,
         )
 
         # Assign the robot model
@@ -269,6 +267,7 @@ class PedestrianEnv(Env):
             self.simulator.ego_ped_pose,
             ego_ped_ray_vecs,
             ego_ped_action,
+            time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,
         )
 
         return state

@@ -1,10 +1,11 @@
 # test_moviepy_setup.py
 
-import pytest
 from pathlib import Path
+
 import numpy as np
-from moviepy import ImageSequenceClip, VideoFileClip
+import pytest
 from loguru import logger
+from moviepy import ImageSequenceClip, VideoFileClip
 
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 

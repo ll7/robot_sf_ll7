@@ -22,6 +22,7 @@ dependencies = [
     "rich",
     "tensorboard",
     "ruff>=0.9.7",
+    "pre-commit>=4.1.0",
 ]
 license = {text = "GPLv3"}
 
@@ -44,7 +45,7 @@ line-length = 100
 target-version = ["py310", "py311", "py312"]
 
 [tool.ruff]
-required-version = "0.9.7"
+required-version = ">=0.9.7"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -87,7 +88,7 @@ target-version = "py312"
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
 # McCabe complexity (`C901`) by default.
-select = ["E4", "E7", "E9", "F", "W", "C901"]
+select = ["E4", "E7", "E9", "F", "W", "C901", "I001"]
 ignore = []
 
 # Allow fix for all enabled rules (when `--fix`) is provided.

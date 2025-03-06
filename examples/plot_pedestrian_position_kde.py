@@ -3,14 +3,14 @@ Use a recording and plot the kde of the pedestrian positions on a map.
 """
 
 import argparse
+
 from loguru import logger
 
-
-from robot_sf.render.playback_recording import load_states
 from robot_sf.data_analysis.recording_analysis import (
     extract_pedestrian_positions,
     visualize_kde_of_pedestrians_on_map,
 )
+from robot_sf.render.playback_recording import load_states
 
 
 def main():

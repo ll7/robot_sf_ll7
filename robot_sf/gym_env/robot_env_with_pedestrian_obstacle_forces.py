@@ -3,8 +3,9 @@ Create a robot environment with pedestrian obstacle forces
 """
 
 from loguru import logger
-from robot_sf.gym_env.robot_env import RobotEnv
+
 from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.nav.map_config import MapDefinitionPool
 
 # specify default map:

@@ -1,4 +1,5 @@
 import numpy as np
+
 from robot_sf.sensor.range_sensor import (
     circle_line_intersection_distance,
     euclid_dist,

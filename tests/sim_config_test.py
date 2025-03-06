@@ -1,13 +1,14 @@
 import pytest
+
 from robot_sf.gym_env.env_config import (
-    EnvSettings,
-    SimulationSettings,
-    LidarScannerSettings,
-    DifferentialDriveSettings,
-    BicycleDriveSettings,
-    MapDefinitionPool,
-    DifferentialDriveRobot,
     BicycleDriveRobot,
+    BicycleDriveSettings,
+    DifferentialDriveRobot,
+    DifferentialDriveSettings,
+    EnvSettings,
+    LidarScannerSettings,
+    MapDefinitionPool,
+    SimulationSettings,
 )
 
 

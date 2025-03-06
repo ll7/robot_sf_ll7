@@ -3,3 +3,6 @@
 # https://stackoverflow.com/questions/53502654/how-do-i-run-a-code-formatter-over-my-source-without-modifying-git-history
 # Use ruff for formating.
 3e27f6bb7fd514ad63abb763ece1382d0ceb3f4e
+
+# I001 import sorting fix
+cf762630b42bb7c7c0164ef6f2d342ccb330bd74

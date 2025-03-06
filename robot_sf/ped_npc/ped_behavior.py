@@ -4,14 +4,14 @@ ped_behavior.py
 - Pedestrian groups can be assigned to follow a route or to move around a crowded zone
 """
 
-from math import dist
-from typing import List, Dict, Protocol
 from dataclasses import dataclass, field
+from math import dist
+from typing import Dict, List, Protocol
 
 from robot_sf.nav.map_config import GlobalRoute
 from robot_sf.nav.navigation import RouteNavigator
-from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings
+from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.util.types import Zone
 
 

@@ -1,11 +1,11 @@
+import json
 import os
 import sys
-import json
 from typing import List
 
-from svgelements import SVG, Point, Path
+from svgelements import SVG, Path, Point
 
-from robot_sf.util.types import Vec2D, RgbColor
+from robot_sf.util.types import RgbColor, Vec2D
 
 HELP_MSG = """This tool converts SVG maps from OpenStreetMap to JSON maps that can be imported
 into the RobotSF simulator.

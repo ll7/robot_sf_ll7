@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from robot_sf.render.lidar_visual import render_lidar
 
 

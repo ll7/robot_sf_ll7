@@ -2,7 +2,8 @@
 Module specifying types used in robot_sf
 """
 
-from typing import Tuple, Union, Set, Dict
+from typing import Dict, Set, Tuple, Union
+
 import numpy as np
 
 # Geometry types

@@ -2,20 +2,20 @@
 define the map configuration
 """
 
-import os
 import json
+import os
 import random
+from dataclasses import dataclass, field
+from math import sqrt
+from typing import Dict, List, Union
+
+import matplotlib.axes
 import numpy as np
 from loguru import logger
-import matplotlib.axes
 
-from math import sqrt
-from typing import List, Union, Dict
-from dataclasses import dataclass, field
-
-from robot_sf.util.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.obstacle import Obstacle
+from robot_sf.util.types import Line2D, Rect, Vec2D
 
 
 @dataclass

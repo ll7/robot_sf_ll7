@@ -6,14 +6,13 @@ from pathlib import Path
 from loguru import logger
 from stable_baselines3 import PPO
 
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
-from robot_sf.sim.sim_config import SimulationSettings
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
-from robot_sf.render.playback_recording import load_states_and_visualize
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
-
+from robot_sf.render.playback_recording import load_states_and_visualize
+from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.sim.sim_config import SimulationSettings
 
 logger.info("Simulate the trained robot and a pedestrian with a random policy.")
 

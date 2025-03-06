@@ -1,10 +1,10 @@
 import json
-from typing import Union, List, Set
 from dataclasses import dataclass, field
+from typing import List, Set, Union
 
 import numpy as np
 
-from robot_sf.util.types import Vec2D, Rect, Range2D
+from robot_sf.util.types import Range2D, Rect, Vec2D
 
 
 @dataclass

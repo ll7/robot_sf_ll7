@@ -13,6 +13,7 @@ from typing import List, Union
 import gymnasium
 import numpy as np
 from gymnasium import spaces
+from loguru import logger
 from stable_baselines3 import A2C, PPO
 from tqdm import tqdm
 
@@ -259,7 +260,7 @@ def evaluation_series(model_path: str, settings: EvalSettings):
 
 def main():
     """Main function to set up and run the evaluation."""
-    model_path = "./model/a2c_model"
+    model_path = "./model/run_043.zip"
     obs_space, action_space = prepare_gym_spaces()
 
     # Configure gym adapter settings
@@ -274,11 +275,11 @@ def main():
 
     # Configure vehicle
     vehicle_config = DifferentialDriveSettings(
-        radius=1.0,
-        max_linear_speed=0.5,
-        max_angular_speed=0.5,
-        wheel_radius=0.05,
-        interaxis_length=0.3,
+        #     radius=1.0,
+        #     max_linear_speed=0.5,
+        #     max_angular_speed=0.5,
+        #     wheel_radius=0.05,
+        #     interaxis_length=0.3,
     )
 
     # Configure pedestrian-robot interaction forces
@@ -318,4 +319,5 @@ def prepare_gym_spaces():
 
 
 if __name__ == "__main__":
+    logger.info("Starting evaluation script")
     main()

@@ -8,8 +8,8 @@ This module performs the following:
 - Saves the converted data as a JSON file named after the recording's timestamp.
 """
 
-import os
 import json
+import os
 import re
 from pathlib import Path
 
@@ -17,7 +17,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.render.playback_recording import load_states
-from robot_sf.render.sim_view import VisualizableSimState, VisualizableAction
+from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 
 
 def run():

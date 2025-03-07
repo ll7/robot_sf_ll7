@@ -1,10 +1,10 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.neighbors import KernelDensity
 
 from robot_sf.data_analysis.generate_dataset import (
-    extract_key_from_json_as_ndarray,
     extract_key_from_json,
+    extract_key_from_json_as_ndarray,
 )
 
 

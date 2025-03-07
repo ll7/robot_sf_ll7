@@ -1,7 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy.stats import norm
-
 
 from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,

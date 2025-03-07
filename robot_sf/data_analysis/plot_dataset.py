@@ -1,6 +1,7 @@
+import timeit
+
 import matplotlib.pyplot as plt
 import numpy as np
-import timeit
 
 from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,

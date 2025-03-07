@@ -237,7 +237,6 @@ class PedestrianEnv(Env):
             self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
         )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
-
         # Prepare action and LIDAR visualization for the ego pedestrian
         ego_ped_action = (
             None

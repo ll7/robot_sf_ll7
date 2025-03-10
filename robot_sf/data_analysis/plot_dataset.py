@@ -14,15 +14,20 @@ import numpy as np
 
 from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,
+    extract_timestamp,
 )
 
 
-def plot_all_npc_ped_positions(ped_positions_array: np.ndarray):
+def plot_all_npc_ped_positions(
+    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+):
     """
     Plot all NPC pedestrian positions from the given position array.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        interactive (bool): If True, show the plot interactively.
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     # E.g.: For only 100 timesteps x_vals = ped_positions_array[:100, :, 0]
     x_vals = ped_positions_array[:, :, 0]
@@ -38,10 +43,19 @@ def plot_all_npc_ped_positions(ped_positions_array: np.ndarray):
     plt.title("All recorded npc pedestrian positions")
     # plt.legend()
     plt.tight_layout()
-    plt.savefig("robot_sf/data_analysis/plots/all_npc_pedestrian_positions.png")
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/all_npc_pedestrian_positions_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/all_npc_pedestrian_positions.png"
+    plt.savefig(filename)
+    if interactive:
+        plt.show()
+    plt.close()
 
 
-def plot_all_npc_ped_velocities(ped_actions: list, raw: bool = True):
+def plot_all_npc_ped_velocities(
+    ped_actions: list, raw: bool = True, interactive: bool = False, unique_id: str = None
+):
     """
     Plot all NPC pedestrian velocities from the given list of actions.
     Based on the actions of the npc pedestrians.
@@ -49,6 +63,8 @@ def plot_all_npc_ped_velocities(ped_actions: list, raw: bool = True):
     Args:
         ped_actions (list): List of pedestrian actions.
         raw (bool): If raw is True, dont use the applied scaling factor (for visual purpose).
+        interactive (bool): If True, show the plot interactively.
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     velocity_list = []
     for timestep, actions in enumerate(ped_actions):
@@ -72,16 +88,28 @@ def plot_all_npc_ped_velocities(ped_actions: list, raw: bool = True):
     plt.title("Pedestrian Velocity over Time, raw" if raw else "Pedestrian Velocity over Time")
     # plt.legend()
     plt.tight_layout()
+
     title = "all_npc_ped_velocities_raw" if raw else "all_npc_ped_velocities"
-    plt.savefig(f"robot_sf/data_analysis/plots/{title}.png")
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/{title}_{unique_id}.png"
+    else:
+        filename = f"robot_sf/data_analysis/plots/{title}.png"
+    plt.savefig(filename)
+    if interactive:
+        plt.show()
+    plt.close()
 
 
-def plot_ego_ped_acceleration(ego_ped_acceleration: list):
+def plot_ego_ped_acceleration(
+    ego_ped_acceleration: list, interactive: bool = False, unique_id: str = None
+):
     """
     Plot the acceleration of the ego pedestrian.
 
     Args:
         ego_ped_acceleration (list): List of ego pedestrian accelerations.
+        interactive (bool): If True, show the plot interactively.
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
 
     plt.plot(ego_ped_acceleration, label="Acceleration")
@@ -89,15 +117,26 @@ def plot_ego_ped_acceleration(ego_ped_acceleration: list):
     plt.ylabel("Acceleration")
     plt.title("Ego Ped Acceleration over Time")
     plt.legend()
-    plt.savefig("robot_sf/data_analysis/plots/ego_ped_acc.png")
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/ego_ped_acc_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/ego_ped_acc.png"
+    plt.savefig(filename)
+    if interactive:
+        plt.show()
+    plt.close()
 
 
-def plot_ego_ped_velocity(ego_ped_acceleration: list):
+def plot_ego_ped_velocity(
+    ego_ped_acceleration: list, interactive: bool = False, unique_id: str = None
+):
     """
     Plot the velocity of the ego pedestrian based on the acceleration.
 
     Args:
         ego_ped_acceleration (list): List of ego pedestrian accelerations.
+        interactive (bool): If True, show the plot interactively.
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
 
     ego_ped_velocity = []
@@ -115,13 +154,21 @@ def plot_ego_ped_velocity(ego_ped_acceleration: list):
     plt.ylabel("Velocity")
     plt.title("Ego Ped Velocity over Time")
     plt.legend()
-    plt.savefig("robot_sf/data_analysis/plots/ego_ped_vel.png")
-    plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/ego_ped_vel_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/ego_ped_vel.png"
+    plt.savefig(filename)
+    if interactive:
+        plt.show()
+    plt.close()
 
 
 def main():
     # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
     filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
+    unique_id = extract_timestamp(filename)
 
     # ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
     # ped_actions = extract_key_from_json(filename, "ped_actions")
@@ -131,7 +178,7 @@ def main():
 
     # plot_all_npc_ped_positions(ped_positions_array)
     # plot_all_npc_ped_velocities(ped_actions, raw=True)
-    plot_ego_ped_acceleration(ego_ped_acceleration)
+    plot_ego_ped_acceleration(ego_ped_acceleration, interactive=True, unique_id=unique_id)
     # plot_ego_ped_velocity(ego_ped_acceleration)
 
 

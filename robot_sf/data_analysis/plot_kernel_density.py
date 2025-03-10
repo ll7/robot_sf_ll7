@@ -14,16 +14,24 @@ from sklearn.neighbors import KernelDensity
 from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,
     extract_key_from_json_as_ndarray,
+    extract_timestamp,
 )
 
 
-def plot_kde_on_map(ped_positions_array: np.ndarray, bandwidth: float = 1.0):
+def plot_kde_on_map(
+    ped_positions_array: np.ndarray,
+    bandwidth: float = 1.0,
+    interactive: bool = False,
+    unique_id: str = None,
+):
     """
     Plot the Kernel Density Estimation of pedestrian positions on a map.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+        interactive (bool): If True, show the plot interactively.
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     peds_data = ped_positions_array.reshape(-1, 2)
 
@@ -52,8 +60,14 @@ def plot_kde_on_map(ped_positions_array: np.ndarray, bandwidth: float = 1.0):
     plt.xlabel("X Position")
     plt.ylabel("Y Position")
     plt.title("Kernel Density Estimation")
-
-    plt.savefig("robot_sf/data_analysis/plots/kde_on_map.png")
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/kde_on_map_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/kde_on_map.png"
+    plt.savefig(filename)
+    if interactive:
+        plt.show()
+    plt.close()
 
 
 def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
@@ -80,7 +94,13 @@ def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
     return axis_grid, density
 
 
-def plot_kde_in_x_y(ped_positions_array: np.ndarray, ego_data: np.ndarray, bandwidth: float = 0.1):
+def plot_kde_in_x_y(
+    ped_positions_array: np.ndarray,
+    ego_data: np.ndarray,
+    bandwidth: float = 0.1,
+    interactive: bool = False,
+    unique_id: str = None,
+):
     """
     Plot the Kernel Density Estimation of npc and ego positions in X and Y axes.
 
@@ -88,6 +108,8 @@ def plot_kde_in_x_y(ped_positions_array: np.ndarray, ego_data: np.ndarray, bandw
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_data (np.ndarray): shape: (timesteps, 2)
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+        interactive (bool): If True, show the plot interactively.
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     peds_data = ped_positions_array.reshape(-1, 2)
     # Perform KDE on npc data x positions
@@ -134,16 +156,24 @@ def plot_kde_in_x_y(ped_positions_array: np.ndarray, ego_data: np.ndarray, bandw
     axes[1].legend()
 
     plt.tight_layout()
-    plt.savefig("robot_sf/data_analysis/plots/kde_xy_ego_npc.png")
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/kde_xy_ego_npc_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/kde_xy_ego_npc.png"
+    plt.savefig(filename)
+    if interactive:
+        plt.show()
+    plt.close()
 
 
 def main():
     # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
     filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
+    unique_id = extract_timestamp(filename)
 
     pedestrian_pos = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
-    plot_kde_on_map(pedestrian_pos)
+    plot_kde_on_map(pedestrian_pos, interactive=True, unique_id=unique_id)
 
     ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 

@@ -24,6 +24,9 @@ from robot_sf.data_analysis.generate_dataset import (
 
 TRAJECTORY_DISCONTINUITY_THRESHOLD = 2  # Threshold for abnormal distance
 
+# Global flag to avoid log spam in calculate_velocity and calculate_acceleration
+time_interval_warning_logged = False
+
 
 def plot_single_splitted_traj(
     ped_positions_array: np.ndarray,
@@ -74,14 +77,13 @@ def plot_single_splitted_traj(
     plt.gca().invert_yaxis()
     plt.legend()
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj_{unique_id}.png"
     else:
         filename = f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -130,14 +132,13 @@ def plot_all_splitted_traj(
     # plt.legend()
     plt.gca().invert_yaxis()
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/all_splitted_npc_traj_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/all_splitted_npc_traj.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -145,8 +146,11 @@ def calculate_velocity(
     x_vals: np.ndarray, y_vals: np.ndarray, time_interval: float = None
 ) -> np.ndarray:
     """Calculate the velocity of a pedestrian given their x and y positions."""
+    global time_interval_warning_logged
     if time_interval is None:
-        logger.warning("Time interval not provided. Using default value of 0.1 seconds.")
+        if time_interval_warning_logged is False:
+            time_interval_warning_logged = True
+            logger.warning("Time interval not provided. Using default value of 0.1 seconds.")
         time_interval = 0.1
 
     # Calculate the differences between consecutive points
@@ -163,8 +167,11 @@ def calculate_velocity(
 def calculate_acceleration(velocities: np.ndarray, time_interval: float = None) -> np.ndarray:
     """Calculate the acceleration of a pedestrian given their velocities."""
     # Calculate the differences between consecutive velocities
+    global time_interval_warning_logged
     if time_interval is None:
-        logger.warning("Time interval not provided. Using default value of 0.1 seconds.")
+        if time_interval_warning_logged is False:
+            time_interval_warning_logged = True
+            logger.warning("Time interval not provided. Using default value of 0.1 seconds.")
         time_interval = 0.1
 
     dv = np.diff(velocities)
@@ -243,14 +250,13 @@ def subplot_single_splitted_traj_acc(
 
     plt.tight_layout()
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}_{unique_id}.png"
     else:
         filename = f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -289,7 +295,7 @@ def plot_acceleration_distribution(
         all_accelerations.extend(acceleration)
 
     max_acceleration = max(all_accelerations)
-    print(f"Maximum Acceleration: {max_acceleration}")
+    logger.info(f"Maximum Acceleration: {max_acceleration}")
 
     # Plot the histogram of accelerations
     plt.hist(all_accelerations, bins=60, density=True, alpha=0.6, color="g")
@@ -307,14 +313,13 @@ def plot_acceleration_distribution(
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Accelerations")
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/acceleration_distribution_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/acceleration_distribution.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -351,7 +356,7 @@ def plot_velocity_distribution(
         all_velocities.extend(velocities)
 
     max_velocity = max(all_velocities)
-    print(f"Maximum Velocity: {max_velocity}")
+    logger.info(f"Maximum Velocity: {max_velocity}")
 
     # Plot the histogram of velocities
     plt.hist(all_velocities, bins=60, density=True, alpha=0.6, color="b")
@@ -369,14 +374,13 @@ def plot_velocity_distribution(
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Velocities")
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/velocity_distribution_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/velocity_distribution.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -420,7 +424,7 @@ def subplot_velocity_distribution_with_ego_ped(
 
     max_ego = max(ego_velocities)
     max_npc = max(all_npc_velocities)
-    print(f"Maximum Velocity Ego: {max_ego}, NPC: {max_npc}")
+    logger.info(f"Maximum Velocity Ego: {max_ego}, NPC: {max_npc}")
 
     # Plot the histogram of velocities
     _, axes = plt.subplots(1, 2, figsize=(18, 6))
@@ -445,14 +449,13 @@ def subplot_velocity_distribution_with_ego_ped(
 
     plt.tight_layout()
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/velocity_distribution_comparison_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/velocity_distribution_comparison.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -500,8 +503,8 @@ def subplot_acceleration_distribution(
     max_npc = max(all_npc_accelerations)
     min_ego = min(ego_accelerations)
     min_npc = min(all_npc_accelerations)
-    print(f"Maximum Acceleration Ego: {max_ego}, NPC: {max_npc}")
-    print(f"Minimum Acceleration Ego: {min_ego}, NPC: {min_npc}")
+    logger.info(f"Maximum Acceleration Ego: {max_ego}, NPC: {max_npc}")
+    logger.info(f"Minimum Acceleration Ego: {min_ego}, NPC: {min_npc}")
 
     # Plot the histogram of accelerations
     _, axes = plt.subplots(1, 2, figsize=(18, 6))
@@ -526,9 +529,6 @@ def subplot_acceleration_distribution(
 
     plt.tight_layout()
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = (
             f"robot_sf/data_analysis/plots/acceleration_distribution_comparison_{unique_id}.png"
@@ -536,6 +536,8 @@ def subplot_acceleration_distribution(
     else:
         filename = "robot_sf/data_analysis/plots/acceleration_distribution_comparison.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 
@@ -578,7 +580,7 @@ def subplot_velocity_distribution_with_positions(
         all_npc_positions.extend(zip(x_vals[start_idx + 1 :], y_vals[start_idx + 1 :]))
 
     max_velocity = max(all_npc_velocities)
-    print(f"Maximum Velocity: {max_velocity}")
+    logger.info(f"Maximum Velocity: {max_velocity}")
 
     # Plot the histogram of velocities
     fig, axes = plt.subplots(1, 2, figsize=(27, 6))
@@ -608,9 +610,6 @@ def subplot_velocity_distribution_with_positions(
 
     plt.tight_layout()
 
-    if interactive:
-        plt.show()
-
     if unique_id:
         filename = (
             f"robot_sf/data_analysis/plots/velocity_distribution_with_positions_{unique_id}.png"
@@ -618,6 +617,8 @@ def subplot_velocity_distribution_with_positions(
     else:
         filename = "robot_sf/data_analysis/plots/velocity_distribution_with_positions.png"
     plt.savefig(filename)
+    if interactive:
+        plt.show()
     plt.close()
 
 

@@ -132,6 +132,7 @@ class SimulationView:
         display_robot_info (int): Level of robot information to display.
         display_help (bool): Whether to display help text.
         current_target_fps (float): Current target frames per second for rendering.
+        display_text: bool = Fase: Whether to display text on the screen.
 
     Methods:
         __post_init__(): Initialize PyGame components.
@@ -170,6 +171,7 @@ class SimulationView:
     display_robot_info: int = field(default=0)  # Add this line
     display_help: bool = field(default=False)  # Also add this for help text
     current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
+    display_text: bool = field(default=False)  # Add this field to control text visibility
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -291,9 +293,14 @@ class SimulationView:
 
     def _draw_information(self, state: VisualizableSimState):
         """Draw UI information elements."""
-        self._add_text(state.timestep, state)
-        if self.display_help:
-            self._add_help_text()
+        if self.display_text:
+            # Full text display
+            self._add_text(state.timestep, state)
+            if self.display_help:
+                self._add_help_text()
+        else:
+            # Minimal hint when text is disabled
+            self._add_minimal_hint()
 
     def _finalize_frame(self, target_fps: float):
         """Capture or display the completed frame."""
@@ -384,6 +391,8 @@ class SimulationView:
             pygame.K_q: lambda: setattr(
                 self, "display_robot_info", (self.display_robot_info + 1) % 3
             ),
+            # toggle text display (add this line)
+            pygame.K_t: lambda: setattr(self, "display_text", not self.display_text),
         }
 
         if e.key in key_action_map:
@@ -493,7 +502,6 @@ class SimulationView:
             pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
-        # TODO: display pedestrians with an image instead of a circle
         pygame.draw.circle(
             self.screen,
             ROBOT_GOAL_COLOR,
@@ -653,6 +661,34 @@ class SimulationView:
 
         self.screen.blit(text_surface, self._timestep_text_pos)
 
+    def _add_minimal_hint(self):
+        """Show a minimal hint when text display is disabled."""
+        hint_text = "Press T to show text"
+
+        # Create a smaller font for the hint
+        hint_font = pygame.font.Font(None, 12)  # Reduced from 36 to 24
+
+        # Create a semi-transparent surface for the hint
+        text_render = hint_font.render(hint_text, True, TEXT_COLOR)
+        text_outline = hint_font.render(hint_text, True, TEXT_OUTLINE_COLOR)
+
+        width, height = hint_font.size(hint_text)
+        hint_surface = pygame.Surface((width + 10, height + 10), pygame.SRCALPHA)
+        hint_surface.fill((0, 0, 0, 128))  # More transparent than normal
+
+        # Position for the text
+        pos = (5, 5)
+
+        # Draw outline
+        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            hint_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
+
+        # Draw main text
+        hint_surface.blit(text_render, pos)
+
+        # Display the hint in the corner
+        self.screen.blit(hint_surface, (16, 16))
+
     def _add_help_text(self):
         text_lines = [
             "Move camera: arrow keys",
@@ -664,6 +700,7 @@ class SimulationView:
             "Scale up: +",
             "Scale down: -",
             "Display robot info: q",
+            "Toggle text: t",  # Add this line
             "Help: h",
         ]
 

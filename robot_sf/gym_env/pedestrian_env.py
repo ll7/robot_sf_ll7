@@ -162,11 +162,11 @@ class PedestrianEnv(Env):
         # Process the action through the simulator
         action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
         action_robot = self.simulator.robots[0].parse_action(action_robot)
-        action_robot = (0.0, 0.0)  # TODO: remove noop after testing
+        # action_robot = (0.0, 0.0)  # TODO: remove noop after testing
         self.last_action_robot = action_robot
 
         action_ped = self.simulator.ego_ped.parse_action(action_ped)
-        action_ped = (0.0, 0.0)  # TODO: remove noop after testing
+        # action_ped = (0.0, 0.0)  # TODO: remove noop after testing
         self.last_action_ped = action_ped
 
         # Perform simulation step

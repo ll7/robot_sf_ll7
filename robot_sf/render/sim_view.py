@@ -188,7 +188,7 @@ class SimulationView:
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
-    def render(self, state: VisualizableSimState, sleep_time: float = 0.01):  # noqa: C901
+    def render(self, state: VisualizableSimState, sleep_time: float = 0.01):
         """
         Render one frame and handle events.
 
@@ -196,19 +196,22 @@ class SimulationView:
             state (VisualizableSimState): The current state of the simulation to be visualized.
             sleep_time (float, optional): Time to sleep between frames to control the frame rate.
                 Defaults to 0.01.
-
-        Handles:
-            - Pygame events such as QUIT, VIDEORESIZE, and KEYDOWN.
-            - Camera movement based on the simulation state.
-            - Drawing of static objects, grid, dynamic objects, and additional information.
-            - Video recording if enabled.
-
-        Notes:
-            - If an exit is requested, the function will quit pygame and exit the program if an
-                abortion is requested.
-            - The function limits the frame rate by sleeping for the specified sleep_time.
         """
         # Handle events on main thread
+        self._process_events()
+
+        if self.is_exit_requested:
+            self._handle_exit()
+            return
+
+        # Render the frame
+        self._prepare_frame(state)
+
+        # Capture or display the frame
+        self._finalize_frame(sleep_time)
+
+    def _process_events(self):
+        """Process pygame events."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self._handle_quit()
@@ -217,60 +220,99 @@ class SimulationView:
             elif event.type == pygame.KEYDOWN:
                 self._handle_keydown(event)
 
-        if self.is_exit_requested:
-            pygame.quit()
-            if self.is_abortion_requested:
-                exit()
-            return
+    def _handle_exit(self):
+        """Handle the exit state."""
+        pygame.quit()
+        if self.is_abortion_requested:
+            exit()
 
+    def _prepare_frame(self, state: VisualizableSimState):
+        """Prepare a new frame with the given state."""
         # Adjust the view based on the focus
         self._move_camera(state)
-
         self.screen.fill(BACKGROUND_COLOR)
 
-        # static objects
+        # Draw scene components in order
+        self._draw_static_elements()
+        self._draw_dynamic_elements(state)
+        self._draw_information(state)
+
+    def _draw_static_elements(self):
+        """Draw static elements like obstacles and grid."""
         if self.map_def.obstacles:
             self._draw_obstacles()
-
         self._draw_grid()
 
-        # dynamic objects
+    def _draw_dynamic_elements(self, state: VisualizableSimState):
+        """Draw dynamic elements based on the simulation state."""
+        self._draw_sensor_data(state)
+        self._draw_actions(state)
+        self._draw_entities(state)
+
+    def _draw_sensor_data(self, state: VisualizableSimState):
+        """Draw sensor data like lidar rays."""
         if hasattr(state, "ray_vecs"):
             self._augment_lidar(state.ray_vecs)
+        if (
+            hasattr(state, "ego_ped_pose")
+            and state.ego_ped_pose
+            and hasattr(state, "ego_ped_ray_vecs")
+        ):
+            self._augment_lidar(state.ego_ped_ray_vecs)
+
+    def _draw_actions(self, state: VisualizableSimState):
+        """Draw action indicators for all entities."""
         if hasattr(state, "ped_actions"):
             self._augment_ped_actions(state.ped_actions)
+
         if hasattr(state, "robot_action") and state.robot_action:
             self._augment_action(state.robot_action, ROBOT_ACTION_COLOR)
             if hasattr(state.robot_action, "goal"):
                 self._augment_goal_position(state.robot_action.goal)
+
+        if (
+            hasattr(state, "ego_ped_pose")
+            and hasattr(state, "ego_ped_action")
+            and state.ego_ped_action
+        ):
+            self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
+
+    def _draw_entities(self, state: VisualizableSimState):
+        """Draw all entities (robot, pedestrians, etc.)."""
         if hasattr(state, "pedestrian_positions"):
             self._draw_pedestrians(state.pedestrian_positions)
+
         if hasattr(state, "robot_pose"):
             self._draw_robot(state.robot_pose)
+
         if hasattr(state, "ego_ped_pose") and state.ego_ped_pose:
-            if hasattr(state, "ego_ped_ray_vecs"):
-                self._augment_lidar(state.ego_ped_ray_vecs)
-            if hasattr(state, "ego_ped_action") and state.ego_ped_action:
-                self._augment_action(state.ego_ped_action, EGO_PED_ACTION_COLOR)
             self._draw_ego_ped(state.ego_ped_pose)
 
-        # information
+    def _draw_information(self, state: VisualizableSimState):
+        """Draw UI information elements."""
         self._add_text(state.timestep, state)
         if self.display_help:
             self._add_help_text()
 
+    def _finalize_frame(self, sleep_time: float):
+        """Capture or display the completed frame."""
         if self.record_video:
-            # Capture frame
-            frame_data = pygame.surfarray.array3d(self.screen)
-            frame_data = frame_data.swapaxes(0, 1)
-            self.frames.append(frame_data)
-            if len(self.frames) > 2000:
-                logger.warning("Too many frames recorded. Stopping video recording.")
+            self._capture_frame()
         else:
-            # Normal display update
-            pygame.display.update()
-            # Limit the frame rate
-            self.clock.tick(1 / sleep_time)
+            self._display_frame(sleep_time)
+
+    def _capture_frame(self):
+        """Capture the current frame for video recording."""
+        frame_data = pygame.surfarray.array3d(self.screen)
+        frame_data = frame_data.swapaxes(0, 1)
+        self.frames.append(frame_data)
+        if len(self.frames) > 2000:
+            logger.warning("Too many frames recorded. Stopping video recording.")
+
+    def _display_frame(self, sleep_time: float):
+        """Display the frame and control frame rate."""
+        pygame.display.update()
+        self.clock.tick(1 / sleep_time)
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

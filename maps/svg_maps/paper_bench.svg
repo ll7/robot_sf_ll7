@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="50"
+   height="30"
+   viewBox="0 0 50 30.000017"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.1-rc (832c77b156, 2025-02-28)"
+   sodipodi:docname="paper_bench.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="6.4965436"
+     inkscape:cx="14.469233"
+     inkscape:cy="-21.011173"
+     inkscape:window-width="2494"
+     inkscape:window-height="1371"
+     inkscape:window-x="66"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1"
+     showguides="false" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-2"
+       width="30"
+       height="1"
+       x="5"
+       y="19"
+       ry="0.027167529"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1"
+       width="30"
+       height="1"
+       x="5"
+       y="4"
+       ry="0.027167529"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-5"
+       width="5.9659863"
+       height="1"
+       x="16.237843"
+       y="11.727892"
+       ry="0.027167529"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.128104;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect11"
+       width="0.87189567"
+       height="15.871896"
+       x="34.064053"
+       y="4.0640526"
+       ry="0.070254974"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0.138041;stroke-linejoin:bevel;stroke-opacity:1"
+       id="rect10"
+       width="0.86195832"
+       height="15.861959"
+       x="5.0690203"
+       y="4.0690203"
+       ry="0.069868691"
+       inkscape:label="obstacle" />
+    <rect
+       style="fill:#ffdf00;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect3"
+       width="5"
+       height="5"
+       x="3.306792"
+       y="23.081221"
+       ry="0.10415587"
+       inkscape:label="robot_spawn_zone" />
+    <rect
+       style="fill:#ff6c00;fill-opacity:1;stroke:#ff6c00;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect4"
+       width="5"
+       height="5"
+       x="38.189919"
+       y="23.312113"
+       ry="0.14076407"
+       inkscape:label="robot_goal_zone" />
+    <rect
+       style="fill:#107400;fill-opacity:1;stroke:#107400;stroke-width:0.0309354;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect6-6"
+       width="1.9690646"
+       height="1.9690646"
+       x="6.2654676"
+       y="14.015468"
+       ry="0.041594859"
+       inkscape:label="ped_goal_zone" />
+    <rect
+       style="fill:#23ff00;fill-opacity:1;stroke:#23ff00;stroke-width:0.0303014;stroke-linejoin:bevel;stroke-dasharray:none;stroke-opacity:1"
+       id="rect5-3"
+       width="1.9696987"
+       height="1.9696985"
+       x="31.76515"
+       y="8.015151"
+       ry="0.037919853"
+       inkscape:label="ped_spawn_zone" />
+    <path
+       style="fill:none;stroke:#0310b4;stroke-width:0.217101;stroke-dasharray:none;stroke-opacity:1"
+       d="M 8.6867839,25.953468 10.354106,25.707878 12.981401,25.216699 15.482384,25.462289 17.427593,26.444646 19.827526,26.690236 22.252721,27.427005 24.627391,27.181415 H 26.9768 L 29.705144,26.690236 H 32.686114 L 34.580799,26.935825 36.298645,26.199058 37.58703,25.462289"
+       id="path1"
+       inkscape:label="robot_route_0_0" />
+    <path
+       style="fill:none;stroke:#b40305;stroke-width:0.22;stroke-dasharray:none;stroke-opacity:1"
+       d="M 31.619047,9.0884353 8.3265306,14.965986"
+       id="path9"
+       inkscape:label="ped_route_0_0" />
+  </g>
+</svg>

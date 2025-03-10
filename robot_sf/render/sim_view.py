@@ -131,6 +131,7 @@ class SimulationView:
         offset (np.ndarray): Offset for the camera.
         display_robot_info (int): Level of robot information to display.
         display_help (bool): Whether to display help text.
+        current_target_fps (float): Current target frames per second for rendering.
 
     Methods:
         __post_init__(): Initialize PyGame components.
@@ -168,6 +169,7 @@ class SimulationView:
     offset: np.ndarray = field(default_factory=lambda: np.array([0, 0]))
     display_robot_info: int = field(default=0)  # Add this line
     display_help: bool = field(default=False)  # Also add this for help text
+    current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -187,14 +189,14 @@ class SimulationView:
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
-    def render(self, state: VisualizableSimState, target_fps: float = 100):
+    def render(self, state: VisualizableSimState, target_fps: float = 60):
         """
         Render one frame and handle events.
 
         Args:
             state (VisualizableSimState): The current state of the simulation to be visualized.
             target_fps (float, optional): Target frames per second for displaying the simulation.
-                Defaults to 100 (10ms per frame).
+                Defaults to 60 fps.
         """
         # Handle events on main thread
         self._process_events()
@@ -298,6 +300,8 @@ class SimulationView:
         if self.record_video:
             self._capture_frame()
         else:
+            # Store the current target FPS for display
+            self.current_target_fps = target_fps
             pygame.display.update()
             # Control frame rate with pygame's clock
             self.clock.tick(target_fps)
@@ -573,14 +577,19 @@ class SimulationView:
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
         lines = []
-        if self.display_robot_info == 1 and state.robot_action:
+        if self.display_robot_info == 1 and hasattr(state, "robot_action") and state.robot_action:
             lines += [
                 f"RobotPose: {state.robot_pose}",
                 f"RobotAction: {state.robot_action.action if state.robot_action else None}",
                 f"RobotGoal: {state.robot_action.goal if state.robot_action else None}",
             ]
         elif self.display_robot_info == 2:
-            if state.ego_ped_pose and state.ego_ped_action:
+            if (
+                hasattr(state, "ego_ped_pose")
+                and state.ego_ped_pose
+                and hasattr(state, "ego_ped_action")
+                and state.ego_ped_action
+            ):
                 distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
                 lines += [
                     f"PedestrianPose: {state.ego_ped_pose}",
@@ -590,12 +599,34 @@ class SimulationView:
                 ]
             else:
                 self.display_robot_info = 0
+
+        # Calculate the speedup factor safely
+        actual_fps = self.clock.get_fps()
+
+        # Get time_per_step_in_secs safely, ensuring a default value
+        time_per_step = getattr(state, "time_per_step_in_secs", None)
+        if time_per_step is None:
+            time_per_step = 0.1  # Default value if missing
+
+        speedup = actual_fps * time_per_step
+
         text_lines = [
             f"step: {timestep}",
             f"scaling: {self.scaling}",
+        ]
+
+        # Add FPS and speedup information if not recording
+        if not self.record_video:
+            text_lines += [
+                f"target fps: {actual_fps:.1f}/{getattr(self, 'current_target_fps', 60):.1f}",
+                f"speedup: {speedup:.1f}x",
+            ]
+
+        text_lines += [
             f"x-offset: {self.offset[0] / self.scaling:.2f}",
             f"y-offset: {self.offset[1] / self.scaling:.2f}",
         ]
+
         text_lines += lines
         text_lines += [
             "(Press h for help)",

@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass, field
 from math import cos, sin
-from time import sleep
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -135,7 +134,7 @@ class SimulationView:
 
     Methods:
         __post_init__(): Initialize PyGame components.
-        render(state: VisualizableSimState, sleep_time: float = 0.01):
+        render(state: VisualizableSimState, target_fps: float = 100):
             Render one frame and handle events.
         exit_simulation(return_frames: bool = False): Exit the simulation.
         clear(): Clears the screen and updates the display.
@@ -188,14 +187,14 @@ class SimulationView:
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
 
-    def render(self, state: VisualizableSimState, sleep_time: float = 0.01):
+    def render(self, state: VisualizableSimState, target_fps: float = 100):
         """
         Render one frame and handle events.
 
         Args:
             state (VisualizableSimState): The current state of the simulation to be visualized.
-            sleep_time (float, optional): Time to sleep between frames to control the frame rate.
-                Defaults to 0.01.
+            target_fps (float, optional): Target frames per second for displaying the simulation.
+                Defaults to 100 (10ms per frame).
         """
         # Handle events on main thread
         self._process_events()
@@ -208,7 +207,7 @@ class SimulationView:
         self._prepare_frame(state)
 
         # Capture or display the frame
-        self._finalize_frame(sleep_time)
+        self._finalize_frame(target_fps)
 
     def _process_events(self):
         """Process pygame events."""
@@ -294,12 +293,14 @@ class SimulationView:
         if self.display_help:
             self._add_help_text()
 
-    def _finalize_frame(self, sleep_time: float):
+    def _finalize_frame(self, target_fps: float):
         """Capture or display the completed frame."""
         if self.record_video:
             self._capture_frame()
         else:
-            self._display_frame(sleep_time)
+            pygame.display.update()
+            # Control frame rate with pygame's clock
+            self.clock.tick(target_fps)
 
     def _capture_frame(self):
         """Capture the current frame for video recording."""
@@ -308,11 +309,6 @@ class SimulationView:
         self.frames.append(frame_data)
         if len(self.frames) > 2000:
             logger.warning("Too many frames recorded. Stopping video recording.")
-
-    def _display_frame(self, sleep_time: float):
-        """Display the frame and control frame rate."""
-        pygame.display.update()
-        self.clock.tick(1 / sleep_time)
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
@@ -335,7 +331,7 @@ class SimulationView:
             logger.debug("Returning intermediate frames.")
             return intermediate_frames
 
-    def _handle_quit(self, e=None):
+    def _handle_quit(self):
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
@@ -394,18 +390,22 @@ class SimulationView:
                 self.redraw_needed = True
 
     def _process_event_queue(self):
-        """Process the event queue of the pygame window."""
+        """Process the event queue with better timing control."""
         event_handler_map = {
             pygame.QUIT: self._handle_quit,
             pygame.VIDEORESIZE: self._handle_video_resize,
             pygame.KEYDOWN: self._handle_keydown,
         }
+
+        # Use pygame's clock for consistent timing
         while not self.is_exit_requested:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
                 if handler:
                     handler(e)
-            sleep(0.01)  # Consider removing or replacing with a frame rate clock
+
+            # Limit this loop to 30 event checks per second (sufficient for UI interaction)
+            self.clock.tick(30)
 
     def clear(self):
         """

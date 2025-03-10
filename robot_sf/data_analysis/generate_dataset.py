@@ -47,9 +47,7 @@ def save_to_json(filename_pkl: str):
     if not os.path.exists(filename_pkl):
         raise FileNotFoundError(f"File {filename_pkl} not found!")
 
-    # Extract timestamp from filename using regular expression
-    match = re.search(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", str(filename_pkl))
-    timestamp = match.group(1) if match else "unknown"
+    timestamp = extract_timestamp(filename_pkl)
     filename_json = f"robot_sf/data_analysis/datasets/{timestamp}.json"
 
     # Load simulation states and map definition, which is not used
@@ -164,6 +162,20 @@ def get_file() -> Path:
         key=lambda x: os.path.getctime(os.path.join("recordings", x)),
     )
     return Path("recordings", filename)
+
+
+def extract_timestamp(filename: str) -> str:
+    """
+    Extract the timestamp from a filename.
+
+    Args:
+        filename (str): The filename from which to extract the timestamp.
+
+    Returns:
+        str: The extracted timestamp or 'unknown' if no timestamp is found.
+    """
+    match = re.search(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", filename)
+    return match.group() if match else "unknown"
 
 
 if __name__ == "__main__":

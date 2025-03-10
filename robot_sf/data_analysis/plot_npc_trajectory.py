@@ -19,10 +19,18 @@ from scipy.stats import norm
 from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,
     extract_key_from_json_as_ndarray,
+    extract_timestamp,
 )
 
+TRAJECTORY_DISCONTINUITY_THRESHOLD = 2  # Threshold for abnormal distance
 
-def plot_single_splitted_traj(ped_positions_array: np.ndarray, ped_idx: int = 0):
+
+def plot_single_splitted_traj(
+    ped_positions_array: np.ndarray,
+    ped_idx: int = 0,
+    interactive: bool = False,
+    unique_id: str = None,
+):
     """
     Plot from position_array from a single pedestrian id the multiple trajectories.
     Split when the distance between two consecutive points is greater than normal.
@@ -33,6 +41,8 @@ def plot_single_splitted_traj(ped_positions_array: np.ndarray, ped_idx: int = 0)
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ped_idx (int): Which simulation pedestrian is inspected
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
 
     x_vals = ped_positions_array[:, ped_idx, 0]
@@ -41,7 +51,7 @@ def plot_single_splitted_traj(ped_positions_array: np.ndarray, ped_idx: int = 0)
     distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
     start_idx = 0
     for i, dist in enumerate(distances):
-        if dist > 2:  # Threshold for abnormal distance
+        if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
             plt.plot(
                 x_vals[start_idx : i + 1],
                 y_vals[start_idx : i + 1],
@@ -63,16 +73,29 @@ def plot_single_splitted_traj(ped_positions_array: np.ndarray, ped_idx: int = 0)
     plt.title(f"Pedestrian Trajectories: {x_vals.shape[0]}")
     plt.gca().invert_yaxis()
     plt.legend()
-    plt.savefig(f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj.png")
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj_{unique_id}.png"
+    else:
+        filename = f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj.png"
+    plt.savefig(filename)
+    plt.close()
 
 
-def plot_all_splitted_traj(ped_positions_array: np.ndarray):
+def plot_all_splitted_traj(
+    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+):
     """
     Plot from position_array all npc pedestrian trajectories.
     Split when the distance between two consecutive points is greater than normal.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -84,7 +107,7 @@ def plot_all_splitted_traj(ped_positions_array: np.ndarray):
         distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
         start_idx = 0
         for i, dist in enumerate(distances):
-            if dist > 2:  # Threshold for abnormal distance
+            if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 plt.plot(
                     x_vals[start_idx : i + 1],
                     y_vals[start_idx : i + 1],
@@ -106,7 +129,16 @@ def plot_all_splitted_traj(ped_positions_array: np.ndarray):
     plt.title("Pedestrian Trajectories")
     # plt.legend()
     plt.gca().invert_yaxis()
-    plt.savefig("robot_sf/data_analysis/plots/all_splitted_npc_traj.png")
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/all_splitted_npc_traj_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/all_splitted_npc_traj.png"
+    plt.savefig(filename)
+    plt.close()
 
 
 def calculate_velocity(
@@ -143,13 +175,20 @@ def calculate_acceleration(velocities: np.ndarray, time_interval: float = None) 
     return accelerations
 
 
-def subplot_single_splitted_traj_acc(ped_positions_array: np.ndarray, ped_idx: int = 0):
+def subplot_single_splitted_traj_acc(
+    ped_positions_array: np.ndarray,
+    ped_idx: int = 0,
+    interactive: bool = False,
+    unique_id: str = None,
+):
     """
     Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ped_idx (int): Which simulation pedestrian is inspected
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, axes = plt.subplots(1, 3, figsize=(18, 6))
 
@@ -160,7 +199,7 @@ def subplot_single_splitted_traj_acc(ped_positions_array: np.ndarray, ped_idx: i
     counter = 0
     start_idx = 0
     for i, dist in enumerate(distances):
-        if dist > 2:  # Threshold for abnormal distance
+        if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
             axes[0].plot(
                 x_vals[start_idx : i + 1],
                 y_vals[start_idx : i + 1],
@@ -203,15 +242,28 @@ def subplot_single_splitted_traj_acc(ped_positions_array: np.ndarray, ped_idx: i
     axes[2].legend()
 
     plt.tight_layout()
-    plt.savefig(f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}.png")
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}_{unique_id}.png"
+    else:
+        filename = f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}.png"
+    plt.savefig(filename)
+    plt.close()
 
 
-def plot_acceleration_distribution(ped_positions_array: np.ndarray):
+def plot_acceleration_distribution(
+    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+):
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -224,7 +276,7 @@ def plot_acceleration_distribution(ped_positions_array: np.ndarray):
         distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
         start_idx = 0
         for i, dist in enumerate(distances):
-            if dist > 2:  # Threshold for abnormal distance
+            if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
                     x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
                 )
@@ -254,16 +306,28 @@ def plot_acceleration_distribution(ped_positions_array: np.ndarray):
     plt.xlabel("Acceleration")
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Accelerations")
-    plt.savefig("robot_sf/data_analysis/plots/acceleration_distribution.png")
-    plt.show()
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/acceleration_distribution_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/acceleration_distribution.png"
+    plt.savefig(filename)
+    plt.close()
 
 
-def plot_velocity_distribution(ped_positions_array: np.ndarray):
+def plot_velocity_distribution(
+    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -276,7 +340,7 @@ def plot_velocity_distribution(ped_positions_array: np.ndarray):
         distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
         start_idx = 0
         for i, dist in enumerate(distances):
-            if dist > 2:  # Threshold for abnormal distance
+            if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
                     x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
                 )
@@ -304,12 +368,23 @@ def plot_velocity_distribution(ped_positions_array: np.ndarray):
     plt.xlabel("Velocity")
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Velocities")
-    plt.savefig("robot_sf/data_analysis/plots/velocity_distribution.png")
-    plt.show()
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/velocity_distribution_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/velocity_distribution.png"
+    plt.savefig(filename)
+    plt.close()
 
 
 def subplot_velocity_distribution_with_ego_ped(
-    ped_positions_array: np.ndarray, ego_positions: np.ndarray
+    ped_positions_array: np.ndarray,
+    ego_positions: np.ndarray,
+    interactive: bool = False,
+    unique_id: str = None,
 ):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians
@@ -318,6 +393,8 @@ def subplot_velocity_distribution_with_ego_ped(
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_positions (np.ndarray): shape: (timesteps, 2)
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -331,7 +408,7 @@ def subplot_velocity_distribution_with_ego_ped(
         distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
         start_idx = 0
         for i, dist in enumerate(distances):
-            if dist > 2:  # Threshold for abnormal distance
+            if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
                     x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
                 )
@@ -367,17 +444,32 @@ def subplot_velocity_distribution_with_ego_ped(
     axes[1].set_ylabel("Probability Density")
 
     plt.tight_layout()
-    plt.savefig("robot_sf/data_analysis/plots/velocity_distribution_comparison.png")
-    plt.show()
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = f"robot_sf/data_analysis/plots/velocity_distribution_comparison_{unique_id}.png"
+    else:
+        filename = "robot_sf/data_analysis/plots/velocity_distribution_comparison.png"
+    plt.savefig(filename)
+    plt.close()
 
 
-def subplot_acceleration_distribution(ped_positions_array: np.ndarray, ego_positions: np.ndarray):
+def subplot_acceleration_distribution(
+    ped_positions_array: np.ndarray,
+    ego_positions: np.ndarray,
+    interactive: bool = False,
+    unique_id: str = None,
+):
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_positions (np.ndarray): shape: (timesteps, 2)
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -392,7 +484,7 @@ def subplot_acceleration_distribution(ped_positions_array: np.ndarray, ego_posit
         distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
         start_idx = 0
         for i, dist in enumerate(distances):
-            if dist > 2:  # Threshold for abnormal distance
+            if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
                     x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
                 )
@@ -433,17 +525,31 @@ def subplot_acceleration_distribution(ped_positions_array: np.ndarray, ego_posit
     axes[1].set_ylabel("Probability Density")
 
     plt.tight_layout()
-    plt.savefig("robot_sf/data_analysis/plots/acceleration_distribution_comparison.png")
-    plt.show()
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = (
+            f"robot_sf/data_analysis/plots/acceleration_distribution_comparison_{unique_id}.png"
+        )
+    else:
+        filename = "robot_sf/data_analysis/plots/acceleration_distribution_comparison.png"
+    plt.savefig(filename)
+    plt.close()
 
 
-def subplot_velocity_distribution_with_positions(ped_positions_array: np.ndarray):
+def subplot_velocity_distribution_with_positions(
+    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians,
     and plot the positions of NPC pedestrians color-coded by their velocities.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        interactive (bool): If True, show the plot interactively
+        unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -457,7 +563,7 @@ def subplot_velocity_distribution_with_positions(ped_positions_array: np.ndarray
         distances = np.sqrt(np.diff(x_vals) ** 2 + np.diff(y_vals) ** 2)
         start_idx = 0
         for i, dist in enumerate(distances):
-            if dist > 2:  # Threshold for abnormal distance
+            if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
                     x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
                 )
@@ -501,18 +607,32 @@ def subplot_velocity_distribution_with_positions(ped_positions_array: np.ndarray
     fig.colorbar(scatter, ax=axes[1], label="Velocity")
 
     plt.tight_layout()
-    plt.savefig("robot_sf/data_analysis/plots/velocity_distribution_with_positions.png")
-    plt.show()
+
+    if interactive:
+        plt.show()
+
+    if unique_id:
+        filename = (
+            f"robot_sf/data_analysis/plots/velocity_distribution_with_positions_{unique_id}.png"
+        )
+    else:
+        filename = "robot_sf/data_analysis/plots/velocity_distribution_with_positions.png"
+    plt.savefig(filename)
+    plt.close()
 
 
 def main():
     # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
     filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
 
+    unique_id = extract_timestamp(filename)
+
     ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
+    plot_single_splitted_traj(
+        ped_positions_array, ped_idx=10, interactive=True, unique_id=unique_id
+    )
     # plot_all_splitted_traj(ped_positions_array)
-    # plot_single_splitted_traj(ped_positions_array, ped_idx=15)
     # subplot_single_splitted_traj_acc(ped_positions_array, ped_idx=3)
     # plot_acceleration_distribution(ped_positions_array)
     # plot_velocity_distribution(ped_positions_array)

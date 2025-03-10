@@ -339,7 +339,10 @@ class PedSimulator(Simulator):
 
 
 def init_ped_simulators(
-    env_config: PedEnvSettings, map_def: MapDefinition, random_start_pos: bool = False, peds_have_obstacle_forces: bool = False
+    env_config: PedEnvSettings,
+    map_def: MapDefinition,
+    random_start_pos: bool = False,
+    peds_have_obstacle_forces: bool = False,
 ) -> List[PedSimulator]:
     """
     Initialize simulators for the pedestrian environment.

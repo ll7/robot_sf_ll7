@@ -27,7 +27,13 @@ def test_simulation(map_definition: MapDefinition):
 
     robot_model = PPO.load("./model/run_043", env=None)
 
-    env = PedestrianEnv(env_config, robot_model=robot_model, debug=True, recording_enabled=True, peds_have_obstacle_forces=True)
+    env = PedestrianEnv(
+        env_config,
+        robot_model=robot_model,
+        debug=True,
+        recording_enabled=True,
+        peds_have_obstacle_forces=True,
+    )
 
     _, _ = env.reset()
 

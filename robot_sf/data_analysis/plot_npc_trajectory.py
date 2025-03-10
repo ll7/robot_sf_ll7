@@ -641,7 +641,7 @@ def main():
 
     ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 
-    # subplot_velocity_distribution_with_ego_ped(ped_positions_array, ego_positions)
+    subplot_velocity_distribution_with_ego_ped(ped_positions_array, ego_positions)
     # subplot_acceleration_distribution(ped_positions_array, ego_positions)
     # subplot_velocity_distribution_with_positions(ped_positions_array)
 

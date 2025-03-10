@@ -50,6 +50,7 @@ class PedestrianEnv(Env):
         robot_model=None,
         debug: bool = False,
         recording_enabled: bool = False,
+        peds_have_obstacle_forces: bool = False,
     ):
         """
         Initialize the pedestrian Environment.
@@ -89,7 +90,7 @@ class PedestrianEnv(Env):
         self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
-        self.simulator = init_ped_simulators(env_config, self.map_def, random_start_pos=True)[0]
+        self.simulator = init_ped_simulators(env_config, self.map_def, random_start_pos=True, peds_have_obstacle_forces=peds_have_obstacle_forces)[0]
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_ped_collision_and_sensors(
@@ -156,10 +157,11 @@ class PedestrianEnv(Env):
         # Process the action through the simulator
         action_robot, _ = self.robot_model.predict(self.last_obs_robot, deterministic=True)
         action_robot = self.simulator.robots[0].parse_action(action_robot)
-        # action_robot = (0.0, 0.0) #TODO: remove noop after testing
+        action_robot = (0.0, 0.0) #TODO: remove noop after testing
         self.last_action_robot = action_robot
 
         action_ped = self.simulator.ego_ped.parse_action(action_ped)
+        action_ped = (0.0, 0.0) #TODO: remove noop after testing
         self.last_action_ped = action_ped
 
         # Perform simulation step

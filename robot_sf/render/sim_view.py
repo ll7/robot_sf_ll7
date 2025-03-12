@@ -132,7 +132,7 @@ class SimulationView:
         display_robot_info (int): Level of robot information to display.
         display_help (bool): Whether to display help text.
         current_target_fps (float): Current target frames per second for rendering.
-        display_text: bool = Fase: Whether to display text on the screen.
+        display_text: bool = False: Whether to display text on the screen.
 
     Methods:
         __post_init__(): Initialize PyGame components.

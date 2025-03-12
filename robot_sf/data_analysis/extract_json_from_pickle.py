@@ -39,6 +39,7 @@ def save_to_json(filename_pkl: str, filename_json: str = None):
 
     Args:
         filename_pkl (str): The path to the recorded data in pickle format (*.pkl).
+        filename_json (str): The path to save the converted data in JSON format (*.json).
 
     Raises:
         FileNotFoundError: If the specified file does not exist.

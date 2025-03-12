@@ -35,6 +35,7 @@ def plot_kde_on_map(
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
     peds_data = ped_positions_array.reshape(-1, 2)
 
@@ -65,6 +66,7 @@ def plot_kde_on_map(
     fig.colorbar(im, ax=ax, label="Density")
     ax.set_xlabel("X Position")
     ax.set_ylabel("Y Position")
+    ax.invert_yaxis()
 
     # Plot map obstacles if map_def is provided
     if map_def is not None:

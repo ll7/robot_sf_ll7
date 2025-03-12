@@ -174,7 +174,10 @@ def plot_all_data(
 
     # Extract and plot NPC trajectories
     plot_single_splitted_traj(
-        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
 
     # Pass map_def to plot_all_splitted_traj
@@ -187,7 +190,10 @@ def plot_all_data(
 
     # Fix parameter spelling (ped_postions_array -> ped_positions_array)
     subplot_single_splitted_traj_acc(
-        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
 
     # Fix parameter spelling (ped_postions_array -> ped_positions_array)

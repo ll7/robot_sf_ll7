@@ -16,6 +16,7 @@ from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json_as_ndarray,
     extract_timestamp,
 )
+from robot_sf.nav.map_config import MapDefinition
 
 
 def plot_kde_on_map(
@@ -23,6 +24,7 @@ def plot_kde_on_map(
     bandwidth: float = 1.0,
     interactive: bool = False,
     unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot the Kernel Density Estimation of pedestrian positions on a map.
@@ -53,13 +55,21 @@ def plot_kde_on_map(
     # Convert log density to actual density values
     density = np.exp(log_density).reshape(x_grid.shape)
 
-    plt.imshow(
+    # Create a figure and axes
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    im = ax.imshow(
         density, extent=(x_min, x_max, y_min, y_max), origin="lower", cmap="viridis", aspect="auto"
     )
-    plt.colorbar(label="Density")
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title("Kernel Density Estimation")
+    fig.colorbar(im, ax=ax, label="Density")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+
+    # Plot map obstacles if map_def is provided
+    if map_def is not None:
+        map_def.plot_map_obstacles(ax)
+
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/kde_on_map_{unique_id}.png"
     else:

@@ -26,11 +26,11 @@ def run():
 
     Converts the most recent recording file from pickle format to a JSON dataset.
     """
-    filename = get_file()
+    filename = get_latest_recording_file()
     save_to_json(filename)
 
 
-def save_to_json(filename_pkl: str):
+def save_to_json(filename_pkl: str, filename_json: str = None):
     """
     Save simulation states from a pickle recording file to a JSON file.
 
@@ -39,6 +39,7 @@ def save_to_json(filename_pkl: str):
 
     Args:
         filename_pkl (str): The path to the recorded data in pickle format (*.pkl).
+        filename_json (str): The path to save the converted data in JSON format (*.json).
 
     Raises:
         FileNotFoundError: If the specified file does not exist.
@@ -48,7 +49,9 @@ def save_to_json(filename_pkl: str):
         raise FileNotFoundError(f"File {filename_pkl} not found!")
 
     timestamp = extract_timestamp(filename_pkl)
-    filename_json = f"robot_sf/data_analysis/datasets/{timestamp}.json"
+    if not filename_json:
+        logger.warning("No output filename provided. Using the timestamp as the filename.")
+        filename_json = f"robot_sf/data_analysis/datasets/{timestamp}.json"
 
     # Load simulation states and map definition, which is not used
     states, _ = load_states(filename_pkl)
@@ -149,7 +152,7 @@ def extract_key_from_json_as_ndarray(filename: str, key: str) -> np.ndarray:
     return np_array
 
 
-def get_file() -> Path:
+def get_latest_recording_file() -> Path:
     """
     Get the most recent recording file from the 'recordings' directory.
 

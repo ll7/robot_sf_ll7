@@ -12,14 +12,19 @@ Key Features:
 import matplotlib.pyplot as plt
 import numpy as np
 
-from robot_sf.data_analysis.generate_dataset import (
+from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_key_from_json,
     extract_timestamp,
 )
+from robot_sf.data_analysis.plot_utils import save_plot
+from robot_sf.nav.map_config import MapDefinition
 
 
 def plot_all_npc_ped_positions(
-    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+    ped_positions_array: np.ndarray,
+    interactive: bool = False,
+    unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot all NPC pedestrian positions from the given position array.
@@ -28,7 +33,11 @@ def plot_all_npc_ped_positions(
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
+    # Create a figure and axes
+    _fig, ax = plt.subplots(figsize=(10, 8))
+
     # E.g.: For only 100 timesteps x_vals = ped_positions_array[:100, :, 0]
     x_vals = ped_positions_array[:, :, 0]
     y_vals = ped_positions_array[:, :, 1]
@@ -36,21 +45,24 @@ def plot_all_npc_ped_positions(
     # colormap for better visibility
     colors = np.random.rand(x_vals.shape[0], x_vals.shape[1])
 
-    plt.scatter(x_vals, y_vals, c=colors, alpha=0.5, s=1)
+    ax.scatter(x_vals, y_vals, c=colors, alpha=0.5, s=1)
 
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title("All recorded npc pedestrian positions")
-    # plt.legend()
-    plt.tight_layout()
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.invert_yaxis()
+
+    # Plot map obstacles if map_def is provided
+    if map_def is not None:
+        map_def.plot_map_obstacles(ax)
+
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/all_npc_pedestrian_positions_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/all_npc_pedestrian_positions.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot
+    save_plot(filename, "All recorded npc pedestrian positions", interactive)
 
 
 def plot_all_npc_ped_velocities(
@@ -77,27 +89,24 @@ def plot_all_npc_ped_velocities(
                     velocity = velocity / 2  # See pedestrian_env.py -> ped_actions = ...
                 current_velocity.append(velocity)
         velocity_list.append(current_velocity)
-        # if timestep == 100:
-        #     break
 
     for timestep, vels in enumerate(velocity_list):
         plt.scatter([timestep] * len(vels), vels, alpha=0.5, c="blue", s=1)
 
     plt.xlabel("Time Step")
     plt.ylabel("Velocity")
-    plt.title("Pedestrian Velocity over Time, raw" if raw else "Pedestrian Velocity over Time")
-    # plt.legend()
-    plt.tight_layout()
 
-    title = "all_npc_ped_velocities_raw" if raw else "all_npc_ped_velocities"
+    # Prepare title and filename
+    title = "Pedestrian Velocity over Time, raw" if raw else "Pedestrian Velocity over Time"
+    plot_type = "all_npc_ped_velocities_raw" if raw else "all_npc_ped_velocities"
+
     if unique_id:
-        filename = f"robot_sf/data_analysis/plots/{title}_{unique_id}.png"
+        filename = f"robot_sf/data_analysis/plots/{plot_type}_{unique_id}.png"
     else:
-        filename = f"robot_sf/data_analysis/plots/{title}.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+        filename = f"robot_sf/data_analysis/plots/{plot_type}.png"
+
+    # Save the plot
+    save_plot(filename, title, interactive)
 
 
 def plot_ego_ped_acceleration(
@@ -111,20 +120,19 @@ def plot_ego_ped_acceleration(
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
-
     plt.plot(ego_ped_acceleration, label="Acceleration")
     plt.xlabel("Timestep")
     plt.ylabel("Acceleration")
-    plt.title("Ego Ped Acceleration over Time")
     plt.legend()
+
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/ego_ped_acc_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/ego_ped_acc.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot
+    save_plot(filename, "Ego Ped Acceleration over Time", interactive)
 
 
 def plot_ego_ped_velocity(
@@ -138,7 +146,6 @@ def plot_ego_ped_velocity(
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
-
     ego_ped_velocity = []
     cumulative_sum = 0.0
     for acc in ego_ped_acceleration:
@@ -152,17 +159,16 @@ def plot_ego_ped_velocity(
     plt.plot(ego_ped_velocity, label="Velocity")
     plt.xlabel("Timestep")
     plt.ylabel("Velocity")
-    plt.title("Ego Ped Velocity over Time")
     plt.legend()
 
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/ego_ped_vel_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/ego_ped_vel.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot
+    save_plot(filename, "Ego Ped Velocity over Time", interactive)
 
 
 def main():

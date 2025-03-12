@@ -11,11 +11,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KernelDensity
 
-from robot_sf.data_analysis.generate_dataset import (
+from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_key_from_json,
     extract_key_from_json_as_ndarray,
     extract_timestamp,
 )
+from robot_sf.data_analysis.plot_utils import save_plot
+from robot_sf.nav.map_config import MapDefinition
 
 
 def plot_kde_on_map(
@@ -23,6 +25,7 @@ def plot_kde_on_map(
     bandwidth: float = 1.0,
     interactive: bool = False,
     unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot the Kernel Density Estimation of pedestrian positions on a map.
@@ -32,6 +35,7 @@ def plot_kde_on_map(
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
     peds_data = ped_positions_array.reshape(-1, 2)
 
@@ -53,21 +57,29 @@ def plot_kde_on_map(
     # Convert log density to actual density values
     density = np.exp(log_density).reshape(x_grid.shape)
 
-    plt.imshow(
+    # Create a figure and axes
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    im = ax.imshow(
         density, extent=(x_min, x_max, y_min, y_max), origin="lower", cmap="viridis", aspect="auto"
     )
-    plt.colorbar(label="Density")
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title("Kernel Density Estimation")
+    fig.colorbar(im, ax=ax, label="Density")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.invert_yaxis()
+
+    # Plot map obstacles if map_def is provided
+    if map_def is not None:
+        map_def.plot_map_obstacles(ax)
+
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/kde_on_map_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/kde_on_map.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot
+    save_plot(filename, "Kernel Density Estimation", interactive)
 
 
 def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
@@ -155,15 +167,14 @@ def plot_kde_in_x_y(
     axes[1].set_ylabel("Density")
     axes[1].legend()
 
-    plt.tight_layout()
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/kde_xy_ego_npc_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/kde_xy_ego_npc.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot using our utility function
+    save_plot(filename, None, interactive)
 
 
 def main():
@@ -177,7 +188,7 @@ def main():
 
     ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 
-    plot_kde_in_x_y(pedestrian_pos, ego_data)
+    plot_kde_in_x_y(pedestrian_pos, ego_data, interactive=True, unique_id=unique_id)
 
 
 if __name__ == "__main__":

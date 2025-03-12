@@ -16,11 +16,13 @@ import numpy as np
 from loguru import logger
 from scipy.stats import norm
 
-from robot_sf.data_analysis.generate_dataset import (
+from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_key_from_json,
     extract_key_from_json_as_ndarray,
     extract_timestamp,
 )
+from robot_sf.data_analysis.plot_utils import save_plot
+from robot_sf.nav.map_config import MapDefinition
 
 TRAJECTORY_DISCONTINUITY_THRESHOLD = 2  # Threshold for abnormal distance
 
@@ -33,6 +35,7 @@ def plot_single_splitted_traj(
     ped_idx: int = 0,
     interactive: bool = False,
     unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot from position_array from a single pedestrian id the multiple trajectories.
@@ -46,7 +49,10 @@ def plot_single_splitted_traj(
         ped_idx (int): Which simulation pedestrian is inspected
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
+    # Create figure and axes for better control
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     x_vals = ped_positions_array[:, ped_idx, 0]
     y_vals = ped_positions_array[:, ped_idx, 1]
@@ -55,41 +61,45 @@ def plot_single_splitted_traj(
     start_idx = 0
     for i, dist in enumerate(distances):
         if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
-            plt.plot(
+            ax.plot(
                 x_vals[start_idx : i + 1],
                 y_vals[start_idx : i + 1],
                 label=f"Pedestrian {start_idx}",
             )
             # Start point
-            plt.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
+            ax.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
             # End point
-            plt.scatter(x_vals[i], y_vals[i], color="red", marker="x")
+            ax.scatter(x_vals[i], y_vals[i], color="red", marker="x")
             start_idx = i + 1
 
     # Plot the last segment
-    plt.plot(x_vals[start_idx:], y_vals[start_idx:], label=f"Pedestrian {start_idx}")
-    plt.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")  # Start point
-    plt.scatter(x_vals[-1], y_vals[-1], color="red", marker="x")  # End point
+    ax.plot(x_vals[start_idx:], y_vals[start_idx:], label=f"Pedestrian {start_idx}")
+    ax.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")  # Start point
+    ax.scatter(x_vals[-1], y_vals[-1], color="red", marker="x")  # End point
 
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title(f"Pedestrian Trajectories: {x_vals.shape[0]} Steps")
-    # plt.legend()
-    plt.gca().invert_yaxis()
-    plt.legend()
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.set_title(f"Pedestrian Trajectories: {x_vals.shape[0]} Steps")
+    ax.invert_yaxis()
 
+    # Plot map obstacles if map_def is provided
+    if map_def is not None:
+        map_def.plot_map_obstacles(ax)
+
+    # Prepare filename and save plot
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj_{unique_id}.png"
     else:
         filename = f"robot_sf/data_analysis/plots/single_splitted_npc{ped_idx}_traj.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def plot_all_splitted_traj(
-    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+    ped_positions_array: np.ndarray,
+    interactive: bool = False,
+    unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot from position_array all npc pedestrian trajectories.
@@ -99,8 +109,12 @@ def plot_all_splitted_traj(
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
     _, num_pedestrians, _ = ped_positions_array.shape
+
+    # Create figure and axes for better control
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     for ped_idx in range(num_pedestrians):
         # Extract x and y for this ped_idx across all timesteps
@@ -111,36 +125,39 @@ def plot_all_splitted_traj(
         start_idx = 0
         for i, dist in enumerate(distances):
             if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
-                plt.plot(
+                ax.plot(
                     x_vals[start_idx : i + 1],
                     y_vals[start_idx : i + 1],
                     label=f"Pedestrian {ped_idx} Segment",
                 )
                 # Start point
-                plt.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
+                ax.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
                 # End point
-                plt.scatter(x_vals[i], y_vals[i], color="red", marker="x")
+                ax.scatter(x_vals[i], y_vals[i], color="red", marker="x")
                 start_idx = i + 1
 
         # Plot the last segment
-        plt.plot(x_vals[start_idx:], y_vals[start_idx:], label=f"Pedestrian {ped_idx} Segment")
-        plt.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
-        plt.scatter(x_vals[-1], y_vals[-1], color="red", marker="x")
+        ax.plot(x_vals[start_idx:], y_vals[start_idx:], label=f"Pedestrian {ped_idx} Segment")
+        ax.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
+        ax.scatter(x_vals[-1], y_vals[-1], color="red", marker="x")
 
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title("Pedestrian Trajectories")
-    # plt.legend()
-    plt.gca().invert_yaxis()
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.set_title("Pedestrian Trajectories")
+    # plt.legend()  # Legend would be too crowded with many pedestrians
+    ax.invert_yaxis()
 
+    # Plot map obstacles if map_def is provided
+    if map_def is not None:
+        map_def.plot_map_obstacles(ax)
+
+    # Prepare filename and save plot
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/all_splitted_npc_traj_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/all_splitted_npc_traj.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def calculate_velocity(
@@ -188,6 +205,7 @@ def subplot_single_splitted_traj_acc(
     ped_idx: int = 0,
     interactive: bool = False,
     unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
@@ -197,6 +215,7 @@ def subplot_single_splitted_traj_acc(
         ped_idx (int): Which simulation pedestrian is inspected
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
     _, axes = plt.subplots(1, 3, figsize=(18, 6))
 
@@ -228,6 +247,9 @@ def subplot_single_splitted_traj_acc(
     axes[0].scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")  # Start point
     axes[0].scatter(x_vals[-1], y_vals[-1], color="red", marker="x")  # End point
 
+    if map_def:
+        map_def.plot_map_obstacles(axes[0])
+
     velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
     accelerations = calculate_acceleration(velocities)
     axes[1].plot(range(len(velocities)), velocities, label=f"Pedestrian {start_idx}")
@@ -249,16 +271,13 @@ def subplot_single_splitted_traj_acc(
     axes[2].set_title("Pedestrian Accelerations")
     axes[2].legend()
 
-    plt.tight_layout()
-
+    # Prepare filename and save plot
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}_{unique_id}.png"
     else:
         filename = f"robot_sf/data_analysis/plots/subplot_npc_{ped_idx}.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def plot_acceleration_distribution(
@@ -314,14 +333,13 @@ def plot_acceleration_distribution(
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Accelerations")
 
+    # Prepare filename and save plot
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/acceleration_distribution_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/acceleration_distribution.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def plot_velocity_distribution(
@@ -375,14 +393,13 @@ def plot_velocity_distribution(
     plt.ylabel("Probability Density")
     plt.title("Probability Distribution of Pedestrian Velocities")
 
+    # Prepare filename and save plot
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/velocity_distribution_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/velocity_distribution.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def subplot_velocity_distribution_with_ego_ped(
@@ -450,14 +467,13 @@ def subplot_velocity_distribution_with_ego_ped(
 
     plt.tight_layout()
 
+    # Prepare filename and save plot
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/velocity_distribution_comparison_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/velocity_distribution_comparison.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def subplot_acceleration_distribution(
@@ -530,20 +546,22 @@ def subplot_acceleration_distribution(
 
     plt.tight_layout()
 
+    # Prepare filename and save plot
     if unique_id:
         filename = (
             f"robot_sf/data_analysis/plots/acceleration_distribution_comparison_{unique_id}.png"
         )
     else:
         filename = "robot_sf/data_analysis/plots/acceleration_distribution_comparison.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, None, interactive)
 
 
 def subplot_velocity_distribution_with_positions(
-    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+    ped_positions_array: np.ndarray,
+    interactive: bool = False,
+    unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians,
@@ -553,6 +571,7 @@ def subplot_velocity_distribution_with_positions(
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
     _, num_pedestrians, _ = ped_positions_array.shape
 
@@ -607,34 +626,37 @@ def subplot_velocity_distribution_with_positions(
     axes[1].set_title("NPC Pedestrian Positions Color-Coded by Velocity")
     axes[1].set_xlabel("X Position")
     axes[1].set_ylabel("Y Position")
+    axes[1].invert_yaxis()
+    if map_def:
+        map_def.plot_map_obstacles(axes[1])
     fig.colorbar(scatter, ax=axes[1], label="Velocity")
 
     plt.tight_layout()
 
+    # Prepare filename and save plot
     if unique_id:
         filename = (
             f"robot_sf/data_analysis/plots/velocity_distribution_with_positions_{unique_id}.png"
         )
     else:
         filename = "robot_sf/data_analysis/plots/velocity_distribution_with_positions.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    save_plot(filename, "NPC Pedestrian Positions Color-Coded by Velocity", interactive)
 
 
 def main():
     # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
-    filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
+    # filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
+    filename = "robot_sf/data_analysis/datasets/2025-03-06_11-10-28.json"
 
     unique_id = extract_timestamp(filename)
 
     ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
 
-    plot_single_splitted_traj(
-        ped_positions_array, ped_idx=10, interactive=True, unique_id=unique_id
-    )
-    # plot_all_splitted_traj(ped_positions_array)
+    # plot_single_splitted_traj(
+    #     ped_positions_array, ped_idx=10, interactive=True, unique_id=unique_id
+    # )
+    plot_all_splitted_traj(ped_positions_array, interactive=True, unique_id=unique_id)
     # subplot_single_splitted_traj_acc(ped_positions_array, ped_idx=3)
     # plot_acceleration_distribution(ped_positions_array)
     # plot_velocity_distribution(ped_positions_array)

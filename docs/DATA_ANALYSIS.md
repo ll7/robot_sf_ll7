@@ -43,4 +43,4 @@ In [plot_npc_trajectory.py](../robot_sf/data_analysis/plot_npc_trajectory.py) th
 - Plot the velocity distribution of the npc pedestrians
 - Plot the comparison of the acceleration distribution of the npc pedestrians and the ego pedestrian
 - Plot the comparison of the velocity distribution of the npc pedestrians and the ego pedestrian
-- Plot the velocity distribution of the npc pedestrians with the positions colorcoded to the velocity
+- Plot the velocity distribution of the npc pedestrians with the positions color coded to the velocity

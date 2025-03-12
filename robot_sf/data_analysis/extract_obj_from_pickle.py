@@ -18,6 +18,14 @@ from robot_sf.data_analysis.plot_dataset import (
     plot_ego_ped_velocity,
 )
 from robot_sf.data_analysis.plot_kernel_density import plot_kde_on_map
+from robot_sf.data_analysis.plot_npc_trajectory import (
+    plot_acceleration_distribution,
+    plot_all_splitted_traj,
+    plot_single_splitted_traj,
+    plot_velocity_distribution,
+    subplot_single_splitted_traj_acc,
+    subplot_velocity_distribution_with_positions,
+)
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableSimState
@@ -123,14 +131,14 @@ def ensure_dir_exists(directory):
 def plot_all_data(
     sim_states: List[VisualizableSimState],
     map_def: MapDefinition = None,
-    unique_id: bool = True,
+    unique_id: str = None,  # Changed from bool to str
     interactive: bool = True,
 ):
     """
     Plot all available data from simulation states.
 
     Args:
-        states (List[VisualizableSimState]): List of simulation states
+        sim_states (List[VisualizableSimState]): List of simulation states
         map_def (MapDefinition): Map definition for plotting obstacles
         unique_id (str): Unique identifier for plot filenames
         interactive (bool): Whether to display plots interactively
@@ -157,7 +165,49 @@ def plot_all_data(
     plot_ego_ped_velocity(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
 
     # Extract and plot pedestrian positions using Kernel Density Estimation
-    plot_kde_on_map(ped_positions_array=ped_positions, interactive=interactive, map_def=map_def)
+    plot_kde_on_map(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        map_def=map_def,
+        unique_id=unique_id,
+    )
+
+    # Extract and plot NPC trajectories
+    plot_single_splitted_traj(
+        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    # Pass map_def to plot_all_splitted_traj
+    plot_all_splitted_traj(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    # Fix parameter spelling (ped_postions_array -> ped_positions_array)
+    subplot_single_splitted_traj_acc(
+        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    # Fix parameter spelling (ped_postions_array -> ped_positions_array)
+    plot_velocity_distribution(
+        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    plot_acceleration_distribution(
+        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    # Extract and plot NPC velocity distribution with positions
+    subplot_velocity_distribution_with_positions(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    logger.info("All data extracted and plotted successfully")
 
 
 if __name__ == "__main__":

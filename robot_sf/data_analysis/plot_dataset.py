@@ -16,10 +16,14 @@ from robot_sf.data_analysis.generate_dataset import (
     extract_key_from_json,
     extract_timestamp,
 )
+from robot_sf.nav.map_config import MapDefinition
 
 
 def plot_all_npc_ped_positions(
-    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+    ped_positions_array: np.ndarray,
+    interactive: bool = False,
+    unique_id: str = None,
+    map_def: MapDefinition = None,
 ):
     """
     Plot all NPC pedestrian positions from the given position array.
@@ -28,7 +32,11 @@ def plot_all_npc_ped_positions(
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        map_def (MapDefinition, optional): Map definition to plot obstacles
     """
+    # Create a figure and axes
+    _fig, ax = plt.subplots(figsize=(10, 8))
+
     # E.g.: For only 100 timesteps x_vals = ped_positions_array[:100, :, 0]
     x_vals = ped_positions_array[:, :, 0]
     y_vals = ped_positions_array[:, :, 1]
@@ -36,13 +44,16 @@ def plot_all_npc_ped_positions(
     # colormap for better visibility
     colors = np.random.rand(x_vals.shape[0], x_vals.shape[1])
 
-    plt.scatter(x_vals, y_vals, c=colors, alpha=0.5, s=1)
+    ax.scatter(x_vals, y_vals, c=colors, alpha=0.5, s=1)
 
-    plt.xlabel("X Position")
-    plt.ylabel("Y Position")
-    plt.title("All recorded npc pedestrian positions")
-    # plt.legend()
-    plt.tight_layout()
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+
+    # Plot map obstacles if map_def is provided
+    if map_def is not None:
+        map_def.plot_map_obstacles(ax)
+
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/all_npc_pedestrian_positions_{unique_id}.png"
     else:

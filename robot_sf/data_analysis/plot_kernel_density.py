@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KernelDensity
 
-from robot_sf.data_analysis.generate_dataset import (
+from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_key_from_json,
     extract_key_from_json_as_ndarray,
     extract_timestamp,
 )
+from robot_sf.data_analysis.plot_utils import save_plot
 from robot_sf.nav.map_config import MapDefinition
 
 
@@ -74,10 +75,9 @@ def plot_kde_on_map(
         filename = f"robot_sf/data_analysis/plots/kde_on_map_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/kde_on_map.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot
+    save_plot(filename, "Kernel Density Estimation", interactive)
 
 
 def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
@@ -165,15 +165,14 @@ def plot_kde_in_x_y(
     axes[1].set_ylabel("Density")
     axes[1].legend()
 
-    plt.tight_layout()
+    # Prepare filename
     if unique_id:
         filename = f"robot_sf/data_analysis/plots/kde_xy_ego_npc_{unique_id}.png"
     else:
         filename = "robot_sf/data_analysis/plots/kde_xy_ego_npc.png"
-    plt.savefig(filename)
-    if interactive:
-        plt.show()
-    plt.close()
+
+    # Save the plot using our utility function
+    save_plot(filename, None, interactive)
 
 
 def main():
@@ -187,7 +186,7 @@ def main():
 
     ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 
-    plot_kde_in_x_y(pedestrian_pos, ego_data)
+    plot_kde_in_x_y(pedestrian_pos, ego_data, interactive=True, unique_id=unique_id)
 
 
 if __name__ == "__main__":

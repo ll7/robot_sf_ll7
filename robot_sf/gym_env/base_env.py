@@ -86,11 +86,23 @@ class BaseEnv(Env):
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str = None):
+    def save_recording(self, filename: str = None, reward_dict: dict = None):
         """
-        save the recorded states to a file
-        filname: str, must end with *.pkl
-        resets the recorded states list at the end
+        Save the recorded states to a file in dictionary format.
+
+        Args:
+            filename (str, optional): Path where the recording will be saved.
+                If None, a timestamped filename in the recordings directory is used.
+            reward_dict (dict, optional): Dictionary containing reward information
+                to save with the recording.
+
+        Returns:
+            str: Path to the saved file, or None if no states were recorded
+
+        Notes:
+            - The recording is saved in a dictionary format with keys:
+              'states', 'map_def', 'rewards', 'metadata'
+            - The recorded states list is reset after saving
         """
         if filename is None:
             now = datetime.datetime.now()
@@ -102,12 +114,31 @@ class BaseEnv(Env):
         if len(self.recorded_states) == 0:
             logger.warning("No states recorded, skipping save")
             # TODO: First env.reset will always have no recorded states
-            return
+            return None
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
+        # Create metadata with recording timestamp
+        metadata = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "num_states": len(self.recorded_states),
+            "environment_type": self.__class__.__name__,
+            "time_per_step": self.env_config.sim_config.time_per_step_in_secs,
+        }
+
+        # Prepare data dictionary
+        recording_data = {
+            "states": self.recorded_states,
+            "map_def": self.map_def,
+            "rewards": reward_dict,
+            "metadata": metadata,
+        }
+
         with open(filename, "wb") as f:  # write binary
-            pickle.dump((self.recorded_states, self.map_def), f)
+            pickle.dump(recording_data, f)
             logger.info(f"Recording saved to {filename}")
+            logger.info(f"Saved {len(self.recorded_states)} states with metadata")
             logger.info("Reset state list")
             self.recorded_states = []
+
+        return filename

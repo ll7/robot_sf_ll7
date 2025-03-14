@@ -171,15 +171,17 @@ class RobotEnv(BaseEnv):
                 - info (dict): A dictionary with auxiliary information.
         """
         super().reset(seed=seed, options=options)
+
+        # if recording is enabled, save the recording and reset the state list
+        if self.recording_enabled:
+            self.save_recording(reward_dict=self.state.meta_dict())
+
         # Reset last_action
         self.last_action = None
         # Reset internal simulator state
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
-        # if recording is enabled, save the recording and reset the state list
-        if self.recording_enabled:
-            self.save_recording()
 
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}

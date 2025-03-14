@@ -18,7 +18,7 @@ Notes:
 
 import os
 import pickle
-from typing import List, Tuple
+from typing import List
 
 import loguru
 
@@ -28,52 +28,81 @@ from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 logger = loguru.logger
 
 
-def load_states(filename: str) -> Tuple[List[VisualizableSimState], MapDefinition]:
+def load_states(filename: str, return_dict: bool = False):
     """
-    Load a list of states from a pickle file.
+    Load simulation states from a pickle file.
 
-    This function reads a pickle file containing simulation states and map definition,
-    performs validation checks, and returns them if valid.
+    This function supports both the new dictionary format and the legacy tuple format.
 
     Args:
         filename (str): Path to the pickle file containing the states
+        return_dict (bool): If True, returns the complete data dictionary
+        instead of just states and map_def
 
     Returns:
-        Tuple[List[VisualizableSimState], MapDefinition]: A tuple containing:
-            - List of VisualizableSimState objects representing simulation states
-            - MapDefinition object containing the map information
+        If return_dict=False (default):
+            Tuple[List[VisualizableSimState], MapDefinition]: A tuple containing states and map_def
+        If return_dict=True:
+            Dict: All data from the pickle file including states, map_def, metadata and rewards
 
     Raises:
         TypeError: If loaded states are not VisualizableSimState objects or map_def
             is not MapDefinition
-
-    Notes:
-        The pickle file must contain a tuple of (states, map_def) where:
-        - states is a list of VisualizableSimState objects
-        - map_def is a MapDefinition object
     """
     # Check if the file is empty
     if os.path.getsize(filename) == 0:
         logger.error(f"File {filename} is empty")
-        return []
+        return ([], None) if not return_dict else {"states": [], "map_def": None}
 
     logger.info(f"Loading states from {filename}")
+
     with open(filename, "rb") as f:  # rb = read binary
-        states, map_def = pickle.load(f)
-    logger.info(f"Loaded {len(states)} states")
+        content = pickle.load(f)
+
+    # Initialize the result dictionary
+    result = {"states": [], "map_def": None, "metadata": {}, "rewards": None}
+
+    # Handle dictionary format
+    if isinstance(content, dict):
+        logger.info("Detected dictionary format recording")
+        result["states"] = content.get("states", [])
+        result["map_def"] = content.get("map_def")
+        result["metadata"] = content.get("metadata", {})
+        result["rewards"] = content.get("rewards")
+
+        # Log metadata if available
+        if result["metadata"]:
+            timestamp = result["metadata"].get("timestamp")
+            num_states = len(result["states"])
+            logger.info(f"Recording info: {num_states} states, created on {timestamp}")
+
+    # Handle legacy tuple format
+    elif isinstance(content, tuple):
+        logger.info("Detected legacy tuple format recording")
+        if len(content) >= 2:
+            result["states"], result["map_def"] = content[0], content[1]
+        else:
+            logger.error(f"Invalid tuple format in {filename}")
+            return ([], None) if not return_dict else {"states": [], "map_def": None}
+    else:
+        logger.error(f"Unknown format in {filename}")
+        return ([], None) if not return_dict else {"states": [], "map_def": None}
+
+    logger.info(f"Loaded {len(result['states'])} states")
 
     # Verify `states` is a list of VisualizableSimState
-    if not all(isinstance(state, VisualizableSimState) for state in states):
+    if not all(isinstance(state, VisualizableSimState) for state in result["states"]):
         logger.error(f"Invalid states loaded from {filename}")
         raise TypeError(f"Invalid states loaded from {filename}")
 
     # Verify `map_def` is a MapDefinition
-    if not isinstance(map_def, MapDefinition):
+    if not isinstance(result["map_def"], MapDefinition):
         logger.error(f"Invalid map definition loaded from {filename}")
-        logger.error(f"map_def: {type(map_def)}")
+        logger.error(f"map_def: {type(result['map_def'])}")
         raise TypeError(f"Invalid map definition loaded from {filename}")
 
-    return states, map_def
+    # Return based on the return_dict flag
+    return result if return_dict else (result["states"], result["map_def"])
 
 
 def visualize_states(states: List[VisualizableSimState], map_def: MapDefinition):

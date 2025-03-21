@@ -2,9 +2,13 @@
 https://imitation.readthedocs.io/en/latest/algorithms/gail.html
 """
 
+import time
+from typing import List
+
 import numpy as np
 from imitation.algorithms.adversarial.gail import GAIL
 from imitation.data import rollout
+from imitation.data.types import Trajectory
 from imitation.data.wrappers import RolloutInfoWrapper
 from imitation.rewards.reward_nets import BasicRewardNet
 from imitation.util.networks import RunningNorm
@@ -18,22 +22,6 @@ from tqdm import tqdm
 from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
-
-
-# Create a tqdm callback for monitoring rollout progress
-class TqdmCallback:
-    def __init__(self, total_episodes=60, desc="Collecting rollouts"):
-        self.pbar = tqdm(total=total_episodes, desc=desc)
-        self.episodes_completed = 0
-
-    def __call__(self, trajectory):
-        self.episodes_completed += 1
-        self.pbar.update(1)
-        self.pbar.set_postfix(ep_length=len(trajectory), ep_return=float(sum(trajectory.rews)))
-        return False  # Continue collecting
-
-    def close(self):
-        self.pbar.close()
 
 
 # Create a callback to track GAIL training progress with tqdm
@@ -58,11 +46,30 @@ class GAILProgressBarCallback(BaseCallback):
         self.pbar = None
 
 
+# Custom monitoring for rollout collection
+def monitor_rollout_collection(
+    min_episodes: int = 60,
+    max_wait_seconds: int = 3600,  # 1 hour timeout
+) -> List[Trajectory]:
+    """
+    A custom function to collect rollouts with progress monitoring.
+
+    Args:
+        min_episodes: Minimum number of episodes to collect
+        max_wait_seconds: Maximum time to wait before timing out
+
+    Returns:
+        List of collected trajectories
+    """
+    # This is a dummy placeholder - the actual implementation would be in the main block
+    pass
+
+
 if __name__ == "__main__":
     SEED = 42
     np.random.seed(SEED)
 
-    n_envs = 1  # Keeping at 1 for simplicity with the observation space issues
+    n_envs = 1
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     target_episodes = 60
@@ -83,23 +90,37 @@ if __name__ == "__main__":
 
     print("Collecting expert rollouts...")
 
-    # Create the progress tracking callback
-    progress_callback = TqdmCallback(total_episodes=target_episodes)
+    # Create a manual progress bar
+    pbar = tqdm(total=target_episodes, desc="Collecting rollouts")
+    collected_rollouts = []
 
-    try:
-        # Use the callback during rollout collection
-        rollouts = rollout.rollout(
-            expert,
-            env,
-            rollout.make_sample_until(min_timesteps=None, min_episodes=target_episodes),
-            rng=np.random.default_rng(SEED),
-            callback=progress_callback,
+    # Set up the sampler
+    sampler = rollout.make_sample_until(min_timesteps=None, min_episodes=target_episodes)
+
+    # Call rollout without callback
+    start_time = time.time()
+    collected_episodes = 0
+
+    # Use the more basic version that lets us monitor ourself
+    rollouts = []
+    while sampler(rollouts):
+        # Generate one trajectory
+        traj = rollout.generate_trajectory(expert, env, deterministic_policy=False)
+        rollouts.append(traj)
+
+        # Update progress bar
+        collected_episodes += 1
+        pbar.update(1)
+        pbar.set_postfix(
+            ep_length=len(traj),
+            ep_return=float(sum(traj.rews)),
+            time=f"{time.time() - start_time:.1f}s",
         )
-    finally:
-        # Make sure we close the progress bar
-        progress_callback.close()
 
-    print(f"Collected {len(rollouts)} expert rollouts")
+    # Close the progress bar
+    pbar.close()
+
+    print(f"Collected {len(rollouts)} expert rollouts in {time.time() - start_time:.1f} seconds")
 
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
     learner = PPO(

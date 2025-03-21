@@ -24,6 +24,7 @@ dependencies = [
     "ruff>=0.9.7",
     "pre-commit>=4.1.0",
     "scikit-learn>=1.6.1",
+    "imitation>=1.0.1"
 ]
 license = {text = "GPLv3"}
 

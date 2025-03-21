@@ -4,7 +4,7 @@
         {
             "label": "Ruff: Format and Fix",
             "type": "shell",
-            "command": "uvx ruff check . && uvx ruff check --fix . && uvx ruff format .",
+            "command": "uvx ruff check --fix . && uvx ruff format .",
             "problemMatcher": []
         }
     ]

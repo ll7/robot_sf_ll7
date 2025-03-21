@@ -88,7 +88,7 @@ class MultiRobotEnv(VectorEnv):
 
         return obs, rewards, terms, masked_metas
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
         self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
         obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
 

@@ -150,7 +150,7 @@ class RobotEnv(BaseEnv):
             {"step": reward_dict["step"], "meta": reward_dict},
         )
 
-    def reset(self, seed=None, options=None):
+    def reset(self, *, seed=None, options=None):
         """
         Reset the environment to an initial state to begin a new episode.
 

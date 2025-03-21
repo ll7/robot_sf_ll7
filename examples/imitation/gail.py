@@ -5,6 +5,7 @@ https://imitation.readthedocs.io/en/latest/algorithms/gail.html
 import numpy as np
 from imitation.algorithms.adversarial.gail import GAIL
 from imitation.data import rollout
+from imitation.data.buffer import ReplayBuffer
 from imitation.data.wrappers import RolloutInfoWrapper
 from imitation.rewards.reward_nets import BasicRewardNet
 from imitation.util.networks import RunningNorm
@@ -41,6 +42,83 @@ class GAILProgressBarCallback(BaseCallback):
     def _on_training_end(self):
         self.pbar.close()
         self.pbar = None
+
+
+# Custom ReplayBuffer for dictionary observations
+class DictReplayBuffer(ReplayBuffer):
+    """A replay buffer that handles dictionary observations."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.obs_keys = None
+
+    def store(self, obs, act, next_obs, done, rew):
+        """Store a transition in the replay buffer with dictionary observation support."""
+        if self.obs_keys is None and isinstance(obs, dict):
+            self.obs_keys = list(obs.keys())
+
+        if len(self.obs) == 0 and isinstance(obs, dict):
+            # Initialize storage for dictionary observations
+            self.obs = {k: [] for k in self.obs_keys}
+            self.next_obs = {k: [] for k in self.obs_keys}
+
+        if isinstance(obs, dict):
+            for k in self.obs_keys:
+                self.obs[k].append(obs[k])
+                self.next_obs[k].append(next_obs[k])
+        else:
+            # Fall back to standard storage
+            self.obs.append(obs)
+            self.next_obs.append(next_obs)
+
+        self.acts.append(act)
+        self.dones.append(done)
+        self.rews.append(rew)
+
+    def sample(self, batch_size):
+        """Sample a batch of transitions with dictionary observation support."""
+        n_samples = len(self.acts)
+        assert n_samples > 0, "Cannot sample from an empty replay buffer"
+
+        indices = np.random.randint(0, n_samples, batch_size)
+
+        if isinstance(self.obs, dict):
+            # Handle dictionary observations
+            obs_batch = {k: [self.obs[k][i] for i in indices] for k in self.obs_keys}
+            next_obs_batch = {k: [self.next_obs[k][i] for i in indices] for k in self.obs_keys}
+
+            # Convert lists to numpy arrays or tensors
+            for k in self.obs_keys:
+                obs_batch[k] = np.array(obs_batch[k])
+                next_obs_batch[k] = np.array(next_obs_batch[k])
+        else:
+            # Standard batch sampling
+            obs_batch = np.array([self.obs[i] for i in indices])
+            next_obs_batch = np.array([self.next_obs[i] for i in indices])
+
+        acts_batch = np.array([self.acts[i] for i in indices])
+        dones_batch = np.array([self.dones[i] for i in indices])
+        rews_batch = np.array([self.rews[i] for i in indices])
+
+        return obs_batch, acts_batch, next_obs_batch, dones_batch, rews_batch
+
+
+# Custom GAIL class that uses our DictReplayBuffer
+class DictGAIL(GAIL):
+    """GAIL implementation that supports dictionary observations."""
+
+    def __init__(self, *args, **kwargs):
+        # Intercept the initialization to use our custom buffer
+        self._use_dict_buffer = True
+        super().__init__(*args, **kwargs)
+
+    def _init_replay_buffer(self, gen_replay_buffer_capacity):
+        """Initialize the replay buffer with our custom implementation."""
+        if self._use_dict_buffer:
+            self._gen_replay_buffer = DictReplayBuffer(gen_replay_buffer_capacity)
+        else:
+            # Fall back to the default implementation
+            super()._init_replay_buffer(gen_replay_buffer_capacity)
 
 
 if __name__ == "__main__":
@@ -136,6 +214,14 @@ if __name__ == "__main__":
         f"Episode returns: min={min(ep_returns):.2f}, mean={np.mean(ep_returns):.2f}, max={max(ep_returns):.2f}"
     )
 
+    # Examine the structure of the observations to confirm they're dictionaries
+    traj = rollouts[0]
+    logger.info(f"Observation type: {type(traj.obs)}")
+    if hasattr(traj.obs, "keys"):
+        logger.info(f"Observation keys: {list(traj.obs.keys())}")
+        for k in traj.obs.keys():
+            logger.info(f"  {k} shape: {traj.obs[k].shape}")
+
     # Create PPO learner
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
     learner = PPO(
@@ -158,10 +244,11 @@ if __name__ == "__main__":
         normalize_input_layer=RunningNorm,
     )
 
-    # Initialize GAIL
-    logger.info("Initializing GAIL trainer...")
+    # Initialize GAIL with our custom implementation
+    logger.info("Initializing custom GAIL trainer...")
     try:
-        gail_trainer = GAIL(
+        # Use our custom GAIL implementation that supports dictionary observations
+        gail_trainer = DictGAIL(
             demonstrations=rollouts,
             demo_batch_size=64,
             gen_replay_buffer_capacity=128,
@@ -178,10 +265,11 @@ if __name__ == "__main__":
         if rollouts:
             traj = rollouts[0]
             logger.info(
-                f"First trajectory info: obs shape={traj.obs.shape}, acts shape={traj.acts.shape}"
+                f"First trajectory info: obs type={type(traj.obs)}, acts shape={traj.acts.shape}"
             )
-            logger.info(f"First trajectory obs type: {type(traj.obs)}")
-            logger.info(f"First trajectory acts type: {type(traj.acts)}")
+            if hasattr(traj.obs, "keys"):
+                for k in traj.obs.keys():
+                    logger.info(f"  {k} shape: {traj.obs[k].shape}")
 
         raise
 

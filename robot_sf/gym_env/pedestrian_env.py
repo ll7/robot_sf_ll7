@@ -191,7 +191,7 @@ class PedestrianEnv(Env):
         truncated = False
         return obs_ped, reward, term, truncated, {"step": meta["step"], "meta": meta}
 
-    def reset(self, seed=None, options=None):
+    def reset(self, *, seed=None, options=None):
         """
         Reset the environment state to start a new episode.
 

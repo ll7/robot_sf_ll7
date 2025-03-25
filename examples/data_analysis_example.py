@@ -155,14 +155,16 @@ def plot_all_data_json(
     # Extract ego pedestrian positions
     ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 
-    plot_all_npc_ped_positions(ped_positions_array, interactive=True, unique_id=unique_id)
-    plot_all_npc_ped_velocities(ped_actions, interactive=True, unique_id=unique_id)
-    plot_ego_ped_acceleration(ego_ped_acceleration, interactive=True, unique_id=unique_id)
-    plot_ego_ped_velocity(ego_ped_acceleration, interactive=True, unique_id=unique_id)
+    plot_all_npc_ped_positions(ped_positions_array, interactive=interactive, unique_id=unique_id)
+    plot_all_npc_ped_velocities(ped_actions, interactive=interactive, unique_id=unique_id)
+    plot_ego_ped_acceleration(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
+    plot_ego_ped_velocity(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
 
-    plot_kde_on_map(ped_positions_array, interactive=True, unique_id=unique_id)
+    plot_kde_on_map(ped_positions_array, interactive=interactive, unique_id=unique_id)
 
-    plot_kde_in_x_y(ped_positions_array, ego_positions, interactive=True, unique_id=unique_id)
+    plot_kde_in_x_y(
+        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+    )
 
     # Choose id between 0 and ped_positions_array.shape[1] - 1
     ped_idx = 0

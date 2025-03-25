@@ -9,6 +9,7 @@ import os
 from typing import List
 
 import numpy as np
+from loguru import logger
 
 from robot_sf.render.sim_view import VisualizableSimState
 
@@ -107,4 +108,4 @@ def ensure_dir_exists(directory):
     """
     if not os.path.exists(directory):
         os.makedirs(directory)
-        print(f"Created directory: {directory}")
+        logger.info(f"Created directory: {directory}")

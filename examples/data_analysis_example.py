@@ -1,4 +1,4 @@
-"""Perfom a showcase on how to use the data analysis module."""
+"""Perform a showcase on how to use the data analysis module."""
 
 import os
 from pathlib import Path

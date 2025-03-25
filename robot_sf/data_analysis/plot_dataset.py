@@ -12,10 +12,6 @@ Key Features:
 import matplotlib.pyplot as plt
 import numpy as np
 
-from robot_sf.data_analysis.extract_json_from_pickle import (
-    extract_key_from_json,
-    extract_timestamp,
-)
 from robot_sf.data_analysis.plot_utils import save_plot
 from robot_sf.nav.map_config import MapDefinition
 
@@ -66,7 +62,7 @@ def plot_all_npc_ped_positions(
 
 
 def plot_all_npc_ped_velocities(
-    ped_actions: list, raw: bool = True, interactive: bool = False, unique_id: str = None
+    ped_actions: list, interactive: bool = False, unique_id: str = None
 ):
     """
     Plot all NPC pedestrian velocities from the given list of actions.
@@ -74,7 +70,6 @@ def plot_all_npc_ped_velocities(
 
     Args:
         ped_actions (list): List of pedestrian actions.
-        raw (bool): If raw is True, dont use the applied scaling factor (for visual purpose).
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
@@ -85,8 +80,8 @@ def plot_all_npc_ped_velocities(
             for action in actions:
                 vel_vector = np.array(action[1]) - np.array(action[0])
                 velocity = np.linalg.norm(vel_vector)
-                if raw:
-                    velocity = velocity / 2  # See pedestrian_env.py -> ped_actions = ...
+                # Scaling factor for better visibility for simulation view
+                velocity = velocity / 2  # See pedestrian_env.py -> ped_actions = ...
                 current_velocity.append(velocity)
         velocity_list.append(current_velocity)
 
@@ -96,17 +91,13 @@ def plot_all_npc_ped_velocities(
     plt.xlabel("Time Step")
     plt.ylabel("Velocity")
 
-    # Prepare title and filename
-    title = "Pedestrian Velocity over Time, raw" if raw else "Pedestrian Velocity over Time"
-    plot_type = "all_npc_ped_velocities_raw" if raw else "all_npc_ped_velocities"
-
     if unique_id:
-        filename = f"robot_sf/data_analysis/plots/{plot_type}_{unique_id}.png"
+        filename = f"robot_sf/data_analysis/plots/all_npc_ped_velocities_{unique_id}.png"
     else:
-        filename = f"robot_sf/data_analysis/plots/{plot_type}.png"
+        filename = "robot_sf/data_analysis/plots/all_npc_ped_velocities.png"
 
     # Save the plot
-    save_plot(filename, title, interactive)
+    save_plot(filename, "Pedestrian Velocity over Time", interactive)
 
 
 def plot_ego_ped_acceleration(
@@ -150,8 +141,9 @@ def plot_ego_ped_velocity(
     cumulative_sum = 0.0
     for acc in ego_ped_acceleration:
         cumulative_sum += acc
-        # Clip, because the ego pedestrian can't go faster than 3 m/s
-        cumulative_sum = np.clip(cumulative_sum, None, 3)
+        # Clip, because the ego pedestrian can't go faster than max_speed = 3 m/s
+        # and can't go backwards (if backwards activated min_speed = -max_speed)
+        cumulative_sum = np.clip(cumulative_sum, 0, 3)
         ego_ped_velocity.append(cumulative_sum)
 
     ego_ped_velocity = np.array(ego_ped_velocity)
@@ -169,24 +161,3 @@ def plot_ego_ped_velocity(
 
     # Save the plot
     save_plot(filename, "Ego Ped Velocity over Time", interactive)
-
-
-def main():
-    # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
-    filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
-    unique_id = extract_timestamp(filename)
-
-    # ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
-    # ped_actions = extract_key_from_json(filename, "ped_actions")
-    ego_ped_acceleration = [
-        item["action"][0] for item in extract_key_from_json(filename, "ego_ped_action")
-    ]
-
-    # plot_all_npc_ped_positions(ped_positions_array)
-    # plot_all_npc_ped_velocities(ped_actions, raw=True)
-    plot_ego_ped_acceleration(ego_ped_acceleration, interactive=True, unique_id=unique_id)
-    # plot_ego_ped_velocity(ego_ped_acceleration)
-
-
-if __name__ == "__main__":
-    main()

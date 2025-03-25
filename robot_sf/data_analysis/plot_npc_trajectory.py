@@ -16,11 +16,6 @@ import numpy as np
 from loguru import logger
 from scipy.stats import norm
 
-from robot_sf.data_analysis.extract_json_from_pickle import (
-    extract_key_from_json,
-    extract_key_from_json_as_ndarray,
-    extract_timestamp,
-)
 from robot_sf.data_analysis.plot_utils import save_plot
 from robot_sf.nav.map_config import MapDefinition
 
@@ -642,31 +637,3 @@ def subplot_velocity_distribution_with_positions(
         filename = "robot_sf/data_analysis/plots/velocity_distribution_with_positions.png"
 
     save_plot(filename, "NPC Pedestrian Positions Color-Coded by Velocity", interactive)
-
-
-def main():
-    # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
-    # filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
-    filename = "robot_sf/data_analysis/datasets/2025-03-06_11-10-28.json"
-
-    unique_id = extract_timestamp(filename)
-
-    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
-
-    # plot_single_splitted_traj(
-    #     ped_positions_array, ped_idx=10, interactive=True, unique_id=unique_id
-    # )
-    plot_all_splitted_traj(ped_positions_array, interactive=True, unique_id=unique_id)
-    # subplot_single_splitted_traj_acc(ped_positions_array, ped_idx=3)
-    # plot_acceleration_distribution(ped_positions_array)
-    # plot_velocity_distribution(ped_positions_array)
-
-    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
-
-    subplot_velocity_distribution_with_ego_ped(ped_positions_array, ego_positions)
-    # subplot_acceleration_distribution(ped_positions_array, ego_positions)
-    # subplot_velocity_distribution_with_positions(ped_positions_array)
-
-
-if __name__ == "__main__":
-    main()

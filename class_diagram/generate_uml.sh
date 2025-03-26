@@ -7,4 +7,4 @@ if ! command -v dot &> /dev/null; then
     exit 1
 fi
 
-pyreverse -o svg -p robot_sf --colorized --max-color-depth 8 --output-dir class_diagram/ robot_sf/
+pyreverse -o svg -p robot_sf --colorized --max-color-depth 8 --show-ancestors 1 --show-associated 1 -my --show-stdlib --output-dir class_diagram/ robot_sf/

@@ -10,7 +10,7 @@
         {
             "label": "Generate UML",
             "type": "shell",
-            "command": "./generate_uml.sh",
+            "command": "./class_diagram/generate_uml.sh",
             "problemMatcher": [],
             "group": {
                 "kind": "build",

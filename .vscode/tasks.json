@@ -6,6 +6,16 @@
             "type": "shell",
             "command": "uvx ruff check . && uvx ruff check --fix . && uvx ruff format .",
             "problemMatcher": []
+        },
+        {
+            "label": "Generate UML",
+            "type": "shell",
+            "command": "./generate_uml.sh",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
     ]
 }

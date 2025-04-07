@@ -54,6 +54,12 @@ class DictReplayBuffer(ReplayBuffer):
 
     def store(self, obs, act, next_obs, done, rew):
         """Store a transition in the replay buffer with dictionary observation support."""
+        # Convert to dict if it's a DictObs
+        if hasattr(obs, "_d") and hasattr(obs, "keys"):
+            obs = {k: v for k, v in obs._d.items()}
+        if hasattr(next_obs, "_d") and hasattr(next_obs, "keys"):
+            next_obs = {k: v for k, v in next_obs._d.items()}
+
         if self.obs_keys is None and isinstance(obs, dict):
             self.obs_keys = list(obs.keys())
 
@@ -217,10 +223,12 @@ if __name__ == "__main__":
     # Examine the structure of the observations to confirm they're dictionaries
     traj = rollouts[0]
     logger.info(f"Observation type: {type(traj.obs)}")
-    if hasattr(traj.obs, "keys"):
-        logger.info(f"Observation keys: {list(traj.obs.keys())}")
-        for k in traj.obs.keys():
-            logger.info(f"  {k} shape: {traj.obs[k].shape}")
+
+    # Properly access DictObs properties
+    if hasattr(traj.obs, "_d"):
+        logger.info(f"Observation keys: {list(traj.obs._d.keys())}")
+        for k in traj.obs._d.keys():
+            logger.info(f"  {k} shape: {traj.obs._d[k].shape}")
 
     # Create PPO learner
     policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
@@ -267,9 +275,10 @@ if __name__ == "__main__":
             logger.info(
                 f"First trajectory info: obs type={type(traj.obs)}, acts shape={traj.acts.shape}"
             )
-            if hasattr(traj.obs, "keys"):
-                for k in traj.obs.keys():
-                    logger.info(f"  {k} shape: {traj.obs[k].shape}")
+            if hasattr(traj.obs, "_d"):
+                logger.info(f"Internal observation structure: {traj.obs._d.keys()}")
+                for k in traj.obs._d.keys():
+                    logger.info(f"  {k} shape: {traj.obs._d[k].shape}")
 
         raise
 

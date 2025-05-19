@@ -76,6 +76,7 @@ def plot_single_splitted_traj(
     ax.set_ylabel("Y Position")
     ax.set_title(f"Pedestrian Trajectories: {x_vals.shape[0]} Steps")
     ax.invert_yaxis()
+    ax.set_aspect("equal")
 
     # Plot map obstacles if map_def is provided
     if map_def is not None:
@@ -141,6 +142,7 @@ def plot_all_splitted_traj(
     ax.set_title("Pedestrian Trajectories")
     # plt.legend()  # Legend would be too crowded with many pedestrians
     ax.invert_yaxis()
+    ax.set_aspect("equal")
 
     # Plot map obstacles if map_def is provided
     if map_def is not None:
@@ -254,6 +256,8 @@ def subplot_single_splitted_traj_acc(
     axes[0].set_ylabel("Y Position")
     axes[0].set_title(f"Pedestrian Trajectories: {x_vals.shape[0]}")
     axes[0].invert_yaxis()
+    axes[0].set_aspect("equal")
+
     axes[0].legend()
 
     axes[1].set_xlabel("Timestep")
@@ -552,15 +556,14 @@ def subplot_acceleration_distribution(
     save_plot(filename, None, interactive)
 
 
-def subplot_velocity_distribution_with_positions(
+def velocity_colorcoded_with_positions(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
     unique_id: str = None,
     map_def: MapDefinition = None,
 ):
     """
-    Calculate and plot the probability distribution of the velocity of all pedestrians,
-    and plot the positions of NPC pedestrians color-coded by their velocities.
+    Plot the positions of NPC pedestrians color-coded by their velocities.
 
     Args:
         ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
@@ -598,42 +601,35 @@ def subplot_velocity_distribution_with_positions(
     logger.info(f"Maximum Velocity: {max_velocity}")
 
     # Plot the histogram of velocities
-    fig, axes = plt.subplots(1, 2, figsize=(27, 6))
-
-    axes[0].hist(all_npc_velocities, bins=60, density=True, alpha=0.6, color="b")
-    mu_npc, std_npc = norm.fit(all_npc_velocities)
-    x_npc = np.linspace(0, max_velocity, 100)
-    p_npc = norm.pdf(x_npc, mu_npc, std_npc)
-    axes[0].plot(x_npc, p_npc, "k", linewidth=2)
-    axes[0].set_title("Probability Distribution of NPC Pedestrian Velocities")
-    axes[0].set_xlabel("Velocity")
-    axes[0].set_ylabel("Probability Density")
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     # Plot the positions of NPC pedestrians color-coded by their velocities
     all_npc_positions = np.array(all_npc_positions)
-    scatter = axes[1].scatter(
+    scatter = ax.scatter(
         all_npc_positions[:, 0],
         all_npc_positions[:, 1],
         c=all_npc_velocities,
         cmap="viridis",
         alpha=0.6,
     )
-    axes[1].set_title("NPC Pedestrian Positions Color-Coded by Velocity")
-    axes[1].set_xlabel("X Position")
-    axes[1].set_ylabel("Y Position")
-    axes[1].invert_yaxis()
+    ax.set_title("NPC Pedestrian Positions Color-Coded by Velocity")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+    ax.invert_yaxis()
+    ax.set_aspect("equal")
+
     if map_def:
-        map_def.plot_map_obstacles(axes[1])
-    fig.colorbar(scatter, ax=axes[1], label="Velocity")
+        map_def.plot_map_obstacles(ax)
+    fig.colorbar(scatter, ax=ax, label="Velocity")
 
     plt.tight_layout()
 
     # Prepare filename and save plot
     if unique_id:
         filename = (
-            f"robot_sf/data_analysis/plots/velocity_distribution_with_positions_{unique_id}.png"
+            f"robot_sf/data_analysis/plots/velocity_colorcoded_with_positions_{unique_id}.png"
         )
     else:
-        filename = "robot_sf/data_analysis/plots/velocity_distribution_with_positions.png"
+        filename = "robot_sf/data_analysis/plots/velocity_colorcoded_with_positions.png"
 
     save_plot(filename, "NPC Pedestrian Positions Color-Coded by Velocity", interactive)

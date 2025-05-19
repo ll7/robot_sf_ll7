@@ -62,6 +62,7 @@ def plot_kde_on_map(
     ax.set_xlabel("X Position")
     ax.set_ylabel("Y Position")
     ax.invert_yaxis()
+    ax.set_aspect("equal")
 
     # Plot map obstacles if map_def is provided
     if map_def is not None:

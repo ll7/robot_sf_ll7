@@ -11,6 +11,22 @@ from typing import List
 import numpy as np
 from loguru import logger
 
+from robot_sf.data_analysis.plot_dataset import (
+    plot_all_npc_ped_positions,
+    plot_all_npc_ped_velocities,
+    plot_ego_ped_acceleration,
+    plot_ego_ped_velocity,
+)
+from robot_sf.data_analysis.plot_kernel_density import plot_kde_on_map
+from robot_sf.data_analysis.plot_npc_trajectory import (
+    plot_acceleration_distribution,
+    plot_all_splitted_traj,
+    plot_single_splitted_traj,
+    plot_velocity_distribution,
+    subplot_single_splitted_traj_acc,
+    velocity_colorcoded_with_positions,
+)
+from robot_sf.nav.map_config import MapDefinition
 from robot_sf.render.sim_view import VisualizableSimState
 
 
@@ -97,6 +113,91 @@ def extract_ego_ped_acceleration(sim_states: List[VisualizableSimState]) -> List
             accelerations.append(0.0)  # Default value when no acceleration data is available
 
     return accelerations
+
+
+def plot_all_data_pkl(
+    sim_states: List[VisualizableSimState],
+    map_def: MapDefinition = None,
+    unique_id: str = None,
+    interactive: bool = True,
+):
+    """
+    Plot all available data from simulation states extracted from pickle file.
+
+    Args:
+        sim_states (List[VisualizableSimState]): List of simulation states
+        map_def (MapDefinition): Map definition for plotting obstacles
+        unique_id (str): Unique identifier for plot filenames
+        interactive (bool): Whether to display plots interactively
+    Returns:
+        None
+    """
+
+    # Extract and plot pedestrian positions
+    ped_positions = extract_ped_positions(sim_states)
+    plot_all_npc_ped_positions(
+        ped_positions, interactive=interactive, unique_id=unique_id, map_def=map_def
+    )
+
+    # Extract and plot pedestrian velocities
+    ped_actions = extract_ped_actions(sim_states)
+    plot_all_npc_ped_velocities(ped_actions, interactive=interactive, unique_id=unique_id)
+
+    # Extract and plot ego pedestrian acceleration
+    ego_ped_acceleration = extract_ego_ped_acceleration(sim_states)
+    plot_ego_ped_acceleration(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
+
+    # Plot ego pedestrian velocity based on acceleration
+    plot_ego_ped_velocity(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
+
+    # Extract and plot pedestrian positions using Kernel Density Estimation
+    plot_kde_on_map(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        map_def=map_def,
+        unique_id=unique_id,
+    )
+
+    # Extract and plot NPC trajectories
+    plot_single_splitted_traj(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    # Pass map_def to plot_all_splitted_traj
+    plot_all_splitted_traj(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    subplot_single_splitted_traj_acc(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    plot_velocity_distribution(
+        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    plot_acceleration_distribution(
+        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    # Extract and plot NPC velocity distribution with positions
+    velocity_colorcoded_with_positions(
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    logger.info("All data extracted and plotted successfully")
 
 
 def ensure_dir_exists(directory):

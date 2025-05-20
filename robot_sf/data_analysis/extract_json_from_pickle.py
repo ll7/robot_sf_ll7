@@ -12,6 +12,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from loguru import logger
@@ -278,7 +279,7 @@ def extract_timestamp(filename: str) -> str:
 
 def plot_all_data_json(
     filename: str,
-    unique_id: str = None,
+    unique_id: Optional[str] = None,
     interactive: bool = True,
 ):
     """

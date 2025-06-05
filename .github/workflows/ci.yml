@@ -19,6 +19,9 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
 
+      - name: Update package list
+        run: sudo apt-get update
+
       - name: Install ffmpeg
         run: sudo apt-get install ffmpeg
 

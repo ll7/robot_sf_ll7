@@ -24,7 +24,7 @@ from robot_sf.data_analysis.plot_npc_trajectory import (
     plot_single_splitted_traj,
     plot_velocity_distribution,
     subplot_single_splitted_traj_acc,
-    subplot_velocity_distribution_with_positions,
+    velocity_colorcoded_with_positions,
 )
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.render.playback_recording import load_states
@@ -116,33 +116,20 @@ def extract_ego_ped_acceleration(sim_states: List[VisualizableSimState]) -> List
     return accelerations
 
 
-def ensure_dir_exists(directory):
-    """
-    Ensure that a directory exists, creating it if necessary.
-
-    Args:
-        directory (str): Path to the directory to check/create
-    """
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-        print(f"Created directory: {directory}")
-
-
-def plot_all_data(
+def plot_all_data_pkl(
     sim_states: List[VisualizableSimState],
     map_def: MapDefinition = None,
-    unique_id: str = None,  # Changed from bool to str
+    unique_id: str = None,
     interactive: bool = True,
 ):
     """
-    Plot all available data from simulation states.
+    Plot all available data from simulation states extracted from pickle file.
 
     Args:
         sim_states (List[VisualizableSimState]): List of simulation states
         map_def (MapDefinition): Map definition for plotting obstacles
         unique_id (str): Unique identifier for plot filenames
         interactive (bool): Whether to display plots interactively
-
     Returns:
         None
     """
@@ -155,7 +142,7 @@ def plot_all_data(
 
     # Extract and plot pedestrian velocities
     ped_actions = extract_ped_actions(sim_states)
-    plot_all_npc_ped_velocities(ped_actions, raw=True, interactive=interactive, unique_id=unique_id)
+    plot_all_npc_ped_velocities(ped_actions, interactive=interactive, unique_id=unique_id)
 
     # Extract and plot ego pedestrian acceleration
     ego_ped_acceleration = extract_ego_ped_acceleration(sim_states)
@@ -188,7 +175,6 @@ def plot_all_data(
         map_def=map_def,
     )
 
-    # Fix parameter spelling (ped_postions_array -> ped_positions_array)
     subplot_single_splitted_traj_acc(
         ped_positions_array=ped_positions,
         interactive=interactive,
@@ -196,7 +182,6 @@ def plot_all_data(
         map_def=map_def,
     )
 
-    # Fix parameter spelling (ped_postions_array -> ped_positions_array)
     plot_velocity_distribution(
         ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
     )
@@ -206,7 +191,7 @@ def plot_all_data(
     )
 
     # Extract and plot NPC velocity distribution with positions
-    subplot_velocity_distribution_with_positions(
+    velocity_colorcoded_with_positions(
         ped_positions_array=ped_positions,
         interactive=interactive,
         unique_id=unique_id,
@@ -214,6 +199,18 @@ def plot_all_data(
     )
 
     logger.info("All data extracted and plotted successfully")
+
+
+def ensure_dir_exists(directory):
+    """
+    Ensure that a directory exists, creating it if necessary.
+
+    Args:
+        directory (str): Path to the directory to check/create
+    """
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+        logger.info(f"Created directory: {directory}")
 
 
 if __name__ == "__main__":
@@ -239,7 +236,7 @@ if __name__ == "__main__":
             states, map_def = load_states(latest_file)
 
             # Plot all available data
-            plot_all_data(states, map_def, unique_id)
+            plot_all_data_pkl(states, map_def, unique_id)
 
             logger.info(f"Successfully extracted and plotted data from {latest_file}")
             logger.info(f"Plots saved to {os.path.abspath(PLOTS_DIR)}")

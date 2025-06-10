@@ -191,7 +191,7 @@ class TestImageSensor:
         # Should have reasonable grayscale values (not all zeros or ones)
         assert 0.0 < frame.mean() < 1.0
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture
     def cleanup_pygame(self):
         """Clean up pygame after each test."""
         yield

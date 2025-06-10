@@ -30,7 +30,7 @@ def test_image_system_integration():
     # Test 2: Environment with image observations enabled
     print("2. Testing environment with image observations enabled...")
     image_config = ImageSensorSettings(
-        width=64, height=64, capture_enabled=True, fov_degrees=90.0, max_range=10.0
+        width=64, height=64, channels=3, normalize=True, grayscale=False
     )
     settings_enabled = RobotEnvSettings(use_image_obs=True, image_config=image_config)
     env_enabled = RobotEnvWithImage(env_config=settings_enabled, debug=True)

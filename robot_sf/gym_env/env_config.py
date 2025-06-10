@@ -1,5 +1,19 @@
 """
-The `sim_config.py` file defines `EnvSettings` and `PedEnvSettings` for simulation settings.
+The `sim_config.from dataclasses import dataclass, field
+from typing import Union
+
+from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.ped_ego.unicycle_drive import (
+    UnicycleDrivePedestrian,
+    UnicycleDriveSettings,
+)
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
+from robot_sf.robot.differential_drive import (
+    DifferentialDriveRobot,
+    DifferentialDriveSettings,
+)
+from robot_sf.sensor.range_sensor import LidarScannerSettings
+from robot_sf.sim.sim_config import SimulationSettingss `EnvSettings` and `PedEnvSettings` for simulation settings.
 
 These settings include:
 - `sim_config`: Simulation configuration
@@ -31,6 +45,7 @@ from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
     DifferentialDriveSettings,
 )
+from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
@@ -59,6 +74,9 @@ class RobotEnvSettings(BaseEnvSettings):
     robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
         default_factory=DifferentialDriveSettings
     )
+    # Image observation settings
+    image_config: ImageSensorSettings = field(default_factory=ImageSensorSettings)
+    use_image_obs: bool = field(default=False)  # Enable/disable image observations
 
     def __post_init__(self):
         """

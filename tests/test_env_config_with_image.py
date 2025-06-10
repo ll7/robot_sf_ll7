@@ -285,12 +285,8 @@ class TestImageObservationIntegration:
             mock_target.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=np.float32)
             mock_lidar.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=np.float32)
 
-            # Create a mock env_settings with image obs enabled
-            from robot_sf.gym_env.env_config import EnvSettings
-
-            env_settings = EnvSettings()
-            env_settings.use_image_obs = True  # Add the attribute dynamically
-            env_settings.image_config = ImageSensorSettings()  # Add image config
+            # Use RobotEnvSettings which properly supports image observations
+            env_settings = RobotEnvSettings(use_image_obs=True)
             action_space, obs_space, orig_obs_space = create_spaces_with_image(
                 env_settings, map_def
             )

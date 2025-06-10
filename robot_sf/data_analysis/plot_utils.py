@@ -10,6 +10,7 @@ This module provides centralized utilities for:
 import os
 
 import matplotlib.pyplot as plt
+from loguru import logger
 
 
 def ensure_plot_dir_exists(plot_path):
@@ -28,7 +29,7 @@ def ensure_plot_dir_exists(plot_path):
     # Create directory if it doesn't exist
     if directory and not os.path.exists(directory):
         os.makedirs(directory)
-        print(f"Created directory: {os.path.abspath(directory)}")
+        logger.info(f"Created directory: {os.path.abspath(directory)}")
 
     return plot_path
 
@@ -53,9 +54,9 @@ def save_plot(filename, title=None, interactive=False):
     # Save the plot
     try:
         plt.savefig(validated_path)
-        print(f"Plot saved to: {os.path.abspath(validated_path)}")
+        logger.info(f"Plot saved to: {os.path.abspath(validated_path)}")
     except Exception as e:
-        print(f"Error saving plot to {validated_path}: {e}")
+        logger.error(f"Error saving plot to {validated_path}: {e}")
 
     # Show the plot if interactive
     if interactive:

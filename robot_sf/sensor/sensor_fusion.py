@@ -107,50 +107,21 @@ def fused_sensor_space_with_image(
     Tuple[spaces.Dict, spaces.Dict]
         The normalized and original combined observation spaces.
     """
-    # Create the maximum and minimum drive states for each timestep
-    max_drive_state = np.array(
-        [robot_obs.high.tolist() + target_obs.high.tolist() for t in range(timesteps)],
-        dtype=np.float32,
-    )
-    min_drive_state = np.array(
-        [robot_obs.low.tolist() + target_obs.low.tolist() for t in range(timesteps)],
-        dtype=np.float32,
-    )
-
-    # Create the maximum and minimum LiDAR states for each timestep
-    max_lidar_state = np.array(
-        [lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32
-    )
-    min_lidar_state = np.array([lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
-
-    # Create the original observation spaces for the drive and LiDAR states
-    orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
-    orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)
-
-    orig_obs_space = {OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state}
-
-    # Create the normalized observation spaces for the drive and LiDAR states
-    box_drive_state = spaces.Box(
-        low=min_drive_state / max_drive_state,
-        high=max_drive_state / max_drive_state,
-        dtype=np.float32,
-    )
-    box_lidar_state = spaces.Box(
-        low=min_lidar_state / max_lidar_state,
-        high=max_lidar_state / max_lidar_state,
-        dtype=np.float32,
-    )
-
-    norm_obs_space = {OBS_DRIVE_STATE: box_drive_state, OBS_RAYS: box_lidar_state}
+    # Start with the basic sensor fusion
+    norm_obs_space, orig_obs_space = fused_sensor_space(timesteps, robot_obs, target_obs, lidar_obs)
 
     # Add image observation space if provided
     if image_obs is not None:
-        orig_obs_space[OBS_IMAGE] = image_obs
-        norm_obs_space[OBS_IMAGE] = image_obs  # Images are already normalized in the sensor
+        # Convert back to dict to add image space
+        orig_dict = dict(orig_obs_space.spaces)
+        norm_dict = dict(norm_obs_space.spaces)
 
-    # Convert to spaces.Dict
-    orig_obs_space = spaces.Dict(orig_obs_space)
-    norm_obs_space = spaces.Dict(norm_obs_space)
+        orig_dict[OBS_IMAGE] = image_obs
+        norm_dict[OBS_IMAGE] = image_obs  # Images are already normalized in the sensor
+
+        # Convert back to spaces.Dict
+        orig_obs_space = spaces.Dict(orig_dict)
+        norm_obs_space = spaces.Dict(norm_dict)
 
     return norm_obs_space, orig_obs_space
 

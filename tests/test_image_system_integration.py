@@ -10,7 +10,11 @@ from robot_sf.sensor.image_sensor import ImageSensorSettings
 
 
 def test_image_system_integration():
-    """Test that the image observation system works end-to-end."""
+    """
+    Validates the end-to-end functionality of the image observation system in a robotic environment.
+    
+    This test covers two scenarios: with image observations disabled and enabled. It verifies that the observation dictionary correctly includes or excludes image data based on configuration, checks the shape of the image observation when enabled, performs a step with a sampled action, and ensures proper environment shutdown in both cases.
+    """
     print("Testing image observation system integration...")
 
     # Test 1: Environment with image observations disabled

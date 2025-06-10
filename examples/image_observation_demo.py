@@ -12,7 +12,11 @@ from robot_sf.sensor.image_sensor import ImageSensorSettings
 
 
 def main():
-    """Demonstrate image-based observations in the robot environment."""
+    """
+    Runs a demonstration of image-based observations in a robot environment.
+    
+    Configures an image sensor for RGB observations, sets up the robot environment to use image-based observations, and interacts with the environment for several steps. Prints details about the action and observation spaces, including image observation properties, and handles environment resets and closure.
+    """
 
     # Configure image sensor settings
     image_config = ImageSensorSettings(

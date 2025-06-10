@@ -39,6 +39,11 @@ class ImageSensorFusion:
 
     def __post_init__(self):
         # Initialize the number of steps to cache based on the LiDAR observation space
+        """
+        Initializes internal caches and stacked state arrays for drive, LiDAR, and image data.
+        
+        Determines the number of cache steps and observation shapes from the unnormalized observation space. Sets up numpy arrays for stacking recent sensor data and initializes deques for caching drive, LiDAR, and optionally image states.
+        """
         rays_space = self.unnormed_obs_space[OBS_RAYS]
         if hasattr(rays_space, "shape") and rays_space.shape is not None:
             self.cache_steps = rays_space.shape[0]
@@ -73,12 +78,10 @@ class ImageSensorFusion:
 
     def next_obs(self) -> Dict[str, np.ndarray]:
         """
-        Get the next observation by combining data from all sensors including images.
-
-        Returns
-        -------
-        Dict[str, np.ndarray]
-            The next observation, consisting of the drive state, LiDAR state, and optionally image state.
+        Combines the latest readings from LiDAR, robot speed, target, and optionally image sensors into a normalized observation dictionary.
+        
+        Returns:
+            A dictionary containing the stacked and normalized drive state and LiDAR state, and, if enabled, the current image frame.
         """
         # Get the current LiDAR state
         lidar_state = self.lidar_sensor()
@@ -152,7 +155,9 @@ class ImageSensorFusion:
 
     def reset_cache(self):
         """
-        Clear the caches of previous states.
+        Clears all cached drive, LiDAR, and image states.
+        
+        Resets the internal caches used for stacking recent sensor observations, including image state cache if image observations are enabled.
         """
         self.drive_state_cache.clear()
         self.lidar_state_cache.clear()

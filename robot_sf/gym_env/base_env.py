@@ -29,6 +29,11 @@ class BaseEnv(Env):
         video_fps: float = None,
         peds_have_obstacle_forces: bool = False,
     ):
+        """
+        Initializes the base simulation environment with configuration, debugging, and recording options.
+        
+        Sets up the environment using the provided configuration, selects a random map, initializes the simulator, and prepares for optional state recording and video output. If debugging or video recording is enabled, creates a simulation UI for visualization.
+        """
         super().__init__()
 
         # Environment configuration details

@@ -66,8 +66,10 @@ class RobotEnvSettings(BaseEnvSettings):
 
     def __post_init__(self):
         """
-        Check if any of the properties are not initialized (None) and raise an
-        error if so.
+        Validates that all required environment settings are initialized.
+        
+        Raises:
+            ValueError: If any of sim_config, lidar_config, robot_config, or map_pool is not set.
         """
         if (
             not self.sim_config

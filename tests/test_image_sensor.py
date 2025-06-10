@@ -15,7 +15,9 @@ class TestImageSensorSettings:
     """Test the ImageSensorSettings configuration class."""
 
     def test_default_settings(self):
-        """Test default ImageSensorSettings initialization."""
+        """
+        Verifies that ImageSensorSettings initializes with the correct default values.
+        """
         settings = ImageSensorSettings()
         assert settings.width == 84
         assert settings.height == 84
@@ -24,7 +26,9 @@ class TestImageSensorSettings:
         assert settings.grayscale is False
 
     def test_custom_settings(self):
-        """Test custom ImageSensorSettings initialization."""
+        """
+        Tests that ImageSensorSettings initializes correctly with custom parameter values.
+        """
         settings = ImageSensorSettings(
             width=128, height=96, channels=1, normalize=False, grayscale=True
         )
@@ -39,7 +43,9 @@ class TestImageSensorSpace:
     """Test the image sensor space creation function."""
 
     def test_rgb_normalized_space(self):
-        """Test RGB normalized image space."""
+        """
+        Tests that the image sensor space for RGB normalized images has the correct shape, data type, and value range.
+        """
         settings = ImageSensorSettings(width=64, height=64, channels=3, normalize=True)
         space = image_sensor_space(settings)
 
@@ -50,7 +56,11 @@ class TestImageSensorSpace:
         assert space.high.max() == 1.0
 
     def test_grayscale_normalized_space(self):
-        """Test grayscale normalized image space."""
+        """
+        Verifies that the observation space for a grayscale, normalized image sensor is correctly defined.
+        
+        Ensures the space has the expected shape, data type, and value range for grayscale normalized images.
+        """
         settings = ImageSensorSettings(width=32, height=48, grayscale=True, normalize=True)
         space = image_sensor_space(settings)
 
@@ -61,7 +71,9 @@ class TestImageSensorSpace:
         assert space.high.max() == 1.0
 
     def test_rgb_unnormalized_space(self):
-        """Test RGB unnormalized image space."""
+        """
+        Verifies that the image sensor space for unnormalized RGB images has the correct shape, data type, and value range.
+        """
         settings = ImageSensorSettings(width=100, height=80, normalize=False)
         space = image_sensor_space(settings)
 
@@ -77,7 +89,12 @@ class TestImageSensor:
 
     @pytest.fixture
     def sim_view(self):
-        """Create a minimal SimulationView for testing."""
+        """
+        Creates a minimal offscreen SimulationView instance with a filled test surface.
+        
+        Returns:
+            A SimulationView object configured for testing with a preset surface and map definition.
+        """
         pygame.init()
         # Create a small offscreen surface for testing
         screen = pygame.Surface((200, 150))
@@ -94,7 +111,9 @@ class TestImageSensor:
         return sim_view
 
     def test_sensor_initialization(self, sim_view):
-        """Test ImageSensor initialization."""
+        """
+        Tests that the ImageSensor is correctly initialized with the provided settings and simulation view.
+        """
         settings = ImageSensorSettings()
         sensor = ImageSensor(settings, sim_view)
 
@@ -102,7 +121,9 @@ class TestImageSensor:
         assert sensor.sim_view == sim_view
 
     def test_sensor_initialization_without_sim_view(self):
-        """Test ImageSensor initialization without SimulationView."""
+        """
+        Tests that an ImageSensor can be initialized without a SimulationView and retains the provided settings.
+        """
         settings = ImageSensorSettings()
         sensor = ImageSensor(settings)
 
@@ -110,7 +131,9 @@ class TestImageSensor:
         assert sensor.sim_view is None
 
     def test_set_sim_view(self, sim_view):
-        """Test setting SimulationView after initialization."""
+        """
+        Tests that the simulation view can be set on an ImageSensor after initialization.
+        """
         settings = ImageSensorSettings()
         sensor = ImageSensor(settings)
         sensor.set_sim_view(sim_view)
@@ -118,7 +141,9 @@ class TestImageSensor:
         assert sensor.sim_view == sim_view
 
     def test_capture_frame_without_sim_view(self):
-        """Test capturing frame without SimulationView raises error."""
+        """
+        Tests that calling capture_frame on an ImageSensor without a SimulationView raises a ValueError.
+        """
         settings = ImageSensorSettings()
         sensor = ImageSensor(settings)
 
@@ -126,7 +151,9 @@ class TestImageSensor:
             sensor.capture_frame()
 
     def test_capture_frame_rgb_normalized(self, sim_view):
-        """Test capturing RGB normalized frame."""
+        """
+        Tests that capturing an RGB normalized frame returns an array with the correct shape, dtype, and value range.
+        """
         settings = ImageSensorSettings(width=50, height=40, normalize=True)
         sensor = ImageSensor(settings, sim_view)
 
@@ -137,7 +164,9 @@ class TestImageSensor:
         assert 0.0 <= frame.min() <= frame.max() <= 1.0
 
     def test_capture_frame_rgb_unnormalized(self, sim_view):
-        """Test capturing RGB unnormalized frame."""
+        """
+        Tests that capturing an RGB unnormalized frame returns an array of shape (45, 60, 3) with dtype uint8 and values in the range [0, 255].
+        """
         settings = ImageSensorSettings(width=60, height=45, normalize=False)
         sensor = ImageSensor(settings, sim_view)
 
@@ -148,7 +177,9 @@ class TestImageSensor:
         assert 0 <= frame.min() <= frame.max() <= 255
 
     def test_capture_frame_grayscale_normalized(self, sim_view):
-        """Test capturing grayscale normalized frame."""
+        """
+        Tests that capturing a grayscale normalized frame produces a 2D float32 array with values in [0.0, 1.0] and correct shape.
+        """
         settings = ImageSensorSettings(width=30, height=25, grayscale=True, normalize=True)
         sensor = ImageSensor(settings, sim_view)
 
@@ -159,7 +190,9 @@ class TestImageSensor:
         assert 0.0 <= frame.min() <= frame.max() <= 1.0
 
     def test_capture_frame_grayscale_unnormalized(self, sim_view):
-        """Test capturing grayscale unnormalized frame."""
+        """
+        Tests that capturing a grayscale, unnormalized frame produces a 2D uint8 array with correct shape and pixel value range.
+        """
         settings = ImageSensorSettings(width=35, height=28, grayscale=True, normalize=False)
         sensor = ImageSensor(settings, sim_view)
 
@@ -170,7 +203,9 @@ class TestImageSensor:
         assert 0 <= frame.min() <= frame.max() <= 255
 
     def test_resize_functionality(self, sim_view):
-        """Test that frames are properly resized."""
+        """
+        Tests that the ImageSensor correctly resizes captured frames to the specified target dimensions.
+        """
         # SimulationView has 200x150 surface, sensor wants 100x75
         settings = ImageSensorSettings(width=100, height=75)
         sensor = ImageSensor(settings, sim_view)
@@ -180,7 +215,9 @@ class TestImageSensor:
         assert frame.shape == (75, 100, 3)  # Resized to target dimensions
 
     def test_grayscale_conversion(self, sim_view):
-        """Test grayscale conversion produces reasonable values."""
+        """
+        Tests that grayscale conversion in the ImageSensor produces a 2D array with non-trivial normalized values.
+        """
         settings = ImageSensorSettings(grayscale=True, normalize=True)
         sensor = ImageSensor(settings, sim_view)
 
@@ -193,7 +230,11 @@ class TestImageSensor:
 
     @pytest.fixture
     def cleanup_pygame(self):
-        """Clean up pygame after each test."""
+        """
+        Ensures pygame is properly shut down after each test.
+        
+        This fixture yields control to the test and calls `pygame.quit()` after the test completes to clean up resources.
+        """
         yield
         pygame.quit()
 
@@ -202,7 +243,11 @@ class TestImageSensorIntegration:
     """Integration tests for ImageSensor with actual rendering."""
 
     def test_sensor_with_actual_rendering(self):
-        """Test ImageSensor with actual SimulationView rendering."""
+        """
+        Integration test that verifies ImageSensor captures and processes frames from an actual SimulationView rendering.
+        
+        Creates a SimulationView with offscreen rendering, fills the screen with a known color, captures a frame using ImageSensor, and asserts correct frame shape, data type, value range, and non-zero content. Cleans up the simulation after the test.
+        """
         from robot_sf.nav.map_config import MapDefinitionPool
 
         # Create a real SimulationView (but with video recording to avoid window)
@@ -238,7 +283,11 @@ class TestImageSensorIntegration:
         sim_view.exit_simulation()
 
     def test_different_image_formats(self):
-        """Test various image format configurations."""
+        """
+        Tests the ImageSensor with multiple image format configurations.
+        
+        Verifies that the sensor correctly captures frames with various width, height, grayscale, and normalization settings, ensuring output shape, data type, and value range match expectations for each configuration.
+        """
         from robot_sf.nav.map_config import MapDefinitionPool
 
         formats_to_test = [

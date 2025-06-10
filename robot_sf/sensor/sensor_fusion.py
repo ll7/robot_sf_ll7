@@ -21,24 +21,18 @@ def fused_sensor_space(
     timesteps: int, robot_obs: spaces.Box, target_obs: spaces.Box, lidar_obs: spaces.Box
 ) -> Tuple[spaces.Dict, spaces.Dict]:
     """
-    Create a combined observation space for the robot, target, and LiDAR sensors.
-
-    Parameters
-    ----------
-    timesteps : int
-        The number of **stacked** timesteps in the observation.
-        # TODO: check if this interpretation is correct
-    robot_obs : spaces.Box
-        The observation space for the robot.
-    target_obs : spaces.Box
-        The observation space for the target.
-    lidar_obs : spaces.Box
-        The observation space for the LiDAR sensor.
-
-    Returns
-    -------
-    Tuple[spaces.Dict, spaces.Dict]
-        The normalized and original combined observation spaces.
+    Creates combined observation spaces for stacked robot, target, and LiDAR sensor data.
+    
+    The function constructs both normalized and original (unnormalized) observation spaces by stacking the bounds of the provided robot, target, and LiDAR observation spaces over a specified number of timesteps. The normalized space scales each dimension to the range [0, 1] based on the maximum values.
+    
+    Args:
+        timesteps: Number of consecutive timesteps to stack in the observation.
+        robot_obs: Observation space for the robot sensor.
+        target_obs: Observation space for the target sensor.
+        lidar_obs: Observation space for the LiDAR sensor.
+    
+    Returns:
+        A tuple containing the normalized and original combined observation spaces as `spaces.Dict` objects.
     """
     # Create the maximum and minimum drive states for each timestep
     max_drive_state = np.array(
@@ -87,25 +81,9 @@ def fused_sensor_space_with_image(
     image_obs: Optional[spaces.Box] = None,
 ) -> Tuple[spaces.Dict, spaces.Dict]:
     """
-    Create a combined observation space for the robot, target, LiDAR, and optionally image sensors.
-
-    Parameters
-    ----------
-    timesteps : int
-        The number of **stacked** timesteps in the observation.
-    robot_obs : spaces.Box
-        The observation space for the robot.
-    target_obs : spaces.Box
-        The observation space for the target.
-    lidar_obs : spaces.Box
-        The observation space for the LiDAR sensor.
-    image_obs : spaces.Box, optional
-        The observation space for the image sensor.
-
-    Returns
-    -------
-    Tuple[spaces.Dict, spaces.Dict]
-        The normalized and original combined observation spaces.
+    Creates combined observation spaces for robot, target, LiDAR, and optionally image sensors over a specified number of stacked timesteps.
+    
+    If an image observation space is provided, it is included in both the normalized and original observation spaces. The function returns a tuple containing the normalized and original observation spaces as `spaces.Dict` objects.
     """
     # Start with the basic sensor fusion
     norm_obs_space, orig_obs_space = fused_sensor_space(timesteps, robot_obs, target_obs, lidar_obs)

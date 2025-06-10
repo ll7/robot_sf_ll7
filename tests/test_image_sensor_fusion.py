@@ -19,7 +19,12 @@ class TestImageSensorFusion:
 
     @pytest.fixture
     def mock_sensors(self):
-        """Create mock sensors for testing."""
+        """
+        Creates and returns mock sensor objects for LiDAR, robot speed, target, and image data.
+        
+        Returns:
+            A tuple containing mock LiDAR sensor, speed sensor, target sensor, and image sensor objects for use in tests.
+        """
         # Mock LiDAR sensor
         lidar_sensor = Mock(return_value=np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
 
@@ -37,7 +42,12 @@ class TestImageSensorFusion:
 
     @pytest.fixture
     def mock_obs_space(self):
-        """Create mock observation space."""
+        """
+        Creates a mock observation space dictionary for testing sensor fusion with drive state, lidar rays, and image observations.
+        
+        Returns:
+            A Gymnasium Dict space containing Box spaces for drive state, rays, and image observations.
+        """
         obs_space = {
             OBS_DRIVE_STATE: spaces.Box(
                 low=np.array([[0, -1, 0, -np.pi, -np.pi]] * 3),
@@ -54,7 +64,11 @@ class TestImageSensorFusion:
         return spaces.Dict(obs_space)
 
     def test_initialization_with_image_enabled(self, mock_sensors, mock_obs_space):
-        """Test ImageSensorFusion initialization with image observations enabled."""
+        """
+        Tests that ImageSensorFusion initializes correctly when image observations are enabled.
+        
+        Verifies that all sensor attributes are assigned, the image observation flag is set, and the cache step count matches the observation space configuration.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -75,7 +89,11 @@ class TestImageSensorFusion:
         assert fusion.cache_steps == 3  # Based on mock obs space
 
     def test_initialization_with_image_disabled(self, mock_sensors, mock_obs_space):
-        """Test ImageSensorFusion initialization with image observations disabled."""
+        """
+        Tests that ImageSensorFusion initializes correctly when image observations are disabled.
+        
+        Verifies that the use_image_obs flag is set to False and that initialization completes without errors even when an image sensor is provided.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -92,7 +110,9 @@ class TestImageSensorFusion:
         # Should still initialize without errors
 
     def test_next_obs_with_image_enabled(self, mock_sensors, mock_obs_space):
-        """Test next_obs method with image observations enabled."""
+        """
+        Tests that next_obs returns a dictionary containing drive state, rays, and image observations with correct shapes when image observations are enabled, and verifies that all relevant sensors are called.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -126,7 +146,9 @@ class TestImageSensorFusion:
         image_sensor.capture_frame.assert_called()
 
     def test_next_obs_with_image_disabled(self, mock_sensors, mock_obs_space):
-        """Test next_obs method with image observations disabled."""
+        """
+        Tests that next_obs() excludes image observations and does not call the image sensor when image observations are disabled.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -152,7 +174,9 @@ class TestImageSensorFusion:
         image_sensor.capture_frame.assert_not_called()
 
     def test_next_obs_without_image_sensor(self, mock_sensors, mock_obs_space):
-        """Test next_obs method when image sensor is None."""
+        """
+        Tests that next_obs() excludes the image observation when the image sensor is None, even if image observations are enabled.
+        """
         lidar_sensor, speed_sensor, target_sensor, _ = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -175,7 +199,9 @@ class TestImageSensorFusion:
         assert OBS_IMAGE not in obs  # Should not include image when sensor is None
 
     def test_multiple_observations_consistency(self, mock_sensors, mock_obs_space):
-        """Test that multiple calls to next_obs maintain consistency."""
+        """
+        Verifies that repeated calls to next_obs produce observations with consistent structure and shapes, even when sensor outputs vary between calls.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         # Make sensors return different values each call
@@ -224,7 +250,11 @@ class TestImageSensorFusion:
             assert obs[OBS_IMAGE].shape == (64, 64, 3)
 
     def test_reset_cache_with_image_enabled(self, mock_sensors, mock_obs_space):
-        """Test cache reset functionality with image observations."""
+        """
+        Verifies that the cache reset functionality clears all observation caches when image observations are enabled.
+        
+        This test ensures that after generating an observation to populate the drive state, lidar, and image caches, calling `reset_cache()` empties all caches as expected.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -254,7 +284,9 @@ class TestImageSensorFusion:
         assert len(fusion.image_state_cache) == 0
 
     def test_reset_cache_with_image_disabled(self, mock_sensors, mock_obs_space):
-        """Test cache reset functionality with image observations disabled."""
+        """
+        Verifies that resetting the cache in ImageSensorFusion clears drive state and lidar caches when image observations are disabled.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -278,7 +310,11 @@ class TestImageSensorFusion:
         assert len(fusion.lidar_state_cache) == 0
 
     def test_normalization_consistency(self, mock_sensors, mock_obs_space):
-        """Test that observations are properly normalized."""
+        """
+        Verifies that all components of the observation returned by ImageSensorFusion are normalized within the [0, 1] range.
+        
+        Ensures that drive state, lidar, and image observations conform to expected normalization bounds according to the observation space.
+        """
         lidar_sensor, speed_sensor, target_sensor, image_sensor = mock_sensors
 
         fusion = ImageSensorFusion(
@@ -309,7 +345,11 @@ class TestImageSensorFusionIntegration:
     """Integration tests for ImageSensorFusion with real components."""
 
     def test_integration_with_real_image_sensor(self):
-        """Test ImageSensorFusion with real ImageSensor."""
+        """
+        Performs an integration test of ImageSensorFusion using a real ImageSensor and SimulationView.
+        
+        This test initializes a simulation environment with a real image sensor, generates an observation using ImageSensorFusion, and verifies that the observation includes correctly shaped and normalized image data along with other expected keys. Cleans up simulation resources after execution.
+        """
         import pygame
 
         from robot_sf.nav.map_config import MapDefinitionPool
@@ -398,5 +438,14 @@ class RobotEnvWithImage(RobotEnv):
     """
 
     def __init__(self, env_config, debug=False):
+        """
+        Initializes the RobotEnvWithImage environment with image observations enabled.
+        
+        Args:
+            env_config: Configuration dictionary for the environment.
+            debug: If True, enables debug mode.
+        
+        The simulation UI is set to the simulation view if available; otherwise, it is set to None.
+        """
         super().__init__(env_config, debug)
         self.sim_ui = None if not hasattr(self, "sim_view") else self.sim_view

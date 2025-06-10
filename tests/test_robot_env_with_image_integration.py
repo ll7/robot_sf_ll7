@@ -14,7 +14,9 @@ class TestRobotEnvWithImageIntegration:
     """Integration tests for RobotEnvWithImage."""
 
     def test_env_creation_with_image_disabled(self):
-        """Test creating environment with image observations disabled."""
+        """
+        Tests that the environment can be created without image observations and verifies the observation space excludes the image key while including drive state and rays.
+        """
         settings = RobotEnvSettings(use_image_obs=False)
 
         try:
@@ -34,7 +36,9 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_env_creation_with_image_enabled(self):
-        """Test creating environment with image observations enabled."""
+        """
+        Tests that the environment is created with image observations enabled and verifies the observation space includes the image key with correct shape and data type.
+        """
         image_config = ImageSensorSettings(width=64, height=64, normalize=True)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -60,7 +64,11 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_env_reset_with_image_observations(self):
-        """Test environment reset with image observations."""
+        """
+        Tests that resetting the environment with image observations enabled returns a valid observation.
+        
+        Verifies that the reset observation includes drive state, rays, and image keys with correct shapes and data types, and that the image observation is normalized and conforms to the observation space.
+        """
         image_config = ImageSensorSettings(width=32, height=32, normalize=True)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -93,7 +101,11 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_env_step_with_image_observations(self):
-        """Test environment step with image observations."""
+        """
+        Tests that stepping the environment with grayscale, normalized image observations returns valid outputs.
+        
+        Verifies that the observation after a step includes the expected keys, the grayscale image has the correct shape and dtype, pixel values are within the normalized range, and all step outputs are of the correct types.
+        """
         image_config = ImageSensorSettings(width=48, height=48, grayscale=True, normalize=True)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -127,7 +139,11 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_multiple_episodes_with_image(self):
-        """Test running multiple episodes with image observations."""
+        """
+        Runs multiple episodes in the environment with image observations enabled and verifies observation consistency.
+        
+        This test checks that, across several episodes and steps, image observations have the expected shape, data type, and pixel value range. It also ensures that each observation is valid according to the environment's observation space.
+        """
         image_config = ImageSensorSettings(width=32, height=32, normalize=False)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -161,7 +177,9 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_debug_mode_forced_with_image_obs(self):
-        """Test that debug mode is forced when image observations are enabled."""
+        """
+        Tests that debug mode is automatically enabled when image observations are used, ensuring the simulation UI is created even if debug is set to False.
+        """
         settings = RobotEnvSettings(use_image_obs=True)
 
         try:
@@ -177,7 +195,11 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_image_observation_consistency_across_steps(self):
-        """Test that image observations change consistently across steps."""
+        """
+        Verifies that image observations maintain correct shape, dtype, and value range across multiple environment steps with normalized image settings.
+        
+        Ensures that each image observation after reset and subsequent steps is a 64x64 RGB float32 array with values in [0.0, 1.0], confirming observation consistency and validity throughout an episode.
+        """
         image_config = ImageSensorSettings(width=64, height=64, normalize=True)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -211,7 +233,11 @@ class TestRobotEnvWithImageIntegration:
                 env.exit()
 
     def test_different_image_configurations(self):
-        """Test various image sensor configurations."""
+        """
+        Tests environment creation and reset with multiple image sensor configurations.
+        
+        For each configuration, verifies that the image observation's shape, data type, and pixel value range match the expected properties based on grayscale and normalization settings.
+        """
         configs_to_test = [
             {"width": 32, "height": 32, "normalize": True, "grayscale": False},
             {"width": 84, "height": 84, "normalize": False, "grayscale": False},
@@ -254,7 +280,9 @@ class TestImageObservationSpaceValidation:
     """Test observation space validation with image observations."""
 
     def test_observation_space_sample_and_contains(self):
-        """Test that observation space sampling and contains work correctly."""
+        """
+        Tests that the observation space can generate valid samples and that both sampled and actual environment observations conform to the defined space.
+        """
         image_config = ImageSensorSettings(width=32, height=32, normalize=True)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -282,7 +310,9 @@ class TestImageObservationSpaceValidation:
                 env.exit()
 
     def test_observation_space_bounds_checking(self):
-        """Test observation space bounds are properly enforced."""
+        """
+        Verifies that the observation space correctly rejects observations with out-of-bounds image values or incorrect image shapes.
+        """
         image_config = ImageSensorSettings(width=32, height=32, normalize=True)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
 
@@ -315,7 +345,11 @@ class TestErrorHandling:
     """Test error handling in image-based environments."""
 
     def test_missing_image_config_handling(self):
-        """Test handling when image observations are enabled but config is missing."""
+        """
+        Tests that the environment auto-creates a default image sensor configuration when image observations are enabled but no explicit image configuration is provided.
+        
+        Ensures the environment initializes successfully and the image observation key is present in the observation space.
+        """
         # This should auto-create image_config in post_init
         settings = RobotEnvSettings(use_image_obs=True)
 
@@ -331,7 +365,11 @@ class TestErrorHandling:
                 env.exit()
 
     def test_graceful_degradation_without_sim_view(self):
-        """Test that environment degrades gracefully if SimulationView creation fails."""
+        """
+        Verifies that the environment can be created successfully even if the simulation view component is unavailable or fails to initialize.
+        
+        This test ensures that enabling image observations does not prevent environment instantiation in the absence of the simulation view.
+        """
         settings = RobotEnvSettings(use_image_obs=True)
 
         # This test might be hard to implement without mocking internal components

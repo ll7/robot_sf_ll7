@@ -21,7 +21,12 @@ class TestFusedSensorSpaceWithImage:
 
     @pytest.fixture
     def basic_spaces(self):
-        """Create basic observation spaces for testing."""
+        """
+        Creates basic Box observation spaces for robot state, target state, and LiDAR rays.
+        
+        Returns:
+            Tuple of three gym.spaces.Box instances representing robot observation, target observation, and LiDAR observation spaces.
+        """
         robot_obs = spaces.Box(low=np.array([0, -1]), high=np.array([5, 1]), dtype=np.float32)
         target_obs = spaces.Box(
             low=np.array([0, -np.pi, -np.pi]), high=np.array([10, np.pi, np.pi]), dtype=np.float32
@@ -30,7 +35,11 @@ class TestFusedSensorSpaceWithImage:
         return robot_obs, target_obs, lidar_obs
 
     def test_fused_space_without_image(self, basic_spaces):
-        """Test fused sensor space creation without image observations."""
+        """
+        Tests that the fused sensor space is constructed correctly without image observations.
+        
+        Verifies that the fused space matches the regular fused sensor space in structure and keys, and that image observation keys are absent.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
         timesteps = 3
 
@@ -49,7 +58,11 @@ class TestFusedSensorSpaceWithImage:
         assert OBS_IMAGE not in orig_space.spaces
 
     def test_fused_space_with_image(self, basic_spaces):
-        """Test fused sensor space creation with image observations."""
+        """
+        Tests that the fused sensor space correctly includes image observations.
+        
+        Verifies that when an image observation space is provided, the fused sensor space contains drive state, LiDAR, and image keys in both normalized and original spaces, and that the image observation space is preserved identically in both.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
         timesteps = 3
 
@@ -75,7 +88,11 @@ class TestFusedSensorSpaceWithImage:
         assert orig_space.spaces[OBS_IMAGE] == image_obs
 
     def test_image_space_properties(self, basic_spaces):
-        """Test that image space properties are preserved correctly."""
+        """
+        Verifies that image observation space properties are correctly preserved in fused sensor spaces.
+        
+        Tests multiple image configurations to ensure that the shape and structure of the image observation space remain consistent and accurate in both normalized and original fused sensor spaces.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
         timesteps = 2
 
@@ -111,7 +128,9 @@ class TestFusedSensorSpaceWithImage:
             assert orig_image_space.shape == expected_shape
 
     def test_drive_state_and_lidar_consistency(self, basic_spaces):
-        """Test that drive state and LiDAR spaces remain consistent."""
+        """
+        Verifies that the drive state and LiDAR observation spaces remain unchanged and identical whether or not image observations are included in the fused sensor space.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
         timesteps = 4
 
@@ -147,7 +166,9 @@ class TestFusedSensorSpaceWithImage:
         )
 
     def test_return_types(self, basic_spaces):
-        """Test that return types are correct."""
+        """
+        Verifies that fused sensor spaces returned by fused_sensor_space_with_image are instances of spaces.Dict, both with and without image observation spaces.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
         timesteps = 2
 
@@ -171,7 +192,9 @@ class TestFusedSensorSpaceWithImage:
         assert isinstance(orig_space, spaces.Dict)
 
     def test_timesteps_parameter(self, basic_spaces):
-        """Test that timesteps parameter affects stacked observations correctly."""
+        """
+        Verifies that the timesteps parameter in fused_sensor_space_with_image correctly stacks drive state and LiDAR observations along the first dimension, while image observation shape remains unchanged.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
         image_settings = ImageSensorSettings()
         image_obs = image_sensor_space(image_settings)
@@ -197,7 +220,11 @@ class TestFusedSensorSpaceWithImage:
             assert image_shape == image_obs.shape
 
     def test_edge_cases(self, basic_spaces):
-        """Test edge cases and error conditions."""
+        """
+        Tests the fused sensor space with image observation for edge cases, specifically when timesteps is set to 1.
+        
+        Verifies that the drive state and LiDAR observation spaces are correctly stacked along the first dimension and that the image observation key is present in the fused space.
+        """
         robot_obs, target_obs, lidar_obs = basic_spaces
 
         # Test with timesteps = 1
@@ -217,7 +244,11 @@ class TestImageObservationSpaceIntegration:
     """Integration tests for image observation spaces."""
 
     def test_space_consistency_with_sensor_output(self):
-        """Test that observation spaces match actual sensor outputs."""
+        """
+        Verifies that image observation spaces accept mock sensor outputs matching their configuration.
+        
+        Tests multiple image sensor configurations by generating corresponding observation spaces and random mock outputs, then asserts that each space contains its respective mock output.
+        """
 
         # Test various configurations
         configs = [
@@ -256,7 +287,11 @@ class TestImageObservationSpaceIntegration:
             )
 
     def test_complete_observation_space_structure(self):
-        """Test complete observation space structure with all components."""
+        """
+        Verifies that a fused observation space containing drive state, LiDAR, and image components correctly validates a complete mock observation dictionary.
+        
+        Creates realistic observation spaces for robot state, target state, LiDAR, and image sensors, fuses them for multiple timesteps, and checks that both the overall fused space and each individual component accept appropriately shaped random data.
+        """
         # Create realistic robot and sensor spaces
         robot_obs = spaces.Box(
             low=np.array([0, -2]),  # speed_x, speed_rot

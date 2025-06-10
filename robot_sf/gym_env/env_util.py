@@ -195,18 +195,12 @@ def init_ped_collision_and_sensors(
     sim: PedSimulator, env_config: PedEnvSettings, orig_obs_space: List[spaces.Dict]
 ):
     """
-    Initialize collision detection and sensor fusion for the robot and the pedestrian in the
-    simulator.
-
-    Parameters:
-    sim (PedSimulator): The simulator object.
-    env_config (PedEnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
-
+    Initializes collision detection and sensor fusion for both the robot and the ego pedestrian in the pedestrian simulator.
+    
+    Creates occupancy objects for collision detection and sensor fusion objects for sensor data integration for the robot and the ego pedestrian, using their respective positions, goals, and environment configuration. Returns lists of occupancy and sensor fusion objects for both agents.
+    
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        A tuple containing two lists: occupancy objects and sensor fusion objects, ordered as [robot, ego pedestrian].
     """
 
     # Get the simulation configuration, pedestrian configuration,
@@ -305,22 +299,12 @@ def create_spaces_with_image(
     agent_type: AgentType = AgentType.ROBOT,
 ):
     """
-    Create observation and action spaces including optional image observations.
-
-    Parameters
-    ----------
-    env_config : Union[EnvSettings, PedEnvSettings]
-        The configuration settings for the environment.
-    map_def : MapDefinition
-        The definition of the map for the environment.
-    agent_type : AgentType
-        The type of agent (robot or pedestrian).
-
-    Returns
-    -------
-    Tuple[Space, Space, Space]
-        A tuple containing the action space, the extended observation space, and
-        the original observation space of the agent.
+    Creates action and observation spaces for an agent, optionally including image-based observations.
+    
+    If image observations are enabled in the environment configuration and an image configuration is provided, the observation space is extended to include image sensor data in addition to target and lidar sensors. Raises a ValueError if a pedestrian agent is requested but no pedestrian factory is available.
+    
+    Returns:
+        A tuple containing the agent's action space, the extended observation space (with optional image sensor), and the original observation space.
     """
     # Create a agent using the factory method in the environment configuration
     if agent_type == AgentType.ROBOT:
@@ -378,18 +362,18 @@ def init_collision_and_sensors_with_image(
     sim_view=None,
 ):
     """
-    Initialize collision detection and sensor fusion including image sensors for the robots.
-
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
-    sim_view: The simulation view for capturing images (optional).
-
+    Initializes collision detection and sensor fusion for robots, including optional image sensors.
+    
+    Creates occupancy objects for collision detection and, for each robot, constructs either a standard sensor fusion or an image sensor fusion object depending on whether image observations are enabled and a simulation view is provided. Returns lists of occupancy and sensor fusion objects for all robots.
+    
+    Args:
+        sim: The simulator instance containing robots and environment state.
+        env_config: Environment configuration specifying robot, lidar, and optional image settings.
+        orig_obs_space: The original observation space definition.
+        sim_view: Optional simulation view used for image sensor input.
+    
     Returns:
-    Tuple[List[ContinuousOccupancy], List[Union[SensorFusion, ImageSensorFusion]]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        A tuple containing a list of occupancy objects for collision detection and a list of sensor fusion objects (standard or image-based) for each robot.
     """
     # Get the number of robots, simulation configuration,
     # robot configuration, and lidar configuration
@@ -422,14 +406,41 @@ def init_collision_and_sensors_with_image(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """
+            Returns the lidar ray scan readings for the specified robot.
+            
+            Args:
+                r_id: The index of the robot for which to compute the ray scan.
+            
+            Returns:
+                The lidar ray scan data for the robot at the given index.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """
+            Generates target sensor observations for a specified robot.
+            
+            Args:
+                r_id: The index of the robot for which to generate the target sensor observation.
+            
+            Returns:
+                The observation from the target sensor for the specified robot, including current pose, goal position, and next goal position.
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id]
             )
 
         def speed_sensor(r_id=r_id):
+            """
+            Retrieves the current speed of the specified robot.
+            
+            Args:
+                r_id: The index of the robot whose speed is to be returned.
+            
+            Returns:
+                The current speed of the robot.
+            """
             return sim.robots[r_id].current_speed
 
         # Create appropriate sensor fusion based on configuration

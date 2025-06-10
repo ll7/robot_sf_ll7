@@ -1,7 +1,5 @@
 """
-Test from robot_sf.sensor.image_sensor import ImageSensor, ImageSensorSettings
-from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
-from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_IMAGE, OBS_RAYSe for the ImageSensorFusion class and image-enabled sensor fusion.
+Test suite for the ImageSensorFusion class and image-enabled sensor fusion.
 """
 
 from unittest.mock import Mock

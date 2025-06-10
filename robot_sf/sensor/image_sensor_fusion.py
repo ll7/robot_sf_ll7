@@ -51,21 +51,7 @@ class ImageSensorFusion:
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)
         self.stacked_lidar_state = np.zeros((self.cache_steps, lidar_shape), dtype=np.float32)
 
-        # Initialize image cache if image observations are enabled
-        if self.use_image_obs and self.image_sensor is not None:
-            # Get image dimensions from the observation space
-            image_space = self.unnormed_obs_space[OBS_IMAGE]
-            if hasattr(image_space, "shape") and image_space.shape is not None:
-                image_shape = image_space.shape
-                if len(image_shape) == 2:  # Grayscale
-                    self.stacked_image_state = np.zeros(
-                        (self.cache_steps,) + image_shape, dtype=np.float32
-                    )
-                else:  # RGB
-                    self.stacked_image_state = np.zeros(
-                        (self.cache_steps,) + image_shape, dtype=np.float32
-                    )
-
+        # Initialize caches for sensors
         self.drive_state_cache = deque(maxlen=self.cache_steps)
         self.lidar_state_cache = deque(maxlen=self.cache_steps)
         if self.use_image_obs:
@@ -143,10 +129,10 @@ class ImageSensorFusion:
         # Add image observation if enabled
         if self.use_image_obs and image_state is not None:
             self.image_state_cache.append(image_state)
-            self.stacked_image_state = np.roll(self.stacked_image_state, -1, axis=0)
-            self.stacked_image_state[-1] = image_state
             # Images are already normalized in the sensor
-            obs[OBS_IMAGE] = image_state  # Use current frame, not stacked for now
+            # Note: Images are intentionally NOT stacked like drive/lidar states
+            # to match the observation space design where images represent current frame only
+            obs[OBS_IMAGE] = image_state
 
         return obs
 
@@ -158,3 +144,7 @@ class ImageSensorFusion:
         self.lidar_state_cache.clear()
         if self.use_image_obs:
             self.image_state_cache.clear()
+
+        # Reset stacked states to zeros
+        self.stacked_drive_state = np.zeros_like(self.stacked_drive_state)
+        self.stacked_lidar_state = np.zeros_like(self.stacked_lidar_state)

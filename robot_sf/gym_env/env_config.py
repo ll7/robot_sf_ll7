@@ -1,19 +1,5 @@
 """
-The `sim_config.from dataclasses import dataclass, field
-from typing import Union
-
-from robot_sf.nav.map_config import MapDefinitionPool
-from robot_sf.ped_ego.unicycle_drive import (
-    UnicycleDrivePedestrian,
-    UnicycleDriveSettings,
-)
-from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
-from robot_sf.robot.differential_drive import (
-    DifferentialDriveRobot,
-    DifferentialDriveSettings,
-)
-from robot_sf.sensor.range_sensor import LidarScannerSettings
-from robot_sf.sim.sim_config import SimulationSettingss `EnvSettings` and `PedEnvSettings` for simulation settings.
+The `env_config.py` file defines `EnvSettings` and `PedEnvSettings` for simulation settings.
 
 These settings include:
 - `sim_config`: Simulation configuration

@@ -59,6 +59,9 @@ class BaseEnv(Env):
         # Store last action executed by the robot
         self.last_action = None
 
+        # Initialize sim_ui attribute (required for exit() method)
+        self.sim_ui = None
+
         # If in debug mode or video recording is enabled, create simulation view
         if debug or record_video:
             self.sim_ui = SimulationView(

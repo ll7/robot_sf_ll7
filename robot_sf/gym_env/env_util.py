@@ -8,7 +8,7 @@ from typing import List, Union
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings
+from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
@@ -300,7 +300,7 @@ def init_ped_collision_and_sensors(
 
 
 def create_spaces_with_image(
-    env_config: Union[EnvSettings, PedEnvSettings],
+    env_config: Union[EnvSettings, PedEnvSettings, RobotEnvSettings],
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
 ):
@@ -326,7 +326,12 @@ def create_spaces_with_image(
     if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
     elif agent_type == AgentType.PEDESTRIAN:
-        agent = env_config.pedestrian_factory()
+        if hasattr(env_config, "pedestrian_factory"):
+            agent = env_config.pedestrian_factory()
+        else:
+            raise ValueError(
+                "Pedestrian agent type requires an env_config with pedestrian_factory method"
+            )
     else:
         raise ValueError(f"Unsupported agent type: {agent_type}")
 
@@ -367,7 +372,10 @@ def create_spaces_with_image(
 
 
 def init_collision_and_sensors_with_image(
-    sim: Simulator, env_config: EnvSettings, orig_obs_space: spaces.Dict, sim_view=None
+    sim: Simulator,
+    env_config: Union[EnvSettings, RobotEnvSettings],
+    orig_obs_space: spaces.Dict,
+    sim_view=None,
 ):
     """
     Initialize collision detection and sensor fusion including image sensors for the robots.

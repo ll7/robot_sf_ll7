@@ -11,11 +11,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KernelDensity
 
-from robot_sf.data_analysis.extract_json_from_pickle import (
-    extract_key_from_json,
-    extract_key_from_json_as_ndarray,
-    extract_timestamp,
-)
 from robot_sf.data_analysis.plot_utils import save_plot
 from robot_sf.nav.map_config import MapDefinition
 
@@ -67,6 +62,7 @@ def plot_kde_on_map(
     ax.set_xlabel("X Position")
     ax.set_ylabel("Y Position")
     ax.invert_yaxis()
+    ax.set_aspect("equal")
 
     # Plot map obstacles if map_def is provided
     if map_def is not None:
@@ -175,21 +171,3 @@ def plot_kde_in_x_y(
 
     # Save the plot using our utility function
     save_plot(filename, None, interactive)
-
-
-def main():
-    # filename = "robot_sf/data_analysis/datasets/2025-02-06_10-24-12.json"
-    filename = "robot_sf/data_analysis/datasets/2025-01-16_11-47-44.json"
-    unique_id = extract_timestamp(filename)
-
-    pedestrian_pos = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
-
-    plot_kde_on_map(pedestrian_pos, interactive=True, unique_id=unique_id)
-
-    ego_data = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
-
-    plot_kde_in_x_y(pedestrian_pos, ego_data, interactive=True, unique_id=unique_id)
-
-
-if __name__ == "__main__":
-    main()

@@ -5,7 +5,7 @@ It also provides a function `fused_sensor_space` to create a combined observatio
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from gymnasium import spaces
@@ -14,6 +14,7 @@ from robot_sf.util.types import PolarVec2D
 
 OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"
+OBS_IMAGE = "image"
 
 
 def fused_sensor_space(
@@ -74,6 +75,53 @@ def fused_sensor_space(
         dtype=np.float32,
     )
     norm_obs_space = spaces.Dict({OBS_DRIVE_STATE: box_drive_state, OBS_RAYS: box_lidar_state})
+
+    return norm_obs_space, orig_obs_space
+
+
+def fused_sensor_space_with_image(
+    timesteps: int,
+    robot_obs: spaces.Box,
+    target_obs: spaces.Box,
+    lidar_obs: spaces.Box,
+    image_obs: Optional[spaces.Box] = None,
+) -> Tuple[spaces.Dict, spaces.Dict]:
+    """
+    Create a combined observation space for the robot, target, LiDAR, and optionally image sensors.
+
+    Parameters
+    ----------
+    timesteps : int
+        The number of **stacked** timesteps in the observation.
+    robot_obs : spaces.Box
+        The observation space for the robot.
+    target_obs : spaces.Box
+        The observation space for the target.
+    lidar_obs : spaces.Box
+        The observation space for the LiDAR sensor.
+    image_obs : spaces.Box, optional
+        The observation space for the image sensor.
+
+    Returns
+    -------
+    Tuple[spaces.Dict, spaces.Dict]
+        The normalized and original combined observation spaces.
+    """
+    # Start with the basic sensor fusion
+    norm_obs_space, orig_obs_space = fused_sensor_space(timesteps, robot_obs, target_obs, lidar_obs)
+
+    # Add image observation space if provided
+    if image_obs is not None:
+        # Convert back to dict to add image space
+        orig_dict = dict(orig_obs_space.spaces)
+        norm_dict = dict(norm_obs_space.spaces)
+
+        orig_dict[OBS_IMAGE] = image_obs
+        norm_dict[OBS_IMAGE] = image_obs  # Images are already normalized in the sensor
+
+        # Convert back to spaces.Dict
+        orig_obs_space = spaces.Dict(orig_dict)
+        norm_obs_space = spaces.Dict(norm_dict)
 
     return norm_obs_space, orig_obs_space
 

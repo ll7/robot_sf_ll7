@@ -12,22 +12,33 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from loguru import logger
 
+from robot_sf.data_analysis.extract_obj_from_pickle import ensure_dir_exists
+from robot_sf.data_analysis.plot_dataset import (
+    plot_all_npc_ped_positions,
+    plot_all_npc_ped_velocities,
+    plot_ego_ped_acceleration,
+    plot_ego_ped_velocity,
+)
+from robot_sf.data_analysis.plot_kernel_density import plot_kde_in_x_y, plot_kde_on_map
+from robot_sf.data_analysis.plot_npc_trajectory import (
+    plot_acceleration_distribution,
+    plot_all_splitted_traj,
+    plot_single_splitted_traj,
+    plot_velocity_distribution,
+    subplot_acceleration_distribution,
+    subplot_single_splitted_traj_acc,
+    subplot_velocity_distribution_with_ego_ped,
+    velocity_colorcoded_with_positions,
+)
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
-
-
-def run():
-    """
-    Main entry point of the module.
-
-    Converts the most recent recording file from pickle format to a JSON dataset.
-    """
-    filename = get_latest_recording_file()
-    save_to_json(filename)
 
 
 def save_to_json(filename_pkl: str, filename_json: str = None):
@@ -54,11 +65,15 @@ def save_to_json(filename_pkl: str, filename_json: str = None):
         filename_json = f"robot_sf/data_analysis/datasets/{timestamp}.json"
 
     # Load simulation states and map definition, which is not used
-    states, _ = load_states(filename_pkl)
+    states, map_def = load_states(filename_pkl)
 
-    # Write the states into a JSON file using a custom serializer
+    combined_data = {
+        "states": convert_to_serializable(states),
+        "map_def": convert_map_def_to_serializable(map_def),
+    }
+
     with open(filename_json, "w", encoding="utf-8") as file:
-        json.dump(states, file, indent=4, default=convert_to_serializable)
+        json.dump(combined_data, file, indent=4)
 
     logger.info(f"Saved data to {filename_json}")
 
@@ -118,6 +133,38 @@ def convert_to_serializable(obj):
         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable!")
 
 
+def convert_map_def_to_serializable(obj):
+    """
+    Recursively convert non-JSON-serializable objects into serializable ones.
+
+    This is a extension to the convert_to_serializable() function and works with MapDefinition and
+    Obstacle objects. Converting only the necessary vertices.
+
+    Args:
+        obj: The object to be converted.
+
+    Returns:
+        A JSON-serializable representation of the object.
+
+    Raises:
+        TypeError: If the object cannot be converted to a serializable format
+    """
+    if isinstance(obj, MapDefinition):
+        return {
+            key: convert_map_def_to_serializable(value)
+            for key, value in obj.__dict__.items()
+            if key == "obstacles"
+        }
+    elif isinstance(obj, (list, tuple)):
+        return [convert_map_def_to_serializable(item) for item in obj]
+    elif isinstance(obj, Obstacle):
+        return {
+            "obstacle_vertices": convert_to_serializable(obj.vertices),
+        }
+    else:
+        raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable!")
+
+
 def extract_key_from_json(filename: str, key: str) -> list:
     """
     Extract a list of values associated with a given key from a JSON file.
@@ -132,7 +179,7 @@ def extract_key_from_json(filename: str, key: str) -> list:
     with open(filename, "r", encoding="utf-8") as file:
         data = json.load(file)
 
-    return [item[key] for item in data]
+    return [item[key] for item in data["states"]]
 
 
 def extract_key_from_json_as_ndarray(filename: str, key: str) -> np.ndarray:
@@ -150,6 +197,46 @@ def extract_key_from_json_as_ndarray(filename: str, key: str) -> np.ndarray:
     # Convert the list of positions to a NumPy array.
     np_array = np.array(data)
     return np_array
+
+
+def extract_map_def_from_json(filename: str) -> MapDefinition:
+    """
+    Extract the map definition from a JSON file.
+
+    Args:
+        filename (str): Path to the JSON file.
+
+    Returns:
+        MapDefinition: The map definition extracted from the JSON file.
+
+    Notes:
+        This does not recreate a valid map definition!
+        Only the obstacles are extracted, which are needed for plotting.
+    """
+    with open(filename, "r", encoding="utf-8") as file:
+        json_data = json.load(file)
+
+    obstacles = []
+    for obstacle_data in json_data["map_def"]["obstacles"]:
+        vertices = obstacle_data["obstacle_vertices"]
+        obstacle = Obstacle(vertices=vertices)
+        obstacles.append(obstacle)
+
+    map_def = MapDefinition(
+        width=1,
+        height=1,
+        obstacles=obstacles,
+        robot_spawn_zones=[[(0, 0), (0, 0), (0, 0)]],
+        ped_spawn_zones=[],
+        robot_goal_zones=[[(0, 0), (0, 0), (0, 0)]],
+        bounds=[[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],
+        robot_routes=[],
+        ped_goal_zones=[],
+        ped_crowded_zones=[],
+        ped_routes=[],
+    )
+
+    return map_def
 
 
 def get_latest_recording_file() -> Path:
@@ -181,5 +268,141 @@ def extract_timestamp(filename: str) -> str:
     return match.group() if match else "unknown"
 
 
+def plot_all_data_json(
+    filename: str,
+    unique_id: Optional[str] = None,
+    interactive: bool = True,
+):
+    """
+    Plot all available data from a JSON file.
+
+    Args:
+        filename (str): Path to the JSON file
+        unique_id (str): Unique identifier for plot filenames
+        interactive (bool): Whether to display plots interactively
+    Returns:
+        None
+    """
+    # Extract pedestrian positions
+    ped_positions_array = extract_key_from_json_as_ndarray(filename, "pedestrian_positions")
+
+    # Extract pedestrian actions as list
+    ped_actions = extract_key_from_json(filename, "ped_actions")
+
+    # Extract ego pedestrian acceleration
+    ego_ped_acceleration = [
+        item["action"][0] for item in extract_key_from_json(filename, "ego_ped_action")
+    ]
+
+    # Extract map definition
+    map_def = extract_map_def_from_json(filename)
+
+    # Extract ego pedestrian positions
+    ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
+
+    plot_all_npc_ped_positions(
+        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+    )
+    plot_all_npc_ped_velocities(ped_actions, interactive=interactive, unique_id=unique_id)
+    plot_ego_ped_acceleration(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
+    plot_ego_ped_velocity(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
+
+    plot_kde_on_map(
+        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+    )
+
+    plot_kde_in_x_y(
+        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+    )
+
+    # Choose id between 0 and ped_positions_array.shape[1] - 1
+    ped_idx = 0
+
+    plot_single_splitted_traj(
+        ped_positions_array,
+        ped_idx=ped_idx,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    plot_all_splitted_traj(
+        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+    )
+
+    subplot_single_splitted_traj_acc(
+        ped_positions_array,
+        ped_idx=ped_idx,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
+    )
+
+    plot_acceleration_distribution(
+        ped_positions_array, interactive=interactive, unique_id=unique_id
+    )
+
+    plot_velocity_distribution(ped_positions_array, interactive=interactive, unique_id=unique_id)
+
+    subplot_velocity_distribution_with_ego_ped(
+        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+    )
+    subplot_acceleration_distribution(
+        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+    )
+    velocity_colorcoded_with_positions(
+        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+    )
+
+
+def show_from_json(filename: str, unique_id: str):
+    """
+    Convert recording file into json and plot the data.
+
+    Args:
+        filename (str): Path to the JSON file
+        unique_id (str): Unique identifier for plot filenames
+    Returns:
+        None
+    """
+    dataset_dir = Path("robot_sf/data_analysis/datasets")
+    if dataset_dir.exists():
+        # Convert recording to json
+        save_to_json(filename, f"{dataset_dir}/{unique_id}.json")
+
+        latest_file = max(dataset_dir.glob("*.json"), key=os.path.getctime, default=None)
+
+        if latest_file:
+            # Plot all available data
+            plot_all_data_json(str(latest_file), unique_id)
+
+        else:
+            logger.error(f"No json files found in the '{dataset_dir}' directory")
+    else:
+        logger.error(f"'{dataset_dir}' directory not found")
+
+
 if __name__ == "__main__":
-    run()
+    # Example usage
+    from pathlib import Path
+
+    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
+
+    # Ensure the plots directory exists
+    PLOTS_DIR = "robot_sf/data_analysis/plots"
+    ensure_dir_exists(PLOTS_DIR)
+
+    # Find the most recent recording file
+    recording_dir = Path("recordings")
+    if recording_dir.exists():
+        latest_file = max(recording_dir.glob("*.pkl"), key=os.path.getctime, default=None)
+
+        if latest_file:
+            show_from_json(str(latest_file), extract_timestamp(str(latest_file)))
+
+            logger.info(f"Successfully extracted and plotted data from {latest_file}")
+            logger.info(f"Plots saved to {os.path.abspath(PLOTS_DIR)}")
+        else:
+            logger.error("No recording files found in the 'recordings' directory")
+    else:
+        logger.error("'recordings' directory not found")

@@ -12,10 +12,18 @@ Activate the conda environment:
 conda activate conda_env
 ```
 
-Manually install the packages:
+Install the required packages in the conda environment:
 
 ```bash
+# Option 1: Using conda (recommended for conda environments)
+conda install psutil gputil
+
+# Option 2: Using pip within conda environment
 pip install psutil gputil
+
+# Option 3: Using uv (requires uv to be installed in the conda environment)
+pip install uv  # install uv first if needed
+uv add psutil gputil
 ```
 
 Modify the `slurm_train.sl` file to run the training with util callback:

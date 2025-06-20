@@ -23,7 +23,7 @@ pip install psutil gputil
 
 # Option 3: Using uv (requires uv to be installed in the conda environment)
 pip install uv  # install uv first if needed
-uv add psutil gputil
+uv pip install psutil gputil
 ```
 
 Modify the `slurm_train.sl` file to run the training with util callback:

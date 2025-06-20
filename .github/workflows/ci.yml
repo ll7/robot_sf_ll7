@@ -17,7 +17,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
-          version: "latest"
+          version: "0.5.11"
 
       - name: Set up Python
         run: uv python install 3.12
@@ -42,7 +42,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
-          version: "latest"
+          version: "0.5.11"
           
       - name: Set up Python  
         run: uv python install 3.12
@@ -55,9 +55,3 @@ jobs:
 
       - name: Run Ruff formatting
         run: uv run ruff format --check .
-
-      - name: Ruff Format Check
-        run: ruff format --check .
-
-      - name: Ruff Lint Check
-        run: ruff check .

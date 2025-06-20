@@ -12,23 +12,41 @@ Performance-critical implementations of forces use Numba for significant speed-u
 
 ## Installation
 
+### Prerequisites
+
+First, install uv (if not already installed):
+
+```sh
+# On macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# On Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Alternative: Using pip
+pip install uv
+```
+
+### Install PySocialForce
+
 Clone the source code.
 
 ```sh
 git clone https://github.com/Bonifatius94/PySocialForce.git
+cd PySocialForce
 ```
 
-Install the pysocialforce package and its dependencies using pip + setup.py.
+Install the pysocialforce package and its dependencies using uv.
 
 ```sh
-pip install -e .
+uv sync
 ```
 
 For development, run the automated tests and lint the coding style.
 
 ```sh
-pylint pysocialforce
-pytest tests
+uv run pylint pysocialforce
+uv run pytest tests
 ```
 
 ## Usage

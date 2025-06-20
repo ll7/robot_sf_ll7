@@ -8,10 +8,15 @@ pwd
 git submodule update --init --recursive || { echo "Failed to update git submodules"; exit 1; }
 git config --global --add safe.directory /workspaces/robot_sf_ll7/fast-pysf
 
-pip install -r ./requirements.txt || { echo "Failed to install requirements from ./requirements.txt"; exit 1; }
-pip install -r ./fast-pysf/requirements.txt || { echo "Failed to install requirements from ./fast-pysf/requirements.txt"; exit 1; }
-pip install -e . || { echo "Failed to install the current directory as a package"; exit 1; }
-pip install -e ./fast-pysf || { echo "Failed to install ./fast-pysf as a package"; exit 1; }
+# Install uv if not already installed
+if ! command -v uv &> /dev/null; then
+    echo "Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh || { echo "Failed to install uv"; exit 1; }
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
+# Use uv for all dependency management
+uv sync || { echo "Failed to sync dependencies with uv"; exit 1; }
 
 # Set the display environment variable for GUI applications based on the host OS
 if [ $HOST_OS == *"Windows"* ]; then

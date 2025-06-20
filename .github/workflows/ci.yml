@@ -29,7 +29,7 @@ jobs:
         run: sudo apt-get install ffmpeg
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Run tests
         run: uv run pytest tests
@@ -48,7 +48,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --frozen
 
       - name: Run Ruff linting
         run: uv run ruff check .

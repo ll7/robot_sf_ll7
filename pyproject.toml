@@ -184,5 +184,17 @@ docstring-code-format = true
 # enabled.
 docstring-code-line-length = "dynamic"
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Suppress external library warnings
+    "ignore::DeprecationWarning:pygame.*",
+    "ignore::DeprecationWarning:stable_baselines3.*",
+    "ignore::UserWarning:stable_baselines3.*",
+    "ignore::UserWarning:gymnasium.*",
+    # Keep our own warnings visible
+    "default::DeprecationWarning:robot_sf.*",
+    "default::UserWarning:robot_sf.*",
+]
+
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }

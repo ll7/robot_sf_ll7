@@ -13,7 +13,6 @@ dependencies = [
     "scipy>=1.14.1",
     "matplotlib>=3.9.2",
     "pillow>=10.4.0",
-    "tk>=0.1.0",
     "pygame>=2.6.1",
 ]
 

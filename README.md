@@ -38,8 +38,8 @@ pip install uv
 
 ```sh
 # Clone the repository with submodules
-git clone --recurse-submodules https://github.com/Bonifatius94/robot-sf
-cd robot-sf
+git clone --recurse-submodules https://github.com/ll7/robot_sf_ll7
+cd robot_sf_ll7
 
 # Install all dependencies and create virtual environment automatically
 uv sync

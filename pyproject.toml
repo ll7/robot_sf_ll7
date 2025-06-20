@@ -39,7 +39,6 @@ dependencies = [
     "toml>=0.10.2",
     "shimmy>=2.0.0",
     "moviepy>=2.0.0",
-    "tk>=0.1.0",
     # Development tools
     "pylint>=3.3.1",
     "pytest>=8.3.3",
@@ -47,7 +46,6 @@ dependencies = [
     "ruff>=0.9.7",
     "pre-commit>=4.1.0",
     "setuptools>=70.0.0",
-    "pysocialforce",
 ]
 
 [project.optional-dependencies]

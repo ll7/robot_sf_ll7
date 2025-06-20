@@ -4,8 +4,32 @@
         {
             "label": "Ruff: Format and Fix",
             "type": "shell",
-            "command": "uvx ruff check . && uvx ruff check --fix . && uvx ruff format .",
+            "command": "uv run ruff check . && uv run ruff check --fix . && uv run ruff format .",
             "problemMatcher": []
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "uv run pytest tests",
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run Tests (GUI)",
+            "type": "shell",
+            "command": "uv run pytest test_pygame",
+            "problemMatcher": [],
+            "group": "test"
+        },
+        {
+            "label": "Install Dependencies",
+            "type": "shell",
+            "command": "uv sync",
+            "problemMatcher": [],
+            "group": "build"
         },
         {
             "label": "Generate UML",

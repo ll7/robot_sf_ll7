@@ -22,9 +22,5 @@ RUN git config --global core.autocrlf true
 ENV DISPLAY=host.docker.internal:0.0
 
 # Create a virtual environment and activate it
-# Avoids pip complaint about being a root user in the docker container
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Update pip
-RUN pip install --upgrade pip
+# Install uv for Python package management
+RUN pip install --upgrade pip uv

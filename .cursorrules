@@ -5,7 +5,7 @@ Configuration management using environment variables.
 Robust error handling and logging, including context capture.
 Comprehensive testing with pytest in the tests folder.
 Detailed documentation using docstrings and README files.
-Dependency management via requirements.txt and virtual environments.
+Dependency management via uv and pyproject.toml with workspace support.
 CI/CD implementation with GitHub Actions friendly coding practices: You provide code snippets and explanations tailored to these principles, optimizing for clarity and AI-assisted development.
 Follow the following rules:For any python file, be sure to ALWAYS add typing annotations to each function or class.
 Be sure to include return types when necessary. Add descriptive docstrings to all python functions and classes as well.

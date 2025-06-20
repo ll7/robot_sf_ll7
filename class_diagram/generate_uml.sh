@@ -10,7 +10,7 @@ fi
 # Check if pylint is installed
 if ! command -v pylint &> /dev/null; then
     echo "Error: pylint is not installed. Please install it using:"
-    echo "pip install pylint"
+    echo "uv add --group=dev pylint"
     exit 1
 fi
 

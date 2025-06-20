@@ -4,6 +4,7 @@ Test suite for environment configuration and integration with image observations
 
 from unittest.mock import Mock, patch
 
+import numpy as np
 import pytest
 from gymnasium import spaces
 
@@ -70,8 +71,8 @@ class TestCreateSpacesWithImage:
     def test_create_spaces_without_image(self, mock_lidar_space, mock_target_space):
         """Test creating spaces without image observations."""
         # Setup mocks
-        mock_target_space.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=float)
-        mock_lidar_space.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=float)
+        mock_target_space.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=np.float32)
+        mock_lidar_space.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=np.float32)
         # Create settings without image
         settings = RobotEnvSettings(use_image_obs=False)
 
@@ -93,8 +94,8 @@ class TestCreateSpacesWithImage:
     def test_create_spaces_with_image(self, mock_lidar_space, mock_target_space):
         """Test creating spaces with image observations."""
         # Setup mocks
-        mock_target_space.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=float)
-        mock_lidar_space.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=float)
+        mock_target_space.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=np.float32)
+        mock_lidar_space.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=np.float32)
         # Create settings with image
         image_config = ImageSensorSettings(width=64, height=64)
         settings = RobotEnvSettings(use_image_obs=True, image_config=image_config)
@@ -130,8 +131,8 @@ class TestCreateSpacesWithImage:
             patch("robot_sf.gym_env.env_util.target_sensor_space") as mock_target,
             patch("robot_sf.gym_env.env_util.lidar_sensor_space") as mock_lidar,
         ):
-            mock_target.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=float)
-            mock_lidar.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=float)
+            mock_target.return_value = spaces.Box(low=0, high=10, shape=(3,), dtype=np.float32)
+            mock_lidar.return_value = spaces.Box(low=0, high=10, shape=(4,), dtype=np.float32)
 
             action_space_no_image, _, _ = create_spaces_with_image(settings_no_image, map_def)
             action_space_with_image, _, _ = create_spaces_with_image(settings_with_image, map_def)

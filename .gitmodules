@@ -1,4 +1,4 @@
 [submodule "fast-pysf"]
 	path = fast-pysf
 	url = https://github.com/ll7/pysocialforce-ll7
-	branch = main
+	branch = robot-sf

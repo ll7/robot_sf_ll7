@@ -40,6 +40,20 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "Run Tests (Show All Warnings)",
+            "type": "shell",
+            "command": "uv run pytest tests --disable-warnings --tb=short -v",
+            "problemMatcher": [],
+            "group": "test"
+        },
+        {
+            "label": "Check Code Quality",
+            "type": "shell",
+            "command": "uv run ruff check . && uv run pylint robot_sf --errors-only",
+            "problemMatcher": [],
+            "group": "test"
         }
     ]
 }

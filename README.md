@@ -21,62 +21,99 @@ map data from OpenStreetMap.
 
 ## Installation
 
-This project currently only supports local installation. The [.devcontainer installation](./.devcontainer/readme.md) is deprecated.
+This project now uses `uv` for modern Python dependency management and virtual environment handling.
 
-### Local Installation
+### Prerequisites
 
-Install python >= 3.10 and <= 3.12. Python **3.12** is recommended.
-The following assumes that you are using the [uv python package manger](https://docs.astral.sh/uv/).
+Install Python 3.10+ (Python **3.12** is recommended) and `uv`:
 
 ```sh
-# Install pip
-sudo apt-get update && sudo apt-get install -y python3-pip
-
-# Install uv
+# Install uv (the modern Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# or
 pip install uv
 ```
 
-### Clone Source Code
+### Quick Start
 
 ```sh
+# Clone the repository with submodules
 git clone --recurse-submodules https://github.com/Bonifatius94/robot-sf
 cd robot-sf
-```
 
-### Create a `uv venv`
+# Install all dependencies and create virtual environment automatically
+uv sync
 
-```sh
-uv venv --python 3.12
+# Activate the virtual environment
 source .venv/bin/activate
+
+# Install system dependencies (Linux/Ubuntu)
+sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
-### Install Dependencies
+### Development Setup
+
+For development work with additional tools:
 
 ```sh
-uv pip install pip --upgrade
-uv pip install -r requirements.txt
-uv pip install -r fast-pysf/requirements.txt
+# Install with development dependencies
+uv sync --extra dev
+
+# Install pre-commit hooks
+uv run pre-commit install
+
+# Run tests
+uv run pytest tests
+
+# Run linting and formatting
+uv run ruff check .
+uv run ruff format .
 ```
 
-### FFMPEG
+### Alternative Installation Methods
 
-For video recording of the simulation, ffmpeg is required.
+#### Manual dependency installation
+
+If you prefer more control over the installation:
 
 ```sh
+# Create virtual environment with specific Python version
+uv venv --python 3.12
+
+# Activate environment
+source .venv/bin/activate
+
+# Install project in editable mode
+uv sync
+
+# Install development tools (optional)
+uv sync --group=dev
+```
+
+#### Docker Installation (Advanced)
+
+For containerized environments:
+
+```sh
+docker compose build && docker compose run \
+    robotsf-cuda python ./scripts/training_ppo.py
+```
+
+*Note: See [GPU setup documentation](./docs/GPU_SETUP.md) for Docker with GPU support.*
+
+### System Dependencies
+
+**FFMPEG** (required for video recording):
+
+```sh
+# Ubuntu/Debian
 sudo apt-get install -y ffmpeg
-```
 
-### Install your local packages in `editable` mode
+# macOS
+brew install ffmpeg
 
-```sh
-uv pip install -e fast-pysf/. # pysocialforce
-uv pip install -e . # robot_sf
-```
-
-### Install Pre-Commit Hook
-
-```sh
-pre-commit install
+# Windows
+# Download from https://ffmpeg.org/download.html
 ```
 
 ### Tests

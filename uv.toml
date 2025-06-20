@@ -1,0 +1,3 @@
+# uv workspace configuration
+cache-dir = ".uv-cache"
+native-tls = true

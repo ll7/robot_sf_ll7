@@ -17,11 +17,14 @@ from copy import deepcopy
 from typing import Callable, List
 
 import loguru
-import numpy as np
 from gymnasium import Env
 
 from robot_sf.gym_env.env_config import PedEnvSettings
-from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
+from robot_sf.gym_env.env_util import (
+    init_ped_collision_and_sensors,
+    init_ped_spaces,
+    prepare_pedestrian_actions,
+)
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
 from robot_sf.render.lidar_visual import render_lidar
@@ -239,11 +242,7 @@ class PedestrianEnv(Env):
         robot_ray_vecs = render_lidar(robot_pos, distances, directions)
 
         # Prepare npc_pedestrian action visualization
-        ped_actions = zip(
-            self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
-        )
-        ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
+        ped_actions_np = prepare_pedestrian_actions(self.simulator)
         # Prepare action and LIDAR visualization for the ego pedestrian
         ego_ped_action = (
             None

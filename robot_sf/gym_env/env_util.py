@@ -468,3 +468,25 @@ def init_collision_and_sensors_with_image(
         sensor_fusions.append(sensor_fusion)
 
     return occupancies, sensor_fusions
+
+
+def prepare_pedestrian_actions(simulator) -> np.ndarray:
+    """
+    Prepare pedestrian action visualization data.
+
+    This helper function creates pedestrian action vectors for visualization
+    by combining pedestrian positions with their velocity vectors.
+
+    Args:
+        simulator: The simulator object containing pysf_sim with pedestrian data
+
+    Returns:
+        np.ndarray: Array of shape (n_peds, 2, 2) where each pedestrian has
+                   a start position [x, y] and end position [x, y] representing
+                   their current position and position + velocity vector
+    """
+    ped_actions = zip(
+        simulator.pysf_sim.peds.pos(),
+        simulator.pysf_sim.peds.pos() + simulator.pysf_sim.peds.vel(),
+    )
+    return np.array([[pos, vel] for pos, vel in ped_actions])

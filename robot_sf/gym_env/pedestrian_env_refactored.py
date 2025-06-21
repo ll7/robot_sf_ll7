@@ -250,7 +250,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         # Prepare NPC pedestrian actions
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
+            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),
         )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 

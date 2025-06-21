@@ -214,8 +214,7 @@ class RobotEnv(BaseEnv):
         # Prepare pedestrian action visualization
         ped_actions = zip(
             self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
-            # TODO Clarify why the factor of 2 is used
+            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),
         )
         ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
 

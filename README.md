@@ -118,21 +118,26 @@ brew install ffmpeg
 
 ### Tests
 
-#### Pysocialforce Tests (**currently not working**)
+#### PySocialForce Tests
 
-> [!WARNING]  
-> Currently not working. See https://github.com/ll7/robot_sf_ll7/issues/1
-
-Add symbolic link for pysocialforce and navigate to tests directory:
+The PySocialForce tests are located in the `fast-pysf/tests/` directory and can be run with:
 
 ```sh
-ln -s fast-pysf/pysocialforce pysocialforce
-pushd tests
-    # ln -s ../fast-pysf/tests pysf_tests
-popd
+cd fast-pysf
+uv run python -m pytest tests/ -v
 ```
 
-*Note: The outlined command might differ on Windows, e.g. try mklink*
+Or with dev dependencies explicitly:
+
+```sh
+cd fast-pysf  
+uv run --extra dev python -m pytest tests/ -v
+```
+
+All tests should pass successfully. The test suite includes:
+- Force calculation tests (desired, social, group repulsion forces)
+- Map loading tests 
+- Simulator functionality tests
 
 #### Run Linter / Tests
 

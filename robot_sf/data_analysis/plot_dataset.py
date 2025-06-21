@@ -81,8 +81,6 @@ def plot_all_npc_ped_velocities(
             for action in actions:
                 vel_vector = np.array(action[1]) - np.array(action[0])
                 velocity = np.linalg.norm(vel_vector)
-                # Scaling factor for better visibility for simulation view
-                velocity = velocity / 2  # See pedestrian_env.py -> ped_actions = ...
                 current_velocity.append(velocity)
         velocity_list.append(current_velocity)
 

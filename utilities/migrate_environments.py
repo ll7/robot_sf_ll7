@@ -37,7 +37,7 @@ class EnvironmentMigrator:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-        except Exception as e:
+        except (FileNotFoundError, IOError, OSError, UnicodeDecodeError) as e:
             return {"error": str(e)}
 
         analysis = {
@@ -114,7 +114,7 @@ class EnvironmentMigrator:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-        except Exception:
+        except (FileNotFoundError, IOError, OSError, UnicodeDecodeError):
             return "Could not read file"
 
         suggestions = []
@@ -160,7 +160,7 @@ class EnvironmentMigrator:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-        except Exception as e:
+        except (FileNotFoundError, IOError, OSError, UnicodeDecodeError) as e:
             return f"Error reading file: {e}"
 
         original_content = content
@@ -202,17 +202,20 @@ class EnvironmentMigrator:
 
         if content != original_content:
             if not dry_run:
-                # Create backup
-                backup_path = file_path.with_suffix(file_path.suffix + ".backup")
-                with open(backup_path, "w", encoding="utf-8") as f:
-                    f.write(original_content)
+                try:
+                    # Create backup
+                    backup_path = file_path.with_suffix(file_path.suffix + ".backup")
+                    with open(backup_path, "w", encoding="utf-8") as f:
+                        f.write(original_content)
 
-                # Write migrated version
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(content)
+                    # Write migrated version
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(content)
 
-                self.changes_made.append(str(file_path))
-                return f"Migrated {file_path} (backup created)"
+                    self.changes_made.append(str(file_path))
+                    return f"Migrated {file_path} (backup created)"
+                except (IOError, OSError, UnicodeEncodeError) as e:
+                    return f"Error writing file {file_path}: {e}"
             else:
                 return f"Would migrate {file_path}"
         else:
@@ -303,9 +306,12 @@ def main():
 
         # Save report to file
         report_path = Path(args.project_root) / "migration_report.md"
-        with open(report_path, "w") as f:
-            f.write(report)
-        print(f"\nReport saved to {report_path}")
+        try:
+            with open(report_path, "w") as f:
+                f.write(report)
+            print(f"\nReport saved to {report_path}")
+        except (IOError, OSError, UnicodeEncodeError) as e:
+            print(f"\nError saving report to {report_path}: {e}")
 
     elif args.suggest:
         file_path = Path(args.suggest)

@@ -14,6 +14,7 @@ from copy import deepcopy
 from typing import Callable
 
 import numpy as np
+from loguru import logger
 
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
@@ -251,3 +252,16 @@ class RobotEnv(BaseEnv):
         """
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
+
+    def set_pedestrian_velocity_scale(self, scale: float = 1.0):
+        """
+        Set the pedestrian velocity visualization scaling factor.
+
+        Args:
+            scale (float): Scaling factor for pedestrian velocity arrows in visualization.
+                          1.0 = actual size, 2.0 = double size for better visibility, etc.
+        """
+        if self.sim_ui:
+            self.sim_ui.ped_velocity_scale = scale
+        else:
+            logger.warning("Cannot set velocity scale: debug mode not enabled")

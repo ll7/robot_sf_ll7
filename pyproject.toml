@@ -197,3 +197,8 @@ filterwarnings = [
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }
+
+[dependency-groups]
+dev = [
+    "pylint>=3.3.4",
+]

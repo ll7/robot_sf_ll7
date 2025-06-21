@@ -2941,6 +2941,11 @@ gpu = [
     { name = "torch" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pylint" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
@@ -2980,6 +2985,9 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.0" },
     { name = "wandb", specifier = ">=0.18.7" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pylint", specifier = ">=3.3.4" }]
 
 [[package]]
 name = "roman-numerals-py"

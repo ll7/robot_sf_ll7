@@ -102,17 +102,6 @@ docs/42-fix-button-alignment/
 └── implementation-notes.md
 ```
 
-## General Behavior
-
-### Code Quality Standards
-- Always follow the latest coding standards and best practices for the language being used
-- Use clear, descriptive variable and function names that express intent
-- Write code that is easy to read, understand, and maintain
-- Ensure that all code is well-documented with meaningful comments and docstrings
-- Follow the existing code style and patterns in the project
-- Write comprehensive unit tests for new features and bug fixes
-- Perform code reviews and ensure changes meet quality standards
-
 ### Version Control & Collaboration
 - Use version control best practices with meaningful, descriptive commit messages
 - When making changes, ensure backward compatibility unless explicitly specified otherwise

@@ -115,7 +115,7 @@ The refactoring created these new core files:
 | Tool | Purpose |
 |------|---------|
 | [`utilities/migrate_environments.py`](../../utilities/migrate_environments.py) | Automated migration script |
-| [`demo_refactored_environments.py`](../../demo_refactored_environments.py) | Working demonstration |
+| [`examples/demo_refactored_environments.py`](../../examples/demo_refactored_environments.py) | Working demonstration |
 | [`tests/env_test_updated.py`](../../tests/env_test_updated.py) | Updated test patterns |
 | [`examples/demo_pedestrian_updated.py`](../../examples/demo_pedestrian_updated.py) | Migration example |
 

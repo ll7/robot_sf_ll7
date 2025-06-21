@@ -53,7 +53,7 @@ The Robot SF environment refactoring project has been **successfully completed**
 - **56 Python files analyzed**
 - **33 files identified for potential migration** (optional, non-breaking)
 - **23 files already using compatible patterns**
-- **Automated migration tools available** (`migrate_environments.py`)
+- **Automated migration tools available** (`utilities/migrate_environments.py`)
 
 ### 🏗️ Architecture Benefits Delivered
 
@@ -107,4 +107,4 @@ The project objectives have been **fully achieved** and the system is ready for 
 
 ---
 
-> **Next Steps**: Use the [Migration Guide](migration_guide.md) to gradually update files to the new factory pattern, or continue using existing code as-is. The [migration script](../../migrate_environments.py) can automate most conversions.
+> **Next Steps**: Use the [Migration Guide](migration_guide.md) to gradually update files to the new factory pattern, or continue using existing code as-is. The [migration script](../../utilities/migrate_environments.py) can automate most conversions.

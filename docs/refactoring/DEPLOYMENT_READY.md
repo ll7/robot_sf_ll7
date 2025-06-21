@@ -68,13 +68,13 @@ Start with the most commonly used files:
 
 ```bash
 # Update main example files
-python3 migrate_environments.py --migrate examples/demo_pedestrian.py
-python3 migrate_environments.py --migrate examples/demo_defensive.py
-python3 migrate_environments.py --migrate examples/demo_offensive.py
+python3 utilities/migrate_environments.py --migrate examples/demo_pedestrian.py
+python3 utilities/migrate_environments.py --migrate examples/demo_defensive.py
+python3 utilities/migrate_environments.py --migrate examples/demo_offensive.py
 
 # Update key test files  
-python3 migrate_environments.py --migrate tests/env_test.py
-python3 migrate_environments.py --migrate tests/test_robot_env_with_image_integration.py
+python3 utilities/migrate_environments.py --migrate tests/env_test.py
+python3 utilities/migrate_environments.py --migrate tests/test_robot_env_with_image_integration.py
 ```
 
 #### 2.2 Bulk Migration (1 week)
@@ -82,13 +82,13 @@ Use the migration script to update all files:
 
 ```bash
 # Generate detailed report
-python3 migrate_environments.py --report
+python3 utilities/migrate_environments.py --report
 
 # Review and migrate example files
 for file in examples/*.py; do
-    python3 migrate_environments.py --suggest "$file"
+    python3 utilities/migrate_environments.py --suggest "$file"
     # Review suggestions, then:
-    python3 migrate_environments.py --migrate "$file"
+    python3 utilities/migrate_environments.py --migrate "$file"
 done
 ```
 
@@ -201,10 +201,10 @@ env = make_robot_env(config=config, debug=True)
 ### Documentation
 - `refactoring_plan.md` - Detailed implementation plan
 - `migration_guide.md` - Step-by-step migration instructions
-- `migrate_environments.py` - Automated migration tool
+- `utilities/migrate_environments.py` - Automated migration tool
 
 ### Example Files
-- `demo_refactored_environments.py` - Working demonstration
+- `examples/demo_refactored_environments.py` - Working demonstration
 - `tests/env_test_updated.py` - Test patterns
 - `examples/demo_pedestrian_updated.py` - Migration example
 

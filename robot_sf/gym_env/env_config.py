@@ -164,3 +164,36 @@ class PedEnvSettings(EnvSettings):
             return UnicycleDrivePedestrian(self.ego_ped_config)
         else:
             raise NotImplementedError(f"unsupported pedestrian type {type(self.ego_ped_config)}!")
+
+
+# Backward compatibility imports - these provide access to the new unified configuration
+# while maintaining the old interface
+try:
+    from robot_sf.gym_env.unified_config import (
+        BaseSimulationConfig,
+    )
+    from robot_sf.gym_env.unified_config import (
+        ImageRobotConfig as RobotEnvSettingsNew,
+    )
+    from robot_sf.gym_env.unified_config import (
+        PedestrianSimulationConfig as PedEnvSettingsNew,
+    )
+    from robot_sf.gym_env.unified_config import (
+        RobotSimulationConfig as EnvSettingsNew,
+    )
+
+    # These can be used as drop-in replacements for gradual migration
+    __all__ = [
+        "BaseEnvSettings",
+        "RobotEnvSettings",
+        "EnvSettings",
+        "PedEnvSettings",
+        # New unified config classes for forward compatibility
+        "BaseSimulationConfig",
+        "EnvSettingsNew",
+        "RobotEnvSettingsNew",
+        "PedEnvSettingsNew",
+    ]
+except ImportError:
+    # If unified_config is not available, just export the original classes
+    __all__ = ["BaseEnvSettings", "RobotEnvSettings", "EnvSettings", "PedEnvSettings"]

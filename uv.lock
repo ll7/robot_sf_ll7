@@ -2907,7 +2907,6 @@ dependencies = [
     { name = "pre-commit" },
     { name = "psutil" },
     { name = "pygame" },
-    { name = "pylint" },
     { name = "pysocialforce" },
     { name = "pytest" },
     { name = "rich" },
@@ -2941,6 +2940,11 @@ gpu = [
     { name = "torch" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pylint" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
@@ -2959,7 +2963,6 @@ requires-dist = [
     { name = "pre-commit", specifier = ">=4.1.0" },
     { name = "psutil", specifier = ">=6.1.0" },
     { name = "pygame", specifier = ">=2.6.1" },
-    { name = "pylint", specifier = ">=3.3.1" },
     { name = "pysocialforce", editable = "fast-pysf" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "rich", specifier = ">=13.9.4" },
@@ -2980,6 +2983,9 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.0" },
     { name = "wandb", specifier = ">=0.18.7" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pylint", specifier = ">=3.3.4" }]
 
 [[package]]
 name = "roman-numerals-py"

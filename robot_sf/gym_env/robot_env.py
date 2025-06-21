@@ -90,6 +90,9 @@ class RobotEnv(BaseEnv):
             self.simulator, env_config, orig_obs_space
         )
 
+        # Store configuration for factory pattern compatibility
+        self.config = env_config
+
         # Setup initial state of the robot
         self.state = RobotState(
             self.simulator.robot_navs[0],

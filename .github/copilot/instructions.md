@@ -12,6 +12,7 @@ You are assisting in a development workflow that uses GitHub Issues and follows 
 - Ensure that all code is well-documented with meaningful comments and docstrings
 - Follow the existing code style and patterns in the project
 - Write comprehensive unit tests for new features and bug fixes
+  - tests should be placed in the `tests/` directory or in the `test_pygame/` directory for tests that need a display output.
 - Perform code reviews and ensure changes meet quality standards
 - Use the linting task and the test task to ensure code quality before committing changes
 

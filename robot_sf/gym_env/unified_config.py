@@ -6,7 +6,10 @@ duplication and provides clear separation of concerns.
 """
 
 from dataclasses import dataclass, field
-from typing import Union
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
@@ -106,7 +109,7 @@ class PedestrianSimulationConfig(RobotSimulationConfig):
         # Ensure radius consistency between ego pedestrian and simulation
         self.ego_ped_config.radius = self.sim_config.ped_radius
 
-    def pedestrian_factory(self):
+    def pedestrian_factory(self) -> "UnicycleDrivePedestrian":
         """Create a pedestrian instance based on configuration."""
         from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 

@@ -60,6 +60,9 @@ class RobotEnvWithImage(RobotEnv):
             peds_have_obstacle_forces=peds_have_obstacle_forces,
         )
 
+        # Store configuration for factory pattern compatibility
+        self.config = env_config
+
         # Override spaces initialization to include image observations
         self.action_space, self.observation_space, orig_obs_space = create_spaces_with_image(
             env_config, self.map_def

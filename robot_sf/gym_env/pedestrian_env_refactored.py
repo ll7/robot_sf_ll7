@@ -9,10 +9,13 @@ from copy import deepcopy
 from typing import Callable
 
 import loguru
-import numpy as np
 
 from robot_sf.gym_env.abstract_envs import SingleAgentEnv
-from robot_sf.gym_env.env_util import init_ped_collision_and_sensors, init_ped_spaces
+from robot_sf.gym_env.env_util import (
+    init_ped_collision_and_sensors,
+    init_ped_spaces,
+    prepare_pedestrian_actions,
+)
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
@@ -248,11 +251,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         ego_ped_ray_vecs = render_lidar(ego_ped_pos, distances, directions)
 
         # Prepare NPC pedestrian actions
-        ped_actions = zip(
-            self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),
-        )
-        ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
+        ped_actions_np = prepare_pedestrian_actions(self.simulator)
 
         # Create visualizable state
         state = VisualizableSimState(

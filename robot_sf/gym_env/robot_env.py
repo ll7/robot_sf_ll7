@@ -13,12 +13,15 @@ It also defines the action and observation spaces for the robot.
 from copy import deepcopy
 from typing import Callable
 
-import numpy as np
 from loguru import logger
 
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+from robot_sf.gym_env.env_util import (
+    init_collision_and_sensors,
+    init_spaces,
+    prepare_pedestrian_actions,
+)
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
@@ -213,11 +216,7 @@ class RobotEnv(BaseEnv):
         ray_vecs_np = render_lidar(robot_pos, distances, directions)
 
         # Prepare pedestrian action visualization
-        ped_actions = zip(
-            self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),
-        )
-        ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
+        ped_actions_np = prepare_pedestrian_actions(self.simulator)
 
         # Package the state for visualization
         state = VisualizableSimState(

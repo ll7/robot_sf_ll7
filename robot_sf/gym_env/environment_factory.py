@@ -118,11 +118,6 @@ class EnvironmentFactory:
         if config is None:
             config = PedestrianSimulationConfig()
 
-        if reward_func is None:
-            from robot_sf.gym_env.reward import simple_ped_reward
-
-            reward_func = simple_ped_reward
-
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
 
         from robot_sf.gym_env.pedestrian_env_refactored import RefactoredPedestrianEnv

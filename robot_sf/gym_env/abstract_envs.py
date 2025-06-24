@@ -103,10 +103,10 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, **kwargs):
-        super().__init__(config, **kwargs)
         self.state = None
         self.simulator = None
         self.last_action = None
+        super().__init__(config, **kwargs)
 
     @abstractmethod
     def _setup_simulator(self) -> None:

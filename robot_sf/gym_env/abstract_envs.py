@@ -106,6 +106,8 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
         self.state = None
         self.simulator = None
         self.last_action = None
+        # Call super().__init__() after initializing instance variables
+        # because parent's _setup_environment() may depend on these attributes
         super().__init__(config, **kwargs)
 
     @abstractmethod

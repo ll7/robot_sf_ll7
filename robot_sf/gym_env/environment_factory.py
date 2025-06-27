@@ -120,10 +120,10 @@ class EnvironmentFactory:
 
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
 
-        from robot_sf.gym_env.pedestrian_env import PedestrianEnv
+        from robot_sf.gym_env.pedestrian_env_refactored import RefactoredPedestrianEnv
 
-        return PedestrianEnv(
-            env_config=config,
+        return RefactoredPedestrianEnv(
+            config=config,
             robot_model=robot_model,
             reward_func=reward_func,
             debug=debug,

@@ -248,7 +248,7 @@ def init_simulators(
 @dataclass
 class PedSimulator(Simulator):
     """
-    A pedestrian simulator, whic extends the base simulator.
+    A pedestrian simulator, which extends the base simulator.
 
     Args:
         ego_ped (UnicycleDrivePedestrian): The ego pedestrian in the environment.

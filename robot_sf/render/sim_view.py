@@ -172,6 +172,7 @@ class SimulationView:
     display_help: bool = field(default=False)  # Also add this for help text
     current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
     display_text: bool = field(default=False)  # Add this field to control text visibility
+    ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -540,13 +541,21 @@ class SimulationView:
         )
 
     def _augment_ped_actions(self, ped_actions: np.ndarray):
-        """Draw the actions of the pedestrians as lines."""
+        """Draw the actions of the pedestrians as lines with optional velocity scaling."""
         for p1, p2 in ped_actions:
+            # Apply velocity scaling for visualization if different from 1.0
+            if self.ped_velocity_scale != 1.0:
+                velocity_vector = np.array(p2) - np.array(p1)
+                scaled_p2 = np.array(p1) + velocity_vector * self.ped_velocity_scale
+                p2_display = tuple(scaled_p2)
+            else:
+                p2_display = p2
+
             pygame.draw.line(
                 self.screen,
                 PED_ACTION_COLOR,
                 self._scale_tuple(p1),
-                self._scale_tuple(p2),
+                self._scale_tuple(p2_display),
                 width=3,
             )
 

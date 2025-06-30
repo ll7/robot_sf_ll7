@@ -13,11 +13,15 @@ It also defines the action and observation spaces for the robot.
 from copy import deepcopy
 from typing import Callable
 
-import numpy as np
+from loguru import logger
 
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
+from robot_sf.gym_env.env_util import (
+    init_collision_and_sensors,
+    init_spaces,
+    prepare_pedestrian_actions,
+)
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
@@ -89,6 +93,9 @@ class RobotEnv(BaseEnv):
         occupancies, sensors = init_collision_and_sensors(
             self.simulator, env_config, orig_obs_space
         )
+
+        # Store configuration for factory pattern compatibility
+        self.config = env_config
 
         # Setup initial state of the robot
         self.state = RobotState(
@@ -209,12 +216,7 @@ class RobotEnv(BaseEnv):
         ray_vecs_np = render_lidar(robot_pos, distances, directions)
 
         # Prepare pedestrian action visualization
-        ped_actions = zip(
-            self.simulator.pysf_sim.peds.pos(),
-            self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,
-            # TODO Clarify why the factor of 2 is used
-        )
-        ped_actions_np = np.array([[pos, vel] for pos, vel in ped_actions])
+        ped_actions_np = prepare_pedestrian_actions(self.simulator)
 
         # Package the state for visualization
         state = VisualizableSimState(
@@ -249,3 +251,16 @@ class RobotEnv(BaseEnv):
         """
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
+
+    def set_pedestrian_velocity_scale(self, scale: float = 1.0):
+        """
+        Set the pedestrian velocity visualization scaling factor.
+
+        Args:
+            scale (float): Scaling factor for pedestrian velocity arrows in visualization.
+                          1.0 = actual size, 2.0 = double size for better visibility, etc.
+        """
+        if self.sim_ui:
+            self.sim_ui.ped_velocity_scale = scale
+        else:
+            logger.warning("Cannot set velocity scale: debug mode not enabled")

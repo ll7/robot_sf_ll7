@@ -27,6 +27,7 @@ from robot_sf.data_analysis.plot_npc_trajectory import (
     velocity_colorcoded_with_positions,
 )
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableSimState
 
 
@@ -210,3 +211,36 @@ def ensure_dir_exists(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
         logger.info(f"Created directory: {directory}")
+
+
+if __name__ == "__main__":
+    # Example usage
+    from pathlib import Path
+
+    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
+
+    # Ensure the plots directory exists
+    PLOTS_DIR = "robot_sf/data_analysis/plots"
+    ensure_dir_exists(PLOTS_DIR)
+
+    # Find the most recent recording file
+    recording_dir = Path("recordings")
+    if recording_dir.exists():
+        latest_file = max(recording_dir.glob("*.pkl"), key=os.path.getctime, default=None)
+
+        if latest_file:
+            # Extract timestamp for unique filenames
+            unique_id = extract_timestamp(str(latest_file))
+
+            # Load states and map definition
+            states, map_def = load_states(latest_file)
+
+            # Plot all available data
+            plot_all_data_pkl(states, map_def, unique_id)
+
+            logger.info(f"Successfully extracted and plotted data from {latest_file}")
+            logger.info(f"Plots saved to {os.path.abspath(PLOTS_DIR)}")
+        else:
+            logger.error("No recording files found in the 'recordings' directory")
+    else:
+        logger.error("'recordings' directory not found")

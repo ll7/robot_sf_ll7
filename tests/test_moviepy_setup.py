@@ -10,7 +10,7 @@ from moviepy import ImageSequenceClip, VideoFileClip
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
 
-@pytest.mark.skipif(not MOVIEPY_AVAILABLE, reason="Moviepy not installed. Run: pip install moviepy")
+@pytest.mark.skipif(not MOVIEPY_AVAILABLE, reason="Moviepy not installed. Run: uv add moviepy")
 def test_moviepy_ffmpeg_setup():
     """Test if moviepy and ffmpeg are properly configured."""
     # Create test directory

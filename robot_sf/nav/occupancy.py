@@ -278,7 +278,7 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
     @property
     def distance_to_robot(self) -> float:
         """
-        Gets the euklidean distance to the robot.
+        Gets the Euclidean distance to the robot.
 
         Returns
         -------

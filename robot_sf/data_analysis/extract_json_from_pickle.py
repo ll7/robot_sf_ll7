@@ -12,10 +12,12 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from loguru import logger
 
+from robot_sf.data_analysis.extract_obj_from_pickle import ensure_dir_exists
 from robot_sf.data_analysis.plot_dataset import (
     plot_all_npc_ped_positions,
     plot_all_npc_ped_velocities,
@@ -37,16 +39,6 @@ from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
-
-
-def run():
-    """
-    Main entry point of the module.
-
-    Converts the most recent recording file from pickle format to a JSON dataset.
-    """
-    filename = get_latest_recording_file()
-    save_to_json(filename)
 
 
 def save_to_json(filename_pkl: str, filename_json: str = None):
@@ -278,7 +270,7 @@ def extract_timestamp(filename: str) -> str:
 
 def plot_all_data_json(
     filename: str,
-    unique_id: str = None,
+    unique_id: Optional[str] = None,
     interactive: bool = True,
 ):
     """
@@ -363,5 +355,54 @@ def plot_all_data_json(
     )
 
 
+def show_from_json(filename: str, unique_id: str):
+    """
+    Convert recording file into json and plot the data.
+
+    Args:
+        filename (str): Path to the JSON file
+        unique_id (str): Unique identifier for plot filenames
+    Returns:
+        None
+    """
+    dataset_dir = Path("robot_sf/data_analysis/datasets")
+    if dataset_dir.exists():
+        # Convert recording to json
+        save_to_json(filename, f"{dataset_dir}/{unique_id}.json")
+
+        latest_file = max(dataset_dir.glob("*.json"), key=os.path.getctime, default=None)
+
+        if latest_file:
+            # Plot all available data
+            plot_all_data_json(str(latest_file), unique_id)
+
+        else:
+            logger.error(f"No json files found in the '{dataset_dir}' directory")
+    else:
+        logger.error(f"'{dataset_dir}' directory not found")
+
+
 if __name__ == "__main__":
-    run()
+    # Example usage
+    from pathlib import Path
+
+    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
+
+    # Ensure the plots directory exists
+    PLOTS_DIR = "robot_sf/data_analysis/plots"
+    ensure_dir_exists(PLOTS_DIR)
+
+    # Find the most recent recording file
+    recording_dir = Path("recordings")
+    if recording_dir.exists():
+        latest_file = max(recording_dir.glob("*.pkl"), key=os.path.getctime, default=None)
+
+        if latest_file:
+            show_from_json(str(latest_file), extract_timestamp(str(latest_file)))
+
+            logger.info(f"Successfully extracted and plotted data from {latest_file}")
+            logger.info(f"Plots saved to {os.path.abspath(PLOTS_DIR)}")
+        else:
+            logger.error("No recording files found in the 'recordings' directory")
+    else:
+        logger.error("'recordings' directory not found")

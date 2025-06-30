@@ -1,5 +1,5 @@
 """
-The `sim_config.py` file defines `EnvSettings` and `PedEnvSettings` for simulation settings.
+The `env_config.py` file defines `EnvSettings` and `PedEnvSettings` for simulation settings.
 
 These settings include:
 - `sim_config`: Simulation configuration
@@ -31,6 +31,7 @@ from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
     DifferentialDriveSettings,
 )
+from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
@@ -59,6 +60,9 @@ class RobotEnvSettings(BaseEnvSettings):
     robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
         default_factory=DifferentialDriveSettings
     )
+    # Image observation settings
+    image_config: ImageSensorSettings = field(default_factory=ImageSensorSettings)
+    use_image_obs: bool = field(default=False)  # Enable/disable image observations
 
     def __post_init__(self):
         """
@@ -160,3 +164,36 @@ class PedEnvSettings(EnvSettings):
             return UnicycleDrivePedestrian(self.ego_ped_config)
         else:
             raise NotImplementedError(f"unsupported pedestrian type {type(self.ego_ped_config)}!")
+
+
+# Backward compatibility imports - these provide access to the new unified configuration
+# while maintaining the old interface
+try:
+    from robot_sf.gym_env.unified_config import (
+        BaseSimulationConfig,
+    )
+    from robot_sf.gym_env.unified_config import (
+        ImageRobotConfig as RobotEnvSettingsNew,
+    )
+    from robot_sf.gym_env.unified_config import (
+        PedestrianSimulationConfig as PedEnvSettingsNew,
+    )
+    from robot_sf.gym_env.unified_config import (
+        RobotSimulationConfig as EnvSettingsNew,
+    )
+
+    # These can be used as drop-in replacements for gradual migration
+    __all__ = [
+        "BaseEnvSettings",
+        "RobotEnvSettings",
+        "EnvSettings",
+        "PedEnvSettings",
+        # New unified config classes for forward compatibility
+        "BaseSimulationConfig",
+        "EnvSettingsNew",
+        "RobotEnvSettingsNew",
+        "PedEnvSettingsNew",
+    ]
+except ImportError:
+    # If unified_config is not available, just export the original classes
+    __all__ = ["BaseEnvSettings", "RobotEnvSettings", "EnvSettings", "PedEnvSettings"]

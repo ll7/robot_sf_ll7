@@ -28,7 +28,7 @@ All Forces are summed in the end to determine the direction and the velocity.
 
 #### Classical
 
-Found in *fast-pysf/pysocialforce/forces.py*
+*Located in the [forces.py](../fast-pysf/pysocialforce/forces.py) file.*
 
 Desired Force:  
 This force describes the pedestrians wish to reach a goal and is also called the acceleration force.  
@@ -45,7 +45,7 @@ It uses the distance to the nearest point of the obstacle to calculate it's stre
 
 #### Extended
 
-Found in *fast-pysf/pysocialforce/forces.py*
+*Located in the [forces.py](../fast-pysf/pysocialforce/forces.py) file.*
 
 Group Repulsive Force:  
 This force models repulsive interactions between members of a group, by summing the relative position vectors of nearby members.
@@ -59,7 +59,7 @@ This force aligns the pedestrian with with the members direction.
 
 #### New
 
-Found in *robot_sf/ped_npc/ped_robot_force.py*
+*Located in the [ped_robot_force.py](../robot_sf/ped_npc/ped_robot_force.py) file.*
 
 Ped-Robot Force:  
 This force is repulsive and causes pedestrians to avoid the robot.
@@ -67,11 +67,11 @@ This force is repulsive and causes pedestrians to avoid the robot.
 
 ### Behaviors
 
-*robot_sf/ped_npc/ped_behavior.py*
+*Located in the [ped_behavior.py](../robot_sf/ped_npc/ped_behavior.py) file.*
 
 FollowRouteBehavior:  
 Pedestrians follow a fixed route and restart at the spawn when the route is finished. 
-When this happens, the pedestrian is considered as a new pedestrian, even though the ID is the same.
+When this happens, the pedestrian starts a new trajectory, even though the ID is the same.
 
 CrowdedZoneBehavior:  
 Pedestrians try to reach a goal in a predefined zone, and when they reach it, they are redirected to a new goal within the zone without respawning at a different location.
@@ -80,14 +80,18 @@ Pedestrians try to reach a goal in a predefined zone, and when they reach it, th
 
 (The most important ones)
 
-*robot_sf/sim/sim_config.py*
+*Located in the [sim_config.py](../robot_sf/sim/sim_config.py) file.*
+
 - base configuration for the simulation
-- e.g. pedestrian_radius = 0.4
+- e.g. pedestrian_radius = 0.4, peds_speed_mult = 1.3 (max_speed_multiplier)
 
-*fast-pysf/pysocialforce/config.py*
+*Located in the fast-pysf [config.py](../fast-pysf/pysocialforce/config.py) file.*
+
 - base configuration for all the forces
+- if group forces should be used
 
-Found in *robot_sf/ped_npc/ped_population.py*
+*Located in the [ped_population.py](../robot_sf/ped_npc/ped_population.py) file.*
+
 - sidewalk_width: float = 3.0 -> Determine deviation at spawn
 - initial_speed: float = 0.5, with the max_speed_multiplier it leads to a maximum speed of 0.65 m/s ~ 2.34 km/h 
 

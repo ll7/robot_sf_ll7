@@ -2,19 +2,20 @@
 
 ## Pedestrian Metrics
 
-Pedestrian Metrics are needed to determine, if they are moving in a realistic way.
+Pedestrian metrics are needed to determine, if the pedestrians are moving in a realistic way.
 
 ### About
 
 These metrics are all implemented in the data_analysis directory:  
-robot_sf/data_analysis/plot_dataset.py -> Includes base functions to plot pedestrian data  
-robot_sf/data_analysis/plot_kernel_density.py -> Includes kernel density estimation functions  
-robot_sf/data_analysis/plot_npc_trajectory.py -> Focuses more on trajectories of the npc pedestrians  
+*[plot_dataset.py](../robot_sf/data_analysis/plot_dataset.py) -> Includes base functions to plot pedestrian data*  
+*[plot_kernel_density.py](../robot_sf/data_analysis/plot_kernel_density.py) -> Includes kernel density estimation functions*  
+*[plot_npc_trajectory.py](../robot_sf/data_analysis/plot_npc_trajectory.py) -> Focuses more on trajectories of the npc pedestrians*  
 
-It is possible to differentiate between single pedestrians, by observing the route taken. If there is a
-large distance between the following points, it means the pedestrian has completed his route, spawned back to the start position and is beginning a new trajectory. This newly spawned pedestrian is considered as a new pedestrian, even though is still has the same id.
+It is possible to differentiate between single pedestrians, by observing the route taken. 
+If there is a large distance between the following points, it means the pedestrian has completed 
+his route and has spawned back to the start position. This newly spawned pedestrian will create his own trajectory, even though it still has the same id.
 
-There is no explicit example provided at the moment, because development of the ego pedestrian is not finished at the moment.
+For the ego pedestrian metrics there are no explicit examples provided at the moment, because development of the ego pedestrian is not finished at the moment.
 
 ### NPC Metrics
 
@@ -30,7 +31,7 @@ Insight: At which positions were pedestrians located?
 
 ![All npc positions](assets/ped_metrics/all_npc_pedestrian_positions.png)
 
-This plot shows that no position deviates much from the given paths, with the pedestrians on the lower path taking a wide arc to avoid the obstacle.
+This plot shows that no position deviates much from the upper path, meanwhile the pedestrians on the lower path are taking a wide arc to avoid the obstacle.
 
 
 **2. Calculate the speed of all pedestrians at each time step based on the provided action vector.**  
@@ -45,20 +46,20 @@ Insight: How likely is the presence of pedestrians at positions?
 
 ![KDE on map](assets/ped_metrics/kde_on_map.png)
 
-On the upper path, staying at one position is equally likely. The beginning is probably only slightly stronger due to the simulation stopping halfway.
-On the lower path, it is clear to see that the probability of stopping directly in front of the obstacle is significantly higher than the normal path probability. There is also a clear preference when selecting the alternative route.
+On the upper path, staying at one position is equally likely. The beginning is only slightly stronger due to the simulation stopping halfway.
+On the lower path, it is clear to see that the probability of staying directly in front of the obstacle is significantly higher than the normal path probability. This is because pedestrians slow down before an obstacle. There is also a clear preference when selecting the alternative route.
 
 **4. Output trajectory of one or all pedestrians**  
 Insight: What Path is used by a pedestrian?
 
 ![All splitted](assets/ped_metrics/all_splitted_npc_traj.png)
 
-Here it is confirmed that the paths were broken off by the pedestrians on the upper path at the halfway point, as the simulation finished.
-On the lower path it can be seen that one path runs underneath the obstacle and the rest runs along the top, although there are also differences in how the obstacle is avoided on the top route.
+Here it is visible that the trajectories were broken off by the pedestrians on the upper path at the halfway point, as the simulation finished.
+On the lower path it can be seen that one path runs underneath the obstacle and the rest runs along the top, although there are also slight differences in how the obstacle is avoided on the top route.
 
 ![Single splitted](assets/ped_metrics/single_splitted_npc0_traj.png)
 
-In this plot, a single pedestrian id is represented, which becomes 3 individual pedestrians due to respawning, each with different approaches.
+In this plot, a single pedestrian id is represented, which becomes three trajectories due to respawning, each with different approaches.
 The blue path starts the evasive maneuver very early, while the orange pedestrian first turns in a circle in front of the obstacle.
 
 **5. Trajectory compared to acceleration and velocity**  
@@ -66,9 +67,9 @@ Insight: What velocities are used and when does the pedestrian accelerate and de
 
 ![subplot_acc_vel](assets/ped_metrics/subplot_npc_0.png)
 
-Here speed and acceleration are not calculated from the action vector, but from the difference in position over time.
-Here you can see that the course of blue and green is very similar.
-Orange, on the other hand, has to slow down very heavily due to the obstacle.
+In this plot, speed and acceleration are calculated based on the difference in position over time, rather than from the action vector.  
+As you can see here, the blue and green graphs for the velocity are very similar; only a time shift is noticeable.
+Orange, on the other hand, has to slow down very heavily due to the obstacle.  
 The acceleration shows that spikes are used to quickly reach maximum speed again.
 
 **6. Probability distribution over the acceleration**  
@@ -108,5 +109,5 @@ The ego pedestrian can reach higher velocity (3m/s) and also changes rapidly the
 Insight: How does the positions probabilities compare only based on one axes?
 
 **3. Comparison of probability distributions of velocity and acceleration**  
-Insight: How does the velocity and acceleration compare between ego and npc pedestrian.
+Insight: How does the velocity and acceleration compare between ego and npc pedestrian?
 

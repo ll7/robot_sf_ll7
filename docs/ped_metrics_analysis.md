@@ -8,14 +8,13 @@ The main focus of this file is to analyse which methods have been used by differ
 
 Link to [Github](https://github.com/c-pouw/physics-based-pedestrian-modeling)
 
-Validates their newly created pedestrian model with following Methods
+They validate their newly created pedestrian model with following methods:
 - Trajectories and the speed with related direction
 - Probability distribution over x
 - Probability distribution over y
 - Probability distribution over longitudinal speeds
 - Probability distribution over lateral speeds
-
-- (analytical potential u(y) = beta*y², beta = 1, only corridor (straight paths))
+- analytical potential: u(y) = beta*y², beta = 1, only corridor (straight paths)
 
 
 **Comparison with the Narrow Corridor Scene**
@@ -27,7 +26,7 @@ This is the simplest scenario imaginable, pedestrians walk in a tightly confined
 Despite different starts, almost all pedestrians are on the same line to the finish after 1 meter.  
 The reason for the exceptions is the simultaneous start.  
 
-The Paper also uses a wide corridor scenario, but with the npc pedestrian model there wouldnt be any difference to the narrow corridor scene.
+The Paper also uses a wide corridor scenario, but with the npc pedestrian model there wouldn't be any difference to the narrow corridor scene.
 
 **Comparison with Train Station Scene**
 
@@ -47,11 +46,11 @@ The orange trajectory needs to slow down the most, because it hits the bench in 
 ![alt text](assets/ped_metrics_analysis/paper1_vel_distru.png)
 
 Maximum speed is the most common, but slow speeds are also not rare.  
-Also The velocities don't fit a normal distribution.
+The velocities also don't fit a normal distribution.
 
 ![alt text](assets/ped_metrics_analysis/paper1_colorcoded.png)
 
-Pedestrians start at maximum speed and slow down before the object, only short term path planning, can speed up again, but must also slow down for the second object.
+Pedestrians start at the maximum speed and slow down before the object using only short term path planning. After that they can speed up again, but must slow down for the second object.
 
 ### [Paper 2](#2)
 
@@ -61,7 +60,6 @@ Validates the social force model with real data and following methods:
 - Acceleration displayed on the map (color-coded)
 - Acceleration in x-direction along y-axis
 - Acceleration in y-direction along y-axis
-- (Parameter Estimation für Social Force Model)
 
 **Comparison with MIT Infinite Corridor**  
 This Scenario describes a corridor with a single small object placed in the middle of it, with the goal to evaluate the evasive behavior of pedestrians in a tight space.
@@ -88,12 +86,12 @@ Following methods were used to visualize and validate the data:
 
 ### [Paper 4](#4)
 
-This Paper creates a pedestrian model that uses discrete decision to predict the behavior.
-The real world data used to validate was a pedestrian crossing in japan and a controlled experiment at Delft University in the Netherlands, where a rectagular area was the walking space.
+Here a pedestrian model gets created that uses discrete decision to predict the behavior.
+The real world data is used to validate a pedestrian crossing in japan and a controlled experiment at Delft University in the Netherlands, where a rectagular area was the walking space.
 
 Following methods were used to analyze the data:
 - Speed Histogramm 
-- Speed Statistics: Mean, Standard Deviation, Minimum, Maximum, Standard Error (Standard Deviation of sample mean), Median, Mode
+- Speed Statistics: Mean, Standard Deviation, Minimum, Maximum, Standard Error (estimated standard deviation of sample mean), Median (middle value, when sorted), Mode (most frequently occurring value)
 - Number of Decisions (%): Acceleration, constant speed, Deceleration, central, not central
 
 ## References

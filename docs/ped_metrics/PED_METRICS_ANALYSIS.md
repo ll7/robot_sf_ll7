@@ -6,9 +6,9 @@ The main focus of this file is to analyse which methods have been used by differ
 
 ### [Paper 1](#1)
 
-Link to [Github](https://github.com/c-pouw/physics-based-pedestrian-modeling)
+Link to [GitHub](https://github.com/c-pouw/physics-based-pedestrian-modeling)
 
-They validate their newly created pedestrian model with following methods:
+The authors of this paper validate their newly created pedestrian model with following methods:
 - Trajectories and the speed with related direction
 - Probability distribution over x
 - Probability distribution over y
@@ -19,36 +19,36 @@ They validate their newly created pedestrian model with following methods:
 
 **Comparison with the Narrow Corridor Scene**
 
-This is the simplest scenario imaginable, pedestrians walk in a tightly confined space 
+This is the simplest scenario imaginable, pedestrians walk in a tightly confined space.
 
-![alt text](assets/ped_metrics_analysis/paper1_narrow.png)
+![alt text](../img/ped_metrics_analysis/paper1_narrow.png)
 
 Despite different starts, almost all pedestrians are on the same line to the finish after 1 meter.  
 The reason for the exceptions is the simultaneous start.  
 
-The Paper also uses a wide corridor scenario, but with the npc pedestrian model there wouldn't be any difference to the narrow corridor scene.
+The paper also uses a wide corridor scenario, but with the npc pedestrian model there wouldn't be any difference to the narrow corridor scene.
 
 **Comparison with Train Station Scene**
 
-This following Scenario describes a railway station, where the direct path is blocked by a bench.
-It was used to determine, if the simulated trajectory was close enough to the real data.
-![Bench Scenario](assets/ped_metrics_analysis/paper1_bench.png)
+This following scenario describes a railway station, where the direct path is blocked by a bench.
+It was used to determine if the simulated trajectory was close enough to the real data.
+![Bench Scenario](../img/ped_metrics_analysis/paper1_bench.png)
 
-![alt text](assets/ped_metrics_analysis/paper1_all.png)
+![alt text](../img/ped_metrics_analysis/paper1_all.png)
 Pedestrians usually choose the path above the  bench, making an almost 90 degree turn.  
 One pedestrian has taken the lower path, because he hits the bench slightly lower than all the other pedestrians.
 
-![alt text](assets/ped_metrics_analysis/paper1_vel_acc.png)
+![alt text](../img/ped_metrics_analysis/paper1_vel_acc.png)
 
 Very similar behavior in speed and acceleration are recognizable.  
 The orange trajectory needs to slow down the most, because it hits the bench in a bad angle. Better evasive behaviour is shown by the blue and green trajectories.
 
-![alt text](assets/ped_metrics_analysis/paper1_vel_distru.png)
+![alt text](../img/ped_metrics_analysis/paper1_vel_distru.png)
 
 Maximum speed is the most common, but slow speeds are also not rare.  
 The velocities also don't fit a normal distribution.
 
-![alt text](assets/ped_metrics_analysis/paper1_colorcoded.png)
+![alt text](../img/ped_metrics_analysis/paper1_colorcoded.png)
 
 Pedestrians start at the maximum speed and slow down before the object using only short term path planning. After that they can speed up again, but must slow down for the second object.
 
@@ -62,9 +62,9 @@ Validates the social force model with real data and following methods:
 - Acceleration in y-direction along y-axis
 
 **Comparison with MIT Infinite Corridor**  
-This Scenario describes a corridor with a single small object placed in the middle of it, with the goal to evaluate the evasive behavior of pedestrians in a tight space.
+This scenario describes a corridor with a single small object placed in the middle of it, with the goal to evaluate the evasive behavior of pedestrians in a tight space.
 
-![MIT Corridor](assets/ped_metrics_analysis/paper2_MIT-corridor.png)
+![MIT Corridor](../img/ped_metrics_analysis/paper2_MIT-corridor.png)
 
 Distances in x: Corridor = 3 m, Obstacle = 0.1 m, Pedestrian = 0.8  
 
@@ -86,11 +86,11 @@ Following methods were used to visualize and validate the data:
 
 ### [Paper 4](#4)
 
-Here a pedestrian model gets created that uses discrete decision to predict the behavior.
-The real world data is used to validate a pedestrian crossing in japan and a controlled experiment at Delft University in the Netherlands, where a rectagular area was the walking space.
+Here, a pedestrian model gets created that uses discrete decisions to predict the behavior.
+The real world data is used to validate a pedestrian crossing in Japan and a controlled experiment at Delft University in the Netherlands, where a rectagular area was the walking space.
 
 Following methods were used to analyze the data:
-- Speed Histogramm 
+- Speed Histogram
 - Speed Statistics: Mean, Standard Deviation, Minimum, Maximum, Standard Error (estimated standard deviation of sample mean), Median (middle value, when sorted), Mode (most frequently occurring value)
 - Number of Decisions (%): Acceleration, constant speed, Deceleration, central, not central
 

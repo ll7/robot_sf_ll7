@@ -2,7 +2,7 @@
 
 ## Pedestrian metrics analysis
 
-The main focus of this file is to analyse which methods have been used by different papers to validate pedestrian behaviour.
+The main focus of this file is to analyze which methods have been used by different papers to validate pedestrian behavior.
 
 ### [Paper 1](#1)
 
@@ -41,7 +41,7 @@ One pedestrian has taken the lower path, because he hits the bench slightly lowe
 ![alt text](../img/ped_metrics_analysis/paper1_vel_acc.png)
 
 Very similar behavior in speed and acceleration are recognizable.  
-The orange trajectory needs to slow down the most, because it hits the bench in a bad angle. Better evasive behaviour is shown by the blue and green trajectories.
+The orange trajectory needs to slow down the most, because it hits the bench in a bad angle. Better evasive behavior is shown by the blue and green trajectories.
 
 ![alt text](../img/ped_metrics_analysis/paper1_vel_distru.png)
 
@@ -62,7 +62,7 @@ Validates the social force model with real data using the following methods:
 - Acceleration in y-direction along y-axis
 
 **Comparison with MIT Infinite Corridor**  
-This scenario describes a corridor with a single small object placed in the middle of it, with the goal to evaluate the evasive behavior of pedestrians in a tight space.
+This scenario describes a corridor with a single small object placed in the middle of it, with the goal of evaluating the evasive behavior of pedestrians in a tight space.
 
 ![MIT Corridor](../img/ped_metrics_analysis/paper2_MIT-corridor.png)
 

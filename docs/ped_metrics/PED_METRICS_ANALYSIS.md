@@ -35,7 +35,7 @@ It was used to determine if the simulated trajectory was close enough to the rea
 ![Bench Scenario](../img/ped_metrics_analysis/paper1_bench.png)
 
 ![alt text](../img/ped_metrics_analysis/paper1_all.png)
-Pedestrians usually choose the path above the  bench, making an almost 90 degree turn.  
+Pedestrians usually choose the path above the  bench, making an almost 90-degree turn.  
 One pedestrian has taken the lower path, because he hits the bench slightly lower than all the other pedestrians.
 
 ![alt text](../img/ped_metrics_analysis/paper1_vel_acc.png)
@@ -54,7 +54,7 @@ Pedestrians start at the maximum speed and slow down before the object using onl
 
 ### [Paper 2](#2)
 
-Validates the social force model with real data and following methods: 
+Validates the social force model with real data using the following methods: 
 - Trajectories
 - Kernel Density Estimation with bandwith = 0.1m
 - Acceleration displayed on the map (color-coded)

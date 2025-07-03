@@ -26,9 +26,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager
 
 ### 📈 Pedestrian Metrics  
-- [**Pedestrian Metrics Overview**](./ped_metrics/PED_METRICS.md) — Summary of implemented metrics and their purpose
-- [**Metric Analysis**](./ped_metrics/PED_METRICS_ANALYSIS.md) — Overview of metrics used in research and validation
-- [**NPC Pedestrian Design**](./ped_metrics/NPC_PEDESTRIAN.md) — Details on the design and behavior of NPC pedestrians
+- [**Pedestrian Metrics Overview**](./ped_metrics/PED_METRICS.md) - Summary of implemented metrics and their purpose
+- [**Metric Analysis**](./ped_metrics/PED_METRICS_ANALYSIS.md) - Overview of metrics used in research and validation
+- [**NPC Pedestrian Design**](./ped_metrics/NPC_PEDESTRIAN.md) - Details on the design and behavior of NPC pedestrians
 
 ### 📁 Media Resources
 - [`img/`](./img/) - Documentation images and diagrams

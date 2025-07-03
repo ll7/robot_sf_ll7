@@ -11,7 +11,7 @@ In the simulation view, they are represented as red dots with a line indicating 
 ### About
 
 The NPC pedestrians use the Extended Social Force Model [[2]](#2).
-It extends the vanilla social force model [[1]](#1) to simulate the walking behaviour
+It extends the vanilla social force model [[1]](#1) to simulate the walking behavior
 of pedestrians with social group interactions.
 
 Implementations, which they are based off, are [[3]](#3) and [[4]](#4).

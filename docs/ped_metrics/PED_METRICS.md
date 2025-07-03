@@ -12,18 +12,18 @@ These metrics are all implemented in the data_analysis directory:
 *[plot_npc_trajectory.py](../../robot_sf/data_analysis/plot_npc_trajectory.py) -> Focuses more on trajectories of the npc pedestrians*  
 
 It is possible to differentiate between single pedestrians, by observing the route taken. 
-If there is a large distance between the following points, it means the pedestrian has completed 
+If there is a large distance between consecutive points, it means the pedestrian has completed 
 his route and has spawned back to the start position. This newly spawned pedestrian will create his own trajectory, even though it still has the same id.
 
 For the ego pedestrian metrics there are no explicit examples provided at the moment, because development of the ego pedestrian is not finished at this point of time.
 
 ### NPC Metrics
 
-All following metrics will be analyzed based on an example szenario.  
+All following metrics will be analyzed based on an example scenario.  
 In this example, there are two paths from left to right.
 The upper path is free, while the lower path has a small obstacle that must be passed.
 
-![Szenario](../img/ped_metrics/metrics_scenario.png)
+![Scenario](../img/ped_metrics/metrics_scenario.png)
 
 
 **1. Plot positions of pedestrians at each time step.**  
@@ -72,14 +72,14 @@ As you can see here, the blue and green graphs for the velocity are very similar
 Orange, on the other hand, has to slow down very heavily due to the obstacle.  
 The acceleration shows that spikes are used to quickly reach maximum speed again.
 
-**6. Probability distribution over the acceleration**  
+**6. Probability distribution of acceleration**  
 Insight: How likely is a certain acceleration for a pedestrian?
 
 ![probability distribution acceleration](../img/ped_metrics/acceleration_distribution.png)
 
 This probability distribution is fitted with a normal distribution and shows that pedestrians walk steadily most of the time, without accelerating or decelerating.
 
-**7. Probability distribution over speed**  
+**7. Probability distribution of speed**  
 Insight: How likely is a certain speed for a pedestrian?
 
 ![probability distribution velocity](../img/ped_metrics/velocity_distribution.png)

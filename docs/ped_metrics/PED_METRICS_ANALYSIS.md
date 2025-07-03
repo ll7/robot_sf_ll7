@@ -56,7 +56,7 @@ Pedestrians start at the maximum speed and slow down before the object using onl
 
 Validates the social force model with real data using the following methods: 
 - Trajectories
-- Kernel Density Estimation with bandwith = 0.1m
+- Kernel Density Estimation with bandwidth = 0.1m
 - Acceleration displayed on the map (color-coded)
 - Acceleration in x-direction along y-axis
 - Acceleration in y-direction along y-axis
@@ -87,7 +87,7 @@ Following methods were used to visualize and validate the data:
 ### [Paper 4](#4)
 
 Here, a pedestrian model gets created that uses discrete decisions to predict the behavior.
-The real world data is used to validate a pedestrian crossing in Japan and a controlled experiment at Delft University in the Netherlands, where a rectagular area was the walking space.
+The real world data is used to validate a pedestrian crossing in Japan and a controlled experiment at Delft University in the Netherlands, where a rectangular area was the walking space.
 
 Following methods were used to analyze the data:
 - Speed Histogram

@@ -20,4 +20,5 @@ Multiple key shortcuts are implemented:
 - **f**: Focus Robot
 - **p**: Focus Pedestrian
 - **h**: Display help
+- **t**: Toggle text display
 - **q**: Display information: none -> robot -> pedestrian if present -> none -> ...

@@ -11,7 +11,7 @@ import numpy as np
 
 # Create a simulator (small example)
 state = ...  # numpy array with shape (N, 7) [x,y,vx,vy,goalx,goaly,tau]
-obstacles = [...]  # list of (x1, x2, y1, y2) line segments
+obstacles = [...]  # list of (x1, y1, x2, y2) line segments
 sim = Simulator(state=state, obstacles=obstacles)
 
 wrapper = FastPysfWrapper(sim)

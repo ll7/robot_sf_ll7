@@ -7,6 +7,7 @@ This document shows how to use the `FastPysfWrapper` to sample forces from the b
 ```python
 from pysocialforce import Simulator
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
+import numpy as np
 
 # Create a simulator (small example)
 state = ...  # numpy array with shape (N, 7) [x,y,vx,vy,goalx,goaly,tau]

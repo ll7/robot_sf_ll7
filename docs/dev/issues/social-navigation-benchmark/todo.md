@@ -127,5 +127,5 @@ Update etiquette:
 - [ ] Implement JSON schema draft for episode output
 
 ---
-Last updated: (insert date)
+Last updated: 2025-09-02
 

@@ -2896,6 +2896,7 @@ source = { editable = "." }
 dependencies = [
     { name = "gym" },
     { name = "gymnasium" },
+    { name = "jsonschema" },
     { name = "loguru" },
     { name = "matplotlib" },
     { name = "moviepy" },
@@ -2950,6 +2951,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
     { name = "gym", specifier = ">=0.26.2" },
     { name = "gymnasium", specifier = ">=1.0.0" },
+    { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "matplotlib", specifier = ">=3.9.2" },

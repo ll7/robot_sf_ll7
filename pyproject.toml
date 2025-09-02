@@ -46,6 +46,7 @@ dependencies = [
     "pre-commit>=4.1.0",
     "setuptools>=70.0.0",
     "pysocialforce",
+    "jsonschema>=4.23.0",
 ]
 
 [project.optional-dependencies]

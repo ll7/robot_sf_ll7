@@ -1,0 +1,114 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "SocialNavigationEpisodeMetrics",
+    "type": "object",
+    "required": [
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics",
+        "config_hash",
+        "git_hash",
+        "timestamps"
+    ],
+    "properties": {
+        "episode_id": {
+            "type": "string"
+        },
+        "scenario_id": {
+            "type": "string"
+        },
+        "seed": {
+            "type": "integer"
+        },
+        "config_hash": {
+            "type": "string"
+        },
+        "git_hash": {
+            "type": "string"
+        },
+        "timestamps": {
+            "type": "object",
+            "required": [
+                "start",
+                "end"
+            ],
+            "properties": {
+                "start": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "end": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "scenario_params": {
+            "type": "object"
+        },
+        "metrics": {
+            "type": "object",
+            "required": [
+                "success",
+                "time_to_goal_norm",
+                "collisions",
+                "near_misses"
+            ],
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                },
+                "time_to_goal_norm": {
+                    "type": "number"
+                },
+                "collisions": {
+                    "type": "integer"
+                },
+                "near_misses": {
+                    "type": "integer"
+                },
+                "min_distance": {
+                    "type": "number"
+                },
+                "path_efficiency": {
+                    "type": "number"
+                },
+                "force_quantiles": {
+                    "type": "object",
+                    "properties": {
+                        "q50": {
+                            "type": "number"
+                        },
+                        "q90": {
+                            "type": "number"
+                        },
+                        "q95": {
+                            "type": "number"
+                        }
+                    }
+                },
+                "force_exceed_events": {
+                    "type": "integer"
+                },
+                "comfort_exposure": {
+                    "type": "number"
+                },
+                "jerk_mean": {
+                    "type": "number"
+                },
+                "energy": {
+                    "type": "number"
+                },
+                "snqi": {
+                    "type": "number"
+                }
+            },
+            "additionalProperties": true
+        },
+        "notes": {
+            "type": "string"
+        }
+    },
+    "additionalProperties": false
+}

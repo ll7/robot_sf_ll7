@@ -10,10 +10,22 @@ Update etiquette:
 
 ---
 ## 0. Scoping & Planning
-- [ ] Define benchmark scope statement (≤150 words) and success criteria
+- [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 - [ ] Decide license & artifact dissemination strategy (GitHub + Zenodo DOI)
 - [ ] Finalize baseline algorithm list (min: SF default, RL policy, Random, Optional: ORCA/RVO)
+
+### Scope Statement (Draft)
+The Social Navigation Benchmark provides a reproducible, force-field–aware evaluation suite for robot policies operating amid dynamic pedestrian crowds. It offers a standardized set of procedurally generated scenarios varying density, flow patterns, obstacle complexity, and group behavior. Beyond traditional success and collision counts, it emphasizes comfort and social compliance via force, proximity, and smoothness metrics, aggregated into a transparent composite index (SNQI). The benchmark supplies baseline planners (social-force, RL, random) with deterministic seeding, locked dependencies, and schema-validated outputs to enable fair comparison, ablation, and rapid iteration. Its objective is not to maximize scenario realism initially, but to establish a rigorous, interpretable, and extensible foundation that can be incrementally enriched (e.g., real data calibration, risk-aware planning) while preserving backward compatibility and reproducibility.
+
+### Success Criteria
+- Scenario coverage: ≥ 12 core scenarios spanning density × flow × obstacle classes.
+- Metric discriminative power: each baseline differs on ≥ 2 core metrics in ≥ 60% of scenarios.
+- Reproducibility: identical aggregate metrics (within floating tolerance) across 3 independent runs/seeds batches.
+- Stability: coefficient of variation for success & comfort exposure < 10% across ≥5 seeds per baseline.
+- Composite index (SNQI): ranking shifts > 1 position for ≥50% of baselines when any one major metric term is removed (shows component influence).
+- Artifact completeness: public repo + schema + lockfile + figure regeneration scripts + minimal usage tutorial.
+- CI green run: lint + unit tests + smoke benchmark (≤ 5 min) pass on clean clone.
 
 ## 1. Scenario & Dataset Specification
 - [ ] Enumerate scenario dimensions (density, flow pattern, obstacles, groups)

@@ -122,9 +122,9 @@ Update etiquette:
 - [ ] Compute resource limits → mitigation: batch evaluation + caching layer
 
 ## 13. Immediate Next Actions (Pick 3 to start)
-- [ ] Draft scenario dimension list
-- [ ] Write metric formal definitions doc stub
-- [ ] Implement JSON schema draft for episode output
+- [x] Draft scenario dimension list (see `scenario_dimensions.md`) (2025-09-02)
+- [x] Write metric formal definitions doc stub (see `metrics_spec.md`) (2025-09-02)
+- [x] Implement JSON schema draft for episode output (see `episode_schema.json`) (2025-09-02)
 
 ---
 Last updated: 2025-09-02

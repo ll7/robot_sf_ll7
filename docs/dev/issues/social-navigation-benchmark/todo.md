@@ -28,8 +28,8 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - CI green run: lint + unit tests + smoke benchmark (≤ 5 min) pass on clean clone.
 
 ## 1. Scenario & Dataset Specification
-- [ ] Enumerate scenario dimensions (density, flow pattern, obstacles, groups)
-- [ ] Draft scenario matrix (table of N core scenarios, each with parameter ranges)
+- [x] Enumerate scenario dimensions (density, flow pattern, obstacles, groups) (2025-09-02)
+- [x] Draft scenario matrix (table of N core scenarios, each with parameter ranges) (see `scenario_matrix.yaml`) (2025-09-02)
 - [ ] Implement deterministic scenario generator (seeded)
 - [ ] Implement map variants (simple hall, crossing, bottleneck, obstacle maze)
 - [ ] Add grouping / crowd heterogeneity flags to scenario config schema

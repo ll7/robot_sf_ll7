@@ -194,7 +194,10 @@ def generate_scenario(params: Dict[str, Any], seed: int) -> GeneratedScenario:
     if pysf is None:
         simulator = None  # pragma: no cover
     else:
-        simulator = pysf.Simulator(state=state, obstacles=obstacles)
+        # pysocialforce expects None (not empty list) for no obstacles; empty list triggers
+        # a broadcasting issue inside EnvState._update_obstacles_raw.
+        sim_obstacles = obstacles if len(obstacles) > 0 else None
+        simulator = pysf.Simulator(state=state, obstacles=sim_obstacles)  # type: ignore[arg-type]
 
     return GeneratedScenario(
         simulator=simulator,

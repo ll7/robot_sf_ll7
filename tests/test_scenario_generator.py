@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_sf.benchmark.scenario_generator import generate_scenario
+from robot_sf.benchmark.scenario_generator import (
+    AREA_HEIGHT,
+    AREA_WIDTH,
+    generate_scenario,
+)
 
 BASE_PARAMS = {
     "id": "TEST",
@@ -95,3 +99,42 @@ def test_speed_variance_metadata():
     p_high = {**BASE_PARAMS, "speed_var": "high"}
     scen_high = generate_scenario(p_high, seed=11)
     assert np.isclose(scen_high.metadata["speed_std"], 0.5)
+
+
+def test_flow_goal_geometries():
+    # bi-directional
+    p_bi = {**BASE_PARAMS, "flow": "bi", "goal_topology": "point", "density": "med"}
+    scen_bi = generate_scenario(p_bi, seed=21)
+    pos_bi = scen_bi.state[:, 0:2]
+    goals_bi = scen_bi.state[:, 4:6]
+    n = pos_bi.shape[0]
+    half = n // 2
+    # First half rightward
+    assert np.allclose(goals_bi[:half, 0], AREA_WIDTH - 0.2)
+    assert np.allclose(goals_bi[:half, 1], pos_bi[:half, 1])
+    # Second half leftward
+    assert np.allclose(goals_bi[half:, 0], 0.2)
+    assert np.allclose(goals_bi[half:, 1], pos_bi[half:, 1])
+
+    # cross flow
+    p_cross = {**BASE_PARAMS, "flow": "cross", "goal_topology": "point", "density": "med"}
+    scen_cross = generate_scenario(p_cross, seed=22)
+    pos_c = scen_cross.state[:, 0:2]
+    goals_c = scen_cross.state[:, 4:6]
+    n_c = pos_c.shape[0]
+    half_c = n_c // 2
+    # Horizontal movers
+    np.testing.assert_allclose(goals_c[:half_c, 0], AREA_WIDTH - pos_c[:half_c, 0])
+    np.testing.assert_allclose(goals_c[:half_c, 1], pos_c[:half_c, 1])
+    # Vertical movers
+    np.testing.assert_allclose(goals_c[half_c:, 0], pos_c[half_c:, 0])
+    np.testing.assert_allclose(goals_c[half_c:, 1], AREA_HEIGHT - pos_c[half_c:, 1])
+
+    # merge flow (all share central goal point)
+    p_merge = {**BASE_PARAMS, "flow": "merge", "goal_topology": "point", "density": "med"}
+    scen_merge = generate_scenario(p_merge, seed=23)
+    goals_m = scen_merge.state[:, 4:6]
+    cx = AREA_WIDTH * 0.6
+    cy = AREA_HEIGHT / 2
+    assert np.allclose(goals_m[:, 0], cx)
+    assert np.allclose(goals_m[:, 1], cy)

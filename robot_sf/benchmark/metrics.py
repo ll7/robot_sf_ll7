@@ -59,19 +59,43 @@ def time_to_goal_norm(_data: EpisodeData, _horizon: int) -> float:
     return float("nan")
 
 
-def collisions(_data: EpisodeData) -> float:
-    """Stub: collision timesteps count (TODO)."""
-    return float("nan")
+def collisions(data: EpisodeData) -> float:
+    """Count timesteps where min pedestrian distance < D_COLL.
+
+    If no pedestrians are present (K=0) returns 0.0.
+    """
+    if data.peds_pos.shape[1] == 0:
+        return 0.0
+    diffs = data.peds_pos - data.robot_pos[:, None, :]
+    dists = np.linalg.norm(diffs, axis=2)  # (T,K)
+    min_d = dists.min(axis=1)
+    return float(np.count_nonzero(min_d < D_COLL))
 
 
-def near_misses(_data: EpisodeData) -> float:
-    """Stub: near miss timesteps count (TODO)."""
-    return float("nan")
+def near_misses(data: EpisodeData) -> float:
+    """Count timesteps with d_coll <= min distance < d_near.
+
+    If no pedestrians present returns 0.0.
+    """
+    if data.peds_pos.shape[1] == 0:
+        return 0.0
+    diffs = data.peds_pos - data.robot_pos[:, None, :]
+    dists = np.linalg.norm(diffs, axis=2)
+    min_d = dists.min(axis=1)
+    mask = (min_d >= D_COLL) & (min_d < D_NEAR)
+    return float(np.count_nonzero(mask))
 
 
-def min_distance(_data: EpisodeData) -> float:
-    """Stub: global minimum ped distance (TODO)."""
-    return float("nan")
+def min_distance(data: EpisodeData) -> float:
+    """Return global minimum distance to any pedestrian.
+
+    Returns NaN when there are no pedestrians.
+    """
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    diffs = data.peds_pos - data.robot_pos[:, None, :]
+    dists = np.linalg.norm(diffs, axis=2)
+    return float(dists.min())
 
 
 def path_efficiency(_data: EpisodeData, _shortest_path_len: float) -> float:

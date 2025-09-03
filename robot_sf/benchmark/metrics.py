@@ -141,19 +141,41 @@ def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
     return float(ratio)
 
 
-def force_quantiles(_data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> Dict[str, float]:
-    """Stub: force magnitude quantiles (TODO)."""
-    return {f"force_q{int(q * 100)}": float("nan") for q in qs}
+def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> Dict[str, float]:
+    """Compute quantiles of pedestrian force magnitudes.
+
+    Returns NaN for each quantile if there are no pedestrians.
+    """
+    K = data.peds_pos.shape[1]
+    if K == 0:
+        return {f"force_q{int(q * 100)}": float("nan") for q in qs}
+    mags = np.linalg.norm(data.ped_forces, axis=2)  # (T,K)
+    flat = mags.ravel()
+    return {f"force_q{int(q * 100)}": float(np.quantile(flat, q)) for q in qs}
 
 
-def force_exceed_events(_data: EpisodeData, _threshold: float = FORCE_EXCEED_PLACEHOLDER) -> float:
-    """Stub: count of force events above threshold (TODO)."""
-    return float("nan")
+def force_exceed_events(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOLDER) -> float:
+    """Count (t,k) events where |F| > threshold.
+
+    Returns 0 if no pedestrians.
+    """
+    if data.peds_pos.shape[1] == 0:
+        return 0.0
+    mags = np.linalg.norm(data.ped_forces, axis=2)
+    return float(np.count_nonzero(mags > threshold))
 
 
-def comfort_exposure(_data: EpisodeData, _threshold: float = FORCE_EXCEED_PLACEHOLDER) -> float:
-    """Stub: normalized force exceed exposure (TODO)."""
-    return float("nan")
+def comfort_exposure(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOLDER) -> float:
+    """Normalized exposure to high force events.
+
+    force_exceed_events / (K * T) where K=#peds, T=#timesteps. 0 if K==0 or T==0.
+    """
+    K = data.peds_pos.shape[1]
+    T = data.peds_pos.shape[0]
+    if K == 0 or T == 0:
+        return 0.0
+    events = force_exceed_events(data, threshold=threshold)
+    return float(events / (K * T))
 
 
 def jerk_mean(_data: EpisodeData) -> float:

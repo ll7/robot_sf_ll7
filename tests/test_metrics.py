@@ -1,0 +1,61 @@
+"""Tests for metrics stubs ensuring interface stability and basic behaviors.
+
+We synthesize tiny episodes for three edge cases:
+1. Empty crowd (K=0) -> collisions, near_misses should stay NaN (stub) but keys exist.
+2. All collisions scenario (robot overlapping pedestrians every step) -> still returns NaNs (stub) but keys exist.
+3. Partial success (goal not reached) -> success key present.
+
+Once metrics are implemented these tests can be adapted to assert numeric values;
+for now they guard against accidental signature/key regressions.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from robot_sf.benchmark.metrics import (
+    METRIC_NAMES,
+    EpisodeData,
+    compute_all_metrics,
+)
+
+
+def _make_episode(T: int, K: int) -> EpisodeData:
+    robot_pos = np.zeros((T, 2))
+    robot_vel = np.zeros((T, 2))
+    robot_acc = np.zeros((T, 2))
+    peds_pos = np.zeros((T, K, 2)) if K > 0 else np.zeros((T, 0, 2))
+    ped_forces = np.zeros_like(peds_pos)
+    goal = np.array([5.0, 0.0])
+    return EpisodeData(
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+        robot_acc=robot_acc,
+        peds_pos=peds_pos,
+        ped_forces=ped_forces,
+        goal=goal,
+        dt=0.1,
+        reached_goal_step=None,
+    )
+
+
+def test_metrics_keys_empty_crowd():
+    ep = _make_episode(T=5, K=0)
+    values = compute_all_metrics(ep, horizon=10)
+    for name in METRIC_NAMES:
+        assert name in values, f"Missing metric key {name}"
+
+
+def test_metrics_keys_all_collisions():
+    ep = _make_episode(T=5, K=3)
+    # Overwrite positions to simulate overlap (robot at origin, peds too)
+    ep.peds_pos[:] = 0.0
+    values = compute_all_metrics(ep, horizon=10)
+    for name in METRIC_NAMES:
+        assert name in values
+
+
+def test_metrics_partial_success_flag_present():
+    ep = _make_episode(T=5, K=2)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert "success" in vals

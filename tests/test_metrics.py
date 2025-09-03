@@ -142,3 +142,31 @@ def test_path_efficiency_curved_path_less_than_one():
     actual = np.linalg.norm(diffs, axis=1).sum()
     expected_eff = min(1.0, straight / actual)
     assert np.isclose(vals["path_efficiency"], expected_eff)
+
+
+def test_force_metrics_basic():
+    T, K = 5, 3
+    ep = _make_episode(T=T, K=K)
+    # Populate forces with increasing pattern
+    for t in range(T):
+        for k in range(K):
+            ep.ped_forces[t, k] = np.array([t + 1, k + 1])  # magnitude grows
+    vals = compute_all_metrics(ep, horizon=10)
+    # Quantiles should be finite
+    assert (
+        np.isfinite(vals["force_q50"])
+        and np.isfinite(vals["force_q90"])
+        and np.isfinite(vals["force_q95"])
+    )
+    # Exceed events with high placeholder threshold 5.0 should count some
+    assert vals["force_exceed_events"] > 0
+    # Comfort exposure normalized in [0,1]
+    assert 0 <= vals["comfort_exposure"] <= 1
+
+
+def test_force_metrics_no_peds():
+    ep = _make_episode(T=4, K=0)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert np.isnan(vals["force_q50"])  # no pedestrians
+    assert vals["force_exceed_events"] == 0
+    assert vals["comfort_exposure"] == 0

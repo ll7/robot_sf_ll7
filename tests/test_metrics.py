@@ -95,3 +95,50 @@ def test_mixed_collision_and_near_miss():
     assert values["collisions"] == 2
     assert values["near_misses"] == 2
     assert np.isclose(values["min_distance"], 0.1)
+
+
+def test_success_and_time_to_goal_norm_success_case():
+    # Robot moves linearly to goal without collisions
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    # Create linear motion towards goal x=5.0 reached at step 5 (< horizon 10)
+    xs = np.linspace(0, 5.0, T)
+    ep.robot_pos[:, 0] = xs
+    ep.reached_goal_step = 5
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["success"] == 1.0
+    assert np.isclose(vals["time_to_goal_norm"], 5 / 10)
+    # path_efficiency should be 1 for straight line
+    assert np.isclose(vals["path_efficiency"], 1.0)
+
+
+def test_success_failure_due_to_collision():
+    T = 5
+    ep = _make_episode(T=T, K=1)
+    # Robot moves, but pedestrian collides at step 1
+    ep.robot_pos[:, 0] = np.linspace(0, 1.0, T)
+    ep.peds_pos[:, 0, 0] = 0.0  # always at origin -> collision early
+    ep.reached_goal_step = 4
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["collisions"] > 0
+    assert vals["success"] == 0.0
+    assert vals["time_to_goal_norm"] == 1.0  # failure case
+
+
+def test_path_efficiency_curved_path_less_than_one():
+    # Robot zig-zags to goal increasing actual length
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    # Start (0,0) to goal (5,0); zig zag in y
+    xs = np.linspace(0, 5.0, T)
+    ys = np.array([0, 0.5, -0.5, 0.5, -0.5, 0])
+    ep.robot_pos[:, 0] = xs
+    ep.robot_pos[:, 1] = ys
+    ep.reached_goal_step = 5
+    vals = compute_all_metrics(ep, horizon=10)
+    straight = 5.0
+    # Recompute actual path length for assertion reference
+    diffs = ep.robot_pos[1:] - ep.robot_pos[:-1]
+    actual = np.linalg.norm(diffs, axis=1).sum()
+    expected_eff = min(1.0, straight / actual)
+    assert np.isclose(vals["path_efficiency"], expected_eff)

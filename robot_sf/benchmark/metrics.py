@@ -49,14 +49,30 @@ class EpisodeData:
 
 
 # --- Metric stub functions ---
-def success(_data: EpisodeData) -> float:  # noqa: D401
-    """Stub: success (TODO implement)."""
-    return float("nan")
+def success(data: EpisodeData, *, horizon: int) -> float:  # noqa: D401
+    """Return 1 if goal reached before horizon with zero collisions else 0.
+
+    Uses `reached_goal_step` if provided; if absent returns 0 (unknown / not reached).
+    """
+    if data.reached_goal_step is None:
+        return 0.0
+    if data.reached_goal_step >= horizon:
+        return 0.0
+    # treat any collision as failure
+    if collisions(data) > 0:
+        return 0.0
+    return 1.0
 
 
-def time_to_goal_norm(_data: EpisodeData, _horizon: int) -> float:
-    """Stub: steps_to_goal / H if success else 1.0 (TODO)."""
-    return float("nan")
+def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
+    """Normalized time to goal; 1.0 if not successful.
+
+    success definition mirrors `success` metric (no collision + reached early).
+    """
+    if success(data, horizon=horizon) == 1.0:
+        assert data.reached_goal_step is not None
+        return float(data.reached_goal_step) / float(horizon)
+    return 1.0
 
 
 def collisions(data: EpisodeData) -> float:
@@ -98,9 +114,31 @@ def min_distance(data: EpisodeData) -> float:
     return float(dists.min())
 
 
-def path_efficiency(_data: EpisodeData, _shortest_path_len: float) -> float:
-    """Stub: shortest / actual path length (clipped) (TODO)."""
-    return float("nan")
+def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
+    """Compute shortest_path_len / actual_path_len (clipped to 1).
+
+    Actual path taken: positions up to goal step (inclusive) if reached, else full horizon.
+    If actual length is ~0 (stationary) returns 1.0.
+    """
+    if data.robot_pos.shape[0] < 2:
+        return 1.0
+    end_idx = (
+        data.reached_goal_step
+        if data.reached_goal_step is not None
+        else data.robot_pos.shape[0] - 1
+    )
+    end_idx = min(end_idx, data.robot_pos.shape[0] - 1)
+    # slice positions including end index
+    pos_slice = data.robot_pos[: end_idx + 1]
+    diffs = pos_slice[1:] - pos_slice[:-1]
+    seg_lengths = np.linalg.norm(diffs, axis=1)
+    actual = float(seg_lengths.sum())
+    if actual <= 1e-9:
+        return 1.0
+    ratio = shortest_path_len / actual if actual > 0 else 1.0
+    if ratio > 1.0:
+        ratio = 1.0
+    return float(ratio)
 
 
 def force_quantiles(_data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> Dict[str, float]:
@@ -180,7 +218,7 @@ def compute_all_metrics(
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
 
     values: Dict[str, float] = {}
-    values["success"] = success(data)
+    values["success"] = success(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
     values["collisions"] = collisions(data)
     values["near_misses"] = near_misses(data)

@@ -53,9 +53,45 @@ def test_metrics_keys_all_collisions():
     values = compute_all_metrics(ep, horizon=10)
     for name in METRIC_NAMES:
         assert name in values
+    # Collisions every timestep -> collisions == T
+    assert values["collisions"] == 5
+    # Near misses zero because all are strict collisions
+    assert values["near_misses"] == 0
+    # Min distance exactly zero
+    assert values["min_distance"] == 0.0
 
 
 def test_metrics_partial_success_flag_present():
     ep = _make_episode(T=5, K=2)
     vals = compute_all_metrics(ep, horizon=10)
     assert "success" in vals
+
+
+def test_near_miss_region_only():
+    # Craft positions so robot at origin; pedestrians at 0.3m (>0.25 collision) and 0.45m
+    T, K = 4, 2
+    ep = _make_episode(T=T, K=K)
+    # Robot stays at origin
+    # Place ped 0 at (0.3,0), ped 1 at (0.45,0) constant over time
+    ep.peds_pos[:, 0, 0] = 0.3
+    ep.peds_pos[:, 1, 0] = 0.45
+    values = compute_all_metrics(ep, horizon=10)
+    # No collisions
+    assert values["collisions"] == 0
+    # Near miss each timestep because min dist 0.3 inside [0.25,0.5)
+    assert values["near_misses"] == T
+    # Min distance 0.3
+    assert np.isclose(values["min_distance"], 0.3)
+
+
+def test_mixed_collision_and_near_miss():
+    # First two timesteps collision (<0.25), next two near-miss (0.3)
+    T = 4
+    ep = _make_episode(T=T, K=1)
+    dists = [0.1, 0.2, 0.3, 0.3]
+    for t, d in enumerate(dists):
+        ep.peds_pos[t, 0, 0] = d
+    values = compute_all_metrics(ep, horizon=10)
+    assert values["collisions"] == 2
+    assert values["near_misses"] == 2
+    assert np.isclose(values["min_distance"], 0.1)

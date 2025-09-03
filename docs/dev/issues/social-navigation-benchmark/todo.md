@@ -30,7 +30,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 ## 1. Scenario & Dataset Specification
 - [x] Enumerate scenario dimensions (density, flow pattern, obstacles, groups) (2025-09-02)
 - [x] Draft scenario matrix (table of N core scenarios, each with parameter ranges) (see `scenario_matrix.yaml`) (2025-09-02)
-- [ ] Implement deterministic scenario generator (seeded)
+- [x] Implement deterministic scenario generator (seeded) (2025-09-02)
 - [ ] Implement map variants (simple hall, crossing, bottleneck, obstacle maze)
 - [ ] Add grouping / crowd heterogeneity flags to scenario config schema
 - [ ] Validate scenario diversity via quick summary script (histograms of min distances, avg speeds)

@@ -170,3 +170,17 @@ def test_force_metrics_no_peds():
     assert np.isnan(vals["force_q50"])  # no pedestrians
     assert vals["force_exceed_events"] == 0
     assert vals["comfort_exposure"] == 0
+
+
+def test_energy_and_jerk_mean():
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    # Construct acceleration as linearly increasing in x: a_t = t
+    for t in range(T):
+        ep.robot_acc[t, 0] = t
+    vals = compute_all_metrics(ep, horizon=10)
+    # Energy = sum |a_t| = sum_{t=0}^{5} t = 15
+    assert np.isclose(vals["energy"], 15.0)
+    # Jerk differences: a_{t+1} - a_t = 1 for t=0..4 -> vector [1,0]; norms=1 (5 values)
+    # Using first T-2=4 jerk vectors => average = 4 / 4 =1
+    assert np.isclose(vals["jerk_mean"], 1.0)

@@ -178,14 +178,38 @@ def comfort_exposure(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOL
     return float(events / (K * T))
 
 
-def jerk_mean(_data: EpisodeData) -> float:
-    """Stub: mean jerk magnitude (TODO)."""
-    return float("nan")
+def jerk_mean(data: EpisodeData) -> float:
+    """Mean jerk magnitude.
+
+    Jerk is difference of consecutive acceleration vectors.
+    For T acceleration samples there are T-1 deltas; formula in spec uses (T-2) with a_t defined per step
+    difference. We interpret as average norm of first (T-1)-1 jerk vectors: (a_{t+1}-a_t) for t=0..T-2.
+    If fewer than 3 timesteps, returns 0.0.
+    """
+    acc = data.robot_acc
+    T = acc.shape[0]
+    if T < 3:
+        return 0.0
+    diffs = acc[1:] - acc[:-1]  # length T-1
+    # Use first T-2 differences as per definition (exclude last to align with spec denominator) if T>2
+    jerk_vecs = diffs[:-1]
+    norms = np.linalg.norm(jerk_vecs, axis=1)
+    denom = T - 2
+    if denom <= 0:
+        return 0.0
+    return float(norms.sum() / denom)
 
 
-def energy(_data: EpisodeData) -> float:
-    """Stub: sum acceleration magnitudes (TODO)."""
-    return float("nan")
+def energy(data: EpisodeData) -> float:
+    """Sum of acceleration magnitudes over time.
+
+    If no timesteps returns 0.0.
+    """
+    acc = data.robot_acc
+    if acc.size == 0:
+        return 0.0
+    norms = np.linalg.norm(acc, axis=1)
+    return float(norms.sum())
 
 
 def force_gradient_norm_mean(_data: EpisodeData) -> float:

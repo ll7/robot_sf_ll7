@@ -184,3 +184,25 @@ def test_energy_and_jerk_mean():
     # Jerk differences: a_{t+1} - a_t = 1 for t=0..4 -> vector [1,0]; norms=1 (5 values)
     # Using first T-2=4 jerk vectors => average = 4 / 4 =1
     assert np.isclose(vals["jerk_mean"], 1.0)
+
+
+def test_force_gradient_norm_mean():
+    # Create a simple linear force field Fx = x, Fy = y so |F| = sqrt(x^2+y^2).
+    # Gradient norm of |F| is 1 everywhere except at origin where it's undefined (we exclude by path).
+    nx, ny = 6, 4
+    xs = np.linspace(0, 5, nx)
+    ys = np.linspace(0, 3, ny)
+    X, Y = np.meshgrid(xs, ys)
+    Fx = X.copy()
+    Fy = Y.copy()
+    T = 5
+    ep = _make_episode(T=T, K=0)
+    # path along diagonal away from origin to avoid singularity at (0,0)
+    ep.robot_pos[:, 0] = np.linspace(0.5, 4.5, T)
+    ep.robot_pos[:, 1] = np.linspace(0.5, 2.5, T)
+    ep.force_field_grid = {"X": X, "Y": Y, "Fx": Fx, "Fy": Fy}
+    vals = compute_all_metrics(ep, horizon=10)
+    g = vals["force_gradient_norm_mean"]
+    # Expect close to 1
+    assert np.isfinite(g)
+    assert 0.9 <= g <= 1.1

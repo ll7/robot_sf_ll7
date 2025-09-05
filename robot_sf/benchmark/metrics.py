@@ -281,12 +281,72 @@ def force_gradient_norm_mean(data: EpisodeData) -> float:
 
 
 def snqi(
-    _metric_values: Dict[str, float],
-    _weights: Dict[str, float],
-    _normalized_inputs: Dict[str, float] | None = None,
+    metric_values: Dict[str, float],
+    weights: Dict[str, float],
+    baseline_stats: Dict[str, Dict[str, float]] | None = None,
+    eps: float = 1e-6,
 ) -> float:
-    """Stub: composite Social Navigation Quality Index (TODO)."""
-    return float("nan")
+    """Compute Social Navigation Quality Index (SNQI).
+
+    Parameters
+    ----------
+    metric_values : dict
+        Raw metrics as produced by `compute_all_metrics`.
+    weights : dict
+        Weights mapping ('w_success', 'w_time', 'w_collisions', 'w_near', 'w_comfort', 'w_force_exceed', 'w_jerk').
+        Missing weights default to 1.0 for positive contribution (success) and 1.0 for penalties.
+    baseline_stats : dict | None
+        For normalization of penalized metrics. Format:
+        {
+          'collisions': {'med': float, 'p95': float},
+          'near_misses': {'med': ..., 'p95': ...},
+          'force_exceed_events': {'med': ..., 'p95': ...},
+          'jerk_mean': {'med': ..., 'p95': ...},
+        }
+        If None, normalization terms treated as zero (optimistic default) to avoid exploding scores prematurely.
+    eps : float
+        Small value to avoid division by zero.
+    """
+
+    def _norm(name: str, value: float) -> float:
+        if baseline_stats is None or name not in baseline_stats:
+            return 0.0
+        med = baseline_stats[name].get("med", 0.0)
+        p95 = baseline_stats[name].get("p95", med)
+        denom = (p95 - med) if (p95 - med) > eps else 1.0
+        norm = (value - med) / denom
+        if norm < 0:
+            norm = 0.0
+        if norm > 1:
+            norm = 1.0
+        return float(norm)
+
+    succ = metric_values.get("success", 0.0)
+    time_norm = metric_values.get("time_to_goal_norm", 1.0)
+    coll = _norm("collisions", metric_values.get("collisions", 0.0))
+    near = _norm("near_misses", metric_values.get("near_misses", 0.0))
+    comfort = metric_values.get("comfort_exposure", 0.0)
+    force_ex = _norm("force_exceed_events", metric_values.get("force_exceed_events", 0.0))
+    jerk_n = _norm("jerk_mean", metric_values.get("jerk_mean", 0.0))
+
+    w_success = weights.get("w_success", 1.0)
+    w_time = weights.get("w_time", 1.0)
+    w_collisions = weights.get("w_collisions", 1.0)
+    w_near = weights.get("w_near", 1.0)
+    w_comfort = weights.get("w_comfort", 1.0)
+    w_force_ex = weights.get("w_force_exceed", 1.0)
+    w_jerk = weights.get("w_jerk", 1.0)
+
+    score = (
+        w_success * succ
+        - w_time * time_norm
+        - w_collisions * coll
+        - w_near * near
+        - w_comfort * comfort
+        - w_force_ex * force_ex
+        - w_jerk * jerk_n
+    )
+    return float(score)
 
 
 # --- Orchestrator ---

@@ -46,6 +46,8 @@ class EpisodeData:
     goal: np.ndarray
     dt: float
     reached_goal_step: int | None = None
+    # Optional pre-sampled force field grid: dict with keys X,Y,Fx,Fy (2D arrays)
+    force_field_grid: Dict[str, np.ndarray] | None = None
 
 
 # --- Metric stub functions ---
@@ -212,9 +214,70 @@ def energy(data: EpisodeData) -> float:
     return float(norms.sum())
 
 
-def force_gradient_norm_mean(_data: EpisodeData) -> float:
-    """Stub: mean gradient norm along path (optional) (TODO)."""
-    return float("nan")
+def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -> float:
+    """Bilinear interpolate V on grid defined by X,Y (both shape (ny,nx))."""
+    # Assume rectilinear grid aligned so X,Y vary independently
+    xs = X[0]
+    ys = Y[:, 0]
+    if not (xs[0] <= x <= xs[-1] and ys[0] <= y <= ys[-1]):
+        return float("nan")
+    # find indices
+    ix = np.searchsorted(xs, x) - 1
+    iy = np.searchsorted(ys, y) - 1
+    ix = max(0, min(ix, xs.size - 2))
+    iy = max(0, min(iy, ys.size - 2))
+    x1, x2 = xs[ix], xs[ix + 1]
+    y1, y2 = ys[iy], ys[iy + 1]
+    if (x2 - x1) == 0 or (y2 - y1) == 0:
+        return float("nan")
+    q11 = V[iy, ix]
+    q21 = V[iy, ix + 1]
+    q12 = V[iy + 1, ix]
+    q22 = V[iy + 1, ix + 1]
+    tx = (x - x1) / (x2 - x1)
+    ty = (y - y1) / (y2 - y1)
+    return float(
+        (1 - tx) * (1 - ty) * q11 + tx * (1 - ty) * q21 + (1 - tx) * ty * q12 + tx * ty * q22
+    )
+
+
+def force_gradient_norm_mean(data: EpisodeData) -> float:
+    """Mean gradient norm of force magnitude along robot path.
+
+    Requires `force_field_grid` with keys X,Y,Fx,Fy containing uniform rectilinear grid.
+    Returns NaN if grid not present or insufficient points.
+    """
+    grid = data.force_field_grid
+    if grid is None:
+        return float("nan")
+    try:
+        X = grid["X"]
+        Y = grid["Y"]
+        Fx = grid["Fx"]
+        Fy = grid["Fy"]
+    except KeyError:
+        return float("nan")
+    if X.ndim != 2 or Fx.shape != X.shape or Fy.shape != X.shape:
+        return float("nan")
+    # Compute magnitude and its spatial gradient
+    M = np.sqrt(Fx * Fx + Fy * Fy)
+    # assume uniform spacing
+    if X.shape[1] < 2 or X.shape[0] < 2:
+        return float("nan")
+    dx = X[0, 1] - X[0, 0]
+    dy = Y[1, 0] - Y[0, 0]
+    if dx == 0 or dy == 0:
+        return float("nan")
+    dMy, dMx = np.gradient(M, dy, dx)
+    grad_norm = np.sqrt(dMx * dMx + dMy * dMy)
+    samples = []
+    for x, y in data.robot_pos:
+        val = _bilinear(float(x), float(y), X, Y, grad_norm)
+        if np.isfinite(val):
+            samples.append(val)
+    if not samples:
+        return float("nan")
+    return float(np.mean(samples))
 
 
 def snqi(

@@ -157,9 +157,8 @@ def run_episode(
         robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel)
         last_vel = robot_vel.copy()
 
-        # Capture ped state (positions from sim state columns 0:2)
-        ped_state = sim.state
-        ped_pos = ped_state[:, 0:2].copy()
+        # Capture pedestrian positions directly via pysocialforce API
+        ped_pos = sim.peds.pos().copy()
         peds_pos_traj.append(ped_pos)
 
         # Force sampling per pedestrian if requested
@@ -176,7 +175,7 @@ def run_episode(
         robot_acc_traj.append(acc.copy())
 
         # Goal check
-        if reached_goal_step is None and np.linalg.norm(robot_goal - robot_pos) < goal_radius:
+        if reached_goal_step is None and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius:
             reached_goal_step = t
             break
 
@@ -195,22 +194,9 @@ def run_episode(
     )
 
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
-    metrics: Dict[str, Any] = {k: v for k, v in metrics_raw.items()}
-    # Adapt booleans for schema: success currently 0/1 float
-    metrics["success"] = bool(metrics["success"] == 1.0)
-    # Extract force quantiles into nested object matching schema (if present)
-    fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
-    if fq:
-        metrics["force_quantiles"] = {
-            "q50": float(fq.get("force_q50", float("nan"))),
-            "q90": float(fq.get("force_q90", float("nan"))),
-            "q95": float(fq.get("force_q95", float("nan"))),
-        }
-        for k in list(fq.keys()):
-            metrics.pop(k, None)
-
-    if snqi_weights is not None:
-        metrics["snqi"] = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+    metrics = _post_process_metrics(
+        metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
+    )
 
     record = {
         "episode_id": f"{scenario_params.get('id', 'unknown')}--{seed}",
@@ -244,3 +230,31 @@ __all__ = [
     "run_episode",
     "validate_and_write",
 ]
+
+
+def _post_process_metrics(
+    metrics_raw: Dict[str, Any],
+    *,
+    snqi_weights: Dict[str, float] | None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None,
+) -> Dict[str, Any]:
+    metrics: Dict[str, Any] = {k: v for k, v in metrics_raw.items()}
+    metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
+    fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
+    if fq:
+        metrics["force_quantiles"] = {
+            "q50": float(fq.get("force_q50", float("nan"))),
+            "q90": float(fq.get("force_q90", float("nan"))),
+            "q95": float(fq.get("force_q95", float("nan"))),
+        }
+        for k in list(fq.keys()):
+            metrics.pop(k, None)
+    if snqi_weights is not None:
+        metrics["snqi"] = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+    for count_key in ("collisions", "near_misses", "force_exceed_events"):
+        if count_key in metrics and metrics[count_key] is not None:
+            try:
+                metrics[count_key] = int(metrics[count_key])
+            except Exception:  # pragma: no cover
+                pass
+    return metrics

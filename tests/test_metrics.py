@@ -17,6 +17,7 @@ from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
     compute_all_metrics,
+    snqi,
 )
 
 
@@ -206,3 +207,45 @@ def test_force_gradient_norm_mean():
     # Expect close to 1
     assert np.isfinite(g)
     assert 0.9 <= g <= 1.1
+
+
+def test_snqi_scoring():
+    # Construct two metric dicts: one ideal, one poor
+    good = {
+        "success": 1.0,
+        "time_to_goal_norm": 0.2,
+        "collisions": 0.0,
+        "near_misses": 1.0,
+        "comfort_exposure": 0.05,
+        "force_exceed_events": 2.0,
+        "jerk_mean": 0.5,
+    }
+    bad = {
+        "success": 0.0,
+        "time_to_goal_norm": 1.0,
+        "collisions": 8.0,
+        "near_misses": 12.0,
+        "comfort_exposure": 0.4,
+        "force_exceed_events": 20.0,
+        "jerk_mean": 3.0,
+    }
+    baseline = {
+        "collisions": {"med": 1.0, "p95": 6.0},
+        "near_misses": {"med": 2.0, "p95": 15.0},
+        "force_exceed_events": {"med": 3.0, "p95": 25.0},
+        "jerk_mean": {"med": 0.3, "p95": 2.5},
+    }
+    weights = {
+        "w_success": 1.0,
+        "w_time": 0.5,
+        "w_collisions": 0.8,
+        "w_near": 0.3,
+        "w_comfort": 0.6,
+        "w_force_exceed": 0.4,
+        "w_jerk": 0.2,
+    }
+    s_good = snqi(good, weights, baseline_stats=baseline)
+    s_bad = snqi(bad, weights, baseline_stats=baseline)
+    assert s_good > s_bad
+    # Ensure scores are finite
+    assert np.isfinite(s_good) and np.isfinite(s_bad)

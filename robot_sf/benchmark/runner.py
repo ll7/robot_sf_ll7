@@ -18,7 +18,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import numpy as np
 import yaml
@@ -286,6 +286,9 @@ def run_batch(
     snqi_baseline: Dict[str, Dict[str, float]] | None = None,
     append: bool = True,
     fail_fast: bool = False,
+    progress_cb: Optional[
+        Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]
+    ] = None,
 ) -> Dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -310,7 +313,8 @@ def run_batch(
 
     wrote = 0
     failures: List[Dict[str, Any]] = []
-    for sc, seed in jobs:
+    total = len(jobs)
+    for idx, (sc, seed) in enumerate(jobs, start=1):
         try:
             rec = run_episode(
                 sc,
@@ -326,6 +330,11 @@ def run_batch(
             with out_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
             wrote += 1
+            if progress_cb is not None:
+                try:
+                    progress_cb(idx, total, sc, seed, True, None)
+                except Exception:  # pragma: no cover - progress best-effort
+                    pass
         except Exception as e:  # pragma: no cover - error path
             failures.append(
                 {
@@ -334,6 +343,11 @@ def run_batch(
                     "error": repr(e),
                 }
             )
+            if progress_cb is not None:
+                try:
+                    progress_cb(idx, total, sc, seed, False, repr(e))
+                except Exception:  # pragma: no cover
+                    pass
             if fail_fast:
                 raise
 

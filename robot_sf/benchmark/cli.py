@@ -6,6 +6,7 @@ import sys
 from typing import List
 
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+from robot_sf.benchmark.runner import run_batch
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -37,12 +38,38 @@ def _add_baseline_subparser(
     p.set_defaults(cmd="baseline")
 
 
+def _add_run_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "run",
+        help="Run a batch of episodes from a scenario matrix and write JSONL",
+    )
+    p.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p.add_argument("--out", required=True, help="Path to write episode JSONL")
+    p.add_argument("--schema", default=DEFAULT_SCHEMA_PATH, help="Schema path for validation")
+    p.add_argument("--base-seed", type=int, default=0)
+    p.add_argument("--repeats", type=int, default=None, help="Override repeats in matrix")
+    p.add_argument("--horizon", type=int, default=100)
+    p.add_argument("--dt", type=float, default=0.1)
+    p.add_argument("--record-forces", action="store_true", default=False)
+    p.add_argument("--append", action="store_true", default=False, help="Append to existing JSONL")
+    p.add_argument(
+        "--fail-fast",
+        action="store_true",
+        default=False,
+        help="Stop on first failure instead of collecting errors",
+    )
+    p.set_defaults(cmd="run")
+
+
 def cli_main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
     )
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)
+    _add_run_subparser(subparsers)
 
     args = parser.parse_args(argv)
     if args.cmd == "baseline":
@@ -60,6 +87,25 @@ def cli_main(argv: List[str] | None = None) -> int:
             )
             # Print brief summary to stdout for convenience
             print(json.dumps({"out": args.out, "keys": sorted(stats.keys())}, indent=2))
+            return 0
+        except Exception as e:  # pragma: no cover - error path
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+    if args.cmd == "run":
+        try:
+            summary = run_batch(
+                scenarios_or_path=args.matrix,
+                out_path=args.out,
+                schema_path=args.schema,
+                base_seed=args.base_seed,
+                repeats_override=args.repeats,
+                horizon=args.horizon,
+                dt=args.dt,
+                record_forces=args.record_forces,
+                append=args.append,
+                fail_fast=args.fail_fast,
+            )
+            print(json.dumps(summary, indent=2))
             return 0
         except Exception as e:  # pragma: no cover - error path
             print(f"Error: {e}", file=sys.stderr)

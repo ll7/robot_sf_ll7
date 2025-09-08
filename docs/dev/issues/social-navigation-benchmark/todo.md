@@ -31,7 +31,8 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Enumerate scenario dimensions (density, flow pattern, obstacles, groups) (2025-09-02)
 - [x] Draft scenario matrix (table of N core scenarios, each with parameter ranges) (see `scenario_matrix.yaml`) (2025-09-02)
 - [x] Implement deterministic scenario generator (seeded) (2025-09-02)
-- [ ] Implement map variants (simple hall, crossing, bottleneck, obstacle maze)
+- [x] Implement map variants (simple hall, bottleneck, obstacle maze) (2025-09-08)
+	- Note: "crossing" currently represented via flow topology, not a distinct obstacle layout.
 - [ ] Add grouping / crowd heterogeneity flags to scenario config schema
 - [ ] Validate scenario diversity via quick summary script (histograms of min distances, avg speeds)
 - [ ] (Optional) Import small real trajectory stats (ETH/UCY aggregate) for parameter calibration
@@ -48,13 +49,13 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 	- [ ] Path smoothness (jerk / curvature stats)
 	- [ ] Robot energy proxy (sum |accel|)
 	- [ ] (Optional) Divergence / gradient norm of force field along path
-- [ ] Implement metric computation module (`metrics/`)
-- [ ] Add unit tests for each metric (edge cases: empty crowd, single ped, high density)
-- [ ] Define JSON schema for per-episode metric output
+- [x] Implement metric computation module (`metrics/`) (2025-09-08)
+- [x] Add unit tests for key metrics (edge cases; expand as needed) (2025-09-08)
+- [x] Define JSON schema for per-episode metric output (2025-09-02)
 
 ## 3. Composite Index (SNQI)
-- [ ] Draft formula (weighted normalized metrics)
-- [ ] Implement normalization strategy (min-max or percentile baseline)
+- [x] Draft formula (weighted normalized metrics) (2025-09-08)
+- [x] Implement normalization strategy (percentile baseline: median/p95) (2025-09-08)
 - [ ] Provide script to recompute weights / sensitivity analysis
 - [ ] Ablation: measure discriminative power with and without each component
 
@@ -65,6 +66,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Subcommand: `robot_sf_bench validate-config`
 - [ ] Global flags: seed, parallel workers, progress bar, resume
 - [ ] Logging: structured (JSONL) plus human-readable summary
+	- [x] Python API batch runner `run_batch(...)` with JSONL writing and schema validation (2025-09-08)
 
 ## 5. Baseline Algorithm Integrations
 - [ ] Standard Social Force planner wrapper
@@ -92,8 +94,8 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 
 ## 8. Reproducibility & Packaging
 - [ ] Deterministic seeding audit (numpy, torch, random)
-- [ ] Version stamping (git hash + config hash in outputs)
-- [ ] Lock dependencies (uv lock confirmed)
+- [x] Version stamping (git hash + config hash in outputs) (2025-09-08)
+- [x] Lock dependencies (uv lock confirmed) (2025-09-02)
 - [ ] Provide `environment.md` / exact reproduction instructions
 - [ ] Pre-commit hook to validate metric schema changes
 - [ ] Lightweight CI pipeline (lint + unit tests + sample benchmark smoke test)
@@ -138,6 +140,11 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Write metric formal definitions doc stub (see `metrics_spec.md`) (2025-09-02)
 - [x] Implement JSON schema draft for episode output (see `episode_schema.json`) (2025-09-02)
 
+Next picks (2025-09-08):
+- [ ] Aggregation script: JSONL -> per-algorithm metrics CSV + SNQI; include simple CLI and tests
+- [ ] Baseline normalization data: script to run `run_batch` over a baseline policy suite, compute per-metric med/p95, persist as JSON for SNQI
+- [ ] Minimal CLI shim `robot_sf_bench run` that wraps `run_batch` (matrix path, out path, seeds, flags)
+
 ---
-Last updated: 2025-09-02
+Last updated: 2025-09-08
 

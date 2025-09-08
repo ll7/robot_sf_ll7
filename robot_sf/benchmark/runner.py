@@ -228,6 +228,7 @@ def validate_and_write(
 __all__ = [
     "load_scenario_matrix",
     "run_episode",
+    "run_batch",
     "validate_and_write",
 ]
 
@@ -258,3 +259,87 @@ def _post_process_metrics(
             except Exception:  # pragma: no cover
                 pass
     return metrics
+
+
+def _expand_jobs(
+    scenarios: List[Dict[str, Any]], base_seed: int = 0, repeats_override: int | None = None
+) -> List[tuple[Dict[str, Any], int]]:
+    jobs: List[tuple[Dict[str, Any], int]] = []
+    for sc in scenarios:
+        reps = int(sc.get("repeats", 1)) if repeats_override is None else int(repeats_override)
+        for r in range(reps):
+            jobs.append((sc, base_seed + r))
+    return jobs
+
+
+def run_batch(
+    scenarios_or_path: List[Dict[str, Any]] | str | Path,
+    out_path: str | Path,
+    schema_path: str | Path,
+    *,
+    base_seed: int = 0,
+    repeats_override: int | None = None,
+    horizon: int = 100,
+    dt: float = 0.1,
+    record_forces: bool = True,
+    snqi_weights: Dict[str, float] | None = None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    append: bool = True,
+    fail_fast: bool = False,
+) -> Dict[str, Any]:
+    """Run a batch of episodes and write JSONL records.
+
+    scenarios_or_path: either a list of scenario dicts or a YAML file path.
+    Returns a summary dict with counts and failures.
+    """
+    # Load scenarios
+    if isinstance(scenarios_or_path, (str, Path)):
+        scenarios = load_scenario_matrix(scenarios_or_path)
+    else:
+        scenarios = scenarios_or_path
+
+    jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
+
+    # Prepare output
+    out_path = Path(out_path)
+    if not append and out_path.exists():
+        out_path.unlink()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    schema = load_schema(schema_path)
+
+    wrote = 0
+    failures: List[Dict[str, Any]] = []
+    for sc, seed in jobs:
+        try:
+            rec = run_episode(
+                sc,
+                seed,
+                horizon=horizon,
+                dt=dt,
+                record_forces=record_forces,
+                snqi_weights=snqi_weights,
+                snqi_baseline=snqi_baseline,
+            )
+            # Validate and append
+            validate_episode(rec, schema)
+            with out_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+            wrote += 1
+        except Exception as e:  # pragma: no cover - error path
+            failures.append(
+                {
+                    "scenario_id": sc.get("id", "unknown"),
+                    "seed": seed,
+                    "error": repr(e),
+                }
+            )
+            if fail_fast:
+                raise
+
+    return {
+        "total_jobs": len(jobs),
+        "written": wrote,
+        "failures": failures,
+        "out_path": str(out_path),
+    }

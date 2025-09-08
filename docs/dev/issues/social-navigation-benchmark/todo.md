@@ -77,7 +77,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Per-baseline config file (hyperparameters, seeds)
 
 ## 6. Evaluation Pipeline & Aggregation
-- [ ] Aggregation script: merges JSONL episodes -> metrics CSV + SNQI per algo
+- [x] Aggregation script: merges JSONL episodes -> metrics CSV + SNQI per algo (2025-09-08)
 - [ ] Confidence interval computation (bootstrap or across seeds)
 - [ ] Seed variance analysis script
 - [ ] Automatic ranking table generator
@@ -141,10 +141,10 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Implement JSON schema draft for episode output (see `episode_schema.json`) (2025-09-02)
 
 Next picks (2025-09-08):
-- [ ] Aggregation script: JSONL -> per-algorithm metrics CSV + SNQI; include simple CLI and tests
 - [ ] Baseline normalization data: script to run `run_batch` over a baseline policy suite, compute per-metric med/p95, persist as JSON for SNQI
 - [ ] Minimal CLI shim `robot_sf_bench run` that wraps `run_batch` (matrix path, out path, seeds, flags)
+- [ ] Scenario diversity summary script: quick histograms (min distances, avg speeds) as sanity check
 
 ---
-Last updated: 2025-09-08
+Last updated: 2025-09-08 (aggregation complete)
 

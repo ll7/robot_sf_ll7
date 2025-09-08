@@ -60,6 +60,12 @@ def _add_run_subparser(
         default=False,
         help="Stop on first failure instead of collecting errors",
     )
+    p.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress per-episode progress output",
+    )
     p.set_defaults(cmd="run")
 
 
@@ -93,6 +99,17 @@ def cli_main(argv: List[str] | None = None) -> int:
             return 2
     if args.cmd == "run":
         try:
+
+            def _progress(i, total, sc, seed, ok, err):
+                if args.quiet:
+                    return
+                status = "ok" if ok else "FAIL"
+                sid = sc.get("id", "unknown")
+                msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
+                if err:
+                    msg += f" ({err})"
+                print(msg)
+
             summary = run_batch(
                 scenarios_or_path=args.matrix,
                 out_path=args.out,
@@ -104,6 +121,7 @@ def cli_main(argv: List[str] | None = None) -> int:
                 record_forces=args.record_forces,
                 append=args.append,
                 fail_fast=args.fail_fast,
+                progress_cb=_progress,
             )
             print(json.dumps(summary, indent=2))
             return 0

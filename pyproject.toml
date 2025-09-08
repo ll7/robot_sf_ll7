@@ -202,3 +202,6 @@ pysocialforce = { path = "fast-pysf", editable = true }
 dev = [
     "pylint>=3.3.4",
 ]
+
+[project.scripts]
+robot_sf_bench = "robot_sf.benchmark.cli:main"

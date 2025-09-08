@@ -143,10 +143,10 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 
 Next picks (2025-09-08):
 - [x] Baseline normalization data: script to run `run_batch` over a baseline policy suite, compute per-metric med/p95, persist as JSON for SNQI (2025-09-08)
-- [ ] Minimal CLI shim `robot_sf_bench run` that wraps `run_batch` (matrix path, out path, seeds, flags)
+- [x] Minimal CLI shim `robot_sf_bench run` that wraps `run_batch` (matrix path, out path, seeds, flags) (2025-09-08)
 - [ ] Scenario diversity summary script: quick histograms (min distances, avg speeds) as sanity check
 - [ ] Lightweight CI job: lint + unit tests + tiny batch run as smoke test
 
 ---
-Last updated: 2025-09-08 (aggregation, baseline stats + CLI baseline complete)
+Last updated: 2025-09-08 (aggregation, baseline stats + CLI baseline + CLI run complete)
 

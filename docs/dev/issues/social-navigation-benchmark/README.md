@@ -22,6 +22,83 @@ The benchmark focuses on evaluating **robot navigation policies in dynamic pedes
 ## 2. Current Status
 See `todo.md` for granular task tracking. This README gives conceptual overview; `todo.md` contains the actionable checklist.
 
+### Running episodes and batches (new)
+You can now generate episode records and run batches directly from Python.
+
+Single episode:
+
+```python
+from robot_sf.benchmark.runner import run_episode, validate_and_write
+from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+
+scenario = {
+	"id": "smoke-uni-low-open",
+	"density": "low",
+	"flow": "uni",
+	"obstacle": "open",
+	"groups": 0.0,
+	"speed_var": "low",
+	"goal_topology": "point",
+	"robot_context": "embedded",
+	"repeats": 1,
+}
+record = run_episode(scenario, seed=123, horizon=15, dt=0.1, record_forces=False)
+
+# Validate against the JSON schema and append to JSONL
+schema_path = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+schema = load_schema(schema_path)
+validate_episode(record, schema)
+validate_and_write(record, schema_path, "results/episodes.jsonl")
+```
+
+Batch run with repeats expanded and JSONL output:
+
+```python
+from robot_sf.benchmark.runner import run_batch
+
+scenarios = [
+	{
+		"id": "batch-uni-low-open",
+		"density": "low",
+		"flow": "uni",
+		"obstacle": "open",
+		"groups": 0.0,
+		"speed_var": "low",
+		"goal_topology": "point",
+		"robot_context": "embedded",
+		"repeats": 5,
+	}
+]
+summary = run_batch(
+	scenarios,
+	out_path="results/episodes.jsonl",
+	schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+	base_seed=42,
+	horizon=50,
+	dt=0.1,
+	record_forces=False,
+	append=False,
+)
+print(summary)
+```
+
+You can also pass a YAML scenario matrix instead of a list:
+
+```python
+from robot_sf.benchmark.runner import run_batch
+summary = run_batch(
+	"docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml",
+	out_path="results/matrix_episodes.jsonl",
+	schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+	base_seed=0,
+)
+```
+
+Notes
+- Each JSONL line is schema-validated and includes `episode_id`, `scenario_id`, `seed`, `scenario_params`, `metrics`, config/git hashes, and timestamps.
+- SNQI weights/baselines can be provided via `snqi_weights` and `snqi_baseline` in both `run_episode` and `run_batch`.
+- The current runner models the robot independently of pedestrian dynamics (one-way coupling). Two-way coupling can be integrated later.
+
 ## 3. Directory Layout (Planned / Evolving)
 ```
 ./README.md                                # High-level overview (this file)
@@ -120,6 +197,7 @@ robot_sf_bench figures --config figures/config.yaml
 
 ## 15. Changelog
 - 2025-09-02: Initial README scaffold added.
+- 2025-09-08: Added runner usage and batch API docs.
 
 ## 16. Maintainers / Contacts
 (Add names/emails once ownership is defined.)

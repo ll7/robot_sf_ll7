@@ -56,7 +56,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 ## 3. Composite Index (SNQI)
 - [x] Draft formula (weighted normalized metrics) (2025-09-08)
 - [x] Implement normalization strategy (percentile baseline: median/p95) (2025-09-08)
-- [ ] Provide script to recompute weights / sensitivity analysis
+	- [ ] Provide script to recompute weights / sensitivity analysis
 - [ ] Ablation: measure discriminative power with and without each component
 
 ## 4. Configuration & CLI Harness
@@ -67,6 +67,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Global flags: seed, parallel workers, progress bar, resume
 - [ ] Logging: structured (JSONL) plus human-readable summary
 	- [x] Python API batch runner `run_batch(...)` with JSONL writing and schema validation (2025-09-08)
+	- [x] CLI baseline subcommand (`robot_sf_bench baseline`) to produce baseline med/p95 JSON (2025-09-08)
 
 ## 5. Baseline Algorithm Integrations
 - [ ] Standard Social Force planner wrapper
@@ -141,10 +142,11 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Implement JSON schema draft for episode output (see `episode_schema.json`) (2025-09-02)
 
 Next picks (2025-09-08):
-- [ ] Baseline normalization data: script to run `run_batch` over a baseline policy suite, compute per-metric med/p95, persist as JSON for SNQI
+- [x] Baseline normalization data: script to run `run_batch` over a baseline policy suite, compute per-metric med/p95, persist as JSON for SNQI (2025-09-08)
 - [ ] Minimal CLI shim `robot_sf_bench run` that wraps `run_batch` (matrix path, out path, seeds, flags)
 - [ ] Scenario diversity summary script: quick histograms (min distances, avg speeds) as sanity check
+- [ ] Lightweight CI job: lint + unit tests + tiny batch run as smoke test
 
 ---
-Last updated: 2025-09-08 (aggregation complete)
+Last updated: 2025-09-08 (aggregation, baseline stats + CLI baseline complete)
 

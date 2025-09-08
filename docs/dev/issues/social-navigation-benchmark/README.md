@@ -22,7 +22,7 @@ The benchmark focuses on evaluating **robot navigation policies in dynamic pedes
 ## 2. Current Status
 See `todo.md` for granular task tracking. This README gives conceptual overview; `todo.md` contains the actionable checklist.
 
-### Running episodes and batches (new)
+### Running episodes, batches, and CLI (new)
 You can now generate episode records and run batches directly from Python.
 
 Single episode:
@@ -98,6 +98,28 @@ Notes
 - Each JSONL line is schema-validated and includes `episode_id`, `scenario_id`, `seed`, `scenario_params`, `metrics`, config/git hashes, and timestamps.
 - SNQI weights/baselines can be provided via `snqi_weights` and `snqi_baseline` in both `run_episode` and `run_batch`.
 - The current runner models the robot independently of pedestrian dynamics (one-way coupling). Two-way coupling can be integrated later.
+
+CLI usage:
+
+```bash
+# Run a batch from a scenario matrix YAML and write JSONL
+robot_sf_bench run \
+	--matrix docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml \
+	--out results/episodes.jsonl \
+	--schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+	--base-seed 0 \
+	--horizon 50 \
+	--dt 0.1
+
+# Compute baseline med/p95 statistics for SNQI normalization
+robot_sf_bench baseline \
+	--matrix docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml \
+	--out results/baseline_stats.json \
+	--jsonl results/baseline_episodes.jsonl \
+	--schema docs/dev/issues/social-navigation-benchmark/episode_schema.json
+```
+
+Tip: During development, you can call `cli_main([...])` directly from `robot_sf.benchmark.cli` to avoid installing the console script.
 
 ## 3. Directory Layout (Planned / Evolving)
 ```

@@ -7,6 +7,7 @@ from typing import List
 
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.summary import summarize_to_plots
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -69,6 +70,18 @@ def _add_run_subparser(
     p.set_defaults(cmd="run")
 
 
+def _add_summary_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "summary",
+        help="Generate simple histograms (min_distance, avg_speed) from episode JSONL",
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input JSONL path")
+    p.add_argument("--out-dir", required=True, help="Output directory for PNGs")
+    p.set_defaults(cmd="summary")
+
+
 def cli_main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -76,6 +89,7 @@ def cli_main(argv: List[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)
     _add_run_subparser(subparsers)
+    _add_summary_subparser(subparsers)
 
     args = parser.parse_args(argv)
     if args.cmd == "baseline":
@@ -124,6 +138,14 @@ def cli_main(argv: List[str] | None = None) -> int:
                 progress_cb=_progress,
             )
             print(json.dumps(summary, indent=2))
+            return 0
+        except Exception as e:  # pragma: no cover - error path
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+    if args.cmd == "summary":
+        try:
+            outs = summarize_to_plots(args.in_path, args.out_dir)
+            print(json.dumps({"wrote": outs}, indent=2))
             return 0
         except Exception as e:  # pragma: no cover - error path
             print(f"Error: {e}", file=sys.stderr)

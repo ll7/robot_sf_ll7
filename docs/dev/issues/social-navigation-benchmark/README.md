@@ -117,6 +117,11 @@ robot_sf_bench baseline \
 	--out results/baseline_stats.json \
 	--jsonl results/baseline_episodes.jsonl \
 	--schema docs/dev/issues/social-navigation-benchmark/episode_schema.json
+
+# Quick scenario diversity summary (histograms)
+robot_sf_bench summary \
+	--in results/episodes.jsonl \
+	--out-dir results/figs
 ```
 
 Tip: During development, you can call `cli_main([...])` directly from `robot_sf.benchmark.cli` to avoid installing the console script.
@@ -147,7 +152,7 @@ Tip: During development, you can call `cli_main([...])` directly from `robot_sf.
 | Success       | success_rate                        | Binary per episode |
 | Efficiency    | normalized_time, path_efficiency    | Normalize by shortest path |
 | Safety        | collisions, near_misses             | Distance thresholds |
-| Proximity     | min_distance, avg_distance          | Distribution summaries |
+| Proximity     | min_distance, avg_speed             | Distribution summaries |
 | Force/Comfort | force_q50/force_q90/force_max       | Force magnitudes |
 | Comfort       | comfort_exposure (time > threshold) | Threshold from nominal baseline |
 | Smoothness    | jerk_mean, curvature_mean           | Derived from trajectory |
@@ -220,6 +225,7 @@ robot_sf_bench figures --config figures/config.yaml
 ## 15. Changelog
 - 2025-09-02: Initial README scaffold added.
 - 2025-09-08: Added runner usage and batch API docs.
+- 2025-09-09: Added CLI summary subcommand and avg_speed metric.
 
 ## 16. Maintainers / Contacts
 (Add names/emails once ownership is defined.)

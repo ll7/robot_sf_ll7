@@ -214,6 +214,21 @@ def energy(data: EpisodeData) -> float:
     return float(norms.sum())
 
 
+def avg_speed(data: EpisodeData) -> float:
+    """Average robot speed magnitude over the episode timeline.
+
+    Uses all available timesteps up to the recorded trajectory length.
+    Returns 0.0 if there are no velocity samples.
+    """
+    vel = data.robot_vel
+    if vel.size == 0:
+        return 0.0
+    speeds = np.linalg.norm(vel, axis=1)
+    if speeds.size == 0:
+        return 0.0
+    return float(np.mean(speeds))
+
+
 def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -> float:
     """Bilinear interpolate V on grid defined by X,Y (both shape (ny,nx))."""
     # Assume rectilinear grid aligned so X,Y vary independently
@@ -357,6 +372,7 @@ METRIC_NAMES: List[str] = [
     "near_misses",
     "min_distance",
     "path_efficiency",
+    "avg_speed",
     "force_q50",
     "force_q90",
     "force_q95",
@@ -398,6 +414,7 @@ def compute_all_metrics(
     values["comfort_exposure"] = comfort_exposure(data)
     values["jerk_mean"] = jerk_mean(data)
     values["energy"] = energy(data)
+    values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
     return values
 
@@ -419,5 +436,6 @@ __all__ = [
     "jerk_mean",
     "energy",
     "force_gradient_norm_mean",
+    "avg_speed",
     "snqi",
 ]

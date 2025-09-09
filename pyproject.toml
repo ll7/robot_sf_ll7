@@ -88,6 +88,9 @@ exclude = [
     "/fast-pysf",
 ]
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 # Use ruff when possible
 [tool.autopep8]
 max_line_length = 100
@@ -195,8 +198,6 @@ filterwarnings = [
     "default::UserWarning:robot_sf.*",
 ]
 
-[tool.uv.sources]
-pysocialforce = { path = "fast-pysf", editable = true }
 
 [dependency-groups]
 dev = [
@@ -205,3 +206,8 @@ dev = [
 
 [project.scripts]
 robot_sf_bench = "robot_sf.benchmark.cli:main"
+
+# Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
+
+[tool.uv.sources]
+pysocialforce = { path = "fast-pysf", editable = true }

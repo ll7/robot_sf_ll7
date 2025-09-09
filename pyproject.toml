@@ -187,6 +187,8 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
 filterwarnings = [
     # Suppress external library warnings
     "ignore::DeprecationWarning:pygame.*",

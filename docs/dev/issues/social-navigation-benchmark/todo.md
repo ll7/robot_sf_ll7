@@ -34,7 +34,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Implement map variants (simple hall, bottleneck, obstacle maze) (2025-09-08)
 	- Note: "crossing" currently represented via flow topology, not a distinct obstacle layout.
 - [ ] Add grouping / crowd heterogeneity flags to scenario config schema
-- [ ] Validate scenario diversity via quick summary script (histograms of min distances, avg speeds)
+- [x] Validate scenario diversity via quick summary script (histograms of min distances, avg speeds) (2025-09-09)
 - [ ] (Optional) Import small real trajectory stats (ETH/UCY aggregate) for parameter calibration
 
 ## 2. Metric Definition & Implementation
@@ -97,9 +97,9 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Deterministic seeding audit (numpy, torch, random)
 - [x] Version stamping (git hash + config hash in outputs) (2025-09-08)
 - [x] Lock dependencies (uv lock confirmed) (2025-09-02)
-- [ ] Provide `environment.md` / exact reproduction instructions
+- [x] Provide `environment.md` / exact reproduction instructions (2025-09-09)
 - [ ] Pre-commit hook to validate metric schema changes
-- [ ] Lightweight CI pipeline (lint + unit tests + sample benchmark smoke test)
+- [x] Lightweight CI pipeline (lint + unit tests + sample benchmark smoke test) (2025-09-09)
 - [ ] Zenodo deposition draft (metadata prepared)
 
 ## 9. Paper Writing Tasks
@@ -144,9 +144,9 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 Next picks (2025-09-08):
 - [x] Baseline normalization data: script to run `run_batch` over a baseline policy suite, compute per-metric med/p95, persist as JSON for SNQI (2025-09-08)
 - [x] Minimal CLI shim `robot_sf_bench run` that wraps `run_batch` (matrix path, out path, seeds, flags) (2025-09-08)
-- [ ] Scenario diversity summary script: quick histograms (min distances, avg speeds) as sanity check
-- [ ] Lightweight CI job: lint + unit tests + tiny batch run as smoke test
+- [x] Scenario diversity summary script: quick histograms (min distances, avg speeds) as sanity check (2025-09-09)
+- [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-08 (aggregation, baseline stats + CLI baseline + CLI run complete)
+Last updated: 2025-09-09 (added CLI summary + avg_speed metric; ENVIRONMENT.md; CI job)
 

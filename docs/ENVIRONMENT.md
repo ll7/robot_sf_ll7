@@ -50,13 +50,17 @@ cat > /tmp/matrix.yaml <<'YAML'
   repeats: 1
 YAML
 
-uv run python -m robot_sf.benchmark.cli run \
+robot_sf_bench run \
   --matrix /tmp/matrix.yaml \
   --out /tmp/episodes.jsonl \
   --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
   --horizon 3 --dt 0.1 --base-seed 0 --quiet
 
 echo "Wrote: /tmp/episodes.jsonl"
+
+# Optional: quick diversity summary plots
+robot_sf_bench summary --in /tmp/episodes.jsonl --out-dir /tmp/figs
+echo "Plots under /tmp/figs"
 ```
 
 ## Notes

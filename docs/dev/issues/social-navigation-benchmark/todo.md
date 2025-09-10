@@ -39,16 +39,16 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 
 ## 2. Metric Definition & Implementation
 - [ ] Finalize metric list & definitions (formal doc)
-	- [ ] Success rate
-	- [ ] Time-to-goal / normalized path efficiency
-	- [ ] Collision count / near-miss count (distance < threshold)
-	- [ ] Min / mean interpersonal distance distribution
-	- [ ] Force magnitude quantiles (per ped & aggregated)
-	- [ ] Force exceedance events (above comfort threshold)
-	- [ ] Comfort exposure time (% of steps above threshold)
-	- [ ] Path smoothness (jerk / curvature stats)
-	- [ ] Robot energy proxy (sum |accel|)
-	- [ ] (Optional) Divergence / gradient norm of force field along path
+	- [x] Success rate (2025-09-10)
+	- [x] Time-to-goal / normalized path efficiency (2025-09-10)
+	- [x] Collision count / near-miss count (distance < threshold) (2025-09-10)
+	- [ ] Min / mean interpersonal distance distribution (min implemented; mean pending)
+	- [ ] Force magnitude quantiles (per ped & aggregated) (aggregated implemented; per-ped pending)
+	- [x] Force exceedance events (above comfort threshold) (2025-09-10)
+	- [x] Comfort exposure time (% of steps above threshold) (2025-09-10)
+	- [ ] Path smoothness (jerk / curvature stats) (jerk implemented; curvature pending)
+	- [x] Robot energy proxy (sum |accel|) (2025-09-10)
+	- [x] (Optional) Divergence / gradient norm of force field along path (gradient norm implemented) (2025-09-10)
 - [x] Implement metric computation module (`metrics/`) (2025-09-08)
 - [x] Add unit tests for key metrics (edge cases; expand as needed) (2025-09-08)
 - [x] Define JSON schema for per-episode metric output (2025-09-02)

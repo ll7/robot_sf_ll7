@@ -11,6 +11,10 @@ Use Euclidean norm $\|\cdot\|$.
 5. $\text{min\_distance} = \min_t \min_k d(r_t, p_t^k)$.
 6. $\text{path\_efficiency} = \frac{L_{\text{shortest}}}{L_{\text{actual}}}$ (clipped $\le 1$).
 
+### Convenience / Diagnostics
+- $\text{avg\_speed} = \frac{1}{T} \sum_{t=0}^{T-1} \| v_t \|$ (average robot speed magnitude).
+	Useful for sanity checks and distribution plots; not part of SNQI.
+
 ## Force / Comfort Metrics
 7. $\text{force\_quantiles}(q50,q90,q95)$: quantiles of all pedestrian force magnitudes $\|F_t^k\|$.
 8. $\text{force\_exceed\_events} = \left| \{ (t,k): \|F_t^k\| > \tau_{\text{force}} \} \right|$.
@@ -39,6 +43,10 @@ Normalization: $\text{norm}_x = \frac{x - b_{\text{med}}}{b_{p95} - b_{\text{med
 ## Open Choices
 - Weight selection procedure (grid search maximizing rank stability across scenario subsets)
 - Whether to include path_efficiency directly or encode via time_to_goal_norm
+
+## Coverage Status (as of 2025-09-10)
+- Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, path_efficiency, force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
+- Documented but partially specified/optional: mean interpersonal distance (pending), curvature-based smoothness (pending), force field divergence (pending).
 
 ## Validation & Tests
 - Empty crowd: collisions=0, near_misses=0, comfort_exposure=0

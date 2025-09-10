@@ -76,7 +76,7 @@ def main():
         potential_files = [
             "examples/recordings/2024-12-06_15-39-44.pkl",
             "recordings/latest.pkl",
-            "test_pygame/recordings/demo.pkl"
+            "test_pygame/recordings/demo.pkl",
         ]
 
         recording_file = None

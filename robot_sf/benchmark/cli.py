@@ -36,6 +36,15 @@ def _add_baseline_subparser(
     p.add_argument("--horizon", type=int, default=50)
     p.add_argument("--dt", type=float, default=0.1)
     p.add_argument("--record-forces", action="store_true", default=False)
+    p.add_argument(
+        "--algo",
+        default="simple_policy",
+        help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)"
+    )
+    p.add_argument(
+        "--algo-config",
+        help="Path to algorithm configuration YAML file"
+    )
     p.set_defaults(cmd="baseline")
 
 
@@ -56,6 +65,15 @@ def _add_run_subparser(
     p.add_argument("--record-forces", action="store_true", default=False)
     p.add_argument("--append", action="store_true", default=False, help="Append to existing JSONL")
     p.add_argument(
+        "--algo",
+        default="simple_policy",
+        help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)"
+    )
+    p.add_argument(
+        "--algo-config",
+        help="Path to algorithm configuration YAML file"
+    )
+    p.add_argument(
         "--fail-fast",
         action="store_true",
         default=False,
@@ -68,6 +86,16 @@ def _add_run_subparser(
         help="Suppress per-episode progress output",
     )
     p.set_defaults(cmd="run")
+
+
+def _add_list_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "list-algorithms",
+        help="List available baseline algorithms",
+    )
+    p.set_defaults(cmd="list-algorithms")
 
 
 def _add_summary_subparser(
@@ -90,6 +118,7 @@ def cli_main(argv: List[str] | None = None) -> int:
     _add_baseline_subparser(subparsers)
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
+    _add_list_subparser(subparsers)
 
     args = parser.parse_args(argv)
     if args.cmd == "baseline":
@@ -104,9 +133,32 @@ def cli_main(argv: List[str] | None = None) -> int:
                 horizon=args.horizon,
                 dt=args.dt,
                 record_forces=args.record_forces,
+                algo=args.algo,
+                algo_config_path=args.algo_config,
             )
             # Print brief summary to stdout for convenience
             print(json.dumps({"out": args.out, "keys": sorted(stats.keys())}, indent=2))
+            return 0
+        except Exception as e:  # pragma: no cover - error path
+            print(f"Error: {e}", file=sys.stderr)
+            return 2
+    if args.cmd == "list-algorithms":
+        try:
+            # Show built-in simple policy
+            algorithms = ["simple_policy"]
+            
+            # Try to load baseline algorithms
+            try:
+                from robot_sf.baselines import list_baselines
+                baseline_algos = list_baselines()
+                algorithms.extend(baseline_algos)
+            except ImportError:
+                print("Warning: Could not load baseline algorithms", file=sys.stderr)
+            
+            print("Available algorithms:")
+            for algo in algorithms:
+                print(f"  - {algo}")
+            
             return 0
         except Exception as e:  # pragma: no cover - error path
             print(f"Error: {e}", file=sys.stderr)
@@ -136,6 +188,8 @@ def cli_main(argv: List[str] | None = None) -> int:
                 append=args.append,
                 fail_fast=args.fail_fast,
                 progress_cb=_progress,
+                algo=args.algo,
+                algo_config_path=args.algo_config,
             )
             print(json.dumps(summary, indent=2))
             return 0

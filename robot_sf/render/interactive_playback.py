@@ -6,8 +6,8 @@ recorded simulation states, allowing users to step forward/backward through fram
 and control playback speed. Includes trajectory visualization for entities.
 """
 
-from typing import List, Dict, Tuple, Deque
 from collections import deque
+from typing import Deque, Dict, List, Tuple
 
 import pygame
 from loguru import logger
@@ -82,7 +82,9 @@ class InteractivePlayback(SimulationView):
         self.max_trajectory_length = 100  # Default trail length
         self.robot_trajectory: Deque[Tuple[float, float]] = deque(maxlen=self.max_trajectory_length)
         self.ped_trajectories: Dict[int, Deque[Tuple[float, float]]] = {}
-        self.ego_ped_trajectory: Deque[Tuple[float, float]] = deque(maxlen=self.max_trajectory_length)
+        self.ego_ped_trajectory: Deque[Tuple[float, float]] = deque(
+            maxlen=self.max_trajectory_length
+        )
 
         # Add playback controls to the help text
         self._extend_help_text()
@@ -222,12 +224,14 @@ class InteractivePlayback(SimulationView):
         # Update robot trajectory
         new_robot_trajectory = deque(self.robot_trajectory, maxlen=self.max_trajectory_length)
         self.robot_trajectory = new_robot_trajectory
-        
+
         # Update pedestrian trajectories
         for ped_id in self.ped_trajectories:
-            new_ped_trajectory = deque(self.ped_trajectories[ped_id], maxlen=self.max_trajectory_length)
+            new_ped_trajectory = deque(
+                self.ped_trajectories[ped_id], maxlen=self.max_trajectory_length
+            )
             self.ped_trajectories[ped_id] = new_ped_trajectory
-        
+
         # Update ego pedestrian trajectory
         new_ego_trajectory = deque(self.ego_ped_trajectory, maxlen=self.max_trajectory_length)
         self.ego_ped_trajectory = new_ego_trajectory
@@ -244,23 +248,25 @@ class InteractivePlayback(SimulationView):
             return
 
         # Update robot trajectory
-        if hasattr(state, 'robot_pose') and state.robot_pose:
+        if hasattr(state, "robot_pose") and state.robot_pose:
             robot_pos = state.robot_pose[0]  # Get position from pose
             self.robot_trajectory.append((robot_pos[0], robot_pos[1]))
 
         # Update pedestrian trajectories
-        if hasattr(state, 'pedestrian_positions') and state.pedestrian_positions is not None:
+        if hasattr(state, "pedestrian_positions") and state.pedestrian_positions is not None:
             for ped_id, pos in enumerate(state.pedestrian_positions):
                 if ped_id not in self.ped_trajectories:
                     self.ped_trajectories[ped_id] = deque(maxlen=self.max_trajectory_length)
                 self.ped_trajectories[ped_id].append((pos[0], pos[1]))
 
         # Update ego pedestrian trajectory
-        if hasattr(state, 'ego_ped_pose') and state.ego_ped_pose:
+        if hasattr(state, "ego_ped_pose") and state.ego_ped_pose:
             ego_pos = state.ego_ped_pose[0]  # Get position from pose
             self.ego_ped_trajectory.append((ego_pos[0], ego_pos[1]))
 
-    def _draw_trajectory(self, trajectory: Deque[Tuple[float, float]], color: Tuple[int, int, int], width: int = 2):
+    def _draw_trajectory(
+        self, trajectory: Deque[Tuple[float, float]], color: Tuple[int, int, int], width: int = 2
+    ):
         """Draw a trajectory as connected lines."""
         if len(trajectory) < 2:
             return
@@ -296,44 +302,48 @@ class InteractivePlayback(SimulationView):
         """Rebuild trajectory histories up to the specified frame."""
         if not self.show_trajectories:
             return
-            
+
         # Clear existing trajectories
         self._clear_trajectories()
-        
+
         # Rebuild trajectories from frame 0 to target_frame
         for frame_idx in range(min(target_frame + 1, len(self.states))):
             state = self.states[frame_idx]
-            
+
             # Update robot trajectory
-            if hasattr(state, 'robot_pose') and state.robot_pose:
+            if hasattr(state, "robot_pose") and state.robot_pose:
                 robot_pos = state.robot_pose[0]
                 self.robot_trajectory.append((robot_pos[0], robot_pos[1]))
-            
+
             # Update pedestrian trajectories
-            if hasattr(state, 'pedestrian_positions') and state.pedestrian_positions is not None:
+            if hasattr(state, "pedestrian_positions") and state.pedestrian_positions is not None:
                 for ped_id, pos in enumerate(state.pedestrian_positions):
                     if ped_id not in self.ped_trajectories:
                         self.ped_trajectories[ped_id] = deque(maxlen=self.max_trajectory_length)
                     self.ped_trajectories[ped_id].append((pos[0], pos[1]))
-            
+
             # Update ego pedestrian trajectory
-            if hasattr(state, 'ego_ped_pose') and state.ego_ped_pose:
+            if hasattr(state, "ego_ped_pose") and state.ego_ped_pose:
                 ego_pos = state.ego_ped_pose[0]
                 self.ego_ped_trajectory.append((ego_pos[0], ego_pos[1]))
-        """Render the current frame."""
+
+    def render_current_frame(self):
+        """Render the current frame at a smooth UI framerate."""
         if 0 <= self.current_frame < len(self.states):
             current_state = self.states[self.current_frame]
-            
+
             # Update trajectories with current state
             self._update_trajectories(current_state)
-            
-            # Use the instance sleep_time variable
-            super().render(current_state, self.sleep_time)
-            
-            # Draw trajectories on top of everything else
+
+            # Prepare base frame (map, entities, UI)
+            self._prepare_frame(current_state)
+
+            # Draw trajectories on top of everything else before finalizing
             self._draw_all_trajectories()
-            
-            pygame.display.update()
+
+            # Finalize at UI FPS (avoid using sleep_time as FPS)
+            ui_fps = 60
+            self._finalize_frame(ui_fps)
         else:
             logger.error(f"Invalid frame index: {self.current_frame}")
 
@@ -384,9 +394,6 @@ class InteractivePlayback(SimulationView):
                 break
 
             self.update()  # No sleep_time parameter needed
-
-            # Limit the frame rate to avoid excessive CPU usage
-            self.clock.tick(60)
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
         """Override parent _add_text to include playback information"""

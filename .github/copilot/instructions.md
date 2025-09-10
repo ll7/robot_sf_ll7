@@ -2,6 +2,8 @@
 
 You are assisting in a development workflow that uses GitHub Issues and follows software engineering best practices.
 
+This project standardizes on uv for Python environment/dependency management and Ruff for linting/formatting. Use the provided VS Code tasks wherever possible.
+
 ## General Behavior
 
 ### Code Quality Standards
@@ -15,6 +17,14 @@ You are assisting in a development workflow that uses GitHub Issues and follows 
   - tests should be placed in the `tests/` directory or in the `test_pygame/` directory for tests that need a display output.
 - Perform code reviews and ensure changes meet quality standards
 - Use the linting task and the test task to ensure code quality before committing changes
+
+### Always Ask Clarifying Questions (with options)
+
+- Before implementing, ask targeted clarifying questions to confirm requirements
+  - Prefer multiple-choice options when possible to speed decisions
+  - Group questions by theme (scope, interfaces, data, UX, performance)
+  - If answers are unknown, propose sensible defaults and confirm
+- Keep questions concise and actionable; avoid blocking if not essential
 
 ### Version Control & Collaboration
 
@@ -32,6 +42,29 @@ You are assisting in a development workflow that uses GitHub Issues and follows 
 - Consider the impact of changes on the entire system, not just the immediate problem
 - Document architectural decisions and trade-offs made during implementation
 - Think about edge cases, error handling, and potential failure modes
+
+## Tooling and Tasks (uv, Ruff, pytest, VS Code tasks)
+
+Use these tools and pre-defined tasks consistently:
+
+- Environment & dependencies: uv
+  - Install/resolve: Run the VS Code task "Install Dependencies" (uv sync)
+  - Execute: Use `uv run <cmd>` for any Python-based commands (tests, linters)
+  - Adding deps: Prefer `uv add <package>` (or edit `pyproject.toml` and run sync)
+- Lint & format: Ruff
+  - Run the VS Code task "Ruff: Format and Fix" before commits and PRs
+  - Keep the codebase ruff-clean; fix or document rule exceptions with comments
+- Tests: pytest
+  - Run the VS Code task "Run Tests" for the default test suite
+  - Use "Run Tests (Show All Warnings)" when diagnosing issues
+  - Use "Run Tests (GUI)" for tests requiring a display (e.g., pygame)
+- Code quality checks
+  - Use the VS Code task "Check Code Quality" (ruff + pylint errors-only)
+- Documentation/diagrams
+  - Use the VS Code task "Generate UML" when updating class diagrams
+
+Quality gates to run locally before pushing:
+- Install Dependencies → Ruff: Format and Fix → Check Code Quality → Run Tests
 
 ## Documentation Standards
 
@@ -73,6 +106,22 @@ Documentation should include:
 - Consider the impact on research workflows and data analysis tools
 - Maintain compatibility with the fast-pysf reference implementation when applicable
 - Test changes thoroughly as they may affect both simulation behavior and research results
+
+## Design Doc First (required for non-trivial work)
+
+Before significant changes (new features, refactors, cross-cutting fixes), create a short design doc in `docs/dev/issues/<topic>/README.md` or under an issue-specific folder as per Documentation Standards.
+
+Recommended template:
+- Title and context (link issue/PR)
+- Problem statement and goals; explicit non-goals
+- Constraints/assumptions
+- Options considered (trade-offs, risks)
+- Chosen approach (diagram if helpful)
+- Data shapes/APIs/contracts (inputs/outputs, error modes)
+- Test plan (unit/integration, fixtures, GUI tests if needed)
+- Rollout plan and migration/back-compat notes
+- Metrics/observability (how we’ll measure success)
+- Open questions and follow-ups
 
 ## Examples
 
@@ -121,6 +170,26 @@ docs/42-fix-button-alignment/
 - Document architectural decisions and trade-offs made during implementation
 - Think about edge cases, error handling, and potential failure modes
 
+## Testing Policy
+
+- Always add tests when fixing bugs or adding features
+  - Unit tests belong in `tests/`; GUI-dependent tests in `test_pygame/`
+  - Add regression tests to prevent reintroducing fixed bugs
+- Ensure tests pass locally via VS Code tasks:
+  - Default: "Run Tests"
+  - With warnings and short tracebacks: "Run Tests (Show All Warnings)"
+  - GUI-specific: "Run Tests (GUI)"
+- For performance-sensitive code, add simple benchmarks or timing asserts where appropriate (and document variability)
+- Keep tests deterministic; seed RNGs; use fixtures; avoid network and time flakiness
+
+## Helpful Definitions
+
+- uv: Fast Python package/dependency manager and runner. We use `uv sync` for lockfile/env sync and `uv run` to execute tools.
+- Ruff: Python linter and formatter. Run via the "Ruff: Format and Fix" task.
+- pytest: Testing framework. Run via the "Run Tests" tasks.
+- VS Code tasks: Predefined commands in this repo to standardize workflows (install, lint, test, diagram).
+- Quality gates: The minimal sequence of checks to pass before pushing: install → lint/format → quality check → tests.
+
 ## Markdown Documentation
 
 - Use markdown files for documentation.
@@ -138,4 +207,16 @@ docs/42-fix-button-alignment/
 ## Example
 
 If we are working on issue #42 titled “Fix button alignment”, then save the file to:
+
+`docs/42-fix-button-alignment/README.md`
+
+## Workflow Checklist (TL;DR)
+
+1) Clarify requirements (ask concise, optioned questions)
+2) Draft design doc under `docs/` (link issue, add test plan)
+3) Implement with small, reviewed commits
+4) Add/extend tests in `tests/` or `test_pygame/`
+5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Run Tests
+6) Update docs and diagrams; run "Generate UML" if classes changed
+7) Open PR with summary, risks, and links to docs/tests
 

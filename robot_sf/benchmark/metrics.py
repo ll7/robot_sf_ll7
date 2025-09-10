@@ -183,14 +183,14 @@ def comfort_exposure(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOL
 def jerk_mean(data: EpisodeData) -> float:
     """
     Mean magnitude of jerk (time derivative of acceleration).
-    
+
     Computes jerk vectors as consecutive differences of acceleration: j_t = a_{t+1} - a_t.
     The function averages the norms of the first T-2 jerk vectors (i.e., uses diffs[:-1]) so the denominator is T-2.
     Returns 0.0 if there are fewer than three acceleration samples.
-    
+
     Parameters:
         data (EpisodeData): episode container; this function reads data.robot_acc.
-    
+
     Returns:
         float: mean jerk magnitude (0.0 when insufficient timesteps).
     """
@@ -360,11 +360,11 @@ def snqi(
 ) -> float:
     """
     Compute the Social Navigation Quality Index (SNQI) from raw metric values.
-    
+
     One-line summary:
         Aggregates multiple navigation metrics into a single scalar quality score using
         weighted positive and penalized components.
-    
+
     Detailed behavior:
         - Expects metric_values produced by compute_all_metrics; uses the following keys (with defaults):
           "success" (default 0.0), "time_to_goal_norm" (default 1.0), "collisions",
@@ -379,7 +379,7 @@ def snqi(
         - Each component is multiplied by its weight (weights dict). Missing weight entries default to 1.0.
         - The final SNQI is: w_success*success - w_time*time_norm - sum(weights * normalized_penalties)
           and is returned as a float.
-    
+
     Parameters:
         metric_values: dict
             Raw metric values from compute_all_metrics.
@@ -393,7 +393,7 @@ def snqi(
             normalized contribution is treated as 0.0.
         eps: float
             Small number to avoid division-by-zero when computing normalization denominators.
-    
+
     Returns:
         float
             The aggregated SNQI score (higher is better).
@@ -469,9 +469,9 @@ def compute_all_metrics(
 ) -> Dict[str, float]:
     """
     Compute all defined social-navigation metrics for an episode and return them as a mapping.
-    
+
     Calls each metric implementation on the provided EpisodeData and collects their scalar results into a dict keyed by metric name.
-    
+
     Parameters:
         data: EpisodeData
             Episode trajectory and auxiliary data used by the metrics.
@@ -480,7 +480,7 @@ def compute_all_metrics(
         shortest_path_len: float | None
             Precomputed shortest-path length from start to goal. If None, the Euclidean
             distance from the episode start to the goal is used as a fallback.
-    
+
     Returns:
         Dict[str, float]: A mapping from metric name to its computed scalar value. Keys include
         "success", "time_to_goal_norm", "collisions", "near_misses", "min_distance",

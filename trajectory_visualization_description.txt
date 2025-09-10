@@ -1,0 +1,105 @@
+Trajectory Visualization Feature - Visual Description
+=======================================================
+
+This document provides a text-based description of what the trajectory visualization 
+feature looks like in the pygame interactive playback window.
+
+Window Layout:
+┌─────────────────────────────────────────────────────────────────────────┐
+│                   RobotSF Interactive Playback                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│ ┌─────────────────┐                           ┌─────────────────────────┐ │
+│ │ Status Info:    │                           │ --- Playback Controls  │ │
+│ │ step: 142       │                           │ Space: Play/pause      │ │
+│ │ scaling: 15     │                           │ Period (.): Next frame │ │
+│ │ target fps: 58  │     ████                 │ Comma (,): Prev frame  │ │
+│ │ speedup: 5.8x   │     ████ (obstacle)      │ n: First frame         │ │
+│ │ x-offset: -2.34 │                           │ m: Last frame          │ │
+│ │ y-offset: -1.67 │   ●~~~~~●~~~~~●           │ --- Trajectory Ctrl    │ │
+│ │ (Press h help)  │   ^robot trajectory       │ v: Toggle trajectories │ │
+│ └─────────────────┘   (blue trail)           │ b: Increase length     │ │
+│                                               │ c: Decrease length     │ │
+│     ●~~~~~●~~~~~●                            │ x: Clear trajectories  │ │
+│     ^pedestrian trajectory                    └─────────────────────────┘ │
+│     (red trail)                                                         │
+│                                                                         │
+│            ████████                                                     │
+│            ████████ (obstacle)                                          │
+│                                                                         │
+│   ■~~~~~■~~~~~■                                                        │
+│   ^ego pedestrian trajectory                                            │
+│   (magenta trail)                                                       │
+│                                                                         │
+│                                ┌─────────────────────────────────────┐  │
+│                                │ Playback Status:                    │  │
+│                                │ Frame: 142/500                      │  │
+│                                │ Playing: Yes                        │  │
+│                                │ Speed: 2.0x                         │  │
+│                                │ Trajectories: ON                    │  │
+│                                │ Trail Length: 100                   │  │
+│                                └─────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Visual Elements:
+================
+
+Entities:
+---------
+● = Robot (blue circle)
+● = Pedestrians (red circles) 
+■ = Ego Pedestrian (magenta square)
+
+Trajectories:
+-------------
+~~~~ = Trail lines showing movement history
+- Robot trails: Blue color (#0064FF), 3px width
+- Pedestrian trails: Red color (#FF6464), 2px width  
+- Ego pedestrian trails: Magenta color (#C800C8), 3px width
+
+Environment:
+------------
+████ = Obstacles (dark green/gray rectangles)
+Grid lines in background for reference
+
+UI Overlays:
+============
+
+Top-Left Status Box (semi-transparent black background):
+- Current simulation step
+- View scaling and offset information
+- FPS and speedup information
+- Help reminder
+
+Top-Right Help Box (semi-transparent black background):
+- Playback controls (space, period, comma, n, m, k, j)
+- New trajectory controls (v, b, c, x)
+
+Bottom-Right Status Box (semi-transparent black background):
+- Current frame index and total frames
+- Playing/paused status
+- Playback speed multiplier
+- Trajectory display status (ON/OFF)
+- Current trail length setting
+
+Interaction Flow:
+=================
+
+1. Load recording file with simulation states
+2. Start interactive playback
+3. Press 'V' to enable trajectory visualization
+4. Use playback controls to navigate through frames
+5. Watch entity trails build up showing movement history
+6. Adjust trail length with 'B'/'C' keys
+7. Clear trails with 'X' key when needed
+
+Trail Behavior:
+===============
+
+- Trails build incrementally as frames advance
+- When jumping backwards, trails rebuild from start to current frame
+- Trail length is limited to prevent memory issues
+- Different colors help distinguish entity types
+- Trails overlay on top of all other visual elements
+
+This feature provides valuable insight into entity movement patterns
+and helps visualize the dynamics of the simulation over time.

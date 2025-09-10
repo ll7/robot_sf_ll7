@@ -141,83 +141,93 @@ class InteractivePlayback(SimulationView):
 
     def _handle_keydown(self, e):
         """Handle key presses for both simulation view and playback controls."""
-        # Check for playback control keys
+        # Quick toggle for play/pause
         if e.key == pygame.K_SPACE:
-            # Toggle play/pause
             self.is_playing = not self.is_playing
             return
 
-        elif e.key == pygame.K_PERIOD and not self.is_playing:
-            # Next frame (using period '.' instead of right arrow)
+        # Playback navigation and speed controls
+        if self._handle_playback_key(e):
+            return
+
+        # Trajectory controls
+        if self._handle_trajectory_key(e):
+            return
+
+        # If not a playback control key, let parent handle it
+        super()._handle_keydown(e)
+
+    def _handle_playback_key(self, e) -> bool:
+        """Handle playback navigation and speed keys; return True if handled."""
+        # Next frame (using period '.' instead of right arrow)
+        if e.key == pygame.K_PERIOD and not self.is_playing:
             old_frame = self.current_frame
             self.current_frame = min(self.current_frame + 1, len(self.states) - 1)
             if self.current_frame != old_frame:
                 self.redraw_needed = True
-            return
+            return True
 
-        elif e.key == pygame.K_COMMA and not self.is_playing:
-            # Previous frame (using comma ',' instead of left arrow)
+        # Previous frame (using comma ',' instead of left arrow)
+        if e.key == pygame.K_COMMA and not self.is_playing:
             old_frame = self.current_frame
             self.current_frame = max(self.current_frame - 1, 0)
             if self.current_frame != old_frame:
                 # When going backwards, rebuild trajectories
                 self._rebuild_trajectories_up_to_frame(self.current_frame)
                 self.redraw_needed = True
-            return
+            return True
 
-        elif e.key == pygame.K_n:
-            # First frame
+        # First frame
+        if e.key == pygame.K_n:
             self.current_frame = 0
             self._rebuild_trajectories_up_to_frame(self.current_frame)
             self.redraw_needed = True
-            return
+            return True
 
-        elif e.key == pygame.K_m:
-            # Last frame
+        # Last frame
+        if e.key == pygame.K_m:
             self.current_frame = len(self.states) - 1
             self._rebuild_trajectories_up_to_frame(self.current_frame)
             self.redraw_needed = True
-            return
+            return True
 
-        elif e.key == pygame.K_k:
-            # Speed up
+        # Speed up
+        if e.key == pygame.K_k:
             self.playback_speed = min(self.playback_speed * 1.5, 10.0)
-            return
+            return True
 
-        elif e.key == pygame.K_j:
-            # Slow down
+        # Slow down
+        if e.key == pygame.K_j:
             self.playback_speed = max(self.playback_speed / 1.5, 0.1)
-            return
+            return True
 
-        # Trajectory control keys
-        elif e.key == pygame.K_v:
-            # Toggle trajectory display
+        return False
+
+    def _handle_trajectory_key(self, e) -> bool:
+        """Handle trajectory-related keys; return True if handled."""
+        if e.key == pygame.K_v:
             self.show_trajectories = not self.show_trajectories
             logger.info(f"Trajectory display: {'ON' if self.show_trajectories else 'OFF'}")
-            return
+            return True
 
-        elif e.key == pygame.K_b:
-            # Increase trail length
+        if e.key == pygame.K_b:
             self.max_trajectory_length = min(self.max_trajectory_length + 20, 500)
             self._update_trajectory_maxlen()
             logger.info(f"Trail length increased to: {self.max_trajectory_length}")
-            return
+            return True
 
-        elif e.key == pygame.K_c:
-            # Decrease trail length
+        if e.key == pygame.K_c:
             self.max_trajectory_length = max(self.max_trajectory_length - 20, 10)
             self._update_trajectory_maxlen()
             logger.info(f"Trail length decreased to: {self.max_trajectory_length}")
-            return
+            return True
 
-        elif e.key == pygame.K_x:
-            # Clear trajectories
+        if e.key == pygame.K_x:
             self._clear_trajectories()
             logger.info("Trajectories cleared")
-            return
+            return True
 
-        # If not a playback control key, let parent handle it
-        super()._handle_keydown(e)
+        return False
 
     def _update_trajectory_maxlen(self):
         """Update the maximum length of trajectory deques."""

@@ -47,6 +47,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 	- [x] Force exceedance events (above comfort threshold) (2025-09-10)
 	- [x] Comfort exposure time (% of steps above threshold) (2025-09-10)
 	- [ ] Path smoothness (jerk / curvature stats) (jerk implemented; curvature pending)
+	- [x] Path smoothness (jerk + curvature stats) (2025-09-10)
 	- [x] Robot energy proxy (sum |accel|) (2025-09-10)
 	- [x] (Optional) Divergence / gradient norm of force field along path (gradient norm implemented) (2025-09-10)
 - [x] Implement metric computation module (`metrics/`) (2025-09-08)
@@ -148,5 +149,5 @@ Next picks (2025-09-08):
 - [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-09 (added CLI summary + avg_speed metric; ENVIRONMENT.md; CI job)
+Last updated: 2025-09-10 (completed curvature path metric)
 

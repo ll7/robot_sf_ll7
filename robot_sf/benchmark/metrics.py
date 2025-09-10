@@ -181,12 +181,18 @@ def comfort_exposure(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOL
 
 
 def jerk_mean(data: EpisodeData) -> float:
-    """Mean jerk magnitude.
-
-    Jerk is difference of consecutive acceleration vectors.
-    For T acceleration samples there are T-1 deltas; formula in spec uses (T-2) with a_t defined per step
-    difference. We interpret as average norm of first (T-1)-1 jerk vectors: (a_{t+1}-a_t) for t=0..T-2.
-    If fewer than 3 timesteps, returns 0.0.
+    """
+    Mean magnitude of jerk (time derivative of acceleration).
+    
+    Computes jerk vectors as consecutive differences of acceleration: j_t = a_{t+1} - a_t.
+    The function averages the norms of the first T-2 jerk vectors (i.e., uses diffs[:-1]) so the denominator is T-2.
+    Returns 0.0 if there are fewer than three acceleration samples.
+    
+    Parameters:
+        data (EpisodeData): episode container; this function reads data.robot_acc.
+    
+    Returns:
+        float: mean jerk magnitude (0.0 when insufficient timesteps).
     """
     acc = data.robot_acc
     T = acc.shape[0]
@@ -352,27 +358,45 @@ def snqi(
     baseline_stats: Dict[str, Dict[str, float]] | None = None,
     eps: float = 1e-6,
 ) -> float:
-    """Compute Social Navigation Quality Index (SNQI).
-
-    Parameters
-    ----------
-    metric_values : dict
-        Raw metrics as produced by `compute_all_metrics`.
-    weights : dict
-        Weights mapping ('w_success', 'w_time', 'w_collisions', 'w_near', 'w_comfort', 'w_force_exceed', 'w_jerk', 'w_curvature').
-        Missing weights default to 1.0 for positive contribution (success) and 1.0 for penalties.
-    baseline_stats : dict | None
-        For normalization of penalized metrics. Format:
-        {
-          'collisions': {'med': float, 'p95': float},
-          'near_misses': {'med': ..., 'p95': ...},
-          'force_exceed_events': {'med': ..., 'p95': ...},
-          'jerk_mean': {'med': ..., 'p95': ...},
-          'curvature_mean': {'med': ..., 'p95': ...},
-        }
-        If None, normalization terms treated as zero (optimistic default) to avoid exploding scores prematurely.
-    eps : float
-        Small value to avoid division by zero.
+    """
+    Compute the Social Navigation Quality Index (SNQI) from raw metric values.
+    
+    One-line summary:
+        Aggregates multiple navigation metrics into a single scalar quality score using
+        weighted positive and penalized components.
+    
+    Detailed behavior:
+        - Expects metric_values produced by compute_all_metrics; uses the following keys (with defaults):
+          "success" (default 0.0), "time_to_goal_norm" (default 1.0), "collisions",
+          "near_misses", "comfort_exposure" (default 0.0), "force_exceed_events",
+          "jerk_mean", "curvature_mean".
+        - Success contributes positively; time-to-goal and other listed metrics are treated as penalties.
+        - Penalized metrics (collisions, near_misses, force_exceed_events, jerk_mean, curvature_mean)
+          are optionally normalized to [0, 1] using baseline_stats. If baseline_stats is None or a
+          metric is missing from baseline_stats, its normalized value defaults to 0.0 (optimistic).
+          Normalization for a metric uses median ('med') and 95th percentile ('p95') from baseline_stats;
+          normalized = clamp((value - med) / max(p95 - med, eps), 0, 1).
+        - Each component is multiplied by its weight (weights dict). Missing weight entries default to 1.0.
+        - The final SNQI is: w_success*success - w_time*time_norm - sum(weights * normalized_penalties)
+          and is returned as a float.
+    
+    Parameters:
+        metric_values: dict
+            Raw metric values from compute_all_metrics.
+        weights: dict
+            Per-component weights. Expected keys include (but are not limited to):
+            "w_success", "w_time", "w_collisions", "w_near", "w_comfort",
+            "w_force_exceed", "w_jerk", "w_curvature". Missing weights default to 1.0.
+        baseline_stats: dict | None
+            Optional mapping from metric name to {'med': float, 'p95': float} used to normalize
+            penalized metrics into [0,1]. If None or a metric entry is missing, that metric's
+            normalized contribution is treated as 0.0.
+        eps: float
+            Small number to avoid division-by-zero when computing normalization denominators.
+    
+    Returns:
+        float
+            The aggregated SNQI score (higher is better).
     """
 
     def _norm(name: str, value: float) -> float:
@@ -443,17 +467,26 @@ METRIC_NAMES: List[str] = [
 def compute_all_metrics(
     data: EpisodeData, *, horizon: int, shortest_path_len: float | None = None
 ) -> Dict[str, float]:
-    """Call each metric stub and return a dict.
-
-    Parameters
-    ----------
-    data : EpisodeData
-        Episode container.
-    horizon : int
-        Episode horizon (H) used by time-normalized metrics.
-    shortest_path_len : float | None
-        Pre-computed straight-line / planner shortest path length; if None uses
-        Euclidean start->goal distance.
+    """
+    Compute all defined social-navigation metrics for an episode and return them as a mapping.
+    
+    Calls each metric implementation on the provided EpisodeData and collects their scalar results into a dict keyed by metric name.
+    
+    Parameters:
+        data: EpisodeData
+            Episode trajectory and auxiliary data used by the metrics.
+        horizon: int
+            Episode horizon (number of timesteps) used by time-normalized metrics.
+        shortest_path_len: float | None
+            Precomputed shortest-path length from start to goal. If None, the Euclidean
+            distance from the episode start to the goal is used as a fallback.
+    
+    Returns:
+        Dict[str, float]: A mapping from metric name to its computed scalar value. Keys include
+        "success", "time_to_goal_norm", "collisions", "near_misses", "min_distance",
+        "path_efficiency", force quantile keys (e.g. "force_q50"), "force_exceed_events",
+        "comfort_exposure", "jerk_mean", "curvature_mean", "energy", "avg_speed",
+        and "force_gradient_norm_mean".
     """
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback

@@ -242,6 +242,27 @@ def test_curvature_mean_insufficient_points():
     )
 
 
+def test_curvature_mean_invalid_dt_zero():
+    # dt == 0 should safely return 0.0
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    ep.dt = 0.0
+    # simple motion
+    ep.robot_pos[:, 0] = np.linspace(0, 1.0, T)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["curvature_mean"] == 0.0
+
+
+def test_curvature_mean_invalid_dt_nan():
+    # dt NaN should safely return 0.0
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    ep.dt = float("nan")
+    ep.robot_pos[:, 0] = np.linspace(0, 1.0, T)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["curvature_mean"] == 0.0
+
+
 def test_force_gradient_norm_mean():
     # Create a simple linear force field Fx = x, Fy = y so |F| = sqrt(x^2+y^2).
     # Gradient norm of |F| is 1 everywhere except at origin where it's undefined (we exclude by path).

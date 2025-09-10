@@ -202,6 +202,57 @@ def jerk_mean(data: EpisodeData) -> float:
     return float(norms.sum() / denom)
 
 
+def curvature_mean(data: EpisodeData) -> float:
+    """Mean path curvature.
+
+    Curvature is computed using the cross product formula: κ = |v × a| / |v|³
+    where v is velocity and a is acceleration, both computed from position differences.
+    For T position samples there are T-1 velocity samples and T-2 acceleration samples.
+    If fewer than 4 timesteps, returns 0.0.
+    """
+    pos = data.robot_pos
+    T = pos.shape[0]
+    if T < 4:
+        return 0.0
+    
+    # Compute velocity using finite differences: v_t = (pos_{t+1} - pos_t) / dt
+    vel_diffs = pos[1:] - pos[:-1]  # length T-1
+    dt = data.dt
+    velocities = vel_diffs / dt
+    
+    # Compute acceleration using finite differences: a_t = (v_{t+1} - v_t) / dt  
+    acc_diffs = velocities[1:] - velocities[:-1]  # length T-2
+    accelerations = acc_diffs / dt
+    
+    # For curvature calculation, we need velocity and acceleration at the same time points
+    # Use velocities[1:] (length T-2) to match accelerations (length T-2)
+    vel_aligned = velocities[1:]  # Skip first velocity to align with acceleration indices
+    
+    curvatures = []
+    for i in range(len(vel_aligned)):
+        v = vel_aligned[i]
+        a = accelerations[i]
+        
+        # Compute |v|
+        v_mag = np.linalg.norm(v)
+        
+        # Skip points with near-zero velocity to avoid division by zero
+        if v_mag < 1e-9:
+            continue
+            
+        # Compute cross product |v × a| for 2D vectors: |v_x * a_y - v_y * a_x|
+        cross_product = abs(v[0] * a[1] - v[1] * a[0])
+        
+        # Curvature formula: κ = |v × a| / |v|³
+        curvature = cross_product / (v_mag ** 3)
+        curvatures.append(curvature)
+    
+    if not curvatures:
+        return 0.0
+    
+    return float(sum(curvatures) / len(curvatures))
+
+
 def energy(data: EpisodeData) -> float:
     """Sum of acceleration magnitudes over time.
 
@@ -308,7 +359,7 @@ def snqi(
     metric_values : dict
         Raw metrics as produced by `compute_all_metrics`.
     weights : dict
-        Weights mapping ('w_success', 'w_time', 'w_collisions', 'w_near', 'w_comfort', 'w_force_exceed', 'w_jerk').
+        Weights mapping ('w_success', 'w_time', 'w_collisions', 'w_near', 'w_comfort', 'w_force_exceed', 'w_jerk', 'w_curvature').
         Missing weights default to 1.0 for positive contribution (success) and 1.0 for penalties.
     baseline_stats : dict | None
         For normalization of penalized metrics. Format:
@@ -317,6 +368,7 @@ def snqi(
           'near_misses': {'med': ..., 'p95': ...},
           'force_exceed_events': {'med': ..., 'p95': ...},
           'jerk_mean': {'med': ..., 'p95': ...},
+          'curvature_mean': {'med': ..., 'p95': ...},
         }
         If None, normalization terms treated as zero (optimistic default) to avoid exploding scores prematurely.
     eps : float
@@ -343,6 +395,7 @@ def snqi(
     comfort = metric_values.get("comfort_exposure", 0.0)
     force_ex = _norm("force_exceed_events", metric_values.get("force_exceed_events", 0.0))
     jerk_n = _norm("jerk_mean", metric_values.get("jerk_mean", 0.0))
+    curvature_n = _norm("curvature_mean", metric_values.get("curvature_mean", 0.0))
 
     w_success = weights.get("w_success", 1.0)
     w_time = weights.get("w_time", 1.0)
@@ -351,6 +404,7 @@ def snqi(
     w_comfort = weights.get("w_comfort", 1.0)
     w_force_ex = weights.get("w_force_exceed", 1.0)
     w_jerk = weights.get("w_jerk", 1.0)
+    w_curvature = weights.get("w_curvature", 1.0)
 
     score = (
         w_success * succ
@@ -360,6 +414,7 @@ def snqi(
         - w_comfort * comfort
         - w_force_ex * force_ex
         - w_jerk * jerk_n
+        - w_curvature * curvature_n
     )
     return float(score)
 
@@ -379,6 +434,7 @@ METRIC_NAMES: List[str] = [
     "force_exceed_events",
     "comfort_exposure",
     "jerk_mean",
+    "curvature_mean",
     "energy",
     "force_gradient_norm_mean",
 ]
@@ -413,6 +469,7 @@ def compute_all_metrics(
     values["force_exceed_events"] = force_exceed_events(data)
     values["comfort_exposure"] = comfort_exposure(data)
     values["jerk_mean"] = jerk_mean(data)
+    values["curvature_mean"] = curvature_mean(data)
     values["energy"] = energy(data)
     values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
@@ -434,6 +491,7 @@ __all__ = [
     "force_exceed_events",
     "comfort_exposure",
     "jerk_mean",
+    "curvature_mean",
     "energy",
     "force_gradient_norm_mean",
     "avg_speed",

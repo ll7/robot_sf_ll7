@@ -25,6 +25,7 @@ DEFAULT_METRICS: List[str] = [
     "force_exceed_events",
     "comfort_exposure",
     "jerk_mean",
+    "curvature_mean",
     "energy",
 ]
 

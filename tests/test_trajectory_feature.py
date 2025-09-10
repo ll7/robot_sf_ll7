@@ -26,6 +26,7 @@ class MockPose:
         else:
             raise IndexError("Pose index out of range")
 
+
 @dataclass
 class MockVisualizableSimState:
     timestep: int
@@ -33,9 +34,11 @@ class MockVisualizableSimState:
     pedestrian_positions: List[List[float]]
     ego_ped_pose: MockPose = None
 
+
 @dataclass
 class MockMapDefinition:
     name: str = "test_map"
+
 
 class TrajectoryVisualizationTest:
     """Test class for trajectory visualization functionality."""
@@ -53,19 +56,19 @@ class TrajectoryVisualizationTest:
             return
 
         # Update robot trajectory
-        if hasattr(state, 'robot_pose') and state.robot_pose:
+        if hasattr(state, "robot_pose") and state.robot_pose:
             robot_pos = state.robot_pose[0]
             self.robot_trajectory.append((robot_pos[0], robot_pos[1]))
 
         # Update pedestrian trajectories
-        if hasattr(state, 'pedestrian_positions') and state.pedestrian_positions is not None:
+        if hasattr(state, "pedestrian_positions") and state.pedestrian_positions is not None:
             for ped_id, pos in enumerate(state.pedestrian_positions):
                 if ped_id not in self.ped_trajectories:
                     self.ped_trajectories[ped_id] = deque(maxlen=self.max_trajectory_length)
                 self.ped_trajectories[ped_id].append((pos[0], pos[1]))
 
         # Update ego pedestrian trajectory
-        if hasattr(state, 'ego_ped_pose') and state.ego_ped_pose:
+        if hasattr(state, "ego_ped_pose") and state.ego_ped_pose:
             ego_pos = state.ego_ped_pose[0]
             self.ego_ped_trajectory.append((ego_pos[0], ego_pos[1]))
 
@@ -90,7 +93,7 @@ class TrajectoryVisualizationTest:
                 timestep=i,
                 robot_pose=robot_pose,
                 pedestrian_positions=ped_positions,
-                ego_ped_pose=ego_pose
+                ego_ped_pose=ego_pose,
             )
             states.append(state)
 
@@ -109,9 +112,15 @@ class TrajectoryVisualizationTest:
         print(f"Ego pedestrian trajectory: {list(self.ego_ped_trajectory)}")
 
         # Verify expected results
-        assert len(self.robot_trajectory) == 5, f"Expected 5 robot positions, got {len(self.robot_trajectory)}"
-        assert len(self.ped_trajectories) == 2, f"Expected 2 pedestrians, got {len(self.ped_trajectories)}"
-        assert len(self.ego_ped_trajectory) == 5, f"Expected 5 ego positions, got {len(self.ego_ped_trajectory)}"
+        assert len(self.robot_trajectory) == 5, (
+            f"Expected 5 robot positions, got {len(self.robot_trajectory)}"
+        )
+        assert len(self.ped_trajectories) == 2, (
+            f"Expected 2 pedestrians, got {len(self.ped_trajectories)}"
+        )
+        assert len(self.ego_ped_trajectory) == 5, (
+            f"Expected 5 ego positions, got {len(self.ego_ped_trajectory)}"
+        )
 
         print("✓ Trajectory update test passed!")
 
@@ -127,16 +136,18 @@ class TrajectoryVisualizationTest:
         for i in range(5):
             robot_pose = MockPose((i * 1.0, i * 0.5), 0.0)
             state = MockVisualizableSimState(
-                timestep=i,
-                robot_pose=robot_pose,
-                pedestrian_positions=[]
+                timestep=i, robot_pose=robot_pose, pedestrian_positions=[]
             )
             self._update_trajectories(state)
 
         # Check that only the last 3 positions are kept
-        assert len(self.robot_trajectory) == 3, f"Expected 3 positions, got {len(self.robot_trajectory)}"
+        assert len(self.robot_trajectory) == 3, (
+            f"Expected 3 positions, got {len(self.robot_trajectory)}"
+        )
         expected_positions = [(2.0, 1.0), (3.0, 1.5), (4.0, 2.0)]
-        assert list(self.robot_trajectory) == expected_positions, f"Expected {expected_positions}, got {list(self.robot_trajectory)}"
+        assert list(self.robot_trajectory) == expected_positions, (
+            f"Expected {expected_positions}, got {list(self.robot_trajectory)}"
+        )
 
         print("✓ Trajectory length limit test passed!")
 
@@ -147,9 +158,7 @@ class TrajectoryVisualizationTest:
         # Add some data
         robot_pose = MockPose((1.0, 1.0), 0.0)
         state = MockVisualizableSimState(
-            timestep=0,
-            robot_pose=robot_pose,
-            pedestrian_positions=[[1.0, 1.0]]
+            timestep=0, robot_pose=robot_pose, pedestrian_positions=[[1.0, 1.0]]
         )
         self._update_trajectories(state)
 
@@ -176,9 +185,7 @@ class TrajectoryVisualizationTest:
 
         robot_pose = MockPose((1.0, 1.0), 0.0)
         state = MockVisualizableSimState(
-            timestep=0,
-            robot_pose=robot_pose,
-            pedestrian_positions=[[1.0, 1.0]]
+            timestep=0, robot_pose=robot_pose, pedestrian_positions=[[1.0, 1.0]]
         )
 
         # Try to update - should be ignored
@@ -198,6 +205,7 @@ class TrajectoryVisualizationTest:
 
         print("✓ Trajectory toggle test passed!")
 
+
 def main():
     """Run all tests."""
     print("Running trajectory visualization tests...\n")
@@ -210,12 +218,15 @@ def main():
         test.test_trajectory_clear()
         test.test_trajectory_toggle()
 
-        print("\n🎉 All tests passed! Trajectory visualization implementation is working correctly.")
+        print(
+            "\n🎉 All tests passed! Trajectory visualization implementation is working correctly."
+        )
         return 0
 
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

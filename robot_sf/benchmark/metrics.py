@@ -214,42 +214,42 @@ def curvature_mean(data: EpisodeData) -> float:
     T = pos.shape[0]
     if T < 4:
         return 0.0
-    
+
     # Compute velocity using finite differences: v_t = (pos_{t+1} - pos_t) / dt
     vel_diffs = pos[1:] - pos[:-1]  # length T-1
     dt = data.dt
     velocities = vel_diffs / dt
-    
-    # Compute acceleration using finite differences: a_t = (v_{t+1} - v_t) / dt  
+
+    # Compute acceleration using finite differences: a_t = (v_{t+1} - v_t) / dt
     acc_diffs = velocities[1:] - velocities[:-1]  # length T-2
     accelerations = acc_diffs / dt
-    
+
     # For curvature calculation, we need velocity and acceleration at the same time points
     # Use velocities[1:] (length T-2) to match accelerations (length T-2)
     vel_aligned = velocities[1:]  # Skip first velocity to align with acceleration indices
-    
+
     curvatures = []
     for i in range(len(vel_aligned)):
         v = vel_aligned[i]
         a = accelerations[i]
-        
+
         # Compute |v|
         v_mag = np.linalg.norm(v)
-        
+
         # Skip points with near-zero velocity to avoid division by zero
         if v_mag < 1e-9:
             continue
-            
+
         # Compute cross product |v × a| for 2D vectors: |v_x * a_y - v_y * a_x|
         cross_product = abs(v[0] * a[1] - v[1] * a[0])
-        
+
         # Curvature formula: κ = |v × a| / |v|³
-        curvature = cross_product / (v_mag ** 3)
+        curvature = cross_product / (v_mag**3)
         curvatures.append(curvature)
-    
+
     if not curvatures:
         return 0.0
-    
+
     return float(sum(curvatures) / len(curvatures))
 
 

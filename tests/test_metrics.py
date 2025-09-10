@@ -190,51 +190,56 @@ def test_energy_and_jerk_mean():
 def test_curvature_mean():
     T = 6
     ep = _make_episode(T=T, K=0)
-    
+
     # Create a simple circular arc path for known curvature
     # For a circle of radius R, curvature κ = 1/R
     R = 2.0  # radius
-    dt = ep.dt
-    
+
     # Generate positions for a quarter circle
-    angles = np.linspace(0, np.pi/2, T)
+    angles = np.linspace(0, np.pi / 2, T)
     for t in range(T):
         ep.robot_pos[t, 0] = R * np.cos(angles[t])
         ep.robot_pos[t, 1] = R * np.sin(angles[t])
-    
+
     vals = compute_all_metrics(ep, horizon=10)
-    
+
     # For a circle of radius 2, expected curvature should be 1/2 = 0.5
     # Due to discrete approximation, we allow some tolerance
     expected_curvature = 1.0 / R
     assert vals["curvature_mean"] > 0.0, "Curvature should be positive for curved path"
-    assert abs(vals["curvature_mean"] - expected_curvature) < 0.5, f"Expected curvature ~{expected_curvature}, got {vals['curvature_mean']}"
+    assert abs(vals["curvature_mean"] - expected_curvature) < 0.5, (
+        f"Expected curvature ~{expected_curvature}, got {vals['curvature_mean']}"
+    )
 
 
 def test_curvature_mean_straight_line():
     T = 6
     ep = _make_episode(T=T, K=0)
-    
+
     # Create a straight line path (zero curvature)
     for t in range(T):
         ep.robot_pos[t, 0] = t * 1.0  # moving in x direction
-        ep.robot_pos[t, 1] = 0.0      # constant y
-    
+        ep.robot_pos[t, 1] = 0.0  # constant y
+
     vals = compute_all_metrics(ep, horizon=10)
-    
+
     # Straight line should have zero curvature
-    assert np.isclose(vals["curvature_mean"], 0.0, atol=1e-6), f"Expected zero curvature for straight line, got {vals['curvature_mean']}"
+    assert np.isclose(vals["curvature_mean"], 0.0, atol=1e-6), (
+        f"Expected zero curvature for straight line, got {vals['curvature_mean']}"
+    )
 
 
 def test_curvature_mean_insufficient_points():
     # Test with fewer than 4 points (should return 0.0)
     T = 3
     ep = _make_episode(T=T, K=0)
-    
+
     vals = compute_all_metrics(ep, horizon=10)
-    
+
     # Should return 0.0 for insufficient points
-    assert vals["curvature_mean"] == 0.0, f"Expected 0.0 for insufficient points, got {vals['curvature_mean']}"
+    assert vals["curvature_mean"] == 0.0, (
+        f"Expected 0.0 for insufficient points, got {vals['curvature_mean']}"
+    )
 
 
 def test_force_gradient_norm_mean():

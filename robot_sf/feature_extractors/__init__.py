@@ -8,12 +8,12 @@ with StableBaselines3 and the sensor fusion system.
 All extractors implement the same interface and work with the same observation spaces.
 """
 
-from .mlp_extractor import MLPFeatureExtractor
 from .attention_extractor import AttentionFeatureExtractor
 from .lightweight_cnn_extractor import LightweightCNNExtractor
+from .mlp_extractor import MLPFeatureExtractor
 
 __all__ = [
     "MLPFeatureExtractor",
-    "AttentionFeatureExtractor", 
+    "AttentionFeatureExtractor",
     "LightweightCNNExtractor",
 ]

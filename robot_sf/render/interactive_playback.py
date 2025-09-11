@@ -22,8 +22,8 @@ import pygame
 from loguru import logger
 
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.render.jsonl_playback import BatchPlayback, JSONLPlaybackLoader, PlaybackEpisode
 from robot_sf.render.playback_recording import load_states
-from robot_sf.render.jsonl_playback import JSONLPlaybackLoader, BatchPlayback, PlaybackEpisode
 from robot_sf.render.sim_view import (
     TEXT_BACKGROUND,
     TEXT_COLOR,
@@ -63,7 +63,7 @@ class InteractivePlayback(SimulationView):
         robot_trajectory (Deque[Tuple[float, float]]): Robot position history
         ped_trajectories (Dict[int, Deque[Tuple[float, float]]]): Pedestrian position histories
         ego_ped_trajectory (Deque[Tuple[float, float]]): Ego pedestrian position history
-        
+
         # Episode-aware attributes
         episodes (Optional[List[PlaybackEpisode]]): List of episodes for batch playback
         current_episode_idx (int): Index of current episode in batch playback
@@ -118,7 +118,7 @@ class InteractivePlayback(SimulationView):
         self.current_episode_idx = 0
         self.episode_boundaries = []
         self.reset_points = []
-        
+
         # Initialize episode boundaries and reset points
         self._initialize_episode_data()
 
@@ -132,12 +132,12 @@ class InteractivePlayback(SimulationView):
             frame_offset = 0
             for episode in self.episodes:
                 self.episode_boundaries.append(frame_offset)
-                
+
                 # Add reset points relative to global frame indices
                 if episode.reset_points:
                     for reset_point in episode.reset_points:
                         self.reset_points.append(frame_offset + reset_point)
-                
+
                 frame_offset += len(episode.states)
         else:
             # Single episode - no boundaries, but might have reset points from legacy detection
@@ -360,8 +360,7 @@ class InteractivePlayback(SimulationView):
     def _should_clear_trajectories(self) -> bool:
         """Check if trajectories should be cleared at current frame."""
         return (
-            self.current_frame in self.episode_boundaries or 
-            self.current_frame in self.reset_points
+            self.current_frame in self.episode_boundaries or self.current_frame in self.reset_points
         )
 
     def _draw_trajectory(
@@ -554,47 +553,51 @@ def load_and_play_interactively(filename: str):
 def load_and_play_jsonl_interactively(source: Union[str, Path]):
     """
     Load JSONL recorded states and play them back interactively.
-    
+
     Args:
         source: Path to JSONL file, directory with episodes, or manifest file
     """
     loader = JSONLPlaybackLoader()
-    
+
     source_path = Path(source)
-    
-    if source_path.is_file() and source_path.suffix == '.jsonl':
+
+    if source_path.is_file() and source_path.suffix == ".jsonl":
         # Single episode file
         episode, map_def = loader.load_single_episode(source)
         states = episode.states
         episodes = [episode]
-        
+
         logger.info(f"Starting interactive playback with {len(states)} states from single episode")
         player = InteractivePlayback(states, map_def, episodes=episodes)
         player.run()
-        
-    elif source_path.is_file() and source_path.suffix == '.pkl':
+
+    elif source_path.is_file() and source_path.suffix == ".pkl":
         # Legacy pickle file
         episode, map_def = loader.load_single_episode(source)
         states = episode.states
         episodes = [episode]
-        
-        logger.info(f"Starting interactive playback with {len(states)} states from legacy pickle file")
+
+        logger.info(
+            f"Starting interactive playback with {len(states)} states from legacy pickle file"
+        )
         player = InteractivePlayback(states, map_def, episodes=episodes)
         player.run()
-        
-    elif source_path.is_dir() or (source_path.is_file() and source_path.suffix == '.json'):
+
+    elif source_path.is_dir() or (source_path.is_file() and source_path.suffix == ".json"):
         # Directory or manifest - batch playback
         batch = loader.load_batch(source)
-        
+
         # Concatenate all episode states
         states = []
         for episode in batch.episodes:
             states.extend(episode.states)
-        
-        logger.info(f"Starting batch interactive playback with {len(states)} total states from {batch.total_episodes} episodes")
+
+        logger.info(
+            f"Starting batch interactive playback with {len(states)} total states from {batch.total_episodes} episodes"
+        )
         player = InteractivePlayback(states, batch.map_def, episodes=batch.episodes)
         player.run()
-        
+
     else:
         raise ValueError(f"Unsupported source: {source}")
 
@@ -602,10 +605,10 @@ def load_and_play_jsonl_interactively(source: Union[str, Path]):
 def create_interactive_playback_from_batch(batch: BatchPlayback) -> InteractivePlayback:
     """
     Create an InteractivePlayback viewer from a BatchPlayback object.
-    
+
     Args:
         batch: BatchPlayback object containing episodes and map definition
-        
+
     Returns:
         Configured InteractivePlayback instance
     """
@@ -613,7 +616,7 @@ def create_interactive_playback_from_batch(batch: BatchPlayback) -> InteractiveP
     states = []
     for episode in batch.episodes:
         states.extend(episode.states)
-    
+
     return InteractivePlayback(states, batch.map_def, episodes=batch.episodes)
 
 

@@ -12,8 +12,8 @@ from gymnasium import Env
 from loguru import logger
 
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 from robot_sf.render.jsonl_recording import JSONLRecorder
+from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 from robot_sf.sim.simulator import init_simulators
 
 
@@ -59,17 +59,17 @@ class BaseEnv(Env):
         # New JSONL recording system
         self.use_jsonl_recording = use_jsonl_recording
         self.jsonl_recorder: Optional[JSONLRecorder] = None
-        
+
         if use_jsonl_recording and recording_enabled:
             # Use provided seed or generate from environment config
-            seed = recording_seed if recording_seed is not None else getattr(env_config, 'seed', 0)
-            
+            seed = recording_seed if recording_seed is not None else getattr(env_config, "seed", 0)
+
             self.jsonl_recorder = JSONLRecorder(
                 output_dir=recording_dir,
                 suite=suite_name,
                 scenario=scenario_name,
                 algorithm=algorithm_name,
-                seed=seed
+                seed=seed,
             )
 
         # Initialize simulator with a random start position
@@ -149,7 +149,7 @@ class BaseEnv(Env):
         # Legacy pickle recording
         if self.recording_enabled and not self.use_jsonl_recording:
             self.recorded_states.append(state)
-        
+
         # New JSONL recording
         if self.jsonl_recorder is not None:
             self.jsonl_recorder.record_step(state)

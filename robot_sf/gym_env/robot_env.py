@@ -197,7 +197,7 @@ class RobotEnv(BaseEnv):
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
-        
+
         # Handle recording for both systems
         if self.recording_enabled:
             if self.use_jsonl_recording:
@@ -271,7 +271,7 @@ class RobotEnv(BaseEnv):
         Records the current state as visualizable state and stores it in the list.
         """
         state = self._prepare_visualizable_state()
-        
+
         # Use the new unified recording method
         self.record_simulation_step(state)
 

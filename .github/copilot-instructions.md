@@ -22,6 +22,11 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - Common issues and solutions
 - Migration notes
 - Helpful definitions and repository structure
+- Definition of Done (DoD)
+- PR template (snippet)
+- Design doc template (snippet)
+- Security & network policy
+- Large files & artifacts policy
 - Quick reference and TL;DR checklist
 
 ---
@@ -38,6 +43,13 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
 - If answers are unknown, propose sensible defaults and proceed (don’t block on non‑essentials).
+
+Examples (copy‑ready):
+- Scope: Is the metric per episode or a per‑timestep aggregate?
+- Interfaces: Return shape `dict[str, float]` or a dataclass?
+- Data: How to handle NaN/missing — drop, impute, or error?
+- UX: Any hotkey conflicts with existing controls; prefer `,` and `.`?
+- Performance: Target budget for feature X (ms/frame)?
 
 ### Problem‑solving approach
 - Break problems into smaller tasks; research prior art and patterns.
@@ -65,8 +77,15 @@ Quality gates to run locally before pushing:
 
 Shortcuts (optional shell):
 ```bash
+# Lint+format
 uv run ruff check . && uv run ruff format .
+# Tests
 uv run pytest tests
+```
+
+One‑liner quality gates (CLI):
+```bash
+uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uv run pytest tests
 ```
 
 ---
@@ -96,10 +115,10 @@ uv run pytest tests
 
 ### Running tests
 ```bash
-# Main suite (2–3 min)
+# Main suite (2–3 min) — do not cancel
 uv run pytest tests
 
-# GUI tests (1–2 min; headless)
+# GUI tests (1–2 min; headless) — do not cancel
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
 
 # fast-pysf submodule tests (2 tests may fail due to missing map files)
@@ -123,6 +142,43 @@ Create under `docs/dev/issues/<topic>/README.md` (or issue‑specific folder). I
 - Test plan (unit/integration, GUI if needed)
 - Rollout/back‑compat notes; metrics/observability
 - Open questions and follow‑ups
+
+Minimal template (copy‑paste):
+```markdown
+# <Title>
+
+## Context
+- Issue/PR: <link>
+
+## Goals / Non‑goals
+- Goals: …
+- Non‑goals: …
+
+## Constraints & assumptions
+- …
+
+## Options & trade‑offs
+- Option A …
+- Option B …
+
+## Chosen approach
+- … (diagram if helpful)
+
+## Contracts (APIs/data)
+- Inputs/outputs, types, error modes
+
+## Test plan
+- Unit, integration, GUI (if needed)
+
+## Rollout & back‑compat
+- Migration notes, toggles, fallback
+
+## Metrics/observability
+- …
+
+## Open questions / follow‑ups
+- …
+```
 
 ---
 
@@ -179,6 +235,13 @@ env = make_robot_env(config=config)
 - Lint: `uv run ruff check .` and `uv run ruff format --check .`
 - The pipeline mirrors the local quality gates. Ensure green locally first.
 
+CI mapping to local tasks and CLI:
+- Lint job → Task “Ruff: Format and Fix” → `uv run ruff check . && uv run ruff format --check .`
+- Code quality job → Task “Check Code Quality” → `uv run ruff check . && uv run pylint robot_sf --errors-only`
+- Test job → Task “Run Tests” → `uv run pytest tests`
+
+Workflow location: `.github/workflows/ci.yml`.
+
 ---
 
 ## Validation scenarios and performance
@@ -188,6 +251,10 @@ env = make_robot_env(config=config)
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
 ```
+Success criteria:
+- Basic environment: exits 0; no exceptions.
+- Model prediction: exits 0; logs model load and inference without errors.
+- Complete simulation: exits 0; simulation runs to completion without errors.
 
 ### Performance benchmarking (optional)
 ```bash
@@ -267,6 +334,74 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 
 ---
 
+## Definition of Done (DoD)
+- Requirements clarified (with options/assumptions recorded).
+- Design doc added/updated and linked (if non‑trivial).
+- Code implemented with tests (unit/integration; GUI when needed).
+- Ruff clean and “Check Code Quality” clean locally.
+- Docs updated (README in feature folder, diagrams if changed).
+- Validation scripts run and pass; optional benchmark if perf‑sensitive.
+- CI green (lint + tests) and PR opened with appropriate links.
+
+---
+
+## PR template (snippet)
+```markdown
+## Summary
+Brief description of the change.
+
+## Linked issues
+- #<id>
+
+## Changes
+- …
+
+## Tests
+- Unit/integration/GUI; results; timings
+
+## Risks / rollout
+- Migration/back‑compat notes; toggles; fallback
+
+## Docs
+- Links to updated docs/diagrams
+
+## Validation
+- Output of validation scripts; benchmarks (if any)
+```
+
+---
+
+## Design doc template (snippet)
+```markdown
+# <Title>
+(See “Documentation standards and design docs” for full guidance)
+
+## Context, Goals, Non‑goals
+## Constraints & assumptions
+## Options & trade‑offs
+## Chosen approach (diagram optional)
+## Contracts (APIs/data, error modes)
+## Test plan
+## Rollout & back‑compat
+## Metrics/observability
+## Open questions / follow‑ups
+```
+
+---
+
+## Security & network policy
+- No secrets in code, configs, or commit messages.
+- Avoid network access in tests; prefer local fixtures. If unavoidable, document and gate behind flags.
+- Don’t exfiltrate data; handle PII safely (none expected in this repo).
+
+---
+
+## Large files & artifacts policy
+- Don’t commit large binaries to the repo; prefer Git LFS for models/datasets when needed.
+- Use the `model/` directory conventions; document artifact sources and versions.
+
+---
+
 ## Quick reference and TL;DR checklist
 ### Quick reference commands
 ```bash
@@ -274,7 +409,7 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 git submodule update --init --recursive && uv sync && source .venv/bin/activate
 
 # Validate changes
-uv run ruff check . && uv run ruff format . && uv run pytest tests
+uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uv run pytest tests
 
 # Functional smoke (headless)
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \

@@ -167,7 +167,8 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
         ) -> np.ndarray:
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
-        return policy, {}
+    # Provide minimal algorithm metadata for consistency
+    return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
 
     # Load baseline planner
     planner, Observation, _config = _load_baseline_planner(algo, algo_config_path, seed)

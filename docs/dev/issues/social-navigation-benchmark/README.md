@@ -96,6 +96,7 @@ summary = run_batch(
 
 Notes
 - Each JSONL line is schema-validated and includes `episode_id`, `scenario_id`, `seed`, `scenario_params`, `metrics`, config/git hashes, and timestamps.
+- New field `algorithm_metadata` now captures the algorithm name plus its (possibly hashed) configuration for reproducibility. Always emitted by the runner; schema treats it as an object with `algorithm`, `config`, and `config_hash` keys (additional keys allowed for future expansion).
 - SNQI weights/baselines can be provided via `snqi_weights` and `snqi_baseline` in both `run_episode` and `run_batch`.
 - The current runner models the robot independently of pedestrian dynamics (one-way coupling). Two-way coupling can be integrated later.
 

@@ -44,6 +44,16 @@
                 }
             }
         },
+        "algorithm_metadata": {
+            "type": "object",
+            "description": "Metadata about the algorithm/policy used (name, config, hash).",
+            "properties": {
+                "algorithm": {"type": "string"},
+                "config": {"type": "object"},
+                "config_hash": {"type": "string"}
+            },
+            "additionalProperties": true
+        },
         "scenario_params": {
             "type": "object"
         },

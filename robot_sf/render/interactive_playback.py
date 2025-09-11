@@ -210,6 +210,8 @@ class InteractivePlayback(SimulationView):
         """Handle trajectory-related keys; return True if handled."""
         if e.key == pygame.K_v:
             self.show_trajectories = not self.show_trajectories
+            if self.show_trajectories:
+                self._rebuild_trajectories_up_to_frame(self.current_frame)
             logger.info(f"Trajectory display: {'ON' if self.show_trajectories else 'OFF'}")
             return True
 

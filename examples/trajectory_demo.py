@@ -52,7 +52,8 @@ def demonstrate_trajectory_visualization(recording_file: str):
 
         # Enable trajectories by default for the demo
         playback.show_trajectories = True
-        playback.max_trajectory_length = 50  # Start with moderate trail length
+        # Apply trail length using public API so existing deques are reconfigured
+        playback.set_trail_length(50)  # Start with moderate trail length
 
         logger.info("Trajectory visualization enabled by default")
         logger.info(f"Initial trail length: {playback.max_trajectory_length}")

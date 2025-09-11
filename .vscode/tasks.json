@@ -55,11 +55,5 @@
 			"problemMatcher": [],
 			"group": "test"
 		},
-		{
-			"label": "Run Tests",
-			"type": "shell",
-			"command": "uv run pytest tests",
-			"group": "test"
-		}
 	]
 }

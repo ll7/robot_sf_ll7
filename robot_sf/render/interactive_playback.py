@@ -26,6 +26,9 @@ ROBOT_TRAJECTORY_COLOR = (0, 100, 255)  # Blue
 PED_TRAJECTORY_COLOR = (255, 100, 100)  # Light red
 EGO_PED_TRAJECTORY_COLOR = (200, 0, 200)  # Magenta
 
+# UI frame rate target (Hz)
+UI_FPS = 60
+
 
 class InteractivePlayback(SimulationView):
     """
@@ -383,8 +386,7 @@ class InteractivePlayback(SimulationView):
             self._draw_all_trajectories()
 
             # Finalize at UI FPS (avoid using sleep_time as FPS)
-            ui_fps = 60
-            self._finalize_frame(ui_fps)
+            self._finalize_frame(UI_FPS)
         else:
             logger.error(f"Invalid frame index: {self.current_frame}")
 

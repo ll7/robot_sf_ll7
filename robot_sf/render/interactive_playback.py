@@ -112,15 +112,15 @@ class InteractivePlayback(SimulationView):
 
     def _add_help_text(self):
         """Override the help text method to include playback controls."""
-        # Call the parent method to get standard help text
-        super()._add_help_text()
+        # Call the parent method and get the rect of the standard help block
+        parent_rect = super()._add_help_text()
 
         # Add playback specific help text below the standard help
         text_lines = self._playback_help_lines
 
-        # Calculate position for the playback controls (below standard help)
-        standard_help_height = 10 * self.font.get_linesize()  # Assuming 10 lines in standard help
-        y_offset = self._timestep_text_pos[1] + standard_help_height + 20
+        # Calculate position for the playback controls (below standard help),
+        # using the actual height of the parent's help rect
+        y_offset = parent_rect.bottom + 10
 
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()

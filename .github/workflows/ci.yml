@@ -63,6 +63,30 @@ jobs:
       - name: Unit tests
         run: uv run pytest -q
 
+      - name: Preflight for Tiny batch smoke
+        run: |
+          set -euo pipefail
+          echo "Preflight: checking schema file, uv availability, and optional jq"
+          SCHEMA_PATH="docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+          if [ ! -r "$SCHEMA_PATH" ]; then
+            echo "ERROR: Schema file not found or not readable: $SCHEMA_PATH" >&2
+            ls -la "$(dirname "$SCHEMA_PATH")" || true
+            exit 1
+          fi
+          if ! command -v uv >/dev/null 2>&1; then
+            echo "ERROR: 'uv' CLI not found in PATH" >&2
+            exit 1
+          fi
+          if [ ! -x "$(command -v uv)" ]; then
+            echo "ERROR: 'uv' CLI is not executable" >&2
+            exit 1
+          fi
+          if command -v jq >/dev/null 2>&1; then
+            echo "jq found; JSONL validation will be performed after smoke run"
+          else
+            echo "jq not found; JSONL validation will be skipped (episodes.jsonl size will still be checked)"
+          fi
+
       - name: Tiny batch smoke
         run: |
           cat > matrix.yaml <<'YAML'
@@ -82,6 +106,16 @@ jobs:
             --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
             --horizon 3 --dt 0.1 --base-seed 0 --quiet
           test -s episodes.jsonl
+
+      - name: Validate JSONL (optional jq)
+        run: |
+          set -euo pipefail
+          if command -v jq >/dev/null 2>&1; then
+            echo "Validating first JSONL record with jq…"
+            head -n1 episodes.jsonl | jq type >/dev/null
+          else
+            echo "jq not installed; skipping JSONL validation"
+          fi
 
       - name: Upload smoke artifact on failure
         if: failure()

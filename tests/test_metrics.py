@@ -187,6 +187,82 @@ def test_energy_and_jerk_mean():
     assert np.isclose(vals["jerk_mean"], 1.0)
 
 
+def test_curvature_mean():
+    T = 6
+    ep = _make_episode(T=T, K=0)
+
+    # Create a simple circular arc path for known curvature
+    # For a circle of radius R, curvature κ = 1/R
+    R = 2.0  # radius
+
+    # Generate positions for a quarter circle
+    angles = np.linspace(0, np.pi / 2, T)
+    for t in range(T):
+        ep.robot_pos[t, 0] = R * np.cos(angles[t])
+        ep.robot_pos[t, 1] = R * np.sin(angles[t])
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # For a circle of radius 2, expected curvature should be 1/2 = 0.5
+    # Due to discrete approximation, we allow some tolerance
+    expected_curvature = 1.0 / R
+    assert vals["curvature_mean"] > 0.0, "Curvature should be positive for curved path"
+    assert abs(vals["curvature_mean"] - expected_curvature) < 0.5, (
+        f"Expected curvature ~{expected_curvature}, got {vals['curvature_mean']}"
+    )
+
+
+def test_curvature_mean_straight_line():
+    T = 6
+    ep = _make_episode(T=T, K=0)
+
+    # Create a straight line path (zero curvature)
+    for t in range(T):
+        ep.robot_pos[t, 0] = t * 1.0  # moving in x direction
+        ep.robot_pos[t, 1] = 0.0  # constant y
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # Straight line should have zero curvature
+    assert np.isclose(vals["curvature_mean"], 0.0, atol=1e-6), (
+        f"Expected zero curvature for straight line, got {vals['curvature_mean']}"
+    )
+
+
+def test_curvature_mean_insufficient_points():
+    # Test with fewer than 4 points (should return 0.0)
+    T = 3
+    ep = _make_episode(T=T, K=0)
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # Should return 0.0 for insufficient points
+    assert vals["curvature_mean"] == 0.0, (
+        f"Expected 0.0 for insufficient points, got {vals['curvature_mean']}"
+    )
+
+
+def test_curvature_mean_invalid_dt_zero():
+    # dt == 0 should safely return 0.0
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    ep.dt = 0.0
+    # simple motion
+    ep.robot_pos[:, 0] = np.linspace(0, 1.0, T)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["curvature_mean"] == 0.0
+
+
+def test_curvature_mean_invalid_dt_nan():
+    # dt NaN should safely return 0.0
+    T = 6
+    ep = _make_episode(T=T, K=0)
+    ep.dt = float("nan")
+    ep.robot_pos[:, 0] = np.linspace(0, 1.0, T)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert vals["curvature_mean"] == 0.0
+
+
 def test_force_gradient_norm_mean():
     # Create a simple linear force field Fx = x, Fy = y so |F| = sqrt(x^2+y^2).
     # Gradient norm of |F| is 1 everywhere except at origin where it's undefined (we exclude by path).
@@ -219,6 +295,7 @@ def test_snqi_scoring():
         "comfort_exposure": 0.05,
         "force_exceed_events": 2.0,
         "jerk_mean": 0.5,
+        "curvature_mean": 0.1,
     }
     bad = {
         "success": 0.0,
@@ -228,12 +305,14 @@ def test_snqi_scoring():
         "comfort_exposure": 0.4,
         "force_exceed_events": 20.0,
         "jerk_mean": 3.0,
+        "curvature_mean": 2.5,
     }
     baseline = {
         "collisions": {"med": 1.0, "p95": 6.0},
         "near_misses": {"med": 2.0, "p95": 15.0},
         "force_exceed_events": {"med": 3.0, "p95": 25.0},
         "jerk_mean": {"med": 0.3, "p95": 2.5},
+        "curvature_mean": {"med": 0.2, "p95": 2.0},
     }
     weights = {
         "w_success": 1.0,
@@ -243,6 +322,7 @@ def test_snqi_scoring():
         "w_comfort": 0.6,
         "w_force_exceed": 0.4,
         "w_jerk": 0.2,
+        "w_curvature": 0.3,
     }
     s_good = snqi(good, weights, baseline_stats=baseline)
     s_bad = snqi(bad, weights, baseline_stats=baseline)

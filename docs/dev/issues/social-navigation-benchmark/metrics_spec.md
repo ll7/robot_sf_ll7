@@ -22,7 +22,8 @@ Use Euclidean norm $\|\cdot\|$.
 
 ## Smoothness / Energy
 10. $\text{jerk\_mean} = \frac{1}{T-2} \sum_{t=0}^{T-3} \| a_{t+1} - a_t \|$ where $a_t$ is robot acceleration.
-11. $\text{energy} = \sum_{t=0}^{T-1} \| a_t \|$.
+11. $\text{curvature\_mean} = \operatorname{mean}_t \frac{\| v_t \times a_t \|}{\|v_t\|^3}$ computed from discrete differences with $\Delta t$; entries with $\|v_t\| \le \varepsilon$ are excluded; non-finite values filtered; returns $0$ if no valid samples.
+12. $\text{energy} = \sum_{t=0}^{T-1} \| a_t \|$.
 
 ## Optional Field Metrics
 12. $\text{force\_gradient\_norm\_mean} = \frac{1}{M} \sum_{m=1}^M \| \nabla F(x_m,y_m) \|$ along sampled path points $(x_m,y_m)$.
@@ -45,13 +46,14 @@ Normalization: $\text{norm}_x = \frac{x - b_{\text{med}}}{b_{p95} - b_{\text{med
 - Whether to include path_efficiency directly or encode via time_to_goal_norm
 
 ## Coverage Status (as of 2025-09-10)
-- Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, path_efficiency, force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
-- Documented but partially specified/optional: mean interpersonal distance (pending), curvature-based smoothness (pending), force field divergence (pending).
+- Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, path_efficiency, force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, curvature_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
+- Documented but partially specified/optional: mean interpersonal distance (pending), force field divergence (pending).
 
 ## Validation & Tests
 - Empty crowd: collisions=0, near_misses=0, comfort_exposure=0
 - Single pedestrian static: force_exceed_events=0 for low density
 - High density stress: comfort_exposure increases monotonically with density label
+- Curvature: straight line → 0; circle of radius R → ≈ 1/R; invalid $\Delta t$ (0/NaN) → 0
 
 ## Next
 Finalize constants & add symbol table; implement metric module + unit tests.

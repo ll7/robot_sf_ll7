@@ -69,6 +69,9 @@ class SFPlannerConfig:
     # I/O
     action_space: str = "velocity"  # or "unicycle"
     safety_clamp: bool = True
+    # Adaptive behavior (tuning aids)
+    speed_scale_to_vmax: bool = True  # Scale desired speed up to v_max (aggressive)
+    interaction_weight: float = 3.0  # Stronger repulsion to maintain clearance
 
 
 @dataclass
@@ -229,32 +232,35 @@ class SocialForcePlanner(BasePolicy):
     def _compute_total_force(
         self, robot_pos: np.ndarray, robot_goal: np.ndarray, robot_vel: np.ndarray
     ) -> np.ndarray:
-        """Compute total acceleration-like force.
+        """Compute total acceleration-like force (desired + interactions).
 
-        Use f_des = (v_des - v)/tau instead of assuming v=0 inside the desired
-        force term to avoid double counting when integrating velocity.
+        We explicitly form desired acceleration to avoid double-counting and
+        optionally scale desired speed up to ``v_max`` for long straight runs so
+        the robot can reach distant goals within benchmark episode limits.
+        Interaction (social + obstacle) forces are scaled by a configurable
+        weight to tune clearance behavior.
         """
-        # Desired velocity toward the goal (clamp by remaining distance / dt)
         goal_vec = robot_goal - robot_pos
         dist = float(np.linalg.norm(goal_vec))
-        if dist > 1e-9:
-            goal_dir = goal_vec / dist
-        else:
-            goal_dir = np.zeros_like(goal_vec)
-        # Distance-based cap so we don't overshoot when very near goal
-        desired_speed = min(self.config.desired_speed, dist / max(self.config.dt, 1e-6))
+        goal_dir = goal_vec / dist if dist > 1e-9 else np.zeros_like(goal_vec)
+
+        # Adaptive desired speed: allow v_max when sufficiently far from goal
+        base_speed = self.config.desired_speed
+        if self.config.speed_scale_to_vmax and base_speed < self.config.v_max:
+            base_speed = self.config.v_max
+        desired_speed = min(base_speed, dist / max(self.config.dt, 1e-6))
         v_des = goal_dir * desired_speed
         desired = (v_des - robot_vel) / max(self.config.tau, 1e-6)
 
-        # Interactions (social + obstacles) only from wrapper
+        # Interaction forces (exclude desired to prevent double counting)
         interactions = self._wrapper.get_forces_at(
             robot_pos,
             include_desired=False,
             include_robot=False,
         )
+        interactions *= self.config.interaction_weight
 
-        # Downweight interactions to prefer forward progress
-        total = desired + 0.5 * interactions
+        total = desired + interactions
         # Replace any NaNs/Infs defensively
         total = np.nan_to_num(
             total, nan=0.0, posinf=self.config.max_force, neginf=-self.config.max_force

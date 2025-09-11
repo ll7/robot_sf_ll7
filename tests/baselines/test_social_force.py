@@ -287,17 +287,16 @@ class TestSocialForcePlanner:
         config_str = json.dumps(metadata["config"])
         assert isinstance(config_str, str)
 
-    def test_close_cleanup(self, planner):
+    def test_close_cleanup(self, planner: SocialForcePlanner):
         """Test that close cleans up resources."""
         # Setup some internal state
+        planner._sim = "dummy_sim"  # noqa: SLF001
+        planner._wrapper = "dummy_wrapper"  # noqa: SLF001
 
-    planner._sim = "dummy_sim"  # noqa: SLF001
-    planner._wrapper = "dummy_wrapper"  # noqa: SLF001
+        planner.close()
 
-    planner.close()
-
-    assert planner._sim is None  # noqa: SLF001
-    assert planner._wrapper is None  # noqa: SLF001
+        assert planner._sim is None  # noqa: SLF001
+        assert planner._wrapper is None  # noqa: SLF001
 
 
 class TestObservation:

@@ -1,59 +1,59 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Ruff: Format and Fix",
-            "type": "shell",
-            "command": "uv run ruff check . && uv run ruff check --fix . && uv run ruff format .",
-            "problemMatcher": []
-        },
-        {
-            "label": "Run Tests",
-            "type": "shell",
-            "command": "uv run pytest tests",
-            "problemMatcher": [],
-            "group": {
-                "kind": "test",
-                "isDefault": true
-            }
-        },
-        {
-            "label": "Run Tests (GUI)",
-            "type": "shell",
-            "command": "uv run pytest test_pygame",
-            "problemMatcher": [],
-            "group": "test"
-        },
-        {
-            "label": "Install Dependencies",
-            "type": "shell",
-            "command": "uv sync",
-            "problemMatcher": [],
-            "group": "build"
-        },
-        {
-            "label": "Generate UML",
-            "type": "shell",
-            "command": "./class_diagram/generate_uml.sh",
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        },
-        {
-            "label": "Run Tests (Show All Warnings)",
-            "type": "shell",
-            "command": "uv run pytest tests --disable-warnings --tb=short -v",
-            "problemMatcher": [],
-            "group": "test"
-        },
-        {
-            "label": "Check Code Quality",
-            "type": "shell",
-            "command": "uv run ruff check . && uv run pylint robot_sf --errors-only",
-            "problemMatcher": [],
-            "group": "test"
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Ruff: Format and Fix",
+			"type": "shell",
+			"command": "uv run ruff check . && uv run ruff check --fix . && uv run ruff format .",
+			"problemMatcher": []
+		},
+		{
+			"label": "Run Tests",
+			"type": "shell",
+			"command": "uv run pytest tests",
+			"problemMatcher": [],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "Run Tests (GUI)",
+			"type": "shell",
+			"command": "uv run pytest test_pygame",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Install Dependencies",
+			"type": "shell",
+			"command": "uv sync",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Generate UML",
+			"type": "shell",
+			"command": "./class_diagram/generate_uml.sh",
+			"problemMatcher": [],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "Run Tests (Show All Warnings)",
+			"type": "shell",
+			"command": "uv run pytest tests --disable-warnings --tb=short -v",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Check Code Quality",
+			"type": "shell",
+			"command": "uv run ruff check . && uv run pylint robot_sf --errors-only",
+			"problemMatcher": [],
+			"group": "test"
+		},
+	]
 }

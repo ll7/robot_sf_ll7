@@ -76,6 +76,50 @@ Quality gates to run locally before pushing:
 1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Run Tests
 
 Shortcuts (optional shell):
+- Break down complex problems into smaller, manageable tasks
+- Research existing solutions and patterns before implementing new approaches
+- Consider the impact of changes on the entire system, not just the immediate problem
+- Document architectural decisions and trade-offs made during implementation
+- Think about edge cases, error handling, and potential failure modes
+
+## Documentation Standards
+
+### Technical Documentation
+
+- Create comprehensive documentation for all significant changes and new features
+- Save documentation files in the `docs/` directory using a clear folder structure
+- Each major feature or issue should have its own subfolder named in kebab-case
+  - Format: `docs/42-fix-button-alignment/` or `docs/feature-name/`
+- Use descriptive README.md files as the main documentation entry point for each folder
+
+### Documentation Content Requirements
+
+Documentation should include:
+- **Problem Statement**: Clear description of the issue being addressed
+- **Solution Overview**: High-level approach and architectural decisions
+- **Implementation Details**: Code examples, API changes, and technical specifics
+- **Impact Analysis**: What systems/users are affected and how
+- **Testing Strategy**: How the changes were validated
+- **Future Considerations**: Potential improvements or known limitations
+- **Related Links**: References to GitHub issues, pull requests, or external resources
+
+### Documentation Best Practices
+
+- Use proper markdown formatting with clear headings and structure
+- Include code examples with syntax highlighting
+- Add diagrams or screenshots when they improve understanding
+  - Mermaid diagrams are welcome and encouraged for visualizing workflows, architecture, and relationships
+- Write for future developers who may be unfamiliar with the context
+- Keep documentation up-to-date as code evolves
+- Use consistent formatting and follow markdown linting standards
+
+## Installation and Setup
+
+For complete installation instructions, see the [main README.md](../README.md#installation). The project uses `uv` for modern Python dependency management.
+
+## Working Effectively
+
+### Quick Start Commands
 ```bash
 # Lint+format
 uv run ruff check . && uv run ruff format .

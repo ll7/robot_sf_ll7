@@ -4,32 +4,100 @@ Robot SF is a Python-based robotics simulation environment for training robots t
 
 **Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
 
-## Working Effectively
+## General Behavior
 
-### Bootstrap and Build the Repository
-```bash
-# Clone with submodules (CRITICAL - contains fast-pysf dependency)
-git clone --recurse-submodules https://github.com/ll7/robot_sf_ll7
-cd robot_sf_ll7
+### Code Quality Standards
 
-# Initialize submodules if not already done
-git submodule update --init --recursive
+- Always follow the latest coding standards and best practices for the language being used
+- Use clear, descriptive variable and function names that express intent
+- Write code that is easy to read, understand, and maintain
+- Ensure that all code is well-documented with meaningful comments and docstrings
+- Follow the existing code style and patterns in the project
+- Write comprehensive unit tests for new features and bug fixes
+  - Tests should be placed in the `tests/` directory or in the `test_pygame/` directory for tests that need a display output.
+- Perform code reviews and ensure changes meet quality standards
+- Use the linting task and the test task to ensure code quality before committing changes
 
-# Install uv (modern Python package manager)
-pip install uv
-# OR: curl -LsSf https://astral.sh/uv/install.sh | sh
+### Version Control & Collaboration
 
-# Install system dependencies (required for video recording)
-sudo apt-get update && sudo apt-get install -y ffmpeg
+- Use version control best practices with meaningful, descriptive commit messages
+- When making changes, ensure backward compatibility unless explicitly specified otherwise
+- Always check for existing issues, discussions, or similar work before starting new tasks
+- Use issue numbers in commit messages to link changes to specific GitHub issues
+  - Format: `fix: resolve button alignment issue (#42)`
+- Create feature branches named after the issue number and title in kebab-case
+  - Format: `feature/42-fix-button-alignment` or `bugfix/123-memory-leak-fix`
+- Keep branches up-to-date with the main branch to avoid merge conflicts
+- Use pull requests for code reviews and team discussions before merging
+- Always run the full test suite before merging changes to ensure system stability
 
-# Install all dependencies and create virtual environment
-uv sync
-# NEVER CANCEL: Takes 2-3 minutes to complete. Set timeout to 5+ minutes.
+#### Examples
 
-# Activate virtual environment
-source .venv/bin/activate
+**Branch Naming:**
+```
+feature/42-fix-button-alignment
+bugfix/89-memory-leak-in-simulator
+enhancement/156-improve-lidar-performance
 ```
 
+**Commit Messages:**
+```
+fix: resolve 2x speed multiplier in VisualizableSimState (#42)
+feat: add new lidar sensor configuration options (#156)
+docs: update installation guide with GPU setup instructions
+test: add comprehensive integration tests for pedestrian simulation
+```
+
+### Problem-Solving Approach
+
+- Break down complex problems into smaller, manageable tasks
+- Research existing solutions and patterns before implementing new approaches
+- Consider the impact of changes on the entire system, not just the immediate problem
+- Document architectural decisions and trade-offs made during implementation
+- Think about edge cases, error handling, and potential failure modes
+
+## Documentation Standards
+
+### Technical Documentation
+
+- Create comprehensive documentation for all significant changes and new features
+- Save documentation files in the `docs/` directory using a clear folder structure
+- Each major feature or issue should have its own subfolder named in kebab-case
+  - Format: `docs/42-fix-button-alignment/` or `docs/feature-name/`
+- Use descriptive README.md files as the main documentation entry point for each folder
+
+### Documentation Content Requirements
+
+Documentation should include:
+- **Problem Statement**: Clear description of the issue being addressed
+- **Solution Overview**: High-level approach and architectural decisions
+- **Implementation Details**: Code examples, API changes, and technical specifics
+- **Impact Analysis**: What systems/users are affected and how
+- **Testing Strategy**: How the changes were validated
+- **Future Considerations**: Potential improvements or known limitations
+- **Related Links**: References to GitHub issues, pull requests, or external resources
+
+### Documentation Best Practices
+
+- Use proper markdown formatting with clear headings and structure
+- Include code examples with syntax highlighting
+- Add diagrams or screenshots when they improve understanding
+- Write for future developers who may be unfamiliar with the context
+- Keep documentation up-to-date as code evolves
+- Use consistent formatting and follow markdown linting standards
+
+## Installation and Setup
+
+For complete installation instructions, see the [main README.md](../README.md#installation). The project uses `uv` for modern Python dependency management.
+
+## Working Effectively
+
+### Quick Start Commands
+```bash
+# Essential setup (assumes uv is installed)
+git submodule update --init --recursive  # Initialize submodules
+uv sync && source .venv/bin/activate     # Install dependencies and activate venv
+```
 ### Development Setup
 ```bash
 # Install with development dependencies
@@ -48,8 +116,8 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 uv run pytest tests
 # NEVER CANCEL: Takes 2-3 minutes (170 tests). Set timeout to 5+ minutes.
 
-# Run GUI tests (requires display)
-uv run pytest test_pygame
+# Run GUI tests in headless mode (avoids display issues)
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
 # NEVER CANCEL: Takes 1-2 minutes (3 tests). Set timeout to 3+ minutes.
 
 # Run fast-pysf submodule tests
@@ -68,17 +136,13 @@ uv run ruff check .
 # Run formatting check (fast)
 uv run ruff format --check .
 
-# Run comprehensive linting
-uv run pylint robot_sf --exit-zero
-# Takes ~16 seconds. Code quality typically scores 9.5+/10.
-
 # Fix formatting automatically
 uv run ruff format .
 ```
 
-### Performance Benchmarking
+### Performance Benchmarking (Optional)
 ```bash
-# Run performance benchmark
+# Run performance benchmark (only when performance impact is suspected)
 DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 # Expected: ~22 steps/second, ~45ms per step
 ```
@@ -89,44 +153,17 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 
 ### 1. Basic Environment Creation Test
 ```bash
-DISPLAY= MPLBACKEND=Agg uv run python -c "
-import os
-os.environ['SDL_VIDEODRIVER'] = 'dummy'
-from robot_sf.gym_env.environment_factory import make_robot_env
-print('Testing environment creation...')
-env = make_robot_env(debug=True)
-print('Environment created successfully')
-obs, _ = env.reset()
-print('Environment reset successful')
-print('Observation space:', env.observation_space)
-print('Action space:', env.action_space)
-env.close()
-print('Basic validation completed successfully')
-"
+./scripts/validation/test_basic_environment.sh
 ```
 
 ### 2. Model Loading and Prediction Test
 ```bash
-DISPLAY= MPLBACKEND=Agg uv run python -c "
-import os
-os.environ['SDL_VIDEODRIVER'] = 'dummy'
-from robot_sf.gym_env.environment_factory import make_robot_env
-from stable_baselines3 import PPO
-env = make_robot_env(debug=True)
-# Use newest model for best compatibility
-model = PPO.load('./model/ppo_model_retrained_10m_2025-02-01.zip', env=env)
-obs, _ = env.reset()
-action, _ = model.predict(obs, deterministic=True)
-print('Model loading and prediction successful')
-print('Action shape:', action.shape)
-env.close()
-"
+./scripts/validation/test_model_prediction.sh
 ```
 
 ### 3. Complete Simulation Test
 ```bash
-# Run a short simulation to validate end-to-end functionality
-timeout 30 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python examples/demo_defensive.py
+./scripts/validation/test_complete_simulation.sh
 ```
 
 ## Common Issues and Solutions
@@ -145,6 +182,17 @@ timeout 30 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python examples/
 ### Docker Issues
 - **Docker build fails**: Network connectivity issues in CI are common. Docker builds work locally but may fail in restricted environments.
 - **GPU support**: See `docs/GPU_SETUP.md` for NVIDIA Docker setup
+
+## Project-Specific Guidelines
+
+### Robot SF Development
+
+- This project focuses on robotic simulation and reinforcement learning
+- Pay special attention to data integrity in simulation states and analysis
+- Ensure consistency between simulation data generation and analysis pipelines
+- Consider the impact on research workflows and data analysis tools
+- Maintain compatibility with the fast-pysf reference implementation when applicable
+- Test changes thoroughly as they may affect both simulation behavior and research results
 
 ## Repository Structure
 
@@ -255,10 +303,8 @@ The project recently migrated to UV package manager and uses a new factory patte
 ## Quick Reference Commands
 
 ```bash
-# Fresh setup
-git clone --recurse-submodules https://github.com/ll7/robot_sf_ll7 && cd robot_sf_ll7
-sudo apt-get install -y ffmpeg && pip install uv
-uv sync && source .venv/bin/activate
+# Setup after installation (see README.md for full installation)
+git submodule update --init --recursive && uv sync && source .venv/bin/activate
 
 # Validate changes
 uv run ruff check . && uv run ruff format . && uv run pytest tests
@@ -266,6 +312,6 @@ uv run ruff check . && uv run ruff format . && uv run pytest tests
 # Test functionality
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; env = make_robot_env(); env.reset(); print('OK')"
 
-# Performance check
+# Performance check (optional)
 DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 ```

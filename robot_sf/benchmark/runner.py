@@ -29,6 +29,56 @@ from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
+def _load_baseline_planner(algo: str, algo_config_path: Optional[str], seed: int):
+    """Load and construct a baseline planner from the registry.
+
+    Returns (planner, ObservationCls, config_dict).
+    """
+    try:
+        from robot_sf.baselines import get_baseline
+        from robot_sf.baselines.social_force import Observation
+    except ImportError as e:
+        raise RuntimeError(f"Failed to import baseline algorithms: {e}")
+
+    try:
+        planner_class = get_baseline(algo)
+    except KeyError:
+        from robot_sf.baselines import list_baselines
+
+        available = list_baselines()
+        raise ValueError(f"Unknown algorithm '{algo}'. Available: {available}")
+
+    # Load configuration if provided
+    config = {}
+    if algo_config_path:
+        config_path = Path(algo_config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
+
+        with config_path.open("r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+
+    planner = planner_class(config, seed=seed)
+    return planner, Observation, config
+
+
+def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_positions, dt):
+    agents = [
+        {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
+    ]
+    return ObservationCls(
+        dt=dt,
+        robot={
+            "position": robot_pos.tolist(),
+            "velocity": robot_vel.tolist(),
+            "goal": robot_goal.tolist(),
+            "radius": 0.3,
+        },
+        agents=agents,
+        obstacles=[],
+    )
+
+
 def _git_hash_fallback() -> str:
     # Best effort; avoid importing subprocess if not needed later
     try:
@@ -110,44 +160,19 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
         # Original simple policy for backward compatibility
         def policy(
             robot_pos: np.ndarray,
-            robot_vel: np.ndarray,
+            _robot_vel: np.ndarray,
             robot_goal: np.ndarray,
-            ped_positions: np.ndarray,
-            dt: float,
+            _ped_positions: np.ndarray,
+            _dt: float,
         ) -> np.ndarray:
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
         return policy, {}
 
-    # Load algorithm from baselines
-    try:
-        from robot_sf.baselines import get_baseline
-        from robot_sf.baselines.social_force import Observation
-    except ImportError as e:
-        raise RuntimeError(f"Failed to import baseline algorithms: {e}")
+    # Load baseline planner
+    planner, Observation, _config = _load_baseline_planner(algo, algo_config_path, seed)
 
-    try:
-        planner_class = get_baseline(algo)
-    except KeyError:
-        from robot_sf.baselines import list_baselines
-
-        available = list_baselines()
-        raise ValueError(f"Unknown algorithm '{algo}'. Available: {available}")
-
-    # Load configuration if provided
-    config = {}
-    if algo_config_path:
-        config_path = Path(algo_config_path)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
-
-        with config_path.open("r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-
-    # Create planner instance
-    planner = planner_class(config, seed=seed)
-
-    def policy(
+    def policy_fn(
         robot_pos: np.ndarray,
         robot_vel: np.ndarray,
         robot_goal: np.ndarray,
@@ -155,29 +180,8 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
         dt: float,
     ) -> np.ndarray:
         """Policy function that uses the baseline planner."""
-        # Convert pedestrian positions to agent list
-        agents = []
-        for pos in ped_positions:
-            agents.append(
-                {
-                    "position": pos.tolist(),
-                    "velocity": [0.0, 0.0],  # Assume stationary for now
-                    "radius": 0.35,  # Default pedestrian radius
-                }
-            )
-
         # Create observation
-        obs = Observation(
-            dt=dt,
-            robot={
-                "position": robot_pos.tolist(),
-                "velocity": robot_vel.tolist(),
-                "goal": robot_goal.tolist(),
-                "radius": 0.3,  # Default robot radius
-            },
-            agents=agents,
-            obstacles=[],
-        )
+        obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
 
         # Get action from planner
         action = planner.step(obs)
@@ -208,7 +212,7 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     # Get metadata for episode record
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
 
-    return policy, metadata
+    return policy_fn, metadata
 
 
 def run_episode(
@@ -310,14 +314,13 @@ def run_episode(
         metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
     )
 
-    # Include algorithm metadata in the record
+    # Build record per schema
     record = {
         "episode_id": f"{scenario_params.get('id', 'unknown')}--{seed}",
         "scenario_id": scenario_params.get("id", "unknown"),
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
-        "algorithm_metadata": algo_metadata,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {

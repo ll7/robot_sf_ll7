@@ -46,6 +46,7 @@ dependencies = [
     "pre-commit>=4.1.0",
     "setuptools>=70.0.0",
     "pysocialforce",
+    "jsonschema>=4.23.0",
 ]
 
 [project.optional-dependencies]
@@ -86,6 +87,9 @@ exclude = [
     "/__pycache__",
     "/fast-pysf",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 # Use ruff when possible
 [tool.autopep8]
@@ -183,6 +187,8 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
 filterwarnings = [
     # Suppress external library warnings
     "ignore::DeprecationWarning:pygame.*",
@@ -194,10 +200,16 @@ filterwarnings = [
     "default::UserWarning:robot_sf.*",
 ]
 
-[tool.uv.sources]
-pysocialforce = { path = "fast-pysf", editable = true }
 
 [dependency-groups]
 dev = [
     "pylint>=3.3.4",
 ]
+
+[project.scripts]
+robot_sf_bench = "robot_sf.benchmark.cli:main"
+
+# Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
+
+[tool.uv.sources]
+pysocialforce = { path = "fast-pysf", editable = true }

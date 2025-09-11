@@ -20,6 +20,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### 📊 Analysis & Tools  
 - [**Data Analysis**](./DATA_ANALYSIS.md) - Analysis tools and utilities for simulation data
 - [**Pyreverse**](./pyreverse.md) - Code structure visualization
+ - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
 
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
@@ -87,6 +88,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 - **Migration Tools Available**: Automated migration script for updating code
 - **Factory Pattern**: Clean, consistent environment creation interface
 - **Comprehensive Testing**: All patterns validated and working
+ - **Benchmark Runner Added**: Single-episode and batch APIs with schema validation and JSONL output. See the Social Navigation Benchmark docs for usage.
 
 ### 📋 Migration Status
 - **33 files** identified for migration to new pattern
@@ -119,4 +121,4 @@ When contributing to the project:
 
 ---
 
-*Last updated: June 2025 - Environment refactoring complete and deployed*
+*Last updated: September 2025 - Benchmark runner and batch API added*

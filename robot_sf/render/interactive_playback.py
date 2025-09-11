@@ -79,11 +79,14 @@ class InteractivePlayback(SimulationView):
 
         # Trajectory visualization attributes
         self.show_trajectories = False
-        self.max_trajectory_length = 100  # Default trail length
-        self.robot_trajectory: Deque[Tuple[float, float]] = deque(maxlen=self.max_trajectory_length)
+        # Use a private backing field during init to avoid triggering updates prematurely
+        self._max_trajectory_length = 100  # Default trail length
+        self.robot_trajectory: Deque[Tuple[float, float]] = deque(
+            maxlen=self._max_trajectory_length
+        )
         self.ped_trajectories: Dict[int, Deque[Tuple[float, float]]] = {}
         self.ego_ped_trajectory: Deque[Tuple[float, float]] = deque(
-            maxlen=self.max_trajectory_length
+            maxlen=self._max_trajectory_length
         )
 
         # Add playback controls to the help text
@@ -211,14 +214,12 @@ class InteractivePlayback(SimulationView):
             return True
 
         if e.key == pygame.K_b:
-            self.max_trajectory_length = min(self.max_trajectory_length + 20, 500)
-            self._update_trajectory_maxlen()
+            self.set_trail_length(min(self.max_trajectory_length + 20, 500))
             logger.info(f"Trail length increased to: {self.max_trajectory_length}")
             return True
 
         if e.key == pygame.K_c:
-            self.max_trajectory_length = max(self.max_trajectory_length - 20, 10)
-            self._update_trajectory_maxlen()
+            self.set_trail_length(max(self.max_trajectory_length - 20, 10))
             logger.info(f"Trail length decreased to: {self.max_trajectory_length}")
             return True
 
@@ -245,6 +246,31 @@ class InteractivePlayback(SimulationView):
         # Update ego pedestrian trajectory
         new_ego_trajectory = deque(self.ego_ped_trajectory, maxlen=self.max_trajectory_length)
         self.ego_ped_trajectory = new_ego_trajectory
+
+    def set_trail_length(self, length: int) -> None:
+        """Set the maximum trajectory trail length and reconfigure existing deques.
+
+        This is the preferred public API; it clamps to [10, 500] and reapplies
+        the current maxlen to robot/ped/ego trajectories.
+        """
+        self.max_trajectory_length = length  # delegate to property setter
+
+    # Property to ensure direct assignment also updates deques
+    @property
+    def max_trajectory_length(self) -> int:
+        return getattr(self, "_max_trajectory_length", 100)
+
+    @max_trajectory_length.setter
+    def max_trajectory_length(self, value: int) -> None:
+        clamped = max(10, min(int(value), 500))
+        old = getattr(self, "_max_trajectory_length", None)
+        if old == clamped:
+            self._max_trajectory_length = clamped
+            return
+        self._max_trajectory_length = clamped
+        # Reconfigure existing deques if they are already created
+        if hasattr(self, "robot_trajectory"):
+            self._update_trajectory_maxlen()
 
     def _clear_trajectories(self):
         """Clear all trajectory histories."""
@@ -300,7 +326,7 @@ class InteractivePlayback(SimulationView):
             self._draw_trajectory(self.robot_trajectory, ROBOT_TRAJECTORY_COLOR, 3)
 
         # Draw pedestrian trajectories
-        for ped_id, trajectory in self.ped_trajectories.items():
+        for trajectory in self.ped_trajectories.values():
             if len(trajectory) > 1:
                 self._draw_trajectory(trajectory, PED_TRAJECTORY_COLOR, 2)
 
@@ -315,6 +341,9 @@ class InteractivePlayback(SimulationView):
 
         # Clear existing trajectories
         self._clear_trajectories()
+
+        # Ensure current deques reflect the active max length before refilling
+        self._update_trajectory_maxlen()
 
         # Rebuild trajectories from frame 0 to target_frame
         for frame_idx in range(min(target_frame + 1, len(self.states))):
@@ -469,5 +498,5 @@ if __name__ == "__main__":
     state_file = sys.argv[1]
     load_and_play_interactively(state_file)
 
-    # Uncommenting this line for testing with a specific recording
-    load_and_play_interactively("robot_sf/data/recording_2021-09-01_15-23-51.pkl")
+    # Uncomment for testing with a specific recording
+    # load_and_play_interactively("robot_sf/data/recording_2021-09-01_15-23-51.pkl")

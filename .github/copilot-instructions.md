@@ -82,6 +82,7 @@ Documentation should include:
 - Use proper markdown formatting with clear headings and structure
 - Include code examples with syntax highlighting
 - Add diagrams or screenshots when they improve understanding
+  - Mermaid diagrams are welcome and encouraged for visualizing workflows, architecture, and relationships
 - Write for future developers who may be unfamiliar with the context
 - Keep documentation up-to-date as code evolves
 - Use consistent formatting and follow markdown linting standards

@@ -68,17 +68,30 @@ class TestSocialForcePlanner:
     def test_reset_functionality(self, planner):
         """Test that reset clears internal state."""
         # Setup some internal state
-        planner._last_position = np.array([1.0, 2.0])
-        planner._robot_state = {"dummy": "state"}
+        planner._last_position = np.array([1.0, 2.0])  # noqa: SLF001
+        planner._robot_state = {"dummy": "state"}  # noqa: SLF001
 
-        # Reset and check state is cleared
+        # Reset and check state is cleared (same seed preserved)
         planner.reset()
-        assert planner._last_position is None
-        assert planner._robot_state is None
+        assert planner._last_position is None  # noqa: SLF001
+        assert planner._robot_state is None  # noqa: SLF001
 
-        # Reset with new seed
+        # Capture a short RNG sequence with initial seed (42 from fixture)
+        seq_before = [planner._rng.randint(1000) for _ in range(5)]  # noqa: SLF001
+
+        # Reset with a different seed and capture a new sequence
         planner.reset(seed=100)
-        assert planner._rng.randint(1000) != planner._rng.randint(1000)  # Different from initial
+        seq_after_diff_seed = [planner._rng.randint(1000) for _ in range(5)]  # noqa: SLF001
+        assert seq_before != seq_after_diff_seed, (
+            "RNG sequence should differ after reseeding with a different seed"
+        )
+
+        # Reset back to original seed and ensure sequence reproducibility
+        planner.reset(seed=42)
+        seq_after_same_seed = [planner._rng.randint(1000) for _ in range(5)]  # noqa: SLF001
+        assert seq_before == seq_after_same_seed, (
+            "RNG sequence should match when reseeded with the original seed"
+        )
 
     def test_configure_updates_config(self, planner):
         """Test that configure updates the configuration."""
@@ -277,13 +290,14 @@ class TestSocialForcePlanner:
     def test_close_cleanup(self, planner):
         """Test that close cleans up resources."""
         # Setup some internal state
-        planner._sim = "dummy_sim"
-        planner._wrapper = "dummy_wrapper"
 
-        planner.close()
+    planner._sim = "dummy_sim"  # noqa: SLF001
+    planner._wrapper = "dummy_wrapper"  # noqa: SLF001
 
-        assert planner._sim is None
-        assert planner._wrapper is None
+    planner.close()
+
+    assert planner._sim is None  # noqa: SLF001
+    assert planner._wrapper is None  # noqa: SLF001
 
 
 class TestObservation:

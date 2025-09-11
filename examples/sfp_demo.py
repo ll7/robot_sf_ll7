@@ -199,6 +199,45 @@ except ImportError as e:
             raise KeyError(f"Unknown baseline: {name}")
 
 
+# Ensure a mock planner is always available if user forces mock mode via --mock
+if "MockSocialForcePlanner" not in globals():
+
+    class MockSocialForcePlanner:  # type: ignore[redefinition]
+        """Lightweight mock Social Force Planner (fallback when real deps present)."""
+
+        def __init__(self, config, seed=None):
+            self.config = config
+            self.seed = seed
+
+        def step(self, obs) -> Dict[str, float]:  # noqa: D401
+            # Trivial straight-line goal seeker with zero avoidance
+            goal = obs.robot["goal"]
+            pos = obs.robot["position"]
+            dx = goal[0] - pos[0]
+            dy = goal[1] - pos[1]
+            dist = math.sqrt(dx * dx + dy * dy)
+            if dist > 1e-6:
+                ux, uy = dx / dist, dy / dist
+            else:
+                ux, uy = 0.0, 0.0
+            speed = min(
+                getattr(self.config, "desired_speed", 1.0), getattr(self.config, "v_max", 1.0)
+            )
+            if getattr(self.config, "action_space", "velocity") == "unicycle":
+                return {"v": 0.0 if dist < 1e-3 else min(speed, dist), "omega": 0.0}
+            return {"vx": ux * speed, "vy": uy * speed}
+
+        def reset(self, seed=None):
+            if seed is not None:
+                self.seed = seed
+
+        def configure(self, new_config):
+            pass
+
+        def close(self):  # noqa: D401
+            pass
+
+
 class SFPDemo:
     """Social Force Planner demonstration class."""
 
@@ -215,11 +254,8 @@ class SFPDemo:
         self.mock_mode = mock_mode or not SOCIAL_FORCE_AVAILABLE
 
         if self.mock_mode:
-            self.SocialForcePlanner = (
-                MockSocialForcePlanner
-                if not SOCIAL_FORCE_AVAILABLE
-                else get_baseline("baseline_sf")
-            )
+            # Always use mock planner when mock_mode requested
+            self.SocialForcePlanner = MockSocialForcePlanner
         else:
             self.SocialForcePlanner = get_baseline("baseline_sf")
 

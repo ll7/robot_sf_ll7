@@ -48,9 +48,15 @@
             "type": "object",
             "description": "Metadata about the algorithm/policy used (name, config, hash).",
             "properties": {
-                "algorithm": {"type": "string"},
-                "config": {"type": "object"},
-                "config_hash": {"type": "string"}
+                "algorithm": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object"
+                },
+                "config_hash": {
+                    "type": "string"
+                }
             },
             "additionalProperties": true
         },

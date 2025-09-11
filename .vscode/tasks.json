@@ -56,10 +56,5 @@
 			"group": "test"
 		},
 		{
-			"label": "Run Tests",
-			"type": "shell",
-			"command": "uv run pytest -q",
-			"group": "test"
-		}
 	]
 }

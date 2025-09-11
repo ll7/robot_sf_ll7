@@ -166,7 +166,7 @@ class SocialForcePlanner(BasePolicy):
             "radius": robot_radius,
         }
 
-        total_force = self._compute_total_force(robot_pos, robot_goal)
+        total_force = self._compute_total_force(robot_pos, robot_goal, robot_vel)
         action = self._force_to_action(total_force, robot_pos, robot_vel, robot_goal, dt)
 
         self._last_position = robot_pos.copy()
@@ -226,21 +226,34 @@ class SocialForcePlanner(BasePolicy):
             ),
         )
 
-    def _compute_total_force(self, robot_pos: np.ndarray, robot_goal: np.ndarray) -> np.ndarray:
-        # Desired force toward the goal
-        desired = self._wrapper.get_forces_at(
-            robot_pos,
-            include_desired=True,
-            desired_goal=robot_goal,
-            include_robot=False,
-        )
-        # Interactions (social + obstacles) only
+    def _compute_total_force(
+        self, robot_pos: np.ndarray, robot_goal: np.ndarray, robot_vel: np.ndarray
+    ) -> np.ndarray:
+        """Compute total acceleration-like force.
+
+        Use f_des = (v_des - v)/tau instead of assuming v=0 inside the desired
+        force term to avoid double counting when integrating velocity.
+        """
+        # Desired velocity toward the goal (clamp by remaining distance / dt)
+        goal_vec = robot_goal - robot_pos
+        dist = float(np.linalg.norm(goal_vec))
+        if dist > 1e-9:
+            goal_dir = goal_vec / dist
+        else:
+            goal_dir = np.zeros_like(goal_vec)
+        # Distance-based cap so we don't overshoot when very near goal
+        desired_speed = min(self.config.desired_speed, dist / max(self.config.dt, 1e-6))
+        v_des = goal_dir * desired_speed
+        desired = (v_des - robot_vel) / max(self.config.tau, 1e-6)
+
+        # Interactions (social + obstacles) only from wrapper
         interactions = self._wrapper.get_forces_at(
             robot_pos,
             include_desired=False,
             include_robot=False,
         )
-        # Downweight interactions to prefer forward progress in simple scenes
+
+        # Downweight interactions to prefer forward progress
         total = desired + 0.5 * interactions
         # Replace any NaNs/Infs defensively
         total = np.nan_to_num(

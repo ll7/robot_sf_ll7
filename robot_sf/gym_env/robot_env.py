@@ -49,6 +49,13 @@ class RobotEnv(BaseEnv):
         video_path: str = None,
         video_fps: float = None,
         peds_have_obstacle_forces: bool = False,
+        # New JSONL recording parameters
+        use_jsonl_recording: bool = False,
+        recording_dir: str = "recordings",
+        suite_name: str = "robot_sim",
+        scenario_name: str = "default",
+        algorithm_name: str = "manual",
+        recording_seed: int = None,
     ):
         """
         Initialize the Robot Environment.
@@ -71,6 +78,12 @@ class RobotEnv(BaseEnv):
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
+            use_jsonl_recording=use_jsonl_recording,
+            recording_dir=recording_dir,
+            suite_name=suite_name,
+            scenario_name=scenario_name,
+            algorithm_name=algorithm_name,
+            recording_seed=recording_seed,
         )
 
         # Initialize spaces based on the environment configuration and map
@@ -184,9 +197,17 @@ class RobotEnv(BaseEnv):
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
-        # if recording is enabled, save the recording and reset the state list
+        
+        # Handle recording for both systems
         if self.recording_enabled:
-            self.save_recording()
+            if self.use_jsonl_recording:
+                # End previous episode if any, then start new episode
+                self.end_episode_recording()
+                config_hash = str(hash(str(self.env_config)))  # Simple config hash
+                self.start_episode_recording(config_hash=config_hash)
+            else:
+                # Legacy pickle recording
+                self.save_recording()
 
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
@@ -250,7 +271,9 @@ class RobotEnv(BaseEnv):
         Records the current state as visualizable state and stores it in the list.
         """
         state = self._prepare_visualizable_state()
-        self.recorded_states.append(state)
+        
+        # Use the new unified recording method
+        self.record_simulation_step(state)
 
     def set_pedestrian_velocity_scale(self, scale: float = 1.0):
         """

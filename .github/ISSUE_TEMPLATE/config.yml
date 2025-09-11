@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📚 Documentation
+    url: https://github.com/ll7/robot_sf_ll7/tree/main/docs
+    about: Check the docs directory for detailed documentation and examples
+  - name: 🚀 Refactoring Documentation
+    url: https://github.com/ll7/robot_sf_ll7/tree/main/docs/refactoring
+    about: View environment refactoring documentation and migration guides

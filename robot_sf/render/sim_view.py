@@ -734,7 +734,10 @@ class SimulationView:
             # Draw main text
             text_surface.blit(text_render, pos)
 
-        self.screen.blit(text_surface, (self.width - max_width - 10, self._timestep_text_pos[1]))
+        # Blit and return the rect to allow children to position additional help relative to this
+        return self.screen.blit(
+            text_surface, (self.width - max_width - 10, self._timestep_text_pos[1])
+        )
 
     def _draw_grid(self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)):
         """

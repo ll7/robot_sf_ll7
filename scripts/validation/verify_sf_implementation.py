@@ -15,35 +15,26 @@ sys.path.insert(0, os.path.abspath("."))
 def test_configuration_system():
     """Test that configuration system works."""
     print("Testing configuration system...")
-
     try:
-        # Import with minimal dependencies
-        import importlib.util
-
-        # Test configuration dataclass
-        spec = importlib.util.spec_from_file_location(
-            "social_force", "robot_sf/baselines/social_force.py"
-        )
-
-        if spec is None or spec.loader is None:
-            print("❌ Could not load social_force module")
-            return False
-
-        # This will fail due to numpy import, but we can test the structure
         try:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            print("❌ Expected import to fail due to missing numpy")
-            return False
-        except ModuleNotFoundError as e:
-            if "numpy" in str(e):
-                print("✅ Module structure is correct (numpy dependency confirmed)")
-                return True
-            else:
-                print(f"❌ Unexpected import error: {e}")
-                return False
+            import importlib
 
-    except Exception as e:
+            module = importlib.import_module("robot_sf.baselines.social_force")
+            required = ["SocialForcePlanner", "SFPlannerConfig", "Observation"]
+            missing = [name for name in required if not hasattr(module, name)]
+            if missing:
+                print(f"❌ Missing expected symbols: {missing}")
+                return False
+            print("✅ Module imported successfully and required symbols present")
+            return True
+        except ModuleNotFoundError as e:
+            # Accept missing heavy deps (numpy / pysocialforce) as structural pass
+            if any(x in str(e) for x in ("numpy", "pysocialforce")):
+                print("✅ Module structure is correct (dependency missing as expected)")
+                return True
+            print(f"❌ Unexpected ModuleNotFoundError: {e}")
+            return False
+    except Exception as e:  # pragma: no cover - defensive
         print(f"❌ Configuration test failed: {e}")
         return False
 
@@ -54,7 +45,7 @@ def test_registry_system():
 
     try:
         # Check registry structure
-        with open("robot_sf/baselines/__init__.py", "r") as f:
+        with open("robot_sf/baselines/__init__.py", "r", encoding="utf-8") as f:
             content = f.read()
 
         required_components = ["BASELINES", "get_baseline", "list_baselines", "baseline_sf"]
@@ -78,7 +69,7 @@ def test_cli_integration():
 
     try:
         # Check CLI modifications
-        with open("robot_sf/benchmark/cli.py", "r") as f:
+        with open("robot_sf/benchmark/cli.py", "r", encoding="utf-8") as f:
             cli_content = f.read()
 
         # Check for algorithm support
@@ -90,7 +81,7 @@ def test_cli_integration():
                 return False
 
         # Check runner modifications
-        with open("robot_sf/benchmark/runner.py", "r") as f:
+        with open("robot_sf/benchmark/runner.py", "r", encoding="utf-8") as f:
             runner_content = f.read()
 
         runner_requirements = ["_create_robot_policy", "algo:", "algorithm_metadata"]
@@ -116,7 +107,7 @@ def test_configuration_files():
         import yaml
 
         # Test default config
-        with open("configs/baselines/social_force_default.yaml", "r") as f:
+        with open("configs/baselines/social_force_default.yaml", "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         required_params = ["v_max", "desired_speed", "action_space", "A", "B"]

@@ -321,6 +321,8 @@ def run_episode(
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
+        # Include algorithm metadata for verification / reproducibility
+        "algorithm_metadata": algo_metadata,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {

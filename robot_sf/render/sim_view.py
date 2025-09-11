@@ -142,8 +142,8 @@ class SimulationView:
         clear(): Clears the screen and updates the display.
     """
 
-    width: float = 1200
-    height: float = 800
+    width: float = 1920
+    height: float = 1080
     scaling: float = 15
     robot_radius: float = 1.0
     ego_ped_radius: float = 0.4

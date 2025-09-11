@@ -105,53 +105,67 @@ def _build_episode_data(
 
 def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     """Create a robot policy function based on the specified algorithm."""
-    
+
     if algo == "simple_policy":
         # Original simple policy for backward compatibility
-        def policy(robot_pos: np.ndarray, robot_vel: np.ndarray, robot_goal: np.ndarray, 
-                  ped_positions: np.ndarray, dt: float) -> np.ndarray:
+        def policy(
+            robot_pos: np.ndarray,
+            robot_vel: np.ndarray,
+            robot_goal: np.ndarray,
+            ped_positions: np.ndarray,
+            dt: float,
+        ) -> np.ndarray:
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
+
         return policy, {}
-    
+
     # Load algorithm from baselines
     try:
         from robot_sf.baselines import get_baseline
         from robot_sf.baselines.social_force import Observation
     except ImportError as e:
         raise RuntimeError(f"Failed to import baseline algorithms: {e}")
-    
+
     try:
         planner_class = get_baseline(algo)
     except KeyError:
         from robot_sf.baselines import list_baselines
+
         available = list_baselines()
         raise ValueError(f"Unknown algorithm '{algo}'. Available: {available}")
-    
+
     # Load configuration if provided
     config = {}
     if algo_config_path:
         config_path = Path(algo_config_path)
         if not config_path.exists():
             raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
-        
-        with config_path.open('r', encoding='utf-8') as f:
+
+        with config_path.open("r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
-    
+
     # Create planner instance
     planner = planner_class(config, seed=seed)
-    
-    def policy(robot_pos: np.ndarray, robot_vel: np.ndarray, robot_goal: np.ndarray, 
-              ped_positions: np.ndarray, dt: float) -> np.ndarray:
+
+    def policy(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
         """Policy function that uses the baseline planner."""
         # Convert pedestrian positions to agent list
         agents = []
         for pos in ped_positions:
-            agents.append({
-                "position": pos.tolist(),
-                "velocity": [0.0, 0.0],  # Assume stationary for now
-                "radius": 0.35  # Default pedestrian radius
-            })
-        
+            agents.append(
+                {
+                    "position": pos.tolist(),
+                    "velocity": [0.0, 0.0],  # Assume stationary for now
+                    "radius": 0.35,  # Default pedestrian radius
+                }
+            )
+
         # Create observation
         obs = Observation(
             dt=dt,
@@ -159,15 +173,15 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
                 "position": robot_pos.tolist(),
                 "velocity": robot_vel.tolist(),
                 "goal": robot_goal.tolist(),
-                "radius": 0.3  # Default robot radius
+                "radius": 0.3,  # Default robot radius
             },
             agents=agents,
-            obstacles=[]
+            obstacles=[],
         )
-        
+
         # Get action from planner
         action = planner.step(obs)
-        
+
         # Convert action to velocity (handle both action spaces)
         if "vx" in action and "vy" in action:
             return np.array([action["vx"], action["vy"]], dtype=float)
@@ -175,7 +189,7 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
             # Simple conversion from unicycle to velocity
             # This is a simplification - real conversion would need robot heading
             v = action["v"]
-            omega = action["omega"]
+            _omega = action["omega"]  # Not used in this simplified conversion
             # Assume current velocity direction with magnitude adjustment
             current_speed = np.linalg.norm(robot_vel)
             if current_speed > 1e-6:
@@ -190,10 +204,10 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
                     return np.zeros(2)
         else:
             raise ValueError(f"Invalid action format from {algo}: {action}")
-    
+
     # Get metadata for episode record
-    metadata = planner.get_metadata() if hasattr(planner, 'get_metadata') else {"algorithm": algo}
-    
+    metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
+
     return policy, metadata
 
 
@@ -217,7 +231,7 @@ def run_episode(
     """
     # Create robot policy based on algorithm
     robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
-    
+
     gen = generate_scenario(scenario_params, seed=seed)
     sim = gen.simulator
     if sim is None:

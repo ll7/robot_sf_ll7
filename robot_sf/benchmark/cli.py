@@ -39,12 +39,9 @@ def _add_baseline_subparser(
     p.add_argument(
         "--algo",
         default="simple_policy",
-        help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)"
+        help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)",
     )
-    p.add_argument(
-        "--algo-config",
-        help="Path to algorithm configuration YAML file"
-    )
+    p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
     p.set_defaults(cmd="baseline")
 
 
@@ -67,12 +64,9 @@ def _add_run_subparser(
     p.add_argument(
         "--algo",
         default="simple_policy",
-        help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)"
+        help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)",
     )
-    p.add_argument(
-        "--algo-config",
-        help="Path to algorithm configuration YAML file"
-    )
+    p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
     p.add_argument(
         "--fail-fast",
         action="store_true",
@@ -146,19 +140,20 @@ def cli_main(argv: List[str] | None = None) -> int:
         try:
             # Show built-in simple policy
             algorithms = ["simple_policy"]
-            
+
             # Try to load baseline algorithms
             try:
                 from robot_sf.baselines import list_baselines
+
                 baseline_algos = list_baselines()
                 algorithms.extend(baseline_algos)
             except ImportError:
                 print("Warning: Could not load baseline algorithms", file=sys.stderr)
-            
+
             print("Available algorithms:")
             for algo in algorithms:
                 print(f"  - {algo}")
-            
+
             return 0
         except Exception as e:  # pragma: no cover - error path
             print(f"Error: {e}", file=sys.stderr)

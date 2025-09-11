@@ -1,6 +1,0 @@
-# UV workspace configuration
-# Note: The uv.toml file handles workspace-level settings while
-# [tool.uv.sources] in pyproject.toml handles dependency sources.
-# The warning about both files existing can be safely ignored.
-cache-dir = ".uv-cache"
-native-tls = true

@@ -4,13 +4,25 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+      SDL_VIDEODRIVER: dummy
+      MPLBACKEND: Agg
+      PYGAME_HIDE_SUPPORT_PROMPT: "1"
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -21,45 +33,32 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           version: "0.5.11"
+
+      - name: Cache .venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Cache uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Update package list
-        run: sudo apt-get update
+      - name: System packages for headless
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 
-      - name: Install ffmpeg
-        run: sudo apt-get install ffmpeg
-
-      - name: Install dependencies
+      - name: Sync dependencies (locked)
         run: uv sync --frozen
 
-      - name: Run tests
-        run: uv run pytest tests
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
 
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Verify submodule contents
-        run: ls -la fast-pysf/
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.5.11"
-          
-      - name: Set up Python  
-        run: uv python install 3.12
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Run Ruff linting
-        run: uv run ruff check .
-
-      - name: Run Ruff formatting
-        run: uv run ruff format --check .
+      - name: Unit tests
+        run: uv run pytest -q

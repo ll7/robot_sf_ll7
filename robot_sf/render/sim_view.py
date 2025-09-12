@@ -89,7 +89,7 @@ class VisualizableSimState:
     ego_ped_action: Union[VisualizableAction, None] = None
     """The action taken by the ego pedestrian at this timestep. Defaults to None."""
 
-    time_per_step_in_secs: float = None
+    time_per_step_in_secs: float | None = None
     """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
 
     def __post_init__(self):

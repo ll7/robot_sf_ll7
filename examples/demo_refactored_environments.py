@@ -37,7 +37,11 @@ def demo_factory_pattern():
         robot_env = make_robot_env(debug=False)
         print(f"✅ Created {type(robot_env).__name__}")
         print(f"   Action space: {robot_env.action_space}")
-        print(f"   Observation space keys: {robot_env.observation_space.spaces.keys()}")
+        if hasattr(robot_env.observation_space, 'spaces'):
+            spaces_dict = getattr(robot_env.observation_space, 'spaces')
+            print(f"   Observation space keys: {spaces_dict.keys()}")
+        else:
+            print(f"   Observation space: {robot_env.observation_space}")
         robot_env.exit()
     except Exception as e:
         print(f"❌ Failed to create robot environment: {e}")
@@ -47,7 +51,11 @@ def demo_factory_pattern():
     try:
         image_robot_env = make_image_robot_env(debug=False)
         print(f"✅ Created {type(image_robot_env).__name__}")
-        print(f"   Has image observations: {'image' in image_robot_env.observation_space.spaces}")
+        if hasattr(image_robot_env.observation_space, 'spaces'):
+            spaces_dict = getattr(image_robot_env.observation_space, 'spaces')
+            print(f"   Has image observations: {'image' in spaces_dict}")
+        else:
+            print(f"   Observation space: {image_robot_env.observation_space}")
         image_robot_env.exit()
     except Exception as e:
         print(f"❌ Failed to create image robot environment: {e}")

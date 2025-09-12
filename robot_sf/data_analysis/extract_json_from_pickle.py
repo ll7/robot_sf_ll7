@@ -41,7 +41,7 @@ from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 
 
-def save_to_json(filename_pkl: str, filename_json: str = None):
+def save_to_json(filename_pkl: str, filename_json: str | None = None):
     """
     Save simulation states from a pickle recording file to a JSON file.
 
@@ -385,8 +385,6 @@ def show_from_json(filename: str, unique_id: str):
 if __name__ == "__main__":
     # Example usage
     from pathlib import Path
-
-    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
 
     # Ensure the plots directory exists
     PLOTS_DIR = "robot_sf/data_analysis/plots"

@@ -47,6 +47,7 @@ dependencies = [
     "setuptools>=70.0.0",
     "pysocialforce",
     "jsonschema>=4.23.0",
+    "gputil>=1.4.0",
 ]
 
 [project.optional-dependencies]

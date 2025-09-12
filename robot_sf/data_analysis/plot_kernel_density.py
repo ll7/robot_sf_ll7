@@ -19,8 +19,8 @@ def plot_kde_on_map(
     ped_positions_array: np.ndarray,
     bandwidth: float = 1.0,
     interactive: bool = False,
-    unique_id: str = None,
-    map_def: MapDefinition = None,
+    unique_id: str | None = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot the Kernel Density Estimation of pedestrian positions on a map.
@@ -107,7 +107,7 @@ def plot_kde_in_x_y(
     ego_data: np.ndarray,
     bandwidth: float = 0.1,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
 ):
     """
     Plot the Kernel Density Estimation of npc and ego positions in X and Y axes.

@@ -3,7 +3,12 @@
 import os
 import sys
 
-import GPUtil
+from typing import Any
+
+try:
+    import GPUtil
+except ImportError:
+    GPUtil: Any = None
 import psutil
 from loguru import logger
 from stable_baselines3 import PPO
@@ -23,9 +28,13 @@ class LogResourceUsageCallback(BaseCallback):
     def _on_step(self) -> bool:
         """Log CPU and GPU usage and memory utilization at each step."""
         cpu_usage = psutil.cpu_percent()
-        gpus = GPUtil.getGPUs()
-        gpu_usage = [gpu.load * 100 for gpu in gpus] if gpus else [0]
-        gpu_memory_util = [gpu.memoryUtil * 100 for gpu in gpus] if gpus else [0]
+        if GPUtil is not None:
+            gpus = GPUtil.getGPUs()
+            gpu_usage = [gpu.load * 100 for gpu in gpus] if gpus else [0]
+            gpu_memory_util = [gpu.memoryUtil * 100 for gpu in gpus] if gpus else [0]
+        else:
+            gpu_usage = [0]
+            gpu_memory_util = [0]
 
         # Log to TensorBoard
         self.logger.record("cpu_usage", cpu_usage)
@@ -36,20 +45,22 @@ class LogResourceUsageCallback(BaseCallback):
         return True
 
 
-def training(n_envs: int = os.cpu_count(), ped_densities: list[float] = None, difficulty: int = 2):
+def training(n_envs: int | None = None, ped_densities: list[float] | None = None, difficulty: int = 2):
     """Train a robot in robot_sf.
     Args:
         n_envs: Number of environments to run in parallel.
         ped_densities: List of pedestrian densities to use.
         difficulty: Difficulty of the simulation.
     """
+    if n_envs is None:
+        n_envs = os.cpu_count() or 1
     logger.info(f"Number of CPUs: {n_envs}")
     if ped_densities is None:
         ped_densities = [0.01, 0.02, 0.04, 0.08]
 
     def make_env():
         config = EnvSettings()
-        config.sim_config.ped_density_by_difficulty = ped_densities
+        config.sim_config.ped_density_by_difficulty = ped_densities or []
         config.sim_config.difficulty = difficulty
         return RobotEnv(config)
 

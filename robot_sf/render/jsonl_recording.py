@@ -114,62 +114,103 @@ class JSONLRecorder:
 
     def _serialize_state(self, state: VisualizableSimState) -> Dict[str, Any]:
         """Serialize a VisualizableSimState to dictionary format."""
-        state_dict = {}
+        state_dict: Dict[str, Any] = {"timestep": getattr(state, "timestep", 0.0)}
 
-        # Serialize core attributes
-        state_dict["timestep"] = state.timestep
+        # Delegate serialization of optional components to small helpers to keep
+        # cyclomatic complexity low (ruff C901 compliance) while retaining
+        # defensive checks.
+        robot_pose = self._serialize_robot_pose(state)
+        if robot_pose is not None:
+            state_dict["robot_pose"] = robot_pose
 
-        if hasattr(state, "robot_pose") and state.robot_pose is not None:
-            state_dict["robot_pose"] = [
-                [float(state.robot_pose[0][0]), float(state.robot_pose[0][1])],  # position
-                float(state.robot_pose[1]),  # orientation
-            ]
+        ped_positions = self._serialize_pedestrian_positions(state)
+        if ped_positions is not None:
+            state_dict["pedestrian_positions"] = ped_positions
 
-        if hasattr(state, "pedestrian_positions") and state.pedestrian_positions is not None:
-            # Handle numpy array
-            if (
-                hasattr(state.pedestrian_positions, "__len__")
-                and len(state.pedestrian_positions) > 0
-            ):
-                state_dict["pedestrian_positions"] = [
-                    [float(pos[0]), float(pos[1])] for pos in state.pedestrian_positions
-                ]
-            else:
-                state_dict["pedestrian_positions"] = []
+        ego_ped_pose = self._serialize_ego_ped_pose(state)
+        if ego_ped_pose is not None:
+            state_dict["ego_ped_pose"] = ego_ped_pose
 
-        if hasattr(state, "ego_ped_pose") and state.ego_ped_pose is not None:
-            state_dict["ego_ped_pose"] = [
-                [float(state.ego_ped_pose[0][0]), float(state.ego_ped_pose[0][1])],  # position
-                float(state.ego_ped_pose[1]),  # orientation
-            ]
+        ray_vecs = self._serialize_ray_vecs(state)
+        if ray_vecs is not None:
+            state_dict["ray_vecs"] = ray_vecs
 
-        if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
-            # Handle numpy array for LIDAR rays
-            if hasattr(state.ray_vecs, "__len__") and len(state.ray_vecs) > 0:
-                try:
-                    # Handle multi-dimensional arrays properly
-                    if hasattr(state.ray_vecs, "tolist"):
-                        state_dict["ray_vecs"] = state.ray_vecs.tolist()
-                    else:
-                        # Fallback for other array types
-                        state_dict["ray_vecs"] = [[float(x) for x in ray] for ray in state.ray_vecs]
-                except (TypeError, ValueError):
-                    # If conversion fails, skip ray_vecs
-                    state_dict["ray_vecs"] = []
-            else:
-                state_dict["ray_vecs"] = []
-
-        if hasattr(state, "robot_action") and state.robot_action is not None:
-            # Serialize robot action if present
-            action_dict = {}
-            if hasattr(state.robot_action, "linear_velocity"):
-                action_dict["linear_velocity"] = float(state.robot_action.linear_velocity)
-            if hasattr(state.robot_action, "angular_velocity"):
-                action_dict["angular_velocity"] = float(state.robot_action.angular_velocity)
-            if action_dict:
-                state_dict["robot_action"] = action_dict
+        robot_action = self._serialize_robot_action(state)
+        if robot_action is not None:
+            state_dict["robot_action"] = robot_action
 
         return state_dict
+
+    # --- Serialization helpers (each intentionally small & focused) ---
+    def _serialize_robot_pose(self, state: VisualizableSimState) -> Optional[List[Any]]:  # noqa: D401
+        """Return robot pose [[x, y], theta] if available else None."""
+        if not hasattr(state, "robot_pose") or state.robot_pose is None:
+            return None
+        try:
+            return [
+                [float(state.robot_pose[0][0]), float(state.robot_pose[0][1])],
+                float(state.robot_pose[1]),
+            ]
+        except (TypeError, ValueError, IndexError):  # Defensive: malformed pose
+            return None
+
+    def _serialize_pedestrian_positions(
+        self, state: VisualizableSimState
+    ) -> Optional[List[List[float]]]:  # noqa: D401,E501
+        """Return list of pedestrian positions [[x,y], ...] or None if absent."""
+        if not hasattr(state, "pedestrian_positions") or state.pedestrian_positions is None:
+            return None
+        positions = state.pedestrian_positions
+        try:
+            if hasattr(positions, "__len__") and len(positions) > 0:
+                return [[float(p[0]), float(p[1])] for p in positions]
+            return []
+        except (TypeError, ValueError, IndexError):
+            return []
+
+    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> Optional[List[Any]]:  # noqa: D401
+        """Return ego pedestrian pose [[x,y], theta] if available else None."""
+        if not hasattr(state, "ego_ped_pose") or state.ego_ped_pose is None:
+            return None
+        try:
+            return [
+                [float(state.ego_ped_pose[0][0]), float(state.ego_ped_pose[0][1])],
+                float(state.ego_ped_pose[1]),
+            ]
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def _serialize_ray_vecs(self, state: VisualizableSimState) -> Optional[List[Any]]:  # noqa: D401
+        """Return ray vectors list representation or None if absent."""
+        if not hasattr(state, "ray_vecs") or state.ray_vecs is None:
+            return None
+        ray_vecs = state.ray_vecs
+        if not hasattr(ray_vecs, "__len__") or len(ray_vecs) == 0:  # empty container
+            return []
+        try:
+            if hasattr(ray_vecs, "tolist"):
+                return ray_vecs.tolist()
+            return [[float(x) for x in ray] for ray in ray_vecs]
+        except (TypeError, ValueError):
+            return []
+
+    def _serialize_robot_action(self, state: VisualizableSimState) -> Optional[Dict[str, float]]:  # noqa: D401,E501
+        """Return robot action dict {'linear_velocity':..,'angular_velocity':..} or None."""
+        if not hasattr(state, "robot_action") or state.robot_action is None:
+            return None
+        action = state.robot_action
+        action_dict: Dict[str, float] = {}
+        if hasattr(action, "linear_velocity"):
+            try:
+                action_dict["linear_velocity"] = float(action.linear_velocity)
+            except (TypeError, ValueError):  # ignore malformed values
+                pass
+        if hasattr(action, "angular_velocity"):
+            try:
+                action_dict["angular_velocity"] = float(action.angular_velocity)
+            except (TypeError, ValueError):
+                pass
+        return action_dict or None
 
     def start_episode(self, config_hash: str = "unknown") -> None:
         """Start recording a new episode.

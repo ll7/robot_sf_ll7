@@ -77,14 +77,15 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         ray_layers = []
         in_channels = [rays_space.shape[0]] + num_filters[:-1]
 
-        for i, (in_ch, out_ch, kernel_size) in enumerate(zip(in_channels, num_filters, kernel_sizes)):
+        for i, (in_ch, out_ch, kernel_size) in enumerate(
+            zip(in_channels, num_filters, kernel_sizes)
+        ):
             ray_layers.extend(conv_block(in_ch, out_ch, kernel_size))
 
         # Add adaptive pooling to handle variable input sizes
-        ray_layers.extend([
-            nn.AdaptiveAvgPool1d(rays_space.shape[1] // (2 ** len(num_filters))),
-            nn.Flatten()
-        ])
+        ray_layers.extend(
+            [nn.AdaptiveAvgPool1d(rays_space.shape[1] // (2 ** len(num_filters))), nn.Flatten()]
+        )
 
         self.ray_extractor = nn.Sequential(*ray_layers)
 
@@ -93,16 +94,11 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         drive_dims = [drive_input_dim] + drive_hidden_dims
 
         for i in range(len(drive_dims) - 1):
-            drive_layers.extend([
-                nn.Linear(drive_dims[i], drive_dims[i + 1]),
-                nn.ReLU(),
-                nn.Dropout(dropout_rate)
-            ])
+            drive_layers.extend(
+                [nn.Linear(drive_dims[i], drive_dims[i + 1]), nn.ReLU(), nn.Dropout(dropout_rate)]
+            )
 
-        self.drive_state_extractor = nn.Sequential(
-            nn.Flatten(),
-            *drive_layers
-        )
+        self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
 
     def forward(self, obs: dict) -> th.Tensor:
         """

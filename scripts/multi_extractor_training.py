@@ -70,18 +70,17 @@ class MultiExtractorTraining:
 
     def create_env(self):
         """Create environment factory function."""
+
         def make_env():
             config = EnvSettings()
             config.sim_config.ped_density_by_difficulty = self.ped_densities
             config.sim_config.difficulty = self.difficulty
             return RobotEnv(config)
+
         return make_env
 
     def train_with_extractor(
-        self,
-        extractor_config: FeatureExtractorConfig,
-        name: str,
-        verbose: int = 1
+        self, extractor_config: FeatureExtractorConfig, name: str, verbose: int = 1
     ) -> Dict:
         """
         Train a model with a specific feature extractor.
@@ -94,11 +93,11 @@ class MultiExtractorTraining:
         Returns:
             Dictionary with training results and metrics
         """
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Training with {name} feature extractor")
         print(f"Type: {extractor_config.extractor_type.value}")
         print(f"Params: {extractor_config.params}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         # Create output directory for this extractor
         extractor_dir = self.output_dir / name
@@ -118,14 +117,14 @@ class MultiExtractorTraining:
             train_env,
             tensorboard_log=str(extractor_dir / "tensorboard"),
             policy_kwargs=policy_kwargs,
-            verbose=verbose
+            verbose=verbose,
         )
 
         # Setup callbacks
         checkpoint_callback = CheckpointCallback(
             save_freq=self.save_freq // self.n_envs,
             save_path=str(extractor_dir / "checkpoints"),
-            name_prefix=f"ppo_{name}"
+            name_prefix=f"ppo_{name}",
         )
 
         eval_callback = EvalCallback(
@@ -135,7 +134,7 @@ class MultiExtractorTraining:
             eval_freq=self.eval_freq // self.n_envs,
             n_eval_episodes=self.n_eval_episodes,
             deterministic=True,
-            render=False
+            render=False,
         )
 
         metrics_callback = DrivingMetricsCallback(self.n_envs)
@@ -147,11 +146,7 @@ class MultiExtractorTraining:
 
         try:
             # Train the model
-            model.learn(
-                total_timesteps=self.total_timesteps,
-                callback=callback,
-                progress_bar=True
-            )
+            model.learn(total_timesteps=self.total_timesteps, callback=callback, progress_bar=True)
 
             training_time = time.time() - start_time
 
@@ -165,21 +160,23 @@ class MultiExtractorTraining:
                 "extractor_params": extractor_config.params,
                 "training_time": training_time,
                 "total_timesteps": self.total_timesteps,
-                "final_reward": getattr(eval_callback, 'last_mean_reward', None),
-                "best_reward": getattr(eval_callback, 'best_mean_reward', None),
+                "final_reward": getattr(eval_callback, "last_mean_reward", None),
+                "best_reward": getattr(eval_callback, "best_mean_reward", None),
                 "n_envs": self.n_envs,
                 "completed": True,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
             # Count model parameters
             total_params = sum(p.numel() for p in model.policy.parameters())
             trainable_params = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
 
-            results.update({
-                "total_parameters": int(total_params),
-                "trainable_parameters": int(trainable_params)
-            })
+            results.update(
+                {
+                    "total_parameters": int(total_params),
+                    "trainable_parameters": int(trainable_params),
+                }
+            )
 
             print("Training completed successfully!")
             print(f"Training time: {training_time:.2f} seconds")
@@ -194,7 +191,7 @@ class MultiExtractorTraining:
                 "extractor_params": extractor_config.params,
                 "completed": False,
                 "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
         finally:
@@ -207,7 +204,7 @@ class MultiExtractorTraining:
     def run_comparison(
         self,
         extractor_configs: Dict[str, FeatureExtractorConfig],
-        save_individual_results: bool = True
+        save_individual_results: bool = True,
     ) -> Dict:
         """
         Run training comparison across multiple feature extractors.
@@ -235,7 +232,7 @@ class MultiExtractorTraining:
 
                 if save_individual_results:
                     result_file = self.output_dir / name / "training_results.json"
-                    with open(result_file, 'w') as f:
+                    with open(result_file, "w") as f:
                         json.dump(result, f, indent=2)
 
             except Exception as e:
@@ -244,7 +241,7 @@ class MultiExtractorTraining:
                     "name": name,
                     "completed": False,
                     "error": str(e),
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 }
 
         # Save complete results
@@ -257,16 +254,16 @@ class MultiExtractorTraining:
                 "n_envs": self.n_envs,
                 "n_eval_episodes": self.n_eval_episodes,
                 "difficulty": self.difficulty,
-                "ped_densities": self.ped_densities
+                "ped_densities": self.ped_densities,
             },
-            "results": self.results
+            "results": self.results,
         }
 
         results_file = self.output_dir / "complete_results.json"
-        with open(results_file, 'w') as f:
+        with open(results_file, "w") as f:
             json.dump(complete_results, f, indent=2)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Comparison completed in {total_time:.2f} seconds")
         print(f"Results saved to: {results_file}")
         self._print_summary()
@@ -276,14 +273,24 @@ class MultiExtractorTraining:
     def _print_summary(self):
         """Print a summary of results."""
         print("\nTraining Summary:")
-        print(f"{'Extractor':<20} {'Completed':<12} {'Best Reward':<12} {'Parameters':<12} {'Time (s)':<10}")
-        print(f"{'-'*76}")
+        print(
+            f"{'Extractor':<20} {'Completed':<12} {'Best Reward':<12} {'Parameters':<12} {'Time (s)':<10}"
+        )
+        print(f"{'-' * 76}")
 
         for name, result in self.results.items():
             completed = "✓" if result.get("completed", False) else "✗"
-            best_reward = f"{result.get('best_reward', 'N/A'):>8.3f}" if result.get('best_reward') else "N/A"
-            params = f"{result.get('total_parameters', 0):>9,}" if result.get('total_parameters') else "N/A"
-            train_time = f"{result.get('training_time', 0):>8.1f}" if result.get('training_time') else "N/A"
+            best_reward = (
+                f"{result.get('best_reward', 'N/A'):>8.3f}" if result.get("best_reward") else "N/A"
+            )
+            params = (
+                f"{result.get('total_parameters', 0):>9,}"
+                if result.get("total_parameters")
+                else "N/A"
+            )
+            train_time = (
+                f"{result.get('training_time', 0):>8.1f}" if result.get("training_time") else "N/A"
+            )
 
             print(f"{name:<20} {completed:<12} {best_reward:<12} {params:<12} {train_time:<10}")
 

@@ -109,19 +109,16 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
             nn.Linear(num_timesteps, embed_dim),
             nn.LayerNorm(embed_dim),
             nn.ReLU(),
-            nn.Dropout(dropout_rate)
+            nn.Dropout(dropout_rate),
         )
 
         # Attention layers
-        self.attention_layers = nn.ModuleList([
-            MultiHeadAttention(embed_dim, num_heads, dropout_rate)
-            for _ in range(num_layers)
-        ])
+        self.attention_layers = nn.ModuleList(
+            [MultiHeadAttention(embed_dim, num_heads, dropout_rate) for _ in range(num_layers)]
+        )
 
         # Layer normalization for attention
-        self.layer_norms = nn.ModuleList([
-            nn.LayerNorm(embed_dim) for _ in range(num_layers)
-        ])
+        self.layer_norms = nn.ModuleList([nn.LayerNorm(embed_dim) for _ in range(num_layers)])
 
         # Global pooling for final representation
         self.global_pool = nn.AdaptiveAvgPool1d(1)
@@ -131,16 +128,11 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         drive_dims = [drive_input_dim] + drive_hidden_dims
 
         for i in range(len(drive_dims) - 1):
-            drive_layers.extend([
-                nn.Linear(drive_dims[i], drive_dims[i + 1]),
-                nn.ReLU(),
-                nn.Dropout(dropout_rate)
-            ])
+            drive_layers.extend(
+                [nn.Linear(drive_dims[i], drive_dims[i + 1]), nn.ReLU(), nn.Dropout(dropout_rate)]
+            )
 
-        self.drive_state_extractor = nn.Sequential(
-            nn.Flatten(),
-            *drive_layers
-        )
+        self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
 
     def forward(self, obs: dict) -> th.Tensor:
         """

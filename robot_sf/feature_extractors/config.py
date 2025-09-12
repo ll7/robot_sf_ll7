@@ -50,7 +50,7 @@ class FeatureExtractorConfig:
         """Get policy kwargs suitable for StableBaselines3."""
         return {
             "features_extractor_class": self.get_extractor_class(),
-            "features_extractor_kwargs": self.params.copy()
+            "features_extractor_kwargs": self.params.copy(),
         }
 
 
@@ -70,17 +70,13 @@ class FeatureExtractorPresets:
     @staticmethod
     def dynamics_original() -> FeatureExtractorConfig:
         """Original DynamicsExtractor with default parameters."""
-        return FeatureExtractorConfig(
-            extractor_type=FeatureExtractorType.DYNAMICS,
-            params={}
-        )
+        return FeatureExtractorConfig(extractor_type=FeatureExtractorType.DYNAMICS, params={})
 
     @staticmethod
     def dynamics_no_conv() -> FeatureExtractorConfig:
         """Original DynamicsExtractor without convolution (flatten only)."""
         return FeatureExtractorConfig(
-            extractor_type=FeatureExtractorType.DYNAMICS,
-            params={"use_ray_conv": False}
+            extractor_type=FeatureExtractorType.DYNAMICS, params={"use_ray_conv": False}
         )
 
     @staticmethod
@@ -88,11 +84,7 @@ class FeatureExtractorPresets:
         """Small MLP extractor for fast training."""
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.MLP,
-            params={
-                "ray_hidden_dims": [64, 32],
-                "drive_hidden_dims": [16, 8],
-                "dropout_rate": 0.1
-            }
+            params={"ray_hidden_dims": [64, 32], "drive_hidden_dims": [16, 8], "dropout_rate": 0.1},
         )
 
     @staticmethod
@@ -103,8 +95,8 @@ class FeatureExtractorPresets:
             params={
                 "ray_hidden_dims": [256, 128, 64],
                 "drive_hidden_dims": [64, 32, 16],
-                "dropout_rate": 0.15
-            }
+                "dropout_rate": 0.15,
+            },
         )
 
     @staticmethod
@@ -112,12 +104,7 @@ class FeatureExtractorPresets:
         """Small attention extractor."""
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.ATTENTION,
-            params={
-                "embed_dim": 32,
-                "num_heads": 2,
-                "num_layers": 1,
-                "dropout_rate": 0.1
-            }
+            params={"embed_dim": 32, "num_heads": 2, "num_layers": 1, "dropout_rate": 0.1},
         )
 
     @staticmethod
@@ -125,12 +112,7 @@ class FeatureExtractorPresets:
         """Large attention extractor."""
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.ATTENTION,
-            params={
-                "embed_dim": 128,
-                "num_heads": 8,
-                "num_layers": 3,
-                "dropout_rate": 0.1
-            }
+            params={"embed_dim": 128, "num_heads": 8, "num_layers": 3, "dropout_rate": 0.1},
         )
 
     @staticmethod
@@ -138,17 +120,12 @@ class FeatureExtractorPresets:
         """Lightweight CNN extractor."""
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.LIGHTWEIGHT_CNN,
-            params={
-                "num_filters": [32, 16],
-                "kernel_sizes": [5, 3],
-                "dropout_rate": 0.1
-            }
+            params={"num_filters": [32, 16], "kernel_sizes": [5, 3], "dropout_rate": 0.1},
         )
 
 
 def create_feature_extractor_config(
-    extractor_type: Union[str, FeatureExtractorType],
-    **params
+    extractor_type: Union[str, FeatureExtractorType], **params
 ) -> FeatureExtractorConfig:
     """
     Create a feature extractor configuration.
@@ -166,7 +143,4 @@ def create_feature_extractor_config(
     if isinstance(extractor_type, str):
         extractor_type = FeatureExtractorType(extractor_type)
 
-    return FeatureExtractorConfig(
-        extractor_type=extractor_type,
-        params=params
-    )
+    return FeatureExtractorConfig(extractor_type=extractor_type, params=params)

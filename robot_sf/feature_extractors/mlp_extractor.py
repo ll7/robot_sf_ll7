@@ -63,32 +63,22 @@ class MLPFeatureExtractor(BaseFeaturesExtractor):
         ray_dims = [ray_input_dim] + ray_hidden_dims
 
         for i in range(len(ray_dims) - 1):
-            ray_layers.extend([
-                nn.Linear(ray_dims[i], ray_dims[i + 1]),
-                nn.ReLU(),
-                nn.Dropout(dropout_rate)
-            ])
+            ray_layers.extend(
+                [nn.Linear(ray_dims[i], ray_dims[i + 1]), nn.ReLU(), nn.Dropout(dropout_rate)]
+            )
 
-        self.ray_extractor = nn.Sequential(
-            nn.Flatten(),
-            *ray_layers
-        )
+        self.ray_extractor = nn.Sequential(nn.Flatten(), *ray_layers)
 
         # Build drive state processing MLP
         drive_layers = []
         drive_dims = [drive_input_dim] + drive_hidden_dims
 
         for i in range(len(drive_dims) - 1):
-            drive_layers.extend([
-                nn.Linear(drive_dims[i], drive_dims[i + 1]),
-                nn.ReLU(),
-                nn.Dropout(dropout_rate)
-            ])
+            drive_layers.extend(
+                [nn.Linear(drive_dims[i], drive_dims[i + 1]), nn.ReLU(), nn.Dropout(dropout_rate)]
+            )
 
-        self.drive_state_extractor = nn.Sequential(
-            nn.Flatten(),
-            *drive_layers
-        )
+        self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
 
     def forward(self, obs: dict) -> th.Tensor:
         """

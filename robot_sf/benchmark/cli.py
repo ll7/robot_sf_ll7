@@ -218,8 +218,6 @@ def cli_main(argv: List[str] | None = None) -> int:
         parser.print_help()
         return 2
     return handler(args)
-    parser.print_help()
-    return 1
 
 
 def main() -> None:  # pragma: no cover - thin wrapper

@@ -15,6 +15,7 @@ from typing import Callable
 
 from loguru import logger
 
+from robot_sf.eval import EpisodeMetricsCollector
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import (
@@ -49,6 +50,7 @@ class RobotEnv(BaseEnv):
         video_path: str = None,
         video_fps: float = None,
         peds_have_obstacle_forces: bool = False,
+        collect_episode_metrics: bool = False,
     ):
         """
         Initialize the Robot Environment.
@@ -62,6 +64,8 @@ class RobotEnv(BaseEnv):
         - recording_enabled (bool): If True, enables recording of the simulation
         - record_video: If True, saves simulation as video file
         - video_path: Path where to save the video file
+        - collect_episode_metrics: If True, collects episode-level metrics
+            (mean interpersonal distance and per-pedestrian force quantiles)
         """
         super().__init__(
             env_config=env_config,
@@ -109,6 +113,13 @@ class RobotEnv(BaseEnv):
         # Store last action executed by the robot
         self.last_action = None
 
+        # Initialize episode metrics collector if requested
+        self.collect_episode_metrics = collect_episode_metrics
+        if collect_episode_metrics:
+            self.episode_metrics_collector = EpisodeMetricsCollector()
+        else:
+            self.episode_metrics_collector = None
+
     def step(self, action):
         """
         Execute one time step within the environment.
@@ -127,10 +138,21 @@ class RobotEnv(BaseEnv):
         action = self.simulator.robots[0].parse_action(action)
         # Perform simulation step
         self.simulator.step_once([action])
+
+        # Collect episode metrics if enabled
+        if self.episode_metrics_collector is not None:
+            self._collect_episode_metrics()
+
         # Get updated observation
         obs = self.state.step()
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
+
+        # Add episode metrics to reward_dict if available and episode is terminal
+        if self.episode_metrics_collector is not None and self.state.is_terminal:
+            episode_metrics = self.episode_metrics_collector.compute_episode_metrics()
+            reward_dict.update(episode_metrics)
+
         # add the action space to dict
         reward_dict["action_space"] = self.action_space
         # add action to dict
@@ -182,6 +204,11 @@ class RobotEnv(BaseEnv):
         self.last_action = None
         # Reset internal simulator state
         self.simulator.reset_state()
+
+        # Reset episode metrics collector if enabled
+        if self.episode_metrics_collector is not None:
+            self.episode_metrics_collector.reset_episode()
+
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
         # if recording is enabled, save the recording and reset the state list
@@ -191,6 +218,33 @@ class RobotEnv(BaseEnv):
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
         return obs, info
+
+    def _collect_episode_metrics(self):
+        """Collect episode-level metrics data from current simulation state."""
+        if self.episode_metrics_collector is None:
+            return
+
+        # Get robot position (extract from pose)
+        robot_pos = self.simulator.robot_poses[0][
+            0
+        ]  # [0] for first robot, [0] for position from pose
+
+        # Get pedestrian positions and forces
+        ped_positions = self.simulator.ped_pos
+
+        # Get force data - we need to compute forces or access them from simulator
+        # Forces are computed in step_once, but we need to access them
+        # For now, compute them again (could be optimized by storing them in step_once)
+        try:
+            ped_forces = self.simulator.pysf_sim.compute_forces()
+        except Exception:
+            # If force computation fails, skip force metrics for this timestep
+            ped_forces = None
+
+        # Update metrics collector
+        self.episode_metrics_collector.update_timestep(
+            robot_pos=robot_pos, ped_positions=ped_positions, ped_forces=ped_forces
+        )
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed

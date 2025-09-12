@@ -52,7 +52,7 @@ except ImportError:
     class MockNumpy:
         def array(self, data, dtype=None):
             return data
-        
+
         # Mock ndarray attribute for type hints
         ndarray = list
 

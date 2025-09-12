@@ -9,6 +9,14 @@ Update etiquette:
 - Keep scope creep isolated in the Stretch section.
 
 ---
+### Recent Updates (2025-09-12)
+- Implemented and documented `curvature_mean` metric (added tests; integrated into existing path smoothness suite).
+- Rebuilt & stabilized Social Force baseline (deterministic seeding, NaN guards, consolidated force composition).
+- Extracted scattered `1e-9` literals into `SocialForcePlanner.EPSILON` constant for maintainability.
+- Refactored benchmark CLI (reduced complexity, removed unreachable code).
+- Added CI preflight (schema + uv + optional jq) and kept full test suite green.
+- UI/playback enhancements: frame rendering method, dynamic help overlay height, disentangled UI FPS pacing.
+
 ## 0. Scoping & Planning
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
@@ -70,7 +78,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 	- [x] CLI baseline subcommand (`robot_sf_bench baseline`) to produce baseline med/p95 JSON (2025-09-08)
 
 ## 5. Baseline Algorithm Integrations
-- [ ] Standard Social Force planner wrapper
+- [x] Standard Social Force planner wrapper (2025-09-12)
 - [ ] Existing RL policy loader (PPO model) adapter
 - [ ] Random / naive reactive baseline
 - [ ] (Optional) ORCA integration (licensing check)
@@ -148,5 +156,5 @@ Next picks (2025-09-08):
 - [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-11 (completed curvature path metric)
+Last updated: 2025-09-12 (Social Force wrapper stabilized; curvature_mean metric; EPSILON constant; CLI & CI enhancements)
 

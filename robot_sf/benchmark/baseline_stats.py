@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
@@ -71,6 +71,8 @@ def run_and_compute_baseline(
     dt: float = 0.1,
     record_forces: bool = False,
     metrics: Iterable[str] | None = None,
+    algo: str = "simple_policy",
+    algo_config_path: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
     # Optionally run batch to collect JSONL
     tmp_jsonl: str | None = None
@@ -91,6 +93,8 @@ def run_and_compute_baseline(
         record_forces=record_forces,
         append=False,
         fail_fast=False,
+        algo=algo,
+        algo_config_path=algo_config_path,
     )
 
     records = read_jsonl(tmp_jsonl)

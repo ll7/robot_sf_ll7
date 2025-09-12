@@ -66,9 +66,16 @@ class FastPysfWrapper:
             dir_unit = np.zeros(2)
 
         tau = float(self.sim.config.desired_force_config.relaxation_time)
+        # Compute a robust max_speed without triggering numpy warnings
+        max_speed = 1.0
         try:
-            max_speed = float(self.sim.peds.max_speeds.mean())
+            speeds = np.asarray(self.sim.peds.max_speeds, dtype=float)
+            if speeds.size > 0:
+                finite = np.isfinite(speeds) & (speeds > 0)
+                if np.any(finite):
+                    max_speed = float(speeds[finite].mean())
         except Exception:
+            # Fall back to default 1.0 if anything goes wrong
             max_speed = 1.0
         v_des = dir_unit * max_speed
         f_des = (v_des - np.zeros(2)) / tau

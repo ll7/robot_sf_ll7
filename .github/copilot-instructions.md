@@ -39,6 +39,13 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
 
+#### Docstrings
+- Every public module, function, class, and method should have a docstring.
+- Docstrings should use triple double quotes (""").
+- The first line should be a short summary of the object’s purpose, starting with a capital letter and ending with a period.
+- If more detail is needed, leave a blank line after the summary, then continue with a longer description.
+- For functions/methods: document parameters, return values, exceptions raised, and side effects.
+
 ### Always ask clarifying questions (with options)
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.

@@ -100,6 +100,9 @@ class BasePolicy:
 
 
 class SocialForcePlanner(BasePolicy):
+    # Numerical stability epsilon used for safe division and small-magnitude checks.
+    EPSILON: float = 1e-9
+
     class _RNGCompat:
         """Expose randint() and normal() using numpy's Generator."""
 
@@ -242,7 +245,7 @@ class SocialForcePlanner(BasePolicy):
         """
         goal_vec = robot_goal - robot_pos
         dist = float(np.linalg.norm(goal_vec))
-        goal_dir = goal_vec / dist if dist > 1e-9 else np.zeros_like(goal_vec)
+        goal_dir = goal_vec / dist if dist > self.EPSILON else np.zeros_like(goal_vec)
 
         # Adaptive desired speed: allow v_max when sufficiently far from goal
         base_speed = self.config.desired_speed
@@ -268,7 +271,7 @@ class SocialForcePlanner(BasePolicy):
         if self.config.clip_force:
             m = float(np.linalg.norm(total))
             if m > self.config.max_force:
-                total = total / (m + 1e-9) * self.config.max_force
+                total = total / (m + self.EPSILON) * self.config.max_force
         if self.config.noise_std > 0:
             total = total + np.asarray(
                 self._rng.normal(0.0, self.config.noise_std, size=2), dtype=float
@@ -296,7 +299,7 @@ class SocialForcePlanner(BasePolicy):
         if self.config.safety_clamp:
             speed = float(np.linalg.norm(desired_vel))
             if speed > self.config.v_max:
-                desired_vel = desired_vel / (speed + 1e-9) * self.config.v_max
+                desired_vel = desired_vel / (speed + self.EPSILON) * self.config.v_max
         return {"vx": float(desired_vel[0]), "vy": float(desired_vel[1])}
 
     def _force_to_unicycle_action(
@@ -310,15 +313,15 @@ class SocialForcePlanner(BasePolicy):
         mag = float(np.linalg.norm(force))
         if mag < 1e-6:
             return {"v": 0.0, "omega": 0.0}
-        desired_dir = force / (mag + 1e-9)
+        desired_dir = force / (mag + self.EPSILON)
         cur_speed = float(np.linalg.norm(robot_vel))
         if cur_speed > 1e-6:
-            cur_dir = robot_vel / (cur_speed + 1e-9)
+            cur_dir = robot_vel / (cur_speed + self.EPSILON)
             cur_heading = atan2(cur_dir[1], cur_dir[0])
         else:
             goal_dir = robot_goal - robot_pos
             if float(np.linalg.norm(goal_dir)) > 1e-6:
-                goal_dir = goal_dir / (float(np.linalg.norm(goal_dir)) + 1e-9)
+                goal_dir = goal_dir / (float(np.linalg.norm(goal_dir)) + self.EPSILON)
                 cur_heading = atan2(goal_dir[1], goal_dir[0])
             else:
                 cur_heading = 0.0

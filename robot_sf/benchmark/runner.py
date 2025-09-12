@@ -56,8 +56,10 @@ def _load_baseline_planner(algo: str, algo_config_path: Optional[str], seed: int
             raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
 
         with config_path.open("r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-
+            cfg = yaml.safe_load(f) or {}
+            if not isinstance(cfg, dict):
+                raise TypeError("Algorithm config must be a mapping (YAML dict).")
+            config = cfg
     planner = planner_class(config, seed=seed)
     return planner, Observation, config
 

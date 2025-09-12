@@ -77,10 +77,12 @@ Examples (copy‑ready):
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
 - Code quality checks: VS Code task “Check Code Quality” (Ruff + pylint errors‑only)
+- Type checking: ty
+  - VS Code task "Type Check" (`uvx ty check .`) - **All errors must be fixed before merging PRs**
 - Diagrams: VS Code task “Generate UML”
 
 Quality gates to run locally before pushing:
-1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Run Tests
+1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Type Check → 5) Run Tests
 
 Shortcuts (optional shell):
 - Break down complex problems into smaller, manageable tasks
@@ -136,7 +138,7 @@ uv run pytest tests
 
 One‑liner quality gates (CLI):
 ```bash
-uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uv run pytest tests
+uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . && uv run pytest tests
 ```
 
 ---
@@ -289,6 +291,7 @@ env = make_robot_env(config=config)
 CI mapping to local tasks and CLI:
 - Lint job → Task “Ruff: Format and Fix” → `uv run ruff check . && uv run ruff format --check .`
 - Code quality job → Task “Check Code Quality” → `uv run ruff check . && uv run pylint robot_sf --errors-only`
+- Type check job → Task "Type Check" → `uvx ty check .`
 - Test job → Task “Run Tests” → `uv run pytest tests`
 
 Workflow location: `.github/workflows/ci.yml`.
@@ -390,9 +393,10 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 - Design doc added/updated and linked (if non‑trivial).
 - Code implemented with tests (unit/integration; GUI when needed).
 - Ruff clean and “Check Code Quality” clean locally.
+- Type check clean: **All `uvx ty check .` errors must be fixed** (warnings allowed).
 - Docs updated (README in feature folder, diagrams if changed).
 - Validation scripts run and pass; optional benchmark if perf‑sensitive.
-- CI green (lint + tests) and PR opened with appropriate links.
+- CI green (lint + type check + tests) and PR opened with appropriate links.
 
 ---
 
@@ -460,7 +464,7 @@ Brief description of the change.
 git submodule update --init --recursive && uv sync && source .venv/bin/activate
 
 # Validate changes
-uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uv run pytest tests
+uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . && uv run pytest tests
 
 # Functional smoke (headless)
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
@@ -475,6 +479,6 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 2) Draft design doc under `docs/` (link issue, add test plan)
 3) Implement with small, reviewed commits
 4) Add/extend tests in `tests/` or `test_pygame/`
-5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Run Tests
+5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests
 6) Update docs/diagrams; run “Generate UML” if classes changed
 7) Open PR with summary, risks, and links to docs/tests

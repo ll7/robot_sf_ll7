@@ -55,5 +55,12 @@
 			"problemMatcher": [],
 			"group": "test"
 		},
+		{
+			"label": "Type Check",
+			"type": "shell",
+			"command": "uvx ty check .",
+			"problemMatcher": [],
+			"group": "test"
+		},
 	]
 }

@@ -169,11 +169,11 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
         ) -> np.ndarray:
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
-    # Provide minimal algorithm metadata for consistency
-    return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
+        # Provide minimal algorithm metadata for consistency
+        return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
 
-    # Load baseline planner
-    planner, Observation, _config = _load_baseline_planner(algo, algo_config_path, seed)
+    # Load baseline planner once (removed erroneous early return)
+    planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
     def policy_fn(
         robot_pos: np.ndarray,
@@ -183,37 +183,29 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
         dt: float,
     ) -> np.ndarray:
         """Policy function that uses the baseline planner."""
-        # Create observation
         obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
-
-        # Get action from planner
         action = planner.step(obs)
 
         # Convert action to velocity (handle both action spaces)
         if "vx" in action and "vy" in action:
             return np.array([action["vx"], action["vy"]], dtype=float)
-        elif "v" in action and "omega" in action:
-            # Simple conversion from unicycle to velocity
-            # This is a simplification - real conversion would need robot heading
+        if "v" in action and "omega" in action:
             v = action["v"]
-            _omega = action["omega"]  # Not used in this simplified conversion
-            # Assume current velocity direction with magnitude adjustment
             current_speed = np.linalg.norm(robot_vel)
             if current_speed > 1e-6:
                 direction = robot_vel / current_speed
                 return direction * v
-            else:
-                # If stationary, move toward goal
-                goal_dir = robot_goal - robot_pos
-                if np.linalg.norm(goal_dir) > 1e-6:
-                    return goal_dir / np.linalg.norm(goal_dir) * v
-                else:
-                    return np.zeros(2)
-        else:
-            raise ValueError(f"Invalid action format from {algo}: {action}")
+            goal_dir = robot_goal - robot_pos
+            if np.linalg.norm(goal_dir) > 1e-6:
+                return goal_dir / np.linalg.norm(goal_dir) * v
+            return np.zeros(2)
+        raise ValueError(f"Invalid action format from {algo}: {action}")
 
-    # Get metadata for episode record
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
+    # Ensure consistent metadata schema
+    metadata.setdefault("algorithm", algo)
+    metadata["config"] = algo_config
+    metadata["config_hash"] = _config_hash(algo_config)
 
     return policy_fn, metadata
 

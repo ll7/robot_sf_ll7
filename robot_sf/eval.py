@@ -2,7 +2,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
 from statistics import mean
-from typing import List
+from typing import List, Optional
+
+import numpy as np
 
 
 class EnvOutcome(IntEnum):
@@ -297,3 +299,130 @@ class PedVecEnvMetrics:
     def update(self, metas: List[dict]):
         for metric, meta in zip(self.metrics, metas):
             metric.update(meta)
+
+
+@dataclass
+class EpisodeMetricsCollector:
+    """
+    Collects episode-level metrics including mean interpersonal distance
+    and per-pedestrian force quantiles as specified in metrics_spec.md.
+    """
+
+    # Accumulated data during episode
+    robot_ped_distances: List[float] = field(default_factory=list)
+    ped_force_magnitudes: List[List[float]] = field(default_factory=list)
+    current_ped_forces: List[List[float]] = field(default_factory=list)
+
+    def reset_episode(self):
+        """Reset accumulators for new episode."""
+        self.robot_ped_distances.clear()
+        self.ped_force_magnitudes.clear()
+        self.current_ped_forces.clear()
+
+    def update_timestep(
+        self,
+        robot_pos: np.ndarray,
+        ped_positions: np.ndarray,
+        ped_forces: Optional[np.ndarray] = None,
+    ):
+        """
+        Update metrics with data from current timestep.
+
+        Args:
+            robot_pos: Robot position as (x, y) array
+            ped_positions: Array of pedestrian positions, shape (n_peds, 2)
+            ped_forces: Array of pedestrian force vectors, shape (n_peds, 2)
+        """
+        if ped_positions.size == 0:
+            # No pedestrians this timestep - skip but don't crash
+            return
+
+        # Reshape for broadcasting: robot (1, 2), peds (n_peds, 2)
+        robot_pos = np.asarray(robot_pos).reshape(1, 2)
+        ped_positions = np.asarray(ped_positions).reshape(-1, 2)
+
+        # Compute distances: ||robot_pos - ped_pos||_2 for each pedestrian
+        distances = np.linalg.norm(ped_positions - robot_pos, axis=1)
+        self.robot_ped_distances.extend(distances.tolist())
+
+        # Process forces if provided
+        if ped_forces is not None:
+            ped_forces = np.asarray(ped_forces).reshape(-1, 2)
+            # Handle NaN/inf values as specified
+            ped_forces = np.nan_to_num(ped_forces, copy=False)
+            # Compute force magnitudes
+            force_magnitudes = np.linalg.norm(ped_forces, axis=1)
+
+            # Extend per-pedestrian force lists, growing as needed
+            n_peds = len(force_magnitudes)
+            while len(self.current_ped_forces) < n_peds:
+                self.current_ped_forces.append([])
+
+            for i, magnitude in enumerate(force_magnitudes):
+                self.current_ped_forces[i].append(magnitude)
+
+    def compute_episode_metrics(self) -> dict:
+        """
+        Compute final episode metrics.
+
+        Returns:
+            dict: Dictionary with keys: mean_interpersonal_distance,
+                  ped_force_q50, ped_force_q90, ped_force_q95
+        """
+        # Mean interpersonal distance
+        if len(self.robot_ped_distances) == 0:
+            mean_interpersonal_distance = np.nan
+        else:
+            mean_interpersonal_distance = np.mean(self.robot_ped_distances)
+
+        # Per-pedestrian force quantiles
+        if len(self.current_ped_forces) == 0:
+            # No pedestrians/forces in episode
+            ped_force_q50 = np.nan
+            ped_force_q90 = np.nan
+            ped_force_q95 = np.nan
+        else:
+            # Compute quantiles for each pedestrian, then average across pedestrians
+            quantiles_per_ped = []
+            for ped_forces in self.current_ped_forces:
+                if len(ped_forces) == 0:
+                    # This pedestrian had no force samples - skip
+                    continue
+                elif len(ped_forces) == 1:
+                    # Single sample - all quantiles equal that value
+                    q50 = q90 = q95 = ped_forces[0]
+                    # Check for inf/nan in single sample
+                    if not np.isfinite(q50):
+                        continue  # Skip this pedestrian
+                else:
+                    # Multiple samples - compute quantiles
+                    ped_forces_array = np.array(ped_forces)
+                    # Filter out any remaining inf values after nan_to_num
+                    ped_forces_array = ped_forces_array[np.isfinite(ped_forces_array)]
+                    if len(ped_forces_array) == 0:
+                        continue  # Skip this pedestrian if no finite values
+
+                    q50 = np.nanpercentile(ped_forces_array, 50)
+                    q90 = np.nanpercentile(ped_forces_array, 90)
+                    q95 = np.nanpercentile(ped_forces_array, 95)
+
+                quantiles_per_ped.append([q50, q90, q95])
+
+            if len(quantiles_per_ped) == 0:
+                # No valid pedestrian force data
+                ped_force_q50 = np.nan
+                ped_force_q90 = np.nan
+                ped_force_q95 = np.nan
+            else:
+                # Average quantiles across pedestrians
+                quantiles_array = np.array(quantiles_per_ped)  # shape (n_peds, 3)
+                ped_force_q50 = np.nanmean(quantiles_array[:, 0])
+                ped_force_q90 = np.nanmean(quantiles_array[:, 1])
+                ped_force_q95 = np.nanmean(quantiles_array[:, 2])
+
+        return {
+            "mean_interpersonal_distance": mean_interpersonal_distance,
+            "ped_force_q50": ped_force_q50,
+            "ped_force_q90": ped_force_q90,
+            "ped_force_q95": ped_force_q95,
+        }

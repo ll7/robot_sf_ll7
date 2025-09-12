@@ -61,6 +61,6 @@
 			"command": "uvx ty check .",
 			"problemMatcher": [],
 			"group": "test"
-		},
+		}
 	]
 }

@@ -133,6 +133,190 @@ class JSONLPlaybackLoader:
 
         return state
 
+    def _reconstruct_map_definition(
+        self, metadata: Optional[Dict[str, Any]], states: List[VisualizableSimState]
+    ) -> MapDefinition:
+        """Reconstruct MapDefinition from metadata or fallback to minimal dummy.
+
+        Args:
+            metadata: Episode metadata that may contain map information
+            states: List of simulation states to extract spatial bounds from
+
+        Returns:
+            Reconstructed MapDefinition with proper dimensions and bounds
+        """
+        # Try to extract map information from metadata first
+        if metadata and "map_definition" in metadata:
+            map_data = metadata["map_definition"]
+            return self._deserialize_map_definition(map_data)
+
+        # Fallback: estimate bounds from state data and create minimal map
+        return self._create_estimated_map_definition(states)
+
+    def _deserialize_map_definition(self, map_data: Dict[str, Any]) -> MapDefinition:
+        """Deserialize map definition from metadata format.
+
+        Args:
+            map_data: Dictionary containing map definition data
+
+        Returns:
+            Reconstructed MapDefinition
+        """
+        from robot_sf.nav.global_route import GlobalRoute
+        from robot_sf.nav.obstacle import Obstacle
+
+        # Extract basic dimensions
+        width = float(map_data.get("width", 20.0))
+        height = float(map_data.get("height", 20.0))
+
+        # Deserialize obstacles
+        obstacles = []
+        for obstacle_data in map_data.get("obstacles", []):
+            if "vertices" in obstacle_data:
+                obstacles.append(Obstacle(obstacle_data["vertices"]))
+
+        # Deserialize zones (spawn/goal zones)
+        robot_spawn_zones = map_data.get("robot_spawn_zones", [])
+        ped_spawn_zones = map_data.get("ped_spawn_zones", [])
+        robot_goal_zones = map_data.get("robot_goal_zones", [])
+        ped_goal_zones = map_data.get("ped_goal_zones", [])
+        ped_crowded_zones = map_data.get("ped_crowded_zones", [])
+
+        # Deserialize routes
+        robot_routes = []
+        for route_data in map_data.get("robot_routes", []):
+            robot_routes.append(
+                GlobalRoute(
+                    spawn_id=route_data.get("spawn_id", 0),
+                    goal_id=route_data.get("goal_id", 0),
+                    waypoints=route_data.get("waypoints", []),
+                    spawn_zone=route_data.get("spawn_zone", ((0, 0), (0, 0), (0, 0))),
+                    goal_zone=route_data.get("goal_zone", ((0, 0), (0, 0), (0, 0))),
+                )
+            )
+
+        ped_routes = []
+        for route_data in map_data.get("ped_routes", []):
+            ped_routes.append(
+                GlobalRoute(
+                    spawn_id=route_data.get("spawn_id", 0),
+                    goal_id=route_data.get("goal_id", 0),
+                    waypoints=route_data.get("waypoints", []),
+                    spawn_zone=route_data.get("spawn_zone", ((0, 0), (0, 0), (0, 0))),
+                    goal_zone=route_data.get("goal_zone", ((0, 0), (0, 0), (0, 0))),
+                )
+            )
+
+        # Deserialize or create bounds
+        bounds = map_data.get(
+            "bounds",
+            [
+                (0, width, 0, 0),  # bottom
+                (0, width, height, height),  # top
+                (0, 0, 0, height),  # left
+                (width, width, 0, height),  # right
+            ],
+        )
+
+        return MapDefinition(
+            width=width,
+            height=height,
+            obstacles=obstacles,
+            robot_spawn_zones=robot_spawn_zones,
+            ped_spawn_zones=ped_spawn_zones,
+            robot_goal_zones=robot_goal_zones,
+            bounds=bounds,
+            robot_routes=robot_routes,
+            ped_goal_zones=ped_goal_zones,
+            ped_crowded_zones=ped_crowded_zones,
+            ped_routes=ped_routes,
+        )
+
+    def _create_estimated_map_definition(self, states: List[VisualizableSimState]) -> MapDefinition:
+        """Create a minimal MapDefinition by estimating bounds from simulation states.
+
+        Args:
+            states: List of simulation states to analyze for spatial information
+
+        Returns:
+            MapDefinition with estimated bounds and minimal required elements
+        """
+        # Analyze states to estimate map bounds
+        min_x, max_x = float("inf"), float("-inf")
+        min_y, max_y = float("inf"), float("-inf")
+
+        # Extract positions from robot poses and pedestrian positions
+        for state in states:
+            # Check robot position
+            if hasattr(state, "robot_pose") and state.robot_pose:
+                pos = state.robot_pose[0]
+                min_x = min(min_x, pos[0])
+                max_x = max(max_x, pos[0])
+                min_y = min(min_y, pos[1])
+                max_y = max(max_y, pos[1])
+
+            # Check pedestrian positions
+            if hasattr(state, "pedestrian_positions") and state.pedestrian_positions is not None:
+                for pos in state.pedestrian_positions:
+                    if len(pos) >= 2:
+                        min_x = min(min_x, pos[0])
+                        max_x = max(max_x, pos[0])
+                        min_y = min(min_y, pos[1])
+                        max_y = max(max_y, pos[1])
+
+            # Check ego pedestrian position
+            if hasattr(state, "ego_ped_pose") and state.ego_ped_pose:
+                pos = state.ego_ped_pose[0]
+                min_x = min(min_x, pos[0])
+                max_x = max(max_x, pos[0])
+                min_y = min(min_y, pos[1])
+                max_y = max(max_y, pos[1])
+
+        # Add margin and ensure minimum size
+        margin = 5.0
+        if min_x == float("inf"):  # No positions found
+            width = height = 20.0
+            bounds = [
+                (0, width, 0, 0),  # bottom
+                (0, width, height, height),  # top
+                (0, 0, 0, height),  # left
+                (width, width, 0, height),  # right
+            ]
+        else:
+            width = max(max_x - min_x + 2 * margin, 10.0)
+            height = max(max_y - min_y + 2 * margin, 10.0)
+
+            bounds = [
+                (0, width, 0, 0),  # bottom
+                (0, width, height, height),  # top
+                (0, 0, 0, height),  # left
+                (width, width, 0, height),  # right
+            ]
+
+        logger.info(f"Estimated map bounds: width={width:.1f}, height={height:.1f}")
+
+        # Create minimal zones for validation requirements
+        center_x, center_y = width / 2, height / 2
+        minimal_zone = (
+            (center_x - 1, center_y - 1),
+            (center_x + 1, center_y - 1),
+            (center_x + 1, center_y + 1),
+        )
+
+        return MapDefinition(
+            width=width,
+            height=height,
+            obstacles=[],
+            robot_spawn_zones=[minimal_zone],  # Required: mustn't be empty
+            ped_spawn_zones=[],
+            robot_goal_zones=[minimal_zone],  # Required: mustn't be empty
+            bounds=bounds,  # Required: exactly 4 bounds
+            robot_routes=[],
+            ped_goal_zones=[],
+            ped_crowded_zones=[],
+            ped_routes=[],
+        )
+
     def _load_episode_metadata(self, episode_file: Path) -> Optional[Dict[str, Any]]:
         """Load metadata for an episode from sidecar file.
 
@@ -149,7 +333,7 @@ class JSONLPlaybackLoader:
             return None
 
         try:
-            with open(metadata_file, "r") as f:
+            with open(metadata_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Failed to load metadata from {metadata_file}: {e}")
@@ -180,7 +364,7 @@ class JSONLPlaybackLoader:
         reset_points = []
         episode_id = 0
 
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f):
                 try:
                     record = json.loads(line.strip())
@@ -223,22 +407,8 @@ class JSONLPlaybackLoader:
             episode_id=episode_id, states=states, metadata=metadata, reset_points=reset_points
         )
 
-        # For now, create a dummy MapDefinition - in practice, this would be stored separately
-        # or reconstructed from the first state's context
-
-        map_def = MapDefinition(
-            width=20.0,
-            height=20.0,
-            obstacles=[],
-            robot_spawn_zones=[],
-            ped_spawn_zones=[],
-            robot_goal_zones=[],
-            bounds=[],
-            robot_routes=[],
-            ped_goal_zones=[],
-            ped_crowded_zones=[],
-            ped_routes=[],
-        )
+        # Reconstruct MapDefinition from metadata or fallback to minimal dummy
+        map_def = self._reconstruct_map_definition(metadata, states)
 
         logger.info(f"Loaded episode {episode_id} with {len(states)} states from {file_path}")
 
@@ -356,6 +526,23 @@ class JSONLPlaybackLoader:
         if not episodes:
             raise ValueError(f"No valid episodes loaded from {directory}")
 
+        # Ensure we have a map definition (use default if none found)
+        if map_def is None:
+            logger.warning("No valid map definition found, creating minimal default")
+            map_def = MapDefinition(
+                width=20.0,
+                height=20.0,
+                obstacles=[],
+                robot_spawn_zones=[((8, 8), (12, 8), (12, 12))],
+                ped_spawn_zones=[],
+                robot_goal_zones=[((8, 8), (12, 8), (12, 12))],
+                bounds=[(0, 20, 0, 0), (0, 20, 20, 20), (0, 0, 0, 20), (20, 20, 0, 20)],
+                robot_routes=[],
+                ped_goal_zones=[],
+                ped_crowded_zones=[],
+                ped_routes=[],
+            )
+
         # Create batch playback
         batch = BatchPlayback(
             episodes=episodes,
@@ -385,7 +572,7 @@ class JSONLPlaybackLoader:
             raise FileNotFoundError(f"Manifest file not found: {manifest_file}")
 
         # Load manifest
-        with open(manifest_file, "r") as f:
+        with open(manifest_file, "r", encoding="utf-8") as f:
             manifest = json.load(f)
 
         episode_files = manifest.get("episodes", [])
@@ -416,6 +603,23 @@ class JSONLPlaybackLoader:
 
         if not episodes:
             raise ValueError(f"No valid episodes loaded from manifest: {manifest_file}")
+
+        # Ensure we have a map definition (use default if none found)
+        if map_def is None:
+            logger.warning("No valid map definition found, creating minimal default")
+            map_def = MapDefinition(
+                width=20.0,
+                height=20.0,
+                obstacles=[],
+                robot_spawn_zones=[((8, 8), (12, 8), (12, 12))],
+                ped_spawn_zones=[],
+                robot_goal_zones=[((8, 8), (12, 8), (12, 12))],
+                bounds=[(0, 20, 0, 0), (0, 20, 20, 20), (0, 0, 0, 20), (20, 20, 0, 20)],
+                robot_routes=[],
+                ped_goal_zones=[],
+                ped_crowded_zones=[],
+                ped_routes=[],
+            )
 
         # Create batch playback
         batch = BatchPlayback(

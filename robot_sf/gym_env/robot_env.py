@@ -10,8 +10,11 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
+import hashlib
+import json
 from copy import deepcopy
-from typing import Callable
+from dataclasses import asdict, is_dataclass
+from typing import Callable, Optional
 
 from loguru import logger
 
@@ -24,13 +27,24 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.render.lidar_visual import render_lidar
-from robot_sf.render.sim_view import (
-    VisualizableAction,
-    VisualizableSimState,
-)
+from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import init_simulators
+
+
+# Helper to compute a stable, short hash for env_config
+# Placed near imports for reuse and clarity
+def _stable_config_hash(cfg: EnvSettings) -> str:
+    try:
+        payload = json.dumps(
+            asdict(cfg) if is_dataclass(cfg) else cfg.__dict__,
+            sort_keys=True,
+            default=str,
+        )
+    except Exception:  # pragma: no cover - defensive fallback
+        payload = repr(cfg)
+    return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest()
 
 
 class RobotEnv(BaseEnv):
@@ -46,8 +60,8 @@ class RobotEnv(BaseEnv):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: Optional[str] = None,
+        video_fps: Optional[float] = None,
         peds_have_obstacle_forces: bool = False,
         # New JSONL recording parameters
         use_jsonl_recording: bool = False,
@@ -55,7 +69,7 @@ class RobotEnv(BaseEnv):
         suite_name: str = "robot_sim",
         scenario_name: str = "default",
         algorithm_name: str = "manual",
-        recording_seed: int = None,
+        recording_seed: Optional[int] = None,
     ):
         """
         Initialize the Robot Environment.
@@ -201,9 +215,12 @@ class RobotEnv(BaseEnv):
         # Handle recording for both systems
         if self.recording_enabled:
             if self.use_jsonl_recording:
-                # End previous episode if any, then start new episode
-                self.end_episode_recording()
-                config_hash = str(hash(str(self.env_config)))  # Simple config hash
+                # End previous episode if active, then start a new one
+                try:
+                    self.end_episode_recording()
+                except Exception:  # pragma: no cover - safe if none active
+                    pass
+                config_hash = _stable_config_hash(self.env_config)
                 self.start_episode_recording(config_hash=config_hash)
             else:
                 # Legacy pickle recording

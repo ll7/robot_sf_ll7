@@ -60,5 +60,8 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
+      - name: Type check
+        run: uvx ty check . --exit-zero
+
       - name: Unit tests
         run: uv run pytest -q

@@ -2,8 +2,8 @@
 """SNQI Weight Optimization Script
 
 This script recomputes optimal weights for the Social Navigation Quality Index (SNQI)
-using various optimization strategies including grid search, genetic algorithms, and 
-Pareto analysis. It supports the median/p95 normalization strategy implemented in the 
+using various optimization strategies including grid search, genetic algorithms, and
+Pareto analysis. It supports the median/p95 normalization strategy implemented in the
 social navigation benchmark.
 
 Usage:
@@ -21,19 +21,20 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 from scipy.optimize import differential_evolution
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-@dataclass 
+@dataclass
 class OptimizationResult:
     """Container for weight optimization results."""
+
     weights: Dict[str, float]
     objective_value: float
     ranking_stability: float
@@ -43,10 +44,10 @@ class OptimizationResult:
 
 class SNQIWeightOptimizer:
     """SNQI weight optimization using multiple strategies."""
-    
+
     def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
         """Initialize optimizer with episode data and baseline statistics.
-        
+
         Args:
             episodes_data: List of episode records with metrics
             baseline_stats: Baseline statistics for normalization (median/p95)
@@ -54,218 +55,232 @@ class SNQIWeightOptimizer:
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = [
-            'w_success', 'w_time', 'w_collisions', 'w_near', 
-            'w_comfort', 'w_force_exceed', 'w_jerk'
+            "w_success",
+            "w_time",
+            "w_collisions",
+            "w_near",
+            "w_comfort",
+            "w_force_exceed",
+            "w_jerk",
         ]
-        
+
     def compute_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
         """Compute SNQI score for given metrics and weights.
-        
+
         This implements the same formula as in robot_sf/benchmark/metrics.py
         """
+
         def _normalize(name: str, value: float) -> float:
             if name not in self.baseline_stats:
                 return 0.0
-            med = self.baseline_stats[name].get('med', 0.0)
-            p95 = self.baseline_stats[name].get('p95', med)
+            med = self.baseline_stats[name].get("med", 0.0)
+            p95 = self.baseline_stats[name].get("p95", med)
             eps = 1e-6
             denom = (p95 - med) if (p95 - med) > eps else 1.0
             norm = (value - med) / denom
             return max(0.0, min(1.0, norm))  # clamp to [0,1]
-            
-        success = metrics.get('success', 0.0)
+
+        success = metrics.get("success", 0.0)
         if isinstance(success, bool):
             success = 1.0 if success else 0.0
-            
-        time_norm = metrics.get('time_to_goal_norm', 1.0)
-        coll = _normalize('collisions', metrics.get('collisions', 0.0))
-        near = _normalize('near_misses', metrics.get('near_misses', 0.0))
-        comfort = metrics.get('comfort_exposure', 0.0)
-        force_ex = _normalize('force_exceed_events', metrics.get('force_exceed_events', 0.0))
-        jerk_n = _normalize('jerk_mean', metrics.get('jerk_mean', 0.0))
-        
+
+        time_norm = metrics.get("time_to_goal_norm", 1.0)
+        coll = _normalize("collisions", metrics.get("collisions", 0.0))
+        near = _normalize("near_misses", metrics.get("near_misses", 0.0))
+        comfort = metrics.get("comfort_exposure", 0.0)
+        force_ex = _normalize("force_exceed_events", metrics.get("force_exceed_events", 0.0))
+        jerk_n = _normalize("jerk_mean", metrics.get("jerk_mean", 0.0))
+
         score = (
-            weights.get('w_success', 1.0) * success
-            - weights.get('w_time', 1.0) * time_norm
-            - weights.get('w_collisions', 1.0) * coll
-            - weights.get('w_near', 1.0) * near
-            - weights.get('w_comfort', 1.0) * comfort
-            - weights.get('w_force_exceed', 1.0) * force_ex
-            - weights.get('w_jerk', 1.0) * jerk_n
+            weights.get("w_success", 1.0) * success
+            - weights.get("w_time", 1.0) * time_norm
+            - weights.get("w_collisions", 1.0) * coll
+            - weights.get("w_near", 1.0) * near
+            - weights.get("w_comfort", 1.0) * comfort
+            - weights.get("w_force_exceed", 1.0) * force_ex
+            - weights.get("w_jerk", 1.0) * jerk_n
         )
         return float(score)
-        
+
     def compute_ranking_stability(self, weights: Dict[str, float]) -> float:
         """Compute ranking stability metric across different algorithms/scenarios."""
         if len(self.episodes) < 2:
             return 1.0
-            
+
         # Group episodes by algorithm if available
         algo_groups = {}
         for ep in self.episodes:
-            algo = ep.get('scenario_params', {}).get('algo', ep.get('scenario_id', 'default'))
+            algo = ep.get("scenario_params", {}).get("algo", ep.get("scenario_id", "default"))
             if algo not in algo_groups:
                 algo_groups[algo] = []
             algo_groups[algo].append(ep)
-            
+
         if len(algo_groups) < 2:
             # Not enough algorithms to compare, return based on variance within single group
-            scores = [self.compute_snqi(ep.get('metrics', {}), weights) for ep in self.episodes]
+            scores = [self.compute_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
             return 1.0 / (1.0 + np.var(scores))
-            
+
         # Compute rankings within each scenario group and measure consistency
-        rank_correlations = []
         group_rankings = {}
-        
+
         for group_name, group_episodes in algo_groups.items():
-            scores = [(self.compute_snqi(ep.get('metrics', {}), weights), i) 
-                     for i, ep in enumerate(group_episodes)]
+            scores = [
+                (self.compute_snqi(ep.get("metrics", {}), weights), i)
+                for i, ep in enumerate(group_episodes)
+            ]
             scores.sort(reverse=True)  # Higher SNQI is better
             group_rankings[group_name] = [item[1] for item in scores]
-            
+
         # If multiple groups exist, compute rank correlation between them
         group_names = list(group_rankings.keys())
         if len(group_names) >= 2:
             from scipy.stats import spearmanr
+
             try:
                 # Compare first two groups (could be extended to all pairs)
                 corr, _ = spearmanr(group_rankings[group_names[0]], group_rankings[group_names[1]])
                 return abs(corr) if not np.isnan(corr) else 0.5
-            except:
+            except Exception:
                 return 0.5
-        
+
         return 0.8  # Default for single group
-        
+
     def objective_function(self, weight_vector: np.ndarray) -> float:
         """Objective function for optimization (to be minimized)."""
         weights = dict(zip(self.weight_names, weight_vector))
-        
+
         # Multi-objective: maximize ranking stability and discriminative power
         stability = self.compute_ranking_stability(weights)
-        
+
         # Discriminative power: SNQI should have good variance across episodes
-        scores = [self.compute_snqi(ep.get('metrics', {}), weights) for ep in self.episodes]
+        scores = [self.compute_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
         score_variance = np.var(scores) if len(scores) > 1 else 0.0
         discriminative_power = min(1.0, score_variance / 0.5)  # normalize to [0,1]
-        
+
         # Combined objective (minimize negative of weighted sum)
         combined = -(0.6 * stability + 0.4 * discriminative_power)
         return combined
-        
+
     def grid_search_optimization(self, grid_resolution: int = 5) -> OptimizationResult:
         """Grid search over weight space."""
         logger.info(f"Starting grid search optimization with resolution {grid_resolution}")
-        
-        # Define grid bounds (weights typically in [0.1, 3.0] range)
-        bounds = [(0.1, 3.0) for _ in self.weight_names]
-        
-        best_objective = float('inf')
+
+        best_objective = float("inf")
         best_weights = None
         best_stability = 0.0
-        
+
         # Simple grid search (exponential in dimensions, so keep resolution small)
         grid_points = np.linspace(0.1, 3.0, grid_resolution)
         total_combinations = grid_resolution ** len(self.weight_names)
-        
+
         logger.info(f"Evaluating {total_combinations} weight combinations")
-        
+
         count = 0
         for weight_combo in np.ndindex(*[grid_resolution] * len(self.weight_names)):
             weight_values = [grid_points[i] for i in weight_combo]
             obj_value = self.objective_function(np.array(weight_values))
-            
+
             if obj_value < best_objective:
                 best_objective = obj_value
                 best_weights = weight_values
-                best_stability = self.compute_ranking_stability(dict(zip(self.weight_names, weight_values)))
-                
+                best_stability = self.compute_ranking_stability(
+                    dict(zip(self.weight_names, weight_values))
+                )
+
             count += 1
             if count % max(1, total_combinations // 10) == 0:
                 logger.info(f"Grid search progress: {count}/{total_combinations}")
-                
+
         return OptimizationResult(
             weights=dict(zip(self.weight_names, best_weights)),
             objective_value=-best_objective,  # Convert back to positive
             ranking_stability=best_stability,
             pareto_efficiency=0.8,  # Placeholder
-            convergence_info={'method': 'grid_search', 'evaluated_points': total_combinations}
+            convergence_info={"method": "grid_search", "evaluated_points": total_combinations},
         )
-        
+
     def differential_evolution_optimization(self, maxiter: int = 100) -> OptimizationResult:
         """Differential evolution optimization."""
         logger.info(f"Starting differential evolution optimization with {maxiter} iterations")
-        
+
         bounds = [(0.1, 3.0) for _ in self.weight_names]
-        
+
         result = differential_evolution(
-            self.objective_function,
-            bounds,
-            maxiter=maxiter,
-            popsize=15,
-            seed=42,
-            polish=True
+            self.objective_function, bounds, maxiter=maxiter, popsize=15, seed=42, polish=True
         )
-        
+
         final_weights = dict(zip(self.weight_names, result.x))
         stability = self.compute_ranking_stability(final_weights)
-        
+
         return OptimizationResult(
             weights=final_weights,
             objective_value=-result.fun,  # Convert back to positive
             ranking_stability=stability,
             pareto_efficiency=0.9,  # Placeholder
             convergence_info={
-                'method': 'differential_evolution',
-                'success': result.success,
-                'iterations': result.nit,
-                'function_evaluations': result.nfev
-            }
+                "method": "differential_evolution",
+                "success": result.success,
+                "iterations": result.nit,
+                "function_evaluations": result.nfev,
+            },
         )
-        
-    def sensitivity_analysis(self, base_weights: Dict[str, float], 
-                           perturbation_range: float = 0.2) -> Dict[str, Dict[str, float]]:
+
+    def sensitivity_analysis(
+        self, base_weights: Dict[str, float], perturbation_range: float = 0.2
+    ) -> Dict[str, Dict[str, float]]:
         """Perform sensitivity analysis by perturbing each weight."""
         logger.info("Performing sensitivity analysis")
-        
+
         results = {}
-        base_snqi_scores = [self.compute_snqi(ep.get('metrics', {}), base_weights) 
-                           for ep in self.episodes]
+        base_snqi_scores = [
+            self.compute_snqi(ep.get("metrics", {}), base_weights) for ep in self.episodes
+        ]
         base_stability = self.compute_ranking_stability(base_weights)
-        
+
         for weight_name in self.weight_names:
             weight_results = {
-                'stability_sensitivity': 0.0,
-                'score_sensitivity': 0.0,
-                'ranking_changes': 0.0
+                "stability_sensitivity": 0.0,
+                "score_sensitivity": 0.0,
+                "ranking_changes": 0.0,
             }
-            
+
             # Test both increase and decrease
             for direction in [-1, 1]:
                 perturbed_weights = base_weights.copy()
                 original_value = base_weights.get(weight_name, 1.0)
-                perturbed_weights[weight_name] = original_value * (1 + direction * perturbation_range)
-                
+                perturbed_weights[weight_name] = original_value * (
+                    1 + direction * perturbation_range
+                )
+
                 # Compute metrics with perturbed weights
-                perturbed_scores = [self.compute_snqi(ep.get('metrics', {}), perturbed_weights) 
-                                  for ep in self.episodes]
+                perturbed_scores = [
+                    self.compute_snqi(ep.get("metrics", {}), perturbed_weights)
+                    for ep in self.episodes
+                ]
                 perturbed_stability = self.compute_ranking_stability(perturbed_weights)
-                
+
                 # Measure sensitivity
-                score_change = np.mean(np.abs(np.array(perturbed_scores) - np.array(base_snqi_scores)))
+                score_change = np.mean(
+                    np.abs(np.array(perturbed_scores) - np.array(base_snqi_scores))
+                )
                 stability_change = abs(perturbed_stability - base_stability)
-                
-                weight_results['score_sensitivity'] = max(weight_results['score_sensitivity'], score_change)
-                weight_results['stability_sensitivity'] = max(weight_results['stability_sensitivity'], stability_change)
-                
+
+                weight_results["score_sensitivity"] = max(
+                    weight_results["score_sensitivity"], score_change
+                )
+                weight_results["stability_sensitivity"] = max(
+                    weight_results["stability_sensitivity"], stability_change
+                )
+
             results[weight_name] = weight_results
-            
+
         return results
 
 
 def load_episodes_data(file_path: Path) -> List[Dict]:
     """Load episode data from JSONL file."""
     episodes = []
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -279,31 +294,44 @@ def load_episodes_data(file_path: Path) -> List[Dict]:
 
 def load_baseline_stats(file_path: Path) -> Dict[str, Dict[str, float]]:
     """Load baseline statistics from JSON file."""
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         stats = json.load(f)
     logger.info(f"Loaded baseline statistics from {file_path}")
     return stats
 
 
-def main():
+def main():  # noqa: C901
     parser = argparse.ArgumentParser(description="SNQI Weight Optimization")
-    parser.add_argument('--episodes', type=Path, required=True,
-                      help='Path to episode data JSONL file')
-    parser.add_argument('--baseline', type=Path, required=True,
-                      help='Path to baseline statistics JSON file')
-    parser.add_argument('--output', type=Path, required=True,
-                      help='Path to output optimized weights JSON file')
-    parser.add_argument('--method', choices=['grid', 'evolution', 'both'], default='both',
-                      help='Optimization method to use')
-    parser.add_argument('--sensitivity', action='store_true',
-                      help='Also perform sensitivity analysis')
-    parser.add_argument('--grid-resolution', type=int, default=5,
-                      help='Grid resolution for grid search (default: 5)')
-    parser.add_argument('--maxiter', type=int, default=100,
-                      help='Maximum iterations for evolution (default: 100)')
-    
+    parser.add_argument(
+        "--episodes", type=Path, required=True, help="Path to episode data JSONL file"
+    )
+    parser.add_argument(
+        "--baseline", type=Path, required=True, help="Path to baseline statistics JSON file"
+    )
+    parser.add_argument(
+        "--output", type=Path, required=True, help="Path to output optimized weights JSON file"
+    )
+    parser.add_argument(
+        "--method",
+        choices=["grid", "evolution", "both"],
+        default="both",
+        help="Optimization method to use",
+    )
+    parser.add_argument(
+        "--sensitivity", action="store_true", help="Also perform sensitivity analysis"
+    )
+    parser.add_argument(
+        "--grid-resolution",
+        type=int,
+        default=5,
+        help="Grid resolution for grid search (default: 5)",
+    )
+    parser.add_argument(
+        "--maxiter", type=int, default=100, help="Maximum iterations for evolution (default: 100)"
+    )
+
     args = parser.parse_args()
-    
+
     # Load data
     try:
         episodes = load_episodes_data(args.episodes)
@@ -314,84 +342,90 @@ def main():
     except Exception as e:
         logger.error(f"Error loading data: {e}")
         sys.exit(1)
-        
+
     if len(episodes) == 0:
         logger.error("No valid episodes found in data file")
         sys.exit(1)
-        
+
     # Initialize optimizer
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
-    
+
     results = {}
-    
+
     # Run optimization
-    if args.method in ['grid', 'both']:
+    if args.method in ["grid", "both"]:
         grid_result = optimizer.grid_search_optimization(args.grid_resolution)
-        results['grid_search'] = {
-            'weights': grid_result.weights,
-            'objective_value': grid_result.objective_value,
-            'ranking_stability': grid_result.ranking_stability,
-            'convergence_info': grid_result.convergence_info
+        results["grid_search"] = {
+            "weights": grid_result.weights,
+            "objective_value": grid_result.objective_value,
+            "ranking_stability": grid_result.ranking_stability,
+            "convergence_info": grid_result.convergence_info,
         }
         logger.info(f"Grid search completed. Best objective: {grid_result.objective_value:.4f}")
-        
-    if args.method in ['evolution', 'both']:
+
+    if args.method in ["evolution", "both"]:
         evolution_result = optimizer.differential_evolution_optimization(args.maxiter)
-        results['differential_evolution'] = {
-            'weights': evolution_result.weights,
-            'objective_value': evolution_result.objective_value,
-            'ranking_stability': evolution_result.ranking_stability,
-            'convergence_info': evolution_result.convergence_info
+        results["differential_evolution"] = {
+            "weights": evolution_result.weights,
+            "objective_value": evolution_result.objective_value,
+            "ranking_stability": evolution_result.ranking_stability,
+            "convergence_info": evolution_result.convergence_info,
         }
-        logger.info(f"Differential evolution completed. Best objective: {evolution_result.objective_value:.4f}")
-        
+        logger.info(
+            f"Differential evolution completed. Best objective: {evolution_result.objective_value:.4f}"
+        )
+
     # Select best result
-    if args.method == 'both':
-        best_method = 'grid_search'
-        if 'differential_evolution' in results:
-            if results['differential_evolution']['objective_value'] > results['grid_search']['objective_value']:
-                best_method = 'differential_evolution'
-        results['recommended'] = results[best_method].copy()
-        results['recommended']['method_used'] = best_method
-    elif args.method == 'grid':
-        results['recommended'] = results['grid_search'].copy()
-        results['recommended']['method_used'] = 'grid_search'
+    if args.method == "both":
+        best_method = "grid_search"
+        if "differential_evolution" in results:
+            if (
+                results["differential_evolution"]["objective_value"]
+                > results["grid_search"]["objective_value"]
+            ):
+                best_method = "differential_evolution"
+        results["recommended"] = results[best_method].copy()
+        results["recommended"]["method_used"] = best_method
+    elif args.method == "grid":
+        results["recommended"] = results["grid_search"].copy()
+        results["recommended"]["method_used"] = "grid_search"
     else:
-        results['recommended'] = results['differential_evolution'].copy()
-        results['recommended']['method_used'] = 'differential_evolution'
-        
+        results["recommended"] = results["differential_evolution"].copy()
+        results["recommended"]["method_used"] = "differential_evolution"
+
     # Sensitivity analysis
     if args.sensitivity:
         logger.info("Running sensitivity analysis")
-        recommended_weights = results['recommended']['weights']
+        recommended_weights = results["recommended"]["weights"]
         sensitivity_results = optimizer.sensitivity_analysis(recommended_weights)
-        results['sensitivity_analysis'] = sensitivity_results
-        
+        results["sensitivity_analysis"] = sensitivity_results
+
     # Save results
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, 'w') as f:
+    with open(args.output, "w") as f:
         json.dump(results, f, indent=2)
-        
+
     logger.info(f"Results saved to {args.output}")
-    
+
     # Print summary
-    recommended = results['recommended']
-    print(f"\nOptimization Summary:")
+    recommended = results["recommended"]
+    print("\nOptimization Summary:")
     print(f"Method: {recommended['method_used']}")
     print(f"Objective Value: {recommended['objective_value']:.4f}")
     print(f"Ranking Stability: {recommended['ranking_stability']:.4f}")
-    print(f"\nRecommended Weights:")
-    for weight_name, value in recommended['weights'].items():
+    print("\nRecommended Weights:")
+    for weight_name, value in recommended["weights"].items():
         print(f"  {weight_name}: {value:.3f}")
-        
+
     if args.sensitivity:
-        print(f"\nSensitivity Analysis (top 3 most sensitive weights):")
-        sensitivity = results['sensitivity_analysis']
-        sorted_weights = sorted(sensitivity.items(), 
-                              key=lambda x: x[1]['score_sensitivity'], reverse=True)
+        print("\nSensitivity Analysis (top 3 most sensitive weights):")
+        sensitivity = results["sensitivity_analysis"]
+        sorted_weights = sorted(
+            sensitivity.items(), key=lambda x: x[1]["score_sensitivity"], reverse=True
+        )
         for weight_name, sens_data in sorted_weights[:3]:
             print(f"  {weight_name}: score_sensitivity={sens_data['score_sensitivity']:.4f}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

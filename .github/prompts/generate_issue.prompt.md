@@ -1,7 +1,7 @@
 ---
 mode: agent
 ---
-You are drafting a high‑quality GitHub Issue for this repository (social navigation RL framework). Produce a concise, actionable issue description that enables fast implementation while capturing necessary context and scope boundaries.
+You are drafting a high-quality GitHub Issue for this repository (social navigation RL framework). Produce a concise, actionable issue description that enables fast implementation while capturing necessary context and scope boundaries.
 
 Follow the structure below. Omit any section that would be truly empty, but keep ordering. Use clear bullet points, not prose walls. Prefer present tense and imperative voice ("Add", "Refactor", "Clarify"). Avoid speculative language unless explicitly marking open questions.
 
@@ -21,7 +21,7 @@ TEMPLATE SECTIONS
 	- Bullet list of concrete objectives. Each should be testable / reviewable.
 	- Use measurable or observable phrasing ("MapDefinition serialized into metadata", "Switch timestamp semantics to simulation time", etc.).
 
-4. Non‑Goals (Out of Scope)
+4. Non-Goals (Out of Scope)
 	- Explicitly state what will NOT be addressed to prevent scope creep (e.g., "No hyperparameter tuning", "No new RL algorithms", "No GPU optimization here").
 
 5. Proposed Approach (Initial Draft)
@@ -44,7 +44,7 @@ TEMPLATE SECTIONS
 		- [ ] Added targeted unit tests covering edge cases X, Y.
 		- [ ] Docs updated (`docs/<feature>/README.md`).
 
-8. Risks / Trade‑offs
+8. Risks / Trade-offs
 	- Performance regressions, increased memory, schema churn, coupling, test fragility.
 	- Mitigations.
 
@@ -61,7 +61,7 @@ TEMPLATE SECTIONS
 	- Commands / scripts to run (e.g., validation scripts in `scripts/validation/`, perf benchmark, demo scripts).
 	- Include exact acceptance threshold if performance-sensitive.
 
-13. Definition of Done Reminder (auto‑trim if redundant)
+13. Definition of Done Reminder (auto-trim if redundant)
 	- All acceptance criteria satisfied.
 	- Quality gates: Ruff clean, pylint errors-only clean, type check (no errors), tests green.
 	- Docs & examples updated where relevant.

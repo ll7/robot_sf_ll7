@@ -343,45 +343,37 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 
 ---
 
-## Markdown linting (docs quality)
-Documentation consistency matters for fast onboarding and automation. A non-blocking Markdown lint job runs in CI to surface style and structure issues without failing the main pipeline.
+## Markdown formatting (mdformat)
+We use `mdformat` for deterministic Markdown formatting (installed via `pyproject.toml`). Prefer running the formatter before any substantial doc PR to minimize review noise and keep style consistent.
 
-### Tooling
-- Config file: `.markdownlint.json` (enforces 110 char soft wrap, fenced code blocks, consistent emphasis, relaxed heading duplication rules, allows inline HTML disabled by default).
-- CLI (local optional): `markdownlint-cli2` (Node-based). Install globally or run via npx.
-
-### Running locally (optional)
+### Commands
 ```bash
-npm install -g markdownlint-cli2 # or: npx markdownlint-cli2 "**/*.md" "#fast-pysf/**"
-markdownlint-cli2 "**/*.md" "#fast-pysf/**"
+uv run mdformat .          # Format all markdown files
+uv run mdformat --check .  # CI-style check (no changes)
 ```
-Exclude the `fast-pysf/` submodule to avoid external churn.
 
-### When to fix warnings
-- P0/P1 feature / refactor PRs touching docs: fix or justify.
-- Drive-by doc edits: fix obvious issues (heading order, code fence style).
-- Bulk rewrites: run locally before commit to reduce noise in CI artifact.
+Config lives in `[tool.mdformat]` in `pyproject.toml` (wrap=0 disables hard wrapping; keep soft wrapping in editor).
 
-### Adding exceptions
-Prefer targeted fixes over disabling rules. If necessary, add an inline ignore comment:
+### VS Code Task
+Use the task: "Markdown: Format" (invokes `uv run mdformat .`).
+
+### Adoption Strategy
+1) Baseline format commit
+2) Encourage contributors to run before commit
+3) Optionally promote CI `markdown-format` job from advisory to blocking once noise stabilizes
+
+### Optional Pre-commit Hook
+```yaml
+- repo: https://github.com/executablebooks/mdformat
+  rev: 0.7.19
+  hooks:
+    - id: mdformat
+      additional_dependencies:
+        - mdformat-gfm
+        - mdformat-frontmatter
 ```
-<!-- markdownlint-disable-next-line MD013 -->
-```
-Document rationale briefly.
 
-### Quality gate philosophy
-- Lint is informative (non-blocking) until overall doc debt is reduced.
-- We may later gate on zero critical markdown issues; track decision in a design note if changed.
-
-### Common remediation patterns
-- Long lines → break at clause boundaries; leave code blocks untouched.
-- Mixed emphasis markers → standardize on backticks for code, `*` for emphasis.
-- Redundant top-level heading → remove duplicates (project title appears once in README).
-
-### Future improvements (candidates)
-- Add VS Code task: "Markdown: Lint" (npx invocation) for one-click checks.
-- Add pre-commit hook (optional) running markdownlint on staged `.md` files.
-- Integrate link checker (e.g., lychee) in a separate job.
+If future style concerns arise (e.g., link validation), add a separate non-blocking job (e.g., link checker) rather than reintroducing a linter.
 
 ---
 

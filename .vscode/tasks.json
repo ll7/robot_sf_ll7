@@ -62,5 +62,12 @@
 			"problemMatcher": [],
 			"group": "test"
 		}
+		,
+		{
+			"label": "Markdown: Lint",
+			"type": "shell",
+			"command": "npx --yes markdownlint-cli2 \"**/*.md\" \"#fast-pysf/**\"",
+			"problemMatcher": []
+		}
 	]
 }

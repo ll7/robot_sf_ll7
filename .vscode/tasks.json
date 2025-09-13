@@ -61,8 +61,7 @@
 			"command": "uvx ty check . --exit-zero",
 			"problemMatcher": [],
 			"group": "test"
-		}
-		,
+		},
 		{
 			"label": "Markdown: Lint",
 			"type": "shell",

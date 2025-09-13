@@ -47,6 +47,10 @@ dependencies = [
     "setuptools>=70.0.0",
     "pysocialforce",
     "jsonschema>=4.23.0",
+    # Documentation formatting
+    "mdformat>=0.7.19",
+    "mdformat-gfm>=0.3.6",
+    "mdformat-frontmatter>=0.4.1",
 ]
 
 [project.optional-dependencies]
@@ -213,3 +217,7 @@ robot_sf_bench = "robot_sf.benchmark.cli:main"
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }
+
+[tool.mdformat]
+wrap = 0
+number = false

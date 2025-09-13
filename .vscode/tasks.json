@@ -63,9 +63,9 @@
 			"group": "test"
 		},
 		{
-			"label": "Markdown: Lint",
+			"label": "Markdown: Format",
 			"type": "shell",
-			"command": "npx --yes markdownlint-cli2 \"**/*.md\" \"#fast-pysf/**\"",
+			"command": "uv run mdformat .",
 			"problemMatcher": []
 		}
 	]

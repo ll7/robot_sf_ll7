@@ -29,6 +29,7 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - Security & network policy
 - Large files & artifacts policy
 - Quick reference and TL;DR checklist
+ - Markdown linting (docs quality)
 
 ---
 
@@ -339,6 +340,50 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 ### Docker issues
 - Docker build fails → often network related in CI; usually fine locally
 - GPU support → see `docs/GPU_SETUP.md` for NVIDIA Docker setup
+
+---
+
+## Markdown linting (docs quality)
+Documentation consistency matters for fast onboarding and automation. A non-blocking Markdown lint job runs in CI to surface style and structure issues without failing the main pipeline.
+
+### Tooling
+- Config file: `.markdownlint.json` (enforces 110 char soft wrap, fenced code blocks, consistent emphasis, relaxed heading duplication rules, allows inline HTML disabled by default).
+- CLI (local optional): `markdownlint-cli2` (Node-based). Install globally or run via npx.
+
+### Running locally (optional)
+```bash
+npm install -g markdownlint-cli2 # or: npx markdownlint-cli2 "**/*.md" "#fast-pysf/**"
+markdownlint-cli2 "**/*.md" "#fast-pysf/**"
+```
+Exclude the `fast-pysf/` submodule to avoid external churn.
+
+### When to fix warnings
+- P0/P1 feature / refactor PRs touching docs: fix or justify.
+- Drive-by doc edits: fix obvious issues (heading order, code fence style).
+- Bulk rewrites: run locally before commit to reduce noise in CI artifact.
+
+### Adding exceptions
+Prefer targeted fixes over disabling rules. If necessary, add an inline ignore comment:
+```
+<!-- markdownlint-disable-next-line MD013 -->
+```
+Document rationale briefly.
+
+### Quality gate philosophy
+- Lint is informative (non-blocking) until overall doc debt is reduced.
+- We may later gate on zero critical markdown issues; track decision in a design note if changed.
+
+### Common remediation patterns
+- Long lines → break at clause boundaries; leave code blocks untouched.
+- Mixed emphasis markers → standardize on backticks for code, `*` for emphasis.
+- Redundant top-level heading → remove duplicates (project title appears once in README).
+
+### Future improvements (candidates)
+- Add VS Code task: "Markdown: Lint" (npx invocation) for one-click checks.
+- Add pre-commit hook (optional) running markdownlint on staged `.md` files.
+- Integrate link checker (e.g., lychee) in a separate job.
+
+---
 
 ---
 

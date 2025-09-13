@@ -16,7 +16,7 @@ Schema:
     - episode_id: int - Episode identifier
     - step_idx: int - Step within episode (0-based)
     - event: str - Event type ("episode_start", "step", "episode_end", "entity_reset")
-    - timestamp: float - Simulation timestamp
+    - timestamp: float - Simulation timestamp (0.0 for episode_start, state.timestep for others)
     - state: dict - Serialized VisualizableSimState
 """
 
@@ -97,6 +97,7 @@ class JSONLRecorder:
         self.current_step_idx = 0
         self.current_file = None
         self.current_metadata = None
+        self.last_simulation_timestep = 0.0
 
         self.schema_version = "1.0"
 
@@ -224,6 +225,7 @@ class JSONLRecorder:
 
         # Initialize new episode
         self.current_step_idx = 0
+        self.last_simulation_timestep = 0.0
         self.current_metadata = EpisodeMetadata(
             episode_id=self.current_episode_id,
             algorithm=self.algorithm,
@@ -236,14 +238,14 @@ class JSONLRecorder:
 
         # Open new episode file
         episode_file = self._get_episode_filename(self.current_episode_id)
-        self.current_file = open(episode_file, "w")
+        self.current_file = open(episode_file, "w", encoding="utf-8")
 
         # Write episode start record
         start_record = JSONLRecord(
             episode_id=self.current_episode_id,
             step_idx=self.current_step_idx,
             event="episode_start",
-            timestamp=time.time(),
+            timestamp=0.0,
             state={},
         )
         self.current_file.write(json.dumps(asdict(start_record)) + "\n")
@@ -266,12 +268,16 @@ class JSONLRecorder:
         # Serialize state
         state_dict = self._serialize_state(state)
 
+        # Extract simulation timestep and track it
+        simulation_timestep = float(getattr(state, "timestep", 0.0))
+        self.last_simulation_timestep = simulation_timestep
+
         # Create step record
         step_record = JSONLRecord(
             episode_id=self.current_episode_id,
             step_idx=self.current_step_idx,
             event="step",
-            timestamp=time.time(),
+            timestamp=simulation_timestep,
             state=state_dict,
         )
 
@@ -293,12 +299,16 @@ class JSONLRecorder:
         # Serialize state
         state_dict = self._serialize_state(state)
 
+        # Extract simulation timestep and track it
+        simulation_timestep = float(getattr(state, "timestep", 0.0))
+        self.last_simulation_timestep = simulation_timestep
+
         # Create entity reset record
         reset_record = JSONLRecord(
             episode_id=self.current_episode_id,
             step_idx=self.current_step_idx,
             event="entity_reset",
-            timestamp=time.time(),
+            timestamp=simulation_timestep,
             state=state_dict,
             entity_ids=entity_ids,
         )
@@ -320,7 +330,7 @@ class JSONLRecorder:
             episode_id=self.current_episode_id,
             step_idx=self.current_step_idx,
             event="episode_end",
-            timestamp=time.time(),
+            timestamp=self.last_simulation_timestep,
             state={},
         )
         self.current_file.write(json.dumps(asdict(end_record)) + "\n")
@@ -333,7 +343,7 @@ class JSONLRecorder:
 
         # Save metadata to sidecar file
         metadata_file = self._get_metadata_filename(self.current_episode_id)
-        with open(metadata_file, "w") as f:
+        with open(metadata_file, "w", encoding="utf-8") as f:
             json.dump(asdict(self.current_metadata), f, indent=2)
 
         # Close episode file
@@ -346,6 +356,7 @@ class JSONLRecorder:
         self.current_episode_id += 1
         self.current_step_idx = 0
         self.current_metadata = None
+        self.last_simulation_timestep = 0.0
 
     def close(self) -> None:
         """Close the recorder and end any open episode."""

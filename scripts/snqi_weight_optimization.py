@@ -18,8 +18,10 @@ Requirements:
 import argparse
 import json
 import logging
+import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -80,7 +82,7 @@ class SNQIWeightOptimizer:
         if len(algo_groups) < 2:
             # Not enough algorithms to compare, return based on variance within single group
             scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
-            return 1.0 / (1.0 + np.var(scores))
+            return float(1.0 / (1.0 + float(np.var(scores))))
 
         # Compute rankings within each scenario group and measure consistency
         group_rankings = {}
@@ -153,6 +155,8 @@ class SNQIWeightOptimizer:
             if count % max(1, total_combinations // 10) == 0:
                 logger.info(f"Grid search progress: {count}/{total_combinations}")
 
+        if best_weights is None:  # Fallback safety (should not occur if grid_resolution>=1)
+            best_weights = [1.0] * len(self.weight_names)
         return OptimizationResult(
             weights=dict(zip(self.weight_names, best_weights)),
             objective_value=-best_objective,  # Convert back to positive
@@ -291,6 +295,12 @@ def main():  # noqa: C901
     parser.add_argument(
         "--maxiter", type=int, default=100, help="Maximum iterations for evolution (default: 100)"
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility (applies to differential evolution and any stochastic components)",
+    )
 
     args = parser.parse_args()
 
@@ -308,6 +318,10 @@ def main():  # noqa: C901
     if len(episodes) == 0:
         logger.error("No valid episodes found in data file")
         sys.exit(1)
+
+    # Apply seed if provided
+    if args.seed is not None:
+        np.random.seed(args.seed)
 
     # Initialize optimizer
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
@@ -361,6 +375,33 @@ def main():  # noqa: C901
         recommended_weights = results["recommended"]["weights"]
         sensitivity_results = optimizer.sensitivity_analysis(recommended_weights)
         results["sensitivity_analysis"] = sensitivity_results
+
+    # Augment results with metadata
+    def _git_commit() -> str:
+        try:
+            return (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
+            )
+        except Exception:
+            return "UNKNOWN"
+
+    results_meta = {
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "git_commit": _git_commit(),
+        "seed": args.seed,
+        "provenance": {
+            "episodes_file": str(args.episodes),
+            "baseline_file": str(args.baseline),
+            "invocation": "python " + " ".join(sys.argv),
+            "method_requested": args.method,
+        },
+    }
+    results["_metadata"] = results_meta
 
     # Save results
     args.output.parent.mkdir(parents=True, exist_ok=True)

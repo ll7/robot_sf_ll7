@@ -33,6 +33,11 @@ import numpy as np
 from scipy.optimize import differential_evolution
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
+from robot_sf.benchmark.snqi.exit_codes import (
+    EXIT_INPUT_ERROR,
+    EXIT_SUCCESS,
+    EXIT_VALIDATION_ERROR,
+)
 from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 from robot_sf.benchmark.snqi.weights_validation import (
     validate_weights_mapping as _validate_weights_mapping,
@@ -406,10 +411,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         episodes, baseline_stats = _load_inputs(args)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
-        return 1
+        return EXIT_INPUT_ERROR
     if not episodes:
         logger.error("No valid episodes found in data file")
-        return 1
+        return EXIT_INPUT_ERROR
     if args.seed is not None:
         np.random.seed(args.seed)
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
@@ -420,7 +425,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             logger.info("Loaded initial weights from %s", args.initial_weights_file)
         except Exception as e:  # noqa: BLE001
             logger.error("Failed loading initial weights: %s", e)
-            return 1
+            return EXIT_INPUT_ERROR
     results: Dict[str, Any] = {}
     if args.method in ["grid", "both"]:
         grid_result = optimizer.grid_search_optimization(
@@ -460,13 +465,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             assert_all_finite(results)
     except ValueError as e:
         logger.error("Validation failed: %s", e)
-        return 1
+        return EXIT_VALIDATION_ERROR
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
     logger.info("Results saved to %s", args.output)
     _print_summary(results, args)
-    return 0
+    return EXIT_SUCCESS
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:

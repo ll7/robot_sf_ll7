@@ -1,0 +1,6 @@
+{"id": 0, "metrics": {"collisions": 1, "near_misses": 0, "force_exceed_events": 0, "jerk_mean": 0.1}}
+{"id": 1, "metrics": {"collisions": 0, "near_misses": 1, "force_exceed_events": 0, "jerk_mean": 0.15000000000000002}}
+{"id": 2, "metrics": {"collisions": 0, "near_misses": 0, "force_exceed_events": 0, "jerk_mean": 0.2}}
+{"id": 3, "metrics": {"collisions": 1, "near_misses": 1, "force_exceed_events": 0, "jerk_mean": 0.25}}
+{"id": 4, "metrics": {"collisions": 0, "near_misses": 0, "force_exceed_events": 0, "jerk_mean": 0.30000000000000004}}
+{"id": 5, "metrics": {"collisions": 0, "near_misses": 1, "force_exceed_events": 0, "jerk_mean": 0.35}}

@@ -37,7 +37,7 @@ PR #175 introduces standalone scripts for weight recomputation, optimization, an
 - (Resolved) Duplicated SNQI calculation across scripts → consolidated in `robot_sf/benchmark/snqi/compute.py`.
 - (Partially resolved) Lack of design doc → skeleton + updated status; still need full expansion (Sections 8–14 elaboration & rationale expansions pending).
 - (Open) Ad hoc formulas for stability / Pareto selection (heuristic still in use; bootstrap stability planned).
-- (Open) Seeding / reproducibility controls (CLI `--seed` not yet added).
+- (Resolved) Seeding / reproducibility controls: `--seed` flag + unified `_metadata` (schema_version, generated_at, git_commit, seed, provenance) added to all scripts (remaining: formally seed SciPy DE & test determinism).
 - (Open) Benchmark CLI integration.
 - (Resolved) Validation that scripts compute canonical SNQI: parity test `tests/test_snqi_parity.py` added.
 
@@ -112,21 +112,45 @@ Required minimal keys:
 ```
 {"w_success": float, "w_time": float, ..., "w_jerk": float}
 ```
-### 8.4 Output Schema (Proposed `schema_version: 1`)
-Core fields (example for optimization):
+### 8.4 Output Schema (Implemented `schema_version: 1`)
+All scripts emit a top-level `_metadata` block encapsulating reproducibility & provenance. Analytical sections differ per script.
+
+Canonical metadata block:
 ```
-{
+"_metadata": {
   "schema_version": 1,
-  "generated_at": "2025-09-14T12:34:56Z",
-  "git_commit": "<hash>",
+  "generated_at": "2025-09-14T12:34:56.123456+00:00",
+  "git_commit": "<short_hash>",
   "seed": 42,
-  "method": "differential_evolution",
-  "weights": {...},
-  "objectives": {"stability": 0.83, "discriminative_power": 0.41},
-  "metrics": {"score_variance": 0.12, "ranking_corr_bootstrap_mean": 0.79},
-  "provenance": {"episodes_file": "episodes.jsonl", "baseline_file": "baseline.json"}
+  "provenance": {
+    "episodes_file": "episodes.jsonl",
+    "baseline_file": "baseline_stats.json",
+    "weights_file": "weights.json",            # sensitivity only
+    "strategy_requested": "pareto",             # recompute only
+    "method_requested": "both",                 # optimization only
+    "compare_strategies": true,
+    "compare_normalization": false,
+    "sweep_points": 20,
+    "pairwise_points": 15,
+    "skip_visualizations": false,
+    "invocation": "python scripts/... <args>"
+  }
 }
 ```
+Examples:
+```
+// optimization
+{ "grid_search": {...}, "differential_evolution": {...}, "recommended": {...}, "_metadata": { ... } }
+
+// recompute
+{ "strategy_result": {...}, "recommended_weights": {...}, "_metadata": { ... } }
+
+// sensitivity (results)
+{ "weight_sweep": {...}, "pairwise": {...}, "ablation": {...}, "normalization": {...}, "_metadata": { ... } }
+// sensitivity (summary)
+{ "analysis_summary": {...}, "_metadata": { ... } }
+```
+Stability rules (v1): `_metadata` and its child field names are reserved; adding new analytic sections is non-breaking. Schema bumps required for any breaking change to `_metadata` structure or semantics.
 
 ## 9. Algorithms & Formulas
 ### 9.1 SNQI
@@ -193,9 +217,9 @@ Mitigations:
 ## 14. Migration / Rollout Plan
 Phase 1: Introduce shared module + modify scripts to import it (backward compatible)  (COMPLETED)  
 Phase 1b: Add parity regression test (COMPLETED)  
-Phase 2: Add broader tests + schema + expand design doc (IN PROGRESS – next)  
+Phase 2: Add broader tests + formal JSON schema artifact + expand design doc (IN PROGRESS)  
 Phase 3: Add CLI integration (`robot_sf_bench snqi`)  
-Phase 4: Introduce seed, provenance & bootstrap stability; deprecate direct script usage (soft warning)  
+Phase 4: Introduce bootstrap stability metric & deprecate direct script usage (soft warning)  
 Phase 5: Optional advanced methodology (ANOVA, NSGA-II)  
 
 ## 15. Open Questions
@@ -216,8 +240,9 @@ Phase 5: Optional advanced methodology (ANOVA, NSGA-II)
 - Shared module replaces duplication (DONE)
 - Parity test ensures canonical score stability (DONE)
 - Test suite covers ≥85% of new logic paths (non-viz) (PARTIAL – more tests pending)
-- Deterministic optimization under fixed seed (PENDING)
-- Documented JSON schema with `schema_version` (PENDING)
+- Deterministic optimization under fixed seed (PARTIAL – NumPy seeding applied; ensure SciPy DE reproducibility) 
+- Documented JSON schema with `schema_version` (PARTIAL – `_metadata` implemented; jsonschema file pending)
+- Reproducibility metadata (`_metadata` with seed/git commit/provenance) (DONE)
 - CI passes with new tests & type hints (ONGOING; current additions green)
 - Updated root README and feature docs (PENDING)
 

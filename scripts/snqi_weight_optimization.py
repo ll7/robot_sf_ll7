@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 """SNQI Weight Optimization Script.
 
-Refactored version with decomposed helpers for clarity and reduced complexity.
-Supports grid search and differential evolution strategies plus optional sensitivity
-analysis. Outputs metadata-rich JSON with schema + summary section.
+Responsibilities:
+1. Load episodes + baseline normalization statistics.
+2. Optimize weight vector using grid search, differential evolution, or both.
+3. Optionally run one-step local sensitivity analysis around recommended weights.
+4. Emit reproducibility metadata (`_metadata`) and a concise `summary`.
+
+Determinism:
+Passing `--seed` seeds NumPy and SciPy differential evolution (forwarded via `seed`).
+
+Heuristic Objective:
+`0.6 * stability + 0.4 * discriminative_power` (see design doc §8.1). Stability falls
+back to a variance-derived proxy when insufficient algorithm groups are present.
 """
 
 from __future__ import annotations
@@ -18,7 +27,7 @@ from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, Iterator, List
 
 import numpy as np
 from scipy.optimize import differential_evolution
@@ -32,6 +41,25 @@ from robot_sf.benchmark.snqi.weights_validation import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# ----------------------------- Progress helper ----------------------------- #
+try:  # pragma: no cover - optional dependency
+    from tqdm import tqdm
+
+    def _progress(
+        iterable: Iterable, desc: str | None = None, total: int | None = None
+    ) -> Iterator:  # type: ignore[name-defined]
+        return tqdm(iterable, desc=desc, total=total)  # type: ignore[no-any-return]
+
+    _TQDM_AVAILABLE = True
+except Exception:  # noqa: BLE001 - pragma: no cover
+
+    def _progress(
+        iterable: Iterable, desc: str | None = None, total: int | None = None
+    ) -> Iterator:  # type: ignore[unused-argument]
+        return iter(iterable)
+
+    _TQDM_AVAILABLE = False
+
 
 @dataclass
 class OptimizationResult:
@@ -44,7 +72,15 @@ class OptimizationResult:
 
 
 class SNQIWeightOptimizer:
-    """SNQI weight optimization using multiple strategies."""
+    """Optimize SNQI weights via grid search and/or differential evolution.
+
+    Parameters
+    ----------
+    episodes_data:
+        List of episode dicts each containing a `metrics` mapping.
+    baseline_stats:
+        Mapping metric -> {"med": float, "p95": float} for normalization.
+    """
 
     def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
         self.episodes = episodes_data
@@ -92,8 +128,17 @@ class SNQIWeightOptimizer:
         return -(0.6 * stability + 0.4 * discriminative_power)
 
     def grid_search_optimization(
-        self, grid_resolution: int = 5, max_combinations: int | None = None
+        self,
+        grid_resolution: int = 5,
+        max_combinations: int | None = None,
+        show_progress: bool = False,
     ) -> OptimizationResult:
+        """Perform (possibly guarded) grid search over weight space.
+
+        Shrinks resolution if raw combinations exceed `max_combinations`; if still
+        excessive then samples a deterministic subset (fixed RNG seed) to bound runtime.
+        Returns best weight configuration under heuristic objective.
+        """
         logger.info("Starting grid search optimization with resolution %d", grid_resolution)
         n = len(self.weight_names)
         # Guard: shrink resolution if combinations explode
@@ -118,7 +163,11 @@ class SNQIWeightOptimizer:
         best_weights: Dict[str, float] | None = None
         best_stability = 0.0
         evaluations = 0
-        for combo in combos_iter:
+        iterator: Iterable = combos_iter
+        if show_progress:
+            materialized = list(combos_iter) if not isinstance(combos_iter, list) else combos_iter
+            iterator = _progress(materialized, desc="grid", total=len(materialized))
+        for combo in iterator:
             weights = {k: float(v) for k, v in zip(self.weight_names, combo)}
             obj = self.objective_function(np.array(list(weights.values())))
             if obj < best_obj:
@@ -142,9 +191,26 @@ class SNQIWeightOptimizer:
         )
 
     def differential_evolution_optimization(
-        self, maxiter: int = 30, seed: int | None = None
+        self, maxiter: int = 30, seed: int | None = None, show_progress: bool = False
     ) -> OptimizationResult:
+        """Run SciPy's differential evolution on continuous weight domain.
+
+        Bounds each weight to [0.1, 3.0]. Returns best solution including
+        convergence diagnostics (iterations, evaluations, success flag).
+        """
         bounds = [(0.1, 3.0)] * len(self.weight_names)
+        pbar = None
+        if show_progress and _TQDM_AVAILABLE:  # pragma: no branch - simple gate
+            pbar = tqdm(total=maxiter, desc="evolution")
+
+            def _cb(_xk, convergence):  # noqa: D401
+                if pbar is not None:
+                    pbar.update(1)
+                return False  # continue
+
+            callback = _cb
+        else:
+            callback = None
         result = differential_evolution(
             self.objective_function,
             bounds=bounds,
@@ -152,7 +218,10 @@ class SNQIWeightOptimizer:
             seed=seed,
             polish=True,
             strategy="best1bin",
+            callback=callback,
         )
+        if pbar is not None:
+            pbar.close()
         weights = dict(zip(self.weight_names, result.x))
         stability = self.compute_ranking_stability(weights)
         positive_score = -result.fun
@@ -169,11 +238,21 @@ class SNQIWeightOptimizer:
             convergence_info=convergence,
         )
 
-    def sensitivity_analysis(self, weights: Dict[str, float]) -> Dict[str, Dict[str, float]]:
+    def sensitivity_analysis(
+        self, weights: Dict[str, float], show_progress: bool = False
+    ) -> Dict[str, Dict[str, float]]:
+        """Compute simple local one-at-a-time sensitivity metrics.
+
+        Perturbs each weight ±10% (clamped to domain) and measures change in
+        mean SNQI score; returns per-weight sensitivity info.
+        """
         base_scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
         base_mean = float(np.mean(base_scores)) if base_scores else 0.0
         results: Dict[str, Dict[str, float]] = {}
-        for name, value in weights.items():
+        iterator = weights.items()
+        if show_progress:
+            iterator = _progress(list(weights.items()), desc="sensitivity")  # type: ignore[assignment]
+        for name, value in iterator:  # type: ignore[misc]
             delta = 0.1 * value if value != 0 else 0.1
             up = {**weights, name: min(3.0, value + delta)}
             down = {**weights, name: max(0.1, value - delta)}
@@ -345,7 +424,9 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     results: Dict[str, Any] = {}
     if args.method in ["grid", "both"]:
         grid_result = optimizer.grid_search_optimization(
-            args.grid_resolution, max_combinations=args.max_grid_combinations
+            args.grid_resolution,
+            max_combinations=args.max_grid_combinations,
+            show_progress=args.progress,
         )
         results["grid_search"] = {
             "weights": grid_result.weights,
@@ -355,7 +436,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         }
     if args.method in ["evolution", "both"]:
         evolution_result = optimizer.differential_evolution_optimization(
-            args.maxiter, seed=args.seed
+            args.maxiter, seed=args.seed, show_progress=args.progress
         )
         results["differential_evolution"] = {
             "weights": evolution_result.weights,
@@ -368,7 +449,9 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         results["initial_weights"] = initial_weights
     if args.sensitivity:
         recommended_weights = results["recommended"]["weights"]
-        results["sensitivity_analysis"] = optimizer.sensitivity_analysis(recommended_weights)
+        results["sensitivity_analysis"] = optimizer.sensitivity_analysis(
+            recommended_weights, show_progress=args.progress
+        )
     _augment_metadata(results, args, start_iso, start_perf)
     try:
         if args.validate:
@@ -415,6 +498,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Path to JSON file containing initial/seed weights mapping (validated)",
+    )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Show progress bars (requires tqdm; silently ignored if unavailable)",
     )
     return parser.parse_args(argv)
 

@@ -234,3 +234,21 @@ ped_env = make_pedestrian_env(robot_model=model, debug=True)
 - ✅ **Backward compatibility** maintained
 
 📖 **[Read the full refactoring documentation →](./docs/refactoring/)**
+
+### SNQI Weight Tooling (Benchmark Metrics)
+
+Tools for recomputing, optimizing, and analyzing Social Navigation Quality Index (SNQI) weights are now available:
+
+- User Guide: [`docs/snqi-weight-tools/README.md`](./docs/snqi-weight-tools/README.md)
+- Design & architecture: [`docs/dev/issues/snqi-recomputation/DESIGN.md`](./docs/dev/issues/snqi-recomputation/DESIGN.md)
+
+Core capabilities:
+
+```text
+recompute_snqi_weights.py      # Strategy comparison (default, safety, efficiency, pareto) + normalization checks
+snqi_weight_optimization.py    # Grid + differential evolution + optional sensitivity
+snqi_sensitivity_analysis.py   # Deeper robustness & interaction analysis
+```
+
+Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is planned.
+

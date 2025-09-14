@@ -32,31 +32,43 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Justify heuristic formulas (e.g., stability = 1/(1+|std-0.5|)) and consider replacing or labeling experimental
 - [ ] Add docstrings (module, classes, functions) per repo style to all new scripts
 - [ ] Add doc comment on clamping normalized metrics to [0,1] (implication for outliers)
+  
+Progress notes:
+  * Partial doc coverage exists in `docs/snqi_weight_cli_updates.md` (covers new CLI flags & validation). Full design doc still pending.
 
 ## 2. Code Structure & Refactor (🔧)
 - [x] Extract shared SNQI computation logic into a single module (`robot_sf/benchmark/snqi/compute.py`)
 - [x] Replace duplicated `compute_snqi` in all scripts with import from shared module
 - [x] Centralize `WEIGHT_NAMES` constant
-- [ ] Factor large `main()` functions (currently ignored via `# noqa: C901`) into smaller helpers (arg parsing, IO, compute, reporting)
-- [ ] Remove placeholder values (`pareto_efficiency: 0.8/0.9`) or compute real metric or drop field
-- [ ] Add defensive validation of weights file schema (missing keys, wrong types)
+- [x] Factor large `main()` functions (currently ignored via `# noqa: C901`) into smaller helpers (arg parsing, IO, compute, reporting)  
+  (Optimization & recompute scripts decomposed into helper functions; only demo script keeps complexity suppression.)
+- [x] Remove placeholder values (`pareto_efficiency: 0.8/0.9`) or compute real metric or drop field  
+  (Dropped placeholder field entirely.)
+- [x] Add defensive validation of weights file schema (missing keys, wrong types)  
+  (Implemented shared `weights_validation.py`; integrated `--initial-weights-file` / `--external-weights-file`.)
 - [x] Add CLI option `--seed` to all stochastic scripts (recompute, optimization, sensitivity)
 - [ ] Add progress indication for long loops (grid search, pairwise surfaces) using `tqdm`
 - [ ] Add bounds/guard for grid explosion (warn if combinations > threshold)
+  (`--max-grid-combinations` adaptive shrink + sampling.)
 - [ ] Unify logging style (avoid mixed print/logging; reserve print for final summaries)
 - [ ] Normalize return codes & `if __name__ == "__main__"` patterns
 - [ ] Consider exposing core functionality as functions that accept data structures (facilitates reuse in notebooks/tests)
 
 ## 3. Testing (🧪)
 - [x] Add unit test ensuring recomputed SNQI matches canonical implementation for a fixture episode set (`tests/test_snqi_parity.py`)
-- [ ] Test each strategy output contains required keys & weight ranges
-- [ ] Test Pareto sampling is deterministic under fixed seed
+- [x] Test each strategy output contains required keys & weight ranges  
+  (`test_snqi_strategies.py` covers keys; added weight validation tests.)
+- [x] Test Pareto sampling is deterministic under fixed seed  
+  (`test_snqi_pareto_determinism.py`).
 - [ ] Test sensitivity analysis ranking correlation monotonic behavior for controlled perturbations
-- [ ] Test CLI entry points (use `pytest` `script_runner` or subprocess) returning 0 and producing expected output schema
+- [x] Test CLI entry points (use `pytest` `script_runner` or subprocess) returning 0 and producing expected output schema  
+  (`test_snqi_cli_optimization.py`, `test_snqi_cli_recompute.py`, plus new external weights test.)
 - [ ] Add regression test for JSON schema (snapshot or structured validation via `jsonschema`)
 - [ ] Add test for handling missing optional metrics (e.g., jerk) without crashing
+  (`test_snqi_missing_optional_metrics.py`).
 - [ ] Add test for malformed JSONL line skip counting
-- [ ] Add test verifying `--compare-normalization` correlations in [0,1] and base strategy present
+- [x] Add test verifying `--compare-normalization` correlations in [0,1] and base strategy present  
+  (`test_snqi_cli_recompute.py`).
 
 ## 4. Benchmark / CLI Integration (⚙️)
 - [ ] Add unified subcommand to existing benchmark CLI (`robot_sf_bench snqi <action>`) wrapping scripts
@@ -92,8 +104,10 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [x] Add `schema_version` field to JSON outputs (in `_metadata.schema_version`)
 - [x] Include generation timestamp & git commit hash (if accessible) in outputs (`_metadata.generated_at`, `_metadata.git_commit`)
 - [x] Include command-line args echo in output for provenance (`_metadata.provenance.invocation`)
-- [ ] Validate numeric fields are finite (no NaN) before writing JSON
-- [ ] Add compact summary block (top weights, stability, discriminative power) (pending: consolidation across scripts)
+- [x] Validate numeric fields are finite (no NaN) before writing JSON  
+  (Using `assert_all_finite` or full schema validation path.)
+- [x] Add compact summary block (top weights, stability, discriminative power) (pending: consolidation across scripts)  
+  (`summary` added to both optimization & recompute outputs.)
 
 ## 10. Error Handling & UX
 - [ ] Aggregate and report count of skipped / invalid JSONL lines
@@ -103,8 +117,10 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Provide exit code differentiation (e.g., 2 = input error, 3 = runtime failure)
 
 ## 11. Style & Consistency
-- [ ] Ensure all new code passes type checking (add type hints where missing)
-- [ ] Ensure ruff clean with no inline suppressions except justified (document rationale)
+- [x] Ensure all new code passes type checking (add type hints where missing)  
+  (No new type errors introduced; helper functions annotated.)
+- [x] Ensure ruff clean with no inline suppressions except justified (document rationale)  
+  (Only demo script keeps `noqa` for complexity/import grouping; rationale: pedagogical clarity.)
 - [ ] Add module-level `__all__` where appropriate for public surfaces
 - [ ] Normalize naming: `near_misses` vs `w_near` (ensure doc clarity)
 
@@ -129,7 +145,7 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 
 ---
 ## Next Step Recommendation
-Start with: shared module refactor → tests → docs relocation+design doc → CLI integration → seeding & schema improvements → methodology refinements.
+Completed foundational refactors + validation + core tests. **Recommended next focus:** produce the comprehensive design doc (Section 1) and add remaining UX/error-handling improvements (Section 10) before tackling methodology enhancements (Section 6). Immediate actionable next task: "Create full design doc with formal JSON schema & error modes".
 
 ---
 Generated: (initial scaffold — to be updated as work proceeds)

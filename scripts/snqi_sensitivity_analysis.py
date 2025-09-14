@@ -26,8 +26,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from scipy.stats import spearmanr
 
-# Import canonical SNQI computation utilities
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
+from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 
 # Optional visualization dependencies
 try:
@@ -541,6 +541,11 @@ def main():  # noqa: C901
         default=None,
         help="Random seed for reproducibility (affects stochastic components if any added in future)",
     )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate JSON output structure and numeric finiteness before writing",
+    )
 
     args = parser.parse_args()
 
@@ -608,7 +613,17 @@ def main():  # noqa: C901
     }
     results["_metadata"] = metadata
 
-    # Save detailed results
+    # Validate detailed results
+    try:
+        if args.validate:
+            validate_snqi(results, "sensitivity", check_finite=True)
+        else:
+            assert_all_finite(results)
+    except ValueError as e:
+        logger.error("Validation failed: %s", e)
+        return 1
+
+    # Save detailed results after validation
     args.output.mkdir(parents=True, exist_ok=True)
     with open(args.output / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -645,6 +660,15 @@ def main():  # noqa: C901
 
     # Attach metadata to summary too for standalone consumption
     summary["_metadata"] = metadata
+    # Standardized top-level style summary section matching other scripts
+    summary["summary"] = {
+        "total_episodes": len(episodes),
+        "weights": weights,
+        "seed": args.seed,
+        "has_visualizations": not args.skip_visualizations,
+        "sweep_points": args.sweep_points,
+        "pairwise_points": args.pairwise_points,
+    }
     with open(args.output / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 

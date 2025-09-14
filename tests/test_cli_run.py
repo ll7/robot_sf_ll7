@@ -56,6 +56,7 @@ def test_cli_run_subcommand(tmp_path: Path, capsys):
     # Expect 2 episodes due to repeats
     assert len(lines) == 2
 
-    # Spot-check JSON structure
+    # Spot-check JSON structure including algorithm metadata
     rec = json.loads(lines[0])
     assert "episode_id" in rec and "metrics" in rec
+    assert "algorithm_metadata" in rec and isinstance(rec["algorithm_metadata"], dict)

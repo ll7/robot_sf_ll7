@@ -29,6 +29,58 @@ from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
+def _load_baseline_planner(algo: str, algo_config_path: Optional[str], seed: int):
+    """Load and construct a baseline planner from the registry.
+
+    Returns (planner, ObservationCls, config_dict).
+    """
+    try:
+        from robot_sf.baselines import get_baseline
+        from robot_sf.baselines.social_force import Observation
+    except ImportError as e:
+        raise RuntimeError(f"Failed to import baseline algorithms: {e}")
+
+    try:
+        planner_class = get_baseline(algo)
+    except KeyError:
+        from robot_sf.baselines import list_baselines
+
+        available = list_baselines()
+        raise ValueError(f"Unknown algorithm '{algo}'. Available: {available}")
+
+    # Load configuration if provided
+    config = {}
+    if algo_config_path:
+        config_path = Path(algo_config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
+
+        with config_path.open("r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+            if not isinstance(cfg, dict):
+                raise TypeError("Algorithm config must be a mapping (YAML dict).")
+            config = cfg
+    planner = planner_class(config, seed=seed)
+    return planner, Observation, config
+
+
+def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_positions, dt):
+    agents = [
+        {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
+    ]
+    return ObservationCls(
+        dt=dt,
+        robot={
+            "position": robot_pos.tolist(),
+            "velocity": robot_vel.tolist(),
+            "goal": robot_goal.tolist(),
+            "radius": 0.3,
+        },
+        agents=agents,
+        obstacles=[],
+    )
+
+
 def _git_hash_fallback() -> str:
     # Best effort; avoid importing subprocess if not needed later
     try:
@@ -103,6 +155,61 @@ def _build_episode_data(
     )
 
 
+def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
+    """Create a robot policy function based on the specified algorithm."""
+
+    if algo == "simple_policy":
+        # Original simple policy for backward compatibility
+        def policy(
+            robot_pos: np.ndarray,
+            _robot_vel: np.ndarray,
+            robot_goal: np.ndarray,
+            _ped_positions: np.ndarray,
+            _dt: float,
+        ) -> np.ndarray:
+            return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
+
+        # Provide minimal algorithm metadata for consistency
+        return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
+
+    # Load baseline planner once (removed erroneous early return)
+    planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
+
+    def policy_fn(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
+        """Policy function that uses the baseline planner."""
+        obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
+        action = planner.step(obs)
+
+        # Convert action to velocity (handle both action spaces)
+        if "vx" in action and "vy" in action:
+            return np.array([action["vx"], action["vy"]], dtype=float)
+        if "v" in action and "omega" in action:
+            v = action["v"]
+            current_speed = np.linalg.norm(robot_vel)
+            if current_speed > 1e-6:
+                direction = robot_vel / current_speed
+                return direction * v
+            goal_dir = robot_goal - robot_pos
+            if np.linalg.norm(goal_dir) > 1e-6:
+                return goal_dir / np.linalg.norm(goal_dir) * v
+            return np.zeros(2)
+        raise ValueError(f"Invalid action format from {algo}: {action}")
+
+    metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
+    # Ensure consistent metadata schema
+    metadata.setdefault("algorithm", algo)
+    metadata["config"] = algo_config
+    metadata["config_hash"] = _config_hash(algo_config)
+
+    return policy_fn, metadata
+
+
 def run_episode(
     scenario_params: Dict[str, Any],
     seed: int,
@@ -114,12 +221,16 @@ def run_episode(
     record_forces: bool = True,
     snqi_weights: Dict[str, float] | None = None,
     snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    algo: str = "simple_policy",
+    algo_config_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
-    The robot is modeled separately from pedestrians (independent); robot motion does not influence pedestrians yet.
-    Future work: integrate robot into social-force environment for two-way coupling.
+    The robot can use different algorithms based on the 'algo' parameter.
     """
+    # Create robot policy based on algorithm
+    robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
+
     gen = generate_scenario(scenario_params, seed=seed)
     sim = gen.simulator
     if sim is None:
@@ -145,21 +256,21 @@ def run_episode(
     last_vel = robot_vel.copy()
 
     def _step_robot(
-        curr_pos: np.ndarray, curr_vel: np.ndarray
+        curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        new_vel = _simple_robot_policy(curr_pos, robot_goal_arr, speed=1.0)
+        new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
         new_pos = curr_pos + new_vel * dt
         acc_vec = (new_vel - curr_vel) / dt
         return new_pos, new_vel, acc_vec
 
     for t in range(horizon):
-        # Policy
-        robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel)
-        last_vel = robot_vel.copy()
-
         # Capture pedestrian positions directly via pysocialforce API
         ped_pos = sim.peds.pos().copy()
         peds_pos_traj.append(ped_pos)
+
+        # Policy (now algorithm-based)
+        robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
+        last_vel = robot_vel.copy()
 
         # Force sampling per pedestrian if requested
         if record_forces:
@@ -198,12 +309,15 @@ def run_episode(
         metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
     )
 
+    # Build record per schema
     record = {
         "episode_id": f"{scenario_params.get('id', 'unknown')}--{seed}",
         "scenario_id": scenario_params.get("id", "unknown"),
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
+        # Include algorithm metadata for verification / reproducibility
+        "algorithm_metadata": algo_metadata,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
         "timestamps": {
@@ -289,6 +403,8 @@ def run_batch(
     progress_cb: Optional[
         Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]
     ] = None,
+    algo: str = "simple_policy",
+    algo_config_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -324,6 +440,8 @@ def run_batch(
                 record_forces=record_forces,
                 snqi_weights=snqi_weights,
                 snqi_baseline=snqi_baseline,
+                algo=algo,
+                algo_config_path=algo_config_path,
             )
             # Validate and append
             validate_episode(rec, schema)

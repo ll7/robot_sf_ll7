@@ -729,6 +729,16 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         original_episode_count=original_episode_count,
         used_episode_count=used_episode_count,
     )
+    if args.ci_placeholder:
+        # Confidence interval scaffold referencing planned bootstrap integration
+        results.setdefault("_metadata", {})["confidence_intervals_placeholder"] = {
+            "status": "placeholder",
+            "method": "bootstrap_future",
+            "details": {
+                "message": "CI computation not yet implemented; this is a forward-compatible scaffold.",
+                "planned_bootstrap_function": "robot_sf.benchmark.snqi.bootstrap.bootstrap_stability",
+            },
+        }
     results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
     results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
         "total_missing"
@@ -834,6 +844,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         type=float,
         default=1e-4,
         help="Minimum positive objective improvement to reset early stopping patience.",
+    )
+    parser.add_argument(
+        "--ci-placeholder",
+        action="store_true",
+        help="Include a placeholder confidence-interval scaffold in output metadata (non-operative)",
     )
     return parser.parse_args(argv)
 

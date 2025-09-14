@@ -284,21 +284,27 @@ def _load_initial_weights(path: Path) -> Dict[str, float]:
 
 
 # ---------------------------- I/O helpers ---------------------------- #
-def load_episodes_data(path: Path) -> List[Dict[str, Any]]:
-    """Load episodes from JSONL file."""
+def load_episodes_data(path: Path) -> tuple[List[Dict[str, Any]], int]:
+    """Load episodes from JSONL file returning (episodes, skipped_malformed)."""
     episodes: List[Dict[str, Any]] = []
+    skipped = 0
     with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+        for line_no, line in enumerate(f, start=1):
+            raw = line.strip()
+            if not raw:
                 continue
             try:
-                obj = json.loads(line)
+                obj = json.loads(raw)
                 if isinstance(obj, dict):
                     episodes.append(obj)
+                else:
+                    skipped += 1
             except json.JSONDecodeError:
-                logger.warning("Skipping invalid JSON line in %s", path)
-    return episodes
+                skipped += 1
+                logger.debug("Malformed JSON (line %d) in %s", line_no, path)
+    if skipped:
+        logger.info("Skipped %d malformed/invalid lines in %s", skipped, path)
+    return episodes, skipped
 
 
 def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
@@ -310,10 +316,12 @@ def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
 
 
 # ------------------------- Orchestration helpers --------------------- #
-def _load_inputs(args: argparse.Namespace) -> tuple[list[dict], dict[str, dict[str, float]]]:
-    episodes = load_episodes_data(args.episodes)
+def _load_inputs(
+    args: argparse.Namespace,
+) -> tuple[list[dict], dict[str, dict[str, float]], int]:
+    episodes, skipped = load_episodes_data(args.episodes)
     baseline_stats = load_baseline_stats(args.baseline)
-    return episodes, baseline_stats
+    return episodes, baseline_stats, skipped
 
 
 def _select_best(results: Dict[str, Any], method: str) -> None:
@@ -408,7 +416,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     start_perf = perf_counter()
     start_iso = datetime.now(timezone.utc).isoformat()
     try:
-        episodes, baseline_stats = _load_inputs(args)
+        episodes, baseline_stats, skipped_lines = _load_inputs(args)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
@@ -458,6 +466,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             recommended_weights, show_progress=args.progress
         )
     _augment_metadata(results, args, start_iso, start_perf)
+    results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
     try:
         if args.validate:
             validate_snqi(results, "optimization", check_finite=True)
@@ -469,7 +478,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
-    logger.info("Results saved to %s", args.output)
+    # Inject skipped count into summary after augmentation
+    if "summary" in results:
+        results["summary"]["skipped_malformed_lines"] = skipped_lines
+    logger.info("Results saved to %s (skipped malformed lines: %d)", args.output, skipped_lines)
     _print_summary(results, args)
     return EXIT_SUCCESS
 

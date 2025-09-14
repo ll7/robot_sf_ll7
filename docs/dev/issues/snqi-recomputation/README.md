@@ -24,9 +24,9 @@ This checklist captures all outstanding improvements required to bring the SNQI 
   - [x] Error modes and fallback behavior
   - [x] Reproducibility & seeding strategy
   - [x] Performance characteristics (expected runtime vs dataset size)
-- [ ] Relocate user-facing docs from `scripts/QUICK_START.md` & `scripts/README_SNQI_WEIGHTS.md` into `docs/snqi-weight-tools/README.md` (or link them if partial duplication needed)
-- [ ] Add short section + link in root `README.md` describing SNQI tooling
-- [ ] Add cross-reference in `docs/ENVIRONMENT.md` or benchmark docs if applicable
+- [x] Relocate user-facing docs from `scripts/QUICK_START.md` & `scripts/README_SNQI_WEIGHTS.md` into `docs/snqi-weight-tools/README.md` (or link them if partial duplication needed)
+- [x] Add short section + link in root `README.md` describing SNQI tooling
+- [x] Add cross-reference in `docs/ENVIRONMENT.md` or benchmark docs if applicable
 - [ ] Document JSON output schema formally (key names, types, meaning, stability guarantee)
 - [ ] Explain normalization strategy choice (median/p95) and limitations
 - [ ] Justify heuristic formulas (e.g., stability = 1/(1+|std-0.5|)) and consider replacing or labeling experimental

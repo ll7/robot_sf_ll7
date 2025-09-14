@@ -729,6 +729,40 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         original_episode_count=original_episode_count,
         used_episode_count=used_episode_count,
     )
+    # Bootstrap confidence intervals (optional)
+    if getattr(args, "bootstrap_samples", 0) and args.bootstrap_samples > 0:
+        try:
+            phase_start = perf_counter()
+            bs_rng = np.random.default_rng(args.seed if args.seed is not None else 1234)
+            rec_weights = results.get("recommended", {}).get("weights")
+            if rec_weights:
+                episode_scores = [
+                    optimizer._episode_snqi(ep.get("metrics", {}), rec_weights)  # noqa: SLF001
+                    for ep in optimizer.episodes
+                ]
+                episode_scores = [s for s in episode_scores if np.isfinite(s)]
+                n = len(episode_scores)
+                if n:
+                    reps = args.bootstrap_samples
+                    means: list[float] = []
+                    for _ in range(reps):
+                        idx = bs_rng.integers(0, n, size=n)
+                        sample = [episode_scores[i] for i in idx]
+                        means.append(float(np.mean(sample)))
+                    means_arr = np.array(means, dtype=float)
+                    alpha = 1 - float(getattr(args, "bootstrap_confidence", 0.95))
+                    lower = float(np.percentile(means_arr, 100 * (alpha / 2)))
+                    upper = float(np.percentile(means_arr, 100 * (1 - alpha / 2)))
+                    results.setdefault("bootstrap", {})["recommended_score"] = {
+                        "samples": reps,
+                        "mean_mean": float(np.mean(means_arr)),
+                        "std_mean": float(np.std(means_arr, ddof=1)) if reps > 1 else 0.0,
+                        "ci": [lower, upper],
+                        "confidence_level": float(getattr(args, "bootstrap_confidence", 0.95)),
+                    }
+            phase_timings["bootstrap"] = perf_counter() - phase_start
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Bootstrap computation failed: %s", e)
     if args.ci_placeholder:
         # Confidence interval scaffold referencing planned bootstrap integration
         results.setdefault("_metadata", {})["confidence_intervals_placeholder"] = {
@@ -848,7 +882,19 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--ci-placeholder",
         action="store_true",
-        help="Include a placeholder confidence-interval scaffold in output metadata (non-operative)",
+        help="(DEPRECATED) Include placeholder CI scaffold; use --bootstrap-samples / --bootstrap-confidence instead",
+    )
+    parser.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=0,
+        help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
+    )
+    parser.add_argument(
+        "--bootstrap-confidence",
+        type=float,
+        default=0.95,
+        help="Confidence level for bootstrap intervals (e.g., 0.95)",
     )
     return parser.parse_args(argv)
 

@@ -73,6 +73,15 @@ class SNQIWeightRecomputer:
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = WEIGHT_NAMES
+        self.simplex = False  # toggled externally
+
+    def _maybe_simplex(self, weights: Dict[str, float], total: float = 10.0) -> Dict[str, float]:
+        if not self.simplex:
+            return weights
+        s = sum(weights.values())
+        if s <= 0:  # pragma: no cover - defensive
+            return weights
+        return {k: (v / s) * total for k, v in weights.items()}
 
     def _episode_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
         """Wrapper calling shared compute_snqi keeping backward compatibility."""
@@ -124,10 +133,11 @@ class SNQIWeightRecomputer:
         Returns overall distributional stats and per-algorithm aggregates
         (mean, std, count) if algorithm labels exist in episode `scenario_params`.
         """
+        weights = self._maybe_simplex(weights)
         scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
 
         # Group by algorithm if available
-        algo_scores = {}
+        algo_scores: dict[str, list[float]] = {}
         for ep in self.episodes:
             algo = ep.get("scenario_params", {}).get("algo", ep.get("scenario_id", "default"))
             if algo not in algo_scores:
@@ -251,7 +261,7 @@ class SNQIWeightRecomputer:
                 weights = self.default_weights()
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
-
+        weights = self._maybe_simplex(weights)
         # Compute statistics for the selected weights
         stats = self.compute_weight_statistics(weights)
 
@@ -553,6 +563,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Deterministically sample N episodes prior to analysis (for speed)",
     )
+    parser.add_argument(
+        "--simplex",
+        action="store_true",
+        help="Project strategy and external weight vectors onto a simplex (sum constant) before evaluation",
+    )
     return parser.parse_args(argv)
 
 
@@ -630,6 +645,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
         np.random.seed(args.seed)
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
+        recomputer.simplex = bool(args.simplex)
         external_weights: Dict[str, float] | None = None
         if args.external_weights_file is not None:
             try:
@@ -638,6 +654,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 if not isinstance(raw, dict):  # pragma: no cover - defensive
                     raise ValueError("External weights file must be a JSON object")
                 external_weights = _validate_weights_mapping(raw)
+                if args.simplex:
+                    s = sum(external_weights.values())
+                    if s > 0:
+                        external_weights = {k: (v / s) * 10.0 for k, v in external_weights.items()}
                 logger.info("Loaded external weights from %s", args.external_weights_file)
             except Exception as e:  # noqa: BLE001
                 logger.error("Failed loading external weights: %s", e)

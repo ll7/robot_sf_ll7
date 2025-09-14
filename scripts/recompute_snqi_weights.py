@@ -43,9 +43,15 @@ from robot_sf.benchmark.snqi.weights_validation import (
     validate_weights_mapping as _validate_weights_mapping,
 )
 
-# Setup logging
+# Setup logging (single configuration point)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# Exit code scaffold (taxonomy finalized in subsequent task)
+EXIT_SUCCESS = 0
+EXIT_INPUT_ERROR = 1  # input or parsing related
+EXIT_VALIDATION_ERROR = 2  # schema / validation failure
+EXIT_RUNTIME_ERROR = 3  # other unexpected runtime issues
 
 
 class SNQIWeightRecomputer:
@@ -446,30 +452,32 @@ def _finalize_summary(results: Dict[str, Any], args: argparse.Namespace) -> None
 
 
 def _print_summary(results: Dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
-    print("\nWeight Recomputation Summary:")
-    print(f"Episodes analyzed: {episodes_count}")
+    lines: list[str] = []
+    lines.append("Weight Recomputation Summary:")
+    lines.append(f"Episodes analyzed: {episodes_count}")
     if args.compare_strategies:
-        print(f"Recommended strategy: {results.get('recommended_strategy')}")
+        lines.append(f"Recommended strategy: {results.get('recommended_strategy')}")
         if "strategy_correlations" in results:
             sorted_corrs = sorted(
                 results["strategy_correlations"].items(), key=lambda x: x[1], reverse=True
             )
-            print("Strategy correlations (top 3):")
+            lines.append("Strategy correlations (top 3):")
             for pair, corr in sorted_corrs[:3]:
-                print(f"  {pair}: {corr:.4f}")
+                lines.append(f"  {pair}: {corr:.4f}")
     else:
-        print(f"Strategy used: {args.strategy}")
-    print("\nRecommended Weights:")
+        lines.append(f"Strategy used: {args.strategy}")
+    lines.append("Recommended Weights:")
     for w, v in (results.get("recommended_weights") or {}).items():
-        print(f"  {w}: {float(v):.3f}")
+        lines.append(f"  {w}: {float(v):.3f}")
     if args.compare_normalization and "normalization_comparison" in results:
-        print("\nNormalization Strategy Impact:")
+        lines.append("Normalization Strategy Impact:")
         for name, data in results["normalization_comparison"].items():
             if name == "median_p95":
                 continue
             corr = data.get("correlation_with_base")
             if corr is not None:
-                print(f"  {name}: correlation with base = {corr:.4f}")
+                lines.append(f"  {name}: correlation with base = {corr:.4f}")
+    logger.info("\n" + "\n".join(lines))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -514,10 +522,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
         baseline = load_baseline_stats(args.baseline)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
-        return 1
+    return EXIT_INPUT_ERROR
     if not episodes:
         logger.error("No episodes loaded from %s", args.episodes)
-        return 1
+    return EXIT_INPUT_ERROR
     if args.seed is not None:
         np.random.seed(args.seed)
     recomputer = SNQIWeightRecomputer(episodes, baseline)
@@ -532,7 +540,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             logger.info("Loaded external weights from %s", args.external_weights_file)
         except Exception as e:  # noqa: BLE001
             logger.error("Failed loading external weights: %s", e)
-            return 1
+            return EXIT_INPUT_ERROR
     results: Dict[str, Any] = {}
     if args.compare_strategies:
         all_strategies = ["default", "balanced", "safety_focused", "efficiency_focused", "pareto"]
@@ -581,13 +589,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             assert_all_finite(results)
     except ValueError as e:
         logger.error("Validation failed: %s", e)
-        return 1
+    return EXIT_VALIDATION_ERROR
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
     logger.info("Results saved to %s", args.output)
     _print_summary(results, args, len(episodes))
-    return 0
+    return EXIT_SUCCESS
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover

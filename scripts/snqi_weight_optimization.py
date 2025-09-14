@@ -361,7 +361,11 @@ def _select_best(results: Dict[str, Any], method: str) -> None:
 
 
 def _augment_metadata(
-    results: Dict[str, Any], args: argparse.Namespace, start_iso: str, start_perf: float
+    results: Dict[str, Any],
+    args: argparse.Namespace,
+    start_iso: str,
+    start_perf: float,
+    phase_timings: dict[str, float] | None = None,
 ) -> None:
     def _git_commit() -> str:
         try:
@@ -393,6 +397,9 @@ def _augment_metadata(
             "method_requested": args.method,
         },
     }
+    if phase_timings:
+        # Sort timings for stable output ordering
+        results_meta["phase_timings"] = {k: phase_timings[k] for k in sorted(phase_timings)}
     results["_metadata"] = results_meta
     recommended = results["recommended"]
     results["summary"] = {
@@ -492,11 +499,14 @@ def _print_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
 def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decomposition
     start_perf = perf_counter()
     start_iso = datetime.now(timezone.utc).isoformat()
+    phase_start = start_perf
+    phase_timings: dict[str, float] = {}
     try:
         episodes, baseline_stats, skipped_lines = _load_inputs(args)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
+    phase_timings["load_inputs"] = perf_counter() - phase_start
     if not episodes:
         logger.error("No valid episodes found in data file")
         return EXIT_INPUT_ERROR
@@ -513,11 +523,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             return EXIT_INPUT_ERROR
     results: Dict[str, Any] = {}
     if args.method in ["grid", "both"]:
+        phase_start = perf_counter()
         grid_result = optimizer.grid_search_optimization(
             args.grid_resolution,
             max_combinations=args.max_grid_combinations,
             show_progress=args.progress,
         )
+        phase_timings["grid_search"] = perf_counter() - phase_start
         results["grid_search"] = {
             "weights": grid_result.weights,
             "objective_value": grid_result.objective_value,
@@ -526,9 +538,11 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             "objective_components": grid_result.objective_components,
         }
     if args.method in ["evolution", "both"]:
+        phase_start = perf_counter()
         evolution_result = optimizer.differential_evolution_optimization(
             args.maxiter, seed=args.seed, show_progress=args.progress
         )
+        phase_timings["differential_evolution"] = perf_counter() - phase_start
         results["differential_evolution"] = {
             "weights": evolution_result.weights,
             "objective_value": evolution_result.objective_value,
@@ -540,11 +554,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     if initial_weights is not None:
         results["initial_weights"] = initial_weights
     if args.sensitivity:
+        phase_start = perf_counter()
         recommended_weights = results["recommended"]["weights"]
         results["sensitivity_analysis"] = optimizer.sensitivity_analysis(
             recommended_weights, show_progress=args.progress
         )
+        phase_timings["sensitivity_analysis"] = perf_counter() - phase_start
     # Detect baseline missing metrics (episodes contain metric but baseline lacks med/p95)
+    phase_start = perf_counter()
     missing_info = _detect_missing_baseline_metrics(
         episodes, baseline_stats, args.missing_metric_max_list
     )
@@ -558,7 +575,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         if args.fail_on_missing_metric:
             logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
             return EXIT_MISSING_METRIC_ERROR
-    _augment_metadata(results, args, start_iso, start_perf)
+    phase_timings["diagnostics"] = perf_counter() - phase_start
+    _augment_metadata(results, args, start_iso, start_perf, phase_timings)
     results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
     results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
         "total_missing"
@@ -568,6 +586,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         # Ensure presence of key even before file write (tests expect it)
         results["summary"]["skipped_malformed_lines"] = skipped_lines
     try:
+        phase_start = perf_counter()
         if args.validate:
             validate_snqi(results, "optimization", check_finite=True)
         else:
@@ -575,6 +594,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     except ValueError as e:
         logger.error("Validation failed: %s", e)
         return EXIT_VALIDATION_ERROR
+    phase_timings["validation"] = perf_counter() - phase_start
+    phase_start = perf_counter()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -582,6 +603,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     if "summary" in results:
         results["summary"]["skipped_malformed_lines"] = skipped_lines
     logger.info("Results saved to %s (skipped malformed lines: %d)", args.output, skipped_lines)
+    phase_timings["write_output"] = perf_counter() - phase_start
+    # Optionally log phase timings at INFO if user wants progress; else DEBUG
+    if phase_timings:
+        timing_lines = ["Phase timings (seconds):"] + [
+            f"  {k}: {v:.4f}" for k, v in sorted(phase_timings.items())
+        ]
+        logger.info("\n%s", "\n".join(timing_lines))
     _print_summary(results, args)
     return EXIT_SUCCESS
 

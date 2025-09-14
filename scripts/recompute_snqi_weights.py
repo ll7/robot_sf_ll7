@@ -40,6 +40,7 @@ import numpy as np
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi  # type: ignore
 from robot_sf.benchmark.snqi.exit_codes import (
     EXIT_INPUT_ERROR,
+    EXIT_MISSING_METRIC_ERROR,
     EXIT_RUNTIME_ERROR,
     EXIT_SUCCESS,
     EXIT_VALIDATION_ERROR,
@@ -448,6 +449,9 @@ def _finalize_summary(results: Dict[str, Any], args: argparse.Namespace) -> None
         "runtime_seconds": meta.get("runtime_seconds"),
         "start_time": meta.get("start_time"),
         "end_time": meta.get("end_time"),
+        "baseline_missing_metric_count": results.get("_metadata", {}).get(
+            "baseline_missing_metric_count"
+        ),
     }
 
 
@@ -511,7 +515,62 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional JSON file with externally supplied weights to evaluate (validated)",
     )
+    parser.add_argument(
+        "--missing-metric-max-list",
+        type=int,
+        default=5,
+        help="Max example episode IDs to list per missing baseline metric",
+    )
+    parser.add_argument(
+        "--fail-on-missing-metric",
+        action="store_true",
+        help="Treat presence of baseline-missing metrics as an error (non-zero exit)",
+    )
     return parser.parse_args(argv)
+
+
+def _detect_missing_baseline_metrics(
+    episodes: list[dict[str, Any]],
+    baseline_stats: dict[str, dict[str, float]],
+    max_examples: int = 5,
+) -> dict[str, Any]:
+    """Detect metrics present in episodes but absent from baseline stats.
+
+    Returns structure with total_missing and per-metric counts + example IDs.
+    Metrics checked correspond to those normalized in `compute_snqi`.
+    """
+    normalized_metrics = [
+        "collisions",
+        "near_misses",
+        "force_exceed_events",
+        "jerk_mean",
+    ]
+    results: list[dict[str, Any]] = []
+    for metric in normalized_metrics:
+        if metric in baseline_stats:
+            continue
+        episodes_with_metric: list[str] = []
+        count = 0
+        for ep in episodes:
+            metrics = ep.get("metrics", {}) or {}
+            if metric in metrics:
+                count += 1
+                if len(episodes_with_metric) < max_examples:
+                    ep_id = (
+                        str(ep.get("scenario_id"))
+                        or str(ep.get("id"))
+                        or str(len(episodes_with_metric))
+                    )
+                    episodes_with_metric.append(ep_id)
+        if count:
+            results.append(
+                {
+                    "name": metric,
+                    "episode_count_with_metric": count,
+                    "example_episode_ids": episodes_with_metric,
+                }
+            )
+    return {"total_missing": len(results), "metrics": results}
 
 
 def run(args: argparse.Namespace) -> int:  # noqa: C901
@@ -575,6 +634,20 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             results["normalization_comparison"] = recomputer.compare_normalization_strategies(
                 results["recommended_weights"]
             )
+        # Baseline missing metric diagnostics
+        missing_info = _detect_missing_baseline_metrics(
+            episodes, baseline, args.missing_metric_max_list
+        )
+        results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
+        if missing_info["total_missing"]:
+            logger.warning(
+                "Baseline missing %d metric(s) present in episodes: %s",
+                missing_info["total_missing"],
+                ", ".join(m["name"] for m in missing_info["metrics"]),
+            )
+            if args.fail_on_missing_metric:
+                logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
+                return EXIT_MISSING_METRIC_ERROR
         if external_weights is not None:
             ext_stats = recomputer.compute_weight_statistics(external_weights)
             results["external_weights"] = {
@@ -585,7 +658,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 ),
             }
         _augment_metadata(results, args, start_iso, start_perf)
+        # Record missing metric count in metadata for summary consumption
+        results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
+            "total_missing"
+        ]
         _finalize_summary(results, args)
+        # Also surface in summary (already added in _finalize_summary, ensure consistency)
+        if "summary" in results:
+            results["summary"]["baseline_missing_metric_count"] = missing_info["total_missing"]
         try:
             if args.validate:
                 validate_snqi(results, "recompute", check_finite=True)

@@ -63,6 +63,15 @@ robot_sf_bench summary --in /tmp/episodes.jsonl --out-dir /tmp/figs
 echo "Plots under /tmp/figs"
 ```
 
+## SNQI Weight Tooling
+
+Tools for recomputing and optimizing Social Navigation Quality Index (SNQI) weights live under `scripts/` and are documented in:
+
+- [`docs/snqi-weight-tools/README.md`](./snqi-weight-tools/README.md)
+- Design details: [`docs/dev/issues/snqi-recomputation/DESIGN.md`](./dev/issues/snqi-recomputation/DESIGN.md)
+
+Use these after generating benchmark episode data (`robot_sf_bench run`) and baseline stats to derive or evaluate weight configurations. All outputs contain a reproducibility `_metadata` block (schema version, git commit, seed, invocation).
+
 ## Notes
 - Dependencies are pinned via `uv.lock` for reproducibility.
 - A local editable source for `pysocialforce` is configured in `pyproject.toml` under `[tool.uv.sources]` (path `fast-pysf`).

@@ -18,7 +18,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 - [Related Design Document](#related-design-document)
 
 ## Overview
-The Social Navigation Quality Index (SNQI) aggregates multiple navigation metrics (success, time, safety, comfort, smoothness) into a single score:
+The Social Navigation Quality Index (SNQI) aggregates multiple navigation metrics (success, time, safety, comfort, smoothness) into a single score. It is intentionally bounded and designed for reproducibility and comparative benchmarking:
 ```
 SNQI = w_success * success
        - w_time * time_norm
@@ -28,7 +28,21 @@ SNQI = w_success * success
        - w_force_exceed * force_exceed_norm
        - w_jerk * jerk_norm
 ```
-Normalized metrics use median/p95 baseline statistics with clamping to [0,1]. Positive weights penalize negative factors by subtraction.
+Normalized metrics use median/p95 baseline statistics with clamping to [0,1]. Positive weights penalize adverse factors by subtraction. Metrics below baseline median floor at 0 (no negative reward); values above p95 saturate at 1 (robustness over extreme tail sensitivity).
+
+### Normalization Rationale (Median / p95)
+Chosen for stability + robustness:
+- Median resists skew from heavy tails.
+- p95 anchors an upper bound without letting rare outliers explode scale.
+- Clamping yields a predictable optimization landscape.
+
+Limitations:
+- Improvement below median not differentiated (hard floor).
+- Severe outliers (>p95) collapsed together.
+
+Alternatives (explorable via normalization comparison in recomputation script):
+- Median/p90 (less tail compression)
+- IQR scaling (p25/p75) potentially amplifies moderate variance; sensitive with small samples.
 
 ## Quick Start
 ```bash
@@ -74,6 +88,9 @@ Recompute specific:
 - `--compare-strategies`: Evaluate all strategies.
 - `--compare-normalization`: Include normalization variant comparison.
 - `--external-weights-file <path>`: Evaluate user‑provided weight set.
+ - `--missing-metric-max-list <int>`: Include up to N example episode IDs per missing baseline metric in diagnostics.
+ - `--fail-on-missing-metric`: Treat missing baseline metrics (present in episodes) as error (exit code 4).
+ - `--progress`: Show progress bars (if `tqdm` installed).
 
 Optimization specific:
 - `--method <grid|evolution|both>`: Optimization mode.
@@ -81,12 +98,13 @@ Optimization specific:
 - `--max-grid-combinations <int>`: Cap before adaptive pruning/sampling.
 - `--initial-weights-file <path>`: Starting point (valid weights JSON).
 - `--sensitivity`: Enable sensitivity analysis block.
+ - `--missing-metric-max-list <int>` / `--fail-on-missing-metric` / `--progress` analogous to recompute.
 
 Sensitivity specific:
 - `--weights <path>`: Weights to analyze.
 - `--skip-visualizations`: Skip plotting (headless or minimal run).
 
-Planned / future (design doc): `--sample`, `--fail-on-missing-metric`, bootstrap stability flags, progress reporting (`tqdm`).
+Planned / future (design doc): `--sample`, bootstrap stability, timing instrumentation, weight simplex normalization, evolution early stopping, objective component breakdown.
 
 ## Input Data Formats
 ### Episodes JSONL (one JSON object per line)
@@ -106,7 +124,19 @@ Missing metrics default to neutral (0 contribution) currently.
 ```
 
 ## Output JSON Schema (Summary)
-All scripts include `_metadata` and `summary` blocks (schema version 1). Example (optimization):
+All scripts include `_metadata` and `summary` blocks (schema version 1). A formal JSON Schema lives at:
+`docs/snqi-weight-tools/snqi_output.schema.json`
+
+Validate programmatically:
+```python
+import json, jsonschema
+from pathlib import Path
+schema = json.loads(Path('docs/snqi-weight-tools/snqi_output.schema.json').read_text())
+data = json.loads(Path('optimized_weights.json').read_text())
+jsonschema.Draft202012Validator(schema).validate(data)
+```
+
+Example (optimization excerpt):
 ```json
 {
   "recommended": {"weights": {...}, "objective_value": 0.72, "ranking_stability": 0.81, "method_used": "differential_evolution"},
@@ -117,7 +147,12 @@ All scripts include `_metadata` and `summary` blocks (schema version 1). Example
   "summary": {"method": "differential_evolution", "objective_value": 0.72, "ranking_stability": 0.81, "weights": {"w_success": 2.0, ...}}
 }
 ```
-Recompute output adds: `recommended_weights`, optional `strategy_comparison`, `strategy_correlations`, `external_weights`, `normalization_comparison`.
+Recompute output adds: `recommended_weights`, optional `strategy_comparison`, `strategy_correlations`, `external_weights`, `normalization_comparison`, and `diagnostics`.
+
+### Diagnostics Fields
+- `skipped_malformed_lines` (metadata + summary): Count of invalid JSONL lines ignored.
+- `baseline_missing_metric_count` (metadata + summary): Number of metrics present in episodes but absent from baseline normalization stats.
+- `diagnostics.baseline_missing_metrics.metrics[]`: Per-metric occurrence counts + example episode IDs (bounded by `--missing-metric-max-list`).
 
 ## External / Initial Weights
 Use `--external-weights-file` (recompute) or `--initial-weights-file` (optimization) with a JSON mapping of all required weight keys. Validation enforces:
@@ -153,28 +188,41 @@ python scripts/recompute_snqi_weights.py \
 ```
 
 ## Interpreting Results
-- `objective_value`: Combined (currently heuristic) score mixing stability & discriminative power.
-- `ranking_stability`: Higher = rankings robust across internal perturbations.
-- `strategy_correlations`: How similar strategy rankings are (Spearman or Pearson depending on implementation).
-- `normalization_comparison`: Correlation vs canonical median/p95 normalization.
-- `sensitivity_analysis`: Which weights most affect ranking variance.
+- `objective_value`: Heuristic (0.6 * stability + 0.4 * discriminative power) – higher is better.
+- `ranking_stability`: Spearman-based or variance proxy; ≥0.7 generally acceptable on small sets.
+- `strategy_correlations`: Overlap in episodic ranking across strategies.
+- `normalization_comparison`: Score means + correlation vs canonical median/p95.
+- `sensitivity_analysis`: Local one-at-a-time perturbation effects; highlights brittle dimensions.
+- `baseline_missing_metric_count`: Non-zero implies potential silent bias (consider failing CI with flag).
+- `skipped_malformed_lines`: Data hygiene indicator; should normally be 0.
 
 ## Reproducibility & Determinism
-Pass `--seed` to ensure deterministic: sampling (Pareto), grid sampling fallback, differential evolution initialization. Remaining nondeterminism: potential SciPy internal parallelism.
+Pass `--seed` to ensure deterministic: Pareto sampling, grid subset sampling, differential evolution initialization. Sensitivity analysis and progress bars remain deterministic given the seed. Remaining nondeterminism may stem from SciPy internals / BLAS parallelism.
 
 Metadata captures: seed, git commit, invocation, file provenance, schema version.
 
 ## Troubleshooting
 | Issue | Cause | Resolution |
 |-------|-------|------------|
-| Empty / tiny episode set | Insufficient data for stability | Collect ≥ 10–20 episodes (≥ 2 algos improves stability) |
-| Missing baseline metric | Key absent in baseline JSON | Add med/p95 entry or accept neutral contribution |
-| Large grid runtime | Exponential combination count | Lower `--grid-resolution` or rely on evolution |
-| Non-finite output | Bad input metric or division | Check baseline denominators; ensure p95>med |
-| Plots not generated | Missing matplotlib/seaborn | Install or use `--skip-visualizations` |
+| EXIT_INPUT_ERROR | File not found / malformed JSONL | Verify paths; inspect failing line |
+| EXIT_VALIDATION_ERROR | Output contract drift | Update schema or adapt code + snapshot test |
+| EXIT_MISSING_METRIC_ERROR | Missing baseline metric + fail flag | Regenerate or extend baseline stats |
+| Empty / tiny episode set | Insufficient variability | Collect ≥10–20 episodes across ≥2 algorithms |
+| Large grid runtime | Combinatorial explosion | Reduce `--grid-resolution` or prefer evolution |
+| Low discriminative power | Homogeneous scenarios | Add scenario/policy diversity |
+| Unstable rankings | Too few episodes per algo | Increase per‑algo sample size |
+| Non-finite output | Degenerate baseline (p95≈med) | Inspect baseline stats; ensure spread |
+| Plots not generated | Missing matplotlib/seaborn | Install deps or use `--skip-visualizations` |
 
 ## Future Enhancements
-Planned (see design doc): bootstrap stability metric, multi-objective frontier (NSGA-II), progress bars, episode sampling, exit code taxonomy, schema snapshot tests, weight simplex option.
+Planned (see design doc / backlog):
+- Objective component breakdown (expose stability & discriminative components)
+- Episode sampling flag (`--sample N` deterministic subset)
+- Timing instrumentation (phase durations) + simple perf counters
+- Weight simplex option (normalize weights to sum constant)
+- Early stopping for evolution (plateau detection)
+- Bootstrap stability & confidence intervals scaffolding
+- Drift detection test (continuous regression guard)
 
 ## Related Design Document
 For deep architectural details, data contracts, algorithms, and planned roadmap see:  

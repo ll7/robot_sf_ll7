@@ -16,6 +16,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Dict, List
 
 import numpy as np
@@ -316,6 +317,8 @@ def load_baseline_stats(file_path: Path) -> Dict[str, Dict[str, float]]:
 
 
 def main():  # noqa: C901
+    _t_start_perf = perf_counter()
+    _t_start_iso = datetime.now(timezone.utc).isoformat()
     parser = argparse.ArgumentParser(description="SNQI Weight Recomputation")
     parser.add_argument(
         "--episodes", type=Path, required=True, help="Path to episode data JSONL file"
@@ -442,11 +445,18 @@ def main():  # noqa: C901
         except Exception:
             return "UNKNOWN"
 
+    _t_end_perf = perf_counter()
+    _t_end_iso = datetime.now(timezone.utc).isoformat()
+    _runtime_seconds = _t_end_perf - _t_start_perf
+
     results_meta = {
         "schema_version": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": _t_end_iso,
         "git_commit": _git_commit(),
         "seed": args.seed,
+        "start_time": _t_start_iso,
+        "end_time": _t_end_iso,
+        "runtime_seconds": _runtime_seconds,
         "provenance": {
             "episodes_file": str(args.episodes),
             "baseline_file": str(args.baseline),
@@ -481,6 +491,9 @@ def main():  # noqa: C901
         "compare_normalization": args.compare_normalization,
         "seed": args.seed,
         "has_normalization_comparison": bool(results.get("normalization_comparison")),
+        "runtime_seconds": _runtime_seconds,
+        "start_time": _t_start_iso,
+        "end_time": _t_end_iso,
     }
 
     # Save results after validation

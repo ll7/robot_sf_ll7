@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, Iterable, Iterator, List
+from typing import Any, Callable, Dict, Iterable, Iterator, List
 
 import numpy as np
 from scipy.optimize import differential_evolution
@@ -222,31 +222,152 @@ class SNQIWeightOptimizer:
             },
         )
 
+    # --------------------- Differential Evolution helpers -------------------- #
+    def _build_de_callback(
+        self,
+        *,
+        maxiter: int,
+        show_progress: bool,
+        simplex: bool,
+        early_stop_patience: int,
+        early_stop_min_delta: float,
+    ) -> tuple[Callable | None, Any | None]:  # pragma: no cover - trivial glue
+        """Create (callback, progress_bar) pair for differential evolution.
+
+        The callback encapsulates both progress updates and early stopping logic.
+        Returns (None, None) when neither feature is requested. Keeping this
+        logic isolated reduces branching inside the main optimization method.
+        """
+        use_progress = show_progress and _TQDM_AVAILABLE
+        wants_early_stop = early_stop_patience > 0
+        if not use_progress and not wants_early_stop:
+            return None, None
+
+        pbar = tqdm(total=maxiter, desc="evolution") if use_progress else None
+        best_positive_obj: float | None = None
+        stagnant_iters = 0
+
+        def _callback(xk: np.ndarray, _convergence: float) -> bool:  # noqa: D401
+            nonlocal best_positive_obj, stagnant_iters
+            current_positive = -self.objective_function(xk, simplex=simplex)
+            improved = (
+                best_positive_obj is None
+                or current_positive - best_positive_obj >= early_stop_min_delta
+            )
+            if improved:
+                best_positive_obj = current_positive
+                stagnant_iters = 0
+            else:
+                stagnant_iters += 1
+            if pbar is not None:
+                pbar.update(1)
+            if wants_early_stop and stagnant_iters >= early_stop_patience:
+                if pbar is not None:
+                    pbar.set_description("evolution (early-stop)")
+                return True
+            return False
+
+        return _callback, pbar
+
+    def _assemble_de_result(
+        self,
+        *,
+        result: Any,
+        simplex: bool,
+        early_stop_patience: int,
+        early_stop_min_delta: float,
+        maxiter: int,
+    ) -> OptimizationResult:
+        """Convert SciPy result object into `OptimizationResult` (pure helper)."""
+        weights = dict(zip(self.weight_names, result.x))
+        if simplex:
+            weights = self._maybe_simplex(weights, True)
+        stability = self.compute_ranking_stability(weights)
+        positive_score = -result.fun
+        convergence = {
+            "nit": result.nit,
+            "nfev": result.nfev,
+            "success": bool(result.success),
+            "message": result.message,
+            "early_stop_patience": early_stop_patience,
+            "early_stop_min_delta": early_stop_min_delta,
+            "early_stopped": bool(early_stop_patience > 0 and result.nit < maxiter),
+        }
+        evo_scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
+        evo_var = np.var(evo_scores) if len(evo_scores) > 1 else 0.0
+        evo_discriminative = min(1.0, evo_var / 0.5)
+        return OptimizationResult(
+            weights=weights,
+            objective_value=positive_score,
+            ranking_stability=stability,
+            convergence_info=convergence,
+            objective_components={
+                "stability_component": float(stability),
+                "discriminative_component": float(evo_discriminative),
+            },
+        )
+
     def differential_evolution_optimization(
         self,
         maxiter: int = 30,
         seed: int | None = None,
         show_progress: bool = False,
         simplex: bool = False,
+        early_stop_patience: int = 0,
+        early_stop_min_delta: float = 1e-4,
     ) -> OptimizationResult:
-        """Run SciPy's differential evolution on continuous weight domain.
+        """Run differential evolution to optimize weights (thin wrapper).
 
-        Bounds each weight to [0.1, 3.0]. Returns best solution including
-        convergence diagnostics (iterations, evaluations, success flag).
+        Full implementation lives in ``_differential_evolution_core`` to keep
+        wrapper complexity below the C901 threshold while retaining a clear
+        public method signature for external callers.
         """
+        return self._differential_evolution_core(
+            maxiter=maxiter,
+            seed=seed,
+            show_progress=show_progress,
+            simplex=simplex,
+            early_stop_patience=early_stop_patience,
+            early_stop_min_delta=early_stop_min_delta,
+        )
+
+    def _differential_evolution_core(
+        self,
+        *,
+        maxiter: int,
+        seed: int | None,
+        show_progress: bool,
+        simplex: bool,
+        early_stop_patience: int,
+        early_stop_min_delta: float,
+    ) -> OptimizationResult:  # noqa: C901 - acceptable internal complexity
         bounds = [(0.1, 3.0)] * len(self.weight_names)
-        pbar = None
-        if show_progress and _TQDM_AVAILABLE:  # pragma: no branch - simple gate
-            pbar = tqdm(total=maxiter, desc="evolution")
+        callback, pbar = self._build_de_callback(
+            maxiter=maxiter,
+            show_progress=show_progress,
+            simplex=simplex,
+            early_stop_patience=early_stop_patience,
+            early_stop_min_delta=early_stop_min_delta,
+        )
+        result = self._run_de(bounds, maxiter, seed, simplex, callback, pbar)
+        return self._assemble_de_result(
+            result=result,
+            simplex=simplex,
+            early_stop_patience=early_stop_patience,
+            early_stop_min_delta=early_stop_min_delta,
+            maxiter=maxiter,
+        )
 
-            def _cb(_xk, convergence):  # noqa: D401
-                if pbar is not None:
-                    pbar.update(1)
-                return False  # continue
-
-            callback = _cb
-        else:
-            callback = None
+    def _run_de(
+        self,
+        bounds: list[tuple[float, float]],
+        maxiter: int,
+        seed: int | None,
+        simplex: bool,
+        callback: Callable | None,
+        pbar: Any | None,
+    ) -> Any:  # pragma: no cover - thin wrapper
+        """Execute SciPy differential_evolution with provided configuration."""
 
         def _wrapped(vec: np.ndarray) -> float:
             return self.objective_function(vec, simplex=simplex)
@@ -262,30 +383,7 @@ class SNQIWeightOptimizer:
         )
         if pbar is not None:
             pbar.close()
-        weights = dict(zip(self.weight_names, result.x))
-        if simplex:
-            weights = self._maybe_simplex(weights, True)
-        stability = self.compute_ranking_stability(weights)
-        positive_score = -result.fun
-        convergence = {
-            "nit": result.nit,
-            "nfev": result.nfev,
-            "success": bool(result.success),
-            "message": result.message,
-        }
-        evo_scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
-        evo_var = np.var(evo_scores) if len(evo_scores) > 1 else 0.0
-        evo_discriminative = min(1.0, evo_var / 0.5)
-        return OptimizationResult(
-            weights=weights,
-            objective_value=positive_score,
-            ranking_stability=stability,
-            convergence_info=convergence,
-            objective_components={
-                "stability_component": float(stability),
-                "discriminative_component": float(evo_discriminative),
-            },
-        )
+        return result
 
     def sensitivity_analysis(
         self, weights: Dict[str, float], show_progress: bool = False
@@ -724,6 +822,18 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         "--simplex",
         action="store_true",
         help="Project candidate weight vectors onto a simplex (sum constant) before evaluation",
+    )
+    parser.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=0,
+        help="Early stopping patience (iterations without improvement in positive objective). 0 disables.",
+    )
+    parser.add_argument(
+        "--early-stop-min-delta",
+        type=float,
+        default=1e-4,
+        help="Minimum positive objective improvement to reset early stopping patience.",
     )
     return parser.parse_args(argv)
 

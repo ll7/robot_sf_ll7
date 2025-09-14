@@ -12,6 +12,9 @@ Usage:
 import argparse
 import json
 import logging
+import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -127,7 +130,7 @@ class SNQIWeightRecomputer:
 
     def pareto_frontier_weights(self, n_samples: int = 1000) -> List[Dict[str, Any]]:
         """Generate Pareto-optimal weight configurations."""
-        logger.info(f"Computing Pareto frontier with {n_samples} samples")
+        logger.info("Computing Pareto frontier with %d samples", n_samples)
 
         # Sample random weight configurations
         samples = []
@@ -174,12 +177,12 @@ class SNQIWeightRecomputer:
         # Sort by discriminative power
         pareto_samples.sort(key=lambda x: x["discriminative_power"], reverse=True)
 
-        logger.info(f"Found {len(pareto_samples)} Pareto-optimal configurations")
+        logger.info("Found %d Pareto-optimal configurations", len(pareto_samples))
         return pareto_samples[:10]  # Return top 10
 
     def recompute_with_strategy(self, strategy: str) -> Dict[str, Any]:
         """Recompute weights using specified strategy."""
-        logger.info(f"Recomputing weights with strategy: {strategy}")
+        logger.info("Recomputing weights with strategy: %s", strategy)
 
         if strategy == "default":
             weights = self.default_weights()
@@ -292,23 +295,23 @@ class SNQIWeightRecomputer:
 def load_episodes_data(file_path: Path) -> List[Dict]:
     """Load episode data from JSONL file."""
     episodes = []
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 try:
                     episodes.append(json.loads(line))
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Skipping invalid JSON line: {e}")
-    logger.info(f"Loaded {len(episodes)} episodes from {file_path}")
+                    logger.warning("Skipping invalid JSON line: %s", e)
+    logger.info("Loaded %d episodes from %s", len(episodes), file_path)
     return episodes
 
 
 def load_baseline_stats(file_path: Path) -> Dict[str, Dict[str, float]]:
     """Load baseline statistics from JSON file."""
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         stats = json.load(f)
-    logger.info(f"Loaded baseline statistics from {file_path}")
+    logger.info("Loaded baseline statistics from %s", file_path)
     return stats
 
 
@@ -337,6 +340,12 @@ def main():  # noqa: C901
     parser.add_argument(
         "--compare-strategies", action="store_true", help="Compare all available strategies"
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility (applies to stochastic sampling in strategies like pareto)",
+    )
 
     args = parser.parse_args()
 
@@ -345,11 +354,15 @@ def main():  # noqa: C901
         episodes = load_episodes_data(args.episodes)
         baseline_stats = load_baseline_stats(args.baseline)
     except FileNotFoundError as e:
-        logger.error(f"File not found: {e}")
+        logger.error("File not found: %s", e)
         return 1
     except Exception as e:
-        logger.error(f"Error loading data: {e}")
+        logger.error("Error loading data: %s", e)
         return 1
+
+    # Apply seed if provided
+    if args.seed is not None:
+        np.random.seed(args.seed)
 
     # Initialize recomputer
     recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
@@ -367,7 +380,7 @@ def main():  # noqa: C901
                 strategy_result = recomputer.recompute_with_strategy(strategy)
                 strategy_results[strategy] = strategy_result
             except Exception as e:
-                logger.warning(f"Failed to compute strategy {strategy}: {e}")
+                logger.warning("Failed to compute strategy %s: %s", strategy, e)
 
         results["strategy_comparison"] = strategy_results
 
@@ -411,12 +424,41 @@ def main():  # noqa: C901
         norm_results = recomputer.compare_normalization_strategies(weights_for_norm)
         results["normalization_comparison"] = norm_results
 
+    # Augment results with metadata
+    def _git_commit() -> str:
+        try:
+            return (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
+            )
+        except Exception:
+            return "UNKNOWN"
+
+    results_meta = {
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "git_commit": _git_commit(),
+        "seed": args.seed,
+        "provenance": {
+            "episodes_file": str(args.episodes),
+            "baseline_file": str(args.baseline),
+            "invocation": "python " + " ".join(sys.argv),
+            "strategy_requested": args.strategy,
+            "compare_strategies": args.compare_strategies,
+            "compare_normalization": args.compare_normalization,
+        },
+    }
+    results["_metadata"] = results_meta
+
     # Save results
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
+    with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-    logger.info(f"Results saved to {args.output}")
+    logger.info("Results saved to %s", args.output)
 
     # Print summary
     print("\nWeight Recomputation Summary:")

@@ -164,9 +164,12 @@ Implemented: parity, schema+finite, deterministic Pareto, strategies structure, 
 - Confidence intervals around SNQI.
 
 ## 15. Open Questions
-- Should validated recommended weights be version-controlled under `model/`?  
-- Adopt machine-readable JSON schema artifact or maintain lightweight validator only?  
+- Should validated recommended weights be version-controlled under `model/`?
+  - Yes, to ensure reproducibility and traceability of weight configurations.
+- Adopt machine-readable JSON schema artifact or maintain lightweight validator only?
+  - Yes, to provide formal validation and facilitate integration with other tools.
 - How to parameterize acceptable weight ranges (e.g., dynamic warnings)?
+  - Try dynamic warnings based on dataset statistics; allow user overrides.
 
 ## 16. Risks & Mitigations
 | Risk | Impact | Mitigation |

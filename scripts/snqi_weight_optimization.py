@@ -28,8 +28,8 @@ from typing import Any, Dict, List
 import numpy as np
 from scipy.optimize import differential_evolution
 
-# Import canonical SNQI computation utilities
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
+from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -165,14 +165,31 @@ class SNQIWeightOptimizer:
             convergence_info={"method": "grid_search", "evaluated_points": total_combinations},
         )
 
-    def differential_evolution_optimization(self, maxiter: int = 100) -> OptimizationResult:
-        """Differential evolution optimization."""
-        logger.info(f"Starting differential evolution optimization with {maxiter} iterations")
+    def differential_evolution_optimization(
+        self, maxiter: int = 100, seed: int | None = None
+    ) -> OptimizationResult:
+        """Differential evolution optimization.
+
+        Args:
+            maxiter: Maximum number of iterations.
+            seed: Optional random seed for reproducibility.
+        """
+        logger.info(
+            "Starting differential evolution optimization with %d iterations (seed=%s)",
+            maxiter,
+            seed,
+        )
 
         bounds = [(0.1, 3.0) for _ in self.weight_names]
 
+        # Pass through seed if provided; SciPy accepts int | None
         result = differential_evolution(
-            self.objective_function, bounds, maxiter=maxiter, popsize=15, seed=42, polish=True
+            self.objective_function,
+            bounds,
+            maxiter=maxiter,
+            popsize=15,
+            seed=seed,
+            polish=True,
         )
 
         final_weights = dict(zip(self.weight_names, result.x))
@@ -188,6 +205,7 @@ class SNQIWeightOptimizer:
                 "success": result.success,
                 "iterations": result.nit,
                 "function_evaluations": result.nfev,
+                "seed": seed,
             },
         )
 
@@ -301,6 +319,11 @@ def main():  # noqa: C901
         default=None,
         help="Random seed for reproducibility (applies to differential evolution and any stochastic components)",
     )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate JSON output structure and numeric finiteness before writing",
+    )
 
     args = parser.parse_args()
 
@@ -340,7 +363,9 @@ def main():  # noqa: C901
         logger.info(f"Grid search completed. Best objective: {grid_result.objective_value:.4f}")
 
     if args.method in ["evolution", "both"]:
-        evolution_result = optimizer.differential_evolution_optimization(args.maxiter)
+        evolution_result = optimizer.differential_evolution_optimization(
+            args.maxiter, seed=args.seed
+        )
         results["differential_evolution"] = {
             "weights": evolution_result.weights,
             "objective_value": evolution_result.objective_value,
@@ -403,9 +428,34 @@ def main():  # noqa: C901
     }
     results["_metadata"] = results_meta
 
-    # Save results
+    # Add standardized summary block
+    recommended = results["recommended"]
+    results["summary"] = {
+        "method": recommended.get("method_used"),
+        "objective_value": recommended.get("objective_value"),
+        "ranking_stability": recommended.get("ranking_stability"),
+        "weights": recommended.get("weights"),
+        "available_methods": [
+            k for k in results.keys() if k in ("grid_search", "differential_evolution")
+        ],
+        "seed": args.seed,
+        "has_sensitivity": bool(results.get("sensitivity_analysis")),
+    }
+
+    # Validation & finiteness checks
+    try:
+        if args.validate:
+            validate_snqi(results, "optimization", check_finite=True)
+        else:
+            # At least assert finiteness even if structural validation skipped
+            assert_all_finite(results)
+    except ValueError as e:
+        logger.error(f"Validation failed: {e}")
+        sys.exit(1)
+
+    # Save results (only after successful validation)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
+    with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
     logger.info(f"Results saved to {args.output}")

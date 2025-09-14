@@ -343,20 +343,27 @@ class SNQIWeightRecomputer:
         return results
 
 
-def load_episodes_data(path: Path) -> List[Dict[str, Any]]:
+def load_episodes_data(path: Path) -> tuple[List[Dict[str, Any]], int]:
+    """Load episodes returning (episodes, skipped_malformed_lines)."""
     episodes: list[dict[str, Any]] = []
+    skipped = 0
     with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+        for line_no, line in enumerate(f, start=1):
+            raw = line.strip()
+            if not raw:
                 continue
             try:
-                obj = json.loads(line)
+                obj = json.loads(raw)
                 if isinstance(obj, dict):
                     episodes.append(obj)
+                else:
+                    skipped += 1
             except json.JSONDecodeError:
-                logger.warning("Skipping invalid JSON line in %s", path)
-    return episodes
+                skipped += 1
+                logger.debug("Malformed JSON (line %d) in %s", line_no, path)
+    if skipped:
+        logger.info("Skipped %d malformed/invalid lines in %s", skipped, path)
+    return episodes, skipped
 
 
 def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
@@ -452,6 +459,7 @@ def _finalize_summary(results: Dict[str, Any], args: argparse.Namespace) -> None
         "baseline_missing_metric_count": results.get("_metadata", {}).get(
             "baseline_missing_metric_count"
         ),
+        "skipped_malformed_lines": 0,  # populated later
     }
 
 
@@ -481,7 +489,7 @@ def _print_summary(results: Dict[str, Any], args: argparse.Namespace, episodes_c
             corr = data.get("correlation_with_base")
             if corr is not None:
                 lines.append(f"  {name}: correlation with base = {corr:.4f}")
-    logger.info("\n" + "\n".join(lines))
+    logger.info("\n%s", "\n".join(lines))
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -577,7 +585,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     start_perf = perf_counter()
     start_iso = datetime.now(timezone.utc).isoformat()
     try:
-        episodes = load_episodes_data(args.episodes)
+        episodes, skipped_lines = load_episodes_data(args.episodes)
         baseline = load_baseline_stats(args.baseline)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
@@ -658,13 +666,16 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 ),
             }
         _augment_metadata(results, args, start_iso, start_perf)
+        # Record skipped malformed lines
+        results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
         # Record missing metric count in metadata for summary consumption
         results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
             "total_missing"
         ]
         _finalize_summary(results, args)
-        # Also surface in summary (already added in _finalize_summary, ensure consistency)
         if "summary" in results:
+            # Ensure key presence even if zero for contract stability
+            results["summary"]["skipped_malformed_lines"] = skipped_lines
             results["summary"]["baseline_missing_metric_count"] = missing_info["total_missing"]
         try:
             if args.validate:

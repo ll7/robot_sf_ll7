@@ -76,6 +76,7 @@ class OptimizationResult:
     objective_value: float
     ranking_stability: float
     convergence_info: Dict[str, Any]
+    objective_components: Dict[str, float] | None = None
 
 
 class SNQIWeightOptimizer:
@@ -186,6 +187,11 @@ class SNQIWeightOptimizer:
             best_weights = {k: 1.0 for k in self.weight_names}
         # Convert objective back to positive score (we minimized negative)
         positive_score = -best_obj
+        best_scores = [
+            self._episode_snqi(ep.get("metrics", {}), best_weights) for ep in self.episodes
+        ]
+        best_var = np.var(best_scores) if len(best_scores) > 1 else 0.0
+        best_discriminative = min(1.0, best_var / 0.5)
         return OptimizationResult(
             weights=best_weights,
             objective_value=positive_score,
@@ -194,6 +200,10 @@ class SNQIWeightOptimizer:
                 "evaluations": evaluations,
                 "grid_resolution": grid_resolution,
                 "total_combinations_considered": evaluations,
+            },
+            objective_components={
+                "stability_component": float(best_stability),
+                "discriminative_component": float(best_discriminative),
             },
         )
 
@@ -238,11 +248,18 @@ class SNQIWeightOptimizer:
             "success": bool(result.success),
             "message": result.message,
         }
+        evo_scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
+        evo_var = np.var(evo_scores) if len(evo_scores) > 1 else 0.0
+        evo_discriminative = min(1.0, evo_var / 0.5)
         return OptimizationResult(
             weights=weights,
             objective_value=positive_score,
             ranking_stability=stability,
             convergence_info=convergence,
+            objective_components={
+                "stability_component": float(stability),
+                "discriminative_component": float(evo_discriminative),
+            },
         )
 
     def sensitivity_analysis(
@@ -383,6 +400,7 @@ def _augment_metadata(
         "objective_value": recommended.get("objective_value"),
         "ranking_stability": recommended.get("ranking_stability"),
         "weights": recommended.get("weights"),
+        "objective_components": recommended.get("objective_components"),
         "available_methods": [
             k for k in results.keys() if k in ("grid_search", "differential_evolution")
         ],
@@ -391,6 +409,7 @@ def _augment_metadata(
         "runtime_seconds": runtime_seconds,
         "start_time": start_iso,
         "end_time": end_iso,
+        "skipped_malformed_lines": 0,  # populated later
     }
 
 
@@ -504,6 +523,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             "objective_value": grid_result.objective_value,
             "ranking_stability": grid_result.ranking_stability,
             "convergence_info": grid_result.convergence_info,
+            "objective_components": grid_result.objective_components,
         }
     if args.method in ["evolution", "both"]:
         evolution_result = optimizer.differential_evolution_optimization(
@@ -514,6 +534,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             "objective_value": evolution_result.objective_value,
             "ranking_stability": evolution_result.ranking_stability,
             "convergence_info": evolution_result.convergence_info,
+            "objective_components": evolution_result.objective_components,
         }
     _select_best(results, args.method)
     if initial_weights is not None:
@@ -544,6 +565,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     ]
     if "summary" in results:
         results["summary"]["baseline_missing_metric_count"] = missing_info["total_missing"]
+        # Ensure presence of key even before file write (tests expect it)
+        results["summary"]["skipped_malformed_lines"] = skipped_lines
     try:
         if args.validate:
             validate_snqi(results, "optimization", check_finite=True)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: W291, W293, C901, I001
 """
 Social Force Planner (SFP) Demo Script
 
@@ -40,9 +39,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 # Try to import required packages, fall back to mock mode if missing
-try:
-    import numpy as np
+try:  # noqa: I001 - dynamic import grouping inside try block acceptable here
     import matplotlib.pyplot as plt
+    import numpy as np
 
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
@@ -74,9 +73,9 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Try to import Social Force planner, fall back to mock if dependencies missing
-try:
+try:  # noqa: I001 - dynamic import grouping inside try block acceptable here
     from robot_sf.baselines import get_baseline
-    from robot_sf.baselines.social_force import SFPlannerConfig, Observation
+    from robot_sf.baselines.social_force import Observation, SFPlannerConfig
 
     SOCIAL_FORCE_AVAILABLE = True
 except ImportError as e:
@@ -533,7 +532,7 @@ class SFPDemo:
             unicycle_mode=True,
         )
 
-    def _simulate_scenario(
+    def _simulate_scenario(  # noqa: C901 - demo function prioritizes clarity over complexity budget
         self,
         planner,
         robot_pos: List[float],

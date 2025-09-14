@@ -38,6 +38,12 @@ from typing import Any, Dict, List
 import numpy as np
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi  # type: ignore
+from robot_sf.benchmark.snqi.exit_codes import (
+    EXIT_INPUT_ERROR,
+    EXIT_RUNTIME_ERROR,
+    EXIT_SUCCESS,
+    EXIT_VALIDATION_ERROR,
+)
 from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 from robot_sf.benchmark.snqi.weights_validation import (
     validate_weights_mapping as _validate_weights_mapping,
@@ -46,12 +52,6 @@ from robot_sf.benchmark.snqi.weights_validation import (
 # Setup logging (single configuration point)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-# Exit code scaffold (taxonomy finalized in subsequent task)
-EXIT_SUCCESS = 0
-EXIT_INPUT_ERROR = 1  # input or parsing related
-EXIT_VALIDATION_ERROR = 2  # schema / validation failure
-EXIT_RUNTIME_ERROR = 3  # other unexpected runtime issues
 
 
 class SNQIWeightRecomputer:
@@ -522,80 +522,87 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
         baseline = load_baseline_stats(args.baseline)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
-    return EXIT_INPUT_ERROR
+        return EXIT_INPUT_ERROR
     if not episodes:
         logger.error("No episodes loaded from %s", args.episodes)
-    return EXIT_INPUT_ERROR
+        return EXIT_INPUT_ERROR
     if args.seed is not None:
         np.random.seed(args.seed)
-    recomputer = SNQIWeightRecomputer(episodes, baseline)
-    external_weights: Dict[str, float] | None = None
-    if args.external_weights_file is not None:
-        try:
-            with open(args.external_weights_file, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            if not isinstance(raw, dict):  # pragma: no cover - defensive
-                raise ValueError("External weights file must be a JSON object")
-            external_weights = _validate_weights_mapping(raw)
-            logger.info("Loaded external weights from %s", args.external_weights_file)
-        except Exception as e:  # noqa: BLE001
-            logger.error("Failed loading external weights: %s", e)
-            return EXIT_INPUT_ERROR
-    results: Dict[str, Any] = {}
-    if args.compare_strategies:
-        all_strategies = ["default", "balanced", "safety_focused", "efficiency_focused", "pareto"]
-        strategy_results = _compute_strategy_set(recomputer, all_strategies)
-        results["strategy_comparison"] = strategy_results
-        # correlations
-        correlations: dict[str, float] = {}
-        names = list(strategy_results.keys())
-        for i, n1 in enumerate(names):
-            for n2 in names[i + 1 :]:
-                try:
-                    correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
-                        strategy_results[n1]["weights"], strategy_results[n2]["weights"]
-                    )
-                except Exception as e:  # noqa: BLE001
-                    logger.debug("Correlation %s vs %s failed: %s", n1, n2, e)
-        results["strategy_correlations"] = correlations
-        recommended_name, recommended_weights = _select_recommended(strategy_results)
-        results["recommended_strategy"] = recommended_name
-        results["recommended_weights"] = recommended_weights
-    else:
-        single = recomputer.recompute_with_strategy(args.strategy)
-        results["strategy_result"] = single
-        results["recommended_weights"] = single["weights"]
-    # Normalization comparison
-    if args.compare_normalization:
-        results["normalization_comparison"] = recomputer.compare_normalization_strategies(
-            results["recommended_weights"]
-        )
-    if external_weights is not None:
-        # Always compute statistics with provided external weights under current baseline
-        ext_stats = recomputer.compute_weight_statistics(external_weights)
-        results["external_weights"] = {
-            "weights": external_weights,
-            "statistics": ext_stats,
-            "correlation_with_recommended": recomputer.rank_correlation_analysis(
-                results["recommended_weights"], external_weights
-            ),
-        }
-    _augment_metadata(results, args, start_iso, start_perf)
-    _finalize_summary(results, args)
     try:
-        if args.validate:
-            validate_snqi(results, "recompute", check_finite=True)
+        recomputer = SNQIWeightRecomputer(episodes, baseline)
+        external_weights: Dict[str, float] | None = None
+        if args.external_weights_file is not None:
+            try:
+                with open(args.external_weights_file, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+                if not isinstance(raw, dict):  # pragma: no cover - defensive
+                    raise ValueError("External weights file must be a JSON object")
+                external_weights = _validate_weights_mapping(raw)
+                logger.info("Loaded external weights from %s", args.external_weights_file)
+            except Exception as e:  # noqa: BLE001
+                logger.error("Failed loading external weights: %s", e)
+                return EXIT_INPUT_ERROR
+        results: Dict[str, Any] = {}
+        if args.compare_strategies:
+            all_strategies = [
+                "default",
+                "balanced",
+                "safety_focused",
+                "efficiency_focused",
+                "pareto",
+            ]
+            strategy_results = _compute_strategy_set(recomputer, all_strategies)
+            results["strategy_comparison"] = strategy_results
+            correlations: dict[str, float] = {}
+            names = list(strategy_results.keys())
+            for i, n1 in enumerate(names):
+                for n2 in names[i + 1 :]:
+                    try:
+                        correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
+                            strategy_results[n1]["weights"], strategy_results[n2]["weights"]
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        logger.debug("Correlation %s vs %s failed: %s", n1, n2, e)
+            results["strategy_correlations"] = correlations
+            recommended_name, recommended_weights = _select_recommended(strategy_results)
+            results["recommended_strategy"] = recommended_name
+            results["recommended_weights"] = recommended_weights
         else:
-            assert_all_finite(results)
-    except ValueError as e:
-        logger.error("Validation failed: %s", e)
-    return EXIT_VALIDATION_ERROR
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
-    logger.info("Results saved to %s", args.output)
-    _print_summary(results, args, len(episodes))
-    return EXIT_SUCCESS
+            single = recomputer.recompute_with_strategy(args.strategy)
+            results["strategy_result"] = single
+            results["recommended_weights"] = single["weights"]
+        if args.compare_normalization:
+            results["normalization_comparison"] = recomputer.compare_normalization_strategies(
+                results["recommended_weights"]
+            )
+        if external_weights is not None:
+            ext_stats = recomputer.compute_weight_statistics(external_weights)
+            results["external_weights"] = {
+                "weights": external_weights,
+                "statistics": ext_stats,
+                "correlation_with_recommended": recomputer.rank_correlation_analysis(
+                    results["recommended_weights"], external_weights
+                ),
+            }
+        _augment_metadata(results, args, start_iso, start_perf)
+        _finalize_summary(results, args)
+        try:
+            if args.validate:
+                validate_snqi(results, "recompute", check_finite=True)
+            else:
+                assert_all_finite(results)
+        except ValueError as e:
+            logger.error("Validation failed: %s", e)
+            return EXIT_VALIDATION_ERROR
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2)
+        logger.info("Results saved to %s", args.output)
+        _print_summary(results, args, len(episodes))
+        return EXIT_SUCCESS
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Unexpected runtime failure: %s", e)
+        return EXIT_RUNTIME_ERROR
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover

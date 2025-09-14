@@ -3,20 +3,30 @@
 This guide consolidates user‑facing documentation that was previously split across `scripts/QUICK_START.md` and `scripts/README_SNQI_WEIGHTS.md`. It explains how to recompute, optimize, and analyze Social Navigation Quality Index (SNQI) weights.
 
 ## Contents
+- [Contents](#contents)
 - [Overview](#overview)
+  - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
 - [Installation (uv)](#installation-uv)
 - [Quick Start](#quick-start)
-- [Core Scripts & Typical Tasks](#core-scripts--typical-tasks)
+- [Core Scripts \& Typical Tasks](#core-scripts--typical-tasks)
 - [CLI Arguments (Key Flags)](#cli-arguments-key-flags)
 - [Input Data Formats](#input-data-formats)
+  - [Episodes JSONL (one JSON object per line)](#episodes-jsonl-one-json-object-per-line)
+  - [Baseline Stats JSON](#baseline-stats-json)
+  - [Weights JSON](#weights-json)
 - [Output JSON Schema (Summary)](#output-json-schema-summary)
+  - [Diagnostics Fields](#diagnostics-fields)
 - [External / Initial Weights](#external--initial-weights)
 - [Recommended Workflows](#recommended-workflows)
+  - [A. Establish Baseline \& Strategy Comparison](#a-establish-baseline--strategy-comparison)
+  - [B. Optimize Weights Then Validate](#b-optimize-weights-then-validate)
+  - [C. Evaluate External Weight Proposal](#c-evaluate-external-weight-proposal)
 - [Interpreting Results](#interpreting-results)
-- [Reproducibility & Determinism](#reproducibility--determinism)
+- [Reproducibility \& Determinism](#reproducibility--determinism)
 - [Troubleshooting](#troubleshooting)
 - [Future Enhancements](#future-enhancements)
 - [Related Design Document](#related-design-document)
+- [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
 
 ## Overview
 The Social Navigation Quality Index (SNQI) aggregates multiple navigation metrics (success, time, safety, comfort, smoothness) into a single score. It is intentionally bounded and designed for reproducibility and comparative benchmarking:
@@ -286,3 +296,44 @@ For deep architectural details, data contracts, algorithms, and planned roadmap 
 
 ---
 This user guide will be kept in sync with implementation changes. Please update both this file and the design doc when modifying schemas or adding major features.
+
+## Unified Benchmark CLI (New)
+The functionality of the optimization and recomputation scripts is now also exposed via the central benchmark entrypoint:
+
+```
+robot_sf_bench snqi optimize   # weight search
+robot_sf_bench snqi recompute  # strategy / normalization workflows
+```
+
+Example parity (recompute strategy comparison):
+```
+robot_sf_bench snqi recompute \
+  --episodes episodes.jsonl \
+  --baseline baseline_stats.json \
+  --compare-strategies \
+  --compare-normalization \
+  --output strategy_comparison.json
+```
+
+Optimization with both grid + evolution and sensitivity:
+```
+robot_sf_bench snqi optimize \
+  --episodes episodes.jsonl \
+  --baseline baseline_stats.json \
+  --method both \
+  --sensitivity \
+  --seed 17 \
+  --output optimized_weights.json
+```
+
+Fast smoke-test mode (skips heavy compute):
+```
+ROBOT_SF_SNQI_LIGHT_TEST=1 robot_sf_bench snqi optimize --episodes e.jsonl --baseline b.json --output w.json
+```
+
+Rationale for unified CLI:
+- Single discoverable surface (`robot_sf_bench -h`).
+- Lazy dynamic loading keeps startup fast for non-SNQI commands.
+- Backward compatible: legacy scripts remain supported.
+
+See also: `robot_sf/benchmark/cli.py` implementation notes.

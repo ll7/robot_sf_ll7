@@ -17,8 +17,11 @@ Requirements:
 import argparse
 import json
 import logging
+import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -63,7 +66,7 @@ class SNQISensitivityAnalyzer:
     def weight_sweep_analysis(
         self,
         base_weights: Dict[str, float],
-        weight_ranges: Dict[str, Tuple[float, float]] = None,
+        weight_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
         n_points: int = 20,
     ) -> Dict[str, Any]:
         """Perform sweep analysis for each weight individually."""
@@ -73,7 +76,7 @@ class SNQISensitivityAnalyzer:
         results = {}
 
         for weight_name in self.weight_names:
-            logger.info(f"Analyzing sensitivity of {weight_name}")
+            logger.info("Analyzing sensitivity of %s", weight_name)
 
             min_val, max_val = weight_ranges.get(weight_name, (0.1, 3.0))
             weight_values = np.linspace(min_val, max_val, n_points)
@@ -122,7 +125,7 @@ class SNQISensitivityAnalyzer:
     def pairwise_weight_analysis(
         self,
         base_weights: Dict[str, float],
-        weight_pairs: List[Tuple[str, str]] = None,
+        weight_pairs: Optional[List[Tuple[str, str]]] = None,
         n_points: int = 15,
     ) -> Dict[str, Any]:
         """Analyze sensitivity of weight pairs (2D analysis)."""
@@ -138,7 +141,7 @@ class SNQISensitivityAnalyzer:
         results = {}
 
         for weight1, weight2 in weight_pairs:
-            logger.info(f"Analyzing pair ({weight1}, {weight2})")
+            logger.info("Analyzing pair (%s, %s)", weight1, weight2)
 
             # Create 2D grid
             w1_values = np.linspace(0.1, 3.0, n_points)
@@ -281,6 +284,7 @@ class SNQISensitivityAnalyzer:
 
         results = {}
         base_scores = None
+        base_ranking = None
 
         for strategy_name, strategy_baseline in strategies.items():
             # Temporarily replace baseline stats
@@ -296,7 +300,10 @@ class SNQISensitivityAnalyzer:
                 base_ranking = np.argsort(np.argsort(scores))
 
             current_ranking = np.argsort(np.argsort(scores))
-            ranking_corr, _ = spearmanr(base_ranking, current_ranking)
+            if base_ranking is not None:
+                ranking_corr, _ = spearmanr(base_ranking, current_ranking)
+            else:
+                ranking_corr = 1.0
 
             results[strategy_name] = {
                 "mean_snqi": np.mean(scores),
@@ -388,12 +395,12 @@ class SNQISensitivityAnalyzer:
     def _plot_pairwise_analysis(self, pairwise_data: Dict, output_dir: Path):
         """Plot pairwise weight analysis heatmaps."""
         n_pairs = len(pairwise_data)
-        fig, axes = plt.subplots(2, n_pairs, figsize=(5 * n_pairs, 10))
+        _fig, axes = plt.subplots(2, n_pairs, figsize=(5 * n_pairs, 10))
 
         if n_pairs == 1:
             axes = axes.reshape(2, 1)
 
-        for i, (pair_name, data) in enumerate(pairwise_data.items()):
+        for i, (_pair_name, data) in enumerate(pairwise_data.items()):
             # SNQI surface
             im1 = axes[0, i].imshow(data["snqi_surface"], cmap="viridis", aspect="auto")
             axes[0, i].set_title(f"SNQI Surface: {data['weight1_name']} vs {data['weight2_name']}")
@@ -446,8 +453,7 @@ class SNQISensitivityAnalyzer:
         """Plot normalization strategy comparison."""
         strategies = list(norm_data.keys())
         metrics = ["mean_snqi", "std_snqi", "score_range", "ranking_correlation"]
-
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        _fig, axes = plt.subplots(2, 2, figsize=(12, 8))
         axes = axes.flatten()
 
         for i, metric in enumerate(metrics):
@@ -468,29 +474,29 @@ class SNQISensitivityAnalyzer:
 def load_episodes_data(file_path: Path) -> List[Dict]:
     """Load episode data from JSONL file."""
     episodes = []
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 try:
                     episodes.append(json.loads(line))
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Skipping invalid JSON line: {e}")
-    logger.info(f"Loaded {len(episodes)} episodes from {file_path}")
+                    logger.warning("Skipping invalid JSON line: %s", e)
+    logger.info("Loaded %d episodes from %s", len(episodes), file_path)
     return episodes
 
 
 def load_baseline_stats(file_path: Path) -> Dict[str, Dict[str, float]]:
     """Load baseline statistics from JSON file."""
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         stats = json.load(f)
-    logger.info(f"Loaded baseline statistics from {file_path}")
+    logger.info("Loaded baseline statistics from %s", file_path)
     return stats
 
 
 def load_weights(file_path: Path) -> Dict[str, float]:
     """Load weights from JSON file."""
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     # Handle different formats (direct weights dict or nested structure)
@@ -501,7 +507,7 @@ def load_weights(file_path: Path) -> Dict[str, float]:
     else:
         weights = data
 
-    logger.info(f"Loaded weights from {file_path}")
+    logger.info("Loaded weights from %s", file_path)
     return weights
 
 
@@ -529,6 +535,12 @@ def main():  # noqa: C901
     parser.add_argument(
         "--skip-visualizations", action="store_true", help="Skip generating visualization plots"
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility (affects stochastic components if any added in future)",
+    )
 
     args = parser.parse_args()
 
@@ -538,11 +550,15 @@ def main():  # noqa: C901
         baseline_stats = load_baseline_stats(args.baseline)
         weights = load_weights(args.weights)
     except FileNotFoundError as e:
-        logger.error(f"File not found: {e}")
+        logger.error("File not found: %s", e)
         return 1
     except Exception as e:
-        logger.error(f"Error loading data: {e}")
+        logger.error("Error loading data: %s", e)
         return 1
+
+    # Apply seed if provided
+    if args.seed is not None:
+        np.random.seed(args.seed)
 
     # Initialize analyzer
     analyzer = SNQISensitivityAnalyzer(episodes, baseline_stats)
@@ -562,9 +578,39 @@ def main():  # noqa: C901
     logger.info("Running normalization strategy analysis")
     results["normalization"] = analyzer.normalization_strategy_analysis(weights)
 
+    # Augment with metadata before saving detailed results
+    def _git_commit() -> str:
+        try:
+            return (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
+            )
+        except Exception:
+            return "UNKNOWN"
+
+    metadata = {
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "git_commit": _git_commit(),
+        "seed": args.seed,
+        "provenance": {
+            "episodes_file": str(args.episodes),
+            "baseline_file": str(args.baseline),
+            "weights_file": str(args.weights),
+            "invocation": "python " + " ".join(sys.argv),
+            "sweep_points": args.sweep_points,
+            "pairwise_points": args.pairwise_points,
+            "skip_visualizations": args.skip_visualizations,
+        },
+    }
+    results["_metadata"] = metadata
+
     # Save detailed results
     args.output.mkdir(parents=True, exist_ok=True)
-    with open(args.output / "sensitivity_analysis_results.json", "w") as f:
+    with open(args.output / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
     # Generate summary report
@@ -597,7 +643,9 @@ def main():  # noqa: C901
                     "significant_impact": corr_change > 0.1,
                 }
 
-    with open(args.output / "sensitivity_summary.json", "w") as f:
+    # Attach metadata to summary too for standalone consumption
+    summary["_metadata"] = metadata
+    with open(args.output / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
     # Generate visualizations
@@ -606,9 +654,9 @@ def main():  # noqa: C901
             logger.info("Generating visualizations")
             analyzer.generate_visualizations(results, args.output)
         except Exception as e:
-            logger.warning(f"Failed to generate visualizations: {e}")
+            logger.warning("Failed to generate visualizations: %s", e)
 
-    logger.info(f"Sensitivity analysis completed. Results saved to {args.output}")
+    logger.info("Sensitivity analysis completed. Results saved to %s", args.output)
 
     # Print key findings
     print("\nSensitivity Analysis Summary:")

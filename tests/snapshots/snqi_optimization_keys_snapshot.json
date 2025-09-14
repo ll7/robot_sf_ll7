@@ -1,0 +1,28 @@
+{
+    "top_level_keys": [
+        "_metadata",
+        "recommended",
+        "summary"
+    ],
+    "recommended_keys": [
+        "weights",
+        "objective_value",
+        "ranking_stability",
+        "method_used"
+    ],
+    "metadata_keys_subset": [
+        "schema_version",
+        "git_commit",
+        "seed",
+        "runtime_seconds",
+        "baseline_missing_metric_count",
+        "skipped_malformed_lines"
+    ],
+    "summary_keys_subset": [
+        "method",
+        "objective_value",
+        "ranking_stability",
+        "baseline_missing_metric_count",
+        "skipped_malformed_lines"
+    ]
+}

@@ -16,16 +16,16 @@ Produce a high-signal list of actionable tasks (not vague intentions) with clear
 INPUT SIGNAL SOURCES (SCAN IN THIS ORDER)
 ==================================================
 1. Code Markers
-	- Inline comments containing: TODO, FIXME, BUG, HACK, NOTE (only if implies action), OPTIMIZE, PERFORMANCE.
-	- Pattern: case-insensitive; also detect variations like `# todo:` or `#TODO(`.
+  - Inline comments containing: TODO, FIXME, BUG, HACK, NOTE (only if implies action), OPTIMIZE, PERFORMANCE.
+  - Pattern: case-insensitive; also detect variations like `# todo:` or `#TODO(`.
 2. Docstrings & Markdown
-	- Sections titled: Limitations, Future Work, Next Steps, Known Issues.
+  - Sections titled: Limitations, Future Work, Next Steps, Known Issues.
 3. Repository Structure
-	- Empty placeholder files or obvious stubs (e.g., modules with only pass, or doc folders missing README).
+  - Empty placeholder files or obvious stubs (e.g., modules with only pass, or doc folders missing README).
 4. Conversation / History
-	- Unimplemented suggestions, deferred enhancements, optional improvements previously listed (e.g., metadata map serialization, schema versioning, retrofitting old logs).
+  - Unimplemented suggestions, deferred enhancements, optional improvements previously listed (e.g., metadata map serialization, schema versioning, retrofitting old logs).
 5. Configuration & CI
-	- Lints disabled with comments (`noqa`, `pylint: disable`) if they mask tech debt actionable items.
+  - Lints disabled with comments (`noqa`, `pylint: disable`) if they mask tech debt actionable items.
 
 ==================================================
 CLASSIFICATION CATEGORIES
@@ -84,11 +84,11 @@ Produce Markdown using this structure:
 
 ### TODOs
 1. Title — category | P? | Size ?
-	- Rationale: ...
-	- Acceptance:
-	  - [ ] ...
-	  - [ ] ...
-	- Dependencies: (omit if none)
+  - Rationale: ...
+  - Acceptance:
+    - [ ] ...
+    - [ ] ...
+  - Dependencies: (omit if none)
 
 Group tasks by Priority (P0 → P3) with a heading per priority if >1 task.
 
@@ -98,13 +98,13 @@ If fewer than 3 tasks found, explicitly state: "Low signal: consider deeper scan
 SOURCE-SPECIFIC SIGNAL INTERPRETATION
 ==================================================
 1. Map / Playback Enhancements
-	- If metadata map serialization missing → task candidate.
+  - If metadata map serialization missing → task candidate.
 2. Schema Evolution
-	- Simulation timestamp migration suggests adding schema version constant + migration doc.
+  - Simulation timestamp migration suggests adding schema version constant + migration doc.
 3. Testing Gaps
-	- Add explicit test for timestamp semantics (episode_start=0.0 invariant).
+  - Add explicit test for timestamp semantics (episode_start=0.0 invariant).
 4. Analytics / Tooling
-	- Potential script to retro-convert old logs to new schema.
+  - Potential script to retro-convert old logs to new schema.
 
 ==================================================
 FAILSAFES
@@ -120,19 +120,19 @@ EXAMPLE (ABBREVIATED)
 ### TODOs
 P1
 1. Persist map definition in metadata — schema | P1 | S
-	- Rationale: Eliminates scaling ambiguity in playback.
-	- Acceptance:
-	  - [ ] `map_definition` saved in `.meta.json` when available
-	  - [ ] Playback prefers metadata map over inference
-	  - [ ] Added unit test validating obstacle count fidelity
+  - Rationale: Eliminates scaling ambiguity in playback.
+  - Acceptance:
+    - [ ] `map_definition` saved in `.meta.json` when available
+    - [ ] Playback prefers metadata map over inference
+    - [ ] Added unit test validating obstacle count fidelity
 
 P2
 2. Add schema version constant — schema | P2 | XS
-	- Rationale: Make future JSONL changes traceable.
-	- Acceptance:
-	  - [ ] Version constant defined in single module
-	  - [ ] Recorder embeds version in metadata
-	  - [ ] Docs mention migration path
+  - Rationale: Make future JSONL changes traceable.
+  - Acceptance:
+    - [ ] Version constant defined in single module
+    - [ ] Recorder embeds version in metadata
+    - [ ] Docs mention migration path
 
 ==================================================
 EXECUTION NOTES FOR ASSISTANT USING THIS PROMPT

@@ -1,10 +1,26 @@
 #!/usr/bin/env python3
 """SNQI Weight Recomputation Script.
 
-Refactored for parity with the optimization script: decomposed into helpers,
-provides consistent metadata + summary, optional strategy & normalization
-comparisons, and schema/finite validation. Drops placeholder fields (no
-pareto_efficiency) and keeps deterministic behavior via optional seed.
+High-level responsibilities:
+1. Load episodic benchmark data + baseline normalization statistics.
+2. Generate candidate weight configurations via predefined strategies
+     (default, balanced, safety_focused, efficiency_focused, pareto heuristic).
+3. Optionally compare *all* strategies and compute pairwise rank correlations.
+4. Optionally compare alternative normalization strategies (median/p95 vs variants).
+5. Optionally evaluate an externally supplied weight JSON (sanity/what-if).
+6. Emit a JSON document with `_metadata` (schema + provenance) and a compact `summary`.
+
+Determinism:
+Passing `--seed` seeds NumPy for Pareto sampling and any stochastic choices;
+outputs embed seed + git commit for reproducibility.
+
+Design Notes:
+- Strategy correlation currently based on per-episode ranking Spearman correlations.
+- Pareto frontier is a lightweight heuristic (sample + dominance filter) and
+    may be replaced by a true multi-objective algorithm in future versions.
+- Normalization comparison can highlight sensitivity to percentile choices.
+
+See design doc section 8 / 8.1 for heuristic rationale.
 """
 
 from __future__ import annotations
@@ -33,7 +49,18 @@ logger = logging.getLogger(__name__)
 
 
 class SNQIWeightRecomputer:
-    """Recompute SNQI weights using pre-defined selection strategies."""
+    """Recompute SNQI weights via predefined strategies and analyses.
+
+    Provides helpers for deriving candidate weight sets and computing
+    statistics under the canonical SNQI scoring function.
+
+    Parameters
+    ----------
+    episodes_data:
+        List of episode dictionaries (each must contain a `metrics` mapping).
+    baseline_stats:
+        Mapping of metric -> {"med": float, "p95": float} used for normalization.
+    """
 
     def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
         self.episodes = episodes_data
@@ -85,7 +112,11 @@ class SNQIWeightRecomputer:
         }
 
     def compute_weight_statistics(self, weights: Dict[str, float]) -> Dict[str, Any]:
-        """Compute statistics for given weights across all episodes."""
+        """Compute descriptive statistics for a weight configuration.
+
+        Returns overall distributional stats and per-algorithm aggregates
+        (mean, std, count) if algorithm labels exist in episode `scenario_params`.
+        """
         scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
 
         # Group by algorithm if available
@@ -120,7 +151,11 @@ class SNQIWeightRecomputer:
     def rank_correlation_analysis(
         self, weights1: Dict[str, float], weights2: Dict[str, float]
     ) -> float:
-        """Compute ranking correlation between two weight configurations."""
+        """Compute Spearman rank correlation between two weight configurations.
+
+        Ranks are derived from per-episode SNQI scores for each weight set.
+        Returns 1.0 when correlation is undefined (degenerate identical ranks).
+        """
         scores1 = [self._episode_snqi(ep.get("metrics", {}), weights1) for ep in self.episodes]
         scores2 = [self._episode_snqi(ep.get("metrics", {}), weights2) for ep in self.episodes]
 
@@ -133,11 +168,16 @@ class SNQIWeightRecomputer:
         return corr if not np.isnan(corr) else 1.0
 
     def pareto_frontier_weights(self, n_samples: int = 600) -> List[Dict[str, Any]]:
-        """Sample candidate weights and return an approximate Pareto frontier.
+        """Approximate a Pareto frontier by random sampling.
 
-        Keeps runtime modest (default 600 samples). Objective dimensions:
-        (discriminative_power, stability). Returns top 10 non‑dominated sorted by
-        discriminative_power.
+        Samples `n_samples` random weight vectors (uniform per weight), computes
+        discriminative power (score std) and a heuristic stability proxy
+        ``1 / (1 + |std - 0.5|)`` then applies dominance filtering.
+
+        Returns
+        -------
+        list of dict
+            Up to 10 non-dominated configurations sorted by discriminative power.
         """
         logger.info("Computing Pareto frontier with %d samples", n_samples)
         samples: list[dict[str, Any]] = []
@@ -177,7 +217,10 @@ class SNQIWeightRecomputer:
         return pareto[:10]
 
     def recompute_with_strategy(self, strategy: str) -> Dict[str, Any]:
-        """Recompute weights using specified strategy."""
+        """Run a single strategy pipeline returning weights + stats.
+
+        Falls back to default weights if Pareto sampling produces no candidates.
+        """
         logger.info("Recomputing weights with strategy: %s", strategy)
 
         if strategy == "default":
@@ -218,7 +261,12 @@ class SNQIWeightRecomputer:
         return result
 
     def compare_normalization_strategies(self, base_weights: Dict[str, float]) -> Dict[str, Any]:
-        """Compare different normalization strategies with given weights."""
+        """Compare alternative percentile-based normalization strategies.
+
+        Generates median/p90 and interquartile (p25/p75) baselines for metrics
+        present in the episodes and reports mean score + correlation versus
+        canonical median/p95. Returns mapping of strategy name -> summary stats.
+        """
         logger.info("Comparing normalization strategies")
 
         # Create alternative baseline stats

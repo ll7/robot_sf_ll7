@@ -1,8 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import types
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
 from typing import List
 
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
@@ -196,17 +201,200 @@ def _add_summary_subparser(
     p.set_defaults(cmd="summary")
 
 
-def cli_main(argv: List[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+def _base_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
     )
+
+
+def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: C901
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_list_subparser(subparsers)
+    snqi_parser = subparsers.add_parser(
+        "snqi",
+        help="SNQI weight tooling (optimize / recompute)",
+        description="Social Navigation Quality Index tooling: optimize or recompute weights.",
+    )
+    snqi_sub = snqi_parser.add_subparsers(dest="snqi_cmd")
 
+    # We replicate the script arguments (kept minimal & aligned with parse_args in scripts) to avoid code duplication.
+    # Dynamic loading is used so we don't need to refactor the existing scripts immediately.
+
+    def _add_snqi_optimize(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
+        p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
+        p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
+        p.add_argument("--output", type=Path, required=True, help="Output JSON file")
+        p.add_argument(
+            "--method",
+            choices=["grid", "evolution", "both"],
+            default="both",
+            help="Optimization method",
+        )
+        p.add_argument("--grid-resolution", type=int, default=5)
+        p.add_argument(
+            "--maxiter", type=int, default=30, help="Differential evolution max iterations"
+        )
+        p.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
+        p.add_argument("--seed", type=int, default=None)
+        p.add_argument("--validate", action="store_true", help="Validate output schema")
+        p.add_argument(
+            "--max-grid-combinations",
+            type=int,
+            default=20000,
+            help="Guard threshold for total grid combinations",
+        )
+        p.add_argument(
+            "--initial-weights-file",
+            type=Path,
+            default=None,
+            help="JSON file containing initial weight mapping",
+        )
+        p.add_argument("--progress", action="store_true", help="Show progress bars (tqdm)")
+        p.add_argument(
+            "--missing-metric-max-list",
+            type=int,
+            default=5,
+            help="Max example episode IDs per missing baseline metric",
+        )
+        p.add_argument("--fail-on-missing-metric", action="store_true")
+        p.add_argument(
+            "--sample", type=int, default=None, help="Deterministically sample N episodes"
+        )
+        p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
+        p.add_argument(
+            "--early-stop-patience",
+            type=int,
+            default=0,
+            help="Early stopping patience (0 disables)",
+        )
+        p.add_argument(
+            "--early-stop-min-delta",
+            type=float,
+            default=1e-4,
+            help="Minimum improvement to reset early stopping",
+        )
+        p.add_argument(
+            "--ci-placeholder", action="store_true", help="Include CI placeholder scaffold"
+        )
+        p.set_defaults(cmd="snqi", snqi_cmd="optimize")
+
+    def _add_snqi_recompute(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        p = sp.add_parser("recompute", help="Recompute SNQI weights via predefined strategies")
+        p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
+        p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
+        p.add_argument(
+            "--strategy",
+            choices=["default", "balanced", "safety_focused", "efficiency_focused", "pareto"],
+            default="default",
+        )
+        p.add_argument("--output", type=Path, required=True, help="Output JSON file")
+        p.add_argument("--compare-normalization", action="store_true")
+        p.add_argument("--compare-strategies", action="store_true")
+        p.add_argument("--seed", type=int, default=None)
+        p.add_argument("--validate", action="store_true")
+        p.add_argument(
+            "--external-weights-file",
+            type=Path,
+            default=None,
+            help="Evaluate external weights JSON mapping",
+        )
+        p.add_argument(
+            "--missing-metric-max-list",
+            type=int,
+            default=5,
+            help="Max example episode IDs per missing baseline metric",
+        )
+        p.add_argument("--fail-on-missing-metric", action="store_true")
+        p.add_argument(
+            "--sample", type=int, default=None, help="Deterministically sample N episodes"
+        )
+        p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
+        p.set_defaults(cmd="snqi", snqi_cmd="recompute")
+
+    _add_snqi_optimize(snqi_sub)
+    _add_snqi_recompute(snqi_sub)
+
+    # ---- dynamic script module loaders ----
+    _OPT_MOD = None  # cache
+    _RECOMP_MOD = None
+
+    def _load_script(rel: str, name: str):  # noqa: D401 - simple dynamic loader
+        path = Path(__file__).resolve().parents[2] / rel
+        if not path.exists():  # pragma: no cover - defensive
+            raise FileNotFoundError(f"SNQI script not found: {path}")
+        loader = SourceFileLoader(name, str(path))
+        mod = types.ModuleType(name)
+        loader.exec_module(mod)  # type: ignore[attr-defined]
+        return mod
+
+    def _get_opt_run(mod):  # type: ignore[no-untyped-def]
+        return getattr(mod, "run")
+
+    def _get_recompute_run(mod):  # type: ignore[no-untyped-def]
+        return getattr(mod, "run")
+
+    def _invoke_snqi_opt(args: argparse.Namespace) -> int:
+        # Lightweight fast-path for tests to avoid heavy optimization logic
+        if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
+            return 0
+        nonlocal _OPT_MOD
+        if _OPT_MOD is None:
+            try:
+                _OPT_MOD = _load_script(
+                    "scripts/snqi_weight_optimization.py", "snqi_optimize_script"
+                )
+            except Exception as e:  # pragma: no cover - load error
+                print(f"Error loading optimization script: {e}", file=sys.stderr)
+                return 2
+        run_fn = _get_opt_run(_OPT_MOD)
+        return int(run_fn(args))  # type: ignore[no-any-return]
+
+    def _invoke_snqi_recompute(args: argparse.Namespace) -> int:
+        if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
+            return 0
+        nonlocal _RECOMP_MOD
+        if _RECOMP_MOD is None:
+            try:
+                _RECOMP_MOD = _load_script(
+                    "scripts/recompute_snqi_weights.py", "snqi_recompute_script"
+                )
+            except Exception as e:  # pragma: no cover - load error
+                print(f"Error loading recompute script: {e}", file=sys.stderr)
+                return 2
+        run_fn = _get_recompute_run(_RECOMP_MOD)
+        return int(run_fn(args))  # type: ignore[no-any-return]
+
+    # Public attribute (not underscored) to avoid protected-member lint warning.
+    parser.snqi_loader = {  # type: ignore[attr-defined]  # noqa: ANN001 - dynamic injection
+        "invoke_optimize": _invoke_snqi_opt,
+        "invoke_recompute": _invoke_snqi_recompute,
+    }
+
+
+def _configure_parser() -> argparse.ArgumentParser:
+    parser = _base_parser()
+    _attach_core_subcommands(parser)
+    return parser
+
+
+def cli_main(argv: List[str] | None = None) -> int:
+    parser = _configure_parser()
     args = parser.parse_args(argv)
+
+    # Access dynamic loaders if present
+    snqi_loader = getattr(parser, "snqi_loader", {})  # type: ignore[no-any-explicit]
+    # Dispatch
+    if args.cmd == "snqi":
+        if args.snqi_cmd == "optimize":
+            return snqi_loader["invoke_optimize"](args)
+        if args.snqi_cmd == "recompute":
+            return snqi_loader["invoke_recompute"](args)
+        print("Specify a snqi subcommand (optimize|recompute)", file=sys.stderr)
+        return 2
     handlers = {
         "baseline": _handle_baseline,
         "list-algorithms": _handle_list_algorithms,

@@ -155,6 +155,45 @@ Placeholder fields removed (no synthetic `pareto_efficiency`).
 Stability: Spearman between algorithm groups if ≥2 groups else variance‑derived fallback.  
 Discriminative power: variance (normalized) of SNQI scores.
 
+### 8.1 Heuristic Components (v1 – Experimental)
+Current objective components are pragmatic heuristics pending introduction of more statistically grounded metrics.
+
+Stability Heuristic:
+- If ≥2 algorithm groups present: compute Spearman rank correlation between the permutation indices of episode rankings of the first two groups (proxy for positional consistency). Absolute value used to ignore direction (penalizing inversion equally).
+- Else (no grouping): derive a pseudo-stability = `1 / (1 + var(scores))`. Rationale: high variance in per-episode scores (without algo stratification) often indicates inconsistent weighting effects across scenarios; dampening encourages smoother response.
+- Fallback for exceptions (NaN, errors) → 0.5 neutral baseline.
+
+Discriminative Power Heuristic:
+- Compute variance of per-episode SNQI scores (or per-algorithm aggregated variance when strategies aggregate). Scale to `[0,1]` via `min(1, variance / 0.5)` – the constant 0.5 chosen empirically as a rough “sufficient dispersion” threshold on early datasets; saturating avoids overweighting extreme score spreads.
+
+Combined Objective:
+```
+Objective = 0.6 * Stability + 0.4 * DiscriminativePower
+```
+Weights (0.6 / 0.4) reflect a conservative preference for ranking robustness over raw spread (tunable in future via flag `--objective-alpha`).
+
+Identified Limitations:
+- Spearman between only two groups disregards additional groups and ignores intra-group dispersion.
+- Variance-based discriminative power does not distinguish structured separation (e.g., cluster boundaries) from random noise.
+- Hard saturation at variance=0.5 may truncate legitimate differentiability signals on more diverse future datasets.
+- Absolute Spearman removes directionality that could matter if inversion implies poor ordinal calibration.
+
+Planned Replacements / Enhancements:
+| Aspect | Planned Metric | Benefit |
+|--------|----------------|---------|
+| Stability | Bootstrap mean pairwise Spearman of algorithm mean-rank vectors | Robust to noise; uses all groups |
+| Discriminative | ANOVA F-stat or pairwise effect size (Cohen’s d aggregate) | Distinguishes structured separation from noise |
+| Objective combo | Pareto (multi-objective) + frontier selection | Removes arbitrary α parameter |
+| Variance saturation | Adaptive scaling based on empirical distribution | Better generalization across datasets |
+
+Transition Plan:
+1. Introduce bootstrap stability metric behind `--stability-mode=bootstrap` (task: Prepare bootstrap stability scaffolding).
+2. Emit both heuristic and new metrics in output (non-breaking) and add to `summary` after evaluation period.
+3. Deprecate heuristic fields after two releases; bump `schema_version` if removal or semantic change.
+
+User Guidance (Interim): Treat current objective values as relative within a single run configuration—avoid cross-dataset comparisons until bootstrap metrics land.
+
+
 ## 9. External Weight Validation
 `weights_validation.py` enforces completeness, finiteness, positivity, warns on extraneous keys and unusually large values (>10).
 

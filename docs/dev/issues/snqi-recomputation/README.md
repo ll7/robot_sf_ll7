@@ -2,6 +2,8 @@
 
 This checklist captures all outstanding improvements required to bring the SNQI weight recomputation & sensitivity analysis PR in line with the repository's Definition of Done and quality standards.
 
+> Design doc: See the companion architectural draft in [DESIGN.md](./DESIGN.md) for context, rationale, data contracts, and planned refactors. Keep both files synchronized when items are completed.
+
 ---
 ## Legend
 - [ ] Not started

@@ -4,6 +4,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 
 ## Contents
 - [Overview](#overview)
+- [Installation (uv)](#installation-uv)
 - [Quick Start](#quick-start)
 - [Core Scripts & Typical Tasks](#core-scripts--typical-tasks)
 - [CLI Arguments (Key Flags)](#cli-arguments-key-flags)
@@ -44,24 +45,60 @@ Alternatives (explorable via normalization comparison in recomputation script):
 - Median/p90 (less tail compression)
 - IQR scaling (p25/p75) potentially amplifies moderate variance; sensitive with small samples.
 
+## Installation (uv)
+We use [uv](https://github.com/astral-sh/uv) for fast, reproducible dependency management.
+
+```bash
+# Clone (with submodules if not already pulled)
+git clone --recursive <repo-url>
+cd robot_sf_ll7
+
+# Sync core dependencies
+uv sync
+
+# (Optional) extras:
+#   progress -> tqdm progress bars
+#   analysis -> seaborn/matplotlib/pandas (heavier visualization)
+uv sync --extra progress --extra analysis
+
+# One‑line environment smoke test
+uv run python scripts/validate_snqi_scripts.py
+```
+
+Add extras later without re-syncing everything:
+```bash
+uv sync --extra progress
+```
+
+Install the package in editable mode for external usage (optional):
+```bash
+uv run python -m pip install -e .
+```
+
 ## Quick Start
 ```bash
 # 1. Validate tooling environment
-python scripts/validate_snqi_scripts.py
+uv run python scripts/validate_snqi_scripts.py
 
-# 2. Recompute and compare strategies
-python scripts/recompute_snqi_weights.py \
+# 2. Recompute and compare strategies (with progress bars & sampling 50 episodes)
+uv run python scripts/recompute_snqi_weights.py \
   --episodes episodes.jsonl \
   --baseline baseline_stats.json \
   --compare-strategies \
+  --compare-normalization \
+  --sample 50 \
+  --progress \
   --output strategy_comparison.json
 
-# 3. Optimize weights via grid + evolution
-python scripts/snqi_weight_optimization.py \
+# 3. Optimize weights via grid + evolution, run sensitivity, deterministic seed
+uv run python scripts/snqi_weight_optimization.py \
   --episodes episodes.jsonl \
   --baseline baseline_stats.json \
   --method both \
   --sensitivity \
+  --sample 50 \
+  --seed 17 \
+  --progress \
   --output optimized_weights.json
 ```
 
@@ -82,6 +119,7 @@ Common:
 - `--baseline <path>`: Baseline median/p95 stats JSON.
 - `--seed <int>`: RNG seed for deterministic sampling / optimization.
 - `--output <path>`: Output JSON (or directory for sensitivity).
+ - `--sample <int>`: Deterministically subsample the first N pseudo‑randomly shuffled episodes (stable under seed) for faster iteration. Metadata records original vs used counts.
 
 Recompute specific:
 - `--strategy <name>`: One of `default|balanced|safety_focused|efficiency_focused|pareto`.
@@ -104,7 +142,7 @@ Sensitivity specific:
 - `--weights <path>`: Weights to analyze.
 - `--skip-visualizations`: Skip plotting (headless or minimal run).
 
-Planned / future (design doc): `--sample`, bootstrap stability, timing instrumentation, weight simplex normalization, evolution early stopping, objective component breakdown.
+Planned / future (design doc): weight simplex normalization, evolution early stopping, bootstrap stability + confidence intervals, drift detection test.
 
 ## Input Data Formats
 ### Episodes JSONL (one JSON object per line)
@@ -127,7 +165,9 @@ Missing metrics default to neutral (0 contribution) currently.
 All scripts include `_metadata` and `summary` blocks (schema version 1). A formal JSON Schema lives at:
 `docs/snqi-weight-tools/snqi_output.schema.json`
 
-Validate programmatically:
+Schema stability policy: Additive (backward‑compatible) fields may appear without bumping `schema_version` (consumers should ignore unknown properties). Removals or semantic changes require incrementing `schema_version` and updating snapshot tests.
+
+Validate programmatically (already included dependency: `jsonschema`):
 ```python
 import json, jsonschema
 from pathlib import Path
@@ -136,14 +176,28 @@ data = json.loads(Path('optimized_weights.json').read_text())
 jsonschema.Draft202012Validator(schema).validate(data)
 ```
 
+Validate from the shell (Unix) using uv + python -c:
+```bash
+uv run python - <<'PY'
+import json, sys
+from pathlib import Path
+import jsonschema
+schema = json.loads(Path('docs/snqi-weight-tools/snqi_output.schema.json').read_text())
+for fp in sys.argv[1:]:
+  data = json.loads(Path(fp).read_text())
+  jsonschema.Draft202012Validator(schema).validate(data)
+  print(f'VALID: {fp}')
+PY optimized_weights.json
+```
+
 Example (optimization excerpt):
 ```json
 {
-  "recommended": {"weights": {...}, "objective_value": 0.72, "ranking_stability": 0.81, "method_used": "differential_evolution"},
-  "grid_search": {"weights": {...}, "objective_value": 0.69, "ranking_stability": 0.78},
-  "differential_evolution": {"weights": {...}, "objective_value": 0.72, "ranking_stability": 0.81},
+  "recommended": {"weights": {...}, "objective_value": 0.72, "ranking_stability": 0.81, "method_used": "differential_evolution", "objective_components": {"stability": 0.81, "discriminative": 0.63}},
+  "grid_search": {"weights": {...}, "objective_value": 0.69, "ranking_stability": 0.78, "objective_components": {"stability": 0.78, "discriminative": 0.58}},
+  "differential_evolution": {"weights": {...}, "objective_value": 0.72, "ranking_stability": 0.81, "objective_components": {"stability": 0.81, "discriminative": 0.63}},
   "sensitivity_analysis": {"w_collisions": {"score_sensitivity": 0.15}},
-  "_metadata": {"schema_version": 1, "generated_at": "...", "git_commit": "abc1234", "seed": 42, "provenance": {"episodes_file": "episodes.jsonl", "baseline_file": "baseline_stats.json", "method_requested": "both"}},
+  "_metadata": {"schema_version": 1, "generated_at": "...", "git_commit": "abc1234", "seed": 42, "phase_timings": {"load_inputs": 0.12, "grid_search": 1.31, "differential_evolution": 2.71, "sensitivity_analysis": 0.42, "write_output": 0.01}, "original_episode_count": 120, "used_episode_count": 50, "provenance": {"episodes_file": "episodes.jsonl", "baseline_file": "baseline_stats.json", "method_requested": "both"}},
   "summary": {"method": "differential_evolution", "objective_value": 0.72, "ranking_stability": 0.81, "weights": {"w_success": 2.0, ...}}
 }
 ```
@@ -190,11 +244,13 @@ python scripts/recompute_snqi_weights.py \
 ## Interpreting Results
 - `objective_value`: Heuristic (0.6 * stability + 0.4 * discriminative power) – higher is better.
 - `ranking_stability`: Spearman-based or variance proxy; ≥0.7 generally acceptable on small sets.
+ - `objective_components`: Decomposed contributions (already normalized into [0,1] components) used to form `objective_value` via weighted sum; useful for diagnosing trade‑offs.
 - `strategy_correlations`: Overlap in episodic ranking across strategies.
 - `normalization_comparison`: Score means + correlation vs canonical median/p95.
 - `sensitivity_analysis`: Local one-at-a-time perturbation effects; highlights brittle dimensions.
 - `baseline_missing_metric_count`: Non-zero implies potential silent bias (consider failing CI with flag).
 - `skipped_malformed_lines`: Data hygiene indicator; should normally be 0.
+ - `phase_timings`: Per‑phase wall clock seconds aiding performance regression detection.
 
 ## Reproducibility & Determinism
 Pass `--seed` to ensure deterministic: Pareto sampling, grid subset sampling, differential evolution initialization. Sensitivity analysis and progress bars remain deterministic given the seed. Remaining nondeterminism may stem from SciPy internals / BLAS parallelism.
@@ -215,14 +271,14 @@ Metadata captures: seed, git commit, invocation, file provenance, schema version
 | Plots not generated | Missing matplotlib/seaborn | Install deps or use `--skip-visualizations` |
 
 ## Future Enhancements
-Planned (see design doc / backlog):
-- Objective component breakdown (expose stability & discriminative components)
-- Episode sampling flag (`--sample N` deterministic subset)
-- Timing instrumentation (phase durations) + simple perf counters
-- Weight simplex option (normalize weights to sum constant)
-- Early stopping for evolution (plateau detection)
-- Bootstrap stability & confidence intervals scaffolding
+Implemented items (moved from backlog): objective component breakdown, deterministic episode sampling (`--sample`), phase timing instrumentation.
+
+Still planned (see design doc / backlog):
+- Weight simplex option (normalize weights to sum constant before evaluating objective)
+- Early stopping for evolution (plateau detection over trailing generations)
+- Bootstrap stability + confidence intervals scaffolding
 - Drift detection test (continuous regression guard)
+- Confidence interval reporting once bootstrap scaffold lands
 
 ## Related Design Document
 For deep architectural details, data contracts, algorithms, and planned roadmap see:  

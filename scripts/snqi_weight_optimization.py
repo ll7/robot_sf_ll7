@@ -366,6 +366,8 @@ def _augment_metadata(
     start_iso: str,
     start_perf: float,
     phase_timings: dict[str, float] | None = None,
+    original_episode_count: int | None = None,
+    used_episode_count: int | None = None,
 ) -> None:
     def _git_commit() -> str:
         try:
@@ -397,6 +399,10 @@ def _augment_metadata(
             "method_requested": args.method,
         },
     }
+    if original_episode_count is not None:
+        results_meta["original_episode_count"] = original_episode_count
+    if used_episode_count is not None:
+        results_meta["used_episode_count"] = used_episode_count
     if phase_timings:
         # Sort timings for stable output ordering
         results_meta["phase_timings"] = {k: phase_timings[k] for k in sorted(phase_timings)}
@@ -510,6 +516,19 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     if not episodes:
         logger.error("No valid episodes found in data file")
         return EXIT_INPUT_ERROR
+    original_episode_count = len(episodes)
+    if args.sample is not None and args.sample > 0 and args.sample < len(episodes):
+        # Deterministic sampling using provided seed else fixed fallback
+        rng = np.random.default_rng(args.seed if args.seed is not None else 1337)
+        indices = rng.choice(len(episodes), size=args.sample, replace=False)
+        # Preserve order deterministically by sorting selected indices
+        episodes = [episodes[i] for i in sorted(indices.tolist())]
+        logger.info(
+            "Sampled %d/%d episodes (--sample) for optimization",
+            len(episodes),
+            original_episode_count,
+        )
+    used_episode_count = len(episodes)
     if args.seed is not None:
         np.random.seed(args.seed)
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
@@ -576,7 +595,15 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
             return EXIT_MISSING_METRIC_ERROR
     phase_timings["diagnostics"] = perf_counter() - phase_start
-    _augment_metadata(results, args, start_iso, start_perf, phase_timings)
+    _augment_metadata(
+        results,
+        args,
+        start_iso,
+        start_perf,
+        phase_timings,
+        original_episode_count=original_episode_count,
+        used_episode_count=used_episode_count,
+    )
     results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
     results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
         "total_missing"
@@ -659,6 +686,12 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         "--fail-on-missing-metric",
         action="store_true",
         help="Treat presence of baseline-missing metrics as an error (non-zero exit)",
+    )
+    parser.add_argument(
+        "--sample",
+        type=int,
+        default=None,
+        help="Deterministically sample N episodes before optimization (for faster experimentation)",
     )
     return parser.parse_args(argv)
 

@@ -20,8 +20,8 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-# Import shared SNQI logic
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi  # type: ignore
+from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -346,6 +346,11 @@ def main():  # noqa: C901
         default=None,
         help="Random seed for reproducibility (applies to stochastic sampling in strategies like pareto)",
     )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate JSON output structure and numeric finiteness before writing",
+    )
 
     args = parser.parse_args()
 
@@ -453,7 +458,32 @@ def main():  # noqa: C901
     }
     results["_metadata"] = results_meta
 
-    # Save results
+    # Validation & finiteness checks
+    try:
+        if args.validate:
+            validate_snqi(results, "recompute", check_finite=True)
+        else:
+            assert_all_finite(results)
+    except ValueError as e:
+        logger.error("Validation failed: %s", e)
+        return 1
+
+    # Standardized summary block (after validation of structure, before save)
+    if args.compare_strategies:
+        method_descriptor = results.get("recommended_strategy")
+    else:
+        method_descriptor = results.get("strategy_result", {}).get("strategy", args.strategy)
+
+    results["summary"] = {
+        "method": method_descriptor,
+        "weights": results.get("recommended_weights"),
+        "compare_strategies": args.compare_strategies,
+        "compare_normalization": args.compare_normalization,
+        "seed": args.seed,
+        "has_normalization_comparison": bool(results.get("normalization_comparison")),
+    }
+
+    # Save results after validation
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)

@@ -8,7 +8,8 @@
         "weights",
         "objective_value",
         "ranking_stability",
-        "method_used"
+        "method_used",
+        "objective_components"
     ],
     "metadata_keys_subset": [
         "schema_version",
@@ -22,6 +23,7 @@
         "method",
         "objective_value",
         "ranking_stability",
+        "objective_components",
         "baseline_missing_metric_count",
         "skipped_malformed_lines"
     ]

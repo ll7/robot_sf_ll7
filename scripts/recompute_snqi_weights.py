@@ -17,6 +17,9 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+# Import shared SNQI logic
+from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi  # type: ignore
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -28,50 +31,11 @@ class SNQIWeightRecomputer:
     def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
-        self.weight_names = [
-            "w_success",
-            "w_time",
-            "w_collisions",
-            "w_near",
-            "w_comfort",
-            "w_force_exceed",
-            "w_jerk",
-        ]
+        self.weight_names = WEIGHT_NAMES
 
-    def compute_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
-        """Compute SNQI using median/p95 normalization strategy."""
-
-        def _normalize(name: str, value: float) -> float:
-            if name not in self.baseline_stats:
-                return 0.0
-            med = self.baseline_stats[name].get("med", 0.0)
-            p95 = self.baseline_stats[name].get("p95", med)
-            eps = 1e-6
-            denom = (p95 - med) if (p95 - med) > eps else 1.0
-            norm = (value - med) / denom
-            return max(0.0, min(1.0, norm))
-
-        success = metrics.get("success", 0.0)
-        if isinstance(success, bool):
-            success = 1.0 if success else 0.0
-
-        time_norm = metrics.get("time_to_goal_norm", 1.0)
-        coll = _normalize("collisions", metrics.get("collisions", 0.0))
-        near = _normalize("near_misses", metrics.get("near_misses", 0.0))
-        comfort = metrics.get("comfort_exposure", 0.0)
-        force_ex = _normalize("force_exceed_events", metrics.get("force_exceed_events", 0.0))
-        jerk_n = _normalize("jerk_mean", metrics.get("jerk_mean", 0.0))
-
-        score = (
-            weights.get("w_success", 1.0) * success
-            - weights.get("w_time", 1.0) * time_norm
-            - weights.get("w_collisions", 1.0) * coll
-            - weights.get("w_near", 1.0) * near
-            - weights.get("w_comfort", 1.0) * comfort
-            - weights.get("w_force_exceed", 1.0) * force_ex
-            - weights.get("w_jerk", 1.0) * jerk_n
-        )
-        return float(score)
+    def _episode_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
+        """Wrapper calling shared compute_snqi keeping backward compatibility."""
+        return compute_snqi(metrics, weights, self.baseline_stats)
 
     def default_weights(self) -> Dict[str, float]:
         """Return default weight configuration."""
@@ -115,7 +79,7 @@ class SNQIWeightRecomputer:
 
     def compute_weight_statistics(self, weights: Dict[str, float]) -> Dict[str, Any]:
         """Compute statistics for given weights across all episodes."""
-        scores = [self.compute_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
+        scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
 
         # Group by algorithm if available
         algo_scores = {}
@@ -123,7 +87,7 @@ class SNQIWeightRecomputer:
             algo = ep.get("scenario_params", {}).get("algo", ep.get("scenario_id", "default"))
             if algo not in algo_scores:
                 algo_scores[algo] = []
-            algo_scores[algo].append(self.compute_snqi(ep.get("metrics", {}), weights))
+            algo_scores[algo].append(self._episode_snqi(ep.get("metrics", {}), weights))
 
         stats = {
             "overall": {
@@ -150,8 +114,8 @@ class SNQIWeightRecomputer:
         self, weights1: Dict[str, float], weights2: Dict[str, float]
     ) -> float:
         """Compute ranking correlation between two weight configurations."""
-        scores1 = [self.compute_snqi(ep.get("metrics", {}), weights1) for ep in self.episodes]
-        scores2 = [self.compute_snqi(ep.get("metrics", {}), weights2) for ep in self.episodes]
+        scores1 = [self._episode_snqi(ep.get("metrics", {}), weights1) for ep in self.episodes]
+        scores2 = [self._episode_snqi(ep.get("metrics", {}), weights2) for ep in self.episodes]
 
         ranking1 = np.argsort(np.argsort(scores1))
         ranking2 = np.argsort(np.argsort(scores2))
@@ -172,7 +136,7 @@ class SNQIWeightRecomputer:
             weights = {name: np.random.uniform(0.1, 3.0) for name in self.weight_names}
 
             # Compute objectives: discriminative power and ranking stability
-            scores = [self.compute_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
+            scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
             discriminative_power = np.std(scores)
 
             # Stability: based on score variance and range
@@ -304,7 +268,7 @@ class SNQIWeightRecomputer:
             self.baseline_stats = strategy_baseline
 
             scores = [
-                self.compute_snqi(ep.get("metrics", {}), base_weights) for ep in self.episodes
+                self._episode_snqi(ep.get("metrics", {}), base_weights) for ep in self.episodes
             ]
 
             if base_scores is None:

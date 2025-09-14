@@ -139,6 +139,7 @@ Recompute specific:
  - `--missing-metric-max-list <int>`: Include up to N example episode IDs per missing baseline metric in diagnostics.
  - `--fail-on-missing-metric`: Treat missing baseline metrics (present in episodes) as error (exit code 4).
  - `--progress`: Show progress bars (if `tqdm` installed).
+ - `--bootstrap-samples <int>` / `--bootstrap-confidence <float>`: Same semantics as optimization; operates on the recommended (or selected) weight set.
 
 Optimization specific:
 - `--method <grid|evolution|both>`: Optimization mode.
@@ -147,6 +148,8 @@ Optimization specific:
 - `--initial-weights-file <path>`: Starting point (valid weights JSON).
 - `--sensitivity`: Enable sensitivity analysis block.
  - `--missing-metric-max-list <int>` / `--fail-on-missing-metric` / `--progress` analogous to recompute.
+ - `--bootstrap-samples <int>` / `--bootstrap-confidence <float>`: Enable bootstrap estimation of the mean recommended episodic SNQI score. Adds `bootstrap.recommended_score` with mean-of-means, std, and percentile CI. Set samples to 0 (default) to disable. Confidence defaults to 0.95.
+ - `--ci-placeholder` (deprecated): Legacy scaffold retained for backward compatibility; superseded by real bootstrap fields.
 
 Sensitivity specific:
 - `--weights <path>`: Weights to analyze.
@@ -258,6 +261,7 @@ python scripts/recompute_snqi_weights.py \
 - `strategy_correlations`: Overlap in episodic ranking across strategies.
 - `normalization_comparison`: Score means + correlation vs canonical median/p95.
 - `sensitivity_analysis`: Local one-at-a-time perturbation effects; highlights brittle dimensions.
+- `bootstrap.recommended_score`: Empirical distribution of the mean episodic SNQI score under resampling with replacement (episode-level). Fields:\n  - `samples`: Number of bootstrap replicates.\n  - `mean_mean`: Mean of bootstrap replicate means (unbiased estimator of expected mean score).\n  - `std_mean`: Standard deviation across replicate means.\n  - `ci`: Two-element percentile confidence interval `[lower, upper]` at requested confidence.\n  - `confidence_level`: The nominal confidence level used.
 - `baseline_missing_metric_count`: Non-zero implies potential silent bias (consider failing CI with flag).
 - `skipped_malformed_lines`: Data hygiene indicator; should normally be 0.
  - `phase_timings`: Per‑phase wall clock seconds aiding performance regression detection.
@@ -286,9 +290,8 @@ Implemented items (moved from backlog): objective component breakdown, determini
 Still planned (see design doc / backlog):
 - Weight simplex option (normalize weights to sum constant before evaluating objective)
 - Early stopping for evolution (plateau detection over trailing generations)
-- Bootstrap stability + confidence intervals scaffolding
+- Extended bootstrap: joint objective component distribution; BCa intervals
 - Drift detection test (continuous regression guard)
-- Confidence interval reporting once bootstrap scaffold lands
 
 ## Related Design Document
 For deep architectural details, data contracts, algorithms, and planned roadmap see:  

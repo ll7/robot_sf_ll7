@@ -95,6 +95,16 @@ class SNQIWeightOptimizer:
         self.baseline_stats = baseline_stats
         self.weight_names = list(WEIGHT_NAMES)
 
+    def _maybe_simplex(
+        self, weights: Dict[str, float], simplex: bool, total: float = 10.0
+    ) -> Dict[str, float]:
+        if not simplex:
+            return weights
+        s = sum(weights.values())
+        if s <= 0:  # pragma: no cover - defensive
+            return weights
+        return {k: (v / s) * total for k, v in weights.items()}
+
     def _episode_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
         return compute_snqi(metrics, weights, self.baseline_stats)
 
@@ -127,8 +137,11 @@ class SNQIWeightOptimizer:
                 return 0.5
         return 0.8
 
-    def objective_function(self, weight_vector: np.ndarray) -> float:
+    def objective_function(self, weight_vector: np.ndarray, *, simplex: bool = False) -> float:
+        """Heuristic objective (negative for minimizer)."""
         weights = dict(zip(self.weight_names, weight_vector))
+        if simplex:
+            weights = self._maybe_simplex(weights, True)
         stability = self.compute_ranking_stability(weights)
         scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
         score_variance = np.var(scores) if len(scores) > 1 else 0.0
@@ -140,6 +153,7 @@ class SNQIWeightOptimizer:
         grid_resolution: int = 5,
         max_combinations: int | None = None,
         show_progress: bool = False,
+        simplex: bool = False,
     ) -> OptimizationResult:
         """Perform (possibly guarded) grid search over weight space.
 
@@ -177,10 +191,10 @@ class SNQIWeightOptimizer:
             iterator = _progress(materialized, desc="grid", total=len(materialized))
         for combo in iterator:
             weights = {k: float(v) for k, v in zip(self.weight_names, combo)}
-            obj = self.objective_function(np.array(list(weights.values())))
+            obj = self.objective_function(np.array(list(weights.values())), simplex=simplex)
             if obj < best_obj:
                 best_obj = obj
-                best_weights = weights
+                best_weights = self._maybe_simplex(weights, simplex)
                 best_stability = self.compute_ranking_stability(weights)
             evaluations += 1
         if best_weights is None:  # Fallback (should not happen)
@@ -200,6 +214,7 @@ class SNQIWeightOptimizer:
                 "evaluations": evaluations,
                 "grid_resolution": grid_resolution,
                 "total_combinations_considered": evaluations,
+                "simplex": simplex,
             },
             objective_components={
                 "stability_component": float(best_stability),
@@ -208,7 +223,11 @@ class SNQIWeightOptimizer:
         )
 
     def differential_evolution_optimization(
-        self, maxiter: int = 30, seed: int | None = None, show_progress: bool = False
+        self,
+        maxiter: int = 30,
+        seed: int | None = None,
+        show_progress: bool = False,
+        simplex: bool = False,
     ) -> OptimizationResult:
         """Run SciPy's differential evolution on continuous weight domain.
 
@@ -228,8 +247,12 @@ class SNQIWeightOptimizer:
             callback = _cb
         else:
             callback = None
+
+        def _wrapped(vec: np.ndarray) -> float:
+            return self.objective_function(vec, simplex=simplex)
+
         result = differential_evolution(
-            self.objective_function,
+            _wrapped,
             bounds=bounds,
             maxiter=maxiter,
             seed=seed,
@@ -240,6 +263,8 @@ class SNQIWeightOptimizer:
         if pbar is not None:
             pbar.close()
         weights = dict(zip(self.weight_names, result.x))
+        if simplex:
+            weights = self._maybe_simplex(weights, True)
         stability = self.compute_ranking_stability(weights)
         positive_score = -result.fun
         convergence = {
@@ -397,6 +422,7 @@ def _augment_metadata(
             "baseline_file": str(args.baseline),
             "invocation": "python " + " ".join(sys.argv),
             "method_requested": args.method,
+            "simplex": bool(args.simplex),
         },
     }
     if original_episode_count is not None:
@@ -547,6 +573,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             args.grid_resolution,
             max_combinations=args.max_grid_combinations,
             show_progress=args.progress,
+            simplex=args.simplex,
         )
         phase_timings["grid_search"] = perf_counter() - phase_start
         results["grid_search"] = {
@@ -559,7 +586,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     if args.method in ["evolution", "both"]:
         phase_start = perf_counter()
         evolution_result = optimizer.differential_evolution_optimization(
-            args.maxiter, seed=args.seed, show_progress=args.progress
+            args.maxiter, seed=args.seed, show_progress=args.progress, simplex=args.simplex
         )
         phase_timings["differential_evolution"] = perf_counter() - phase_start
         results["differential_evolution"] = {
@@ -692,6 +719,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help="Deterministically sample N episodes before optimization (for faster experimentation)",
+    )
+    parser.add_argument(
+        "--simplex",
+        action="store_true",
+        help="Project candidate weight vectors onto a simplex (sum constant) before evaluation",
     )
     return parser.parse_args(argv)
 

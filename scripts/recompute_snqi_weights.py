@@ -403,7 +403,11 @@ def _select_recommended(strategy_results: Dict[str, Any]) -> tuple[str, Dict[str
 
 
 def _augment_metadata(
-    results: Dict[str, Any], args: argparse.Namespace, start_iso: str, start_perf: float
+    results: Dict[str, Any],
+    args: argparse.Namespace,
+    start_iso: str,
+    start_perf: float,
+    phase_timings: dict[str, float] | None = None,
 ) -> None:
     def _git_commit() -> str:
         try:
@@ -420,7 +424,7 @@ def _augment_metadata(
     end_perf = perf_counter()
     end_iso = datetime.now(timezone.utc).isoformat()
     runtime = end_perf - start_perf
-    results["_metadata"] = {
+    meta: dict[str, Any] = {
         "schema_version": 1,
         "generated_at": end_iso,
         "git_commit": _git_commit(),
@@ -437,6 +441,9 @@ def _augment_metadata(
             "compare_normalization": args.compare_normalization,
         },
     }
+    if phase_timings:
+        meta["phase_timings"] = {k: phase_timings[k] for k in sorted(phase_timings)}
+    results["_metadata"] = meta
     # summary filled later after recommended weights known
 
 
@@ -584,12 +591,15 @@ def _detect_missing_baseline_metrics(
 def run(args: argparse.Namespace) -> int:  # noqa: C901
     start_perf = perf_counter()
     start_iso = datetime.now(timezone.utc).isoformat()
+    phase_start = start_perf
+    phase_timings: dict[str, float] = {}
     try:
         episodes, skipped_lines = load_episodes_data(args.episodes)
         baseline = load_baseline_stats(args.baseline)
     except Exception as e:  # noqa: BLE001
         logger.error("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
+    phase_timings["load_inputs"] = perf_counter() - phase_start
     if not episodes:
         logger.error("No episodes loaded from %s", args.episodes)
         return EXIT_INPUT_ERROR
@@ -611,6 +621,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 return EXIT_INPUT_ERROR
         results: Dict[str, Any] = {}
         if args.compare_strategies:
+            phase_start = perf_counter()
             all_strategies = [
                 "default",
                 "balanced",
@@ -619,9 +630,11 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 "pareto",
             ]
             strategy_results = _compute_strategy_set(recomputer, all_strategies)
+            phase_timings["strategy_comparison"] = perf_counter() - phase_start
             results["strategy_comparison"] = strategy_results
             correlations: dict[str, float] = {}
             names = list(strategy_results.keys())
+            phase_start = perf_counter()
             for i, n1 in enumerate(names):
                 for n2 in names[i + 1 :]:
                     try:
@@ -631,18 +644,24 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                     except Exception as e:  # noqa: BLE001
                         logger.debug("Correlation %s vs %s failed: %s", n1, n2, e)
             results["strategy_correlations"] = correlations
+            phase_timings["strategy_correlations"] = perf_counter() - phase_start
             recommended_name, recommended_weights = _select_recommended(strategy_results)
             results["recommended_strategy"] = recommended_name
             results["recommended_weights"] = recommended_weights
         else:
+            phase_start = perf_counter()
             single = recomputer.recompute_with_strategy(args.strategy)
+            phase_timings["single_strategy"] = perf_counter() - phase_start
             results["strategy_result"] = single
             results["recommended_weights"] = single["weights"]
         if args.compare_normalization:
+            phase_start = perf_counter()
             results["normalization_comparison"] = recomputer.compare_normalization_strategies(
                 results["recommended_weights"]
             )
+            phase_timings["normalization_comparison"] = perf_counter() - phase_start
         # Baseline missing metric diagnostics
+        phase_start = perf_counter()
         missing_info = _detect_missing_baseline_metrics(
             episodes, baseline, args.missing_metric_max_list
         )
@@ -656,7 +675,9 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             if args.fail_on_missing_metric:
                 logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
                 return EXIT_MISSING_METRIC_ERROR
+        phase_timings["diagnostics"] = perf_counter() - phase_start
         if external_weights is not None:
+            phase_start = perf_counter()
             ext_stats = recomputer.compute_weight_statistics(external_weights)
             results["external_weights"] = {
                 "weights": external_weights,
@@ -665,7 +686,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                     results["recommended_weights"], external_weights
                 ),
             }
-        _augment_metadata(results, args, start_iso, start_perf)
+            phase_timings["external_weights_eval"] = perf_counter() - phase_start
+        _augment_metadata(results, args, start_iso, start_perf, phase_timings)
         # Record skipped malformed lines
         results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
         # Record missing metric count in metadata for summary consumption
@@ -678,6 +700,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             results["summary"]["skipped_malformed_lines"] = skipped_lines
             results["summary"]["baseline_missing_metric_count"] = missing_info["total_missing"]
         try:
+            phase_start = perf_counter()
             if args.validate:
                 validate_snqi(results, "recompute", check_finite=True)
             else:
@@ -685,10 +708,18 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
         except ValueError as e:
             logger.error("Validation failed: %s", e)
             return EXIT_VALIDATION_ERROR
+        phase_timings["validation"] = perf_counter() - phase_start
+        phase_start = perf_counter()
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
+        phase_timings["write_output"] = perf_counter() - phase_start
         logger.info("Results saved to %s", args.output)
+        if phase_timings:
+            timing_lines = ["Phase timings (seconds):"] + [
+                f"  {k}: {v:.4f}" for k, v in sorted(phase_timings.items())
+            ]
+            logger.info("\n%s", "\n".join(timing_lines))
         _print_summary(results, args, len(episodes))
         return EXIT_SUCCESS
     except Exception as e:  # noqa: BLE001

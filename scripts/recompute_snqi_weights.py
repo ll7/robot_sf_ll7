@@ -23,6 +23,9 @@ import numpy as np
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi  # type: ignore
 from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
+from robot_sf.benchmark.snqi.weights_validation import (
+    validate_weights_mapping as _validate_weights_mapping,
+)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -446,6 +449,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
     parser.add_argument("--validate", action="store_true", help="Validate JSON output structure")
+    parser.add_argument(
+        "--external-weights-file",
+        type=Path,
+        default=None,
+        help="Optional JSON file with externally supplied weights to evaluate (validated)",
+    )
     return parser.parse_args(argv)
 
 
@@ -464,6 +473,18 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     if args.seed is not None:
         np.random.seed(args.seed)
     recomputer = SNQIWeightRecomputer(episodes, baseline)
+    external_weights: Dict[str, float] | None = None
+    if args.external_weights_file is not None:
+        try:
+            with open(args.external_weights_file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if not isinstance(raw, dict):  # pragma: no cover - defensive
+                raise ValueError("External weights file must be a JSON object")
+            external_weights = _validate_weights_mapping(raw)
+            logger.info("Loaded external weights from %s", args.external_weights_file)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed loading external weights: %s", e)
+            return 1
     results: Dict[str, Any] = {}
     if args.compare_strategies:
         all_strategies = ["default", "balanced", "safety_focused", "efficiency_focused", "pareto"]
@@ -493,6 +514,16 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
         results["normalization_comparison"] = recomputer.compare_normalization_strategies(
             results["recommended_weights"]
         )
+    if external_weights is not None:
+        # Always compute statistics with provided external weights under current baseline
+        ext_stats = recomputer.compute_weight_statistics(external_weights)
+        results["external_weights"] = {
+            "weights": external_weights,
+            "statistics": ext_stats,
+            "correlation_with_recommended": recomputer.rank_correlation_analysis(
+                results["recommended_weights"], external_weights
+            ),
+        }
     _augment_metadata(results, args, start_iso, start_perf)
     _finalize_summary(results, args)
     try:

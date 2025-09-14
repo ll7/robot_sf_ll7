@@ -17,6 +17,11 @@ Normalization for metrics using baseline stats (median / p95):
 
 This module is intentionally lightweight so it can be imported by scripts
 and tests without pulling heavy dependencies.
+
+Clamping Implications:
+- Values below baseline median never produce a negative normalized penalty (floor at 0) – rewarding improvements implicitly happens only via lower adverse metrics and preserved success term.
+- Values above p95 saturate at 1; extreme outliers do not further worsen the normalized term, trading tail sensitivity for robustness.
+- Future modes may allow soft saturation (sigmoid) or asymmetric scaling; current design favors reproducibility & bounded optimization landscapes.
 """
 
 from __future__ import annotations

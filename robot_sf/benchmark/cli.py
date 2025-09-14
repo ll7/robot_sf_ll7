@@ -1,3 +1,5 @@
+"""Benchmark CLI providing unified entrypoints (including SNQI tooling)."""
+
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
@@ -5,8 +7,7 @@ import argparse
 import json
 import os
 import sys
-import types
-from importlib.machinery import SourceFileLoader
+import traceback
 from pathlib import Path
 from typing import List
 
@@ -347,12 +348,26 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _RECOMP_MOD = None
 
     def _load_script(rel: str, name: str):  # noqa: D401 - simple dynamic loader
+        """Dynamically load a script module by relative path.
+
+        Uses importlib spec APIs so module metadata (__spec__, __file__) is set.
+        """
+        from importlib.util import module_from_spec, spec_from_file_location  # local import
+
+        # Defensive: if a prior failed import left a None placeholder, remove it
+        existing = sys.modules.get(name)
+        if existing is None:
+            sys.modules.pop(name, None)
+
         path = Path(__file__).resolve().parents[2] / rel
         if not path.exists():  # pragma: no cover - defensive
             raise FileNotFoundError(f"SNQI script not found: {path}")
-        loader = SourceFileLoader(name, str(path))
-        mod = types.ModuleType(name)
-        loader.exec_module(mod)  # type: ignore[attr-defined]
+        spec = spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:  # pragma: no cover - defensive
+            raise ImportError(f"Unable to load spec for {path}")
+        mod = module_from_spec(spec)
+        sys.modules[name] = mod  # allow relative imports inside script if any
+        spec.loader.exec_module(mod)
         return mod
 
     def _get_opt_run(mod):  # type: ignore[no-untyped-def]
@@ -373,6 +388,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
                 )
             except Exception as e:  # pragma: no cover - load error
                 print(f"Error loading optimization script: {e}", file=sys.stderr)
+                traceback.print_exc()
                 return 2
         run_fn = _get_opt_run(_OPT_MOD)
         return int(run_fn(args))  # type: ignore[no-any-return]
@@ -388,6 +404,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
                 )
             except Exception as e:  # pragma: no cover - load error
                 print(f"Error loading recompute script: {e}", file=sys.stderr)
+                traceback.print_exc()
                 return 2
         run_fn = _get_recompute_run(_RECOMP_MOD)
         return int(run_fn(args))  # type: ignore[no-any-return]

@@ -1,6 +1,6 @@
 # SNQI Weight Recomputation & Sensitivity Analysis
 
-> Status: Draft (skeleton)
+> Status: In Progress (core refactor & parity test completed)
 > Related PR: #175  
 > Related Issue: #174
 
@@ -33,13 +33,13 @@ PR #175 introduces standalone scripts for weight recomputation, optimization, an
 - Performance acceptable if typical workflows complete < ~5 minutes on ~1–5k episodes
 
 ## 5. Current Pain Points / Gaps
-(From gap analysis)
-- Duplicated SNQI calculation across scripts
-- Lack of design doc, tests, and schema contracts
-- Ad hoc formulas for “stability” and Pareto selection
-- No seeding / reproducibility controls
-- No benchmark CLI integration
-- No validation that computed SNQI matches canonical implementation
+(From gap analysis — updated after Phase 1 refactor)
+- (Resolved) Duplicated SNQI calculation across scripts → consolidated in `robot_sf/benchmark/snqi/compute.py`.
+- (Partially resolved) Lack of design doc → skeleton + updated status; still need full expansion (Sections 8–14 elaboration & rationale expansions pending).
+- (Open) Ad hoc formulas for stability / Pareto selection (heuristic still in use; bootstrap stability planned).
+- (Open) Seeding / reproducibility controls (CLI `--seed` not yet added).
+- (Open) Benchmark CLI integration.
+- (Resolved) Validation that scripts compute canonical SNQI: parity test `tests/test_snqi_parity.py` added.
 
 ## 6. Options & Trade-offs
 ### 6.1 Weight Derivation Approaches
@@ -64,11 +64,11 @@ Decision: Introduce bootstrap Spearman as preferred stability metric (configurab
 ### 6.3 Normalization Strategy
 Will keep median/p95 canonical; allow alt strategies behind flag with correlation reporting—not changing core benchmark yet.
 
-## 7. Chosen Architecture (Planned Refactor)
+## 7. Chosen Architecture (Implemented & Planned)
 ```
 robot_sf/benchmark/snqi/
   __init__.py
-  compute.py        # canonical compute_snqi(metrics, weights, baseline)
+  compute.py        # canonical compute_snqi(metrics, weights, baseline) (implemented)
   normalization.py  # helpers for median/p95 & alternatives
   weighting.py      # strategy generators + validation
   optimization.py   # grid, evolutionary, Pareto sampling APIs
@@ -76,7 +76,7 @@ robot_sf/benchmark/snqi/
 
 scripts/ (CLI wrappers calling above modules)
 ```
-CLI additions (planned):
+CLI additions (planned – not yet implemented):
 ```
 robot_sf_bench snqi recompute ...
 robot_sf_bench snqi optimize ...
@@ -158,13 +158,13 @@ Objective = α * stability + (1-α) * discriminative_power
 with α configurable (default 0.6).
 
 ## 10. Testing Strategy
-- Unit tests for compute normalization edge cases (p95==med, missing metric)
-- Cross-check score vs legacy implementation (fixture episodes)
-- Deterministic tests with seed (evolution & Pareto sampling)
-- Schema validation using `jsonschema`
-- Sensitivity monotonic sanity: Increasing `w_collisions` should not increase average score when collision counts > 0
-- Bootstrap stability reproducibility test
-- CLI integration tests (subprocess) ensuring exit 0 + JSON validity
+- Parity test ensures canonical function stability: `tests/test_snqi_parity.py` (DONE)
+- Unit tests for compute normalization edge cases (p95==med, missing metric) (TODO)
+- Deterministic tests with seed (evolution & Pareto sampling) (TODO)
+- Schema validation using `jsonschema` once schema_version added (TODO)
+- Sensitivity monotonic sanity: Increasing `w_collisions` should not increase average score when collision counts > 0 (TODO)
+- Bootstrap stability reproducibility test (TODO after implementing bootstrap)
+- CLI integration tests (subprocess) ensuring exit 0 + JSON validity (TODO post CLI subcommands)
 
 ## 11. Performance Considerations
 | Component | Baseline Target |
@@ -191,11 +191,12 @@ Mitigations:
 - Large file size guard (optional future enhancement)
 
 ## 14. Migration / Rollout Plan
-Phase 1: Introduce shared module + modify scripts to import it (backward compatible)  
-Phase 2: Add tests + schema + design doc finalize  
+Phase 1: Introduce shared module + modify scripts to import it (backward compatible)  (COMPLETED)  
+Phase 1b: Add parity regression test (COMPLETED)  
+Phase 2: Add broader tests + schema + expand design doc (IN PROGRESS – next)  
 Phase 3: Add CLI integration (`robot_sf_bench snqi`)  
-Phase 4: Deprecate direct script usage (soft warning)  
-Phase 5: Optional advanced methodology (bootstrap, ANOVA)  
+Phase 4: Introduce seed, provenance & bootstrap stability; deprecate direct script usage (soft warning)  
+Phase 5: Optional advanced methodology (ANOVA, NSGA-II)  
 
 ## 15. Open Questions
 - Should weights be normalized (sum=const)?
@@ -212,12 +213,13 @@ Phase 5: Optional advanced methodology (bootstrap, ANOVA)
 - Weight regularization (L1/L2) to discourage extreme values
 
 ## 17. Acceptance Criteria (Design Phase)
-- Shared module replaces duplication
-- Test suite covers ≥85% of new logic paths (non-viz)
-- Deterministic optimization under fixed seed
-- Documented JSON schema with `schema_version`
-- CI passes with new tests & type hints
-- Updated root README and feature docs
+- Shared module replaces duplication (DONE)
+- Parity test ensures canonical score stability (DONE)
+- Test suite covers ≥85% of new logic paths (non-viz) (PARTIAL – more tests pending)
+- Deterministic optimization under fixed seed (PENDING)
+- Documented JSON schema with `schema_version` (PENDING)
+- CI passes with new tests & type hints (ONGOING; current additions green)
+- Updated root README and feature docs (PENDING)
 
 ---
 *This is a living document; sections will be refined as implementation proceeds.*

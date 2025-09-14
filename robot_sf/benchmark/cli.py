@@ -280,6 +280,18 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         p.add_argument(
             "--ci-placeholder", action="store_true", help="Include CI placeholder scaffold"
         )
+        p.add_argument(
+            "--bootstrap-samples",
+            type=int,
+            default=0,
+            help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
+        )
+        p.add_argument(
+            "--bootstrap-confidence",
+            type=float,
+            default=0.95,
+            help="Confidence level for bootstrap intervals (e.g., 0.95)",
+        )
         p.set_defaults(cmd="snqi", snqi_cmd="optimize")
 
     def _add_snqi_recompute(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -313,6 +325,18 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             "--sample", type=int, default=None, help="Deterministically sample N episodes"
         )
         p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
+        p.add_argument(
+            "--bootstrap-samples",
+            type=int,
+            default=0,
+            help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
+        )
+        p.add_argument(
+            "--bootstrap-confidence",
+            type=float,
+            default=0.95,
+            help="Confidence level for bootstrap intervals (e.g., 0.95)",
+        )
         p.set_defaults(cmd="snqi", snqi_cmd="recompute")
 
     _add_snqi_optimize(snqi_sub)

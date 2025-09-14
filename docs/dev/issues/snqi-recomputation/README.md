@@ -16,14 +16,14 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 
 ---
 ## 1. Design & Documentation (📄)
-- [ ] Create full design doc (convert / extend this into design doc) including:
-  - [ ] Context, goals, non-goals
-  - [ ] Rationale for weight strategies & chosen objective proxies
-  - [ ] Alternatives considered (e.g., true multi-objective NSGA-II vs heuristic Pareto sampling)
-  - [ ] Data / file contract definitions (episodes.jsonl, baseline_stats.json, output JSON schemas)
-  - [ ] Error modes and fallback behavior
-  - [ ] Reproducibility & seeding strategy
-  - [ ] Performance characteristics (expected runtime vs dataset size)
+- [x] Create full design doc (convert / extend this into design doc) including:
+  - [x] Context, goals, non-goals
+  - [x] Rationale for weight strategies & chosen objective proxies
+  - [x] Alternatives considered (e.g., true multi-objective NSGA-II vs heuristic Pareto sampling)
+  - [x] Data / file contract definitions (episodes.jsonl, baseline_stats.json, output JSON schemas)
+  - [x] Error modes and fallback behavior
+  - [x] Reproducibility & seeding strategy
+  - [x] Performance characteristics (expected runtime vs dataset size)
 - [ ] Relocate user-facing docs from `scripts/QUICK_START.md` & `scripts/README_SNQI_WEIGHTS.md` into `docs/snqi-weight-tools/README.md` (or link them if partial duplication needed)
 - [ ] Add short section + link in root `README.md` describing SNQI tooling
 - [ ] Add cross-reference in `docs/ENVIRONMENT.md` or benchmark docs if applicable
@@ -34,7 +34,7 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Add doc comment on clamping normalized metrics to [0,1] (implication for outliers)
   
 Progress notes:
-  * Partial doc coverage exists in `docs/snqi_weight_cli_updates.md` (covers new CLI flags & validation). Full design doc still pending.
+  * Full design draft in `DESIGN.md` now covers contracts, objectives, validation, performance, and future work. Remaining doc tasks relate to relocation and cross-links.
 
 ## 2. Code Structure & Refactor (🔧)
 - [x] Extract shared SNQI computation logic into a single module (`robot_sf/benchmark/snqi/compute.py`)
@@ -145,7 +145,7 @@ Progress notes:
 
 ---
 ## Next Step Recommendation
-Completed foundational refactors + validation + core tests. **Recommended next focus:** produce the comprehensive design doc (Section 1) and add remaining UX/error-handling improvements (Section 10) before tackling methodology enhancements (Section 6). Immediate actionable next task: "Create full design doc with formal JSON schema & error modes".
+Design doc completed. **Recommended next focus:** User-facing documentation consolidation (relocate & cross-link), then Error Handling & UX (Section 10: skipped line counts, baseline validation, exit code taxonomy). After that, begin methodology upgrades (bootstrap stability) and CLI unification.
 
 ---
 Generated: (initial scaffold — to be updated as work proceeds)

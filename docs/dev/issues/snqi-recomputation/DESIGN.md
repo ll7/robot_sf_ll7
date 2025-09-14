@@ -115,6 +115,36 @@ All `WEIGHT_NAMES` present with finite positive floats. Extraneous keys ignored 
 ## 6. Canonical SNQI Computation
 Located in `robot_sf/benchmark/snqi/compute.py`. Normalization: `(value - med) / (p95 - med)` guarded & clamped to [0,1]. Score: success positive; all other terms negative contributions scaled by weights.
 
+### 6.1 Normalization Rationale & Limitations
+The median / p95 percentile normalization was chosen for v1 because it provides a simple, robust transform that:
+1. Anchors the “typical” case at 0 (median) – reduces sensitivity to skew and outliers versus mean.
+2. Scales typical-to-high values into roughly `[0,1]` using an interpretable upper reference point (p95) instead of an extreme max which can be unstable across small samples.
+3. Avoids division by very small ranges in common distributions (heavy‑tailed collision / near‑miss counts) more reliably than using p90 or p99 (p90 sometimes too low, p99 unstable with small N).
+
+Clamping to `[0,1]` prevents extreme outliers from disproportionately dominating the linear weighted sum and destabilizing optimization heuristics; this is a pragmatic bias toward stability & comparability across datasets.
+
+Trade‑offs / Limitations:
+- Values above p95 saturate (loss of resolution); downstream sensitivity analysis might under‑estimate discriminative power in tails.
+- For very tight distributions (p95≈median) the denominator can collapse; we currently guard by using a minimum width of `1.0` (implicit neutralization) – this may under‑penalize metrics with insufficient spread.
+- Metrics with bi‑modal or multi‑modal distributions may be poorly represented by a single percentile stretch (future option: piecewise or robust z‑score).
+- Clamping prohibits rewarding *extremely* low adverse metrics beyond p95 improvement; an alternative would be asymmetric scaling (allow <0 for “better than typical”). Deferred for simplicity.
+
+Rejected Alternatives (initial phase):
+| Option | Reason Deferred |
+|--------|-----------------|
+| Min‑Max per dataset | Unstable with small sample max; invites gaming / leakage |
+| Z‑score (mean/σ) | Less robust to outliers; negative values complicate simple weighted subtraction semantics |
+| Log transform + scaling | Adds interpretability burden; not required until heavy skew confirmed problematic |
+| Quantile mapping (full CDF) | Overkill at current dataset sizes; higher implementation & validation complexity |
+
+Future Enhancements:
+- Parameterize upper percentile (pX) and report impact in `normalization_comparison` block (already partially implemented behind flag).
+- Add warning when `p95 - median < ε` and optionally fall back to interquartile range.
+- Optional “no‑clamp but soft cap” mode applying a smooth sigmoid beyond the upper percentile (keeps gradient while limiting explosion).
+
+Documentation / User Guide Sync: A condensed rationale will be mirrored into the user guide (task: Doc update user guide) summarizing the above for practitioners.
+
+
 ## 7. Strategies (Recompute)
 - default, balanced, safety_focused, efficiency_focused, pareto.
 - Pareto: random sampling (bounded 600) -> non‑dominated filtering over `(std, stability_proxy)` -> top 10 by discriminative power. Deterministic with seed.

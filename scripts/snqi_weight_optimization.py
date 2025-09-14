@@ -35,6 +35,7 @@ from scipy.optimize import differential_evolution
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
 from robot_sf.benchmark.snqi.exit_codes import (
     EXIT_INPUT_ERROR,
+    EXIT_MISSING_METRIC_ERROR,
     EXIT_SUCCESS,
     EXIT_VALIDATION_ERROR,
 )
@@ -61,6 +62,7 @@ except Exception:  # noqa: BLE001 - pragma: no cover
     def _progress(
         iterable: Iterable, desc: str | None = None, total: int | None = None
     ) -> Iterator:  # type: ignore[unused-argument]
+        # Fallback: ignore progress parameters when tqdm unavailable
         return iter(iterable)
 
     _TQDM_AVAILABLE = False
@@ -392,6 +394,62 @@ def _augment_metadata(
     }
 
 
+def _detect_missing_baseline_metrics(
+    episodes: list[dict[str, Any]],
+    baseline_stats: dict[str, dict[str, float]],
+    max_examples: int = 5,
+) -> dict[str, Any]:
+    """Detect metrics present in episodes but absent from baseline stats.
+
+    Only checks metrics that participate in normalization (where a missing
+    baseline leads to silent zero penalty). Returns structured info:
+
+    {
+        "total_missing": int,
+        "metrics": [
+            {
+                "name": <metric>,
+                "episode_count_with_metric": n,
+                "example_episode_ids": [...]
+            }, ...
+        ]
+    }
+    """
+    # Metrics whose normalization relies on baseline entries
+    normalized_metrics = [
+        "collisions",
+        "near_misses",
+        "force_exceed_events",
+        "jerk_mean",
+    ]
+    results: list[dict[str, Any]] = []
+    for metric in normalized_metrics:
+        if metric in baseline_stats:
+            continue
+        episodes_with_metric: list[str] = []
+        count = 0
+        for ep in episodes:
+            metrics = ep.get("metrics", {}) or {}
+            if metric in metrics:
+                count += 1
+                if len(episodes_with_metric) < max_examples:
+                    ep_id = (
+                        str(ep.get("scenario_id"))
+                        or str(ep.get("id"))
+                        or str(len(episodes_with_metric))
+                    )
+                    episodes_with_metric.append(ep_id)
+        if count:
+            results.append(
+                {
+                    "name": metric,
+                    "episode_count_with_metric": count,
+                    "example_episode_ids": episodes_with_metric,
+                }
+            )
+    return {"total_missing": len(results), "metrics": results}
+
+
 def _print_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
     recommended = results["recommended"]
     print("\nOptimization Summary:")
@@ -465,8 +523,27 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         results["sensitivity_analysis"] = optimizer.sensitivity_analysis(
             recommended_weights, show_progress=args.progress
         )
+    # Detect baseline missing metrics (episodes contain metric but baseline lacks med/p95)
+    missing_info = _detect_missing_baseline_metrics(
+        episodes, baseline_stats, args.missing_metric_max_list
+    )
+    results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
+    if missing_info["total_missing"]:
+        logger.warning(
+            "Baseline missing %d metric(s) present in episodes: %s",
+            missing_info["total_missing"],
+            ", ".join(m["name"] for m in missing_info["metrics"]),
+        )
+        if args.fail_on_missing_metric:
+            logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
+            return EXIT_MISSING_METRIC_ERROR
     _augment_metadata(results, args, start_iso, start_perf)
     results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
+    results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
+        "total_missing"
+    ]
+    if "summary" in results:
+        results["summary"]["baseline_missing_metric_count"] = missing_info["total_missing"]
     try:
         if args.validate:
             validate_snqi(results, "optimization", check_finite=True)
@@ -520,6 +597,17 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         "--progress",
         action="store_true",
         help="Show progress bars (requires tqdm; silently ignored if unavailable)",
+    )
+    parser.add_argument(
+        "--missing-metric-max-list",
+        type=int,
+        default=5,
+        help="Max example episode IDs to list per missing baseline metric",
+    )
+    parser.add_argument(
+        "--fail-on-missing-metric",
+        action="store_true",
+        help="Treat presence of baseline-missing metrics as an error (non-zero exit)",
     )
     return parser.parse_args(argv)
 

@@ -40,7 +40,7 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Factor large `main()` functions (currently ignored via `# noqa: C901`) into smaller helpers (arg parsing, IO, compute, reporting)
 - [ ] Remove placeholder values (`pareto_efficiency: 0.8/0.9`) or compute real metric or drop field
 - [ ] Add defensive validation of weights file schema (missing keys, wrong types)
-- [ ] Add CLI option `--seed` to all stochastic scripts
+- [x] Add CLI option `--seed` to all stochastic scripts (recompute, optimization, sensitivity)
 - [ ] Add progress indication for long loops (grid search, pairwise surfaces) using `tqdm`
 - [ ] Add bounds/guard for grid explosion (warn if combinations > threshold)
 - [ ] Unify logging style (avoid mixed print/logging; reserve print for final summaries)
@@ -65,9 +65,9 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Optionally add a convenience command to apply weights & recompute SNQI over stored results
 
 ## 5. Reproducibility & Determinism (🎯)
-- [ ] Global seeding support: apply `--seed` to numpy & differential evolution
-- [ ] Record seed in output JSON
-- [ ] Document non-deterministic elements if any remain (e.g., parallelism inside SciPy)
+- [x] Global seeding support: apply `--seed` to NumPy (DE seeding to be validated)
+- [x] Record seed in output JSON (`_metadata.seed`)
+- [ ] Document remaining non-deterministic elements (SciPy internals / parallelism)
 
 ## 6. Methodology Improvements (🎯)
 - [ ] Consider more principled stability metric (e.g., average pairwise Spearman between bootstrap resamples)
@@ -89,11 +89,11 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Document minimal dependency set for headless (no plots) mode
 
 ## 9. Output & Schema Hygiene
-- [ ] Add `schema_version` field to JSON outputs
-- [ ] Include generation timestamp & git commit hash (if accessible) in outputs
-- [ ] Include command-line args echo in output for provenance
+- [x] Add `schema_version` field to JSON outputs (in `_metadata.schema_version`)
+- [x] Include generation timestamp & git commit hash (if accessible) in outputs (`_metadata.generated_at`, `_metadata.git_commit`)
+- [x] Include command-line args echo in output for provenance (`_metadata.provenance.invocation`)
 - [ ] Validate numeric fields are finite (no NaN) before writing JSON
-- [ ] Add compact summary block (top weights, stability, discriminative power)
+- [ ] Add compact summary block (top weights, stability, discriminative power) (pending: consolidation across scripts)
 
 ## 10. Error Handling & UX
 - [ ] Aggregate and report count of skipped / invalid JSONL lines

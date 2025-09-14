@@ -34,9 +34,9 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Add doc comment on clamping normalized metrics to [0,1] (implication for outliers)
 
 ## 2. Code Structure & Refactor (🔧)
-- [ ] Extract shared SNQI computation logic into a single module (e.g. `robot_sf/benchmark/snqi.py` or reuse existing metrics implementation)
-- [ ] Replace duplicated `compute_snqi` in all scripts with import from shared module
-- [ ] Centralize `WEIGHT_NAMES` constant
+- [x] Extract shared SNQI computation logic into a single module (`robot_sf/benchmark/snqi/compute.py`)
+- [x] Replace duplicated `compute_snqi` in all scripts with import from shared module
+- [x] Centralize `WEIGHT_NAMES` constant
 - [ ] Factor large `main()` functions (currently ignored via `# noqa: C901`) into smaller helpers (arg parsing, IO, compute, reporting)
 - [ ] Remove placeholder values (`pareto_efficiency: 0.8/0.9`) or compute real metric or drop field
 - [ ] Add defensive validation of weights file schema (missing keys, wrong types)
@@ -48,7 +48,7 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [ ] Consider exposing core functionality as functions that accept data structures (facilitates reuse in notebooks/tests)
 
 ## 3. Testing (🧪)
-- [ ] Add unit test ensuring recomputed SNQI matches canonical implementation for a fixture episode set
+- [x] Add unit test ensuring recomputed SNQI matches canonical implementation for a fixture episode set (`tests/test_snqi_parity.py`)
 - [ ] Test each strategy output contains required keys & weight ranges
 - [ ] Test Pareto sampling is deterministic under fixed seed
 - [ ] Test sensitivity analysis ranking correlation monotonic behavior for controlled perturbations

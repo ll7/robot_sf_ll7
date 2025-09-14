@@ -190,6 +190,61 @@ Pure JSON input, no code execution. Validation prevents NaN/Inf propagation. Ext
 ## 19. Compatibility Strategy
 `schema_version` increments on breaking shape changes. Extraneous weight keys ignored to allow forward addition. Consumer code should check version.
 
+## 19.1 Schema Artifact & Validation
+A formal JSON Schema for script outputs (optimization + recompute + shared summary metadata) is provided at:
+
+`docs/snqi-weight-tools/snqi_output.schema.json`
+
+Scope (v1):
+- Validates presence/shape of `_metadata` and `summary` blocks.
+- Defines `WeightsObject` (pattern `^w_`) with numeric values; rejects unknown extra weight keys by default (explicit choice to surface typos early).
+- Provides reusable `MethodBlock` and `RecommendedBlock` definitions (objective + stability + weights + optional convergence).
+- Supports optional analytical sections (`grid_search`, `differential_evolution`, `sensitivity_analysis`, `strategy_comparison`, `normalization_comparison`, etc.).
+
+Non‑goals (v1):
+- Enforcing numeric ranges (e.g., weights >0) – handled by runtime validator `validate_weights_mapping`.
+- Enumerating strategy names (kept open for forward addition without schema bump).
+- Strict datetime format validation – treated as opaque ISO8601 strings.
+
+Backward Compatibility Rules:
+| Change Type | Requires `schema_version` bump? | Notes |
+|-------------|----------------------------------|-------|
+| Add new optional top-level analytical section | No | Consumers must ignore unknown keys |
+| Add new field inside existing analytic block (optional) | No | Mark optional; document in changelog |
+| Rename or remove existing required field | Yes | Bump version and update validator/tests |
+| Tighten validation (e.g., forbid previously allowed pattern) | Yes | Consider deprecation cycle |
+| Add new required field to `_metadata` | Yes | Unless defaultable & auto-filled |
+| Add new weight name | Yes* | *If required in all outputs; otherwise keep optional and document |
+
+Validation Path:
+1. Lightweight internal structural validation (`robot_sf.benchmark.snqi.schema.validate_snqi`).
+2. (Planned) Optional `jsonschema` test asserting conformance to `snqi_output.schema.json` (snapshot + drift detection).
+
+Rationale for Lightweight Runtime Validation:
+- Keep benchmark scripts dependency‑light (avoid hard dependency on `jsonschema`).
+- Reserve full schema enforcement for tests / CI (ensures dev ergonomics + performance).
+
+Planned Enhancements:
+- Add schema snapshot regression test (task: Schema snapshot test).
+- Emit objective component breakdown fields (`stability_component`, `discriminative_component`) – non‑breaking optional additions.
+- Introduce formal enum for strategy names once stabilized (`strategy_names` array in `_metadata.provenance`).
+
+Consumers SHOULD:
+- Check `_metadata.schema_version` before parsing.
+- Gracefully ignore unknown top-level keys.
+- Fail fast if required fields missing.
+
+Consumers SHOULD NOT:
+- Depend on incidental ordering of object keys.
+- Assume all analytical sections are present (presence driven by CLI flags).
+
+Versioning Procedure:
+1. Draft change with proposed bump rationale.
+2. Update `EXPECTED_SCHEMA_VERSION` in `schema.py`.
+3. Modify schema file & design doc compatibility table.
+4. Add migration notes + update tests & user guide.
+
+
 ## 20. Appendix
 ### 20.1 Grid Search Guard Pseudocode
 ```

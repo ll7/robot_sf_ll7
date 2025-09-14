@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""SNQI Weight Recomputation Utilities
+"""SNQI Weight Recomputation Script.
 
-This script provides utilities to recompute SNQI weights using different strategies
-and normalization approaches (median/p95). It's designed to work with the existing
-SNQI implementation from the social navigation benchmark.
-
-Usage:
-    python scripts/recompute_snqi_weights.py --episodes episodes.jsonl --baseline baseline_stats.json --strategy pareto --output weights_optimized.json
+Refactored for parity with the optimization script: decomposed into helpers,
+provides consistent metadata + summary, optional strategy & normalization
+comparisons, and schema/finite validation. Drops placeholder fields (no
+pareto_efficiency) and keeps deterministic behavior via optional seed.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class SNQIWeightRecomputer:
-    """Utilities for recomputing SNQI weights with different strategies."""
+    """Recompute SNQI weights using pre-defined selection strategies."""
 
     def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
         self.episodes = episodes_data
@@ -129,57 +129,49 @@ class SNQIWeightRecomputer:
         corr, _ = spearmanr(ranking1, ranking2)
         return corr if not np.isnan(corr) else 1.0
 
-    def pareto_frontier_weights(self, n_samples: int = 1000) -> List[Dict[str, Any]]:
-        """Generate Pareto-optimal weight configurations."""
+    def pareto_frontier_weights(self, n_samples: int = 600) -> List[Dict[str, Any]]:
+        """Sample candidate weights and return an approximate Pareto frontier.
+
+        Keeps runtime modest (default 600 samples). Objective dimensions:
+        (discriminative_power, stability). Returns top 10 non‑dominated sorted by
+        discriminative_power.
+        """
         logger.info("Computing Pareto frontier with %d samples", n_samples)
-
-        # Sample random weight configurations
-        samples = []
+        samples: list[dict[str, Any]] = []
         for _ in range(n_samples):
-            # Sample weights uniformly from [0.1, 3.0]
-            weights = {name: np.random.uniform(0.1, 3.0) for name in self.weight_names}
-
-            # Compute objectives: discriminative power and ranking stability
+            weights = {name: float(np.random.uniform(0.1, 3.0)) for name in self.weight_names}
             scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
-            discriminative_power = np.std(scores)
-
-            # Stability: based on score variance and range
-            stability = 1.0 / (1.0 + abs(discriminative_power - 0.5))  # Prefer moderate variance
-
+            discriminative_power = float(np.std(scores))
+            stability = float(1.0 / (1.0 + abs(discriminative_power - 0.5)))
             samples.append(
                 {
                     "weights": weights,
                     "discriminative_power": discriminative_power,
                     "stability": stability,
-                    "mean_score": np.mean(scores),
+                    "mean_score": float(np.mean(scores)),
                 }
             )
-
-        # Find Pareto frontier
-        pareto_samples = []
+        pareto: list[dict[str, Any]] = []
         for i, sample in enumerate(samples):
-            is_dominated = False
+            dominated = False
             for j, other in enumerate(samples):
-                if i != j:
-                    # Check if 'other' dominates 'sample'
-                    if (
-                        other["discriminative_power"] >= sample["discriminative_power"]
-                        and other["stability"] >= sample["stability"]
-                        and (
-                            other["discriminative_power"] > sample["discriminative_power"]
-                            or other["stability"] > sample["stability"]
-                        )
-                    ):
-                        is_dominated = True
-                        break
-            if not is_dominated:
-                pareto_samples.append(sample)
-
-        # Sort by discriminative power
-        pareto_samples.sort(key=lambda x: x["discriminative_power"], reverse=True)
-
-        logger.info("Found %d Pareto-optimal configurations", len(pareto_samples))
-        return pareto_samples[:10]  # Return top 10
+                if i == j:
+                    continue
+                if (
+                    other["discriminative_power"] >= sample["discriminative_power"]
+                    and other["stability"] >= sample["stability"]
+                    and (
+                        other["discriminative_power"] > sample["discriminative_power"]
+                        or other["stability"] > sample["stability"]
+                    )
+                ):
+                    dominated = True
+                    break
+            if not dominated:
+                pareto.append(sample)
+        pareto.sort(key=lambda x: x["discriminative_power"], reverse=True)
+        logger.info("Found %d Pareto-optimal configurations", len(pareto))
+        return pareto[:10]
 
     def recompute_with_strategy(self, strategy: str) -> Dict[str, Any]:
         """Recompute weights using specified strategy."""
@@ -293,32 +285,143 @@ class SNQIWeightRecomputer:
         return results
 
 
-def load_episodes_data(file_path: Path) -> List[Dict]:
-    """Load episode data from JSONL file."""
-    episodes = []
-    with open(file_path, "r", encoding="utf-8") as f:
+def load_episodes_data(path: Path) -> List[Dict[str, Any]]:
+    episodes: list[dict[str, Any]] = []
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line:
-                try:
-                    episodes.append(json.loads(line))
-                except json.JSONDecodeError as e:
-                    logger.warning("Skipping invalid JSON line: %s", e)
-    logger.info("Loaded %d episodes from %s", len(episodes), file_path)
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if isinstance(obj, dict):
+                    episodes.append(obj)
+            except json.JSONDecodeError:
+                logger.warning("Skipping invalid JSON line in %s", path)
     return episodes
 
 
-def load_baseline_stats(file_path: Path) -> Dict[str, Dict[str, float]]:
-    """Load baseline statistics from JSON file."""
-    with open(file_path, "r", encoding="utf-8") as f:
-        stats = json.load(f)
-    logger.info("Loaded baseline statistics from %s", file_path)
-    return stats
+def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("Baseline stats must be a JSON object")
+    return data  # type: ignore[return-value]
 
 
-def main():  # noqa: C901
-    _t_start_perf = perf_counter()
-    _t_start_iso = datetime.now(timezone.utc).isoformat()
+def _compute_strategy_set(
+    recomputer: SNQIWeightRecomputer, strategies: list[str]
+) -> Dict[str, Any]:
+    out: dict[str, Any] = {}
+    for name in strategies:
+        try:
+            out[name] = recomputer.recompute_with_strategy(name)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Strategy %s failed: %s", name, e)
+    return out
+
+
+def _select_recommended(strategy_results: Dict[str, Any]) -> tuple[str, Dict[str, float]]:
+    best_name: str | None = None
+    best_score = -float("inf")
+    for name, data in strategy_results.items():
+        stats = data.get("statistics", {}).get("overall", {})
+        rng = float(stats.get("range", 0.0) or 0.0)
+        std = float(stats.get("std", 0.0) or 0.0)
+        score = rng * 0.6 + (1.0 / (1.0 + std)) * 0.4
+        if score > best_score:
+            best_score = score
+            best_name = name
+    if best_name is None:
+        return "", {k: 1.0 for k in WEIGHT_NAMES}
+    return best_name, dict(strategy_results[best_name]["weights"])  # copy
+
+
+def _augment_metadata(
+    results: Dict[str, Any], args: argparse.Namespace, start_iso: str, start_perf: float
+) -> None:
+    def _git_commit() -> str:
+        try:
+            return (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
+            )
+        except Exception:  # noqa: BLE001
+            return "UNKNOWN"
+
+    end_perf = perf_counter()
+    end_iso = datetime.now(timezone.utc).isoformat()
+    runtime = end_perf - start_perf
+    results["_metadata"] = {
+        "schema_version": 1,
+        "generated_at": end_iso,
+        "git_commit": _git_commit(),
+        "seed": args.seed,
+        "start_time": start_iso,
+        "end_time": end_iso,
+        "runtime_seconds": runtime,
+        "provenance": {
+            "episodes_file": str(args.episodes),
+            "baseline_file": str(args.baseline),
+            "invocation": "python " + " ".join(sys.argv),
+            "strategy_requested": args.strategy,
+            "compare_strategies": args.compare_strategies,
+            "compare_normalization": args.compare_normalization,
+        },
+    }
+    # summary filled later after recommended weights known
+
+
+def _finalize_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
+    if args.compare_strategies:
+        method_descriptor = results.get("recommended_strategy")
+    else:
+        method_descriptor = results.get("strategy_result", {}).get("strategy", args.strategy)
+    meta = results.get("_metadata", {})
+    results["summary"] = {
+        "method": method_descriptor,
+        "weights": results.get("recommended_weights"),
+        "compare_strategies": args.compare_strategies,
+        "compare_normalization": args.compare_normalization,
+        "seed": args.seed,
+        "has_normalization_comparison": bool(results.get("normalization_comparison")),
+        "runtime_seconds": meta.get("runtime_seconds"),
+        "start_time": meta.get("start_time"),
+        "end_time": meta.get("end_time"),
+    }
+
+
+def _print_summary(results: Dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
+    print("\nWeight Recomputation Summary:")
+    print(f"Episodes analyzed: {episodes_count}")
+    if args.compare_strategies:
+        print(f"Recommended strategy: {results.get('recommended_strategy')}")
+        if "strategy_correlations" in results:
+            sorted_corrs = sorted(
+                results["strategy_correlations"].items(), key=lambda x: x[1], reverse=True
+            )
+            print("Strategy correlations (top 3):")
+            for pair, corr in sorted_corrs[:3]:
+                print(f"  {pair}: {corr:.4f}")
+    else:
+        print(f"Strategy used: {args.strategy}")
+    print("\nRecommended Weights:")
+    for w, v in (results.get("recommended_weights") or {}).items():
+        print(f"  {w}: {float(v):.3f}")
+    if args.compare_normalization and "normalization_comparison" in results:
+        print("\nNormalization Strategy Impact:")
+        for name, data in results["normalization_comparison"].items():
+            if name == "median_p95":
+                continue
+            corr = data.get("correlation_with_base")
+            if corr is not None:
+                print(f"  {name}: correlation with base = {corr:.4f}")
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SNQI Weight Recomputation")
     parser.add_argument(
         "--episodes", type=Path, required=True, help="Path to episode data JSONL file"
@@ -336,139 +439,62 @@ def main():  # noqa: C901
         "--output", type=Path, required=True, help="Output path for recomputed weights JSON"
     )
     parser.add_argument(
-        "--compare-normalization",
-        action="store_true",
-        help="Also compare different normalization strategies",
+        "--compare-normalization", action="store_true", help="Compare normalization strategies"
     )
     parser.add_argument(
         "--compare-strategies", action="store_true", help="Compare all available strategies"
     )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Random seed for reproducibility (applies to stochastic sampling in strategies like pareto)",
-    )
-    parser.add_argument(
-        "--validate",
-        action="store_true",
-        help="Validate JSON output structure and numeric finiteness before writing",
-    )
+    parser.add_argument("--seed", type=int, default=None, help="Random seed")
+    parser.add_argument("--validate", action="store_true", help="Validate JSON output structure")
+    return parser.parse_args(argv)
 
-    args = parser.parse_args()
 
-    # Load data
+def run(args: argparse.Namespace) -> int:  # noqa: C901
+    start_perf = perf_counter()
+    start_iso = datetime.now(timezone.utc).isoformat()
     try:
         episodes = load_episodes_data(args.episodes)
-        baseline_stats = load_baseline_stats(args.baseline)
-    except FileNotFoundError as e:
-        logger.error("File not found: %s", e)
+        baseline = load_baseline_stats(args.baseline)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Failed loading inputs: %s", e)
         return 1
-    except Exception as e:
-        logger.error("Error loading data: %s", e)
+    if not episodes:
+        logger.error("No episodes loaded from %s", args.episodes)
         return 1
-
-    # Apply seed if provided
     if args.seed is not None:
         np.random.seed(args.seed)
-
-    # Initialize recomputer
-    recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
-
-    results = {}
-
+    recomputer = SNQIWeightRecomputer(episodes, baseline)
+    results: Dict[str, Any] = {}
     if args.compare_strategies:
-        # Compare all strategies
-        logger.info("Comparing all weight strategies")
         all_strategies = ["default", "balanced", "safety_focused", "efficiency_focused", "pareto"]
-        strategy_results = {}
-
-        for strategy in all_strategies:
-            try:
-                strategy_result = recomputer.recompute_with_strategy(strategy)
-                strategy_results[strategy] = strategy_result
-            except Exception as e:
-                logger.warning("Failed to compute strategy %s: %s", strategy, e)
-
+        strategy_results = _compute_strategy_set(recomputer, all_strategies)
         results["strategy_comparison"] = strategy_results
-
-        # Compute correlations between strategies
-        correlations = {}
-        strategy_names = list(strategy_results.keys())
-        for i, strategy1 in enumerate(strategy_names):
-            for strategy2 in strategy_names[i + 1 :]:
-                weights1 = strategy_results[strategy1]["weights"]
-                weights2 = strategy_results[strategy2]["weights"]
-                corr = recomputer.rank_correlation_analysis(weights1, weights2)
-                correlations[f"{strategy1}_vs_{strategy2}"] = corr
-
+        # correlations
+        correlations: dict[str, float] = {}
+        names = list(strategy_results.keys())
+        for i, n1 in enumerate(names):
+            for n2 in names[i + 1 :]:
+                try:
+                    correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
+                        strategy_results[n1]["weights"], strategy_results[n2]["weights"]
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("Correlation %s vs %s failed: %s", n1, n2, e)
         results["strategy_correlations"] = correlations
-
-        # Select recommended strategy
-        best_strategy = None
-        best_score = -float("inf")
-
-        for strategy_name, strategy_data in strategy_results.items():
-            # Score based on discriminative power and stability
-            stats = strategy_data["statistics"]["overall"]
-            score = stats["range"] * 0.6 + (1.0 / (1.0 + stats["std"])) * 0.4
-
-            if score > best_score:
-                best_score = score
-                best_strategy = strategy_name
-
-        results["recommended_strategy"] = best_strategy
-        results["recommended_weights"] = strategy_results[best_strategy]["weights"]
-
+        recommended_name, recommended_weights = _select_recommended(strategy_results)
+        results["recommended_strategy"] = recommended_name
+        results["recommended_weights"] = recommended_weights
     else:
-        # Single strategy
-        result = recomputer.recompute_with_strategy(args.strategy)
-        results["strategy_result"] = result
-        results["recommended_weights"] = result["weights"]
-
+        single = recomputer.recompute_with_strategy(args.strategy)
+        results["strategy_result"] = single
+        results["recommended_weights"] = single["weights"]
     # Normalization comparison
     if args.compare_normalization:
-        weights_for_norm = results["recommended_weights"]
-        norm_results = recomputer.compare_normalization_strategies(weights_for_norm)
-        results["normalization_comparison"] = norm_results
-
-    # Augment results with metadata
-    def _git_commit() -> str:
-        try:
-            return (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
-                )
-                .decode()
-                .strip()
-            )
-        except Exception:
-            return "UNKNOWN"
-
-    _t_end_perf = perf_counter()
-    _t_end_iso = datetime.now(timezone.utc).isoformat()
-    _runtime_seconds = _t_end_perf - _t_start_perf
-
-    results_meta = {
-        "schema_version": 1,
-        "generated_at": _t_end_iso,
-        "git_commit": _git_commit(),
-        "seed": args.seed,
-        "start_time": _t_start_iso,
-        "end_time": _t_end_iso,
-        "runtime_seconds": _runtime_seconds,
-        "provenance": {
-            "episodes_file": str(args.episodes),
-            "baseline_file": str(args.baseline),
-            "invocation": "python " + " ".join(sys.argv),
-            "strategy_requested": args.strategy,
-            "compare_strategies": args.compare_strategies,
-            "compare_normalization": args.compare_normalization,
-        },
-    }
-    results["_metadata"] = results_meta
-
-    # Validation & finiteness checks
+        results["normalization_comparison"] = recomputer.compare_normalization_strategies(
+            results["recommended_weights"]
+        )
+    _augment_metadata(results, args, start_iso, start_perf)
+    _finalize_summary(results, args)
     try:
         if args.validate:
             validate_snqi(results, "recompute", check_finite=True)
@@ -477,61 +503,18 @@ def main():  # noqa: C901
     except ValueError as e:
         logger.error("Validation failed: %s", e)
         return 1
-
-    # Standardized summary block (after validation of structure, before save)
-    if args.compare_strategies:
-        method_descriptor = results.get("recommended_strategy")
-    else:
-        method_descriptor = results.get("strategy_result", {}).get("strategy", args.strategy)
-
-    results["summary"] = {
-        "method": method_descriptor,
-        "weights": results.get("recommended_weights"),
-        "compare_strategies": args.compare_strategies,
-        "compare_normalization": args.compare_normalization,
-        "seed": args.seed,
-        "has_normalization_comparison": bool(results.get("normalization_comparison")),
-        "runtime_seconds": _runtime_seconds,
-        "start_time": _t_start_iso,
-        "end_time": _t_end_iso,
-    }
-
-    # Save results after validation
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
-
     logger.info("Results saved to %s", args.output)
-
-    # Print summary
-    print("\nWeight Recomputation Summary:")
-    print(f"Episodes analyzed: {len(episodes)}")
-
-    if args.compare_strategies:
-        print(f"Recommended strategy: {results['recommended_strategy']}")
-        print("Strategy correlations (top 3):")
-        sorted_corrs = sorted(
-            results["strategy_correlations"].items(), key=lambda x: x[1], reverse=True
-        )
-        for pair, corr in sorted_corrs[:3]:
-            print(f"  {pair}: {corr:.4f}")
-    else:
-        print(f"Strategy used: {args.strategy}")
-
-    print("\nRecommended Weights:")
-    for weight_name, value in results["recommended_weights"].items():
-        print(f"  {weight_name}: {value:.3f}")
-
-    if args.compare_normalization:
-        print("\nNormalization Strategy Impact:")
-        norm_results = results["normalization_comparison"]
-        for strategy, data in norm_results.items():
-            if strategy != "median_p95":
-                corr = data["correlation_with_base"]
-                print(f"  {strategy}: correlation with base = {corr:.4f}")
-
+    _print_summary(results, args, len(episodes))
     return 0
 
 
-if __name__ == "__main__":
-    exit(main())
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover
+    args = parse_args(argv)
+    return run(args)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

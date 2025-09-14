@@ -32,7 +32,6 @@ dependencies = [
     "pillow>=10.4.0",
     "svgelements>=1.9.6",
     # Utilities
-    "tqdm>=4.67.0",
     "loguru>=0.7.2",
     "rich>=13.9.4",
     "psutil>=6.1.0",
@@ -47,7 +46,6 @@ dependencies = [
     "setuptools>=70.0.0",
     "pysocialforce",
     "jsonschema>=4.23.0",
-    "seaborn>=0.13.2",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +60,14 @@ gpu = [
 docs = [
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
+]
+progress = [
+    "tqdm>=4.67.0",
+]
+analysis = [
+    "seaborn>=0.13.2",
+    "matplotlib>=3.9.2",
+    "pandas>=2.2.3",
 ]
 
 [build-system]

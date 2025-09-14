@@ -2915,7 +2915,6 @@ dependencies = [
     { name = "scalene" },
     { name = "scikit-learn" },
     { name = "scipy" },
-    { name = "seaborn" },
     { name = "setuptools" },
     { name = "shimmy" },
     { name = "stable-baselines3", extra = ["extra"] },
@@ -2923,11 +2922,15 @@ dependencies = [
     { name = "tensorboard" },
     { name = "toml" },
     { name = "torch" },
-    { name = "tqdm" },
     { name = "wandb" },
 ]
 
 [package.optional-dependencies]
+analysis = [
+    { name = "matplotlib" },
+    { name = "pandas" },
+    { name = "seaborn" },
+]
 dev = [
     { name = "black" },
     { name = "jupyter" },
@@ -2940,6 +2943,9 @@ docs = [
 ]
 gpu = [
     { name = "torch" },
+]
+progress = [
+    { name = "tqdm" },
 ]
 
 [package.dev-dependencies]
@@ -2956,12 +2962,14 @@ requires-dist = [
     { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "matplotlib", specifier = ">=3.9.2" },
+    { name = "matplotlib", marker = "extra == 'analysis'", specifier = ">=3.9.2" },
     { name = "moviepy", specifier = ">=2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "numba", specifier = ">=0.60.0" },
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "optuna", specifier = ">=4.1.0" },
     { name = "pandas", specifier = ">=2.2.3" },
+    { name = "pandas", marker = "extra == 'analysis'", specifier = ">=2.2.3" },
     { name = "pillow", specifier = ">=10.4.0" },
     { name = "pre-commit", specifier = ">=4.1.0" },
     { name = "psutil", specifier = ">=6.1.0" },
@@ -2973,7 +2981,7 @@ requires-dist = [
     { name = "scalene", specifier = ">=1.5.48" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "scipy", specifier = ">=1.14.1" },
-    { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "seaborn", marker = "extra == 'analysis'", specifier = ">=0.13.2" },
     { name = "setuptools", specifier = ">=70.0.0" },
     { name = "shimmy", specifier = ">=2.0.0" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=7.0.0" },
@@ -2984,7 +2992,7 @@ requires-dist = [
     { name = "toml", specifier = ">=0.10.2" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "torch", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=2.5.1" },
-    { name = "tqdm", specifier = ">=4.67.0" },
+    { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.67.0" },
     { name = "wandb", specifier = ">=0.18.7" },
 ]
 

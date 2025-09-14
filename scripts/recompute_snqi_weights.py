@@ -408,6 +408,8 @@ def _augment_metadata(
     start_iso: str,
     start_perf: float,
     phase_timings: dict[str, float] | None = None,
+    original_episode_count: int | None = None,
+    used_episode_count: int | None = None,
 ) -> None:
     def _git_commit() -> str:
         try:
@@ -441,6 +443,10 @@ def _augment_metadata(
             "compare_normalization": args.compare_normalization,
         },
     }
+    if original_episode_count is not None:
+        meta["original_episode_count"] = original_episode_count
+    if used_episode_count is not None:
+        meta["used_episode_count"] = used_episode_count
     if phase_timings:
         meta["phase_timings"] = {k: phase_timings[k] for k in sorted(phase_timings)}
     results["_metadata"] = meta
@@ -541,6 +547,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Treat presence of baseline-missing metrics as an error (non-zero exit)",
     )
+    parser.add_argument(
+        "--sample",
+        type=int,
+        default=None,
+        help="Deterministically sample N episodes prior to analysis (for speed)",
+    )
     return parser.parse_args(argv)
 
 
@@ -603,6 +615,17 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     if not episodes:
         logger.error("No episodes loaded from %s", args.episodes)
         return EXIT_INPUT_ERROR
+    original_episode_count = len(episodes)
+    if args.sample is not None and args.sample > 0 and args.sample < len(episodes):
+        rng = np.random.default_rng(args.seed if args.seed is not None else 1337)
+        idx = rng.choice(len(episodes), size=args.sample, replace=False)
+        episodes = [episodes[i] for i in sorted(idx.tolist())]
+        logger.info(
+            "Sampled %d/%d episodes (--sample) for recomputation",
+            len(episodes),
+            original_episode_count,
+        )
+    used_episode_count = len(episodes)
     if args.seed is not None:
         np.random.seed(args.seed)
     try:
@@ -687,7 +710,15 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 ),
             }
             phase_timings["external_weights_eval"] = perf_counter() - phase_start
-        _augment_metadata(results, args, start_iso, start_perf, phase_timings)
+        _augment_metadata(
+            results,
+            args,
+            start_iso,
+            start_perf,
+            phase_timings,
+            original_episode_count=original_episode_count,
+            used_episode_count=used_episode_count,
+        )
         # Record skipped malformed lines
         results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
         # Record missing metric count in metadata for summary consumption

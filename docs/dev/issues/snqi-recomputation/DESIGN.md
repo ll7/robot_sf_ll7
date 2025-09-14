@@ -41,168 +41,183 @@ Each line: JSON object with minimal structure:
   "scenario_params": { ... optional ... }
 }
 ```
-Malformed lines: skipped; count may be exposed in future UX improvement.
-
-### 5.2 baseline_stats.json (input)
-```
-{
-  "collisions": {"med": float, "p95": float},
-  "near_misses": {"med": float, "p95": float},
-  "force_exceed_events": {"med": float, "p95": float},
-  "jerk_mean": {"med": float, "p95": float}
-}
-```
-Values used for median/p95 scaling. Missing keys cause score terms to fallback (currently neutral weighting) or raise in future tightening.
-
-### 5.3 optimization output (JSON)
-Root object contains:
-- `_metadata`: schema_version, generated_at (UTC ISO), git_commit, seed, start_time, end_time, runtime_seconds, provenance (files, invocation, method_requested)
-- `grid_search`, `differential_evolution` (optional depending on method) each with: weights, objective_value, ranking_stability, convergence_info
-- `recommended`: chosen method summary (weights, objective_value, ranking_stability, method_used)
-- `sensitivity_analysis` (optional)
-- `summary`: method, weights, runtime_seconds, start_time, end_time, available_methods
-
-### 5.4 recompute output (JSON)
-- `_metadata`: as above (strategy_requested, compare flags in provenance)
-- `strategy_result` or `strategy_comparison`
-- `recommended_weights`
-- `normalization_comparison` (optional)
-- `summary`: method, weights, compare flags, runtime_seconds, start_time, end_time
-
-## 6. SNQI Computation (Canonical)
-Implemented in `robot_sf/benchmark/snqi/compute.py`:
-- Takes raw metrics + weight dict + baseline stats.
-- Normalizes selected metrics using median/p95: `norm = clamp((value - med) / (p95 - med), 0, 1)` with safe division (epsilon if p95≈med).
-- Aggregates weighted sum: higher success & lower penalties -> higher SNQI.
-- Finiteness enforced before serialization.
-
-## 7. Weight Strategies (Recompute)
-- default, balanced, safety_focused, efficiency_focused, pareto.
-- Pareto strategy: heuristic sampling of weight vectors; frontier filtered by discriminative power (std) vs stability heuristic.
-- Placeholder `pareto_efficiency` slated for removal or replacement with a true dominance score.
-
-## 8. Optimization Objective
-Objective (minimized) = negative weighted combination of ranking stability (0.6) and discriminative power (0.4). Stability heuristic currently uses variance/score patterns; future refinement may adopt bootstrap rank correlation averages.
-
-## 9. Reproducibility & Seeding
-- `--seed` seeds NumPy; passed into SciPy differential evolution.
-- Pareto sampling & random components deterministic under same seed.
-- Metadata records seed + git commit.
-- Remaining nondeterminism: potential SciPy parallel RNG differences (document). Future: add note if thread pool engaged.
-
-## 10. Error Modes & Fallbacks
-| Condition | Current Handling | Planned Improvement |
-|-----------|------------------|---------------------|
-| Missing episode metrics | Treat absent metrics as neutral (skip term) | Log warning & optional `--fail-on-missing-metric` |
-| Malformed JSONL line | Skip silently (warn logged) | Count + summary report |
-| Empty episodes file | Exit(1) with error log | Same |
-| Missing baseline metric | KeyError propagates | Pre-validate & friendly message |
-| NaN / inf in metrics | Detected by finiteness assertion | Provide field path in error |
-| Excessive grid size | Long runtime | Add proactive guard |
-
-## 11. Performance Characteristics
-- Grid search complexity: O(R^d). R=5, d=7 => 78,125 evals; borderline but tolerable with fast scoring. Guard recommended.
-- Differential evolution typical runtime scales with popsize*maxiter.
-- Sensitivity analysis linear in N_episodes * N_weights * 2 directions.
-- Normalization comparison adds O(S*N_episodes) where S = alt strategies.
-
-## 12. Testing Strategy
-Implemented:
-- Parity vs canonical compute
-- Schema + finiteness validation
-- Deterministic optimization & Pareto sampling
-- Strategy structure & weight ranges
-- Missing optional metrics resilience
-- Malformed JSONL skipping
-- Normalization comparison correlations
-- CLI invocation tests (optimization & recompute)
-Planned:
-- Sensitivity monotonic correlation test
-- Snapshot/schema regression (jsonschema or structural assertion harness)
-
-## 13. Future Enhancements
-- Unified CLI (`robot_sf_bench snqi ...`)
-- Bootstrap-based stability metric
-- Replace heuristic stability/dominance scoring for Pareto
-- Constrain or normalize weight vector (simplex projection option)
-- Weight file external schema validation for reuse
-- Progress indicators via `tqdm`
-- Episode sampling & early stopping
-
-## 14. Risks & Mitigations
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Heuristic stability not robust | Misleading weight selection | Introduce bootstrap rank correlation variant |
-| Large grids freeze session | Developer time waste | Grid size guard + warning |
-| Schema drift unnoticed | Downstream breakage | Snapshot/schema regression tests |
-| Silent metric omissions | Biased scores | Add aggregated warning + fail toggle |
-| Pareto heuristic unstable | Inconsistent weights | Seed + eventually true MOEA |
-
-## 15. Open Questions
-- Should weight outputs be versioned & stored under `model/weights/`?
-- How strict should baseline schema be (hard fail vs soft warn)?
-- Adopt jsonschema dependency or keep lightweight validator?
-
-## 16. Appendix: Proposed Grid Guard
-If `grid_resolution ** n_weights > 200000`: log warning and require `--force-grid` or reduce resolution automatically (document behavior).
-
-## 17. Appendix: Potential Stability Redefinition
-```
-For B bootstrap resamples:
-  For each resample: compute ranking vector r_b
-Stability = average pairwise Spearman(r_b, r_{b'}) over all b<b'
-```
-Expensive; can approximate with subset of pairs.
-
----
-Generated: Initial draft (to be iterated as implementation progresses)# SNQI Weight Recomputation & Sensitivity Analysis
-
-> Status: In Progress (core refactor & parity test completed)
-> Related PR: #175  
-> Related Issue: #174
+# SNQI Weight Optimization & Recomputation – Design Document
 
 ## 1. Context
-The Social Navigation Quality Index (SNQI) aggregates multiple navigation performance and safety metrics (success, time, collisions, near misses, comfort / force exposure, jerk) into a single scalar score used to compare algorithms. The initial implementation (PR #169) provided the formula but lacked:
-- A principled process for (re)computing weights
-- Sensitivity / robustness evaluation
-- Optimization tooling and reproducible workflows
+The Social Navigation Quality Index (SNQI) aggregates task success and social safety / comfort metrics into a single scalar score for benchmarking navigation policies. Earlier iterations duplicated logic, lacked schema guarantees, and provided limited provenance. The refactor introduces canonical computation, weight optimization (grid + differential evolution), recomputation with strategy comparison, normalization sensitivity, and external weight validation.
 
-PR #175 introduces standalone scripts for weight recomputation, optimization, and sensitivity analysis. This design doc formalizes the architecture, contracts, and planned improvements required to meet the repository's Definition of Done.
+Related PR: #175  
+Checklist: `README.md` in this directory.
 
 ## 2. Goals
-- Provide reproducible tooling to derive and analyze SNQI weights
-- Support multiple strategies (preset, Pareto-like sampling, optimization, sensitivity sweeps)
-- Ensure stability (ranking robustness) and discriminative power (score variance) are measurable and tunable
-- Enable integration with the existing benchmark CLI and data pipeline
-- Make outputs machine-consumable with stable JSON schema and provenance metadata
+- Canonical, reusable SNQI computation & normalization.
+- Deterministic (seeded) optimization & strategy evaluation with reproducible metadata.
+- Extensible JSON schema (versioned) + finiteness & structural validation.
+- Modular scripts ready for future unified CLI (`robot_sf_bench snqi ...`).
+- Comprehensive tests (parity, determinism, strategies, normalization comparison, CLI, external weights validation).
 
-## 3. Non-Goals
-- Redesign of the underlying raw episode metric collection pipeline
-- Replacement of SNQI with a fundamentally different composite metric
-- Full multi-objective optimization research (e.g., full NSGA-II implementation) in this iteration
-- Real-time / on-policy adaptive weight tuning
+## 3. Non‑Goals (Initial Scope)
+- Full multi‑objective algorithms (NSGA-II) – deferred.
+- Bootstrap confidence intervals / robust stability – deferred.
+- Real-time visualization UI.
+- Immediate integration into global benchmark CLI (planned follow-up).
 
 ## 4. Constraints & Assumptions
-- Episode data provided as JSONL with a `metrics` object and optional `scenario_params.algo`
-- Baseline normalization uses median/p95; alternative normalizations may be explored but median/p95 remains canonical for now
-- Scripts must run headless (visualizations optional) and avoid hard dependencies on plotting libraries
-- Determinism required when seed provided
-- Performance acceptable if typical workflows complete < ~5 minutes on ~1–5k episodes
+- Lightweight deps: NumPy (+ SciPy for differential evolution) only.
+- Positive weights semantics maintained; penalties subtract from success term.
+- Episode metrics may be partially missing; tool must not crash.
+- Baseline stats (median/p95) externally supplied; absent baseline metric => neutral effect (0 normalized) currently.
+- Execution target: <60s for moderate grid on small dataset (~50 episodes).
 
-## 5. Current Pain Points / Gaps
-(From gap analysis — updated after Phase 1 refactor)
-- (Resolved) Duplicated SNQI calculation across scripts → consolidated in `robot_sf/benchmark/snqi/compute.py`.
-- (Partially resolved) Lack of design doc → skeleton + updated status; still need full expansion (Sections 8–14 elaboration & rationale expansions pending).
-- (Open) Ad hoc formulas for stability / Pareto selection (heuristic still in use; bootstrap stability planned).
-- (Resolved) Seeding / reproducibility controls: `--seed` flag + unified `_metadata` (schema_version, generated_at, git_commit, seed, provenance) added to all scripts (remaining: formally seed SciPy DE & test determinism).
-- (Open) Benchmark CLI integration.
-- (Resolved) Validation that scripts compute canonical SNQI: parity test `tests/test_snqi_parity.py` added.
+## 5. Data & File Contracts
+### 5.1 Episodes JSONL
+Line‑delimited JSON objects: `{"scenario_id": str, "metrics": {...}, "scenario_params": {... optional ...}}`  
+Notable fields (optional unless noted): success, time_to_goal_norm, collisions, near_misses, comfort_exposure, force_exceed_events, jerk_mean.  
+Malformed lines are skipped (warning logged; aggregate count future enhancement).
 
-## 6. Options & Trade-offs
-### 6.1 Weight Derivation Approaches
-| Approach | Pros | Cons |
-|----------|------|------|
-| Preset (hand-tuned) | Simple, transparent | Subjective, may not generalize |
+### 5.2 Baseline Stats JSON
+Mapping: metric -> {"med": float, "p95": float}. Used in median/p95 clamp normalization. Missing key => metric contributes 0.
+
+### 5.3 External / Initial Weights JSON
+All `WEIGHT_NAMES` present with finite positive floats. Extraneous keys ignored with warning. Validated via `validate_weights_mapping`.
+
+### 5.4 Optimization Output Schema (Kind: optimization)
+```
+{
+  "recommended": {"weights": {...}, "objective_value": float, "ranking_stability": float, "method_used": str},
+  "grid_search"?: {"weights": {...}, "objective_value": float, "ranking_stability": float, "convergence_info": {...}},
+  "differential_evolution"?: {...},
+  "sensitivity_analysis"?: { weight: {"score_sensitivity": float, ...}},
+  "initial_weights"?: { ... },
+  "_metadata": {"schema_version":1, "generated_at": iso, "git_commit": str, "seed": int|null, "provenance": {...}},
+  "summary": {"method": str, "objective_value": float, "ranking_stability": float, "weights": {...}, "has_sensitivity": bool, "runtime_seconds": float, ... }
+}
+```
+
+### 5.5 Recompute Output Schema (Kind: recompute)
+```
+{
+  "recommended_weights": {...},
+  "strategy_result"?: {"strategy": str, "weights": {...}, "statistics": {...}},
+  "strategy_comparison"?: { strategy: {"weights": {...}, "statistics": {...}} },
+  "strategy_correlations"?: {"a_vs_b": float},
+  "recommended_strategy"?: str,
+  "external_weights"?: {"weights": {...}, "statistics": {...}, "correlation_with_recommended": float},
+  "normalization_comparison"?: { baseline_variant: {"mean_score": float, "correlation_with_base": float } },
+  "_metadata": {...},
+  "summary": {"method": str, "weights": {...}, "runtime_seconds": float, ...}
+}
+```
+
+### 5.6 Weight Names
+`[w_success, w_time, w_collisions, w_near, w_comfort, w_force_exceed, w_jerk]`
+
+## 6. Canonical SNQI Computation
+Located in `robot_sf/benchmark/snqi/compute.py`. Normalization: `(value - med) / (p95 - med)` guarded & clamped to [0,1]. Score: success positive; all other terms negative contributions scaled by weights.
+
+## 7. Strategies (Recompute)
+- default, balanced, safety_focused, efficiency_focused, pareto.
+- Pareto: random sampling (bounded 600) -> non‑dominated filtering over `(std, stability_proxy)` -> top 10 by discriminative power. Deterministic with seed.
+Placeholder fields removed (no synthetic `pareto_efficiency`).
+
+## 8. Optimization Objective
+`maximize 0.6 * stability + 0.4 * discriminative_power` implemented as negated minimization.  
+Stability: Spearman between algorithm groups if ≥2 groups else variance‑derived fallback.  
+Discriminative power: variance (normalized) of SNQI scores.
+
+## 9. External Weight Validation
+`weights_validation.py` enforces completeness, finiteness, positivity, warns on extraneous keys and unusually large values (>10).
+
+## 10. Reproducibility & Seeding
+`--seed` -> NumPy RNG & SciPy DE seed argument. Pareto & sampled grid reuse deterministic RNG. Metadata records seed + git commit. Residual nondeterminism: internal SciPy parallel evaluation order.
+
+## 11. Error Modes & Fallbacks
+| Condition | Current Behavior | Planned Improvement |
+|-----------|------------------|---------------------|
+| Missing weight key | Abort validation | — |
+| Non-numeric / non-finite weight | Abort | — |
+| Extraneous weight key | Warn ignore | Add to metadata (future) |
+| Malformed JSONL line | Warn skip | Aggregate count in summary |
+| Empty episodes | Abort (exit 1) | Distinct exit code |
+| Missing baseline metric | Silent neutral (0) | Warn / optional fail |
+| NaN/Inf produced | Finiteness assertion error | Field path already provided |
+| Grid explosion | Adaptive shrink + sample | Expose stats in summary |
+
+## 12. Performance & Scaling
+| Component | Complexity | Mitigation |
+|----------|-----------|------------|
+| Grid search | O(R^d) | Adaptive shrink + sampling when > threshold |
+| Diff. evolution | Iter * Pop | Bounded `--maxiter` |
+| Pareto sampling | O(Samples) | Cap 600; early stop possible future |
+| Sensitivity | O(Episodes * Weights) | Lightweight scalar operations |
+
+## 13. Testing Summary
+Implemented: parity, schema+finite, deterministic Pareto, strategies structure, normalization comparison, CLI (opt + recompute), missing optional metrics, external weight validation. Pending: sensitivity monotonic test, schema snapshot regression.
+
+## 14. Methodology Enhancements (Planned)
+- Bootstrap stability (average pairwise Spearman of resamples).
+- True multi-objective frontier via NSGA-II.
+- Weight simplex constraint mode.
+- Objective component breakdown in output.
+- Episode weighting support.
+- Early stopping for evolution.
+- Confidence intervals around SNQI.
+
+## 15. Open Questions
+- Should validated recommended weights be version-controlled under `model/`?  
+- Adopt machine-readable JSON schema artifact or maintain lightweight validator only?  
+- How to parameterize acceptable weight ranges (e.g., dynamic warnings)?
+
+## 16. Risks & Mitigations
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Heuristic stability biased | Suboptimal weights | Replace with bootstrap metric |
+| Sampling variance in Pareto | Frontier instability | Seed + consider MOEA |
+| Schema drift | Consumer breakage | Add snapshot/schema tests |
+| Silent baseline gaps | Skewed scores | Pre-validation & warnings |
+
+## 17. Future Observability
+- Phase timing (parse/opt/finalize) with `--verbose`.
+- Count & report skipped JSONL lines.
+- Emit objective breakdown (stability vs discriminative_power).
+
+## 18. Security & Safety
+Pure JSON input, no code execution. Validation prevents NaN/Inf propagation. External weights cannot inject code.
+
+## 19. Compatibility Strategy
+`schema_version` increments on breaking shape changes. Extraneous weight keys ignored to allow forward addition. Consumer code should check version.
+
+## 20. Appendix
+### 20.1 Grid Search Guard Pseudocode
+```
+while grid_res**n_weights > max_combos and grid_res > 2:
+    grid_res -= 1
+if grid_res**n_weights still > max_combos:
+    sample = rng.choice(grid_points, size=(max_combos, n_weights))
+```
+### 20.2 Pareto Sampling Pseudocode
+```
+for i in range(N):
+  w ~ U(0.1,3.0)^d
+  scores = snqi(w)
+  disc = std(scores)
+  stab = 1/(1+|disc-0.5|)
+  keep (w, disc, stab)
+filter non-dominated -> sort by disc desc -> top 10
+```
+### 20.3 Potential Bootstrap Stability
+```
+for b in 1..B:
+  sample episodes with replacement
+  compute ranking vector r_b
+stability = mean_{b<b'} Spearman(r_b, r_{b'})
+```
+
+## 21. Summary
+Current implementation establishes a reproducible, validated baseline for SNQI weight exploration. Next priority: formalize bootstrap stability & richer error/UX reporting, then unify into a subcommand CLI.
+
+---
+Generated: Full design draft (supersedes prior partial draft).
 | Grid search | Exhaustive (small grids) | Exponential growth, slow for many dims |
 | Differential evolution | Handles continuous space | Stochastic, requires seeding & bounds |
 | Random sampling + Pareto filtering | Simple multi-criteria surface scan | Coverage quality depends on sample size |

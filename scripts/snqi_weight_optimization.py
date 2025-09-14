@@ -25,6 +25,9 @@ from scipy.optimize import differential_evolution
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
 from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
+from robot_sf.benchmark.snqi.weights_validation import (
+    validate_weights_mapping as _validate_weights_mapping,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -188,26 +191,12 @@ class SNQIWeightOptimizer:
         return results
 
 
-def validate_weights_mapping(weights: Dict[str, float]) -> None:
-    """Validate external weights mapping.
-
-    Ensures keys match WEIGHT_NAMES and values are finite positive numbers in a reasonable range.
-    """
-    missing = [k for k in WEIGHT_NAMES if k not in weights]
-    if missing:
-        raise ValueError(f"Missing weight keys: {missing}")
-    extraneous = [k for k in weights.keys() if k not in WEIGHT_NAMES]
-    if extraneous:
-        logger.warning("Extraneous weight keys will be ignored: %s", extraneous)
-    for k, v in weights.items():
-        try:
-            fv = float(v)
-        except Exception as e:  # noqa: BLE001
-            raise ValueError(f"Non-numeric weight for {k}: {v}") from e
-        if not np.isfinite(fv) or fv <= 0:
-            raise ValueError(f"Invalid weight value for {k}: {fv}")
-        if fv > 10:
-            logger.warning("Weight %s unusually large (%.3f) > 10", k, fv)
+def _load_initial_weights(path: Path) -> Dict[str, float]:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+    if not isinstance(raw, dict):  # pragma: no cover - defensive
+        raise ValueError("Initial weights file must be a JSON object")
+    return _validate_weights_mapping(raw)
 
 
 # ---------------------------- I/O helpers ---------------------------- #
@@ -345,6 +334,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     if args.seed is not None:
         np.random.seed(args.seed)
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
+    initial_weights: Dict[str, float] | None = None
+    if args.initial_weights_file is not None:
+        try:
+            initial_weights = _load_initial_weights(args.initial_weights_file)
+            logger.info("Loaded initial weights from %s", args.initial_weights_file)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed loading initial weights: %s", e)
+            return 1
     results: Dict[str, Any] = {}
     if args.method in ["grid", "both"]:
         grid_result = optimizer.grid_search_optimization(
@@ -367,6 +364,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             "convergence_info": evolution_result.convergence_info,
         }
     _select_best(results, args.method)
+    if initial_weights is not None:
+        results["initial_weights"] = initial_weights
     if args.sensitivity:
         recommended_weights = results["recommended"]["weights"]
         results["sensitivity_analysis"] = optimizer.sensitivity_analysis(recommended_weights)
@@ -410,6 +409,12 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         type=int,
         default=20000,
         help="Guard threshold for total grid combinations (adaptive shrink)",
+    )
+    parser.add_argument(
+        "--initial-weights-file",
+        type=Path,
+        default=None,
+        help="Path to JSON file containing initial/seed weights mapping (validated)",
     )
     return parser.parse_args(argv)
 

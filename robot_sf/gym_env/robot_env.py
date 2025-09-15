@@ -10,8 +10,11 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
+import hashlib
+import json
 from copy import deepcopy
-from typing import Callable
+from dataclasses import asdict, is_dataclass
+from typing import Callable, Optional
 
 from loguru import logger
 
@@ -24,13 +27,24 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.render.lidar_visual import render_lidar
-from robot_sf.render.sim_view import (
-    VisualizableAction,
-    VisualizableSimState,
-)
+from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import init_simulators
+
+
+# Helper to compute a stable, short hash for env_config
+# Placed near imports for reuse and clarity
+def _stable_config_hash(cfg: EnvSettings) -> str:
+    try:
+        payload = json.dumps(
+            asdict(cfg) if is_dataclass(cfg) else cfg.__dict__,
+            sort_keys=True,
+            default=str,
+        )
+    except Exception:  # pragma: no cover - defensive fallback
+        payload = repr(cfg)
+    return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest()
 
 
 class RobotEnv(BaseEnv):
@@ -46,9 +60,16 @@ class RobotEnv(BaseEnv):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: Optional[str] = None,
+        video_fps: Optional[float] = None,
         peds_have_obstacle_forces: bool = False,
+        # New JSONL recording parameters
+        use_jsonl_recording: bool = False,
+        recording_dir: str = "recordings",
+        suite_name: str = "robot_sim",
+        scenario_name: str = "default",
+        algorithm_name: str = "manual",
+        recording_seed: Optional[int] = None,
     ):
         """
         Initialize the Robot Environment.
@@ -71,6 +92,12 @@ class RobotEnv(BaseEnv):
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
+            use_jsonl_recording=use_jsonl_recording,
+            recording_dir=recording_dir,
+            suite_name=suite_name,
+            scenario_name=scenario_name,
+            algorithm_name=algorithm_name,
+            recording_seed=recording_seed,
         )
 
         # Initialize spaces based on the environment configuration and map
@@ -184,9 +211,20 @@ class RobotEnv(BaseEnv):
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
-        # if recording is enabled, save the recording and reset the state list
+
+        # Handle recording for both systems
         if self.recording_enabled:
-            self.save_recording()
+            if self.use_jsonl_recording:
+                # End previous episode if active, then start a new one
+                try:
+                    self.end_episode_recording()
+                except Exception:  # pragma: no cover - safe if none active
+                    pass
+                config_hash = _stable_config_hash(self.env_config)
+                self.start_episode_recording(config_hash=config_hash)
+            else:
+                # Legacy pickle recording
+                self.save_recording()
 
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
@@ -250,7 +288,9 @@ class RobotEnv(BaseEnv):
         Records the current state as visualizable state and stores it in the list.
         """
         state = self._prepare_visualizable_state()
-        self.recorded_states.append(state)
+
+        # Use the new unified recording method
+        self.record_simulation_step(state)
 
     def set_pedestrian_velocity_scale(self, scale: float = 1.0):
         """

@@ -4,6 +4,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 
 ## Contents
 - [Contents](#contents)
+- [Bootstrap Examples](#bootstrap-examples)
 - [Overview](#overview)
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
 - [Installation (uv)](#installation-uv)
@@ -15,8 +16,18 @@ This guide consolidates user‑facing documentation that was previously split ac
   - [Baseline Stats JSON](#baseline-stats-json)
   - [Weights JSON](#weights-json)
 - [Output JSON Schema (Summary)](#output-json-schema-summary)
-  - [Bootstrap Examples](#bootstrap-examples)
   - [Diagnostics Fields](#diagnostics-fields)
+- [External / Initial Weights](#external--initial-weights)
+- [Recommended Workflows](#recommended-workflows)
+  - [A. Establish Baseline \& Strategy Comparison](#a-establish-baseline--strategy-comparison)
+  - [B. Optimize Weights Then Validate](#b-optimize-weights-then-validate)
+  - [C. Evaluate External Weight Proposal](#c-evaluate-external-weight-proposal)
+- [Interpreting Results](#interpreting-results)
+- [Reproducibility \& Determinism](#reproducibility--determinism)
+- [Troubleshooting](#troubleshooting)
+- [Future Enhancements](#future-enhancements)
+- [Related Design Document](#related-design-document)
+- [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
 ## Bootstrap Examples
 Estimate stability and confidence intervals for the recommended weights.
 
@@ -52,6 +63,20 @@ Result JSON includes:
 
 Normalization details are documented in `docs/snqi-weight-tools/normalization.md`.
 
+- [Contents](#contents)
+- [Bootstrap Examples](#bootstrap-examples)
+- [Overview](#overview)
+  - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
+- [Installation (uv)](#installation-uv)
+- [Quick Start](#quick-start)
+- [Core Scripts \& Typical Tasks](#core-scripts--typical-tasks)
+- [CLI Arguments (Key Flags)](#cli-arguments-key-flags)
+- [Input Data Formats](#input-data-formats)
+  - [Episodes JSONL (one JSON object per line)](#episodes-jsonl-one-json-object-per-line)
+  - [Baseline Stats JSON](#baseline-stats-json)
+  - [Weights JSON](#weights-json)
+- [Output JSON Schema (Summary)](#output-json-schema-summary)
+  - [Diagnostics Fields](#diagnostics-fields)
 - [External / Initial Weights](#external--initial-weights)
 - [Recommended Workflows](#recommended-workflows)
   - [A. Establish Baseline \& Strategy Comparison](#a-establish-baseline--strategy-comparison)

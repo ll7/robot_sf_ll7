@@ -134,66 +134,36 @@ class TestPygameHeadless:
             elif "MPLBACKEND" in os.environ:
                 del os.environ["MPLBACKEND"]
 
-    def test_simulation_view_normal_vs_headless_mode(self):
-        """Test that SimulationView behaves differently in normal vs headless mode."""
+    def test_simulation_view_normal_vs_headless_mode(self, monkeypatch):
+        """Test that SimulationView behaves differently in normal vs headless mode.
 
-        # Test normal mode first (should use display when available)
-        original_display = os.environ.get("DISPLAY")
-        original_sdl_driver = os.environ.get("SDL_VIDEODRIVER")
-        original_mpl_backend = os.environ.get("MPLBACKEND")
+        We patch the headless detection to simulate both branches while keeping the
+        SDL dummy driver active to ensure no real window is created during tests.
+        """
+        from robot_sf.render.sim_view import SimulationView
 
-        try:
-            # Ensure we start in "normal" mode (no headless environment vars)
-            if "DISPLAY" in os.environ and os.environ["DISPLAY"] == "":
-                del os.environ["DISPLAY"]
-            if "SDL_VIDEODRIVER" in os.environ:
-                del os.environ["SDL_VIDEODRIVER"]
-            if "MPLBACKEND" in os.environ:
-                del os.environ["MPLBACKEND"]
+        pygame.quit()  # Reset pygame to avoid stale state
 
-            pygame.quit()  # Reset pygame
+        # Simulate "normal" mode (not headless)
+        monkeypatch.setattr(SimulationView, "_is_headless_environment", lambda self: False)
+        env_normal = make_robot_env(debug=True)
+        assert env_normal.sim_ui is not None
+        normal_screen = env_normal.sim_ui.screen
+        normal_size = normal_screen.get_size()
+        env_normal.exit()
 
-            # Create environment in normal mode
-            env_normal = make_robot_env(debug=True)
-            assert env_normal.sim_ui is not None
-            normal_screen = env_normal.sim_ui.screen
-            env_normal.exit()
+        # Simulate headless mode
+        monkeypatch.setattr(SimulationView, "_is_headless_environment", lambda self: True)
+        pygame.quit()  # Reset again
+        env_headless = make_robot_env(debug=True)
+        assert env_headless.sim_ui is not None
+        headless_screen = env_headless.sim_ui.screen
+        headless_size = headless_screen.get_size()
+        env_headless.exit()
 
-            # Now test headless mode
-            os.environ["DISPLAY"] = ""
-            os.environ["SDL_VIDEODRIVER"] = "dummy"
-            os.environ["MPLBACKEND"] = "Agg"
+        # Both should work and create surfaces
+        assert isinstance(normal_screen, pygame.Surface)
+        assert isinstance(headless_screen, pygame.Surface)
 
-            pygame.quit()  # Reset pygame
-
-            # Create environment in headless mode
-            env_headless = make_robot_env(debug=True)
-            assert env_headless.sim_ui is not None
-            headless_screen = env_headless.sim_ui.screen
-            env_headless.exit()
-
-            # Both should work and create surfaces
-            assert isinstance(normal_screen, pygame.Surface)
-            assert isinstance(headless_screen, pygame.Surface)
-
-            # They should have the same size
-            assert normal_screen.get_size() == headless_screen.get_size()
-
-        finally:
-            # Restore original environment
-            if original_display is not None:
-                os.environ["DISPLAY"] = original_display
-            elif "DISPLAY" in os.environ:
-                del os.environ["DISPLAY"]
-
-            if original_sdl_driver is not None:
-                os.environ["SDL_VIDEODRIVER"] = original_sdl_driver
-            elif "SDL_VIDEODRIVER" in os.environ:
-                del os.environ["SDL_VIDEODRIVER"]
-
-            if original_mpl_backend is not None:
-                os.environ["MPLBACKEND"] = original_mpl_backend
-            elif "MPLBACKEND" in os.environ:
-                del os.environ["MPLBACKEND"]
-
-            pygame.quit()
+        # They should have the same size
+        assert normal_size == headless_size

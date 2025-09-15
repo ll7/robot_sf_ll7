@@ -15,6 +15,7 @@ Requirements:
 """
 
 import argparse
+import importlib.util
 import json
 import logging
 import subprocess
@@ -28,6 +29,12 @@ import numpy as np
 from scipy.stats import spearmanr
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
+from robot_sf.benchmark.snqi.exit_codes import (
+    EXIT_INPUT_ERROR,
+    EXIT_RUNTIME_ERROR,
+    EXIT_SUCCESS,
+    EXIT_VALIDATION_ERROR,
+)
 from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 
 # Optional visualization dependencies
@@ -39,16 +46,21 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-try:
-    import importlib.util
-
-    PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
-except ImportError:
-    PANDAS_AVAILABLE = False
+PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _apply_log_level(level_name: str | None) -> None:
+    """Apply log level to root and module loggers from a string name (default INFO)."""
+    if not level_name:
+        level = logging.INFO
+    else:
+        level = getattr(logging, str(level_name).upper(), logging.INFO)
+    logging.getLogger().setLevel(level)
+    logger.setLevel(level)
 
 
 class SNQISensitivityAnalyzer:
@@ -550,7 +562,14 @@ def main():  # noqa: C901
         help="Validate JSON output structure and numeric finiteness before writing",
     )
 
+    parser.add_argument(
+        "--log-level",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        default="INFO",
+        help="Logging verbosity (default: INFO)",
+    )
     args = parser.parse_args()
+    _apply_log_level(getattr(args, "log_level", None))
 
     # Load data
     try:
@@ -559,10 +578,10 @@ def main():  # noqa: C901
         weights = load_weights(args.weights)
     except FileNotFoundError as e:
         logger.error("File not found: %s", e)
-        return 1
+        return EXIT_INPUT_ERROR
     except Exception as e:
         logger.error("Error loading data: %s", e)
-        return 1
+        return EXIT_RUNTIME_ERROR
 
     # Apply seed if provided
     if args.seed is not None:
@@ -631,7 +650,7 @@ def main():  # noqa: C901
             assert_all_finite(results)
     except ValueError as e:
         logger.error("Validation failed: %s", e)
-        return 1
+        return EXIT_VALIDATION_ERROR
 
     # Save detailed results after validation
     args.output.mkdir(parents=True, exist_ok=True)
@@ -713,8 +732,8 @@ def main():  # noqa: C901
                 corr = data["ranking_correlation"]
                 print(f"  {strategy}: ranking correlation = {corr:.4f}")
 
-    return 0
+    return EXIT_SUCCESS
 
 
 if __name__ == "__main__":
-    exit(main())
+    raise SystemExit(main())

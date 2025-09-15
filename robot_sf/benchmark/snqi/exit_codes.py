@@ -12,6 +12,7 @@ Current codes
 2  VALIDATION_ERROR       - Schema or finiteness validation failure after result assembly.
 3  RUNTIME_ERROR          - Unexpected runtime exception during processing/optimization.
 4  MISSING_METRIC_ERROR   - (Reserved) Future: triggered when --fail-on-missing-metric is set.
+5  OPTIONAL_DEPS_MISSING  - Optional dependency (e.g., matplotlib) missing when explicitly required.
 
 Notes
 -----
@@ -25,6 +26,7 @@ EXIT_INPUT_ERROR = 1
 EXIT_VALIDATION_ERROR = 2
 EXIT_RUNTIME_ERROR = 3
 EXIT_MISSING_METRIC_ERROR = 4  # reserved for forthcoming feature
+EXIT_OPTIONAL_DEPS_MISSING = 5
 
 __all__ = [
     "EXIT_SUCCESS",
@@ -32,4 +34,5 @@ __all__ = [
     "EXIT_VALIDATION_ERROR",
     "EXIT_RUNTIME_ERROR",
     "EXIT_MISSING_METRIC_ERROR",
+    "EXIT_OPTIONAL_DEPS_MISSING",
 ]

@@ -51,7 +51,9 @@ class EnvironmentFactory:
             record_video: Enable video recording.
             video_path: Path for video output.
             video_fps: Video frame rate.
-            **kwargs: Additional environment parameters.
+            **kwargs: Additional environment parameters, including:
+                - collect_episode_metrics: Enable episode-level metrics collection
+                  (mean interpersonal distance and per-pedestrian force quantiles)
 
         Returns:
             Configured robot environment.

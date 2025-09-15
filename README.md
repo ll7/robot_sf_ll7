@@ -251,4 +251,5 @@ snqi_sensitivity_analysis.py   # Deeper robustness & interaction analysis
 ```
 
 Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is planned.
+Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is available.
 

@@ -12,6 +12,34 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 class TestPygameHeadless:
     """Test pygame headless behavior."""
 
+    def test_pytest_session_forces_dummy_driver(self):
+        """Verify that the pytest session enforces the dummy SDL video driver.
+
+        Before this fix, running tests locally without setting env vars could
+        open a real window. This test would have failed by reporting a non-dummy
+        driver. With the session-level fixture, we always see the dummy driver.
+        """
+        # Ensure display module is initialized for driver query
+        try:
+            pygame.display.init()
+            driver = pygame.display.get_driver()
+            assert driver == "dummy"
+        finally:
+            pygame.display.quit()
+
+    def test_env_does_not_init_display_in_headless(self):
+        """Creating a debug env in tests must not initialize a real display."""
+        pygame.quit()  # Ensure a clean slate
+        env = make_robot_env(debug=True)
+        try:
+            # In headless mode, SimulationView uses an offscreen Surface and
+            # should not call pygame.display.set_mode(); thus no active display surface.
+            assert env.sim_ui is not None
+            assert isinstance(env.sim_ui.screen, pygame.Surface)
+            assert pygame.display.get_surface() is None
+        finally:
+            env.exit()
+
     def test_simulation_view_respects_headless_environment(self):
         """Test that SimulationView doesn't create display window in headless environment."""
         # Save original environment
@@ -79,7 +107,7 @@ class TestPygameHeadless:
             env = make_robot_env(debug=True)
 
             # Should work without creating visible window
-            obs, info = env.reset()
+            obs, _ = env.reset()
             assert obs is not None
 
             # Verify SimulationView was created with offscreen surface in headless mode
@@ -108,7 +136,6 @@ class TestPygameHeadless:
 
     def test_simulation_view_normal_vs_headless_mode(self):
         """Test that SimulationView behaves differently in normal vs headless mode."""
-        import pygame
 
         # Test normal mode first (should use display when available)
         original_display = os.environ.get("DISPLAY")
@@ -128,6 +155,7 @@ class TestPygameHeadless:
 
             # Create environment in normal mode
             env_normal = make_robot_env(debug=True)
+            assert env_normal.sim_ui is not None
             normal_screen = env_normal.sim_ui.screen
             env_normal.exit()
 
@@ -140,6 +168,7 @@ class TestPygameHeadless:
 
             # Create environment in headless mode
             env_headless = make_robot_env(debug=True)
+            assert env_headless.sim_ui is not None
             headless_screen = env_headless.sim_ui.screen
             env_headless.exit()
 

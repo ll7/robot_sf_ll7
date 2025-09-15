@@ -52,7 +52,7 @@ This checklist tracks progress against the modernization, validation, and method
 - [x] Normalization comparison correlations (`test_snqi_cli_recompute.py`)
 - [x] Drift detection vs canonical weights (`test_snqi_drift_detection.py`)
 - [x] Minimal fixture smoke with CI placeholder (`test_snqi_fixture_minimal.py`)
-- [ ] Bootstrap CI tests (add interval assertions; smoke tests exist)
+- [x] Bootstrap CI tests (add interval assertions; smoke tests exist)
 
 ## 4. Benchmark / CLI Integration (⚙️)
 - [x] Unified benchmark subcommand (`robot_sf_bench snqi <action>`) wrapper

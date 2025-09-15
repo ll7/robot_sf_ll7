@@ -9,6 +9,7 @@ from .compute import WEIGHT_NAMES, compute_snqi, normalize_metric  # noqa: F401
 from .exit_codes import (  # noqa: F401
     EXIT_INPUT_ERROR,
     EXIT_MISSING_METRIC_ERROR,
+    EXIT_OPTIONAL_DEPS_MISSING,
     EXIT_RUNTIME_ERROR,
     EXIT_SUCCESS,
     EXIT_VALIDATION_ERROR,
@@ -32,4 +33,5 @@ __all__ = [
     "EXIT_VALIDATION_ERROR",
     "EXIT_RUNTIME_ERROR",
     "EXIT_MISSING_METRIC_ERROR",
+    "EXIT_OPTIONAL_DEPS_MISSING",
 ]

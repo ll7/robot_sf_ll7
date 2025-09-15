@@ -123,6 +123,8 @@ The median / p95 percentile normalization was chosen for v1 because it provides 
 
 Clamping to `[0,1]` prevents extreme outliers from disproportionately dominating the linear weighted sum and destabilizing optimization heuristics; this is a pragmatic bias toward stability & comparability across datasets.
 
+Further discussion and practitioner guidance (including tail compression and under‑rewarding extreme excellence) is provided in `docs/snqi-weight-tools/normalization.md#clamping-and-outliers`. The user guide also summarizes the implications and recommended practices.
+
 Trade‑offs / Limitations:
 - Values above p95 saturate (loss of resolution); downstream sensitivity analysis might under‑estimate discriminative power in tails.
 - For very tight distributions (p95≈median) the denominator can collapse; we currently guard by using a minimum width of `1.0` (implicit neutralization) – this may under‑penalize metrics with insufficient spread.

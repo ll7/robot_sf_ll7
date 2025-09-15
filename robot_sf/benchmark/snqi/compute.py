@@ -47,9 +47,19 @@ Metrics = Mapping[str, float | int | bool]
 def normalize_metric(name: str, value: float | int | bool, baseline_stats: BaselineStats) -> float:
     """Normalize a raw metric using median/p95 baseline statistics.
 
-    If the metric is missing in the baseline statistics, returns 0.0.
-    Division-by-zero is guarded by using a denominator of 1.0 when p95==med.
-    Result is clamped to [0,1] to prevent extreme outliers from dominating.
+    Args:
+        name: Metric name (e.g., "collisions", "near_misses", "jerk_mean").
+        value: Raw metric value from an episode record. Booleans are coerced to float.
+        baseline_stats: Mapping of metric -> {"med": float, "p95": float} used for scaling.
+
+    Returns:
+        A float in [0.0, 1.0] representing the clamped normalized value where 0.0 corresponds
+        to the baseline median and 1.0 corresponds to (and above) the baseline p95.
+
+    Notes:
+        - If the metric is missing in the baseline statistics, returns 0.0 (neutral contribution).
+        - Division-by-zero is guarded by using a denominator of 1.0 when p95 == med.
+        - Result is clamped to [0,1] to prevent extreme outliers from dominating.
     """
     if name not in baseline_stats:
         return 0.0

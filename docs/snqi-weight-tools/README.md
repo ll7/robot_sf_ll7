@@ -344,10 +344,15 @@ python scripts/recompute_snqi_weights.py \
 - `skipped_malformed_lines`: Data hygiene indicator; should normally be 0.
  - `phase_timings`: Per‑phase wall clock seconds aiding performance regression detection.
 
+Note on heuristics (experimental):
+The current stability and discriminative components are pragmatic heuristics intended for fast, reproducible runs. They will be superseded by a principled bootstrap stability metric and improved discriminative measures. See the design doc sections “Heuristic Components (v1 – Experimental)” and “Proposed Stability (Bootstrap)” for details and the transition plan.
+
 ## Reproducibility & Determinism
 Pass `--seed` to ensure deterministic: Pareto sampling, grid subset sampling, differential evolution initialization. Sensitivity analysis and progress bars remain deterministic given the seed. Remaining nondeterminism may stem from SciPy internals / BLAS parallelism.
 
 Metadata captures: seed, git commit, invocation, file provenance, schema version.
+
+See also: `docs/snqi-weight-tools/REPRODUCIBILITY.md` for a focused note on sources of nondeterminism and mitigation tips.
 
 ## Troubleshooting
 | Issue | Cause | Resolution |

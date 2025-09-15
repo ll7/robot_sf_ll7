@@ -158,7 +158,21 @@ Stability: Spearman between algorithm groups if ≥2 groups else variance‑deri
 Discriminative power: variance (normalized) of SNQI scores.
 
 ### 8.1 Heuristic Components (v1 – Experimental)
-Current objective components are pragmatic heuristics pending introduction of more statistically grounded metrics.
+Status: Experimental. The current objective components are pragmatic heuristics chosen to provide a stable, dependency‑light baseline while we implement statistically grounded replacements.
+
+Rationale (why these heuristics now):
+- Low overhead: Works without heavy dependencies or long runtimes, enabling quick iterations on small datasets.
+- Stable behavior: Clamping + variance proxies avoid domination by outliers and produce a smoother optimization landscape.
+- Reproducible: Fully deterministic under seed; good for CI and parity tests.
+
+Limitations (why replace later):
+- Stability proxy either uses only two groups or a variance fallback, which is not theoretically rigorous and may miss structure in multi‑group settings.
+- Variance‑based discriminative power doesn’t distinguish meaningful separation from noise; the fixed saturation is ad hoc.
+
+TODO (replacement plan pointers):
+- Replace stability proxy with bootstrap Spearman across groups (see §9.2 Proposed Stability (Bootstrap)).
+- Upgrade discriminative power to ANOVA F‑stat or effect size aggregation (see §9.3 Discriminative Power).
+- Consider multi‑objective (Pareto/NSGA‑II) to remove the arbitrary α trade‑off (see §9.4 Multi‑objective Combination and §14 Methodology Enhancements).
 
 Stability Heuristic:
 - If ≥2 algorithm groups present: compute Spearman rank correlation between the permutation indices of episode rankings of the first two groups (proxy for positional consistency). Absolute value used to ignore direction (penalizing inversion equally).
@@ -201,6 +215,8 @@ User Guidance (Interim): Treat current objective values as relative within a sin
 
 ## 10. Reproducibility & Seeding
 `--seed` -> NumPy RNG & SciPy DE seed argument. Pareto & sampled grid reuse deterministic RNG. Metadata records seed + git commit. Residual nondeterminism: internal SciPy parallel evaluation order.
+
+For a practitioner-facing summary and mitigation checklist, see `docs/snqi-weight-tools/REPRODUCIBILITY.md`.
 
 ## 11. Error Modes & Fallbacks
 | Condition | Current Behavior | Planned Improvement |

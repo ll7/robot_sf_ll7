@@ -7,6 +7,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 - [Bootstrap Examples](#bootstrap-examples)
 - [Overview](#overview)
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
+  - [Clamping and Outliers](#clamping-and-outliers)
 - [Installation (uv)](#installation-uv)
 - [Quick Start](#quick-start)
 - [Core Scripts \& Typical Tasks](#core-scripts--typical-tasks)
@@ -100,7 +101,7 @@ SNQI = w_success * success
        - w_force_exceed * force_exceed_norm
        - w_jerk * jerk_norm
 ```
-Normalized metrics use median/p95 baseline statistics with clamping to [0,1]. Positive weights penalize adverse factors by subtraction. Metrics below baseline median floor at 0 (no negative reward); values above p95 saturate at 1 (robustness over extreme tail sensitivity).
+Normalized metrics use median/p95 baseline statistics with clamping to [0,1]. Positive weights penalize adverse factors by subtraction. Metrics below baseline median floor at 0 (no negative reward); values above p95 saturate at 1 (robustness over extreme tail sensitivity). See the dedicated clamping discussion below and `docs/snqi-weight-tools/normalization.md` for details and trade-offs.
 
 ### Normalization Rationale (Median / p95)
 Chosen for stability + robustness:
@@ -115,6 +116,21 @@ Limitations:
 Alternatives (explorable via normalization comparison in recomputation script):
 - Median/p90 (less tail compression)
 - IQR scaling (p25/p75) potentially amplifies moderate variance; sensitive with small samples.
+
+### Clamping and Outliers
+Clamping is intentional to improve stability and comparability:
+
+- Below median → normalized 0; above p95 → normalized 1.
+- Prevents extreme outliers from dominating objective/weights.
+- Compresses tails (episodes with very large adverse values become indistinguishable at 1).
+
+If tail ordering matters for your study:
+
+- Enable normalization comparison and review correlations.
+- Experiment with a lower upper percentile (p90) or IQR/MAD.
+- Keep clamping enabled for benchmark comparability unless a documented alternative is used.
+
+Reference: `docs/snqi-weight-tools/normalization.md#clamping-and-outliers` and the design doc “Normalization Rationale & Limitations”.
 
 ## Installation (uv)
 We use [uv](https://github.com/astral-sh/uv) for fast, reproducible dependency management.

@@ -47,6 +47,17 @@ from robot_sf.benchmark.snqi.weights_validation import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+
+def _apply_log_level(level_name: str | None) -> None:
+    """Apply log level to root and module loggers from a string name (default INFO)."""
+    if not level_name:
+        level = logging.INFO
+    else:
+        level = getattr(logging, str(level_name).upper(), logging.INFO)
+    logging.getLogger().setLevel(level)
+    logger.setLevel(level)
+
+
 # ----------------------------- Progress helper ----------------------------- #
 try:  # pragma: no cover - optional dependency
     from tqdm import tqdm
@@ -916,11 +927,18 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
             "(stability and CIs may be unreliable)."
         ),
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        default="INFO",
+        help="Logging verbosity (default: INFO)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: List[str] | None = None) -> int:  # pragma: no cover
     args = parse_args(argv)
+    _apply_log_level(getattr(args, "log_level", None))
     return run(args)
 
 

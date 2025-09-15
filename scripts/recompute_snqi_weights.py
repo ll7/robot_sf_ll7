@@ -55,6 +55,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def _apply_log_level(level_name: str | None) -> None:
+    """Apply log level to root and module loggers from a string name.
+
+    Accepts typical names (DEBUG, INFO, WARNING, ERROR, CRITICAL). Defaults to INFO.
+    """
+    if not level_name:
+        level = logging.INFO
+    else:
+        level = getattr(logging, str(level_name).upper(), logging.INFO)
+    logging.getLogger().setLevel(level)
+    logger.setLevel(level)
+
+
 class SNQIWeightRecomputer:
     """Recompute SNQI weights via predefined strategies and analyses.
 
@@ -589,6 +602,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "(stability and CIs may be unreliable)."
         ),
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        default="INFO",
+        help="Logging verbosity (default: INFO)",
+    )
     return parser.parse_args(argv)
 
 
@@ -845,6 +864,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
     args = parse_args(argv)
+    _apply_log_level(getattr(args, "log_level", None))
     return run(args)
 
 

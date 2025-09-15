@@ -20,8 +20,8 @@ This checklist tracks progress against the modernization, validation, and method
 - [x] Relocate user-facing docs into `docs/snqi-weight-tools/`
 - [x] Root README section referencing SNQI tooling
 - [x] Cross-reference in benchmark/environment docs
-- [ ] Document JSON output schema formally (key names, types, stability) <!-- TODO -->
-- [ ] Explain normalization strategy (median/p95) & limitations <!-- Artifact rationale exists; needs standalone doc -->
+- [x] Document JSON output schema formally (key names, types, stability) <!-- See docs/snqi-weight-tools/schema.md and snqi_output.schema.json -->
+- [x] Explain normalization strategy (median/p95) & limitations <!-- See docs/snqi-weight-tools/normalization.md -->
 - [ ] Justify heuristic formulas (stability proxy) or mark experimental <!-- DESIGN.md partial -->
 - [ ] Comprehensive docstrings for new helpers/modules <!-- Some helpers missing param/return sections -->
 - [ ] Note on clamping normalized metrics to [0,1] and outlier implication
@@ -162,8 +162,8 @@ This checklist captures all outstanding improvements required to bring the SNQI 
 - [x] Relocate user-facing docs from `scripts/QUICK_START.md` & `scripts/README_SNQI_WEIGHTS.md` into `docs/snqi-weight-tools/README.md` (or link them if partial duplication needed)
 - [x] Add short section + link in root `README.md` describing SNQI tooling
 - [x] Add cross-reference in `docs/ENVIRONMENT.md` or benchmark docs if applicable
-- [ ] Document JSON output schema formally (key names, types, meaning, stability guarantee)
-- [ ] Explain normalization strategy choice (median/p95) and limitations
+- [x] Document JSON output schema formally (key names, types, meaning, stability guarantee) <!-- See docs/snqi-weight-tools/schema.md and snqi_output.schema.json -->
+- [x] Explain normalization strategy choice (median/p95) and limitations <!-- See docs/snqi-weight-tools/normalization.md -->
 - [ ] Justify heuristic formulas (e.g., stability = 1/(1+|std-0.5|)) and consider replacing or labeling experimental
 - [ ] Add docstrings (module, classes, functions) per repo style to all new scripts
 - [ ] Add doc comment on clamping normalized metrics to [0,1] (implication for outliers)

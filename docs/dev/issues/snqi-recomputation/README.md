@@ -206,7 +206,7 @@ Progress notes:
   (`test_snqi_cli_recompute.py`).
 
 ## 4. Benchmark / CLI Integration (⚙️)
-- [ ] Add unified subcommand to existing benchmark CLI (`robot_sf_bench snqi <action>`) wrapping scripts
+- [x] Add unified subcommand to existing benchmark CLI (`robot_sf_bench snqi <action>`) wrapping scripts
 - [ ] Provide config-based invocation (so weights can be referenced in future runs)
 - [ ] Wire optimized weights consumption into evaluation pipeline (document how to pass them)
 - [ ] Optionally add a convenience command to apply weights & recompute SNQI over stored results
@@ -223,12 +223,12 @@ Progress notes:
 - [ ] Expose objective component breakdown in output (stability vs discriminative power contributions)
 - [ ] Provide option to optimize for weighted scenarios (e.g., denser crowd episodes weighted more)
 - [ ] Add early stopping for evolution if objective plateaus
-- [ ] Provide confidence intervals via bootstrapping (optional)
+- [x] Provide confidence intervals via bootstrapping (implemented)
 
 ## 7. Performance & Scalability
-- [ ] Add timing instrumentation (per major phase) in verbose mode
+- [x] Add timing instrumentation (per major phase) in verbose mode
 - [ ] Add note/warning if dataset size small (< N episodes) affecting stability metrics
-- [ ] Allow sampling subset of episodes (`--sample N`) for quick exploratory runs
+- [x] Allow sampling subset of episodes (`--sample N`) for quick exploratory runs
 
 ## 8. Dependency & Extras Management
 - [ ] Add optional extra group `analysis` or `viz` for `seaborn` (currently optional import)

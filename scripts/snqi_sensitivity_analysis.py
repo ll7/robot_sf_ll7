@@ -15,7 +15,6 @@ Requirements:
 """
 
 import argparse
-import importlib.util
 import json
 import logging
 import subprocess
@@ -31,6 +30,7 @@ from scipy.stats import spearmanr
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
 from robot_sf.benchmark.snqi.exit_codes import (
     EXIT_INPUT_ERROR,
+    EXIT_OPTIONAL_DEPS_MISSING,
     EXIT_RUNTIME_ERROR,
     EXIT_SUCCESS,
     EXIT_VALIDATION_ERROR,
@@ -46,7 +46,7 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
-PANDAS_AVAILABLE = importlib.util.find_spec("pandas") is not None
+# Note: pandas is optional for advanced analysis; not required for core flow
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -708,6 +708,13 @@ def main():  # noqa: C901
     if not args.skip_visualizations:
         try:
             logger.info("Generating visualizations")
+            if not MATPLOTLIB_AVAILABLE:
+                logger.error(
+                    "Matplotlib is not installed but visualizations were requested. "
+                    "Install optional deps (viz extra) or re-run with --skip-visualizations."
+                )
+                # Return a distinct non-zero code while keeping JSON artifacts on disk
+                return EXIT_OPTIONAL_DEPS_MISSING
             analyzer.generate_visualizations(results, args.output)
         except Exception as e:
             logger.warning("Failed to generate visualizations: %s", e)

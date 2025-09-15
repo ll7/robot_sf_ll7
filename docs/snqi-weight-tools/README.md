@@ -145,8 +145,9 @@ uv sync
 
 # (Optional) extras:
 #   progress -> tqdm progress bars
-#   analysis -> seaborn/matplotlib/pandas (heavier visualization)
-uv sync --extra progress --extra analysis
+#   viz      -> plotting only (matplotlib + seaborn)
+#   analysis -> seaborn/matplotlib/pandas (full visualization/analysis)
+uv sync --extra progress --extra viz
 
 # One‑line environment smoke test
 uv run python scripts/validate_snqi_scripts.py
@@ -155,6 +156,7 @@ uv run python scripts/validate_snqi_scripts.py
 Add extras later without re-syncing everything:
 ```bash
 uv sync --extra progress
+uv sync --extra viz
 ```
 
 Install the package in editable mode for external usage (optional):

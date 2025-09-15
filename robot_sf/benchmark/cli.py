@@ -293,6 +293,15 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             default=0.95,
             help="Confidence level for bootstrap intervals (e.g., 0.95)",
         )
+        p.add_argument(
+            "--small-dataset-threshold",
+            type=int,
+            default=20,
+            help=(
+                "Warn when the number of episodes used is below this threshold "
+                "(stability and CIs may be unreliable)."
+            ),
+        )
         p.set_defaults(cmd="snqi", snqi_cmd="optimize")
 
     def _add_snqi_recompute(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -337,6 +346,15 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             type=float,
             default=0.95,
             help="Confidence level for bootstrap intervals (e.g., 0.95)",
+        )
+        p.add_argument(
+            "--small-dataset-threshold",
+            type=int,
+            default=20,
+            help=(
+                "Warn when the number of episodes used is below this threshold "
+                "(stability and CIs may be unreliable)."
+            ),
         )
         p.set_defaults(cmd="snqi", snqi_cmd="recompute")
 

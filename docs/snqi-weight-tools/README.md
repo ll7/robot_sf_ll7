@@ -155,7 +155,7 @@ Sensitivity specific:
 - `--weights <path>`: Weights to analyze.
 - `--skip-visualizations`: Skip plotting (headless or minimal run).
 
-Planned / future (design doc): weight simplex normalization, evolution early stopping, bootstrap stability + confidence intervals, drift detection test.
+Planned / future (design doc): weight simplex normalization, evolution early stopping, extended bootstrap (BCa, stratified by algorithm group, per-component), drift detection test.
 
 ## Input Data Formats
 ### Episodes JSONL (one JSON object per line)
@@ -285,12 +285,21 @@ Metadata captures: seed, git commit, invocation, file provenance, schema version
 | Plots not generated | Missing matplotlib/seaborn | Install deps or use `--skip-visualizations` |
 
 ## Future Enhancements
-Implemented items (moved from backlog): objective component breakdown, deterministic episode sampling (`--sample`), phase timing instrumentation.
+Implemented items (moved from backlog):
+- Objective component breakdown
+- Deterministic episode sampling (`--sample`)
+- Phase timing instrumentation
+- Unified benchmark CLI entrypoint (`robot_sf_bench snqi optimize|recompute`)
+- Bootstrap stability + percentile confidence intervals for the recommended mean episodic SNQI score (`bootstrap.recommended_score`)
 
 Still planned (see design doc / backlog):
 - Weight simplex option (normalize weights to sum constant before evaluating objective)
 - Early stopping for evolution (plateau detection over trailing generations)
-- Extended bootstrap: joint objective component distribution; BCa intervals
+- Extended bootstrap enhancements:
+  - BCa intervals
+  - Stratified bootstrap by algorithm/policy group to control for mix effects
+  - Per-strategy bootstrap CIs in recompute outputs
+  - Bootstrap distributions for objective components and stability metric
 - Drift detection test (continuous regression guard)
 
 ## Related Design Document

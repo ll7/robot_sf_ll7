@@ -112,6 +112,10 @@ All `WEIGHT_NAMES` present with finite positive floats. Extraneous keys ignored 
 ### 5.6 Weight Names
 `[w_success, w_time, w_collisions, w_near, w_comfort, w_force_exceed, w_jerk]`
 
+Naming normalization:
+- Canonical weight key for near-miss penalty is `w_near`.
+- For backward compatibility, `w_near_misses` is temporarily accepted as an alias (mapped to `w_near`). The validator emits a deprecation warning. The alias will be removed after one release window.
+
 ## 6. Canonical SNQI Computation
 Located in `robot_sf/benchmark/snqi/compute.py`. Normalization: `(value - med) / (p95 - med)` guarded & clamped to [0,1]. Score: success positive; all other terms negative contributions scaled by weights.
 

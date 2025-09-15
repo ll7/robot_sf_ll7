@@ -238,11 +238,11 @@ Missing metrics default to neutral (0 contribution) currently.
 ## Output JSON Schema (Summary)
 All scripts include `_metadata` and `summary` blocks (schema version 1). See the human‑readable schema in `docs/snqi-weight-tools/schema.md`.
 
-Future: a machine‑readable JSON Schema (`docs/snqi-weight-tools/snqi_output.schema.json`) will be added and validated in CI.
+A machine‑readable JSON Schema is available at `docs/snqi-weight-tools/snqi_output.schema.json`. CI validation is planned as a follow‑up.
 
 Schema stability policy: Additive (backward‑compatible) fields may appear without bumping `schema_version` (consumers should ignore unknown properties). Removals or semantic changes require incrementing `schema_version` and updating snapshot tests.
 
-Validate programmatically (once the JSON Schema is added, using `jsonschema`):
+Validate programmatically using `jsonschema`:
 ```python
 import json, jsonschema
 from pathlib import Path
@@ -251,7 +251,7 @@ data = json.loads(Path('optimized_weights.json').read_text())
 jsonschema.Draft202012Validator(schema).validate(data)
 ```
 
-Validate from the shell (Unix) using uv + python -c (when schema.json is present):
+Validate from the shell (Unix) using uv + python -c:
 ```bash
 uv run python - <<'PY'
 import json, sys

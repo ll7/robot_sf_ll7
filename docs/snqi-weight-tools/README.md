@@ -253,6 +253,11 @@ Missing metrics default to neutral (0 contribution) currently.
 { "w_success": 2.0, "w_time": 1.0, "w_collisions": 2.0, "w_near": 1.0, "w_comfort": 1.5, "w_force_exceed": 1.5, "w_jerk": 0.5 }
 ```
 
+Naming note:
+- The canonical key for near-miss penalties is `w_near`.
+- For backward compatibility, the validator also accepts `w_near_misses` as an alias and maps it to `w_near`. If both are provided, `w_near` wins and the alias is ignored (with a warning).
+  - Preferred going forward: use `w_near`.
+
 ## Output JSON Schema (Summary)
 All scripts include `_metadata` and `summary` blocks (schema version 1). See the human‑readable schema in `docs/snqi-weight-tools/schema.md`.
 

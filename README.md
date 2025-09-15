@@ -118,11 +118,32 @@ brew install ffmpeg
 
 ### Tests
 
-#### PySocialForce Tests
+#### Complete Test Suite
 
-The PySocialForce tests are located in the `fast-pysf/tests/` directory and can be run with:
+Run all tests for both robot-sf and fast-pysf:
 
 ```sh
+# Run comprehensive test suite (both main and fast-pysf tests)
+./scripts/run_all_tests.sh
+```
+
+#### Main Robot-SF Tests
+
+```sh
+# Run main robot-sf tests (170 tests)
+uv run pytest tests/ -v
+
+# Run with linting
+uv run pytest tests/
+uv run pylint robot_sf
+```
+
+#### PySocialForce Tests
+
+The PySocialForce tests are located in the `fast-pysf/tests/` directory and include comprehensive coverage (121 tests):
+
+```sh
+# Run fast-pysf tests
 cd fast-pysf
 uv run python -m pytest tests/ -v
 ```
@@ -134,16 +155,28 @@ cd fast-pysf
 uv run --extra dev python -m pytest tests/ -v
 ```
 
-All tests should pass successfully. The test suite includes:
-- Force calculation tests (desired, social, group repulsion forces)
-- Map loading tests 
-- Simulator functionality tests
+The fast-pysf test suite includes:
+- **Configuration tests**: All force and simulation config classes
+- **Force calculation tests**: Desired, social, and group forces
+- **Navigation tests**: Route navigation and waypoint management
+- **Pedestrian grouping tests**: State management and group dynamics
+- **Scene tests**: Pedestrian states and environment obstacles
+- **Map loading tests**: Various map formats and edge cases
+- **Simulator functionality tests**: Core simulation logic
 
-#### Run Linter / Tests
+#### Code Quality
+
+Both projects now include comprehensive linting with Ruff:
 
 ```sh
-pytest tests
-pylint robot_sf
+# Check code quality for main project
+uv run ruff check .
+uv run ruff format .
+
+# Check code quality for fast-pysf
+cd fast-pysf
+uv run ruff check .
+uv run ruff format .
 ```
 
 #### GUI Tests

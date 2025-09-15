@@ -15,7 +15,43 @@ This guide consolidates user‑facing documentation that was previously split ac
   - [Baseline Stats JSON](#baseline-stats-json)
   - [Weights JSON](#weights-json)
 - [Output JSON Schema (Summary)](#output-json-schema-summary)
+  - [Bootstrap Examples](#bootstrap-examples)
   - [Diagnostics Fields](#diagnostics-fields)
+## Bootstrap Examples
+Estimate stability and confidence intervals for the recommended weights.
+
+Unified CLI (preferred):
+
+```bash
+# Optimize weights with 200 bootstrap samples at 95% confidence
+uv run robot_sf_bench snqi optimize \
+  --episodes episodes.jsonl \
+  --baseline baseline_stats.json \
+  --method both \
+  --bootstrap-samples 200 \
+  --bootstrap-confidence 0.95 \
+  --output optimized_with_bootstrap.json
+
+# Recompute strategies and bootstrap the selected (recommended) weights
+uv run robot_sf_bench snqi recompute \
+  --episodes episodes.jsonl \
+  --baseline baseline_stats.json \
+  --compare-strategies \
+  --bootstrap-samples 200 \
+  --bootstrap-confidence 0.95 \
+  --output recompute_with_bootstrap.json
+```
+
+Result JSON includes:
+
+- `results.bootstrap.recommended_score.samples`
+- `results.bootstrap.recommended_score.mean_mean`
+- `results.bootstrap.recommended_score.std_mean`
+- `results.bootstrap.recommended_score.ci` (two‑sided bounds)
+- `results.bootstrap.recommended_score.confidence_level`
+
+Normalization details are documented in `docs/snqi-weight-tools/normalization.md`.
+
 - [External / Initial Weights](#external--initial-weights)
 - [Recommended Workflows](#recommended-workflows)
   - [A. Establish Baseline \& Strategy Comparison](#a-establish-baseline--strategy-comparison)
@@ -175,12 +211,13 @@ Missing metrics default to neutral (0 contribution) currently.
 ```
 
 ## Output JSON Schema (Summary)
-All scripts include `_metadata` and `summary` blocks (schema version 1). A formal JSON Schema lives at:
-`docs/snqi-weight-tools/snqi_output.schema.json`
+All scripts include `_metadata` and `summary` blocks (schema version 1). See the human‑readable schema in `docs/snqi-weight-tools/schema.md`.
+
+Future: a machine‑readable JSON Schema (`docs/snqi-weight-tools/snqi_output.schema.json`) will be added and validated in CI.
 
 Schema stability policy: Additive (backward‑compatible) fields may appear without bumping `schema_version` (consumers should ignore unknown properties). Removals or semantic changes require incrementing `schema_version` and updating snapshot tests.
 
-Validate programmatically (already included dependency: `jsonschema`):
+Validate programmatically (once the JSON Schema is added, using `jsonschema`):
 ```python
 import json, jsonschema
 from pathlib import Path
@@ -189,7 +226,7 @@ data = json.loads(Path('optimized_weights.json').read_text())
 jsonschema.Draft202012Validator(schema).validate(data)
 ```
 
-Validate from the shell (Unix) using uv + python -c:
+Validate from the shell (Unix) using uv + python -c (when schema.json is present):
 ```bash
 uv run python - <<'PY'
 import json, sys

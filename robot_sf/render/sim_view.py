@@ -180,10 +180,17 @@ class SimulationView:
         pygame.init()
         pygame.font.init()
         self.clock = pygame.time.Clock()
-        if self.record_video:
-            # Create offscreen surface for recording
+
+        # Check if we're running in a headless environment
+        is_headless = self._is_headless_environment()
+
+        if self.record_video or is_headless:
+            # Create offscreen surface for recording or headless mode
             self.screen = pygame.Surface((int(self.width), int(self.height)))
-            logger.info("Created offscreen surface for video recording")
+            if self.record_video:
+                logger.info("Created offscreen surface for video recording")
+            else:
+                logger.info("Created offscreen surface for headless mode")
         else:
             # Create window for display
             self.screen = pygame.display.set_mode(
@@ -191,6 +198,34 @@ class SimulationView:
             )
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
+
+    def _is_headless_environment(self) -> bool:
+        """
+        Check if we're running in a headless environment.
+
+        Returns True if any of the common headless indicators are present:
+        - DISPLAY is empty or not set
+        - SDL_VIDEODRIVER is set to 'dummy'
+        - MPLBACKEND is set to 'Agg'
+        """
+        display = os.environ.get("DISPLAY", "")
+        sdl_driver = os.environ.get("SDL_VIDEODRIVER", "")
+        mpl_backend = os.environ.get("MPLBACKEND", "")
+
+        # Check for headless indicators
+        is_headless = (
+            display == ""  # DISPLAY is empty
+            or sdl_driver == "dummy"  # SDL is set to dummy driver
+            or mpl_backend == "Agg"  # Matplotlib is set to non-GUI backend
+        )
+
+        if is_headless:
+            logger.debug(
+                f"Headless environment detected: DISPLAY='{display}', "
+                f"SDL_VIDEODRIVER='{sdl_driver}', MPLBACKEND='{mpl_backend}'"
+            )
+
+        return is_headless
 
     def render(self, state: VisualizableSimState, target_fps: float = 60):
         """

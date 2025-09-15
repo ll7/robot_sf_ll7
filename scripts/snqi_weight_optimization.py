@@ -655,6 +655,17 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     used_episode_count = len(episodes)
     if args.seed is not None:
         np.random.seed(args.seed)
+    # Warn on small dataset sizes which can reduce reliability of statistics and CIs
+    try:
+        threshold = int(getattr(args, "small_dataset_threshold", 20))
+    except Exception:  # noqa: BLE001 - defensive
+        threshold = 20
+    if used_episode_count < threshold:
+        logger.warning(
+            "Small dataset: using %d episodes (< %d). Stability and bootstrap CIs may be unreliable.",
+            used_episode_count,
+            threshold,
+        )
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
     initial_weights: Dict[str, float] | None = None
     if args.initial_weights_file is not None:
@@ -895,6 +906,15 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         type=float,
         default=0.95,
         help="Confidence level for bootstrap intervals (e.g., 0.95)",
+    )
+    parser.add_argument(
+        "--small-dataset-threshold",
+        type=int,
+        default=20,
+        help=(
+            "Warn when the number of episodes used is below this threshold "
+            "(stability and CIs may be unreliable)."
+        ),
     )
     return parser.parse_args(argv)
 

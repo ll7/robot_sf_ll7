@@ -52,10 +52,10 @@ This checklist tracks progress against the modernization, validation, and method
 - [x] Normalization comparison correlations (`test_snqi_cli_recompute.py`)
 - [x] Drift detection vs canonical weights (`test_snqi_drift_detection.py`)
 - [x] Minimal fixture smoke with CI placeholder (`test_snqi_fixture_minimal.py`)
-- [ ] Bootstrap CI (future) real interval tests <!-- Placeholder only -->
+- [ ] Bootstrap CI tests (add interval assertions; smoke tests exist)
 
 ## 4. Benchmark / CLI Integration (⚙️)
-- [ ] Unified benchmark subcommand (`robot_sf_bench snqi <action>`) wrapper
+- [x] Unified benchmark subcommand (`robot_sf_bench snqi <action>`) wrapper
 - [ ] Config-based invocation wiring weights into evaluation pipeline
 - [ ] Automated consumption of optimized weights in eval flow (docs + code)
 - [ ] Convenience recompute command for stored results
@@ -73,7 +73,7 @@ This checklist tracks progress against the modernization, validation, and method
 - [x] Objective component breakdown (stability vs discriminative)
 - [ ] Weighted scenario optimization (episode weighting)
 - [x] Differential evolution early stopping (patience/min_delta)
-- [ ] Real confidence intervals via bootstrap (currently `--ci-placeholder` only)
+- [x] Real confidence intervals via bootstrap (implemented; placeholder deprecated)
 
 ## 7. Performance & Scalability
 - [x] Phase timing instrumentation (metadata timings)

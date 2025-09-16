@@ -8,7 +8,7 @@ The validator intentionally stays lightweight (no external deps) and
 performs the following checks:
 
 * All required weight keys present (defined in WEIGHT_NAMES)
-* Values convertible to float, finite and > 0
+* Values convertible to float, finite and >= 0 (a weight of 0 disables the corresponding metric)
 * Warn (not error) on extraneous keys to preserve forward compatibility
 * Warn on unusually large weights (>10) which may indicate scale errors
 
@@ -104,7 +104,8 @@ def validate_weights_mapping(raw: Mapping[str, object]) -> Dict[str, float]:
             fv = float(v)  # type: ignore[arg-type]
         except Exception as e:  # noqa: BLE001
             raise ValueError(f"Non-numeric weight for {k}: {v}") from e
-        if not np.isfinite(fv) or fv <= 0:
+        # Accept zero as a valid weight to disable a term; reject negatives and non-finite.
+        if not np.isfinite(fv) or fv < 0:
             raise ValueError(f"Invalid weight value for {k}: {fv}")
         if fv > 10:
             logger.warning("Weight %s unusually large (%.3f) > 10", k, fv)

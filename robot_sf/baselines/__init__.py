@@ -14,9 +14,17 @@ def _get_social_force_planner():
     return SocialForcePlanner
 
 
+def _get_ppo_planner():
+    """Lazy import for PPO baseline adapter."""
+    from robot_sf.baselines.ppo import PPOPlanner
+
+    return PPOPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: Dict[str, Type] = {
     "baseline_sf": _get_social_force_planner,
+    "ppo": _get_ppo_planner,
 }
 
 

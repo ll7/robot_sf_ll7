@@ -119,13 +119,13 @@ class SNQISensitivityAnalyzer:
                 ]
 
                 # Statistics
-                sweep_data["mean_snqi"].append(np.mean(scores))
-                sweep_data["std_snqi"].append(np.std(scores))
+                sweep_data["mean_snqi"].append(float(np.mean(scores)))
+                sweep_data["std_snqi"].append(float(np.std(scores)))
 
                 # Ranking correlation (tie-aware)
                 new_ranking = rankdata(scores, method="average")
                 corr, _ = spearmanr(base_ranking, new_ranking)
-                sweep_data["ranking_correlation"].append(corr if not np.isnan(corr) else 1.0)
+                sweep_data["ranking_correlation"].append(float(corr) if not np.isnan(corr) else 1.0)
 
                 # Store score distribution for later analysis
                 sweep_data["score_distribution"].append(scores)
@@ -178,12 +178,12 @@ class SNQISensitivityAnalyzer:
                         self._episode_snqi(ep.get("metrics", {}), modified_weights)
                         for ep in self.episodes
                     ]
-                    snqi_surface[i, j] = np.mean(scores)
+                    snqi_surface[i, j] = float(np.mean(scores))
 
                     # Ranking stability (tie-aware)
                     new_ranking = rankdata(scores, method="average")
                     corr, _ = spearmanr(base_ranking, new_ranking)
-                    stability_surface[i, j] = corr if not np.isnan(corr) else 1.0
+                    stability_surface[i, j] = float(corr) if not np.isnan(corr) else 1.0
 
             results[f"{weight1}_vs_{weight2}"] = {
                 "weight1_name": weight1,
@@ -209,9 +209,9 @@ class SNQISensitivityAnalyzer:
         base_ranking = rankdata(base_scores, method="average")
 
         results["base_performance"] = {
-            "mean_snqi": np.mean(base_scores),
-            "std_snqi": np.std(base_scores),
-            "score_range": np.max(base_scores) - np.min(base_scores),
+            "mean_snqi": float(np.mean(base_scores)),
+            "std_snqi": float(np.std(base_scores)),
+            "score_range": float(np.max(base_scores) - np.min(base_scores)),
         }
 
         importance_scores = []
@@ -227,24 +227,26 @@ class SNQISensitivityAnalyzer:
             ablated_ranking = rankdata(ablated_scores, method="average")
 
             # Measure impact
-            score_change = abs(np.mean(ablated_scores) - np.mean(base_scores))
+            score_change = float(abs(np.mean(ablated_scores) - np.mean(base_scores)))
             ranking_change = 1.0 - spearmanr(base_ranking, ablated_ranking)[0]
             if np.isnan(ranking_change):
                 ranking_change = 0.0
+            else:
+                ranking_change = float(ranking_change)
 
-            variance_change = abs(np.std(ablated_scores) - np.std(base_scores))
+            variance_change = float(abs(np.std(ablated_scores) - np.std(base_scores)))
 
             # Combined importance score
-            importance = 0.4 * score_change + 0.4 * ranking_change + 0.2 * variance_change
+            importance = float(0.4 * score_change + 0.4 * ranking_change + 0.2 * variance_change)
             importance_scores.append((weight_name, importance))
 
             results["ablated_performance"][weight_name] = {
-                "mean_snqi": np.mean(ablated_scores),
-                "std_snqi": np.std(ablated_scores),
-                "score_change": score_change,
-                "ranking_correlation_loss": ranking_change,
-                "variance_change": variance_change,
-                "importance_score": importance,
+                "mean_snqi": float(np.mean(ablated_scores)),
+                "std_snqi": float(np.std(ablated_scores)),
+                "score_change": float(score_change),
+                "ranking_correlation_loss": float(ranking_change),
+                "variance_change": float(variance_change),
+                "importance_score": float(importance),
             }
 
         # Sort by importance
@@ -318,10 +320,10 @@ class SNQISensitivityAnalyzer:
                 ranking_corr = 1.0
 
             results[strategy_name] = {
-                "mean_snqi": np.mean(scores),
-                "std_snqi": np.std(scores),
-                "score_range": np.max(scores) - np.min(scores),
-                "ranking_correlation": ranking_corr if not np.isnan(ranking_corr) else 1.0,
+                "mean_snqi": float(np.mean(scores)),
+                "std_snqi": float(np.std(scores)),
+                "score_range": float(np.max(scores) - np.min(scores)),
+                "ranking_correlation": float(ranking_corr) if not np.isnan(ranking_corr) else 1.0,
             }
 
             # Restore original baseline

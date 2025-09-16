@@ -56,7 +56,7 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     # Ensure we do not trip any LIGHT_TEST fast path (want real code paths)
     env.pop("ROBOT_SF_SNQI_LIGHT_TEST", None)
-    return subprocess.run(args, capture_output=True, text=True, check=False)
+    return subprocess.run(args, capture_output=True, text=True, check=False, env=env)
 
 
 @pytest.mark.parametrize("cmd", ["optimize", "recompute"])  # keep runtime tiny

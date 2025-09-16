@@ -29,7 +29,6 @@ from scipy.stats import rankdata, spearmanr
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
 from robot_sf.benchmark.snqi.exit_codes import (
-    EXIT_INPUT_ERROR,
     EXIT_OPTIONAL_DEPS_MISSING,
     EXIT_RUNTIME_ERROR,
     EXIT_SUCCESS,
@@ -524,9 +523,7 @@ def load_weights(file_path: Path) -> Dict[str, float]:
     return weights
 
 
-def main():  # noqa: C901
-    _t_start_perf = perf_counter()
-    _t_start_iso = datetime.now(timezone.utc).isoformat()
+def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SNQI Sensitivity Analysis")
     parser.add_argument(
         "--episodes", type=Path, required=True, help="Path to episode data JSONL file"
@@ -554,82 +551,90 @@ def main():  # noqa: C901
         "--seed",
         type=int,
         default=None,
-        help="Random seed for reproducibility (affects stochastic components if any added in future)",
+        help=(
+            "Random seed for reproducibility (affects stochastic components if any added in future)"
+        ),
     )
     parser.add_argument(
         "--validate",
         action="store_true",
         help="Validate JSON output structure and numeric finiteness before writing",
     )
-
     parser.add_argument(
         "--log-level",
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
         default="INFO",
         help="Logging verbosity (default: INFO)",
     )
-    args = parser.parse_args()
-    _apply_log_level(getattr(args, "log_level", None))
+    return parser
 
-    # Load data
+
+def _load_inputs(
+    args: argparse.Namespace,
+) -> Tuple[List[Dict], Dict[str, Dict[str, float]], Dict[str, float]]:
     try:
         episodes = load_episodes_data(args.episodes)
         baseline_stats = load_baseline_stats(args.baseline)
         weights = load_weights(args.weights)
+        return episodes, baseline_stats, weights
     except FileNotFoundError as e:
         logger.error("File not found: %s", e)
-        return EXIT_INPUT_ERROR
+        raise
     except Exception as e:
         logger.error("Error loading data: %s", e)
-        return EXIT_RUNTIME_ERROR
+        raise
 
-    # Apply seed if provided
-    if args.seed is not None:
-        np.random.seed(args.seed)
 
-    # Initialize analyzer
-    analyzer = SNQISensitivityAnalyzer(episodes, baseline_stats)
+def _apply_seed_if_any(seed: Optional[int]) -> None:
+    if seed is not None:
+        np.random.seed(seed)
 
-    # Run analyses
-    results = {}
 
+def _run_analyses(
+    analyzer: SNQISensitivityAnalyzer,
+    weights: Dict[str, float],
+    sweep_points: int,
+    pairwise_points: int,
+) -> Dict[str, Any]:
+    results: Dict[str, Any] = {}
     logger.info("Running weight sweep analysis")
-    results["weight_sweep"] = analyzer.weight_sweep_analysis(weights, n_points=args.sweep_points)
+    results["weight_sweep"] = analyzer.weight_sweep_analysis(weights, n_points=sweep_points)
 
     logger.info("Running pairwise weight analysis")
-    results["pairwise"] = analyzer.pairwise_weight_analysis(weights, n_points=args.pairwise_points)
+    results["pairwise"] = analyzer.pairwise_weight_analysis(weights, n_points=pairwise_points)
 
     logger.info("Running ablation analysis")
     results["ablation"] = analyzer.ablation_analysis(weights)
 
     logger.info("Running normalization strategy analysis")
     results["normalization"] = analyzer.normalization_strategy_analysis(weights)
+    return results
 
-    # Augment with metadata before saving detailed results
-    def _git_commit() -> str:
-        try:
-            return (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
-                )
-                .decode()
-                .strip()
+
+def _git_commit() -> str:
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
             )
-        except Exception:
-            return "UNKNOWN"
+            .decode()
+            .strip()
+        )
+    except Exception:
+        return "UNKNOWN"
 
-    _t_end_perf = perf_counter()
-    _t_end_iso = datetime.now(timezone.utc).isoformat()
-    _runtime_seconds = _t_end_perf - _t_start_perf
 
-    metadata = {
+def _build_metadata(
+    args: argparse.Namespace, start_iso: str, end_iso: str, runtime_seconds: float
+) -> Dict[str, Any]:
+    return {
         "schema_version": 1,
-        "generated_at": _t_end_iso,
+        "generated_at": end_iso,
         "git_commit": _git_commit(),
         "seed": args.seed,
-        "start_time": _t_start_iso,
-        "end_time": _t_end_iso,
-        "runtime_seconds": _runtime_seconds,
+        "start_time": start_iso,
+        "end_time": end_iso,
+        "runtime_seconds": runtime_seconds,
         "provenance": {
             "episodes_file": str(args.episodes),
             "baseline_file": str(args.baseline),
@@ -640,27 +645,39 @@ def main():  # noqa: C901
             "skip_visualizations": args.skip_visualizations,
         },
     }
-    results["_metadata"] = metadata
 
-    # Validate detailed results
+
+def _validate_results(results: Dict[str, Any], validate: bool) -> Optional[int]:
     try:
-        if args.validate:
+        if validate:
             validate_snqi(results, "sensitivity", check_finite=True)
         else:
             assert_all_finite(results)
     except ValueError as e:
         logger.error("Validation failed: %s", e)
         return EXIT_VALIDATION_ERROR
+    return None
 
-    # Save detailed results after validation
-    args.output.mkdir(parents=True, exist_ok=True)
-    with open(args.output / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
+
+def _write_results(results: Dict[str, Any], output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-    # Generate summary report
-    summary = {
+
+def _build_summary(
+    results: Dict[str, Any],
+    total_episodes: int,
+    weights: Dict[str, float],
+    args: argparse.Namespace,
+    runtime_seconds: float,
+    start_iso: str,
+    end_iso: str,
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
         "analysis_summary": {
-            "total_episodes": len(episodes),
+            "total_episodes": total_episodes,
             "base_weights": weights,
             "most_sensitive_weights": [],
             "least_sensitive_weights": [],
@@ -670,7 +687,7 @@ def main():  # noqa: C901
 
     # Extract key insights
     if "ablation" in results:
-        importance_ranking = results["ablation"]["importance_ranking"]
+        importance_ranking = results["ablation"].get("importance_ranking", [])
         summary["analysis_summary"]["most_sensitive_weights"] = importance_ranking[:3]
         summary["analysis_summary"]["least_sensitive_weights"] = importance_ranking[-3:]
 
@@ -691,45 +708,58 @@ def main():  # noqa: C901
     summary["_metadata"] = metadata
     # Standardized top-level style summary section matching other scripts
     summary["summary"] = {
-        "total_episodes": len(episodes),
+        "total_episodes": total_episodes,
         "weights": weights,
         "seed": args.seed,
         "has_visualizations": not args.skip_visualizations,
         "sweep_points": args.sweep_points,
         "pairwise_points": args.pairwise_points,
-        "runtime_seconds": _runtime_seconds,
-        "start_time": _t_start_iso,
-        "end_time": _t_end_iso,
+        "runtime_seconds": runtime_seconds,
+        "start_time": start_iso,
+        "end_time": end_iso,
     }
-    with open(args.output / "sensitivity_summary.json", "w", encoding="utf-8") as f:
+    return summary
+
+
+def _write_summary(summary: Dict[str, Any], output_dir: Path) -> None:
+    with open(output_dir / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    # Generate visualizations
-    if not args.skip_visualizations:
-        try:
-            logger.info("Generating visualizations")
-            if not MATPLOTLIB_AVAILABLE:
-                logger.error(
-                    "Matplotlib is not installed but visualizations were requested. "
-                    "Install optional deps (viz extra) or re-run with --skip-visualizations."
-                )
-                # Return a distinct non-zero code while keeping JSON artifacts on disk
-                return EXIT_OPTIONAL_DEPS_MISSING
-            analyzer.generate_visualizations(results, args.output)
-        except Exception as e:
-            logger.warning("Failed to generate visualizations: %s", e)
 
-    logger.info("Sensitivity analysis completed. Results saved to %s", args.output)
+def _handle_visualizations(
+    analyzer: SNQISensitivityAnalyzer,
+    results: Dict[str, Any],
+    output_dir: Path,
+    skip_visualizations: bool,
+) -> Optional[int]:
+    if skip_visualizations:
+        return None
+    try:
+        logger.info("Generating visualizations")
+        if not MATPLOTLIB_AVAILABLE:
+            logger.error(
+                "Matplotlib is not installed but visualizations were requested. "
+                "Install optional deps (viz extra) or re-run with --skip-visualizations."
+            )
+            # Return a distinct non-zero code while keeping JSON artifacts on disk
+            return EXIT_OPTIONAL_DEPS_MISSING
+        analyzer.generate_visualizations(results, output_dir)
+    except Exception as e:
+        logger.warning("Failed to generate visualizations: %s", e)
+    return None
 
-    # Print key findings
+
+def _print_summary(results: Dict[str, Any], total_episodes: int) -> None:
+    logger.info("Sensitivity analysis completed.")
     print("\nSensitivity Analysis Summary:")
-    print(f"Episodes analyzed: {len(episodes)}")
+    print(f"Episodes analyzed: {total_episodes}")
 
     if "ablation" in results:
-        importance_ranking = results["ablation"]["importance_ranking"]
-        print("\nMost influential weight components:")
-        for i, (weight_name, importance) in enumerate(importance_ranking[:3], 1):
-            print(f"  {i}. {weight_name}: {importance:.4f}")
+        importance_ranking = results["ablation"].get("importance_ranking", [])
+        if importance_ranking:
+            print("\nMost influential weight components:")
+            for i, (weight_name, importance) in enumerate(importance_ranking[:3], 1):
+                print(f"  {i}. {weight_name}: {importance:.4f}")
 
     if "normalization" in results:
         print("\nNormalization strategy impact:")
@@ -739,6 +769,58 @@ def main():  # noqa: C901
                 corr = data["ranking_correlation"]
                 print(f"  {strategy}: ranking correlation = {corr:.4f}")
 
+
+def main() -> int:
+    start_perf = perf_counter()
+    start_iso = datetime.now(timezone.utc).isoformat()
+
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+    _apply_log_level(getattr(args, "log_level", None))
+
+    try:
+        episodes, baseline_stats, weights = _load_inputs(args)
+    except Exception:
+        return EXIT_RUNTIME_ERROR
+
+    _apply_seed_if_any(args.seed)
+    analyzer = SNQISensitivityAnalyzer(episodes, baseline_stats)
+
+    results = _run_analyses(analyzer, weights, args.sweep_points, args.pairwise_points)
+
+    end_perf = perf_counter()
+    end_iso = datetime.now(timezone.utc).isoformat()
+    runtime_seconds = end_perf - start_perf
+
+    metadata = _build_metadata(args, start_iso, end_iso, runtime_seconds)
+    results["_metadata"] = metadata
+
+    validation_rc = _validate_results(results, bool(getattr(args, "validate", False)))
+    if validation_rc is not None:
+        return validation_rc
+
+    _write_results(results, args.output)
+
+    summary = _build_summary(
+        results,
+        total_episodes=len(episodes),
+        weights=weights,
+        args=args,
+        runtime_seconds=runtime_seconds,
+        start_iso=start_iso,
+        end_iso=end_iso,
+        metadata=metadata,
+    )
+    _write_summary(summary, args.output)
+
+    viz_rc = _handle_visualizations(
+        analyzer, results, args.output, skip_visualizations=bool(args.skip_visualizations)
+    )
+    if viz_rc is not None:
+        return viz_rc
+
+    _print_summary(results, total_episodes=len(episodes))
+    logger.info("Results saved to %s", args.output)
     return EXIT_SUCCESS
 
 

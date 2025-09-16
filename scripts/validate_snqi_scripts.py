@@ -85,8 +85,11 @@ def test_weight_computation():
     # Test basic SNQI computation
     try:
         import sys
+        from pathlib import Path
 
-        sys.path.append("scripts")
+        # Ensure imports are resolved relative to this file, not CWD
+        scripts_dir = Path(__file__).resolve().parent
+        sys.path.insert(0, str(scripts_dir))
         from recompute_snqi_weights import SNQIWeightRecomputer
 
         recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
@@ -119,8 +122,11 @@ def validate_script_interfaces():
 
     try:
         import sys
+        from pathlib import Path
 
-        sys.path.append("scripts")
+        # Ensure imports are resolved relative to this file, not CWD
+        scripts_dir = Path(__file__).resolve().parent
+        sys.path.insert(0, str(scripts_dir))
 
         # Test recompute_snqi_weights module
         try:

@@ -1,6 +1,6 @@
 # robot-sf
 
-> 2024-03-28 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
+> 2025-09-16 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
 
 ## About
 
@@ -18,6 +18,10 @@ kinematics is driving at the campus of University of Augsburg using real
 map data from OpenStreetMap.
 
 ![](./docs/video/demo_01.gif)
+
+## Development
+
+Refer to the [development guide](./docs/dev_guide.md) for contribution guidelines, code standards, and templates.
 
 ## Installation
 

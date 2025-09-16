@@ -18,6 +18,7 @@ Update etiquette:
 - Extracted scattered `1e-9` literals into `SocialForcePlanner.EPSILON` constant for maintainability.
 - Added CI preflight (schema + uv + optional jq) and kept full test suite green.
 - UI/playback enhancements: frame rendering method, dynamic help overlay height, disentangled UI FPS pacing.
+- Implemented parallel workers in benchmark runner and CLI flag `--workers` (macOS-safe spawn); threaded through baseline stats; kept sequential default.
 
 ## 0. Scoping & Planning
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
@@ -75,7 +76,8 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Subcommand: `robot_sf_bench list-scenarios`
 - [x] Subcommand: `robot_sf_bench list-algorithms` (2025-09-16)
 - [ ] Subcommand: `robot_sf_bench validate-config`
-- [ ] Global flags: seed, parallel workers, progress bar, resume (base seed + quiet/fail-fast implemented; parallel/resume pending)
+- [ ] Global flags: seed, progress bar, resume
+- [x] Parallel workers flag (`--workers`) in CLI and Python API (2025-09-16)
 - [x] Logging: structured (JSONL) plus human-readable summary (per-run JSON summary + plots via `summary`) (2025-09-16)
 	- [x] Python API batch runner `run_batch(...)` with JSONL writing and schema validation (2025-09-08)
 	- [x] CLI baseline subcommand (`robot_sf_bench baseline`) to produce baseline med/p95 JSON (2025-09-08)
@@ -159,5 +161,5 @@ Next picks (2025-09-08):
 - [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-16 (Unified CLI incl. SNQI tools; summary plots; SF wrapper stabilized; curvature_mean metric; EPSILON constant; CI preflight)
+Last updated: 2025-09-16 (Unified CLI incl. SNQI tools; summary plots; SF wrapper stabilized; curvature_mean metric; EPSILON constant; CI preflight; parallel workers)
 

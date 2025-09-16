@@ -65,36 +65,52 @@ def _handle_list_algorithms(_args) -> int:
         return 2
 
 
+def _load_snqi_inputs(args):
+    snqi_weights = None
+    snqi_baseline = None
+    # Priority: explicit weights JSON
+    if getattr(args, "snqi_weights", None):
+        with open(args.snqi_weights, "r", encoding="utf-8") as f:
+            snqi_weights = json.load(f)
+    elif getattr(args, "snqi_weights_from", None):
+        with open(args.snqi_weights_from, "r", encoding="utf-8") as f:
+            report = json.load(f)
+        if isinstance(report, dict):
+            snqi_weights = (
+                report.get("results", {}).get("recommended", {}).get("weights")
+                or report.get("recommended", {}).get("weights")
+                or report.get("recommended_weights")
+            )
+        if not isinstance(snqi_weights, dict):
+            raise ValueError("No recommended weights found in report JSON")
+    if getattr(args, "snqi_baseline", None):
+        with open(args.snqi_baseline, "r", encoding="utf-8") as f:
+            snqi_baseline = json.load(f)
+    return snqi_weights, snqi_baseline
+
+
+def _progress_cb_factory(quiet: bool):
+    def _cb(i, total, sc, seed, ok, err):
+        if quiet:
+            return
+        status = "ok" if ok else "FAIL"
+        sid = sc.get("id", "unknown")
+        msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
+        if err:
+            msg += f" ({err})"
+        print(msg)
+
+    return _cb
+
+
 def _handle_run(args) -> int:
     try:
-
-        def _progress(i, total, sc, seed, ok, err):
-            if args.quiet:
-                return
-            status = "ok" if ok else "FAIL"
-            sid = sc.get("id", "unknown")
-            msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
-            if err:
-                msg += f" ({err})"
-            print(msg)
-
         # Optional: load SNQI weights/baseline for inline SNQI computation
-        snqi_weights = None
-        snqi_baseline = None
-        if getattr(args, "snqi_weights", None):
-            try:
-                with open(args.snqi_weights, "r", encoding="utf-8") as f:
-                    snqi_weights = json.load(f)
-            except Exception as e:  # pragma: no cover - error path
-                print(f"Error loading --snqi-weights: {e}", file=sys.stderr)
-                return 2
-        if getattr(args, "snqi_baseline", None):
-            try:
-                with open(args.snqi_baseline, "r", encoding="utf-8") as f:
-                    snqi_baseline = json.load(f)
-            except Exception as e:  # pragma: no cover - error path
-                print(f"Error loading --snqi-baseline: {e}", file=sys.stderr)
-                return 2
+        try:
+            snqi_weights, snqi_baseline = _load_snqi_inputs(args)
+        except Exception as e:  # pragma: no cover - error path
+            print(f"Error loading SNQI inputs: {e}", file=sys.stderr)
+            return 2
 
         summary = run_batch(
             scenarios_or_path=args.matrix,
@@ -107,7 +123,7 @@ def _handle_run(args) -> int:
             record_forces=args.record_forces,
             append=args.append,
             fail_fast=args.fail_fast,
-            progress_cb=_progress,
+            progress_cb=_progress_cb_factory(bool(args.quiet)),
             algo=args.algo,
             algo_config_path=args.algo_config,
             snqi_weights=snqi_weights,
@@ -196,6 +212,15 @@ def _add_run_subparser(
         type=str,
         default=None,
         help="Optional path to baseline stats JSON (median/p95) used for SNQI normalization",
+    )
+    p.add_argument(
+        "--snqi-weights-from",
+        type=str,
+        default=None,
+        help=(
+            "Convenience: path to an SNQI optimize/recompute output JSON to extract the "
+            "recommended weights. Ignored when --snqi-weights is provided."
+        ),
     )
     p.add_argument(
         "--fail-fast",

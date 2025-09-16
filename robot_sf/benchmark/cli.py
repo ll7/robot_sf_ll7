@@ -33,6 +33,7 @@ def _handle_baseline(args) -> int:
             algo=args.algo,
             algo_config_path=args.algo_config,
             workers=args.workers,
+            resume=(not bool(getattr(args, "no_resume", False))),
         )
         # Print brief summary to stdout for convenience
         print(json.dumps({"out": args.out, "keys": sorted(stats.keys())}, indent=2))
@@ -130,6 +131,7 @@ def _handle_run(args) -> int:
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
             workers=args.workers,
+            resume=(not bool(getattr(args, "no_resume", False))),
         )
         print(json.dumps(summary, indent=2))
         return 0
@@ -184,6 +186,11 @@ def _add_baseline_subparser(
         default=1,
         help="Number of parallel worker processes (1=sequential)",
     )
+    p.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Disable resume (skip detection of already present episodes)",
+    )
     p.set_defaults(cmd="baseline")
 
 
@@ -214,6 +221,11 @@ def _add_run_subparser(
         type=int,
         default=1,
         help="Number of parallel worker processes (1=sequential)",
+    )
+    p.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Disable resume (skip detection of already present episodes)",
     )
     p.add_argument(
         "--snqi-weights",
@@ -325,7 +337,6 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             default=None,
             help="JSON file containing initial weight mapping",
         )
-        p.add_argument("--progress", action="store_true", help="Show progress bars (tqdm)")
         p.add_argument(
             "--missing-metric-max-list",
             type=int,

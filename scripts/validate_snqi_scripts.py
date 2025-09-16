@@ -5,6 +5,8 @@ This script provides a minimal test to ensure the weight recomputation
 and sensitivity analysis scripts are working correctly.
 """
 
+from robot_sf.benchmark.snqi import compute_snqi
+
 
 def create_minimal_test_data():
     """Create minimal test data for validation."""
@@ -98,9 +100,9 @@ def test_weight_computation():
         default_weights = recomputer.default_weights()
         print("✓ Default weights generation: PASS")
 
-        # Test SNQI computation
+        # Test SNQI computation (use canonical module-level function)
         for i, episode in enumerate(episodes):
-            score = recomputer.compute_snqi(episode["metrics"], default_weights)
+            score = compute_snqi(episode["metrics"], default_weights, baseline_stats)
             print(f"✓ SNQI computation episode {i + 1}: {score:.3f}")
 
         # Test different strategies

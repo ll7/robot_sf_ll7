@@ -3,19 +3,20 @@
 Use this as the single source of truth for this repo. Prefer these rules over generic habits; fall back to ad‑hoc searches or shell when something is clearly out of sync.
 
 ## Executive summary
-- Clarify first, then code: ask concise, optioned questions; propose sensible defaults; don’t block on non‑essentials.
-- Design doc first for non‑trivial work; always add tests with code changes; keep the codebase ruff‑clean.
-- Use uv + Ruff + pytest and the provided VS Code tasks; run quality gates before pushing.
-- Always create environments via factory functions (no direct instantiation).
-- Follow Git best practices: small PRs, meaningful commits with issue numbers, and rebased branches.
+- **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` submodule, StableBaselines3 training pipeline
+- **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
+- **Dependencies**: `fast-pysf` git submodule for pedestrian physics; always run `git submodule update --init --recursive` after clone
+- **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
+- **Testing**: Unit tests in `tests/`, GUI-dependent tests in `test_pygame/` (with headless env vars), integration tests for smoke/performance validation
 
 ## Table of contents
+- Executive summary
+- Architecture and key components
+- Critical dependencies and setup  
 - Core principles
 - Tooling and tasks (uv, Ruff, pytest, VS Code)
-- Git workflow (branches, commits, PRs)
-- Testing policy and how to run tests
-- Documentation standards and design docs
-- Environment setup and usage (factory pattern)
+- Testing strategy and benchmark system
+- Environment creation patterns
 - CI/CD expectations
 - Validation scenarios and performance
 - Training and examples (incl. Docker)
@@ -31,6 +32,97 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 
 ---
 
+## Architecture and key components
+### Environment factory pattern (CRITICAL)
+**Always use factory functions** — never instantiate gym environments directly:
+```python
+from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
+
+# Basic robot navigation
+env = make_robot_env(debug=True)
+
+# With image observations  
+env = make_image_robot_env(debug=True)
+
+# Pedestrian environment (requires trained robot model)
+env = make_pedestrian_env(robot_model=model, debug=True)
+```
+
+### Key architectural layers
+- **`robot_sf/gym_env/`**: Gymnasium environment implementations with factory pattern
+- **`robot_sf/baselines/`**: Baseline navigation algorithms (e.g., SocialForce) for benchmarking
+- **`robot_sf/benchmark/`**: Benchmark runner, CLI, metrics collection, and schema validation
+- **`robot_sf/sim/`**: Core simulation components (FastPysfWrapper for pedestrian physics)
+- **`fast-pysf/`**: Git submodule providing optimized SocialForce pedestrian simulation
+
+### Data flow and integration
+- **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
+- **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis
+- **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` submodule → NumPy/Numba physics
+
+### Configuration hierarchy
+Use unified config classes from `robot_sf.gym_env.unified_config`:
+```python
+from robot_sf.gym_env.unified_config import RobotSimulationConfig, ImageRobotConfig
+
+config = RobotSimulationConfig()
+config.peds_have_obstacle_forces = True  # Enable ped-robot physics interaction
+env = make_robot_env(config=config)
+```
+
+## Critical dependencies and setup
+### Fast-pysf submodule (REQUIRED)
+**Always initialize submodules** after git clone or checkout:
+```bash
+git submodule update --init --recursive
+```
+Without this, pedestrian simulation will fail. The `fast-pysf/` directory contains optimized SocialForce physics.
+
+### Installation and setup
+```bash
+# One‑time
+git submodule update --init --recursive
+uv sync && source .venv/bin/activate
+
+# Dev extras and pre‑commit (optional)
+uv sync --extra dev
+uv run pre-commit install
+
+# Quick import check
+uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
+```
+
+### Working with baselines and benchmarks
+**Baseline algorithms** in `robot_sf/baselines/` implement navigation strategies for benchmarking:
+```python
+from robot_sf.baselines import get_baseline
+
+# Get Social Force planner
+SocialForcePlanner = get_baseline("baseline_sf")
+planner = SocialForcePlanner(config, seed=42)
+```
+
+**Benchmark system** provides standardized evaluation:
+```bash
+# Run baseline benchmarks with CLI
+uv run python -m robot_sf.benchmark.cli baseline --algo baseline_sf --out results.json
+
+# List available algorithms
+uv run python -m robot_sf.benchmark.cli list-algorithms
+```
+
+### Testing strategy (THREE test suites)
+```bash
+# 1. Main unit/integration tests (2-3 min)
+uv run pytest tests
+
+# 2. GUI/display-dependent tests (headless mode)  
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
+
+# 3. fast-pysf submodule tests (some may fail without map files)
+uv run python -m pytest fast-pysf/tests/ -v
+```
+
 ## Core principles
 ### Code quality standards
 - Clear, intent‑revealing names; small, cohesive functions; robust error handling.
@@ -39,6 +131,28 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
 
+### Design decisions
+- Favor readability and maintainability over micro‑optimizations.
+- Use type hints for all public functions and methods; prefer `typing` over `Any`.
+- Use exceptions for error handling; avoid silent failures.
+
+#### CLI vs programmatic use
+
+- This project prioritizes traceability and reproducibility of benchmarks. Prefer generating script- and config-driven workflows over ad-hoc command lines or inline parameter tweaks.
+- Do not focus on the cli directly; prefer programmatic use and factory functions.
+- The CLI is not important; prefer programmatic use and factory functions.
+- Use logging for non‑error informational messages; avoid print statements except in CLI entry points.
+
+- Configs: configs/<area>/<name>.yaml (single source of truth for all hyperparameters, seeds, envs).
+-	Scripts: scripts/<task>_<runner>.py (read config path, set up run dirs, log metadata, call library code).
+-	Runs/outputs/results: results/<timestamp>_<shortname>/ (store config.yaml, git_meta.json, logs, metrics, artifacts).
+-	deterministic seed in both config and code
+
+### Code reviews
+- All changes must be reviewed by at least one other team member.
+- Reviewers should check for correctness, style, test coverage, and documentation.
+- Use GitHub’s review tools to leave comments and approve changes.
+
 #### Docstrings
 - Every public module, function, class, and method should have a docstring.
 - Docstrings should use triple double quotes (""").
@@ -46,10 +160,11 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
 
-### Always ask clarifying questions (with options)
+### Ask clarifying questions (with options)
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
-- If answers are unknown, propose sensible defaults and proceed (don’t block on non‑essentials).
+- Add arguments to the options for easy decision-making.
+- If answers are unknown, propose sensible defaults and proceed (don't block on non‑essentials).
 
 Examples (copy‑ready):
 - Scope: Is the metric per episode or a per‑timestep aggregate?
@@ -60,6 +175,7 @@ Examples (copy‑ready):
 
 ### Problem‑solving approach
 - Break problems into smaller tasks; research prior art and patterns.
+- Clearly prioritize must‑haves vs nice‑to‑haves.
 - Consider system‑wide impact, edge cases, error handling, and failure modes.
 - Document architectural decisions and trade‑offs.
 
@@ -145,143 +261,22 @@ uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-o
 
 ---
 
-## Git workflow (branches, commits, PRs)
-- Branch naming:
-  - `feature/42-fix-button-alignment`
-  - `bugfix/89-memory-leak-in-simulator`
-  - `enhancement/156-improve-lidar-performance`
-- Commits (include issue number):
-  - `fix: resolve 2x speed multiplier in VisualizableSimState (#42)`
-  - `feat: add new lidar sensor configuration options (#156)`
-  - `docs: update installation guide with GPU setup instructions`
-  - `test: add comprehensive integration tests for pedestrian simulation`
-- Keep branches rebased with `main`.
-- Use PRs for review; run full test suite before merging.
+## Tooling and tasks (uv, Ruff, pytest, VS Code)
+- Dependencies/runtime: uv
+  - Install/resolve: VS Code task "Install Dependencies" (uv sync)
+  - Run: `uv run <cmd>` for any Python command
+  - Add deps: `uv add <package>` (or edit `pyproject.toml` and sync)
+- Lint/format: Ruff
+  - VS Code task "Ruff: Format and Fix" (keeps repo ruff‑clean; document exceptions with comments)
+- Tests: pytest
+  - VS Code task "Run Tests" (default suite)
+  - "Run Tests (Show All Warnings)" for diagnostics
+  - "Run Tests (GUI)" for display‑dependent tests (headless via environment vars)
+- Code quality checks: VS Code task "Check Code Quality" (Ruff + pylint errors‑only)
+- Diagrams: VS Code task "Generate UML"
 
----
-
-## Testing policy and how to run tests
-### Policy
-- Write tests for all new features and bug fixes.
-- Unit/integration tests in `tests/`; GUI‑dependent tests in `test_pygame/`.
-- Deterministic tests: seed RNGs, use fixtures, avoid time/network flakiness.
-- Add regression tests to prevent reintroduction of bugs.
-- For perf‑sensitive code, add simple benchmarks or timing asserts (document variability).
-
-### Running tests
-```bash
-# Main suite (2–3 min) — do not cancel
-uv run pytest tests
-
-# GUI tests (1–2 min; headless) — do not cancel
-DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
-
-# fast-pysf submodule tests (2 tests may fail due to missing map files)
-uv run python -m pytest fast-pysf/tests/ -v
-```
-
----
-
-## Documentation standards and design docs
-### Technical documentation
-- Place docs in `docs/` with a clear folder structure (kebab‑case per major feature/issue).
-- Each folder has a README.md covering: problem, solution overview, implementation details, impact analysis, testing, future considerations, related links.
-- Use diagrams/screenshots when helpful; keep docs up‑to‑date.
-
-### Design doc first (required for non‑trivial work)
-Create under `docs/dev/issues/<topic>/README.md` (or issue‑specific folder). Include:
-- Context (link issue/PR), goals and non‑goals
-- Constraints/assumptions; options and trade‑offs
-- Chosen approach (diagram if helpful)
-- Data shapes/APIs/contracts (inputs/outputs, error modes)
-- Test plan (unit/integration, GUI if needed)
-- Rollout/back‑compat notes; metrics/observability
-- Open questions and follow‑ups
-
-Minimal template (copy‑paste):
-```markdown
-# <Title>
-
-## Context
-- Issue/PR: <link>
-
-## Goals / Non‑goals
-- Goals: …
-- Non‑goals: …
-
-## Constraints & assumptions
-- …
-
-## Options & trade‑offs
-- Option A …
-- Option B …
-
-## Chosen approach
-- … (diagram if helpful)
-
-## Contracts (APIs/data)
-- Inputs/outputs, types, error modes
-
-## Test plan
-- Unit, integration, GUI (if needed)
-
-## Rollout & back‑compat
-- Migration notes, toggles, fallback
-
-## Metrics/observability
-- …
-
-## Open questions / follow‑ups
-- …
-```
-
----
-
-## Environment setup and usage (factory pattern)
-### Installation and setup
-```bash
-# One‑time
-git submodule update --init --recursive
-uv sync && source .venv/bin/activate
-
-# Dev extras and pre‑commit (optional)
-uv sync --extra dev
-uv run pre-commit install
-
-# Quick import check
-uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
-```
-
-### Environment creation (always use factory functions)
-```python
-from robot_sf.gym_env.environment_factory import (
-    make_robot_env,
-    make_image_robot_env,
-    make_pedestrian_env,
-)
-
-# Basic robot environment
-env = make_robot_env(debug=True)
-
-# Robot with image observations
-env = make_image_robot_env(debug=True)
-
-# Pedestrian environment (requires trained robot model)
-env = make_pedestrian_env(robot_model=model, debug=True)
-```
-
-### Configuration
-```python
-from robot_sf.gym_env.unified_config import (
-    RobotSimulationConfig,
-    ImageRobotConfig,
-    PedestrianSimulationConfig,
-)
-
-config = RobotSimulationConfig()
-config.peds_have_obstacle_forces = True
-env = make_robot_env(config=config)
-```
+Quality gates to run locally before pushing:
+1) Install Dependencies → 2) Ruff: Format and Fix → 3) Check Code Quality → 4) Run Tests
 
 ---
 
@@ -380,8 +375,8 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 ## Helpful definitions and repository structure
 ### Helpful definitions
 - uv: Fast Python package/dependency manager and runner (`uv sync`, `uv run`).
-- Ruff: Python linter and formatter (run via “Ruff: Format and Fix” task).
-- pytest: Testing framework (run via “Run Tests” tasks).
+- Ruff: Python linter and formatter (run via "Ruff: Format and Fix" task).
+- pytest: Testing framework (run via "Run Tests" tasks).
 - VS Code tasks: Standardized workflows (install, lint, test, diagram).
 - Quality gates: Minimal checks before pushing (install → lint/format → quality check → tests).
 
@@ -431,7 +426,7 @@ Brief description of the change.
 ## Design doc template (snippet)
 ```markdown
 # <Title>
-(See “Documentation standards and design docs” for full guidance)
+(See "Documentation standards and design docs" for full guidance)
 
 ## Context, Goals, Non‑goals
 ## Constraints & assumptions
@@ -449,12 +444,12 @@ Brief description of the change.
 ## Security & network policy
 - No secrets in code, configs, or commit messages.
 - Avoid network access in tests; prefer local fixtures. If unavoidable, document and gate behind flags.
-- Don’t exfiltrate data; handle PII safely (none expected in this repo).
+- Don't exfiltrate data; handle PII safely (none expected in this repo).
 
 ---
 
 ## Large files & artifacts policy
-- Don’t commit large binaries to the repo; prefer Git LFS for models/datasets when needed.
+- Don't commit large binaries to the repo; prefer Git LFS for models/datasets when needed.
 - Use the `model/` directory conventions; document artifact sources and versions.
 
 ---

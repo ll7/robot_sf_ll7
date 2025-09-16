@@ -74,6 +74,7 @@ def run_and_compute_baseline(
     algo: str = "simple_policy",
     algo_config_path: Optional[str] = None,
     workers: int = 1,
+    resume: bool = True,
 ) -> Dict[str, Dict[str, float]]:
     # Optionally run batch to collect JSONL
     tmp_jsonl: str | None = None
@@ -92,11 +93,12 @@ def run_and_compute_baseline(
         horizon=horizon,
         dt=dt,
         record_forces=record_forces,
-        append=False,
+        append=True if resume else False,
         fail_fast=False,
         algo=algo,
         algo_config_path=algo_config_path,
         workers=workers,
+        resume=resume,
     )
 
     records = read_jsonl(tmp_jsonl)

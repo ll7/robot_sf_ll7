@@ -176,6 +176,8 @@ class SimulationView:
     current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
     display_text: bool = field(default=False)  # Add this field to control text visibility
     ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
+    # Internal flag: True when a display window is created via pygame.display.set_mode
+    _use_display: bool = field(init=False, default=False)
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -194,6 +196,7 @@ class SimulationView:
 
         if self.record_video or is_headless:
             # Create offscreen surface for recording or headless mode
+            self._use_display = False
             self.screen = pygame.Surface((int(self.width), int(self.height)))
             if self.record_video:
                 logger.info("Created offscreen surface for video recording")
@@ -201,6 +204,7 @@ class SimulationView:
                 logger.info("Created offscreen surface for headless mode")
         else:
             # Create window for display
+            self._use_display = True
             self.screen = pygame.display.set_mode(
                 (int(self.width), int(self.height)), pygame.RESIZABLE
             )
@@ -361,7 +365,8 @@ class SimulationView:
         else:
             # Store the current target FPS for display
             self.current_target_fps = target_fps
-            pygame.display.update()
+            if self._use_display:
+                pygame.display.update()
             # Control frame rate with pygame's clock
             self.clock.tick(target_fps)
 
@@ -484,12 +489,17 @@ class SimulationView:
         adds text at position 0, and updates the display.
         """
         self.screen.fill(BACKGROUND_COLOR)
-        pygame.display.update()
+        if self._use_display:
+            pygame.display.update()
 
     def _resize_window(self):
         logger.debug("Resizing the window.")
         old_surface = self.screen
-        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        if self._use_display:
+            self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        else:
+            # In offscreen mode, just recreate the Surface at the new size
+            self.screen = pygame.Surface((int(self.width), int(self.height)))
         self.screen.blit(old_surface, (0, 0))
 
     def _move_camera(self, state: VisualizableSimState):

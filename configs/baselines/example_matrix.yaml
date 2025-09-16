@@ -1,0 +1,34 @@
+---
+# Minimal scenario matrix for quick CLI demos
+# Used in docs for:
+#  - uv run robot_sf_bench baseline --matrix configs/baselines/example_matrix.yaml ...
+#  - uv run robot_sf_bench run --matrix configs/baselines/example_matrix.yaml ...
+- id: demo-uni-low-open
+  density: low           # low|med|high
+  flow: uni              # uni|bi
+  obstacle: open         # open|narrow|blocked (implementation-specific)
+  groups: 0.0            # group fraction (0.0–1.0)
+  speed_var: low         # low|med|high
+  goal_topology: point   # point|corridor (implementation-specific)
+  robot_context: embedded
+  repeats: 2
+
+- id: demo-uni-med-open
+  density: med
+  flow: uni
+  obstacle: open
+  groups: 0.0
+  speed_var: med
+  goal_topology: point
+  robot_context: embedded
+  repeats: 2
+
+- id: demo-bi-low-open
+  density: low
+  flow: bi
+  obstacle: open
+  groups: 0.0
+  speed_var: low
+  goal_topology: point
+  robot_context: embedded
+  repeats: 2

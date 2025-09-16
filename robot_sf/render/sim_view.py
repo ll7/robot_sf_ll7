@@ -304,14 +304,16 @@ class SimulationView:
 
     def _draw_sensor_data(self, state: VisualizableSimState):
         """Draw sensor data like lidar rays."""
-        if hasattr(state, "ray_vecs"):
+        if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
             self._augment_lidar(state.ray_vecs)
         if (
             hasattr(state, "ego_ped_pose")
             and state.ego_ped_pose
             and hasattr(state, "ego_ped_ray_vecs")
         ):
-            self._augment_lidar(state.ego_ped_ray_vecs)
+            # ego_ped_ray_vecs is Optional; skip if None to avoid TypeError
+            if state.ego_ped_ray_vecs is not None:
+                self._augment_lidar(state.ego_ped_ray_vecs)
 
     def _draw_actions(self, state: VisualizableSimState):
         """Draw action indicators for all entities."""
@@ -564,6 +566,20 @@ class SimulationView:
         )
 
     def _augment_lidar(self, ray_vecs: np.ndarray):
+        """Draw lidar rays given an array of point pairs.
+
+        Accepts an empty array and returns early. If None is provided, does nothing.
+        """
+        if ray_vecs is None:
+            return
+        # Handle empty arrays/lists gracefully
+        try:
+            if len(ray_vecs) == 0:  # works for np.ndarray and list-like
+                return
+        except TypeError:
+            # Not iterable or no length; nothing to draw
+            return
+
         for p1, p2 in ray_vecs:
             pygame.draw.line(
                 self.screen,

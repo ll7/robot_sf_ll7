@@ -6,7 +6,7 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` submodule, StableBaselines3 training pipeline
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git submodule for pedestrian physics; always run `git submodule update --init --recursive` after clone
-- **Toolchain**: uv + Ruff + pytest with VS Code tasks; run quality gates before pushing
+- **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
 - **Testing**: Unit tests in `tests/`, GUI-dependent tests in `test_pygame/` (with headless env vars), integration tests for smoke/performance validation
 
 ## Table of contents

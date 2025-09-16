@@ -125,6 +125,21 @@ uv run robot_sf_bench run \
   --snqi-baseline results/baseline_stats.json
 ```
 
+Alternatively, if you have an output JSON from the optimization or recomputation tools, you can extract the recommended weights directly using `--snqi-weights-from`:
+
+```bash
+uv run robot_sf_bench run \
+  --matrix configs/baselines/example_matrix.yaml \
+  --out results/episodes.jsonl \
+  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --snqi-weights-from results/snqi_opt_report.json \
+  --snqi-baseline results/baseline_stats.json
+```
+
+Notes:
+- `--snqi-weights` takes precedence over `--snqi-weights-from` when both are provided.
+- The CLI looks for recommended weights under `results.recommended.weights`, then `recommended.weights`, then `recommended_weights` in the report JSON.
+
 ## Overview
 The Social Navigation Quality Index (SNQI) aggregates multiple navigation metrics (success, time, safety, comfort, smoothness) into a single score. It is intentionally bounded and designed for reproducibility and comparative benchmarking:
 ```

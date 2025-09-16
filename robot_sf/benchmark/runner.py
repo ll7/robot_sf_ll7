@@ -19,7 +19,7 @@ import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 
 import numpy as np
 import yaml
@@ -96,6 +96,42 @@ def _git_hash_fallback() -> str:
 def _config_hash(obj: Any) -> str:
     data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(data).hexdigest()[:16]
+
+
+def compute_episode_id(scenario_params: Dict[str, Any], seed: int) -> str:
+    """Compute a deterministic episode identifier.
+
+    For v1, we retain the legacy format to preserve compatibility with existing
+    outputs and make resume effective immediately. In a future iteration we may
+    extend this to include algo/config and sim params via a stable hash.
+    """
+    return f"{scenario_params.get('id', 'unknown')}--{seed}"
+
+
+def index_existing(out_path: Path) -> Set[str]:
+    """Scan an existing JSONL file and return the set of episode_ids found.
+
+    Tolerates malformed lines and missing keys; logs are not emitted here to keep
+    the function side-effect free (caller may log if desired).
+    """
+    ids: Set[str] = set()
+    try:
+        with out_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    eid = rec.get("episode_id")
+                    if isinstance(eid, str):
+                        ids.add(eid)
+                except Exception:
+                    # Ignore malformed JSON lines
+                    continue
+    except FileNotFoundError:
+        return set()
+    return ids
 
 
 def load_scenario_matrix(path: str | Path) -> List[Dict[str, Any]]:
@@ -516,6 +552,7 @@ def run_batch(
     algo: str = "simple_policy",
     algo_config_path: Optional[str] = None,
     workers: int = 1,
+    resume: bool = True,
 ) -> Dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -547,6 +584,17 @@ def run_batch(
         "algo": algo,
         "algo_config_path": algo_config_path,
     }
+
+    # Resume support: filter jobs whose episode_id already exists in out_path.
+    if resume and out_path.exists():
+        existing_ids = index_existing(out_path)
+        if existing_ids:
+            filtered: List[tuple[Dict[str, Any], int]] = []
+            for sc, seed in jobs:
+                eid = compute_episode_id(sc, seed)
+                if eid not in existing_ids:
+                    filtered.append((sc, seed))
+            jobs = filtered
 
     if workers <= 1:
         wrote, failures = _run_batch_sequential(

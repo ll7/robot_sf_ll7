@@ -253,3 +253,14 @@ snqi_sensitivity_analysis.py   # Deeper robustness & interaction analysis
 Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is planned.
 Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is available.
 
+Inline SNQI during episode generation (compute `metrics.snqi` on the fly):
+
+```sh
+uv run robot_sf_bench run \
+    --matrix configs/baselines/example_matrix.yaml \
+    --out results/episodes.jsonl \
+    --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+    --snqi-weights model/snqi_canonical_weights_v1.json \
+    --snqi-baseline results/baseline_stats.json
+```
+

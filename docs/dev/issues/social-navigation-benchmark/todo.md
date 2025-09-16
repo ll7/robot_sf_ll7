@@ -9,11 +9,13 @@ Update etiquette:
 - Keep scope creep isolated in the Stretch section.
 
 ---
-### Recent Updates (2025-09-12)
-- Implemented and documented `curvature_mean` metric (added tests; integrated into existing path smoothness suite).
+### Recent Updates (2025-09-16)
+- Implemented unified benchmark CLI `robot_sf_bench` with subcommands: `run`, `baseline`, `summary`, and `snqi (optimize|recompute)`; added console script entry (pyproject).
+- Implemented summary plots utility (histograms for min_distance, avg_speed) and wired to CLI (`summary`).
+- Implemented baseline stats runner and integrated it with CLI (`baseline`).
+- Implemented and documented `curvature_mean` metric (added tests; integrated into path smoothness suite).
 - Rebuilt & stabilized Social Force baseline (deterministic seeding, NaN guards, consolidated force composition).
 - Extracted scattered `1e-9` literals into `SocialForcePlanner.EPSILON` constant for maintainability.
-- Refactored benchmark CLI (reduced complexity, removed unreachable code).
 - Added CI preflight (schema + uv + optional jq) and kept full test suite green.
 - UI/playback enhancements: frame rendering method, dynamic help overlay height, disentangled UI FPS pacing.
 
@@ -64,30 +66,31 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 ## 3. Composite Index (SNQI)
 - [x] Draft formula (weighted normalized metrics) (2025-09-08)
 - [x] Implement normalization strategy (percentile baseline: median/p95) (2025-09-08)
-	- [ ] Provide script to recompute weights / sensitivity analysis
+	- [x] Provide script to recompute weights / sensitivity analysis (CLI: `snqi optimize|recompute`) (2025-09-16)
 - [ ] Ablation: measure discriminative power with and without each component
 
 ## 4. Configuration & CLI Harness
 - [ ] YAML/JSON schema for benchmark suite definition (list of scenario specs + repetitions)
-- [ ] Implement CLI: `robot_sf_bench run --suite core --algo baseline_sf --out results/` 
+- [x] Implement CLI: `robot_sf_bench run ...` (uses `--matrix` instead of `--suite`; includes `--algo`, `--snqi-*`, `--quiet`, `--fail-fast`) (2025-09-16)
 - [ ] Subcommand: `robot_sf_bench list-scenarios`
+- [x] Subcommand: `robot_sf_bench list-algorithms` (2025-09-16)
 - [ ] Subcommand: `robot_sf_bench validate-config`
-- [ ] Global flags: seed, parallel workers, progress bar, resume
-- [ ] Logging: structured (JSONL) plus human-readable summary
+- [ ] Global flags: seed, parallel workers, progress bar, resume (base seed + quiet/fail-fast implemented; parallel/resume pending)
+- [x] Logging: structured (JSONL) plus human-readable summary (per-run JSON summary + plots via `summary`) (2025-09-16)
 	- [x] Python API batch runner `run_batch(...)` with JSONL writing and schema validation (2025-09-08)
 	- [x] CLI baseline subcommand (`robot_sf_bench baseline`) to produce baseline med/p95 JSON (2025-09-08)
 
 ## 5. Baseline Algorithm Integrations
 - [x] Standard Social Force planner wrapper (2025-09-12)
 - [ ] Existing RL policy loader (PPO model) adapter
-- [ ] Random / naive reactive baseline
+- [ ] Random / naive reactive baseline (naive `simple_policy` present; random policy pending)
 - [ ] (Optional) ORCA integration (licensing check)
-- [ ] Unified interface (step(obs) -> action) with timeouts / safety clamp
-- [ ] Per-baseline config file (hyperparameters, seeds)
+- [ ] Unified interface (step(obs) -> action) with timeouts / safety clamp (core interface in place; timeouts pending)
+- [x] Per-baseline config file (hyperparameters, seeds) via `--algo-config` YAML (2025-09-16)
 
 ## 6. Evaluation Pipeline & Aggregation
 - [x] Aggregation script: merges JSONL episodes -> metrics CSV + SNQI per algo (2025-09-08)
-- [ ] Confidence interval computation (bootstrap or across seeds)
+- [ ] Confidence interval computation (bootstrap or across seeds) (SNQI bootstrap options available; episode-level CIs pending)
 - [ ] Seed variance analysis script
 - [ ] Automatic ranking table generator
 - [ ] Failure case extractor (episodes with collisions / low comfort)
@@ -95,7 +98,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 
 ## 7. Visualization & Reporting Assets
 - [ ] Force field heatmap + vector overlays example figure
-- [ ] Distribution plots (distance, force magnitude, comfort exposure)
+- [ ] Distribution plots (distance, force magnitude, comfort exposure) (basic histograms for min_distance, avg_speed via `summary` implemented)
 - [ ] Pareto fronts (Time vs. Comfort, Collisions vs. SNQI)
 - [ ] Scenario montage thumbnails
 - [ ] Baseline comparison table auto-generation (Markdown)
@@ -156,5 +159,5 @@ Next picks (2025-09-08):
 - [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-12 (Social Force wrapper stabilized; curvature_mean metric; EPSILON constant; CLI & CI enhancements)
+Last updated: 2025-09-16 (Unified CLI incl. SNQI tools; summary plots; SF wrapper stabilized; curvature_mean metric; EPSILON constant; CI preflight)
 

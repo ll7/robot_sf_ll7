@@ -241,6 +241,7 @@ Tools for recomputing, optimizing, and analyzing Social Navigation Quality Index
 
 - User Guide: [`docs/snqi-weight-tools/README.md`](./docs/snqi-weight-tools/README.md)
 - Design & architecture: [`docs/dev/issues/snqi-recomputation/DESIGN.md`](./docs/dev/issues/snqi-recomputation/DESIGN.md)
+- Headless usage (minimal deps): see [Headless mode](./docs/snqi-weight-tools/README.md#headless-mode-minimal-deps)
 
 Core capabilities:
 

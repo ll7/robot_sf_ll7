@@ -29,6 +29,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 - [Future Enhancements](#future-enhancements)
 - [Related Design Document](#related-design-document)
 - [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
+  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
 ## Bootstrap Examples
 Estimate stability and confidence intervals for the recommended weights.
 
@@ -89,6 +90,21 @@ Normalization details are documented in `docs/snqi-weight-tools/normalization.md
 - [Future Enhancements](#future-enhancements)
 - [Related Design Document](#related-design-document)
 - [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
+  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
+
+### Inline SNQI during benchmark run
+You can compute SNQI on the fly while generating episodes via the unified benchmark CLI `run` subcommand by providing a weights JSON and baseline stats JSON:
+
+```bash
+uv run robot_sf_bench run \
+  --matrix configs/baselines/example_matrix.yaml \
+  --out results/episodes.jsonl \
+  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --snqi-weights model/snqi_canonical_weights_v1.json \
+  --snqi-baseline results/baseline_stats.json
+```
+
+When both files are provided, each episode record will include `metrics.snqi` computed using the same canonical normalization (median/p95 with clamping). Missing baseline entries fall back to neutral (0) contribution. See the naming note above for `w_near` vs `w_near_misses`.
 
 ## Overview
 The Social Navigation Quality Index (SNQI) aggregates multiple navigation metrics (success, time, safety, comfort, smoothness) into a single score. It is intentionally bounded and designed for reproducibility and comparative benchmarking:

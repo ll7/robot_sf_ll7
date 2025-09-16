@@ -151,9 +151,10 @@ uv run python -m pytest fast-pysf/tests/ -v
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
 
-### Always ask clarifying questions (with options)
+### Ask clarifying questions (with options)
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
+- Add arguments to the options for easy decision-making.
 - If answers are unknown, propose sensible defaults and proceed (don't block on non‑essentials).
 
 Examples (copy‑ready):

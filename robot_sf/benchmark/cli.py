@@ -32,6 +32,7 @@ def _handle_baseline(args) -> int:
             record_forces=args.record_forces,
             algo=args.algo,
             algo_config_path=args.algo_config,
+            workers=args.workers,
         )
         # Print brief summary to stdout for convenience
         print(json.dumps({"out": args.out, "keys": sorted(stats.keys())}, indent=2))
@@ -128,6 +129,7 @@ def _handle_run(args) -> int:
             algo_config_path=args.algo_config,
             snqi_weights=snqi_weights,
             snqi_baseline=snqi_baseline,
+            workers=args.workers,
         )
         print(json.dumps(summary, indent=2))
         return 0
@@ -176,6 +178,12 @@ def _add_baseline_subparser(
         help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)",
     )
     p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of parallel worker processes (1=sequential)",
+    )
     p.set_defaults(cmd="baseline")
 
 
@@ -201,6 +209,12 @@ def _add_run_subparser(
         help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)",
     )
     p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of parallel worker processes (1=sequential)",
+    )
     p.add_argument(
         "--snqi-weights",
         type=str,
@@ -500,6 +514,14 @@ def _configure_parser() -> argparse.ArgumentParser:
 def cli_main(argv: List[str] | None = None) -> int:
     parser = _configure_parser()
     args = parser.parse_args(argv)
+    # macOS safe start method for multiprocessing
+    if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:
+        try:
+            import multiprocessing as _mp
+
+            _mp.set_start_method("spawn", force=False)
+        except Exception:
+            pass
 
     # Access dynamic loaders if present
     snqi_loader = getattr(parser, "snqi_loader", {})  # type: ignore[no-any-explicit]

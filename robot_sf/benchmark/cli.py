@@ -78,6 +78,24 @@ def _handle_run(args) -> int:
                 msg += f" ({err})"
             print(msg)
 
+        # Optional: load SNQI weights/baseline for inline SNQI computation
+        snqi_weights = None
+        snqi_baseline = None
+        if getattr(args, "snqi_weights", None):
+            try:
+                with open(args.snqi_weights, "r", encoding="utf-8") as f:
+                    snqi_weights = json.load(f)
+            except Exception as e:  # pragma: no cover - error path
+                print(f"Error loading --snqi-weights: {e}", file=sys.stderr)
+                return 2
+        if getattr(args, "snqi_baseline", None):
+            try:
+                with open(args.snqi_baseline, "r", encoding="utf-8") as f:
+                    snqi_baseline = json.load(f)
+            except Exception as e:  # pragma: no cover - error path
+                print(f"Error loading --snqi-baseline: {e}", file=sys.stderr)
+                return 2
+
         summary = run_batch(
             scenarios_or_path=args.matrix,
             out_path=args.out,
@@ -92,6 +110,8 @@ def _handle_run(args) -> int:
             progress_cb=_progress,
             algo=args.algo,
             algo_config_path=args.algo_config,
+            snqi_weights=snqi_weights,
+            snqi_baseline=snqi_baseline,
         )
         print(json.dumps(summary, indent=2))
         return 0
@@ -165,6 +185,18 @@ def _add_run_subparser(
         help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)",
     )
     p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
+    p.add_argument(
+        "--snqi-weights",
+        type=str,
+        default=None,
+        help="Optional path to SNQI weights JSON to compute 'metrics.snqi' during run",
+    )
+    p.add_argument(
+        "--snqi-baseline",
+        type=str,
+        default=None,
+        help="Optional path to baseline stats JSON (median/p95) used for SNQI normalization",
+    )
     p.add_argument(
         "--fail-fast",
         action="store_true",

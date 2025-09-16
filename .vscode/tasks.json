@@ -61,6 +61,12 @@
 			"command": "uvx ty check . --exit-zero",
 			"problemMatcher": [],
 			"group": "test"
+		},
+		{
+			"label": "Markdown: Format",
+			"type": "shell",
+			"command": "uv run mdformat .",
+			"problemMatcher": []
 		}
 	]
 }

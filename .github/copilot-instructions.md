@@ -29,6 +29,7 @@ Use this as the single source of truth for this repo. Prefer these rules over ge
 - Security & network policy
 - Large files & artifacts policy
 - Quick reference and TL;DR checklist
+ - Markdown linting (docs quality)
 
 ---
 
@@ -339,6 +340,42 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 ### Docker issues
 - Docker build fails → often network related in CI; usually fine locally
 - GPU support → see `docs/GPU_SETUP.md` for NVIDIA Docker setup
+
+---
+
+## Markdown formatting (mdformat)
+We use `mdformat` for deterministic Markdown formatting (installed via `pyproject.toml`). Prefer running the formatter before any substantial doc PR to minimize review noise and keep style consistent.
+
+### Commands
+```bash
+uv run mdformat .          # Format all markdown files
+uv run mdformat --check .  # CI-style check (no changes)
+```
+
+Config lives in `[tool.mdformat]` in `pyproject.toml` (wrap=0 disables hard wrapping; keep soft wrapping in editor).
+
+### VS Code Task
+Use the task: "Markdown: Format" (invokes `uv run mdformat .`).
+
+### Adoption Strategy
+1) Baseline format commit
+2) Encourage contributors to run before commit
+3) Optionally promote CI `markdown-format` job from advisory to blocking once noise stabilizes
+
+### Optional Pre-commit Hook
+```yaml
+- repo: https://github.com/executablebooks/mdformat
+  rev: 0.7.19
+  hooks:
+    - id: mdformat
+      additional_dependencies:
+        - mdformat-gfm
+        - mdformat-frontmatter
+```
+
+If future style concerns arise (e.g., link validation), add a separate non-blocking job (e.g., link checker) rather than reintroducing a linter.
+
+---
 
 ---
 

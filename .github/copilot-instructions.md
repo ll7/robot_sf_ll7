@@ -135,9 +135,18 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Favor readability and maintainability over micro‑optimizations.
 - Use type hints for all public functions and methods; prefer `typing` over `Any`.
 - Use exceptions for error handling; avoid silent failures.
+
+#### CLI vs programmatic use
+
+- This project prioritizes traceability and reproducibility of benchmarks. Prefer generating script- and config-driven workflows over ad-hoc command lines or inline parameter tweaks.
 - Do not focus on the cli directly; prefer programmatic use and factory functions.
 - The CLI is not important; prefer programmatic use and factory functions.
 - Use logging for non‑error informational messages; avoid print statements except in CLI entry points.
+
+- Configs: configs/<area>/<name>.yaml (single source of truth for all hyperparameters, seeds, envs).
+-	Scripts: scripts/<task>_<runner>.py (read config path, set up run dirs, log metadata, call library code).
+-	Runs/outputs/results: results/<timestamp>_<shortname>/ (store config.yaml, git_meta.json, logs, metrics, artifacts).
+-	deterministic seed in both config and code
 
 ### Code reviews
 - All changes must be reviewed by at least one other team member.

@@ -25,7 +25,7 @@ from time import perf_counter
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from scipy.stats import spearmanr
+from scipy.stats import rankdata, spearmanr
 
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
 from robot_sf.benchmark.snqi.exit_codes import (
@@ -102,11 +102,11 @@ class SNQISensitivityAnalyzer:
                 "score_distribution": [],
             }
 
-            # Compute base ranking for correlation analysis
+            # Compute base ranking for correlation analysis (tie-aware)
             base_scores = [
                 self._episode_snqi(ep.get("metrics", {}), base_weights) for ep in self.episodes
             ]
-            base_ranking = np.argsort(np.argsort(base_scores))
+            base_ranking = rankdata(base_scores, method="average")
 
             for weight_val in weight_values:
                 # Create modified weights
@@ -123,8 +123,8 @@ class SNQISensitivityAnalyzer:
                 sweep_data["mean_snqi"].append(np.mean(scores))
                 sweep_data["std_snqi"].append(np.std(scores))
 
-                # Ranking correlation
-                new_ranking = np.argsort(np.argsort(scores))
+                # Ranking correlation (tie-aware)
+                new_ranking = rankdata(scores, method="average")
                 corr, _ = spearmanr(base_ranking, new_ranking)
                 sweep_data["ranking_correlation"].append(corr if not np.isnan(corr) else 1.0)
 
@@ -167,7 +167,7 @@ class SNQISensitivityAnalyzer:
             base_scores = [
                 self._episode_snqi(ep.get("metrics", {}), base_weights) for ep in self.episodes
             ]
-            base_ranking = np.argsort(np.argsort(base_scores))
+            base_ranking = rankdata(base_scores, method="average")
 
             for i in range(n_points):
                 for j in range(n_points):
@@ -181,8 +181,8 @@ class SNQISensitivityAnalyzer:
                     ]
                     snqi_surface[i, j] = np.mean(scores)
 
-                    # Ranking stability
-                    new_ranking = np.argsort(np.argsort(scores))
+                    # Ranking stability (tie-aware)
+                    new_ranking = rankdata(scores, method="average")
                     corr, _ = spearmanr(base_ranking, new_ranking)
                     stability_surface[i, j] = corr if not np.isnan(corr) else 1.0
 
@@ -207,7 +207,7 @@ class SNQISensitivityAnalyzer:
         base_scores = [
             self._episode_snqi(ep.get("metrics", {}), base_weights) for ep in self.episodes
         ]
-        base_ranking = np.argsort(np.argsort(base_scores))
+        base_ranking = rankdata(base_scores, method="average")
 
         results["base_performance"] = {
             "mean_snqi": np.mean(base_scores),
@@ -225,7 +225,7 @@ class SNQISensitivityAnalyzer:
             ablated_scores = [
                 self._episode_snqi(ep.get("metrics", {}), ablated_weights) for ep in self.episodes
             ]
-            ablated_ranking = np.argsort(np.argsort(ablated_scores))
+            ablated_ranking = rankdata(ablated_scores, method="average")
 
             # Measure impact
             score_change = abs(np.mean(ablated_scores) - np.mean(base_scores))
@@ -310,9 +310,9 @@ class SNQISensitivityAnalyzer:
 
             if base_scores is None:
                 base_scores = scores
-                base_ranking = np.argsort(np.argsort(scores))
+                base_ranking = rankdata(scores, method="average")
 
-            current_ranking = np.argsort(np.argsort(scores))
+            current_ranking = rankdata(scores, method="average")
             if base_ranking is not None:
                 ranking_corr, _ = spearmanr(base_ranking, current_ranking)
             else:

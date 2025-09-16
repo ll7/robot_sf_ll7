@@ -22,9 +22,9 @@ This checklist tracks progress against the modernization, validation, and method
 - [x] Cross-reference in benchmark/environment docs
 - [x] Document JSON output schema formally (key names, types, stability) <!-- See docs/snqi-weight-tools/schema.md and snqi_output.schema.json -->
 - [x] Explain normalization strategy (median/p95) & limitations <!-- See docs/snqi-weight-tools/normalization.md -->
-- [ ] Justify heuristic formulas (stability proxy) or mark experimental <!-- DESIGN.md partial -->
+- [x] Justify heuristic formulas (stability proxy) or mark experimental <!-- DESIGN.md: Heuristic Components (v1 – Experimental) -->
 - [ ] Comprehensive docstrings for new helpers/modules <!-- Some helpers missing param/return sections -->
-- [ ] Note on clamping normalized metrics to [0,1] and outlier implication
+- [x] Note on clamping normalized metrics to [0,1] and outlier implication
 
 ## 2. Code Structure & Refactor (🔧)
 - [x] Shared computation module (`compute.py`)
@@ -57,14 +57,14 @@ This checklist tracks progress against the modernization, validation, and method
 ## 4. Benchmark / CLI Integration (⚙️)
 - [x] Unified benchmark subcommand (`robot_sf_bench snqi <action>`) wrapper
 - [ ] Config-based invocation wiring weights into evaluation pipeline
-- [ ] Automated consumption of optimized weights in eval flow (docs + code)
+- [x] Automated consumption of optimized weights in eval flow (docs + code)
 - [ ] Convenience recompute command for stored results
 
 ## 5. Reproducibility & Determinism (🎯)
 - [x] Deterministic seeding (NumPy + DE seed)
 - [x] Seed captured in metadata
 - [x] Deterministic episode sampling (`--sample N` with fixed seed)
-- [ ] Document remaining nondeterminism (SciPy stochastic internals / threading)
+- [x] Document remaining nondeterminism (SciPy stochastic internals / threading)
 
 ## 6. Methodology Improvements (🎯)
 - [ ] Principled stability metric (bootstrap Spearman) <!-- Planned replacement -->
@@ -77,12 +77,12 @@ This checklist tracks progress against the modernization, validation, and method
 
 ## 7. Performance & Scalability
 - [x] Phase timing instrumentation (metadata timings)
-- [ ] Small dataset warning (< threshold episodes) for stability reliability
+- [x] Small dataset warning (< threshold episodes) for stability reliability
 - [x] Episode subset sampling (`--sample` deterministic)
 
 ## 8. Dependency & Extras Management
-- [ ] Optional extras group (`analysis` / `viz`) for plotting deps
-- [ ] SNQI docs explicitly reference `uv add` usage (repo-level docs mostly done)
+- [x] Optional extras group (`analysis` / `viz`) for plotting deps
+- [x] SNQI docs explicitly reference extras usage (uv sync --extra)
 - [ ] Minimal dependency listing for headless mode
 
 ## 9. Output & Schema Hygiene
@@ -97,14 +97,14 @@ This checklist tracks progress against the modernization, validation, and method
 - [x] Skipped / invalid JSONL line counting (with test)
 - [x] Explicit baseline metric validation error
 - [x] `--fail-on-missing-metric` toggle
-- [ ] Graceful message if matplotlib absent when plots requested
+- [x] Graceful message if matplotlib absent when plots requested
 - [x] Exit code taxonomy (distinct non-zero codes)
 
 ## 11. Style & Consistency
 - [x] Type checking clean (no new errors)
 - [x] Ruff clean except justified complexity suppression
-- [ ] Add module-level `__all__` for public surfaces
-- [ ] Naming normalization (`near_misses` vs `w_near`) doc clarity
+- [x] Add module-level `__all__` for public surfaces
+- [x] Naming normalization (`near_misses` vs `w_near`) doc clarity
 - [ ] Logging style consolidation (Section 2 overlap)
 
 ## 12. Follow-Up (Not blocking)

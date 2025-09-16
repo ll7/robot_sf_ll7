@@ -1,6 +1,74 @@
 # Robot SF – Copilot Guide
+# Robot SF – Copilot Guide
+
+## TL;DR for AI coding agents (read first)
+- Core idea: social navigation RL with Gym/Gymnasium envs and SocialForce pedestrians via the fast-pysf submodule; training/eval with StableBaselines3.
+- Always create envs via factory functions — never instantiate env classes directly:
+  - from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
+  - env = make_robot_env(config=RobotSimulationConfig(), debug=True)
+- Configs live in `robot_sf.gym_env.unified_config` (e.g., `RobotSimulationConfig`, `ImageRobotConfig`). Toggle physics like `config.peds_have_obstacle_forces = True` before passing to factory.
+- Pedestrian physics depends on submodule: run `git submodule update --init --recursive` after clone; code expects `fast-pysf/` present.
+- Tooling: use uv + Ruff + pytest. Common tasks (VS Code Tasks exist):
+  - Install deps: uv sync
+  - Lint/format: Ruff: Format and Fix
+  - Tests: Run Tests (unit/integration), Run Tests (GUI) for display code
+  - Type check (best-effort): Type Check (ty)
+- Tests are split:
+  - `tests/` main suite; `test_pygame/` GUI tests (use headless env: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`).
+  - fast-pysf tests in `fast-pysf/tests/` (some require map files).
+- Training & demos: see `scripts/` and `examples/`:
+  - PPO training: `scripts/training_ppo.py`
+  - Demos: `examples/demo_offensive.py`, `examples/demo_defensive.py`, `examples/demo_pedestrian.py`
+- Benchmarking & baselines:
+  - Baseline planner: `from robot_sf.baselines import get_baseline; SocialForcePlanner = get_baseline("baseline_sf")`.
+  - Programmatic benchmarking preferred; a CLI exists under `robot_sf/benchmark/cli.py` (listing/runner), but favor calling library code.
+- Directory map you’ll touch most:
+  - `robot_sf/gym_env/` envs + factory; `robot_sf/sim/` sim glue (FastPysfWrapper)
+  - `robot_sf/baselines/` baseline algorithms; `robot_sf/benchmark/` benchmark runner + schema
+  - `fast-pysf/` submodule physics; `examples/`, `scripts/`, `tests/`, `test_pygame/`
+- Patterns to follow:
+  - Factory-based env creation; config objects over ad‑hoc kwargs; avoid prints in lib code (use logging);
+  - Prefer programmatic APIs over CLI for reproducible runs.
+- Common pitfalls: missing submodule, missing `ffmpeg` (for video), not setting headless env vars for GUI tests. Models live in `model/`, maps in `maps/svg_maps/`.
+
+The detailed guide below remains the source of truth; use the TL;DR as your quick reference.
 
 Use this as the single source of truth for this repo. Prefer these rules over generic habits; fall back to ad‑hoc searches or shell when something is clearly out of sync.
+
+## Design & workflow recommendations (pragmatic)
+- Working mode: prioritize a thin, end-to-end slice that runs. Optimize and polish after a green smoke test (env reset→step loop or demo run).
+- Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
+- Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
+- Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
+- Baselines/benchmarks: get planners with `robot_sf.baselines.get_baseline(...)`. Prefer programmatic runners; CLI exists at `robot_sf/benchmark/cli.py` for convenience.
+- Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `results/`.
+- Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
+- Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
+- Progress cadence: during complex edits, report what ran and outcomes after ~3–5 tool calls or when you edit > ~3 files in one burst.
+
+### Must-have checklist for agents
+- [ ] Initialize submodules after clone: `git submodule update --init --recursive` (needed for `fast-pysf/`).
+- [ ] Use factory env creators; do not instantiate env classes directly.
+- [ ] Set config via `robot_sf.gym_env.unified_config` before env creation; avoid ad‑hoc kwargs.
+- [ ] Keep lib code print-free; use logging for info and warnings.
+- [ ] Run VS Code Tasks: Install Dependencies, Ruff: Format and Fix, Check Code Quality, Type Check, Run Tests.
+- [ ] Add a minimal test or smoke (e.g., env reset/step) when you change public behavior.
+- [ ] For GUI-dependent tests, set headless env vars; avoid flaky display usage in CI.
+- [ ] Treat `fast-pysf/` as a submodule; don’t modify unless scoped and justified.
+- [ ] Put new demos under `examples/` and new CLIs or runners under `scripts/`.
+
+### Optional backlog (track but don’t block)
+- [ ] Tighten type hints for new public APIs; migrate call sites gradually.
+- [ ] Add programmatic benchmark examples and extend baseline coverage.
+- [ ] Update or add docs under `docs/` for new components; include diagrams when useful.
+- [ ] Add performance smoke (steps/sec) when touching hot paths.
+
+### Quick links
+- Environment overview: `docs/ENVIRONMENT.md`
+- Simulation view: `docs/SIM_VIEW.md`
+- Refactoring and architecture notes: `docs/refactoring/`
+- SNQI tools and metrics: `docs/snqi-weight-tools/README.md`
+- Data analysis helpers: `docs/DATA_ANALYSIS.md`
 
 ## Executive summary
 - **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` submodule, StableBaselines3 training pipeline

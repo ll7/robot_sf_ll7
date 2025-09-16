@@ -184,6 +184,11 @@ class SimulationView:
         pygame.font.init()
         self.clock = pygame.time.Clock()
 
+        if self.record_video and not self.video_path:
+            logger.warning(
+                "record_video=True but no video_path provided; frames will be buffered but no file will be written."
+            )
+
         # Check if we're running in a headless environment
         is_headless = self._is_headless_environment()
 
@@ -391,12 +396,16 @@ class SimulationView:
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
-        if self.record_video and self.frames and MOVIEPY_AVAILABLE:
+        if self.record_video and self.frames and MOVIEPY_AVAILABLE and self.video_path:
             logger.debug("Writing video file.")
             # TODO: get the correct fps from the simulation
             clip = ImageSequenceClip(self.frames, fps=self.video_fps)
             clip.write_videofile(self.video_path)
             self.frames = []
+        elif self.record_video and self.frames and MOVIEPY_AVAILABLE and not self.video_path:
+            logger.warning(
+                "record_video=True but video_path is None; cannot write video file. Skipping write."
+            )
         elif self.record_video and self.frames and not MOVIEPY_AVAILABLE:
             logger.warning("MoviePy is not available. Cannot write video file.")
 

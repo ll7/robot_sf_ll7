@@ -1,4 +1,5 @@
 """Benchmark CLI providing unified entrypoints (including SNQI tooling)."""
+# ruff: noqa: C901  # complexity acceptable for nested CLI builders/wrappers
 
 # -*- coding: utf-8 -*-
 from __future__ import annotations
@@ -337,6 +338,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             default=None,
             help="JSON file containing initial weight mapping",
         )
+        p.add_argument("--progress", action="store_true", help="Show progress bars (tqdm)")
         p.add_argument(
             "--missing-metric-max-list",
             type=int,
@@ -476,10 +478,29 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     def _get_recompute_run(mod):  # type: ignore[no-untyped-def]
         return getattr(mod, "run")
 
-    def _invoke_snqi_opt(args: argparse.Namespace) -> int:
-        # Lightweight fast-path for tests to avoid heavy optimization logic
-        if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
-            return 0
+    def _ensure_snqi_opt_defaults(args: argparse.Namespace) -> None:
+        """Ensure optional flags expected by the optimize script exist on args.
+
+        This guards against AttributeError when constructing Namespace instances
+        programmatically (e.g., in tests) without all optional flags present.
+        """
+        defaults = {
+            "progress": False,
+            "simplex": False,
+            "max_grid_combinations": 20000,
+            "grid_resolution": 5,
+            "maxiter": 30,
+            "sensitivity": False,
+            "bootstrap_samples": 0,
+            "bootstrap_confidence": 0.95,
+            "small_dataset_threshold": 20,
+        }
+        for name, value in defaults.items():
+            if not hasattr(args, name):
+                setattr(args, name, value)
+
+    def _load_optimize_run_fn():  # type: ignore[no-untyped-def]
+        """Load and return the optimize script's run(args) function or None on error."""
         nonlocal _OPT_MOD
         if _OPT_MOD is None:
             try:
@@ -489,8 +510,16 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             except Exception as e:  # pragma: no cover - load error
                 print(f"Error loading optimization script: {e}", file=sys.stderr)
                 traceback.print_exc()
-                return 2
-        run_fn = _get_opt_run(_OPT_MOD)
+                return None
+        return _get_opt_run(_OPT_MOD)
+
+    def _invoke_snqi_opt(args: argparse.Namespace) -> int:  # noqa: C901 - thin wrapper delegating to external script
+        _ensure_snqi_opt_defaults(args)
+        if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
+            return 0
+        run_fn = _load_optimize_run_fn()
+        if run_fn is None:
+            return 2
         return int(run_fn(args))  # type: ignore[no-any-return]
 
     def _invoke_snqi_recompute(args: argparse.Namespace) -> int:

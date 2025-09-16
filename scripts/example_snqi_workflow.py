@@ -141,13 +141,23 @@ def demonstrate_weight_recomputation():
         print("\n2. Comparing weight strategies...")
 
         # Import our modules (this would normally be done with the scripts)
-        import sys
-
-        sys.path.append(str(Path(__file__).parent))
+        # Ensure recompute_snqi_weights.py is in the same directory or in the Python path.
+        # If this import fails, run the script from the project root or install as a package.
 
         try:
             # We'll simulate the key functionality here since the scripts are designed to run standalone
-            from recompute_snqi_weights import SNQIWeightRecomputer
+            # Try to import the recomputation tool whether the script is run via `python -m scripts.example_snqi_workflow`
+            # (project root on sys.path) or directly from within the scripts folder.
+            import importlib
+
+            try:
+                # Preferred when running from project root
+                recompute_module = importlib.import_module("scripts.recompute_snqi_weights")
+            except ModuleNotFoundError:
+                # Fallback when running from within scripts directory
+                recompute_module = importlib.import_module("recompute_snqi_weights")
+
+            SNQIWeightRecomputer = getattr(recompute_module, "SNQIWeightRecomputer")
 
             recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
 
@@ -199,7 +209,7 @@ def demonstrate_weight_recomputation():
             for weight_name, value in best_weights.items():
                 print(f"   {weight_name}: {value:.3f}")
 
-        except ImportError:
+        except (ImportError, ModuleNotFoundError, AttributeError):
             print("   (Demo would use actual scripts here)")
             print("   Run the scripts directly for full functionality:")
             print(

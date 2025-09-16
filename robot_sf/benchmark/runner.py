@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -386,6 +387,115 @@ def _expand_jobs(
     return jobs
 
 
+def _run_job_worker(job: tuple[Dict[str, Any], int, Dict[str, Any]]) -> Dict[str, Any]:
+    """Top-level worker function to run a single episode.
+
+    Accepts a tuple of (scenario_dict, seed, fixed_params_dict) and returns a record dict.
+    This must remain at module top-level for multiprocessing 'spawn' pickling.
+    """
+    sc, seed, params = job
+    return run_episode(
+        sc,
+        seed,
+        horizon=int(params["horizon"]),
+        dt=float(params["dt"]),
+        record_forces=bool(params["record_forces"]),
+        snqi_weights=params.get("snqi_weights"),
+        snqi_baseline=params.get("snqi_baseline"),
+        algo=str(params["algo"]),
+        algo_config_path=params.get("algo_config_path"),
+    )
+
+
+def _write_validated_record(out_path: Path, schema: Dict[str, Any], rec: Dict[str, Any]) -> None:
+    validate_episode(rec, schema)
+    with out_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
+def _run_batch_sequential(
+    jobs: List[tuple[Dict[str, Any], int]],
+    *,
+    out_path: Path,
+    schema: Dict[str, Any],
+    fixed_params: Dict[str, Any],
+    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    fail_fast: bool,
+) -> tuple[int, List[Dict[str, Any]]]:
+    wrote = 0
+    failures: List[Dict[str, Any]] = []
+    total = len(jobs)
+    for idx, (sc, seed) in enumerate(jobs, start=1):
+        try:
+            rec = _run_job_worker((sc, seed, fixed_params))
+            _write_validated_record(out_path, schema, rec)
+            wrote += 1
+            if progress_cb is not None:
+                try:
+                    progress_cb(idx, total, sc, seed, True, None)
+                except Exception:  # pragma: no cover - progress best-effort
+                    pass
+        except Exception as e:  # pragma: no cover - error path
+            failures.append(
+                {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)}
+            )
+            if progress_cb is not None:
+                try:
+                    progress_cb(idx, total, sc, seed, False, repr(e))
+                except Exception:  # pragma: no cover
+                    pass
+            if fail_fast:
+                raise
+    return wrote, failures
+
+
+def _run_batch_parallel(
+    jobs: List[tuple[Dict[str, Any], int]],
+    *,
+    out_path: Path,
+    schema: Dict[str, Any],
+    fixed_params: Dict[str, Any],
+    workers: int,
+    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    fail_fast: bool,
+) -> tuple[int, List[Dict[str, Any]]]:
+    wrote = 0
+    failures: List[Dict[str, Any]] = []
+    total = len(jobs)
+    # Submit all jobs
+    with ProcessPoolExecutor(max_workers=int(workers)) as ex:
+        future_to_job: Dict[Any, tuple[int, Dict[str, Any], int]] = {}
+        for idx, (sc, seed) in enumerate(jobs, start=1):
+            fut = ex.submit(_run_job_worker, (sc, seed, fixed_params))
+            future_to_job[fut] = (idx, sc, seed)
+        for fut in as_completed(future_to_job):
+            idx, sc, seed = future_to_job[fut]
+            try:
+                rec = fut.result()
+                _write_validated_record(out_path, schema, rec)
+                wrote += 1
+                if progress_cb is not None:
+                    try:
+                        progress_cb(idx, total, sc, seed, True, None)
+                    except Exception:  # pragma: no cover
+                        pass
+            except Exception as e:  # pragma: no cover
+                failures.append(
+                    {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)}
+                )
+                if progress_cb is not None:
+                    try:
+                        progress_cb(idx, total, sc, seed, False, repr(e))
+                    except Exception:  # pragma: no cover
+                        pass
+                if fail_fast:
+                    # Cancel remaining futures and re-raise
+                    for f in future_to_job:
+                        f.cancel()
+                    raise
+    return wrote, failures
+
+
 def run_batch(
     scenarios_or_path: List[Dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -405,6 +515,7 @@ def run_batch(
     ] = None,
     algo: str = "simple_policy",
     algo_config_path: Optional[str] = None,
+    workers: int = 1,
 ) -> Dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -427,47 +538,35 @@ def run_batch(
 
     schema = load_schema(schema_path)
 
-    wrote = 0
-    failures: List[Dict[str, Any]] = []
-    total = len(jobs)
-    for idx, (sc, seed) in enumerate(jobs, start=1):
-        try:
-            rec = run_episode(
-                sc,
-                seed,
-                horizon=horizon,
-                dt=dt,
-                record_forces=record_forces,
-                snqi_weights=snqi_weights,
-                snqi_baseline=snqi_baseline,
-                algo=algo,
-                algo_config_path=algo_config_path,
-            )
-            # Validate and append
-            validate_episode(rec, schema)
-            with out_path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(rec) + "\n")
-            wrote += 1
-            if progress_cb is not None:
-                try:
-                    progress_cb(idx, total, sc, seed, True, None)
-                except Exception:  # pragma: no cover - progress best-effort
-                    pass
-        except Exception as e:  # pragma: no cover - error path
-            failures.append(
-                {
-                    "scenario_id": sc.get("id", "unknown"),
-                    "seed": seed,
-                    "error": repr(e),
-                }
-            )
-            if progress_cb is not None:
-                try:
-                    progress_cb(idx, total, sc, seed, False, repr(e))
-                except Exception:  # pragma: no cover
-                    pass
-            if fail_fast:
-                raise
+    fixed_params: Dict[str, Any] = {
+        "horizon": horizon,
+        "dt": dt,
+        "record_forces": record_forces,
+        "snqi_weights": snqi_weights,
+        "snqi_baseline": snqi_baseline,
+        "algo": algo,
+        "algo_config_path": algo_config_path,
+    }
+
+    if workers <= 1:
+        wrote, failures = _run_batch_sequential(
+            jobs,
+            out_path=out_path,
+            schema=schema,
+            fixed_params=fixed_params,
+            progress_cb=progress_cb,
+            fail_fast=fail_fast,
+        )
+    else:
+        wrote, failures = _run_batch_parallel(
+            jobs,
+            out_path=out_path,
+            schema=schema,
+            fixed_params=fixed_params,
+            workers=workers,
+            progress_cb=progress_cb,
+            fail_fast=fail_fast,
+        )
 
     return {
         "total_jobs": len(jobs),

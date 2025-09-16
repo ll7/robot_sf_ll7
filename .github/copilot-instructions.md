@@ -175,6 +175,7 @@ Examples (copy‑ready):
 
 ### Problem‑solving approach
 - Break problems into smaller tasks; research prior art and patterns.
+- Clearly prioritize must‑haves vs nice‑to‑haves.
 - Consider system‑wide impact, edge cases, error handling, and failure modes.
 - Document architectural decisions and trade‑offs.
 

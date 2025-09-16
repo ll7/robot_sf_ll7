@@ -5,6 +5,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 ## Contents
 - [Contents](#contents)
 - [Bootstrap Examples](#bootstrap-examples)
+  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
 - [Overview](#overview)
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
   - [Clamping and Outliers](#clamping-and-outliers)
@@ -29,7 +30,6 @@ This guide consolidates user‑facing documentation that was previously split ac
 - [Future Enhancements](#future-enhancements)
 - [Related Design Document](#related-design-document)
 - [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
-  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
 ## Bootstrap Examples
 Estimate stability and confidence intervals for the recommended weights.
 
@@ -67,8 +67,10 @@ Normalization details are documented in `docs/snqi-weight-tools/normalization.md
 
 - [Contents](#contents)
 - [Bootstrap Examples](#bootstrap-examples)
+  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
 - [Overview](#overview)
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
+  - [Clamping and Outliers](#clamping-and-outliers)
 - [Installation (uv)](#installation-uv)
 - [Quick Start](#quick-start)
 - [Core Scripts \& Typical Tasks](#core-scripts--typical-tasks)
@@ -90,7 +92,6 @@ Normalization details are documented in `docs/snqi-weight-tools/normalization.md
 - [Future Enhancements](#future-enhancements)
 - [Related Design Document](#related-design-document)
 - [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
-  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
 
 ### Inline SNQI during benchmark run
 You can compute SNQI on the fly while generating episodes via the unified benchmark CLI `run` subcommand by providing a weights JSON and baseline stats JSON:

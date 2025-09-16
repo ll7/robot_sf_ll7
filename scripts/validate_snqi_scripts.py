@@ -133,32 +133,47 @@ def validate_script_interfaces():
             import importlib.util
 
             spec = importlib.util.find_spec("recompute_snqi_weights")
-            if spec is not None:
-                print("✓ recompute_snqi_weights module: importable")
+            if spec is None:
+                print("✗ recompute_snqi_weights module: not found")
+                return False
+            print("✓ recompute_snqi_weights module: importable")
         except ImportError:
             return False
 
         # Test snqi_weight_optimization module
         try:
             spec = importlib.util.find_spec("snqi_weight_optimization")
-            if spec is not None:
-                print("✓ snqi_weight_optimization module: importable")
+            if spec is None:
+                print("✗ snqi_weight_optimization module: not found")
+                return False
+            print("✓ snqi_weight_optimization module: importable")
         except ImportError:
             return False
 
         # Test snqi_sensitivity_analysis module
         try:
+            import importlib
+
             spec = importlib.util.find_spec("snqi_sensitivity_analysis")
-            if spec is not None:
-                print("✓ snqi_sensitivity_analysis module: importable")
-        except ImportError as e:
-            if "matplotlib" in str(e) or "seaborn" in str(e) or "pandas" in str(e):
-                print(
-                    "⚠ snqi_sensitivity_analysis module: importable (visualization dependencies missing)"
-                )
-            else:
-                print(f"✗ snqi_sensitivity_analysis import failed: {e}")
+            if spec is None:
+                print("✗ snqi_sensitivity_analysis module: not found")
                 return False
+            # Attempt import to surface optional visualization dependency errors
+            try:
+                importlib.import_module("snqi_sensitivity_analysis")
+                print("✓ snqi_sensitivity_analysis module: importable")
+            except ImportError as e:
+                msg = str(e)
+                if "matplotlib" in msg or "seaborn" in msg or "pandas" in msg:
+                    print(
+                        "⚠ snqi_sensitivity_analysis module: importable (visualization dependencies missing)"
+                    )
+                else:
+                    print(f"✗ snqi_sensitivity_analysis import failed: {e}")
+                    return False
+        except ImportError as e:
+            print(f"✗ snqi_sensitivity_analysis import machinery failed: {e}")
+            return False
 
         return True
 

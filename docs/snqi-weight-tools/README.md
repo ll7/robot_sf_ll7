@@ -210,6 +210,15 @@ uv sync --extra progress
 uv sync --extra viz
 ```
 
+### Headless mode (minimal deps)
+For pure compute (no plots) you can use the core installation without extras. The SNQI tooling and CLI will run headless by default. Optional plotting and richer analysis require extras:
+
+- `--extra progress` for progress bars (tqdm)
+- `--extra viz` for plotting only (matplotlib + seaborn)
+- `--extra analysis` for full plotting/analysis (seaborn + matplotlib + pandas)
+
+If visualization is requested without the required extras, commands will emit a clear message and exit with a distinct code. To stay minimal, omit extras entirely and avoid plot flags.
+
 Install the package in editable mode for external usage (optional):
 ```bash
 uv run python -m pip install -e .

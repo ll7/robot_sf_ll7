@@ -131,6 +131,19 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
 
+### Design decisions
+- Favor readability and maintainability over micro‑optimizations.
+- Use type hints for all public functions and methods; prefer `typing` over `Any`.
+- Use exceptions for error handling; avoid silent failures.
+- Do not focus on the cli directly; prefer programmatic use and factory functions.
+- The CLI is not important; prefer programmatic use and factory functions.
+- Use logging for non‑error informational messages; avoid print statements except in CLI entry points.
+
+### Code reviews
+- All changes must be reviewed by at least one other team member.
+- Reviewers should check for correctness, style, test coverage, and documentation.
+- Use GitHub’s review tools to leave comments and approve changes.
+
 #### Docstrings
 - Every public module, function, class, and method should have a docstring.
 - Docstrings should use triple double quotes (""").

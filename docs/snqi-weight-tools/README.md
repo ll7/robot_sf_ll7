@@ -106,6 +106,25 @@ uv run robot_sf_bench run \
 
 When both files are provided, each episode record will include `metrics.snqi` computed using the same canonical normalization (median/p95 with clamping). Missing baseline entries fall back to neutral (0) contribution. See the naming note above for `w_near` vs `w_near_misses`.
 
+End-to-end (baseline stats + run):
+
+```bash
+# 1) Generate baseline median/p95 stats from a scenario matrix
+uv run robot_sf_bench baseline \
+  --matrix configs/baselines/example_matrix.yaml \
+  --out results/baseline_stats.json \
+  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --horizon 100 --dt 0.1 --record-forces
+
+# 2) Run the episodes and compute SNQI inline
+uv run robot_sf_bench run \
+  --matrix configs/baselines/example_matrix.yaml \
+  --out results/episodes.jsonl \
+  --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+  --snqi-weights model/snqi_canonical_weights_v1.json \
+  --snqi-baseline results/baseline_stats.json
+```
+
 ## Overview
 The Social Navigation Quality Index (SNQI) aggregates multiple navigation metrics (success, time, safety, comfort, smoothness) into a single score. It is intentionally bounded and designed for reproducibility and comparative benchmarking:
 ```

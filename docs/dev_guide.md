@@ -32,6 +32,7 @@
   - [Validation scenarios (run after changes)](#validation-scenarios-run-after-changes)
   - [Performance benchmarking (optional)](#performance-benchmarking-optional)
   - [Performance expectations](#performance-expectations)
+- [Benchmark runner: parallel workers and resume](#benchmark-runner-parallel-workers-and-resume)
 - [Training and examples](#training-and-examples)
   - [Available demos](#available-demos)
   - [Training scripts](#training-scripts)
@@ -370,6 +371,38 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 - Test suite: 2–3 minutes (≈170 tests)
 
 ---
+
+## Benchmark runner: parallel workers and resume
+
+The benchmark runner supports process-based parallel execution and safe resume.
+
+- Parallelism: Use multiple workers to run independent episodes concurrently.
+- Resume: Skips episodes that are already present in the output JSONL.
+
+Key points
+- Parent-only writes: only the parent process writes JSONL lines to avoid corruption.
+- Episode identity: jobs are identified deterministically from scenario params and seed; existing episodes are skipped when resume is enabled.
+- macOS: workers > 1 uses the spawn start method; ensure worker code is importable/picklable and defined at module top level (no lambdas/closures).
+
+CLI usage
+- Run a batch with parallel workers and default resume behavior:
+  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output results/episodes.jsonl --workers 4
+- Force recomputation (disable resume):
+  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output results/episodes.jsonl --workers 4 --no-resume
+- Baseline computation also accepts the same flags:
+  - robot_sf_bench baseline --episodes results/episodes.jsonl --output results/baseline.jsonl --workers 4
+
+Programmatic usage
+- Prefer factory functions and programmatic APIs in library code:
+  - from robot_sf.benchmark.runner import run_batch
+  - from robot_sf.benchmark import baseline_stats
+  - run_batch(scenarios, out_path=..., schema_path=..., workers=4, resume=True)
+  - baseline_stats.run_and_compute_baseline(episodes_path=..., out_path=..., workers=4, resume=True)
+
+Notes
+- Default behavior is resume=True for programmatic APIs and CLI (omit --no-resume to keep it enabled).
+- When resuming, open files in append mode if you want to keep existing lines; the runner will not duplicate episodes.
+- On macOS spawn, module-level top-level functions are required for worker processes to import successfully.
 
 ## Training and examples
 ### Available demos

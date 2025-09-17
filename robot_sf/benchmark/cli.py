@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import List
 
 from robot_sf.benchmark.ablation import (
+    compute_ablation_summary as _abl_summary,
+)
+from robot_sf.benchmark.ablation import (
     compute_snqi_ablation as _abl_compute,
 )
 from robot_sf.benchmark.ablation import (
@@ -255,6 +258,7 @@ def _handle_snqi_ablate(args) -> int:
             baseline=snqi_baseline,  # type: ignore[arg-type]
             group_by=args.group_by,
             fallback_group_by=args.fallback_group_by,
+            top=(int(args.top) if args.top is not None else None),
         )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -274,7 +278,24 @@ def _handle_snqi_ablate(args) -> int:
                 file=sys.stderr,
             )
             return 2
-        print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
+        # Optional summary JSON for ablation (per-weight impact stats)
+        summary_written = None
+        if getattr(args, "summary_out", None):
+            summary_out = Path(args.summary_out)
+            summary_out.parent.mkdir(parents=True, exist_ok=True)
+            summary_payload = _abl_summary(rows)
+            summary_out.write_text(json.dumps(summary_payload, indent=2) + "\n", encoding="utf-8")
+            summary_written = str(summary_out)
+        print(
+            json.dumps(
+                {
+                    "wrote": str(out_path),
+                    "rows": len(rows),
+                    **({"summary": summary_written} if summary_written else {}),
+                },
+                indent=2,
+            )
+        )
         return 0
     except Exception as e:  # pragma: no cover - defensive
         print(f"Error: {e}", file=sys.stderr)
@@ -617,6 +638,13 @@ def _add_snqi_ablate_subparser(
         help="Fallback grouping key when group-by is missing. Default: scenario_id",
     )
     p.add_argument("--format", choices=["md", "csv", "json"], default="md")
+    p.add_argument("--top", type=int, default=None, help="Limit to top-N groups by base ranking")
+    p.add_argument(
+        "--summary-out",
+        type=str,
+        default=None,
+        help="Optional path to write per-weight summary JSON",
+    )
     # SNQI inputs
     p.add_argument("--snqi-weights", type=str, default=None, help="SNQI weights JSON path")
     p.add_argument(

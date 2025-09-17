@@ -19,7 +19,7 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Callable, Dict, List, Sequence, cast
 
 import numpy as np
 
@@ -177,9 +177,175 @@ def compute_aggregates(
     return summary
 
 
+# --- Optional bootstrap confidence intervals ---
+
+
+def _bootstrap_ci(
+    data: np.ndarray,
+    stat_fn: Callable[[np.ndarray], float],
+    *,
+    samples: int = 1000,
+    confidence: float = 0.95,
+    seed: int | None = None,
+) -> tuple[float, float]:
+    """Percentile bootstrap confidence interval for a statistic.
+
+    Parameters
+    - data: 1D numpy array (NaNs will be ignored).
+    - stat_fn: callable computing a scalar statistic on a 1D array.
+    - samples: number of bootstrap resamples (B).
+    - confidence: confidence level (e.g., 0.95).
+    - seed: optional RNG seed for reproducibility.
+
+    Returns (low, high) CI bounds; (nan, nan) if insufficient data or samples=0.
+    """
+    if samples <= 0:
+        return (float("nan"), float("nan"))
+    x = np.asarray(data, dtype=float)
+    x = x[~np.isnan(x)]
+    n = x.size
+    if n == 0:
+        return (float("nan"), float("nan"))
+    rng = np.random.default_rng(seed)
+    stats = np.empty(samples, dtype=float)
+    for i in range(samples):
+        idx = rng.integers(0, n, size=n)
+        xb = x[idx]
+        try:
+            stats[i] = float(stat_fn(xb))
+        except Exception:
+            stats[i] = float("nan")
+    stats = stats[~np.isnan(stats)]
+    if stats.size == 0:
+        return (float("nan"), float("nan"))
+    alpha = (1.0 - confidence) / 2.0
+    lo = float(np.percentile(stats, 100.0 * alpha))
+    hi = float(np.percentile(stats, 100.0 * (1.0 - alpha)))
+    return (lo, hi)
+
+
+def _group_flattened(
+    records: List[Dict[str, Any]],
+    *,
+    group_by: str,
+    fallback_group_by: str,
+) -> Dict[str, List[Dict[str, Any]]]:
+    groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for rec in records:
+        g = _get_nested(rec, group_by)
+        if g is None:
+            g = _get_nested(rec, fallback_group_by)
+        if g is None:
+            g = "unknown"
+        groups[str(g)].append(flatten_metrics(rec))
+    return groups
+
+
+def _attach_ci_for_group(
+    dst_group: Dict[str, Dict[str, Any]],
+    values_by_metric: Dict[str, List[float]],
+    *,
+    bootstrap_samples: int,
+    bootstrap_confidence: float,
+    bootstrap_seed: int | None,
+) -> None:
+    for metric_name, values in values_by_metric.items():
+        arr = np.asarray(values, dtype=float)
+
+        def mean_fn(a: np.ndarray) -> float:
+            return float(np.mean(a))
+
+        def median_fn(a: np.ndarray) -> float:
+            return float(np.median(a))
+
+        def p95_fn(a: np.ndarray) -> float:
+            return float(np.percentile(a, 95))
+
+        lo_hi_mean = _bootstrap_ci(
+            arr,
+            mean_fn,
+            samples=bootstrap_samples,
+            confidence=bootstrap_confidence,
+            seed=bootstrap_seed,
+        )
+        lo_hi_median = _bootstrap_ci(
+            arr,
+            median_fn,
+            samples=bootstrap_samples,
+            confidence=bootstrap_confidence,
+            seed=bootstrap_seed,
+        )
+        lo_hi_p95 = _bootstrap_ci(
+            arr,
+            p95_fn,
+            samples=bootstrap_samples,
+            confidence=bootstrap_confidence,
+            seed=bootstrap_seed,
+        )
+        dst_group.setdefault(metric_name, {})
+        dst_group[metric_name]["mean_ci"] = [float(lo_hi_mean[0]), float(lo_hi_mean[1])]
+        dst_group[metric_name]["median_ci"] = [float(lo_hi_median[0]), float(lo_hi_median[1])]
+        dst_group[metric_name]["p95_ci"] = [float(lo_hi_p95[0]), float(lo_hi_p95[1])]
+
+
+def compute_aggregates_with_ci(
+    records: List[Dict[str, Any]],
+    *,
+    group_by: str = "scenario_params.algo",
+    fallback_group_by: str = "scenario_id",
+    snqi_weights: Dict[str, float] | None = None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    return_ci: bool = True,
+    bootstrap_samples: int = 1000,
+    bootstrap_confidence: float = 0.95,
+    bootstrap_seed: int | None = None,
+) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    """Compute grouped aggregates and optional bootstrap CIs.
+
+    This preserves the original aggregate keys (mean, median, p95) and, when
+    return_ci is True and bootstrap_samples>0, adds parallel keys 'mean_ci',
+    'median_ci', 'p95_ci' with [low, high] bounds using percentile bootstrap.
+    """
+    # Start from base aggregates (no CI) for consistency
+    base = compute_aggregates(
+        records,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+    )
+    if not return_ci or bootstrap_samples <= 0:
+        # Upcast type to Any container for compatibility, but keep content unchanged
+        return cast(Dict[str, Dict[str, Dict[str, Any]]], base)
+
+    # Rebuild groups with flattened numeric values to avoid rework
+    for rec in records:
+        _ensure_snqi(rec, snqi_weights, snqi_baseline)
+    groups = _group_flattened(records, group_by=group_by, fallback_group_by=fallback_group_by)
+
+    out: Dict[str, Dict[str, Dict[str, Any]]] = {k: dict(v) for k, v in base.items()}
+    for g, rows in groups.items():
+        # collect numeric columns per group
+        cols: Dict[str, List[float]] = defaultdict(list)
+        for row in rows:
+            num = _numeric_items(row)
+            for row in rows:
+                num = _numeric_items(row)
+                for k, v in num.items():
+                    cols[k].append(v)
+            _attach_ci_for_group(
+                out.setdefault(g, {}),
+                cols,
+                bootstrap_samples=bootstrap_samples,
+                bootstrap_confidence=bootstrap_confidence,
+                bootstrap_seed=bootstrap_seed,
+            )
+
+
 __all__ = [
     "read_jsonl",
     "flatten_metrics",
     "write_episode_csv",
     "compute_aggregates",
+    "compute_aggregates_with_ci",
 ]

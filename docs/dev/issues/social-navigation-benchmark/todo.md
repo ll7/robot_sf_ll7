@@ -79,9 +79,9 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 ## 5. Baseline Algorithm Integrations
 - [x] Standard Social Force planner wrapper (2025-09-12)
 - [x] Existing RL policy loader (PPO model) adapter (2025-09-17)
-- [ ] Random / naive reactive baseline (naive `simple_policy` present; random policy pending)
+- [x] Random / naive reactive baseline (RandomPlanner + CLI + tests) (2025-09-17)
 - [ ] (Optional) ORCA integration (licensing check)
-- [ ] Unified interface (step(obs) -> action) with timeouts / safety clamp (finalize timeout wrapper and final action clamp in runner)
+- [x] Unified interface (step(obs) -> action) with timeouts / safety clamp (runner timeout + final clamp) (2025-09-17)
 - [x] Per-baseline config file (hyperparameters, seeds) via `--algo-config` YAML (2025-09-16)
 
 ## 6. Evaluation Pipeline & Aggregation

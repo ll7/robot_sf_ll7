@@ -109,6 +109,23 @@ def compute_episode_id(scenario_params: Dict[str, Any], seed: int) -> str:
     return f"{scenario_params.get('id', 'unknown')}--{seed}"
 
 
+def _episode_identity_hash() -> str:
+    """Return a short hash that fingerprints episode identity definition.
+
+    Intentionally small and stable across runs of the same code. If the
+    implementation of ``compute_episode_id`` changes, this hash will change
+    as well, which invalidates any previously saved manifest sidecars.
+    """
+    try:
+        import inspect
+
+        src = inspect.getsource(compute_episode_id)
+    except Exception:
+        # Fallback to function name when source isn't available (e.g., pyc only)
+        src = compute_episode_id.__name__
+    return hashlib.sha256(src.encode()).hexdigest()[:12]
+
+
 def index_existing(out_path: Path) -> Set[str]:
     """Scan an existing JSONL file and return the set of episode_ids found.
 
@@ -589,7 +606,9 @@ def run_batch(
     # Resume support: filter jobs whose episode_id already exists in out_path.
     if resume and out_path.exists():
         # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
-        existing_ids = load_manifest(out_path) or index_existing(out_path)
+        existing_ids = load_manifest(
+            out_path, expected_identity_hash=_episode_identity_hash()
+        ) or index_existing(out_path)
         if existing_ids:
             filtered: List[tuple[Dict[str, Any], int]] = []
             for sc, seed in jobs:
@@ -627,5 +646,5 @@ def run_batch(
     # Save/update manifest to speed up future resume if we wrote anything
     if resume and wrote > 0 and out_path.exists():
         # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
-        save_manifest(out_path, index_existing(out_path))
+        save_manifest(out_path, index_existing(out_path), identity_hash=_episode_identity_hash())
     return summary

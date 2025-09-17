@@ -553,9 +553,24 @@ def _add_extract_failures_subparser(
     p.add_argument(
         "--out", required=True, help="Output path (JSONL by default or JSON if --ids-only)"
     )
-    p.add_argument("--collision-threshold", type=float, default=1.0)
-    p.add_argument("--comfort-threshold", type=float, default=0.2)
-    p.add_argument("--near-miss-threshold", type=float, default=0.0)
+    p.add_argument(
+        "--collision-threshold",
+        type=float,
+        default=1.0,
+        help="Flag when collisions >= threshold (default 1.0)",
+    )
+    p.add_argument(
+        "--comfort-threshold",
+        type=float,
+        default=0.2,
+        help="Flag when comfort_exposure >= threshold (default 0.2)",
+    )
+    p.add_argument(
+        "--near-miss-threshold",
+        type=float,
+        default=0.0,
+        help="Flag when near_misses > threshold (strictly greater-than; default 0.0)",
+    )
     p.add_argument("--snqi-below", type=float, default=None)
     p.add_argument("--max-count", type=int, default=None)
     p.add_argument(

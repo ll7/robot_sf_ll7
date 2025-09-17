@@ -67,3 +67,35 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
     # Should contain at least some baseline keys
     assert "time_to_goal_norm" in data
     assert "collisions" in data
+
+
+def test_cli_list_scenarios(tmp_path: Path, capsys):
+    # Minimal scenario matrix YAML
+    matrix_path = tmp_path / "matrix.yaml"
+    scenarios = [
+        {
+            "id": "s1",
+            "density": "low",
+            "flow": "uni",
+            "obstacle": "open",
+            "repeats": 1,
+        },
+        {
+            "id": "s2",
+            "density": "med",
+            "flow": "bi",
+            "obstacle": "open",
+            "repeats": 2,
+        },
+    ]
+    import yaml  # type: ignore
+
+    with matrix_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(scenarios, f)
+
+    rc = cli_main(["list-scenarios", "--matrix", str(matrix_path)])
+    captured = capsys.readouterr()
+    assert rc == 0
+    # Check output includes both IDs
+    assert "s1" in captured.out
+    assert "s2" in captured.out

@@ -102,3 +102,46 @@ def test_manifest_stale_fallbacks_to_scan(tmp_path: Path):
         resume=True,
     )
     assert summary2["written"] == 1
+
+
+def test_manifest_identity_hash_mismatch_forces_scan(tmp_path: Path):
+    out_file = tmp_path / "episodes.jsonl"
+    sc = _scenarios(repeats=1)
+    # First run writes the file and manifest
+    run_batch(
+        sc,
+        out_path=out_file,
+        schema_path=SCHEMA_PATH,
+        base_seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        append=False,
+        workers=1,
+        resume=True,
+    )
+    # Directly read manifest and blank out identity hash to simulate older writer
+    sidecar = manifest_path_for(out_file)
+    with sidecar.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    # Overwrite with a wrong identity hash
+    data["identity_hash"] = "deadbeef"
+    with sidecar.open("w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    # Add another repeat; with mismatch, load_manifest should return None and
+    # runner should fall back to scanning and write the missing one.
+    sc2 = _scenarios(repeats=2)
+    summary2 = run_batch(
+        sc2,
+        out_path=out_file,
+        schema_path=SCHEMA_PATH,
+        base_seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        append=True,
+        workers=1,
+        resume=True,
+    )
+    assert summary2["written"] == 1

@@ -21,10 +21,18 @@ def _get_ppo_planner():
     return PPOPlanner
 
 
+def _get_random_planner():
+    """Lazy import for Random baseline."""
+    from robot_sf.baselines.random_policy import RandomPlanner
+
+    return RandomPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: Dict[str, Type] = {
     "baseline_sf": _get_social_force_planner,
     "ppo": _get_ppo_planner,
+    "random": _get_random_planner,
 }
 
 

@@ -367,6 +367,7 @@ Example (optimization excerpt):
 
 ## Related tools
 - Ranking generator: see [docs/dev/ranking.md](../dev/ranking.md) for producing Markdown/CSV/JSON leaderboards by metric/group using the unified CLI (`robot_sf_bench rank`).
+- SNQI component ablation: see [docs/dev/snqi_ablation.md](../dev/snqi_ablation.md) for generating rank-shift tables when removing SNQI components one at a time (`robot_sf_bench snqi-ablate`).
 
 ### Diagnostics Fields
 - `skipped_malformed_lines` (metadata + summary): Count of invalid JSONL lines ignored.

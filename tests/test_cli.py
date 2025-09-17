@@ -99,3 +99,42 @@ def test_cli_list_scenarios(tmp_path: Path, capsys):
     # Check output includes both IDs
     assert "s1" in captured.out
     assert "s2" in captured.out
+
+
+def test_cli_validate_config_success(tmp_path: Path, capsys):
+    matrix_path = tmp_path / "matrix.yaml"
+    scenarios = [
+        {"id": "s1", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},
+        {"id": "s2", "density": "med", "flow": "bi", "obstacle": "open", "repeats": 2},
+    ]
+    import yaml  # type: ignore
+
+    with matrix_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(scenarios, f)
+
+    rc = cli_main(["validate-config", "--matrix", str(matrix_path)])
+    captured = capsys.readouterr()
+    assert rc == 0
+    report = json.loads(captured.out)
+    assert report["num_scenarios"] == 2
+    assert report["errors"] == []
+
+
+def test_cli_validate_config_errors(tmp_path: Path, capsys):
+    matrix_path = tmp_path / "matrix.yaml"
+    scenarios = [
+        {"id": "dup", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 0},
+        {"id": "dup", "density": "med", "flow": "bi", "obstacle": "open", "repeats": 1},
+        {"density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},  # missing id
+    ]
+    import yaml  # type: ignore
+
+    with matrix_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(scenarios, f)
+
+    rc = cli_main(["validate-config", "--matrix", str(matrix_path)])
+    captured = capsys.readouterr()
+    assert rc != 0
+    report = json.loads(captured.out)
+    assert report["num_scenarios"] == 3
+    assert len(report["errors"]) >= 2

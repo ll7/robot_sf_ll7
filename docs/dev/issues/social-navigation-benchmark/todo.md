@@ -86,8 +86,8 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 
 ## 6. Evaluation Pipeline & Aggregation
 - [x] Aggregation script: merges JSONL episodes -> metrics CSV + SNQI per algo (2025-09-08)
-- [ ] Confidence interval computation (bootstrap or across seeds) (SNQI bootstrap options available; episode-level CIs pending)
-- [ ] Seed variance analysis script
+- [x] Confidence interval computation (bootstrap or across seeds) (episode-level CIs via aggregate --bootstrap; SNQI bootstrap options available) (2025-09-17)
+- [x] Seed variance analysis script (CLI: seed-variance; docs added) (2025-09-17)
 - [ ] Automatic ranking table generator (Markdown/CSV)
 - [ ] Failure case extractor (episodes with collisions / low comfort)
 - [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest) (2025-09-17)

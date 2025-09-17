@@ -47,7 +47,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 	- [x] Success rate (2025-09-10)
 	- [x] Time-to-goal / normalized path efficiency (2025-09-10)
 	- [x] Collision count / near-miss count (distance < threshold) (2025-09-10)
-	- [ ] Min / mean interpersonal distance distribution (min implemented; mean pending)
+	- [x] Min / mean interpersonal distance distribution (mean implemented) (2025-09-16)
 	- [ ] Force magnitude quantiles (per ped & aggregated) (aggregated implemented; per-ped pending)
 	- [x] Force exceedance events (above comfort threshold) (2025-09-10)
 	- [x] Comfort exposure time (% of steps above threshold) (2025-09-10)
@@ -89,8 +89,8 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Confidence interval computation (bootstrap or across seeds) (episode-level CIs via aggregate --bootstrap; SNQI bootstrap options available) (2025-09-17)
 - [x] Seed variance analysis script (CLI: seed-variance; docs added) (2025-09-17)
 - [x] Failure case extractor (collisions/low comfort) (CLI: extract-failures) (2025-09-17)
-- [ ] Automatic ranking table generator (Markdown/CSV)
-- [ ] Failure case extractor (episodes with collisions / low comfort)
+- [x] Automatic ranking table generator (Markdown/CSV) (2025-09-17)
+- [x] Failure case extractor (episodes with collisions / low comfort) (duplicate; see above) (2025-09-17)
 - [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest) (2025-09-17)
 
 ## 7. Visualization & Reporting Assets

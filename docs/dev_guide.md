@@ -24,6 +24,10 @@
   - [Tooling and tasks (uv, Ruff, pytest, ty, VS Code)](#tooling-and-tasks-uv-ruff-pytest-ty-vs-code)
 - [Documentation Standards](#documentation-standards)
   - [Technical Documentation](#technical-documentation)
+  - [Docs Folder Structure](#docs-folder-structure)
+    - [Top-level guides (entry points)](#top-level-guides-entry-points)
+    - [Focused subfolders](#focused-subfolders)
+    - [Usage tips](#usage-tips)
   - [Documentation Content Requirements](#documentation-content-requirements)
   - [Documentation Best Practices](#documentation-best-practices)
 - [Tooling and tasks (uv, Ruff, pytest, VS Code)](#tooling-and-tasks-uv-ruff-pytest-vs-code)
@@ -111,6 +115,7 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 - **`robot_sf/benchmark/`**: Benchmark runner, CLI, metrics collection, and schema validation
 - **`robot_sf/sim/`**: Core simulation components (FastPysfWrapper for pedestrian physics)
 - **`fast-pysf/`**: Git submodule providing optimized SocialForce pedestrian simulation
+- **`docs/`**: Documentation, design notes, and development guides
 
 ### Data flow and integration
 - **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
@@ -296,6 +301,42 @@ Shortcuts (optional shell):
 - Each major feature or issue should have its own subfolder named in kebab-case
   - Format: `docs/dev/issues/42-fix-button-alignment/` or `docs/dev/issuesfeature-name/`
 - Use descriptive README.md files as the main documentation entry point for each folder
+
+### Docs Folder Structure
+
+Here’s a concise map of the docs folder to help you find the right guidance quickly.
+
+#### Top-level guides (entry points)
+- README.md — Main docs landing page.
+- dev_guide.md — Primary development reference (setup, workflow, testing, CI).
+- `ENVIRONMENT.md` — Environment overview and usage.
+- `SIM_VIEW.md` — Simulation view/UI notes.
+- `GPU_SETUP.md` — GPU/NVIDIA Docker setup.
+- `UV_MIGRATION.md` — Migration notes to uv.
+- Topic-specific guides:
+  - `DATA_ANALYSIS.md`, `trajectory_visualization.md`, `SVG_MAP_EDITOR.md`, `fast_pysf_wrapper.md`, `pyreverse.md`, `curvature_metric.md`, `snqi_weight_cli_updates.md`.
+
+#### Focused subfolders
+- `2x-speed-vissimstate-fix/`
+  - README.md — Notes and outcome for the VissimState 2x speed fix.
+- `baselines/`
+  - `social_force.md` — Baseline Social Force documentation.
+- `docs/dev/` — In-progress/engineering docs and design notes
+- `extract-pedestrian-action-helper/`
+  - README.md — Helper tool documentation.
+- `img/` — Images used across docs
+- `ped_metrics/` Pedestrian metrics documentation and analysis notes.
+- `refactoring/` Migration/architecture reports and plans
+- `snqi-weight-tools/` — SNQI weight tooling user docs and schema
+- `templates/` Template for new design docs.
+- `video/` Demo animations for docs.
+
+
+#### Usage tips
+- Start at dev_guide.md for dev workflows, testing, and quality gates.
+- For the Social Navigation Benchmark artifacts/specs, see social-navigation-benchmark.
+- SNQI workflows live under snqi-weight-tools (the README links to all relevant scripts and flags).
+- Visual assets are centralized under img and video; don’t duplicate screenshots in other folders.
 
 ### Documentation Content Requirements
 

@@ -16,7 +16,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import (
+    ProcessPoolExecutor,
+    ThreadPoolExecutor,
+    as_completed,
+)
+from concurrent.futures import (
+    TimeoutError as FuturesTimeoutError,
+)
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set
@@ -81,6 +88,11 @@ def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_pos
         agents=agents,
         obstacles=[],
     )
+
+
+# Safety/robustness defaults for any baseline policy
+POLICY_STEP_TIMEOUT_SECS: float = 0.2  # step(obs) time budget; fallback to zero action on timeout
+FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 
 def _git_hash_fallback() -> str:
@@ -210,25 +222,53 @@ def _build_episode_data(
     )
 
 
-def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
+def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):  # noqa: C901
     """Create a robot policy function based on the specified algorithm."""
 
-    if algo == "simple_policy":
-        # Original simple policy for backward compatibility
+    def _simple_policy_adapter():
         def policy(
             robot_pos: np.ndarray,
             _robot_vel: np.ndarray,
             robot_goal: np.ndarray,
             _ped_positions: np.ndarray,
             _dt: float,
-        ) -> np.ndarray:
+        ) -> np.ndarray:  # noqa: E501
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
-        # Provide minimal algorithm metadata for consistency
         return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
 
-    # Load baseline planner once (removed erroneous early return)
+    if algo == "simple_policy":
+        return _simple_policy_adapter()
+
     planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
+
+    def _clamp_speed(vel: np.ndarray) -> np.ndarray:
+        speed = float(np.linalg.norm(vel))
+        if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
+            return vel / speed * FINAL_SPEED_CLAMP
+        return vel
+
+    def _action_to_velocity(
+        action: Dict[str, float],
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+    ) -> np.ndarray:  # noqa: E501
+        if "vx" in action and "vy" in action:
+            return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
+        if "v" in action and "omega" in action:
+            v = action["v"]
+            current_speed = np.linalg.norm(robot_vel)
+            if current_speed > 1e-6:
+                vel = robot_vel / current_speed * v
+            else:
+                goal_dir = robot_goal - robot_pos
+                if np.linalg.norm(goal_dir) > 1e-6:
+                    vel = goal_dir / np.linalg.norm(goal_dir) * v
+                else:
+                    vel = np.zeros(2)
+            return _clamp_speed(vel)
+        raise ValueError(f"Invalid action format from {algo}: {action}")
 
     def policy_fn(
         robot_pos: np.ndarray,
@@ -239,22 +279,22 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     ) -> np.ndarray:
         """Policy function that uses the baseline planner."""
         obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
-        action = planner.step(obs)
+
+        # Execute planner.step with a small timeout to avoid stalls
+        def _do_step():
+            return planner.step(obs)
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(_do_step)
+                action = fut.result(timeout=POLICY_STEP_TIMEOUT_SECS)
+        except FuturesTimeoutError:
+            # Safe fallback: zero action in current space
+            # Prefer preserving action-space contract when possible
+            action = {"vx": 0.0, "vy": 0.0}
 
         # Convert action to velocity (handle both action spaces)
-        if "vx" in action and "vy" in action:
-            return np.array([action["vx"], action["vy"]], dtype=float)
-        if "v" in action and "omega" in action:
-            v = action["v"]
-            current_speed = np.linalg.norm(robot_vel)
-            if current_speed > 1e-6:
-                direction = robot_vel / current_speed
-                return direction * v
-            goal_dir = robot_goal - robot_pos
-            if np.linalg.norm(goal_dir) > 1e-6:
-                return goal_dir / np.linalg.norm(goal_dir) * v
-            return np.zeros(2)
-        raise ValueError(f"Invalid action format from {algo}: {action}")
+        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)
 
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
     # Ensure consistent metadata schema

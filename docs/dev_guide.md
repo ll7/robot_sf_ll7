@@ -27,7 +27,6 @@
   - [Docs Folder Structure](#docs-folder-structure)
     - [Top-level guides (entry points)](#top-level-guides-entry-points)
     - [Focused subfolders](#focused-subfolders)
-    - [Usage tips](#usage-tips)
   - [Documentation Content Requirements](#documentation-content-requirements)
   - [Documentation Best Practices](#documentation-best-practices)
 - [Tooling and tasks (uv, Ruff, pytest, VS Code)](#tooling-and-tasks-uv-ruff-pytest-vs-code)
@@ -304,7 +303,7 @@ Shortcuts (optional shell):
 
 ### Docs Folder Structure
 
-Here’s a concise map of the docs folder to help you find the right guidance quickly.
+Here’s a concise map of the docs folder to help you find the right guidance quickly. Each folder should include a README.md for context, links, and references.
 
 #### Top-level guides (entry points)
 - README.md — Main docs landing page.
@@ -330,13 +329,6 @@ Here’s a concise map of the docs folder to help you find the right guidance qu
 - `snqi-weight-tools/` — SNQI weight tooling user docs and schema
 - `templates/` Template for new design docs.
 - `video/` Demo animations for docs.
-
-
-#### Usage tips
-- Start at dev_guide.md for dev workflows, testing, and quality gates.
-- For the Social Navigation Benchmark artifacts/specs, see social-navigation-benchmark.
-- SNQI workflows live under snqi-weight-tools (the README links to all relevant scripts and flags).
-- Visual assets are centralized under img and video; don’t duplicate screenshots in other folders.
 
 ### Documentation Content Requirements
 

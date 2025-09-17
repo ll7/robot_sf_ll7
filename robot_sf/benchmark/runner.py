@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 import numpy as np
 import yaml
 
+from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
@@ -587,7 +588,8 @@ def run_batch(
 
     # Resume support: filter jobs whose episode_id already exists in out_path.
     if resume and out_path.exists():
-        existing_ids = index_existing(out_path)
+        # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
+        existing_ids = load_manifest(out_path) or index_existing(out_path)
         if existing_ids:
             filtered: List[tuple[Dict[str, Any], int]] = []
             for sc, seed in jobs:
@@ -616,9 +618,14 @@ def run_batch(
             fail_fast=fail_fast,
         )
 
-    return {
+    summary = {
         "total_jobs": len(jobs),
         "written": wrote,
         "failures": failures,
         "out_path": str(out_path),
     }
+    # Save/update manifest to speed up future resume if we wrote anything
+    if resume and wrote > 0 and out_path.exists():
+        # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
+        save_manifest(out_path, index_existing(out_path))
+    return summary

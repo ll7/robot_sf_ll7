@@ -21,6 +21,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**Data Analysis**](./DATA_ANALYSIS.md) - Analysis tools and utilities for simulation data
 - [**Pyreverse**](./pyreverse.md) - Code structure visualization
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
+ - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
+   - [Random baseline](./dev/baselines/random.md) — how to use and configure
 
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training

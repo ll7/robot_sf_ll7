@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List
 
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
-from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.summary import summarize_to_plots
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
@@ -151,6 +151,19 @@ def _handle_summary(args) -> int:
         return 2
 
 
+def _handle_list_scenarios(args) -> int:
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+        ids = [str(s.get("id", "unknown")) for s in scenarios]
+        print("Scenario IDs:")
+        for sid in ids:
+            print(f"  - {sid}")
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
 def _add_baseline_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -272,6 +285,13 @@ def _add_list_subparser(
         help="List available baseline algorithms",
     )
     p.set_defaults(cmd="list-algorithms")
+
+    p2 = subparsers.add_parser(
+        "list-scenarios",
+        help="List scenario IDs from a scenario matrix YAML",
+    )
+    p2.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p2.set_defaults(cmd="list-scenarios")
 
 
 def _add_summary_subparser(
@@ -576,6 +596,7 @@ def cli_main(argv: List[str] | None = None) -> int:
     handlers = {
         "baseline": _handle_baseline,
         "list-algorithms": _handle_list_algorithms,
+        "list-scenarios": _handle_list_scenarios,
         "run": _handle_run,
         "summary": _handle_summary,
     }

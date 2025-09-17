@@ -12,17 +12,14 @@ import traceback
 from pathlib import Path
 from typing import List
 
-from robot_sf.benchmark.aggregate import (
-    compute_aggregates as _agg_compute,
-)
-from robot_sf.benchmark.aggregate import (
-    compute_aggregates_with_ci as _agg_compute_ci,
-)
-from robot_sf.benchmark.aggregate import (
-    read_jsonl as _agg_read_jsonl,
-)
+from robot_sf.benchmark.aggregate import compute_aggregates as _agg_compute
+from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_compute_ci
+from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
+from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
+from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
+from robot_sf.benchmark.ranking import format_markdown as _rank_format_md
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
@@ -277,6 +274,37 @@ def _handle_extract_failures(args) -> int:
                 for rec in failures:
                     f.write(json.dumps(rec) + "\n")
         print(json.dumps({"wrote": str(out_path), "count": len(failures)}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_rank(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        rows = _compute_ranking(
+            records,
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+            metric=args.metric,
+            ascending=bool(args.ascending),
+            top=(int(args.top) if args.top is not None else None),
+        )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fmt = str(args.format)
+        if fmt == "md":
+            content = _rank_format_md(rows, args.metric)
+            out_path.write_text(content, encoding="utf-8")
+        elif fmt == "csv":
+            content = _rank_format_csv(rows, args.metric)
+            out_path.write_text(content, encoding="utf-8")
+        else:
+            # JSON fallback
+            payload = [r.__dict__ for r in rows]
+            out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
         print(f"Error: {e}", file=sys.stderr)
@@ -582,6 +610,39 @@ def _add_extract_failures_subparser(
     p.set_defaults(cmd="extract-failures")
 
 
+def _add_rank_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "rank",
+        help=("Compute rankings by mean of a metric per group and write as Markdown/CSV/JSON"),
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output path (md/csv/json)")
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument("--metric", default="collisions", help="Metric name under metrics.<name>")
+    sort = p.add_mutually_exclusive_group()
+    sort.add_argument("--ascending", action="store_true", default=True)
+    sort.add_argument("--descending", dest="ascending", action="store_false")
+    p.add_argument("--top", type=int, default=None, help="Limit to top N rows")
+    p.add_argument(
+        "--format",
+        choices=["md", "csv", "json"],
+        default="md",
+        help="Output format (Markdown table, CSV, or JSON)",
+    )
+    p.set_defaults(cmd="rank")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -596,6 +657,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_aggregate_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
+    _add_rank_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -882,6 +944,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "aggregate": _handle_aggregate,
         "seed-variance": _handle_seed_variance,
         "extract-failures": _handle_extract_failures,
+        "rank": _handle_rank,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

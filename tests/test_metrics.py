@@ -60,6 +60,8 @@ def test_metrics_keys_all_collisions():
     assert values["near_misses"] == 0
     # Min distance exactly zero
     assert values["min_distance"] == 0.0
+    # Mean distance also zero in this constructed case
+    assert values["mean_distance"] == 0.0
 
 
 def test_metrics_partial_success_flag_present():
@@ -83,6 +85,8 @@ def test_near_miss_region_only():
     assert values["near_misses"] == T
     # Min distance 0.3
     assert np.isclose(values["min_distance"], 0.3)
+    # Mean distance also 0.3 (constant over time)
+    assert np.isclose(values["mean_distance"], 0.3)
 
 
 def test_mixed_collision_and_near_miss():
@@ -96,6 +100,8 @@ def test_mixed_collision_and_near_miss():
     assert values["collisions"] == 2
     assert values["near_misses"] == 2
     assert np.isclose(values["min_distance"], 0.1)
+    # Mean of per-timestep minimum distances: (0.1 + 0.2 + 0.3 + 0.3)/4 = 0.225
+    assert np.isclose(values["mean_distance"], 0.225)
 
 
 def test_success_and_time_to_goal_norm_success_case():

@@ -164,6 +164,37 @@ def _handle_list_scenarios(args) -> int:
         return 2
 
 
+def _handle_validate_config(args) -> int:
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+        errors = []
+        warnings = []
+        required = {"id", "density", "flow", "obstacle"}
+        seen_ids = set()
+        for i, s in enumerate(scenarios):
+            missing = sorted(list(required - set(s.keys())))
+            if missing:
+                errors.append({"index": i, "id": s.get("id"), "missing": missing})
+            sid = s.get("id")
+            if isinstance(sid, str):
+                if sid in seen_ids:
+                    errors.append({"index": i, "id": sid, "error": "duplicate id"})
+                else:
+                    seen_ids.add(sid)
+            reps = s.get("repeats", 1)
+            try:
+                if int(reps) < 1:
+                    errors.append({"index": i, "id": sid, "error": "repeats<1"})
+            except Exception:
+                errors.append({"index": i, "id": sid, "error": "invalid repeats"})
+        summary = {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
+        print(json.dumps(summary, indent=2))
+        return 0 if not errors else 2
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
 def _add_baseline_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -292,6 +323,13 @@ def _add_list_subparser(
     )
     p2.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
     p2.set_defaults(cmd="list-scenarios")
+
+    p3 = subparsers.add_parser(
+        "validate-config",
+        help="Validate a scenario matrix YAML for required fields and duplicates",
+    )
+    p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p3.set_defaults(cmd="validate-config")
 
 
 def _add_summary_subparser(
@@ -597,6 +635,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "baseline": _handle_baseline,
         "list-algorithms": _handle_list_algorithms,
         "list-scenarios": _handle_list_scenarios,
+        "validate-config": _handle_validate_config,
         "run": _handle_run,
         "summary": _handle_summary,
     }

@@ -138,3 +138,12 @@ def test_cli_validate_config_errors(tmp_path: Path, capsys):
     report = json.loads(captured.out)
     assert report["num_scenarios"] == 3
     assert len(report["errors"]) >= 2
+
+
+def test_cli_list_algorithms_includes_random(capsys):
+    rc = cli_main(["list-algorithms"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    # Built-in and baseline registry entries should appear
+    assert "simple_policy" in captured.out
+    assert "random" in captured.out

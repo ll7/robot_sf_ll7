@@ -359,7 +359,10 @@ Example (optimization excerpt):
   "summary": {"method": "differential_evolution", "objective_value": 0.72, "ranking_stability": 0.81, "weights": {"w_success": 2.0, ...}}
 }
 ```
-Recompute output adds: `recommended_weights`, optional `strategy_comparison`, `strategy_correlations`, `external_weights`, `normalization_comparison`, and `diagnostics`.
+ Recompute output adds: `recommended_weights`, optional `strategy_comparison`, `strategy_correlations`, `external_weights`, `normalization_comparison`, and `diagnostics`.
+
+## Related tools
+- Ranking generator: see [docs/dev/ranking.md](../dev/ranking.md) for producing Markdown/CSV/JSON leaderboards by metric/group using the unified CLI (`robot_sf_bench rank`).
 
 ### Diagnostics Fields
 - `skipped_malformed_lines` (metadata + summary): Count of invalid JSONL lines ignored.

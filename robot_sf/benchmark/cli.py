@@ -22,6 +22,7 @@ from robot_sf.benchmark.aggregate import (
     read_jsonl as _agg_read_jsonl,
 )
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
@@ -247,6 +248,35 @@ def _handle_seed_variance(args) -> int:
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
         print(json.dumps({"wrote": str(out_path)}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_extract_failures(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        failures = _extract_failures(
+            records,
+            collision_threshold=float(args.collision_threshold),
+            comfort_threshold=float(args.comfort_threshold),
+            near_miss_threshold=float(args.near_miss_threshold),
+            snqi_below=(float(args.snqi_below) if args.snqi_below is not None else None),
+            max_count=(int(args.max_count) if args.max_count is not None else None),
+        )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if bool(args.ids_only):
+            ids = [r.get("episode_id") for r in failures]
+            with out_path.open("w", encoding="utf-8") as f:
+                json.dump({"episode_ids": ids}, f, indent=2)
+        else:
+            # Write JSONL with full records
+            with out_path.open("w", encoding="utf-8") as f:
+                for rec in failures:
+                    f.write(json.dumps(rec) + "\n")
+        print(json.dumps({"wrote": str(out_path), "count": len(failures)}, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
         print(f"Error: {e}", file=sys.stderr)
@@ -512,6 +542,31 @@ def _add_seed_variance_subparser(
     p.set_defaults(cmd="seed-variance")
 
 
+def _add_extract_failures_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "extract-failures",
+        help="Filter episodes with collisions/low comfort/near-misses/SNQI threshold",
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument(
+        "--out", required=True, help="Output path (JSONL by default or JSON if --ids-only)"
+    )
+    p.add_argument("--collision-threshold", type=float, default=1.0)
+    p.add_argument("--comfort-threshold", type=float, default=0.2)
+    p.add_argument("--near-miss-threshold", type=float, default=0.0)
+    p.add_argument("--snqi-below", type=float, default=None)
+    p.add_argument("--max-count", type=int, default=None)
+    p.add_argument(
+        "--ids-only",
+        action="store_true",
+        default=False,
+        help="Write JSON with episode_ids instead of JSONL records",
+    )
+    p.set_defaults(cmd="extract-failures")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -525,6 +580,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
+    _add_extract_failures_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -810,6 +866,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
         "seed-variance": _handle_seed_variance,
+        "extract-failures": _handle_extract_failures,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

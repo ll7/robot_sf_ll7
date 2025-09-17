@@ -12,6 +12,15 @@ import traceback
 from pathlib import Path
 from typing import List
 
+from robot_sf.benchmark.aggregate import (
+    compute_aggregates as _agg_compute,
+)
+from robot_sf.benchmark.aggregate import (
+    compute_aggregates_with_ci as _agg_compute_ci,
+)
+from robot_sf.benchmark.aggregate import (
+    read_jsonl as _agg_read_jsonl,
+)
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
@@ -167,6 +176,52 @@ def _handle_summary(args) -> int:
     try:
         outs = summarize_to_plots(args.in_path, args.out_dir)
         print(json.dumps({"wrote": outs}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_aggregate(args) -> int:
+    try:
+        # Optional: load SNQI inputs to compute metrics.snqi during aggregation
+        snqi_weights = None
+        snqi_baseline = None
+        if getattr(args, "snqi_weights", None):
+            with open(args.snqi_weights, "r", encoding="utf-8") as f:
+                snqi_weights = json.load(f)
+        if getattr(args, "snqi_baseline", None):
+            with open(args.snqi_baseline, "r", encoding="utf-8") as f:
+                snqi_baseline = json.load(f)
+
+        records = _agg_read_jsonl(args.in_path)
+        use_ci = int(getattr(args, "bootstrap_samples", 0)) > 0
+        if use_ci:
+            summary = _agg_compute_ci(
+                records,
+                group_by=args.group_by,
+                fallback_group_by=args.fallback_group_by,
+                snqi_weights=snqi_weights,
+                snqi_baseline=snqi_baseline,
+                bootstrap_samples=int(args.bootstrap_samples),
+                bootstrap_confidence=float(args.bootstrap_confidence),
+                bootstrap_seed=(
+                    int(args.bootstrap_seed) if args.bootstrap_seed is not None else None
+                ),
+            )
+        else:
+            summary = _agg_compute(
+                records,
+                group_by=args.group_by,
+                fallback_group_by=args.fallback_group_by,
+                snqi_weights=snqi_weights,
+                snqi_baseline=snqi_baseline,
+            )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(json.dumps({"wrote": str(out_path)}, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
         print(f"Error: {e}", file=sys.stderr)
@@ -355,6 +410,56 @@ def _add_summary_subparser(
     p.set_defaults(cmd="summary")
 
 
+def _add_aggregate_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "aggregate",
+        help=(
+            "Aggregate episode metrics by group and optionally attach bootstrap CIs; "
+            "writes JSON summary."
+        ),
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output JSON summary path")
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=0,
+        help="Number of bootstrap resamples for CIs (0 disables)",
+    )
+    p.add_argument(
+        "--bootstrap-confidence",
+        type=float,
+        default=0.95,
+        help="Confidence level for bootstrap intervals (e.g., 0.95)",
+    )
+    p.add_argument("--bootstrap-seed", type=int, default=None)
+    p.add_argument(
+        "--snqi-weights",
+        type=str,
+        default=None,
+        help="Optional SNQI weights JSON to compute metrics.snqi during aggregation",
+    )
+    p.add_argument(
+        "--snqi-baseline",
+        type=str,
+        default=None,
+        help="Optional baseline stats JSON used for SNQI normalization",
+    )
+    p.set_defaults(cmd="aggregate")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -366,6 +471,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_baseline_subparser(subparsers)
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
+    _add_aggregate_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -649,6 +755,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "validate-config": _handle_validate_config,
         "run": _handle_run,
         "summary": _handle_summary,
+        "aggregate": _handle_aggregate,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

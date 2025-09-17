@@ -14,6 +14,7 @@ from typing import List
 
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
+from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.summary import summarize_to_plots
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
@@ -188,26 +189,8 @@ def _handle_list_scenarios(args) -> int:
 def _handle_validate_config(args) -> int:
     try:
         scenarios = load_scenario_matrix(args.matrix)
-        errors = []
+        errors = validate_scenario_list(scenarios)
         warnings = []
-        required = {"id", "density", "flow", "obstacle"}
-        seen_ids = set()
-        for i, s in enumerate(scenarios):
-            missing = sorted(list(required - set(s.keys())))
-            if missing:
-                errors.append({"index": i, "id": s.get("id"), "missing": missing})
-            sid = s.get("id")
-            if isinstance(sid, str):
-                if sid in seen_ids:
-                    errors.append({"index": i, "id": sid, "error": "duplicate id"})
-                else:
-                    seen_ids.add(sid)
-            reps = s.get("repeats", 1)
-            try:
-                if int(reps) < 1:
-                    errors.append({"index": i, "id": sid, "error": "repeats<1"})
-            except Exception:
-                errors.append({"index": i, "id": sid, "error": "invalid repeats"})
         summary = {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
         print(json.dumps(summary, indent=2))
         return 0 if not errors else 2
@@ -356,6 +339,7 @@ def _add_list_subparser(
         help="Validate a scenario matrix YAML for required fields and duplicates",
     )
     p3.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    # optional: later we could add --verbose to print detailed schema errors
     p3.set_defaults(cmd="validate-config")
 
 

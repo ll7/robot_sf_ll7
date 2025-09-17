@@ -21,6 +21,7 @@ DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schem
 
 def _handle_baseline(args) -> int:
     try:
+        progress_cb = _progress_cb_factory(bool(args.quiet))
         stats = run_and_compute_baseline(
             args.matrix,
             out_json=args.out,
@@ -35,6 +36,7 @@ def _handle_baseline(args) -> int:
             algo_config_path=args.algo_config,
             workers=args.workers,
             resume=(not bool(getattr(args, "no_resume", False))),
+            progress_cb=progress_cb,
         )
         # Print brief summary to stdout for convenience
         print(json.dumps({"out": args.out, "keys": sorted(stats.keys())}, indent=2))
@@ -93,15 +95,34 @@ def _load_snqi_inputs(args):
 
 
 def _progress_cb_factory(quiet: bool):
+    # Try to use tqdm when available
+    pbar = None
+    if not quiet:
+        try:  # pragma: no cover - tqdm optional
+            from tqdm import tqdm  # type: ignore
+
+            pbar = tqdm(total=0, unit="ep", disable=False)
+        except Exception:
+            pbar = None
+
     def _cb(i, total, sc, seed, ok, err):
         if quiet:
             return
         status = "ok" if ok else "FAIL"
         sid = sc.get("id", "unknown")
-        msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
-        if err:
-            msg += f" ({err})"
-        print(msg)
+        if pbar is not None:
+            try:  # pragma: no cover - tqdm optional
+                if pbar.total != total:
+                    pbar.reset(total=total)
+                pbar.update(1)
+                pbar.set_description(f"{sid} seed={seed} {status}")
+            except Exception:
+                pass
+        else:
+            msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
+            if err:
+                msg += f" ({err})"
+            print(msg)
 
     return _cb
 
@@ -235,6 +256,12 @@ def _add_baseline_subparser(
         "--no-resume",
         action="store_true",
         help="Disable resume (skip detection of already present episodes)",
+    )
+    p.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress per-episode progress output",
     )
     p.set_defaults(cmd="baseline")
 

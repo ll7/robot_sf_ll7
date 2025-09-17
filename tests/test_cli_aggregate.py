@@ -61,11 +61,12 @@ def test_cli_aggregate_without_ci(tmp_path: Path, capsys):
     assert rc == 0, f"aggregate failed: {cap2.err}"
 
     data = json.loads(out_json.read_text(encoding="utf-8"))
-    # Default group is scenario_params.algo -> simple_policy
-    assert "simple_policy" in data
+    # Default grouping is scenario_params.algo; when missing it falls back to scenario_id
+    # Our demo matrix has id 'agg-smoke', so expect that key
+    assert "agg-smoke" in data
     # Check that known metrics exist at least for mean/median/p95
-    any_metric = next(iter(data["simple_policy"].keys()))
-    stats = data["simple_policy"][any_metric]
+    any_metric = next(iter(data["agg-smoke"].keys()))
+    stats = data["agg-smoke"][any_metric]
     assert all(k in stats for k in ("mean", "median", "p95"))
     # CI keys should not be present when bootstrap_samples=0 (default)
     assert not any(k.endswith("_ci") for k in stats.keys())
@@ -118,16 +119,19 @@ def test_cli_aggregate_with_ci_and_seed(tmp_path: Path, capsys):
 
     # Deterministic with same seed
     # Run again with same seed but a different output path to verify determinism
-    rc2 = cli_main([*args[:4], str(out2), *args[4:-2], "123"])  # replace --out path, keep same seed
+    args2 = args.copy()
+    out_idx = args2.index("--out") + 1
+    args2[out_idx] = str(out2)
+    rc2 = cli_main(args2)
     cap2 = capsys.readouterr()
     assert rc2 == 0, f"aggregate ci repeat failed: {cap2.err}"
 
     d1 = json.loads(out1.read_text(encoding="utf-8"))
     d2 = json.loads(out2.read_text(encoding="utf-8"))
 
-    assert "simple_policy" in d1
+    assert "agg-smoke" in d1
     # Pick a metric and verify CI keys present and shape
-    _, stats = next(iter(d1["simple_policy"].items()))
+    _, stats = next(iter(d1["agg-smoke"].items()))
     assert "mean_ci" in stats and "median_ci" in stats and "p95_ci" in stats
     assert len(stats["mean_ci"]) == 2
     assert isinstance(stats["mean_ci"][0], float)

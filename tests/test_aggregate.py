@@ -4,6 +4,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.aggregate import (
     compute_aggregates,
+    compute_aggregates_with_ci,
     flatten_metrics,
     read_jsonl,
     write_episode_csv,
@@ -81,3 +82,41 @@ def test_compute_aggregates_group_by_algo(tmp_path: Path):
     for metrics in summary.values():
         assert "time_to_goal_norm" in metrics
         assert set(metrics["time_to_goal_norm"].keys()) == {"mean", "median", "p95"}
+
+
+def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
+    jsonl_path = _make_sample_jsonl(tmp_path)
+    recs = read_jsonl(jsonl_path)
+    # Compute with CIs
+    summary_ci = compute_aggregates_with_ci(
+        recs,
+        group_by="scenario_params.algo",
+        bootstrap_samples=200,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=123,
+    )
+    # Basic shape: groups and keys
+    assert set(summary_ci.keys()) == {"A", "B"}
+    any_group = next(iter(summary_ci.values()))
+    # Ensure a known metric exists
+    assert "time_to_goal_norm" in any_group
+    m = any_group["time_to_goal_norm"]
+    # Base stats still present
+    assert {"mean", "median", "p95"}.issubset(set(m.keys()))
+    # CI keys present and are [low, high]
+    for key in ("mean_ci", "median_ci", "p95_ci"):
+        assert key in m
+        ci = m[key]
+        assert isinstance(ci, list) and len(ci) == 2
+        assert all(isinstance(v, float) for v in ci)
+        assert ci[0] <= ci[1]
+
+    # Determinism with same seed
+    summary_ci_2 = compute_aggregates_with_ci(
+        recs,
+        group_by="scenario_params.algo",
+        bootstrap_samples=200,
+        bootstrap_confidence=0.90,
+        bootstrap_seed=123,
+    )
+    assert summary_ci == summary_ci_2

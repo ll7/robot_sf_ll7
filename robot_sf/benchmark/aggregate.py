@@ -329,17 +329,15 @@ def compute_aggregates_with_ci(
         cols: Dict[str, List[float]] = defaultdict(list)
         for row in rows:
             num = _numeric_items(row)
-            for row in rows:
-                num = _numeric_items(row)
-                for k, v in num.items():
-                    cols[k].append(v)
-            _attach_ci_for_group(
-                out.setdefault(g, {}),
-                cols,
-                bootstrap_samples=bootstrap_samples,
-                bootstrap_confidence=bootstrap_confidence,
-                bootstrap_seed=bootstrap_seed,
-            )
+            for k, v in num.items():
+                cols[k].append(v)
+        _attach_ci_for_group(
+            out.setdefault(g, {}),
+            cols,
+            bootstrap_samples=bootstrap_samples,
+            bootstrap_confidence=bootstrap_confidence,
+            bootstrap_seed=bootstrap_seed,
+        )
 
 
 __all__ = [

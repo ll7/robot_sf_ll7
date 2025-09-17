@@ -12,6 +12,18 @@ import traceback
 from pathlib import Path
 from typing import List
 
+from robot_sf.benchmark.ablation import (
+    compute_snqi_ablation as _abl_compute,
+)
+from robot_sf.benchmark.ablation import (
+    format_csv as _abl_format_csv,
+)
+from robot_sf.benchmark.ablation import (
+    format_markdown as _abl_format_md,
+)
+from robot_sf.benchmark.ablation import (
+    to_json as _abl_to_json,
+)
 from robot_sf.benchmark.aggregate import compute_aggregates as _agg_compute
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_compute_ci
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
@@ -223,6 +235,48 @@ def _handle_aggregate(args) -> int:
         print(json.dumps({"wrote": str(out_path)}, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_snqi_ablate(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        snqi_weights, snqi_baseline = _load_snqi_inputs(args)
+        if not isinstance(snqi_weights, dict) or not isinstance(snqi_baseline, dict):
+            print(
+                "error: --snqi-weights and --snqi-baseline are required for snqi-ablate",
+                file=sys.stderr,
+            )
+            return 2
+        rows = _abl_compute(
+            records,
+            weights=snqi_weights,  # type: ignore[arg-type]
+            baseline=snqi_baseline,  # type: ignore[arg-type]
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+        )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fmt = (args.format or "md").lower()
+        if fmt == "md":
+            content = _abl_format_md(rows)
+            out_path.write_text(content, encoding="utf-8")
+        elif fmt == "csv":
+            content = _abl_format_csv(rows)
+            out_path.write_text(content, encoding="utf-8")
+        elif fmt == "json":
+            content = json.dumps(_abl_to_json(rows), indent=2)
+            out_path.write_text(content + "\n", encoding="utf-8")
+        else:
+            print(
+                f"error: unknown format '{args.format}', expected one of: md,csv,json",
+                file=sys.stderr,
+            )
+            return 2
+        print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - defensive
         print(f"Error: {e}", file=sys.stderr)
         return 2
 
@@ -543,6 +597,43 @@ def _add_aggregate_subparser(
     p.set_defaults(cmd="aggregate")
 
 
+def _add_snqi_ablate_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "snqi-ablate",
+        help="Compute rank shifts from one-at-a-time SNQI component removal",
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output path (.md/.csv/.json)")
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument("--format", choices=["md", "csv", "json"], default="md")
+    # SNQI inputs
+    p.add_argument("--snqi-weights", type=str, default=None, help="SNQI weights JSON path")
+    p.add_argument(
+        "--snqi-weights-from",
+        type=str,
+        default=None,
+        help="Path to JSON report containing recommended weights",
+    )
+    p.add_argument(
+        "--snqi-baseline",
+        type=str,
+        default=None,
+        help="Baseline stats JSON (median/p95 per metric)",
+    )
+    p.set_defaults(cmd="snqi-ablate")
+
+
 def _add_seed_variance_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -657,6 +748,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_aggregate_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
+    _add_snqi_ablate_subparser(subparsers)
     _add_rank_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
@@ -944,6 +1036,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "aggregate": _handle_aggregate,
         "seed-variance": _handle_seed_variance,
         "extract-failures": _handle_extract_failures,
+        "snqi-ablate": _handle_snqi_ablate,
         "rank": _handle_rank,
     }
     handler = handlers.get(args.cmd)

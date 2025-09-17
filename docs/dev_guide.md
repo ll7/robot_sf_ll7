@@ -141,6 +141,9 @@ env = make_robot_env(config=config)
 - Document assumptions and trade-offs.
 - Prefer programmatic use and factory functions over CLI; the CLI is not important.
 - Working mode: prioritize a thin, end-to-end slice that runs. Optimize and polish after a green smoke test (env reset→step loop or demo run).
+- Whenever possible, add a demo or example to illustrate new functionality.
+- Avoid disabling linters, type checks, or tests unless absolutely necessary.
+  - Whenever you have the chance, refactor to fix issues rather than suppressing them. Especially `# noqa: C901` (complexity) and `# type: ignore` (type hints).
 
 - Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.

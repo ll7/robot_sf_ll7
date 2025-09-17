@@ -106,6 +106,7 @@ def compute_snqi_ablation(
     baseline: Mapping[str, Mapping[str, float]],
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
+    top: int | None = None,
 ) -> List[AblationRow]:
     """Compute per-group rank shifts for one-at-a-time SNQI ablations.
 
@@ -139,6 +140,8 @@ def compute_snqi_ablation(
 
     # Return rows in base ranking order
     ordered = sorted(rows_by_group.values(), key=lambda r: r.base_rank)
+    if isinstance(top, int) and top > 0:
+        ordered = ordered[:top]
     return ordered
 
 
@@ -186,9 +189,53 @@ def to_json(rows: Sequence[AblationRow]) -> List[Dict[str, Any]]:
     return out
 
 
+def compute_ablation_summary(rows: Sequence[AblationRow]) -> Dict[str, Dict[str, float]]:
+    """Compute per-weight summary statistics from ablation rows.
+
+    Returns mapping weight_name -> {changed, mean_abs, max_abs, pos, neg, mean}.
+    All values except counts are floats; counts are returned as floats for JSON uniformity.
+    """
+    # Gather all weight names that appear in any row
+    weight_names = sorted({w for r in rows for w in r.deltas.keys()})
+    summary: Dict[str, Dict[str, float]] = {}
+    for w in weight_names:
+        vals: List[float] = []
+        pos = 0
+        neg = 0
+        for r in rows:
+            v = float(r.deltas.get(w, 0.0))
+            if v != 0.0:
+                vals.append(v)
+                if v > 0:
+                    pos += 1
+                elif v < 0:
+                    neg += 1
+        if vals:
+            abs_vals = [abs(v) for v in vals]
+            summary[w] = {
+                "changed": float(len(vals)),
+                "mean_abs": float(sum(abs_vals) / len(abs_vals)),
+                "max_abs": float(max(abs_vals)),
+                "pos": float(pos),
+                "neg": float(neg),
+                "mean": float(sum(vals) / len(vals)),
+            }
+        else:
+            summary[w] = {
+                "changed": 0.0,
+                "mean_abs": 0.0,
+                "max_abs": 0.0,
+                "pos": 0.0,
+                "neg": 0.0,
+                "mean": 0.0,
+            }
+    return summary
+
+
 __all__ = [
     "AblationRow",
     "compute_snqi_ablation",
+    "compute_ablation_summary",
     "format_markdown",
     "format_csv",
     "to_json",

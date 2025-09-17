@@ -403,6 +403,7 @@ Notes
 - Default behavior is resume=True for programmatic APIs and CLI (omit --no-resume to keep it enabled).
 - When resuming, open files in append mode if you want to keep existing lines; the runner will not duplicate episodes.
 - On macOS spawn, module-level top-level functions are required for worker processes to import successfully.
+- Resume accelerator: The runner writes a small sidecar manifest (episodes.jsonl.manifest.json) caching episode ids and file stat. On subsequent runs, resume uses this manifest when valid and transparently falls back to scanning the JSONL if the sidecar is stale or missing. No user action required.
 
 ## Training and examples
 ### Available demos

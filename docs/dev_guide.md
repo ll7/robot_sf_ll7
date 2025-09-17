@@ -410,6 +410,47 @@ Notes
 - On macOS spawn, module-level top-level functions are required for worker processes to import successfully.
 - Resume accelerator: The runner writes a small sidecar manifest (episodes.jsonl.manifest.json) caching episode ids and file stat. On subsequent runs, resume uses this manifest when valid and transparently falls back to scanning the JSONL if the sidecar is stale or missing. No user action required.
 
+## Aggregation and Confidence Intervals
+
+Once you have a JSONL of episodes, you can aggregate metrics by group and optionally attach bootstrap confidence intervals.
+
+CLI usage
+
+- Aggregate without CIs (default):
+  - robot_sf_bench aggregate --in results/episodes.jsonl --out results/summary.json
+- Aggregate with CIs (enable with >0 samples):
+  - robot_sf_bench aggregate --in results/episodes.jsonl --out results/summary_ci.json --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 123
+
+Options
+
+- --group-by: Dotted path for grouping (default: scenario_params.algo)
+- --fallback-group-by: Used when group-by is missing (default: scenario_id)
+- --bootstrap-samples: Number of bootstrap resamples; 0 disables CI keys
+- --bootstrap-confidence: Confidence level, e.g., 0.90, 0.95
+- --bootstrap-seed: Optional deterministic seed for CIs
+- --snqi-weights/--snqi-baseline: Recompute metrics.snqi during aggregation
+
+Output format
+
+- For each group and metric, the aggregator returns mean, median, p95.
+- When CIs are enabled, additional keys are included: mean_ci, median_ci, p95_ci as [low, high].
+
+Programmatic usage
+
+```python
+from robot_sf.benchmark.aggregate import read_jsonl, compute_aggregates_with_ci
+
+records = read_jsonl("results/episodes.jsonl")
+summary = compute_aggregates_with_ci(
+    records,
+    group_by="scenario_params.algo",
+    fallback_group_by="scenario_id",
+    bootstrap_samples=1000,
+    bootstrap_confidence=0.95,
+    bootstrap_seed=123,
+)
+```
+
 ## Training and examples
 ### Available demos
 ```bash

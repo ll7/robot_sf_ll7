@@ -10,23 +10,13 @@ Update etiquette:
 
 ---
 ### Recent Updates (2025-09-16)
-- Implemented unified benchmark CLI `robot_sf_bench` with subcommands: `run`, `baseline`, `summary`, and `snqi (optimize|recompute)`; added console script entry (pyproject).
-- Implemented summary plots utility (histograms for min_distance, avg_speed) and wired to CLI (`summary`).
-- Implemented baseline stats runner and integrated it with CLI (`baseline`).
-- Implemented and documented `curvature_mean` metric (added tests; integrated into path smoothness suite).
-- Rebuilt & stabilized Social Force baseline (deterministic seeding, NaN guards, consolidated force composition).
-- Extracted scattered `1e-9` literals into `SocialForcePlanner.EPSILON` constant for maintainability.
-- Added CI preflight (schema + uv + optional jq) and kept full test suite green.
-- UI/playback enhancements: frame rendering method, dynamic help overlay height, disentangled UI FPS pacing.
-- Implemented parallel workers in benchmark runner and CLI flag `--workers` (macOS-safe spawn); threaded through baseline stats; kept sequential default.
-
-## 0. Scoping & Planning
+### Recent Updates (2025-09-17)
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
-- [ ] Decide license & artifact dissemination strategy (GitHub + Zenodo DOI)
+[x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
 - [ ] Finalize baseline algorithm list (min: SF default, RL policy, Random, Optional: ORCA/RVO)
 
-### Scope Statement (Draft)
+[ ] Global flags: seed, progress bar, resume (seed+resume implemented; progress bar pending)
 The Social Navigation Benchmark provides a reproducible, force-field–aware evaluation suite for robot policies operating amid dynamic pedestrian crowds. It offers a standardized set of procedurally generated scenarios varying density, flow patterns, obstacle complexity, and group behavior. Beyond traditional success and collision counts, it emphasizes comfort and social compliance via force, proximity, and smoothness metrics, aggregated into a transparent composite index (SNQI). The benchmark supplies baseline planners (social-force, RL, random) with deterministic seeding, locked dependencies, and schema-validated outputs to enable fair comparison, ablation, and rapid iteration. Its objective is not to maximize scenario realism initially, but to establish a rigorous, interpretable, and extensible foundation that can be incrementally enriched (e.g., real data calibration, risk-aware planning) while preserving backward compatibility and reproducibility.
 
 ### Success Criteria

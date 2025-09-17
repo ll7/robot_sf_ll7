@@ -14,9 +14,13 @@ Update etiquette:
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
+- [x] Scenario matrix JSON Schema + CLI validate-config subcommand (2025-09-17)
+- [x] CLI: list-scenarios subcommand (2025-09-17)
+- [x] Global flags wired end-to-end: seed, progress bar, resume (2025-09-17)
+- [x] Progress bar integration for run/baseline via callback (tqdm optional) (2025-09-17)
 - [ ] Finalize baseline algorithm list (min: SF default, RL policy, Random, Optional: ORCA/RVO)
 
-[ ] Global flags: seed, progress bar, resume (seed+resume implemented; progress bar pending)
+[x] Global flags: seed, progress bar, resume (2025-09-17)
 The Social Navigation Benchmark provides a reproducible, force-field–aware evaluation suite for robot policies operating amid dynamic pedestrian crowds. It offers a standardized set of procedurally generated scenarios varying density, flow patterns, obstacle complexity, and group behavior. Beyond traditional success and collision counts, it emphasizes comfort and social compliance via force, proximity, and smoothness metrics, aggregated into a transparent composite index (SNQI). The benchmark supplies baseline planners (social-force, RL, random) with deterministic seeding, locked dependencies, and schema-validated outputs to enable fair comparison, ablation, and rapid iteration. Its objective is not to maximize scenario realism initially, but to establish a rigorous, interpretable, and extensible foundation that can be incrementally enriched (e.g., real data calibration, risk-aware planning) while preserving backward compatibility and reproducibility.
 
 ### Success Criteria
@@ -34,7 +38,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Implement deterministic scenario generator (seeded) (2025-09-02)
 - [x] Implement map variants (simple hall, bottleneck, obstacle maze) (2025-09-08)
 	- Note: "crossing" currently represented via flow topology, not a distinct obstacle layout.
-- [ ] Add grouping / crowd heterogeneity flags to scenario config schema
+- [x] Add grouping / crowd heterogeneity flags to scenario config schema (2025-09-17)
 - [x] Validate scenario diversity via quick summary script (histograms of min distances, avg speeds) (2025-09-09)
 - [ ] (Optional) Import small real trajectory stats (ETH/UCY aggregate) for parameter calibration
 
@@ -61,12 +65,12 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Ablation: measure discriminative power with and without each component
 
 ## 4. Configuration & CLI Harness
-- [ ] YAML/JSON schema for benchmark suite definition (list of scenario specs + repetitions)
+- [x] YAML/JSON schema for benchmark suite definition (list of scenario specs + repetitions) (2025-09-17)
 - [x] Implement CLI: `robot_sf_bench run ...` (uses `--matrix` instead of `--suite`; includes `--algo`, `--snqi-*`, `--quiet`, `--fail-fast`) (2025-09-16)
-- [ ] Subcommand: `robot_sf_bench list-scenarios`
+- [x] Subcommand: `robot_sf_bench list-scenarios` (2025-09-17)
 - [x] Subcommand: `robot_sf_bench list-algorithms` (2025-09-16)
-- [ ] Subcommand: `robot_sf_bench validate-config`
-- [ ] Global flags: seed, progress bar, resume
+- [x] Subcommand: `robot_sf_bench validate-config` (2025-09-17)
+- [x] Global flags: seed, progress bar, resume (2025-09-17)
 - [x] Parallel workers flag (`--workers`) in CLI and Python API (2025-09-16)
 - [x] Logging: structured (JSONL) plus human-readable summary (per-run JSON summary + plots via `summary`) (2025-09-16)
 	- [x] Python API batch runner `run_batch(...)` with JSONL writing and schema validation (2025-09-08)
@@ -74,19 +78,19 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 
 ## 5. Baseline Algorithm Integrations
 - [x] Standard Social Force planner wrapper (2025-09-12)
-- [ ] Existing RL policy loader (PPO model) adapter
+- [x] Existing RL policy loader (PPO model) adapter (2025-09-17)
 - [ ] Random / naive reactive baseline (naive `simple_policy` present; random policy pending)
 - [ ] (Optional) ORCA integration (licensing check)
-- [ ] Unified interface (step(obs) -> action) with timeouts / safety clamp (core interface in place; timeouts pending)
+- [ ] Unified interface (step(obs) -> action) with timeouts / safety clamp (finalize timeout wrapper and final action clamp in runner)
 - [x] Per-baseline config file (hyperparameters, seeds) via `--algo-config` YAML (2025-09-16)
 
 ## 6. Evaluation Pipeline & Aggregation
 - [x] Aggregation script: merges JSONL episodes -> metrics CSV + SNQI per algo (2025-09-08)
 - [ ] Confidence interval computation (bootstrap or across seeds) (SNQI bootstrap options available; episode-level CIs pending)
 - [ ] Seed variance analysis script
-- [ ] Automatic ranking table generator
+- [ ] Automatic ranking table generator (Markdown/CSV)
 - [ ] Failure case extractor (episodes with collisions / low comfort)
-- [ ] Caching layer to avoid recomputing unchanged episodes
+- [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest) (2025-09-17)
 
 ## 7. Visualization & Reporting Assets
 - [ ] Force field heatmap + vector overlays example figure

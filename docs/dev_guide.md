@@ -153,7 +153,8 @@ env = make_robot_env(config=config)
 - Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `results/`.
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
-- Progress cadence: during complex edits, report what ran and outcomes after ~3–5 tool calls or when you edit > ~3 files in one burst.
+- Ensure that the documentation, docstrings, and comments are updated to reflect code changes.
+- Progress cadence: always keep tests and documentation up-to-date. As long as you document your chain of thought and what ran, you can report outcomes after finishing the work.
 
 ### Testing strategy (THREE test suites)
 

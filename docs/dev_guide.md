@@ -33,6 +33,7 @@
   - [Performance benchmarking (optional)](#performance-benchmarking-optional)
   - [Performance expectations](#performance-expectations)
 - [Benchmark runner: parallel workers and resume](#benchmark-runner-parallel-workers-and-resume)
+- [Aggregation and Confidence Intervals](#aggregation-and-confidence-intervals)
 - [Training and examples](#training-and-examples)
   - [Available demos](#available-demos)
   - [Training scripts](#training-scripts)

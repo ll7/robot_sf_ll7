@@ -338,6 +338,7 @@ def compute_aggregates_with_ci(
             bootstrap_confidence=bootstrap_confidence,
             bootstrap_seed=bootstrap_seed,
         )
+    return out
 
 
 __all__ = [

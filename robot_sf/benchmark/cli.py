@@ -24,6 +24,7 @@ from robot_sf.benchmark.aggregate import (
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
 from robot_sf.benchmark.summary import summarize_to_plots
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
@@ -217,6 +218,30 @@ def _handle_aggregate(args) -> int:
                 snqi_weights=snqi_weights,
                 snqi_baseline=snqi_baseline,
             )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(json.dumps({"wrote": str(out_path)}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_seed_variance(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        metrics = None
+        if getattr(args, "metrics", None):
+            # Split comma-separated list, strip whitespace
+            metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
+        summary = _compute_seed_variance(
+            records,
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+            metrics=metrics,
+        )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
@@ -460,6 +485,33 @@ def _add_aggregate_subparser(
     p.set_defaults(cmd="aggregate")
 
 
+def _add_seed_variance_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "seed-variance",
+        help=("Compute per-metric variability across seeds for groups; writes JSON summary"),
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output JSON summary path")
+    p.add_argument(
+        "--group-by",
+        default="scenario_id",
+        help="Grouping key (dotted path). Default: scenario_id",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument(
+        "--metrics",
+        default=None,
+        help="Optional comma-separated list of metric names to include (default: all)",
+    )
+    p.set_defaults(cmd="seed-variance")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -472,6 +524,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
+    _add_seed_variance_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -756,6 +809,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
+        "seed-variance": _handle_seed_variance,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

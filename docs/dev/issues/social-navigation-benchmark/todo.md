@@ -62,7 +62,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Draft formula (weighted normalized metrics) (2025-09-08)
 - [x] Implement normalization strategy (percentile baseline: median/p95) (2025-09-08)
 	- [x] Provide script to recompute weights / sensitivity analysis (CLI: `snqi optimize|recompute`) (2025-09-16)
-- [ ] Ablation: measure discriminative power with and without each component
+- [x] Ablation: measure discriminative power with and without each component (2025-09-17)
 
 ## 4. Configuration & CLI Harness
 - [x] YAML/JSON schema for benchmark suite definition (list of scenario specs + repetitions) (2025-09-17)

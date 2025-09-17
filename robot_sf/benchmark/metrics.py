@@ -116,6 +116,21 @@ def min_distance(data: EpisodeData) -> float:
     return float(dists.min())
 
 
+def mean_distance(data: EpisodeData) -> float:
+    """Return mean over time of the minimum robot–pedestrian distance.
+
+    At each timestep t, compute d_t = min_k ||peds_pos[t, k] - robot_pos[t]||.
+    Return mean_t d_t. Returns NaN if there are no pedestrians.
+    """
+    # If no pedestrians (K==0), undefined -> NaN to mirror min_distance behavior
+    if data.peds_pos.shape[1] == 0:
+        return float("nan")
+    diffs = data.peds_pos - data.robot_pos[:, None, :]
+    dists = np.linalg.norm(diffs, axis=2)  # (T,K)
+    min_per_t = dists.min(axis=1)  # (T,)
+    return float(np.mean(min_per_t))
+
+
 def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
     """Compute shortest_path_len / actual_path_len (clipped to 1).
 
@@ -450,6 +465,7 @@ METRIC_NAMES: List[str] = [
     "collisions",
     "near_misses",
     "min_distance",
+    "mean_distance",
     "path_efficiency",
     "avg_speed",
     "force_q50",
@@ -497,6 +513,7 @@ def compute_all_metrics(
     values["collisions"] = collisions(data)
     values["near_misses"] = near_misses(data)
     values["min_distance"] = min_distance(data)
+    values["mean_distance"] = mean_distance(data)
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
     values.update(force_quantiles(data))
     values["force_exceed_events"] = force_exceed_events(data)

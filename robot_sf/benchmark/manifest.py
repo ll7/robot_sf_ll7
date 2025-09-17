@@ -1,3 +1,37 @@
+"""Manifest sidecar for fast resume of benchmark JSONL outputs.
+
+This module provides a tiny sidecar file (``.manifest.json``) next to a
+benchmark JSONL output (e.g., ``episodes.jsonl``). The manifest records:
+
+- a minimal file stat of the JSONL (size, mtime_ns) to detect changes,
+- the set of ``episode_id`` strings already present in the file,
+- a version tag for forward compatibility, and
+- the output file name (basename) for readability.
+
+Usage pattern
+1) On resume, try ``load_manifest(out_path)``. If it returns a set of ids,
+     use it to skip already-completed jobs. If it returns ``None``, fall back
+     to scanning the JSONL for ``episode_id`` values.
+2) After writing new episodes, call ``save_manifest(out_path, ids)`` to update
+     the sidecar. The writer re-reads ids from disk prior to saving to ensure
+     the manifest precisely matches what is on disk.
+
+Sidecar schema (v1)
+```
+{
+    "version": 1,
+    "out_file": "episodes.jsonl",
+    "stat": {"size": <int>, "mtime_ns": <int>},
+    "episode_ids": [<str>, ...]
+}
+```
+
+Notes
+- If the JSONL file changes (size or mtime_ns differ), ``load_manifest``
+    returns ``None`` to force a scan fallback.
+- The implementation is intentionally minimal and dependency-free.
+"""
+
 from __future__ import annotations
 
 import json
@@ -18,23 +52,20 @@ def _stat_of(path: Path) -> _Stat:
 
 
 def manifest_path_for(out_path: Path) -> Path:
-    """Return the manifest path for a given JSONL output path.
+    """Return the manifest sidecar path for a JSONL output path.
 
-    Uses a sidecar file: episodes.jsonl.manifest.json
+    The sidecar naming pattern appends ``.manifest.json`` to the original
+    suffix, e.g., ``episodes.jsonl`` → ``episodes.jsonl.manifest.json``.
     """
     return out_path.with_suffix(out_path.suffix + ".manifest.json")
 
 
 def load_manifest(out_path: Path) -> Optional[Set[str]]:
-    """Load manifest if it matches current out_path file stat; else None.
+    """Return cached episode_ids if sidecar matches current file, else None.
 
-    Manifest JSON schema (v1):
-    {
-      "version": 1,
-      "out_file": "episodes.jsonl",  # basename for humans
-      "stat": {"size": int, "mtime_ns": int},
-      "episode_ids": ["..."]
-    }
+    The sidecar is considered valid only if both ``size`` and ``mtime_ns`` in
+    the manifest match the JSONL's current stat. Any decoding or validation
+    failure results in ``None`` to allow a robust fallback to JSONL scanning.
     """
     sidecar = manifest_path_for(out_path)
     if not sidecar.exists() or not out_path.exists():
@@ -61,7 +92,17 @@ def load_manifest(out_path: Path) -> Optional[Set[str]]:
 
 
 def save_manifest(out_path: Path, episode_ids: Iterable[str]) -> None:
-    """Write manifest sidecar reflecting current out_path stat and ids."""
+    """Write or update the manifest to reflect the current on-disk state.
+
+    Parameters
+    - out_path: Path to the JSONL episodes file.
+    - episode_ids: Iterable of episode_id strings present in the file.
+
+    Behavior
+    - If the JSONL file does not exist, the function returns without writing.
+    - The sidecar's stat is captured from the JSONL at save time to bind the
+      manifest to the exact file content.
+    """
     if not out_path.exists():
         return
     sidecar = manifest_path_for(out_path)

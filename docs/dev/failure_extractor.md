@@ -16,7 +16,7 @@ Find and export episodes that meet failure-like criteria across metrics.
 
 - --collision-threshold: minimum collisions to flag (default 1)
 - --comfort-threshold: minimum comfort_exposure to flag (default 0.2)
-- --near-miss-threshold: minimum near_misses to flag (default 0)
+- --near-miss-threshold: flags when near_misses > threshold (strictly greater-than; default 0)
 - --snqi-below: optional threshold; if provided and metric present, flags when snqi < value
 - --max-count: optional cap on number of failures to output
 - --ids-only: output JSON with {episode_ids:[...]} instead of JSONL records

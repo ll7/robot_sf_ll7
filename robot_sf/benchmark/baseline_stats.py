@@ -75,6 +75,7 @@ def run_and_compute_baseline(
     algo_config_path: Optional[str] = None,
     workers: int = 1,
     resume: bool = True,
+    progress_cb=None,
 ) -> Dict[str, Dict[str, float]]:
     # Optionally run batch to collect JSONL
     tmp_jsonl: str | None = None
@@ -95,6 +96,7 @@ def run_and_compute_baseline(
         record_forces=record_forces,
         append=True if resume else False,
         fail_fast=False,
+        progress_cb=progress_cb,
         algo=algo,
         algo_config_path=algo_config_path,
         workers=workers,

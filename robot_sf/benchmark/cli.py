@@ -454,6 +454,7 @@ def _handle_plot_pareto(args) -> int:
             x_higher_better=bool(args.x_higher_better),
             y_higher_better=bool(args.y_higher_better),
             title=str(args.title) if args.title is not None else None,
+            out_pdf=(str(args.out_pdf) if getattr(args, "out_pdf", None) else None),
         )
         print(json.dumps({"wrote": str(args.out), **meta}, indent=2))
         return 0
@@ -917,6 +918,7 @@ def _add_plot_pareto_subparser(
     p.add_argument("--x-higher-better", action="store_true", default=False)
     p.add_argument("--y-higher-better", action="store_true", default=False)
     p.add_argument("--title", default=None)
+    p.add_argument("--out-pdf", default=None, help="Optional path to also export a vector PDF")
     p.set_defaults(cmd="plot-pareto")
 
 

@@ -194,6 +194,12 @@ def main() -> int:
     ap.add_argument("--pareto-y", default="comfort_exposure")
     ap.add_argument("--pareto-agg", choices=["mean", "median"], default="mean")
     ap.add_argument("--pareto-pdf", action="store_true", default=False)
+    ap.add_argument(
+        "--no-pareto",
+        action="store_true",
+        default=False,
+        help="Skip Pareto plot generation entirely",
+    )
     # Distributions
     ap.add_argument("--dmetrics", default="collisions,comfort_exposure")
     ap.add_argument("--dists-bins", type=int, default=30)
@@ -246,89 +252,20 @@ def main() -> int:
 
     records = read_jsonl(episodes)
 
-    # Load SNQI inputs if provided and inject SNQI per episode
+    # SNQI injection (optional)
     snqi_weights, snqi_baseline = _load_snqi_inputs(
         args.snqi_weights, args.snqi_weights_from, args.snqi_baseline
     )
     _inject_snqi(records, snqi_weights, snqi_baseline)
 
-    # Pareto
-    pareto_png = out_dir / "pareto.png"
-    pareto_pdf = out_dir / "pareto.pdf" if args.pareto_pdf else None
-    save_pareto_png(
-        records,
-        out_path=str(pareto_png),
-        x_metric=args.pareto_x,
-        y_metric=args.pareto_y,
-        group_by=args.group_by,
-        fallback_group_by=args.fallback_group_by,
-        agg=args.pareto_agg,
-        out_pdf=(str(pareto_pdf) if pareto_pdf else None),
-    )
+    # Pareto (unless disabled)
+    if not args.no_pareto:
+        _generate_pareto(records, out_dir, args)
 
-    # Distributions
-    dmetrics = [m.strip() for m in str(args.dmetrics).split(",") if m.strip()]
-    grouped = collect_grouped_values(
-        records, metrics=dmetrics, group_by=args.group_by, fallback_group_by=args.fallback_group_by
-    )
-    save_distributions(
-        grouped,
-        out_dir=out_dir,
-        bins=int(args.dists_bins),
-        kde=bool(args.dists_kde),
-        out_pdf=bool(args.dists_pdf),
-    )
-
-    # Baseline table (Markdown)
-    table_metrics = [m.strip() for m in str(args.table_metrics).split(",") if m.strip()]
-    # If SNQI was computed and not explicitly requested, append it for convenience
-    if any(isinstance(r.get("metrics"), dict) and "snqi" in r["metrics"] for r in records):
-        if "snqi" not in table_metrics:
-            table_metrics.append("snqi")
-    rows = compute_table(
-        records,
-        metrics=table_metrics,
-        group_by=args.group_by,
-        fallback_group_by=args.fallback_group_by,
-    )
-    (out_dir / "baseline_table.md").write_text(
-        format_markdown(rows, table_metrics), encoding="utf-8"
-    )
-
-    # Optional thumbnails
-    if args.thumbs_matrix:
-        thumbs_out = Path(args.thumbs_out_dir) if args.thumbs_out_dir else (out_dir / "scenarios")
-        thumbs_out.mkdir(parents=True, exist_ok=True)
-        scenarios = load_scenario_matrix(args.thumbs_matrix)
-        metas = save_scenario_thumbnails(
-            scenarios, out_dir=thumbs_out, out_pdf=bool(args.thumbs_pdf)
-        )
-        if bool(args.thumbs_montage):
-            save_montage(
-                metas,
-                out_png=str(thumbs_out / "montage.png"),
-                cols=int(args.thumbs_cols),
-                out_pdf=(str(thumbs_out / "montage.pdf") if args.thumbs_pdf else None),
-            )
-
-    # Optional force-field figure
-    if bool(args.force_field):
-        ff_png = Path(args.ff_png) if args.ff_png else (out_dir / "fig-force-field.png")
-        ff_pdf = (
-            str(Path(args.ff_pdf))
-            if args.ff_pdf is not None
-            else str(out_dir / "fig-force-field.pdf")
-        )
-        generate_force_field_figure(
-            out_png=str(ff_png),
-            out_pdf=ff_pdf,
-            x_min=float(args.ff_x_min),
-            x_max=float(args.ff_x_max),
-            y_min=float(args.ff_y_min),
-            y_max=float(args.ff_y_max),
-            grid=int(args.ff_grid),
-            quiver_step=int(args.ff_quiver_step),
-        )
+    _generate_distributions(records, out_dir, args)
+    _generate_table(records, out_dir, args)
+    _maybe_thumbnails(out_dir, args)
+    _maybe_force_field(out_dir, args)
 
     # Write meta.json and optionally update _latest.txt
     _write_meta(out_dir, episodes, args)
@@ -344,6 +281,87 @@ def main() -> int:
             latest_file.write_text(out_dir.name, encoding="utf-8")
 
     return 0
+
+
+def _generate_pareto(records, out_dir, args) -> None:
+    """Generate Pareto plot (factored out to reduce main complexity)."""
+    pareto_png = out_dir / "pareto.png"
+    pareto_pdf = out_dir / "pareto.pdf" if args.pareto_pdf else None
+    save_pareto_png(
+        records,
+        out_path=str(pareto_png),
+        x_metric=args.pareto_x,
+        y_metric=args.pareto_y,
+        group_by=args.group_by,
+        fallback_group_by=args.fallback_group_by,
+        agg=args.pareto_agg,
+        out_pdf=(str(pareto_pdf) if pareto_pdf else None),
+    )
+
+
+def _generate_distributions(records, out_dir: Path, args) -> None:
+    dmetrics = [m.strip() for m in str(args.dmetrics).split(",") if m.strip()]
+    grouped = collect_grouped_values(
+        records, metrics=dmetrics, group_by=args.group_by, fallback_group_by=args.fallback_group_by
+    )
+    save_distributions(
+        grouped,
+        out_dir=out_dir,
+        bins=int(args.dists_bins),
+        kde=bool(args.dists_kde),
+        out_pdf=bool(args.dists_pdf),
+    )
+
+
+def _generate_table(records, out_dir: Path, args) -> None:
+    table_metrics = [m.strip() for m in str(args.table_metrics).split(",") if m.strip()]
+    if any(isinstance(r.get("metrics"), dict) and "snqi" in r["metrics"] for r in records):
+        if "snqi" not in table_metrics:
+            table_metrics.append("snqi")
+    rows = compute_table(
+        records,
+        metrics=table_metrics,
+        group_by=args.group_by,
+        fallback_group_by=args.fallback_group_by,
+    )
+    (out_dir / "baseline_table.md").write_text(
+        format_markdown(rows, table_metrics), encoding="utf-8"
+    )
+
+
+def _maybe_thumbnails(out_dir: Path, args) -> None:
+    if not args.thumbs_matrix:
+        return
+    thumbs_out = Path(args.thumbs_out_dir) if args.thumbs_out_dir else (out_dir / "scenarios")
+    thumbs_out.mkdir(parents=True, exist_ok=True)
+    scenarios = load_scenario_matrix(args.thumbs_matrix)
+    metas = save_scenario_thumbnails(scenarios, out_dir=thumbs_out, out_pdf=bool(args.thumbs_pdf))
+    if bool(args.thumbs_montage):
+        save_montage(
+            metas,
+            out_png=str(thumbs_out / "montage.png"),
+            cols=int(args.thumbs_cols),
+            out_pdf=(str(thumbs_out / "montage.pdf") if args.thumbs_pdf else None),
+        )
+
+
+def _maybe_force_field(out_dir: Path, args) -> None:
+    if not bool(args.force_field):
+        return
+    ff_png = Path(args.ff_png) if args.ff_png else (out_dir / "fig-force-field.png")
+    ff_pdf = (
+        str(Path(args.ff_pdf)) if args.ff_pdf is not None else str(out_dir / "fig-force-field.pdf")
+    )
+    generate_force_field_figure(
+        out_png=str(ff_png),
+        out_pdf=ff_pdf,
+        x_min=float(args.ff_x_min),
+        x_max=float(args.ff_x_max),
+        y_min=float(args.ff_y_min),
+        y_max=float(args.ff_y_max),
+        grid=int(args.ff_grid),
+        quiver_step=int(args.ff_quiver_step),
+    )
 
 
 if __name__ == "__main__":

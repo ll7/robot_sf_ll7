@@ -163,6 +163,35 @@ def generate_scenario(params: Dict[str, Any], seed: int) -> GeneratedScenario:
     seed : int
         RNG seed for reproducibility.
     """
+    # Special preset for testing/validation: guaranteed contact at t=0
+    # Places one pedestrian exactly at the default robot start (0.3, 3.0)
+    # with goal equal to its position (no desired motion). This ensures
+    # min distance < D_COLL at the first timestep, exercising the collision
+    # counting pipeline end-to-end.
+    preset = str(params.get("preset", "")).strip().lower()
+    if preset == "collision_sanity":
+        n = 1
+        pos = np.array([[0.3, 3.0]], dtype=float)
+        goals = pos.copy()  # no movement desired
+        state = np.zeros((n, 7), dtype=float)
+        state[:, 0:2] = pos
+        state[:, 4:6] = goals
+        state[:, 6] = 1.0
+        obstacles: List[Tuple[float, float, float, float]] = []
+        groups: List[int] = [-1]
+        metadata = {**params, "n_agents": n, "area": AREA_WIDTH * AREA_HEIGHT, "seed": seed}
+        if pysf is None:
+            simulator = None  # pragma: no cover
+        else:
+            simulator = pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
+        return GeneratedScenario(
+            simulator=simulator,
+            state=state,
+            obstacles=obstacles,
+            groups=groups,
+            metadata=metadata,
+        )
+
     rng = np.random.default_rng(seed)
     n = _select_counts(params)
     pos = _sample_positions(rng, n)

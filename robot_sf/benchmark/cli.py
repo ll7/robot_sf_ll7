@@ -930,9 +930,9 @@ def _add_table_subparser(
     )
     p.add_argument(
         "--format",
-        choices=["md", "csv", "json"],
+        choices=["md", "csv", "tex", "json"],
         default="md",
-        help="Output format (Markdown table, CSV, or JSON)",
+        help="Output format (Markdown table, CSV, LaTeX booktabs, or JSON)",
     )
     p.set_defaults(cmd="table")
 

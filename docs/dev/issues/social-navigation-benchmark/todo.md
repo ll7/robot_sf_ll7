@@ -120,6 +120,14 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 6) Discriminative check: verify metric separation criteria across baselines; record quick table in docs.
 7) Decision: ORCA inclusion — proceed or defer based on licensing/time; update Section 5 accordingly.
 
+### Next steps (2025-09-18) — Additions after long-batch fix
+- [ ] Contact sanity validation: add a narrow-corridor or crossing scenario (or temporarily set `D_COLL=0.35`) to exercise the collision metric end-to-end and confirm non-zero collision counts appear. Wire into scenario matrix with a small repetition count (e.g., 3) for quick checks.
+- [ ] SNQI baselines: compute per-metric median/p95 per baseline and persist to `results/baseline_stats.json`; update orchestrator and docs to read these when rendering SNQI-normalized figures/tables.
+- [ ] Figures output naming: migrate to canonical folder names under `docs/figures/` using the pattern `<episodes-stem>__<gitsha7>__v<schema>`. Example: `docs/figures/episodes_sf_long_fix1__a1b2c3d__v1/`. Maintain a light alias via `docs/figures/_latest.txt` pointing to the recommended folder for the paper draft.
+- [ ] Orchestrator flag: add `--auto-out-dir` to `scripts/generate_figures.py` to compute the canonical output folder name automatically from inputs and git state; accept `--out-dir` to override.
+- [ ] Cleanup artifacts: remove stray logs and ad-hoc exports outside `results/` and `docs/figures/`. Add a pre-commit check that blocks new top-level non-source files (allowlist-based).
+- [ ] Docs update: add a short design note describing the figures naming and alias approach (see `docs/dev/issues/figures-naming/design.md`) and link it from `docs/README.md`.
+
 ## 8. Reproducibility & Packaging
 - [x] Deterministic seeding audit (numpy, torch, random) (2025-09-18)
 - [x] Version stamping (git hash + config hash in outputs) (2025-09-08)

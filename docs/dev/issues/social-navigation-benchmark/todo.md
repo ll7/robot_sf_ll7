@@ -19,6 +19,7 @@ Update etiquette:
 - [x] Figure generation script (Pareto, distributions, baseline table) (2025-09-18)
 - [x] Scenario montage thumbnails (module + CLI + tests + docs + figure script integration) (2025-09-18) `docs/dev/issues/scenario-montage-thumbnails/todo.md`
 - [x] Force-field figure (heatmap + quiver) parameterized and wired into orchestrator; LaTeX include snippets added (2025-09-18)
+- [ ] ORCA baseline decision: Deferred until after initial research runs. See `adding_orca.md` for plan & rationale (2025-09-18)
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
@@ -89,6 +90,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Existing RL policy loader (PPO model) adapter (2025-09-17)
 - [x] Random / naive reactive baseline (RandomPlanner + CLI + tests) (2025-09-17)
 - [ ] (Optional) ORCA integration (licensing check)
+	- Status: Deferred (see `adding_orca.md`)
 - [x] Unified interface (step(obs) -> action) with timeouts / safety clamp (runner timeout + final clamp) (2025-09-17)
 - [x] Per-baseline config file (hyperparameters, seeds) via `--algo-config` YAML (2025-09-16)
 

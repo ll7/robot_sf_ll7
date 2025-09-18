@@ -29,6 +29,8 @@
     - [Focused subfolders](#focused-subfolders)
   - [Documentation Content Requirements](#documentation-content-requirements)
   - [Documentation Best Practices](#documentation-best-practices)
+    - [Visualizations and Reports](#visualizations-and-reports)
+    - [Figure and Visualization Guidelines](#figure-and-visualization-guidelines)
 - [Tooling and tasks (uv, Ruff, pytest, VS Code)](#tooling-and-tasks-uv-ruff-pytest-vs-code)
 - [CI/CD expectations](#cicd-expectations)
 - [Validation scenarios and performance](#validation-scenarios-and-performance)
@@ -352,6 +354,42 @@ Documentation should include:
 - Use consistent formatting and follow markdown linting standards
 - Avoid duplications. Link to existing documentation when relevant.
 - Always provide README.md files in new documentation folders for overview and reference.
+
+#### Visualizations and Reports
+
+- Use visualizations to illustrate complex concepts or data flows
+- Include performance reports or benchmarks when relevant
+- Ensure all visual assets are stored in the `docs/img/`, `docs/figures` or `docs/video/` directories for easy access and consistency
+- Generate figures using code when possible to ensure reproducibility
+- Figures should be exported in high-quality vector formats (e.g., SVG, PDF) for clarity
+
+#### Figure and Visualization Guidelines
+All figures must be **reproducible from code** and directly **integratable into LaTeX documents**:
+- **Output format**
+  - Always export **vector PDFs** (`.pdf`) for inclusion in LaTeX.
+  - Optionally export `.png` (300 dpi) for slides/presentations.
+- **Reproducibility**
+  - Each figure = **one standalone script** in `results/figures/`.
+  - Script must read data, generate plot, and save into `docs/figures/`.
+  - No manual edits in Illustrator, Inkscape, etc.
+  - Clear and unique filenames: `fig-<short-description>.py` and `fig-<short-description>.pdf`.
+- **Version control**
+  - Scripts and generated figures go into version control.
+  - Data files (if any) go into `results/`.
+- **Consistent style**
+  - Use Matplotlib with predefined `rcParams`:
+    - `savefig.bbox = "tight"`
+    - `pdf.fonttype = 42`
+    - font sizes: 9 pt labels, 8 pt ticks/legend
+    - line width ~1.2–1.6 pt
+  - Axis labels and math should use LaTeX syntax: `r"$\sin(x)$"`.
+- **Figure sizing**
+  - Provide helper function for resizing
+  - Default: single-column width (`fraction=1.0`).
+- **File locations**
+  - Figures go into `docs/figures/` (tracked).
+  - Data exports (if used) into `results/`.
+
 
 ## Tooling and tasks (uv, Ruff, pytest, VS Code)
 - Dependencies/runtime: uv

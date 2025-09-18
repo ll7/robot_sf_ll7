@@ -68,36 +68,6 @@ Result JSON includes:
 
 Normalization details are documented in `docs/snqi-weight-tools/normalization.md`.
 
-- [Contents](#contents)
-- [Bootstrap Examples](#bootstrap-examples)
-  - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
-- [Overview](#overview)
-  - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
-  - [Clamping and Outliers](#clamping-and-outliers)
-- [Installation (uv)](#installation-uv)
-  - [Headless mode (minimal deps)](#headless-mode-minimal-deps)
-- [Quick Start](#quick-start)
-- [Core Scripts \& Typical Tasks](#core-scripts--typical-tasks)
-- [CLI Arguments (Key Flags)](#cli-arguments-key-flags)
-- [Input Data Formats](#input-data-formats)
-  - [Episodes JSONL (one JSON object per line)](#episodes-jsonl-one-json-object-per-line)
-  - [Baseline Stats JSON](#baseline-stats-json)
-  - [Weights JSON](#weights-json)
-- [Output JSON Schema (Summary)](#output-json-schema-summary)
-- [Related tools](#related-tools)
-  - [Diagnostics Fields](#diagnostics-fields)
-- [External / Initial Weights](#external--initial-weights)
-- [Recommended Workflows](#recommended-workflows)
-  - [A. Establish Baseline \& Strategy Comparison](#a-establish-baseline--strategy-comparison)
-  - [B. Optimize Weights Then Validate](#b-optimize-weights-then-validate)
-  - [C. Evaluate External Weight Proposal](#c-evaluate-external-weight-proposal)
-- [Interpreting Results](#interpreting-results)
-- [Reproducibility \& Determinism](#reproducibility--determinism)
-- [Troubleshooting](#troubleshooting)
-- [Future Enhancements](#future-enhancements)
-- [Related Design Document](#related-design-document)
-- [Unified Benchmark CLI (New)](#unified-benchmark-cli-new)
-
 ### Inline SNQI during benchmark run
 You can compute SNQI on the fly while generating episodes via the unified benchmark CLI `run` subcommand by providing a weights JSON and baseline stats JSON:
 

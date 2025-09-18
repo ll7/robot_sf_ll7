@@ -130,18 +130,14 @@ def save_pareto_png(
     When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
     """
     os.environ.setdefault("MPLBACKEND", "Agg")
-    # Style/rcParams for consistent figure exports (see docs/dev_guide.md)
-    plt.rcParams.update(
-        {
-            "savefig.bbox": "tight",
-            "pdf.fonttype": 42,
-            "font.size": 9,
-            "axes.labelsize": 9,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
-            "legend.fontsize": 8,
-        }
-    )
+    # Style/rcParams for consistent figure exports
+    try:
+        from robot_sf.benchmark.plotting_style import apply_latex_style
+
+        apply_latex_style()
+    except Exception:
+        # Fallback: keep defaults if helper not available
+        pass
     points, labels = compute_pareto_points(
         records, x_metric, y_metric, group_by, fallback_group_by, agg
     )

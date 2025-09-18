@@ -477,6 +477,10 @@ def _handle_plot_distributions(args) -> int:
             bins=int(args.bins),
             kde=bool(args.kde),
             out_pdf=bool(args.out_pdf),
+            ci=bool(getattr(args, "ci", False)),
+            ci_samples=int(getattr(args, "ci_samples", 1000)),
+            ci_confidence=float(getattr(args, "ci_confidence", 0.95)),
+            ci_seed=(int(args.ci_seed) if getattr(args, "ci_seed", None) is not None else None),
         )
         print(
             json.dumps(
@@ -1006,6 +1010,12 @@ def _add_plot_distributions_subparser(
     )
     p.add_argument("--bins", type=int, default=30)
     p.add_argument("--kde", action="store_true", default=False, help="Overlay KDE when available")
+    p.add_argument("--ci", action="store_true", default=False, help="Overlay bootstrap CI bands")
+    p.add_argument("--ci-samples", type=int, default=1000, help="Number of bootstrap samples")
+    p.add_argument(
+        "--ci-confidence", type=float, default=0.95, help="Confidence level for CI (e.g., 0.95)"
+    )
+    p.add_argument("--ci-seed", type=int, default=123, help="Seed for bootstrap resampling")
     p.add_argument(
         "--out-pdf",
         action="store_true",

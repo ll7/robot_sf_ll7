@@ -22,6 +22,8 @@ Options
 - --group-by: grouping key (default: scenario_params.algo)
 - --fallback-group-by: fallback key (default: scenario_id)
 - --format: md | csv | json
+- --top: limit analysis to top-N groups by the base SNQI ranking (optional)
+- --summary-out: write a compact per-weight impact summary JSON (optional)
 
 API usage
 
@@ -34,9 +36,26 @@ weights = {...}
 baseline = {...}
 rows = compute_snqi_ablation(records, weights=weights, baseline=baseline)
 print(format_markdown(rows))
+"""
+
+Advanced usage
+
+Limit to top-5 groups and save a summary JSON:
+
+```bash
+robot_sf_bench snqi-ablate \
+  --in results/episodes.jsonl \
+  --out results/ablation_top5.md \
+  --snqi-weights model/snqi_canonical_weights_v1.json \
+  --snqi-baseline results/baseline_stats.json \
+  --top 5 \
+  --summary-out results/ablation_summary.json \
+  --format md
 ```
 
 Notes
 - Only weights present in the provided weight mapping are ablated.
 - Groups missing after ablation (e.g., no valid episodes) keep their base position.
 - SNQI is computed with the canonical implementation used across tools.
+ - The summary JSON aggregates per-weight rank-shift stats across included groups
+   (changed count, mean absolute shift, max absolute shift, positive/negative counts).

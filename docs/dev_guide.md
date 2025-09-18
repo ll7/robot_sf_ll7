@@ -354,6 +354,7 @@ Documentation should include:
 - Use consistent formatting and follow markdown linting standards
 - Avoid duplications. Link to existing documentation when relevant.
 - Always provide README.md files in new documentation folders for overview and reference.
+- When the document is longer htan 50 lines, create a table of contents at the top for easy navigation. Ideally, use `markdown.extension.toc.create` to *Markdown All in One: Create Table of Contents*.
 
 #### Visualizations and Reports
 

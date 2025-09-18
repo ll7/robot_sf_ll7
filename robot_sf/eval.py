@@ -222,37 +222,48 @@ class PedEnvMetrics:
 
     def update(self, meta: dict):
         self.route_distances.append(meta["distance_to_robot"])
-        is_end_of_route = (
-            meta["is_pedestrian_collision"]
-            or meta["is_obstacle_collision"]
-            or meta["is_robot_collision"]
-            or meta["is_timesteps_exceeded"]
-            or meta["is_robot_at_goal"]
-            or meta["is_robot_obstacle_collision"]
-            or meta["is_robot_pedestrian_collision"]
-        )
-        if not is_end_of_route:
+
+        if not self._is_end_of_route(meta):
             return
 
+        outcome = self._determine_outcome(meta)
+        self._finalize_route_outcome(outcome)
+
+    def _is_end_of_route(self, meta: dict) -> bool:
+        """Check if the current step marks the end of a route."""
+        end_conditions = [
+            "is_pedestrian_collision",
+            "is_obstacle_collision",
+            "is_robot_collision",
+            "is_timesteps_exceeded",
+            "is_robot_at_goal",
+            "is_robot_obstacle_collision",
+            "is_robot_pedestrian_collision",
+        ]
+        return any(meta.get(condition, False) for condition in end_conditions)
+
+    def _determine_outcome(self, meta: dict) -> EnvOutcome:
+        """Determine the outcome based on the meta information."""
         # If Robot collides with ego_pedestrian, the outcome is ROBOT_COLLISION
         # If Robot collides with pysf pedestrian, the outcome is ROBOT_PEDESTRIAN_COLLISION
-        if meta["is_pedestrian_collision"]:
-            outcome = EnvOutcome.PEDESTRIAN_COLLISION
-        elif meta["is_obstacle_collision"]:
-            outcome = EnvOutcome.OBSTACLE_COLLISION
-        elif meta["is_robot_collision"]:
-            outcome = EnvOutcome.ROBOT_COLLISION
-        elif meta["is_timesteps_exceeded"]:
-            outcome = EnvOutcome.TIMEOUT
-        elif meta["is_robot_at_goal"]:
-            outcome = EnvOutcome.REACHED_GOAL
-        elif meta["is_robot_obstacle_collision"]:
-            outcome = EnvOutcome.ROBOT_OBSTACLE_COLLISION
-        elif meta["is_robot_pedestrian_collision"]:
-            outcome = EnvOutcome.ROBOT_PEDESTRIAN_COLLISION
-        else:
-            raise NotImplementedError("unknown environment outcome")
+        outcome_mapping = {
+            "is_pedestrian_collision": EnvOutcome.PEDESTRIAN_COLLISION,
+            "is_obstacle_collision": EnvOutcome.OBSTACLE_COLLISION,
+            "is_robot_collision": EnvOutcome.ROBOT_COLLISION,
+            "is_timesteps_exceeded": EnvOutcome.TIMEOUT,
+            "is_robot_at_goal": EnvOutcome.REACHED_GOAL,
+            "is_robot_obstacle_collision": EnvOutcome.ROBOT_OBSTACLE_COLLISION,
+            "is_robot_pedestrian_collision": EnvOutcome.ROBOT_PEDESTRIAN_COLLISION,
+        }
 
+        for condition, outcome in outcome_mapping.items():
+            if meta.get(condition, False):
+                return outcome
+
+        raise NotImplementedError("unknown environment outcome")
+
+    def _finalize_route_outcome(self, outcome: EnvOutcome):
+        """Finalize the route outcome and update metrics."""
         self.route_outcomes.append(outcome)
         self.avg_distance.append(mean(self.route_distances))
         self.route_distances.clear()

@@ -66,6 +66,15 @@ class ImageSensorFusion:
         Dict[str, np.ndarray]
             The next observation, consisting of the drive state, LiDAR state, and optionally image state.
         """
+        sensor_data = self._collect_sensor_data()
+        self._initialize_caches_if_empty(sensor_data)
+        self._update_sensor_caches(sensor_data)
+        self._update_stacked_states(sensor_data)
+
+        return self._build_observation(sensor_data)
+
+    def _collect_sensor_data(self) -> dict:
+        """Collect data from all sensors."""
         # Get the current LiDAR state
         lidar_state = self.lidar_sensor()
 
@@ -88,53 +97,61 @@ class ImageSensorFusion:
         if self.use_image_obs and self.image_sensor is not None:
             image_state = self.image_sensor.capture_frame()
 
-        # Initialize caches if empty
+        return {"drive_state": drive_state, "lidar_state": lidar_state, "image_state": image_state}
+
+    def _initialize_caches_if_empty(self, sensor_data: dict):
+        """Initialize caches if they are empty."""
         if len(self.drive_state_cache) == 0:
             for _ in range(self.cache_steps):
-                self.drive_state_cache.append(drive_state)
-                self.lidar_state_cache.append(lidar_state)
-                if self.use_image_obs and image_state is not None:
-                    self.image_state_cache.append(image_state)
+                self.drive_state_cache.append(sensor_data["drive_state"])
+                self.lidar_state_cache.append(sensor_data["lidar_state"])
+                if self.use_image_obs and sensor_data["image_state"] is not None:
+                    self.image_state_cache.append(sensor_data["image_state"])
 
-        # Add the current states to the caches
-        self.drive_state_cache.append(drive_state)
-        self.lidar_state_cache.append(lidar_state)
+    def _update_sensor_caches(self, sensor_data: dict):
+        """Update sensor caches with current data."""
+        self.drive_state_cache.append(sensor_data["drive_state"])
+        self.lidar_state_cache.append(sensor_data["lidar_state"])
 
-        # Update stacked states
+    def _update_stacked_states(self, sensor_data: dict):
+        """Update stacked states with current sensor data."""
         self.stacked_drive_state = np.roll(self.stacked_drive_state, -1, axis=0)
-        self.stacked_drive_state[-1] = drive_state
+        self.stacked_drive_state[-1] = sensor_data["drive_state"]
         self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
-        self.stacked_lidar_state[-1] = lidar_state
+        self.stacked_lidar_state[-1] = sensor_data["lidar_state"]
 
-        # Prepare the observation dictionary
+    def _build_observation(self, sensor_data: dict) -> Dict[str, np.ndarray]:
+        """Build the final observation dictionary."""
         obs = {}
 
         # Normalize the stacked states by the maximum values in the observation space
         drive_space = self.unnormed_obs_space[OBS_DRIVE_STATE]
         lidar_space = self.unnormed_obs_space[OBS_RAYS]
 
-        if hasattr(drive_space, "high") and drive_space.high is not None:
-            max_drive = drive_space.high
-        else:
-            max_drive = np.ones(5)  # Default normalization
-
-        if hasattr(lidar_space, "high") and lidar_space.high is not None:
-            max_lidar = lidar_space.high
-        else:
-            max_lidar = np.ones(self.stacked_lidar_state.shape[1])  # Default normalization
+        max_drive = self._get_normalization_max(drive_space, default_shape=5)
+        max_lidar = self._get_normalization_max(
+            lidar_space, default_shape=self.stacked_lidar_state.shape[1]
+        )
 
         obs[OBS_DRIVE_STATE] = self.stacked_drive_state / max_drive
         obs[OBS_RAYS] = self.stacked_lidar_state / max_lidar
 
         # Add image observation if enabled
-        if self.use_image_obs and image_state is not None:
-            self.image_state_cache.append(image_state)
+        if self.use_image_obs and sensor_data["image_state"] is not None:
+            self.image_state_cache.append(sensor_data["image_state"])
             # Images are already normalized in the sensor
             # Note: Images are intentionally NOT stacked like drive/lidar states
             # to match the observation space design where images represent current frame only
-            obs[OBS_IMAGE] = image_state
+            obs[OBS_IMAGE] = sensor_data["image_state"]
 
         return obs
+
+    def _get_normalization_max(self, space, default_shape: int):
+        """Get the maximum values for normalization from observation space."""
+        if hasattr(space, "high") and space.high is not None:
+            return space.high
+        else:
+            return np.ones(default_shape)  # Default normalization
 
     def reset_cache(self):
         """

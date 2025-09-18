@@ -18,6 +18,8 @@ from typing import Dict, Iterable, List, Mapping, Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 
+from robot_sf.benchmark.plotting_style import apply_latex_style
+
 Record = Mapping[str, object]
 
 
@@ -76,17 +78,7 @@ class DistPlotMeta:
 
 
 def _apply_rcparams() -> None:
-    plt.rcParams.update(
-        {
-            "savefig.bbox": "tight",
-            "pdf.fonttype": 42,
-            "font.size": 9,
-            "axes.labelsize": 9,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
-            "legend.fontsize": 8,
-        }
-    )
+    apply_latex_style()
 
 
 def _maybe_kde(ax, data: np.ndarray, color: str) -> None:

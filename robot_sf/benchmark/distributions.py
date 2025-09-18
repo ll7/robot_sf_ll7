@@ -94,6 +94,162 @@ def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
         pass
 
 
+def _compute_hist_ci(
+    vals: np.ndarray,
+    *,
+    bins: int,
+    samples: int,
+    confidence: float,
+    rng: np.random.Generator | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Bootstrap histogram-count confidence band for given values.
+
+    Returns (centers, low, high) or None if not enough/invalid data.
+    """
+    if vals.size < 5:
+        return None
+    vmin = float(vals.min())
+    vmax = float(vals.max())
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
+        return None
+    bin_edges = np.linspace(vmin, vmax, bins + 1)
+    counts_samples: list[np.ndarray] = []
+    local_rng = rng if rng is not None else np.random.default_rng()
+    for _ in range(int(samples)):
+        resample = local_rng.choice(vals, size=vals.size, replace=True)
+        cts, _ = np.histogram(resample, bins=bin_edges)
+        counts_samples.append(cts)
+    cs = np.stack(counts_samples, axis=0)  # (S, B)
+    alpha = (1.0 - confidence) / 2.0
+    low = np.quantile(cs, alpha, axis=0)
+    high = np.quantile(cs, 1.0 - alpha, axis=0)
+    centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    return centers, low, high
+
+
+def _render_metric(
+    ax,
+    grouped: Dict[str, Dict[str, List[float]]],
+    *,
+    metric: str,
+    bins: int,
+    kde: bool,
+    ci: bool,
+    ci_samples: int,
+    ci_confidence: float,
+    ci_seed: int | None,
+    palette: Sequence[str],
+    legend_with_n: bool,
+) -> None:
+    """Render one metric across all groups onto the given axes."""
+    rng = np.random.default_rng(ci_seed) if ci and ci_seed is not None else None
+    for i, (group, mvals) in enumerate(sorted(grouped.items())):
+        vals = np.asarray(mvals.get(metric, []), dtype=float)
+        if vals.size == 0:
+            continue
+        color = palette[i % len(palette)]
+        label = f"{group} (n={vals.size})" if legend_with_n else f"{group}"
+        ax.hist(
+            vals,
+            bins=bins,
+            alpha=0.35,
+            label=label,
+            color=color,
+            edgecolor="white",
+        )
+        if kde and vals.size >= 5:
+            _maybe_kde(ax, vals, color)
+        if ci:
+            ci_data = _compute_hist_ci(
+                vals,
+                bins=bins,
+                samples=ci_samples,
+                confidence=ci_confidence,
+                rng=rng,
+            )
+            if ci_data is not None:
+                centers, low, high = ci_data
+                ax.fill_between(
+                    centers,
+                    low,
+                    high,
+                    color=color,
+                    alpha=0.15,
+                    step="mid",
+                    linewidth=0.0,
+                    label=None,
+                )
+
+
+def _metrics_in_grouped(grouped: Dict[str, Dict[str, List[float]]]) -> list[str]:
+    """Return sorted unique metric names present in grouped dict."""
+    return sorted({m for gv in grouped.values() for m in gv.keys()})
+
+
+def _save_one_metric(
+    out_dir: str,
+    metric: str,
+    grouped: Dict[str, Dict[str, List[float]]],
+    *,
+    bins: int,
+    kde: bool,
+    ci: bool,
+    ci_samples: int,
+    ci_confidence: float,
+    ci_seed: int | None,
+    palette: Sequence[str],
+    out_pdf: bool,
+) -> tuple[str, str | None]:
+    """Render and save a single metric to PNG and optionally PDF; returns paths."""
+    # PNG
+    fig, ax = plt.subplots(figsize=(6, 4))
+    _render_metric(
+        ax,
+        grouped,
+        metric=metric,
+        bins=bins,
+        kde=kde,
+        ci=ci,
+        ci_samples=ci_samples,
+        ci_confidence=ci_confidence,
+        ci_seed=ci_seed,
+        palette=palette,
+        legend_with_n=True,
+    )
+    ax.set_title(f"Distribution: {metric}")
+    ax.set_xlabel(metric)
+    ax.set_ylabel("count")
+    ax.legend(loc="best", fontsize=8)
+    png_path = str(Path(out_dir) / f"dist_{metric}.png")
+    fig.savefig(png_path, dpi=150)
+    plt.close(fig)
+
+    pdf_path: str | None = None
+    if out_pdf:
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        _render_metric(
+            ax2,
+            grouped,
+            metric=metric,
+            bins=bins,
+            kde=kde,
+            ci=ci,
+            ci_samples=ci_samples,
+            ci_confidence=ci_confidence,
+            ci_seed=ci_seed,
+            palette=palette,
+            legend_with_n=False,
+        )
+        ax2.set_xlabel(metric)
+        ax2.set_ylabel("count")
+        ax2.legend(loc="best", fontsize=8)
+        pdf_path = str(Path(out_dir) / f"dist_{metric}.pdf")
+        fig2.savefig(pdf_path)
+        plt.close(fig2)
+
+    return png_path, pdf_path
+
+
 def save_distributions(
     grouped: Dict[str, Dict[str, List[float]]],
     out_dir: str | Path,
@@ -101,6 +257,10 @@ def save_distributions(
     bins: int = 30,
     kde: bool = False,
     out_pdf: bool = False,
+    ci: bool = False,
+    ci_samples: int = 1000,
+    ci_confidence: float = 0.95,
+    ci_seed: int | None = 123,
 ) -> DistPlotMeta:
     """Save per-group per-metric histograms (and optional KDE overlays).
 
@@ -113,50 +273,22 @@ def save_distributions(
     pdfs: List[str] = []
     palette = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2", "#EECA3B"]
 
-    for metric in sorted({m for gv in grouped.values() for m in gv.keys()}):
-        fig, ax = plt.subplots(figsize=(6, 4))
-        for i, (group, mvals) in enumerate(sorted(grouped.items())):
-            vals = np.asarray(mvals.get(metric, []), dtype=float)
-            if vals.size == 0:
-                continue
-            color = palette[i % len(palette)]
-            ax.hist(
-                vals,
-                bins=bins,
-                alpha=0.35,
-                label=f"{group} (n={vals.size})",
-                color=color,
-                edgecolor="white",
-            )
-            if kde and vals.size >= 5:
-                _maybe_kde(ax, vals, color)
-
-        ax.set_title(f"Distribution: {metric}")
-        ax.set_xlabel(metric)
-        ax.set_ylabel("count")
-        ax.legend(loc="best", fontsize=8)
-        fname = f"dist_{metric}.png"
-        fpath = str(Path(out_dir) / fname)
-        fig.savefig(fpath, dpi=150)
-        plt.close(fig)
-        wrote.append(fpath)
-        if out_pdf:
-            pdf_path = str(Path(out_dir) / f"dist_{metric}.pdf")
-            # Re-render lightweightly for vector output
-            fig2, ax2 = plt.subplots(figsize=(6, 4))
-            for i, (group, mvals) in enumerate(sorted(grouped.items())):
-                vals = np.asarray(mvals.get(metric, []), dtype=float)
-                if vals.size == 0:
-                    continue
-                color = palette[i % len(palette)]
-                ax2.hist(vals, bins=bins, alpha=0.35, label=f"{group}", color=color)
-                if kde and vals.size >= 5:
-                    _maybe_kde(ax2, vals, color)
-            ax2.set_xlabel(metric)
-            ax2.set_ylabel("count")
-            ax2.legend(loc="best", fontsize=8)
-            fig2.savefig(pdf_path)
-            plt.close(fig2)
+    for metric in _metrics_in_grouped(grouped):
+        png_path, pdf_path = _save_one_metric(
+            out_dir,
+            metric,
+            grouped,
+            bins=bins,
+            kde=kde,
+            ci=ci,
+            ci_samples=ci_samples,
+            ci_confidence=ci_confidence,
+            ci_seed=ci_seed,
+            palette=palette,
+            out_pdf=out_pdf,
+        )
+        wrote.append(png_path)
+        if pdf_path is not None:
             pdfs.append(pdf_path)
 
     return DistPlotMeta(wrote=wrote, pdfs=pdfs)

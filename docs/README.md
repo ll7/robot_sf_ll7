@@ -39,17 +39,15 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
 
 ### 📊 Analysis & Tools  
-- [**Data Analysis**](./DATA_ANALYSIS.md) - Analysis tools and utilities for simulation data
  - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
-- [**Examples: SNQI Figures**](../examples/README.md) - How to generate SNQI-augmented figures via the orchestrator
-- [**Pyreverse**](./pyreverse.md) - Code structure visualization
+ - [**SNQI Figures (orchestrator usage)**](../examples/README.md) - Generate SNQI-augmented figures from existing episodes
+ - [**Full SNQI Flow (episodes → baseline → figures)**](../examples/snqi_full_flow.py) - End-to-end reproducible pipeline script
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
    - [Random baseline](./dev/baselines/random.md) — how to use and configure
  - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
  - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
  - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
-
 #### Figures naming and outputs
 
 See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. A small tracker lives at `docs/dev/issues/figures-naming/todo.md`.

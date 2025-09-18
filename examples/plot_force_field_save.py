@@ -1,6 +1,8 @@
-"""Generate and save a static image of the force field for documentation.
+"""Generate and save static images of the force field for documentation.
 
-Writes: docs/img/force_field_example.png
+Writes:
+- PNG: docs/img/force_field_example.png
+- PDF: docs/figures/force_field_example.pdf (LaTeX-friendly)
 """
 
 import matplotlib.pyplot as plt
@@ -25,6 +27,18 @@ def make_demo_sim():
 
 
 def main():
+    # LaTeX-friendly export settings (see docs/dev_guide.md)
+    plt.rcParams.update(
+        {
+            "savefig.bbox": "tight",
+            "pdf.fonttype": 42,
+            "font.size": 9,
+            "axes.labelsize": 9,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 8,
+        }
+    )
     sim = make_demo_sim()
     wrapper = FastPysfWrapper(sim)
 
@@ -45,9 +59,17 @@ def main():
     ax.set_xlabel("x")
     ax.set_ylabel("y")
 
-    out = "docs/img/force_field_example.png"
-    fig.savefig(out, dpi=200)
-    print(f"Wrote {out}")
+    out_png = "docs/img/force_field_example.png"
+    fig.savefig(out_png, dpi=200)
+    print(f"Wrote {out_png}")
+
+    # Also export vector PDF to docs/figures for LaTeX inclusion
+    from pathlib import Path
+
+    pdf_path = Path("docs/figures/force_field_example.pdf")
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(pdf_path))
+    print(f"Wrote {pdf_path}")
 
 
 if __name__ == "__main__":

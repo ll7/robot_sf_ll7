@@ -57,6 +57,7 @@ def main(argv: List[str] | None = None) -> int:
     ap.add_argument("--y-higher-better", action="store_true", default=False)
     ap.add_argument("--title", default=None)
     ap.add_argument("--synthetic", action="store_true", default=False)
+    ap.add_argument("--out-pdf", default=None, help="Optional vector PDF path (LaTeX-ready)")
     args = ap.parse_args(argv)
 
     out = Path(args.out)
@@ -80,6 +81,7 @@ def main(argv: List[str] | None = None) -> int:
         x_higher_better=bool(args.x_higher_better),
         y_higher_better=bool(args.y_higher_better),
         title=args.title,
+        out_pdf=(str(args.out_pdf) if args.out_pdf else None),
     )
     print({"wrote": str(out), **meta})
     return 0

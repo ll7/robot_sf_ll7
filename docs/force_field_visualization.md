@@ -31,3 +31,18 @@ Outputs:
 - For LaTeX inclusion, prefer vector PDFs. The scripts export `.pdf` next to the PNGs with LaTeX-friendly rcParams (bbox tight, pdf.fonttype=42, font sizes 9/8).
 - Subsample quiver arrows for clarity (see `step` parameter in the normalized script).
 - Use consistent colormaps and labels. Include units in axis labels.
+
+### Include in LaTeX
+
+```latex
+% Preamble
+% \usepackage{graphicx}
+% Optional: \graphicspath{{docs/figures/}}
+
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=0.48\textwidth]{docs/figures/force_field_example_norm.pdf}
+	\caption{Normalized social-force vector field with magnitude colormap.}
+	\label{fig:ff-example}
+\end{figure}
+```

@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from results.figures.fig_force_field import generate_force_field_figure
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
 from robot_sf.benchmark.plots import save_pareto_png
@@ -48,6 +49,26 @@ def main() -> int:
     ap.add_argument("--dists-bins", type=int, default=30)
     ap.add_argument("--dists-kde", action="store_true", default=False)
     ap.add_argument("--dists-pdf", action="store_true", default=False)
+    # Force-field figure
+    ap.add_argument(
+        "--force-field", action="store_true", default=False, help="Generate force-field figure"
+    )
+    ap.add_argument(
+        "--ff-png",
+        default=None,
+        help="Output PNG for force-field (default: <out-dir>/fig-force-field.png)",
+    )
+    ap.add_argument(
+        "--ff-pdf",
+        default=None,
+        help="Output PDF for force-field (default: <out-dir>/fig-force-field.pdf)",
+    )
+    ap.add_argument("--ff-x-min", type=float, default=-1.0)
+    ap.add_argument("--ff-x-max", type=float, default=5.0)
+    ap.add_argument("--ff-y-min", type=float, default=-2.0)
+    ap.add_argument("--ff-y-max", type=float, default=3.0)
+    ap.add_argument("--ff-grid", type=int, default=120)
+    ap.add_argument("--ff-quiver-step", type=int, default=5)
     # Table
     ap.add_argument("--table-metrics", default="collisions,comfort_exposure")
     # Thumbnails
@@ -122,6 +143,25 @@ def main() -> int:
                 cols=int(args.thumbs_cols),
                 out_pdf=(str(thumbs_out / "montage.pdf") if args.thumbs_pdf else None),
             )
+
+    # Optional force-field figure
+    if bool(args.force_field):
+        ff_png = Path(args.ff_png) if args.ff_png else (out_dir / "fig-force-field.png")
+        ff_pdf = (
+            str(Path(args.ff_pdf))
+            if args.ff_pdf is not None
+            else str(out_dir / "fig-force-field.pdf")
+        )
+        generate_force_field_figure(
+            out_png=str(ff_png),
+            out_pdf=ff_pdf,
+            x_min=float(args.ff_x_min),
+            x_max=float(args.ff_x_max),
+            y_min=float(args.ff_y_min),
+            y_max=float(args.ff_y_max),
+            grid=int(args.ff_grid),
+            quiver_step=int(args.ff_quiver_step),
+        )
 
     return 0
 

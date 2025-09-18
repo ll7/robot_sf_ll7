@@ -1,4 +1,5 @@
 # SNQI Weight Tooling – User Guide
+[← Back to Documentation Index](../README.md)
 
 This guide consolidates user‑facing documentation that was previously split across `scripts/QUICK_START.md` and `scripts/README_SNQI_WEIGHTS.md`. It explains how to recompute, optimize, and analyze Social Navigation Quality Index (SNQI) weights.
 

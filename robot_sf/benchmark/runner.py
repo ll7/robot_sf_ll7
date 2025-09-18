@@ -369,12 +369,16 @@ def run_episode(
 
         # Force sampling per pedestrian if requested
         if record_forces:
-            forces = np.zeros_like(ped_pos)
+            # Use float dtype to avoid truncating small forces to zero when assigning
+            # float vectors returned by FastPysfWrapper.get_forces_at(...).
+            # Using zeros_like(ped_pos) without dtype may default to integers depending
+            # on the simulator's internal array dtype, causing silent casts to 0.
+            forces = np.zeros_like(ped_pos, dtype=float)
             for i, p in enumerate(ped_pos):
                 forces[i] = wrapper.get_forces_at(p)
             ped_forces_traj.append(forces)
         else:
-            ped_forces_traj.append(np.zeros_like(ped_pos))
+            ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
 
         robot_pos_traj.append(robot_pos.copy())
         robot_vel_traj.append(robot_vel.copy())

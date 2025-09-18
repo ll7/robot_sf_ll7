@@ -29,7 +29,7 @@ from robot_sf.benchmark.report_table import compute_table, format_markdown
 from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_thumbnails import save_montage, save_scenario_thumbnails
 
-SCHEMA_VERSION = 1  # Fallback schema version; replace with dynamic detection when available
+SCHEMA_VERSION = 1  # Fallback schema version; replaced at runtime if inferred from episodes
 SCRIPT_VERSION = "0.1.0"
 
 
@@ -54,7 +54,8 @@ def _git_sha_short(length: int = 7) -> str:
 def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
     stem = episodes.stem
     sha = _git_sha_short()
-    folder = f"{stem}__{sha}__v{SCHEMA_VERSION}"
+    version = _infer_schema_version(episodes) or SCHEMA_VERSION
+    folder = f"{stem}__{sha}__v{version}"
     base = base_dir if base_dir is not None else Path("docs/figures")
     return base / folder
 
@@ -64,11 +65,41 @@ def _write_meta(out_dir: Path, episodes: Path, args: argparse.Namespace) -> None
         "episodes_path": str(episodes),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "git_sha": _git_sha_short(),
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": _infer_schema_version(episodes) or SCHEMA_VERSION,
         "script_version": SCRIPT_VERSION,
         "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
+def _infer_schema_version(episodes_path: Path) -> int | None:
+    """Best-effort detection of schema_version from the JSONL file.
+
+    Looks for either top-level "schema_version" or nested under "_metadata.schema_version".
+    Returns None if not found or unreadable.
+    """
+    try:
+        with episodes_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                raw = line.strip()
+                if not raw:
+                    continue
+                try:
+                    obj = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(obj, dict):
+                    continue
+                if "schema_version" in obj and isinstance(obj["schema_version"], int):
+                    return int(obj["schema_version"])
+                meta = obj.get("_metadata")
+                if isinstance(meta, dict) and isinstance(meta.get("schema_version"), int):
+                    return int(meta["schema_version"])
+                # If we got a valid dict and didn't find it, assume absent for the rest
+                break
+    except OSError:
+        return None
+    return None
 
 
 def main() -> int:

@@ -123,9 +123,25 @@ def save_pareto_png(
     x_higher_better: bool = False,
     y_higher_better: bool = False,
     title: str | None = None,
+    out_pdf: str | None = None,
 ) -> Dict[str, object]:
-    """Render and save a Pareto scatter with non-dominated points highlighted."""
+    """Render and save a Pareto scatter with non-dominated points highlighted.
+
+    When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
+    """
     os.environ.setdefault("MPLBACKEND", "Agg")
+    # Style/rcParams for consistent figure exports (see docs/dev_guide.md)
+    plt.rcParams.update(
+        {
+            "savefig.bbox": "tight",
+            "pdf.fonttype": 42,
+            "font.size": 9,
+            "axes.labelsize": 9,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 8,
+        }
+    )
     points, labels = compute_pareto_points(
         records, x_metric, y_metric, group_by, fallback_group_by, agg
     )
@@ -140,11 +156,11 @@ def save_pareto_png(
 
     plt.figure(figsize=(6, 4))
     # All points
-    plt.scatter(xs, ys, c="#888", label="Groups", s=24, alpha=0.7)
+    plt.scatter(xs, ys, c="#888", label="Groups", s=24, alpha=0.7, linewidths=0.6)
     # Frontier
     fxs = [xs[i] for i in front]
     fys = [ys[i] for i in front]
-    plt.scatter(fxs, fys, c="#d62728", label="Pareto front", s=36, marker="^")
+    plt.scatter(fxs, fys, c="#d62728", label="Pareto front", s=36, marker="^", linewidths=0.8)
 
     plt.xlabel(f"{x_metric} ({agg})")
     plt.ylabel(f"{y_metric} ({agg})")
@@ -153,7 +169,20 @@ def save_pareto_png(
     plt.legend(loc="best", fontsize=8)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
+    if out_pdf is not None:
+        # Save vector PDF for LaTeX inclusion
+        pdf_dir = os.path.dirname(out_pdf)
+        if pdf_dir:
+            os.makedirs(pdf_dir, exist_ok=True)
+        plt.savefig(out_pdf)
     plt.close()
 
     front_labels = [labels[i] for i in front]
-    return {"count": len(points), "front_size": len(front), "front_labels": front_labels}
+    payload: Dict[str, object] = {
+        "count": len(points),
+        "front_size": len(front),
+        "front_labels": front_labels,
+    }
+    if out_pdf is not None:
+        payload["pdf"] = out_pdf
+    return payload

@@ -45,7 +45,8 @@ Date: 2025-09-18
 Context:
 - Fix: Pedestrian force buffer dtype set to float in `robot_sf/benchmark/runner.py` so force-derived metrics are not truncated.
 - Episodes: `results/episodes_sf_long_fix1.jsonl` (12 scenarios × 10 repeats = 120 records)
-- Figures/tables: `docs/figures_long_fix1/` (pareto, distributions for collisions/comfort_exposure/near_misses, baseline_table.md, fig-force-field)
+- Figures/tables (canonical): `docs/figures/episodes_sf_long_fix1__a3953a1__v1/` (pareto, distributions for collisions/comfort_exposure/near_misses, baseline_table.md, fig-force-field)
+- Latest alias: `docs/figures/_latest.txt` → `episodes_sf_long_fix1__a3953a1__v1`
 
 Quick aggregate snapshot (n=120):
 - collisions: mean 0.0, max 0.0
@@ -60,11 +61,15 @@ Observations:
 - Collisions remain at 0.0; likely due to scenario design and/or conservative collision threshold (D_COLL=0.25). Will investigate.
 
 Artifacts:
-- Folder: `docs/figures_long_fix1/`
+- Folder (canonical): `docs/figures/episodes_sf_long_fix1__a3953a1__v1/`
   - pareto.pdf/png
   - dist_collisions.pdf/png, dist_comfort_exposure.pdf/png, dist_near_misses.pdf/png
   - fig-force-field.pdf/png
   - baseline_table.md
+  - meta.json (episodes path, git sha, schema version, CLI args)
+
+Notes on reproducibility:
+- The figures are now generated via the orchestrator with `--auto-out-dir --set-latest`, which stamps a canonical folder name and updates `_latest.txt` for stable includes in LaTeX/docs.
 
 Next steps:
 1) Analyze collision metric definition and thresholds vs. scenario scales; verify any episodes with min_distance < D_COLL.

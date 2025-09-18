@@ -16,6 +16,9 @@ Usage (example):
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 from results.figures.fig_force_field import generate_force_field_figure
@@ -26,9 +29,46 @@ from robot_sf.benchmark.report_table import compute_table, format_markdown
 from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_thumbnails import save_montage, save_scenario_thumbnails
 
+SCHEMA_VERSION = 1  # Fallback schema version; replace with dynamic detection when available
+SCRIPT_VERSION = "0.1.0"
+
 
 def _ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
+
+
+def _git_sha_short(length: int = 7) -> str:
+    try:
+        sha = (
+            subprocess.check_output(
+                ["git", "rev-parse", f"--short={length}", "HEAD"], stderr=subprocess.DEVNULL
+            )
+            .decode("utf-8")
+            .strip()
+        )
+        return sha or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
+    stem = episodes.stem
+    sha = _git_sha_short()
+    folder = f"{stem}__{sha}__v{SCHEMA_VERSION}"
+    base = base_dir if base_dir is not None else Path("docs/figures")
+    return base / folder
+
+
+def _write_meta(out_dir: Path, episodes: Path, args: argparse.Namespace) -> None:
+    meta = {
+        "episodes_path": str(episodes),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "git_sha": _git_sha_short(),
+        "schema_version": SCHEMA_VERSION,
+        "script_version": SCRIPT_VERSION,
+        "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
+    }
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def main() -> int:
@@ -36,7 +76,24 @@ def main() -> int:
         description="Generate benchmark figures from episodes JSONL (and optional thumbnails)"
     )
     ap.add_argument("--episodes", required=True, help="Episodes JSONL path")
-    ap.add_argument("--out-dir", required=True, help="Output directory for figures")
+    ap.add_argument(
+        "--out-dir",
+        required=False,
+        default=None,
+        help="Output directory for figures. If omitted with --auto-out-dir, a canonical folder will be computed under docs/figures.",
+    )
+    ap.add_argument(
+        "--auto-out-dir",
+        action="store_true",
+        default=False,
+        help="Compute canonical output folder name based on episodes stem, git sha, and schema version. Appends to --out-dir when provided, otherwise uses docs/figures as base.",
+    )
+    ap.add_argument(
+        "--set-latest",
+        action="store_true",
+        default=False,
+        help="Update docs/figures/_latest.txt to point to the generated figures folder.",
+    )
     ap.add_argument("--group-by", default="scenario_params.algo")
     ap.add_argument("--fallback-group-by", default="scenario_id")
     # Pareto
@@ -84,7 +141,14 @@ def main() -> int:
     args = ap.parse_args()
 
     episodes = Path(args.episodes)
-    out_dir = Path(args.out_dir)
+
+    if bool(args.auto_out_dir):
+        base = Path(args.out_dir) if args.out_dir else None
+        out_dir = _compute_auto_out_dir(episodes, base)
+    else:
+        if args.out_dir is None:
+            raise SystemExit("--out-dir is required unless --auto-out-dir is specified")
+        out_dir = Path(args.out_dir)
     _ensure_dir(out_dir)
 
     records = read_jsonl(episodes)
@@ -162,6 +226,19 @@ def main() -> int:
             grid=int(args.ff_grid),
             quiver_step=int(args.ff_quiver_step),
         )
+
+    # Write meta.json and optionally update _latest.txt
+    _write_meta(out_dir, episodes, args)
+    if bool(args.set_latest):
+        latest_file = Path("docs/figures/_latest.txt")
+        latest_file.parent.mkdir(parents=True, exist_ok=True)
+        # Write path relative to docs/figures for portability when included in LaTeX/docs
+        try:
+            rel = out_dir.relative_to(Path("docs/figures"))
+            latest_file.write_text(str(rel), encoding="utf-8")
+        except ValueError:
+            # If not under docs/figures, write the folder name
+            latest_file.write_text(out_dir.name, encoding="utf-8")
 
     return 0
 

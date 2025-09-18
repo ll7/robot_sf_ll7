@@ -24,9 +24,11 @@ Optional suffixes:
 ## Orchestrator Changes
 - Add `--auto-out-dir` flag to `scripts/generate_figures.py`:
   - When set, compute the output folder name using the above pattern.
+  - Schema version is inferred from the episodes JSONL (`schema_version` top-level or `_metadata.schema_version`) and falls back to `1` if not present.
   - Create the folder if missing; write a `meta.json` with:
     - input episodes path, git sha, schema version, timestamp, generator script version, CLI args.
 - Keep `--out-dir` to override explicitly.
+- Add `--set-latest` to update `docs/figures/_latest.txt` to point at the generated folder.
 
 ## Latest Alias
 - Maintain a text file alias `docs/figures/_latest.txt` containing the relative path to the preferred folder for the current draft (one line).

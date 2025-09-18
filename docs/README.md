@@ -40,6 +40,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### 📊 Analysis & Tools  
 - [**Data Analysis**](./DATA_ANALYSIS.md) - Analysis tools and utilities for simulation data
+ - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
 - [**Pyreverse**](./pyreverse.md) - Code structure visualization
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners

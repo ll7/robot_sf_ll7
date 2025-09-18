@@ -44,6 +44,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
    - [Random baseline](./dev/baselines/random.md) — how to use and configure
+ - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
 
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training

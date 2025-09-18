@@ -1,4 +1,4 @@
-# Scenario Montage Thumbnails — TODO
+# Scenario Montage Thumbnails — Done
 
 Status: Completed on 2025-09-18
 

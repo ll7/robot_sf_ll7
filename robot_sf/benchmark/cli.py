@@ -30,6 +30,7 @@ from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
 from robot_sf.benchmark.ranking import format_markdown as _rank_format_md
 from robot_sf.benchmark.report_table import compute_table as _tbl_compute
 from robot_sf.benchmark.report_table import format_csv as _tbl_format_csv
+from robot_sf.benchmark.report_table import format_latex_booktabs as _tbl_format_tex
 from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
@@ -405,6 +406,9 @@ def _handle_table(args) -> int:
             out_path.write_text(content, encoding="utf-8")
         elif fmt == "csv":
             content = _tbl_format_csv(rows, metrics)
+            out_path.write_text(content, encoding="utf-8")
+        elif fmt == "tex":
+            content = _tbl_format_tex(rows, metrics)
             out_path.write_text(content, encoding="utf-8")
         else:
             payload = _tbl_to_json(rows)
@@ -886,9 +890,9 @@ def _add_rank_subparser(
     p.add_argument("--top", type=int, default=None, help="Limit to top N rows")
     p.add_argument(
         "--format",
-        choices=["md", "csv", "json"],
+        choices=["md", "csv", "tex", "json"],
         default="md",
-        help="Output format (Markdown table, CSV, or JSON)",
+        help="Output format (Markdown, CSV, LaTeX booktabs, or JSON)",
     )
     p.set_defaults(cmd="rank")
 

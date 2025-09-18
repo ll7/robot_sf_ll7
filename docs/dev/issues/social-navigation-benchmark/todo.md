@@ -17,6 +17,7 @@ Update etiquette:
 - [x] SNQI ablation enhancements: `--top` and `--summary-out` (docs updated) (2025-09-18)
 - [x] Distribution plots (CLI + docs) (2025-09-18)
 - [x] Figure generation script (Pareto, distributions, baseline table) (2025-09-18)
+- [x] Scenario montage thumbnails (module + CLI + tests + docs + figure script integration) (2025-09-18) `docs/dev/issues/scenario-montage-thumbnails/todo.md`
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
@@ -103,7 +104,7 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [ ] Force field heatmap + vector overlays example figure (doc added; PDF export optional)
 - [x] Distribution plots (CLI and docs) (2025-09-18)
 - [x] Pareto fronts (Time vs. Comfort, Collisions vs. SNQI) (2025-09-18)
-- [ ] Scenario montage thumbnails
+- [x] Scenario montage thumbnails (2025-09-18)
 - [x] Baseline comparison table auto-generation (CLI + docs) (2025-09-18)
 - [x] Scripts to regenerate paper figures (initial: pareto, dists, table) (2025-09-18)
 

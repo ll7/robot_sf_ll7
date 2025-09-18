@@ -127,6 +127,29 @@ robot_sf_bench summary \
 
 Tip: During development, you can call `cli_main([...])` directly from `robot_sf.benchmark.cli` to avoid installing the console script.
 
+### Include Figures/Tables in LaTeX
+
+Figures (PDF recommended):
+
+```latex
+% \usepackage{graphicx}
+% Optional: \graphicspath{{docs/figures/}}
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=0.48\textwidth]{docs/figures/pareto.pdf}
+	\caption{Example Pareto plot for safety vs comfort.}
+	\label{fig:pareto}
+\end{figure}
+```
+
+Tables (booktabs):
+
+```latex
+% \usepackage{booktabs}
+% Generated via: robot_sf_bench table --format tex
+% \input{docs/figures/baseline_table.tex}
+```
+
 ## 3. Directory Layout (Planned / Evolving)
 ```
 ./README.md                                # High-level overview (this file)

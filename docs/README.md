@@ -2,6 +2,27 @@
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.
 
+- [📚 Documentation Index](#-documentation-index)
+  - [🏗️ Architecture \& Development](#️-architecture--development)
+  - [🎮 Simulation \& Environment](#-simulation--environment)
+  - [📊 Analysis \& Tools](#-analysis--tools)
+  - [⚙️ Setup \& Configuration](#️-setup--configuration)
+  - [📈 Pedestrian Metrics](#-pedestrian-metrics)
+  - [📁 Media Resources](#-media-resources)
+- [🚀 Quick Start Guides](#-quick-start-guides)
+  - [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
+  - [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
+- [🎯 Key Features](#-key-features)
+  - [Environment System](#environment-system)
+  - [Simulation Capabilities](#simulation-capabilities)
+  - [Training \& Analysis](#training--analysis)
+- [📖 Documentation Highlights](#-documentation-highlights)
+  - [🆕 Latest Updates](#-latest-updates)
+  - [📋 Migration Status](#-migration-status)
+- [🔗 External Links](#-external-links)
+- [🤝 Contributing](#-contributing)
+- [📞 Support](#-support)
+
 ## 📚 Documentation Index
 
 ### 🏗️ Architecture & Development

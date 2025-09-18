@@ -18,6 +18,7 @@ Update etiquette:
 - [x] Distribution plots (CLI + docs) (2025-09-18)
 - [x] Figure generation script (Pareto, distributions, baseline table) (2025-09-18)
 - [x] Scenario montage thumbnails (module + CLI + tests + docs + figure script integration) (2025-09-18) `docs/dev/issues/scenario-montage-thumbnails/todo.md`
+- [x] Force-field figure (heatmap + quiver) parameterized and wired into orchestrator; LaTeX include snippets added (2025-09-18)
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
@@ -101,12 +102,21 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest) (2025-09-17)
 
 ## 7. Visualization & Reporting Assets
-- [ ] Force field heatmap + vector overlays example figure (doc added; PDF export optional)
+- [x] Force field heatmap + vector overlays figure (script + docs + PDFs + orchestrator) (2025-09-18)
 - [x] Distribution plots (CLI and docs) (2025-09-18)
 - [x] Pareto fronts (Time vs. Comfort, Collisions vs. SNQI) (2025-09-18)
 - [x] Scenario montage thumbnails (2025-09-18)
 - [x] Baseline comparison table auto-generation (CLI + docs) (2025-09-18)
 - [x] Scripts to regenerate paper figures (initial: pareto, dists, table) (2025-09-18)
+
+### Next picks (2025-09-18) — Research kickoff
+1) Lock scenario matrix for the “core” suite (12+ scenarios) and commit final YAML.
+2) Run baseline batch for SF, PPO, Random with resume enabled; store JSONL under `results/episodes.jsonl`.
+3) Compute baseline stats (med/p95) for SNQI normalization and save to `results/baseline_stats.json`.
+4) Generate figures and tables via `scripts/generate_figures.py` into `docs/figures/`.
+5) Seed variance check: run `seed-variance` and record summary JSON (attach to docs).
+6) Discriminative check: verify metric separation criteria across baselines; record quick table in docs.
+7) Decision: ORCA inclusion — proceed or defer based on licensing/time; update Section 5 accordingly.
 
 ## 8. Reproducibility & Packaging
 - [x] Deterministic seeding audit (numpy, torch, random) (2025-09-18)

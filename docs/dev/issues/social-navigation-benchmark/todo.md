@@ -11,6 +11,10 @@ Update etiquette:
 ---
 ### Recent Updates (2025-09-16)
 ### Recent Updates (2025-09-17)
+### Recent Updates (2025-09-18)
+- [x] Pareto fronts plotting (CLI + programmatic + docs + example) (2025-09-18)
+- [x] Deterministic seeding utilities (+ CLI debug-seeds) and tests (2025-09-18)
+- [x] SNQI ablation enhancements: `--top` and `--summary-out` (docs updated) (2025-09-18)
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
@@ -96,13 +100,13 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 ## 7. Visualization & Reporting Assets
 - [ ] Force field heatmap + vector overlays example figure
 - [ ] Distribution plots (distance, force magnitude, comfort exposure) (basic histograms for min_distance, avg_speed via `summary` implemented)
-- [ ] Pareto fronts (Time vs. Comfort, Collisions vs. SNQI)
+- [x] Pareto fronts (Time vs. Comfort, Collisions vs. SNQI) (2025-09-18)
 - [ ] Scenario montage thumbnails
 - [ ] Baseline comparison table auto-generation (Markdown)
 - [ ] Scripts to regenerate all paper figures from raw logs
 
 ## 8. Reproducibility & Packaging
-- [ ] Deterministic seeding audit (numpy, torch, random)
+- [x] Deterministic seeding audit (numpy, torch, random) (2025-09-18)
 - [x] Version stamping (git hash + config hash in outputs) (2025-09-08)
 - [x] Lock dependencies (uv lock confirmed) (2025-09-02)
 - [x] Provide `environment.md` / exact reproduction instructions (2025-09-09)
@@ -156,5 +160,5 @@ Next picks (2025-09-08):
 - [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-16 (Unified CLI incl. SNQI tools; summary plots; SF wrapper stabilized; curvature_mean metric; EPSILON constant; CI preflight; parallel workers)
+Last updated: 2025-09-18 (Pareto plotting CLI+docs; seed utils + debug-seeds CLI; SNQI ablation --top/--summary; CI green)
 

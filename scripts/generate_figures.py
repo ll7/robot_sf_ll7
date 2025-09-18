@@ -24,6 +24,7 @@ from pathlib import Path
 from results.figures.fig_force_field import generate_force_field_figure
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
+from robot_sf.benchmark.metrics import snqi as _snqi
 from robot_sf.benchmark.plots import save_pareto_png
 from robot_sf.benchmark.report_table import compute_table, format_markdown
 from robot_sf.benchmark.runner import load_scenario_matrix
@@ -102,6 +103,53 @@ def _infer_schema_version(episodes_path: Path) -> int | None:
     return None
 
 
+def _load_snqi_inputs(
+    weights_path: Path | None, weights_from: Path | None, baseline_path: Path | None
+) -> tuple[dict | None, dict | None]:
+    weights = None
+    baseline = None
+    try:
+        if weights_path is not None and Path(weights_path).exists():
+            with Path(weights_path).open("r", encoding="utf-8") as f:
+                weights = json.load(f)
+        elif weights_from is not None and Path(weights_from).exists():
+            with Path(weights_from).open("r", encoding="utf-8") as f:
+                rep = json.load(f)
+            if isinstance(rep, dict):
+                weights = (
+                    rep.get("results", {}).get("recommended", {}).get("weights")
+                    or rep.get("recommended", {}).get("weights")
+                    or rep.get("recommended_weights")
+                )
+        if baseline_path is not None and Path(baseline_path).exists():
+            with Path(baseline_path).open("r", encoding="utf-8") as f:
+                baseline = json.load(f)
+    except Exception:
+        # Best-effort; ignore malformed files silently for figure generation
+        pass
+    return (
+        weights if isinstance(weights, dict) else None,
+        baseline if isinstance(baseline, dict) else None,
+    )
+
+
+def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | None) -> None:
+    if not isinstance(weights, dict):
+        return
+    for rec in records:
+        m = rec.get("metrics") or {}
+        if not isinstance(m, dict):
+            continue
+        if "snqi" in m:
+            continue
+        try:
+            m["snqi"] = float(_snqi(m, weights, baseline))
+            rec["metrics"] = m
+        except Exception:
+            # Leave record unchanged if computation fails for any reason
+            continue
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Generate benchmark figures from episodes JSONL (and optional thumbnails)"
@@ -127,6 +175,20 @@ def main() -> int:
     )
     ap.add_argument("--group-by", default="scenario_params.algo")
     ap.add_argument("--fallback-group-by", default="scenario_id")
+    # SNQI inputs (optional)
+    ap.add_argument("--snqi-weights", type=Path, default=None, help="Path to SNQI weights JSON")
+    ap.add_argument(
+        "--snqi-weights-from",
+        type=Path,
+        default=None,
+        help="Path to JSON report containing recommended weights (fallback when --snqi-weights is not provided)",
+    )
+    ap.add_argument(
+        "--snqi-baseline",
+        type=Path,
+        default=None,
+        help="Path to baseline stats JSON (median/p95 per metric)",
+    )
     # Pareto
     ap.add_argument("--pareto-x", default="collisions")
     ap.add_argument("--pareto-y", default="comfort_exposure")
@@ -184,6 +246,12 @@ def main() -> int:
 
     records = read_jsonl(episodes)
 
+    # Load SNQI inputs if provided and inject SNQI per episode
+    snqi_weights, snqi_baseline = _load_snqi_inputs(
+        args.snqi_weights, args.snqi_weights_from, args.snqi_baseline
+    )
+    _inject_snqi(records, snqi_weights, snqi_baseline)
+
     # Pareto
     pareto_png = out_dir / "pareto.png"
     pareto_pdf = out_dir / "pareto.pdf" if args.pareto_pdf else None
@@ -213,6 +281,10 @@ def main() -> int:
 
     # Baseline table (Markdown)
     table_metrics = [m.strip() for m in str(args.table_metrics).split(",") if m.strip()]
+    # If SNQI was computed and not explicitly requested, append it for convenience
+    if any(isinstance(r.get("metrics"), dict) and "snqi" in r["metrics"] for r in records):
+        if "snqi" not in table_metrics:
+            table_metrics.append("snqi")
     rows = compute_table(
         records,
         metrics=table_metrics,

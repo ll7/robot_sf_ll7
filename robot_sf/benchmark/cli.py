@@ -32,6 +32,7 @@ from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_comp
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
+from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
 from robot_sf.benchmark.ranking import format_markdown as _rank_format_md
@@ -39,6 +40,8 @@ from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
 from robot_sf.benchmark.summary import summarize_to_plots
+from robot_sf.utils.seed_utils import get_seed_state_sample as _seed_sample
+from robot_sf.utils.seed_utils import set_global_seed as _set_seed
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -380,6 +383,46 @@ def _handle_rank(args) -> int:
             payload = [r.__dict__ for r in rows]
             out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_debug_seeds(args) -> int:
+    try:
+        report = _set_seed(int(args.seed), deterministic=bool(args.deterministic))
+        sample = _seed_sample(n=5)
+        payload = {"report": report.to_dict(), "sample": sample}
+        if getattr(args, "out", None):
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            print(json.dumps({"wrote": str(out_path)}, indent=2))
+        else:
+            print(json.dumps(payload, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_plot_pareto(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        meta = _save_pareto_png(
+            records,
+            out_path=str(args.out),
+            x_metric=str(args.x_metric),
+            y_metric=str(args.y_metric),
+            group_by=str(args.group_by),
+            fallback_group_by=str(args.fallback_group_by),
+            agg=str(args.agg),
+            x_higher_better=bool(args.x_higher_better),
+            y_higher_better=bool(args.y_higher_better),
+            title=str(args.title) if args.title is not None else None,
+        )
+        print(json.dumps({"wrote": str(args.out), **meta}, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
         print(f"Error: {e}", file=sys.stderr)
@@ -762,6 +805,52 @@ def _add_rank_subparser(
     p.set_defaults(cmd="rank")
 
 
+def _add_debug_seeds_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "debug-seeds",
+        help="Set global seeds (random, numpy, torch) and print a small state sample.",
+    )
+    p.add_argument("--seed", type=int, default=42, help="Seed to apply (default: 42)")
+    p.add_argument(
+        "--deterministic",
+        action="store_true",
+        default=True,
+        help="Enable deterministic torch settings when available (default: True)",
+    )
+    p.add_argument("--out", type=str, default=None, help="Optional JSON summary path")
+    p.set_defaults(cmd="debug-seeds")
+
+
+def _add_plot_pareto_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "plot-pareto",
+        help="Plot a Pareto front for two metrics grouped by algo (PNG)",
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output PNG path")
+    p.add_argument("--x-metric", required=True, help="Metric name for X axis")
+    p.add_argument("--y-metric", required=True, help="Metric name for Y axis")
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument("--agg", choices=["mean", "median"], default="mean")
+    p.add_argument("--x-higher-better", action="store_true", default=False)
+    p.add_argument("--y-higher-better", action="store_true", default=False)
+    p.add_argument("--title", default=None)
+    p.set_defaults(cmd="plot-pareto")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -778,6 +867,8 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_extract_failures_subparser(subparsers)
     _add_snqi_ablate_subparser(subparsers)
     _add_rank_subparser(subparsers)
+    _add_debug_seeds_subparser(subparsers)
+    _add_plot_pareto_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -1066,6 +1157,8 @@ def cli_main(argv: List[str] | None = None) -> int:
         "extract-failures": _handle_extract_failures,
         "snqi-ablate": _handle_snqi_ablate,
         "rank": _handle_rank,
+        "debug-seeds": _handle_debug_seeds,
+        "plot-pareto": _handle_plot_pareto,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

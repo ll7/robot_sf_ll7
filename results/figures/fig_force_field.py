@@ -21,21 +21,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pysocialforce import Simulator
 
+from robot_sf.benchmark.plotting_style import apply_latex_style
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
 def _latex_rcparams():
-    plt.rcParams.update(
-        {
-            "savefig.bbox": "tight",
-            "pdf.fonttype": 42,
-            "font.size": 9,
-            "axes.labelsize": 9,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
-            "legend.fontsize": 8,
-        }
-    )
+    apply_latex_style()
 
 
 def make_demo_sim() -> Simulator:

@@ -19,11 +19,32 @@ map data from OpenStreetMap.
 
 ![](./docs/video/demo_01.gif)
 
-## Development
+- [About](#about)
+- [Development and Intallation](#development-and-intallation)
+  - [Prerequisites](#prerequisites)
+  - [Quick Start](#quick-start)
+  - [Development Setup](#development-setup)
+  - [Alternative Installation Methods](#alternative-installation-methods)
+    - [Manual dependency installation](#manual-dependency-installation)
+    - [Docker Installation (Advanced)](#docker-installation-advanced)
+  - [System Dependencies](#system-dependencies)
+  - [Tests](#tests)
+    - [PySocialForce Tests](#pysocialforce-tests)
+    - [Run Linter / Tests](#run-linter--tests)
+    - [GUI Tests](#gui-tests)
+  - [5. Run Visual Debugging of Pre-Trained Demo Models](#5-run-visual-debugging-of-pre-trained-demo-models)
+  - [6. Run StableBaselines Training (Docker)](#6-run-stablebaselines-training-docker)
+  - [7. Edit Maps](#7-edit-maps)
+  - [8. Optimize Training Hyperparams (Docker)](#8-optimize-training-hyperparams-docker)
+  - [9. Extension: Pedestrian as Adversarial-Agent](#9-extension-pedestrian-as-adversarial-agent)
+- [📚 Documentation](#-documentation)
+  - [Core Documentation](#core-documentation)
+  - [Environment Architecture (New!)](#environment-architecture-new)
+  - [SNQI Weight Tooling (Benchmark Metrics)](#snqi-weight-tooling-benchmark-metrics)
+
+## Development and Intallation
 
 Refer to the [development guide](./docs/dev_guide.md) for contribution guidelines, code standards, and templates.
-
-## Installation
 
 This project now uses `uv` for modern Python dependency management and virtual environment handling.
 
@@ -246,26 +267,3 @@ Tools for recomputing, optimizing, and analyzing Social Navigation Quality Index
 - User Guide: [`docs/snqi-weight-tools/README.md`](./docs/snqi-weight-tools/README.md)
 - Design & architecture: [`docs/dev/issues/snqi-recomputation/DESIGN.md`](./docs/dev/issues/snqi-recomputation/DESIGN.md)
 - Headless usage (minimal deps): see [Headless mode](./docs/snqi-weight-tools/README.md#headless-mode-minimal-deps)
-
-Core capabilities:
-
-```text
-recompute_snqi_weights.py      # Strategy comparison (default, safety, efficiency, pareto) + normalization checks
-snqi_weight_optimization.py    # Grid + differential evolution + optional sensitivity
-snqi_sensitivity_analysis.py   # Deeper robustness & interaction analysis
-```
-
-Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is planned.
-Pass `--seed` for deterministic optimization/sampling. All outputs embed a `_metadata` block with schema version, git commit, seed, and provenance for reproducibility. A unified CLI subcommand (`robot_sf_bench snqi ...`) is available.
-
-Inline SNQI during episode generation (compute `metrics.snqi` on the fly):
-
-```sh
-uv run robot_sf_bench run \
-    --matrix configs/baselines/example_matrix.yaml \
-    --out results/episodes.jsonl \
-    --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
-    --snqi-weights model/snqi_canonical_weights_v1.json \
-    --snqi-baseline results/baseline_stats.json
-```
-

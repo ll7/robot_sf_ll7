@@ -24,10 +24,10 @@ uv run python examples/plot_force_field_normalized.py
 ```
 
 Outputs:
-- `docs/img/force_field_example.png`
-- `docs/img/force_field_example_norm.png`
+- PNGs: `docs/img/force_field_example.png`, `docs/img/force_field_example_norm.png`
+- PDFs: `docs/figures/force_field_example.pdf`, `docs/figures/force_field_example_norm.pdf`
 
 ## Tips
-- For LaTeX inclusion, prefer vector PDFs when possible. You can adapt the scripts to also save `.pdf` by calling `fig.savefig(".../file.pdf")` and following the rcParams guidance in the dev guide (bbox tight, pdf.fonttype=42, font sizes 9/8).
+- For LaTeX inclusion, prefer vector PDFs. The scripts export `.pdf` next to the PNGs with LaTeX-friendly rcParams (bbox tight, pdf.fonttype=42, font sizes 9/8).
 - Subsample quiver arrows for clarity (see `step` parameter in the normalized script).
 - Use consistent colormaps and labels. Include units in axis labels.

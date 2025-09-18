@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image as Image  # pillow
 
+from robot_sf.benchmark.plotting_style import apply_latex_style
 from robot_sf.benchmark.scenario_generator import AREA_HEIGHT, AREA_WIDTH, generate_scenario
 from robot_sf.utils.seed_utils import set_global_seed
 
@@ -29,12 +30,9 @@ class ThumbMeta:
 
 
 def _latex_rcparams():
-    import matplotlib as mpl
-
-    mpl.rcParams.update(
+    # Maintain backward compatibility for existing imports; delegate to shared helper
+    apply_latex_style(
         {
-            "savefig.bbox": "tight",
-            "pdf.fonttype": 42,  # editable text in Illustrator/LaTeX
             "font.size": 8,
             "axes.titlesize": 9,
             "axes.labelsize": 8,

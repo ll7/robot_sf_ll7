@@ -43,15 +43,25 @@ def make_demo_sim() -> Simulator:
     return Simulator(state=state, obstacles=obstacles)
 
 
-def generate_force_field_figure(out_png: str | Path, out_pdf: str | None = None) -> None:
+def generate_force_field_figure(
+    out_png: str | Path,
+    out_pdf: str | None = None,
+    *,
+    x_min: float = -1.0,
+    x_max: float = 5.0,
+    y_min: float = -2.0,
+    y_max: float = 3.0,
+    grid: int = 120,
+    quiver_step: int = 5,
+) -> None:
     _latex_rcparams()
 
     sim = make_demo_sim()
     wrapper = FastPysfWrapper(sim)
 
     # Domain and resolution
-    xs = np.linspace(-1, 5, 120)
-    ys = np.linspace(-2, 3, 120)
+    xs = np.linspace(float(x_min), float(x_max), int(grid))
+    ys = np.linspace(float(y_min), float(y_max), int(grid))
     wrapper.build_force_grid_cache(xs, ys)
 
     field = wrapper.get_force_field(xs, ys)  # shape (Ny, Nx, 2)
@@ -75,12 +85,11 @@ def generate_force_field_figure(out_png: str | Path, out_pdf: str | None = None)
     cbar.set_label("|F| (a.u.)")
 
     # Subsample quiver overlay
-    step = 5
     ax.quiver(
-        X[::step, ::step],
-        Y[::step, ::step],
-        U[::step, ::step],
-        V[::step, ::step],
+        X[::quiver_step, ::quiver_step],
+        Y[::quiver_step, ::quiver_step],
+        U[::quiver_step, ::quiver_step],
+        V[::quiver_step, ::quiver_step],
         color="white",
         scale=10,
         width=0.003,
@@ -107,9 +116,24 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Generate force-field heatmap + quiver figure")
     ap.add_argument("--png", default="docs/img/fig-force-field.png")
     ap.add_argument("--pdf", default="docs/figures/fig-force-field.pdf")
+    ap.add_argument("--x-min", type=float, default=-1.0)
+    ap.add_argument("--x-max", type=float, default=5.0)
+    ap.add_argument("--y-min", type=float, default=-2.0)
+    ap.add_argument("--y-max", type=float, default=3.0)
+    ap.add_argument("--grid", type=int, default=120)
+    ap.add_argument("--quiver-step", type=int, default=5)
     args = ap.parse_args()
 
-    generate_force_field_figure(out_png=args.png, out_pdf=args.pdf)
+    generate_force_field_figure(
+        out_png=args.png,
+        out_pdf=args.pdf,
+        x_min=args.x_min,
+        x_max=args.x_max,
+        y_min=args.y_min,
+        y_max=args.y_max,
+        grid=args.grid,
+        quiver_step=args.quiver_step,
+    )
     return 0
 
 

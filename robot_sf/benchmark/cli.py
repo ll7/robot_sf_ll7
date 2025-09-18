@@ -36,6 +36,10 @@ from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
 from robot_sf.benchmark.ranking import format_csv as _rank_format_csv
 from robot_sf.benchmark.ranking import format_markdown as _rank_format_md
+from robot_sf.benchmark.report_table import compute_table as _tbl_compute
+from robot_sf.benchmark.report_table import format_csv as _tbl_format_csv
+from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
+from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
@@ -382,6 +386,35 @@ def _handle_rank(args) -> int:
             # JSON fallback
             payload = [r.__dict__ for r in rows]
             out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_table(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
+        rows = _tbl_compute(
+            records,
+            metrics=metrics,
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+        )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fmt = str(args.format)
+        if fmt == "md":
+            content = _tbl_format_md(rows, metrics)
+            out_path.write_text(content, encoding="utf-8")
+        elif fmt == "csv":
+            content = _tbl_format_csv(rows, metrics)
+            out_path.write_text(content, encoding="utf-8")
+        else:
+            payload = _tbl_to_json(rows)
+            out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
@@ -805,6 +838,42 @@ def _add_rank_subparser(
     p.set_defaults(cmd="rank")
 
 
+def _add_table_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "table",
+        help=(
+            "Generate a baseline comparison table by per-group means for selected metrics "
+            "(Markdown/CSV/JSON)"
+        ),
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output path (md/csv/json)")
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument(
+        "--metrics",
+        required=True,
+        help="Comma-separated list of metric names under metrics.<name>",
+    )
+    p.add_argument(
+        "--format",
+        choices=["md", "csv", "json"],
+        default="md",
+        help="Output format (Markdown table, CSV, or JSON)",
+    )
+    p.set_defaults(cmd="table")
+
+
 def _add_debug_seeds_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -867,6 +936,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_extract_failures_subparser(subparsers)
     _add_snqi_ablate_subparser(subparsers)
     _add_rank_subparser(subparsers)
+    _add_table_subparser(subparsers)
     _add_debug_seeds_subparser(subparsers)
     _add_plot_pareto_subparser(subparsers)
     _add_list_subparser(subparsers)
@@ -1157,6 +1227,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "extract-failures": _handle_extract_failures,
         "snqi-ablate": _handle_snqi_ablate,
         "rank": _handle_rank,
+        "table": _handle_table,
         "debug-seeds": _handle_debug_seeds,
         "plot-pareto": _handle_plot_pareto,
     }

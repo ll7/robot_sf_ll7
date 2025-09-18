@@ -49,6 +49,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
  - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
 
+#### Figures naming and outputs
+
+See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. A small tracker lives at `docs/dev/issues/figures-naming/todo.md`.
+
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager

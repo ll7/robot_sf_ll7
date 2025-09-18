@@ -15,6 +15,8 @@ Update etiquette:
 - [x] Pareto fronts plotting (CLI + programmatic + docs + example) (2025-09-18)
 - [x] Deterministic seeding utilities (+ CLI debug-seeds) and tests (2025-09-18)
 - [x] SNQI ablation enhancements: `--top` and `--summary-out` (docs updated) (2025-09-18)
+- [x] Distribution plots (CLI + docs) (2025-09-18)
+- [x] Figure generation script (Pareto, distributions, baseline table) (2025-09-18)
 - [x] Define benchmark scope statement (≤150 words) and success criteria (2025-09-02)
 - [ ] Choose target venues & submission deadlines (ICRA / IROS / CoRL / NeurIPS D&B)
 [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest sidecar with identity hash) (2025-09-17)
@@ -98,12 +100,12 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Caching layer to avoid recomputing unchanged episodes (resume + manifest) (2025-09-17)
 
 ## 7. Visualization & Reporting Assets
-- [ ] Force field heatmap + vector overlays example figure
-- [ ] Distribution plots (distance, force magnitude, comfort exposure) (basic histograms for min_distance, avg_speed via `summary` implemented)
+- [ ] Force field heatmap + vector overlays example figure (doc added; PDF export optional)
+- [x] Distribution plots (CLI and docs) (2025-09-18)
 - [x] Pareto fronts (Time vs. Comfort, Collisions vs. SNQI) (2025-09-18)
 - [ ] Scenario montage thumbnails
-- [ ] Baseline comparison table auto-generation (Markdown)
-- [ ] Scripts to regenerate all paper figures from raw logs
+- [x] Baseline comparison table auto-generation (CLI + docs) (2025-09-18)
+- [x] Scripts to regenerate paper figures (initial: pareto, dists, table) (2025-09-18)
 
 ## 8. Reproducibility & Packaging
 - [x] Deterministic seeding audit (numpy, torch, random) (2025-09-18)

@@ -12,9 +12,7 @@ import traceback
 from pathlib import Path
 from typing import List
 
-from robot_sf.benchmark.ablation import (
-    compute_ablation_summary as _abl_summary,
-)
+from robot_sf.benchmark.ablation import compute_ablation_summary as _abl_summary
 from robot_sf.benchmark.ablation import compute_snqi_ablation as _abl_compute
 from robot_sf.benchmark.ablation import format_csv as _abl_format_csv
 from robot_sf.benchmark.ablation import format_markdown as _abl_format_md
@@ -36,6 +34,8 @@ from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario_thumbnails import save_montage as _thumb_montage
+from robot_sf.benchmark.scenario_thumbnails import save_scenario_thumbnails as _thumb_save_all
 from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
 from robot_sf.benchmark.summary import summarize_to_plots
 from robot_sf.utils.seed_utils import get_seed_state_sample as _seed_sample
@@ -479,6 +479,38 @@ def _handle_plot_distributions(args) -> int:
                 {"wrote": meta.wrote, **({"pdfs": meta.pdfs} if meta.pdfs else {})}, indent=2
             )
         )
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_plot_scenarios(args) -> int:
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+        # Ignore repeats for thumbnails by deduping by id order-preserving
+        seen = set()
+        unique_scenarios = []
+        for sc in scenarios:
+            sid = str(sc.get("id", "scenario"))
+            if sid not in seen:
+                seen.add(sid)
+                unique_scenarios.append(sc)
+        metas = _thumb_save_all(
+            unique_scenarios,
+            out_dir=str(args.out_dir),
+            base_seed=int(args.base_seed),
+            out_pdf=bool(args.pdf),
+            figsize=(float(args.fig_w), float(args.fig_h)),
+        )
+        wrote = [m.png for m in metas]
+        payload = {"wrote": wrote}
+        if bool(args.montage):
+            out_png = str(Path(args.out_dir) / "montage.png")
+            out_pdf = str(Path(args.out_dir) / "montage.pdf") if bool(args.pdf) else None
+            meta = _thumb_montage(metas, out_png=out_png, cols=int(args.cols), out_pdf=out_pdf)
+            payload.update({"montage": meta})
+        print(json.dumps(payload, indent=2))
         return 0
     except Exception as e:  # pragma: no cover - error path
         print(f"Error: {e}", file=sys.stderr)
@@ -979,6 +1011,24 @@ def _add_plot_distributions_subparser(
     p.set_defaults(cmd="plot-distributions")
 
 
+def _add_plot_scenarios_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "plot-scenarios",
+        help="Render per-scenario thumbnails (PNG/PDF) and optional montage",
+    )
+    p.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p.add_argument("--out-dir", required=True, help="Output directory for thumbnails")
+    p.add_argument("--base-seed", type=int, default=0)
+    p.add_argument("--pdf", action="store_true", default=False, help="Also export PDFs")
+    p.add_argument("--montage", action="store_true", default=False, help="Write montage image")
+    p.add_argument("--cols", type=int, default=3, help="Montage columns (default: 3)")
+    p.add_argument("--fig-w", type=float, default=3.2, help="Single thumbnail width in inches")
+    p.add_argument("--fig-h", type=float, default=2.0, help="Single thumbnail height in inches")
+    p.set_defaults(cmd="plot-scenarios")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -999,6 +1049,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_debug_seeds_subparser(subparsers)
     _add_plot_pareto_subparser(subparsers)
     _add_plot_distributions_subparser(subparsers)
+    _add_plot_scenarios_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -1291,6 +1342,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "debug-seeds": _handle_debug_seeds,
         "plot-pareto": _handle_plot_pareto,
         "plot-distributions": _handle_plot_distributions,
+        "plot-scenarios": _handle_plot_scenarios,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

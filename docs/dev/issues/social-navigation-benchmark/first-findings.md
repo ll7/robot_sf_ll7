@@ -36,3 +36,37 @@ Related paths:
 - Episodes (pilot): `results/episodes_sf.jsonl`
 - Figures (pilot): `docs/figures/`
 - Scenario matrix: `docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml`
+
+
+## Post-fix longer batch (horizon≈400)
+
+Date: 2025-09-18
+
+Context:
+- Fix: Pedestrian force buffer dtype set to float in `robot_sf/benchmark/runner.py` so force-derived metrics are not truncated.
+- Episodes: `results/episodes_sf_long_fix1.jsonl` (12 scenarios × 10 repeats = 120 records)
+- Figures/tables: `docs/figures_long_fix1/` (pareto, distributions for collisions/comfort_exposure/near_misses, baseline_table.md, fig-force-field)
+
+Quick aggregate snapshot (n=120):
+- collisions: mean 0.0, max 0.0
+- near_misses: mean ≈ 1.7, max ≈ 8
+- min_distance: mean ≈ 0.534, max ≈ 0.782
+- comfort_exposure: mean ≈ 0.306, max ≈ 0.70
+- force_exceed_events: mean ≈ 1.37e3, max ≈ 8.8e3
+- avg_speed: mean ≈ 1.36, max ≈ 1.96
+
+Observations:
+- Comfort exposure and force exceed events are now clearly non-zero across scenarios, confirming the dtype fix.
+- Collisions remain at 0.0; likely due to scenario design and/or conservative collision threshold (D_COLL=0.25). Will investigate.
+
+Artifacts:
+- Folder: `docs/figures_long_fix1/`
+  - pareto.pdf/png
+  - dist_collisions.pdf/png, dist_comfort_exposure.pdf/png, dist_near_misses.pdf/png
+  - fig-force-field.pdf/png
+  - baseline_table.md
+
+Next steps:
+1) Analyze collision metric definition and thresholds vs. scenario scales; verify any episodes with min_distance < D_COLL.
+2) If warranted, add a scenario or tweak parameters to induce occasional contact for validation.
+3) Optionally compute baseline med/p95 for SNQI normalization and add to the reporting pipeline.

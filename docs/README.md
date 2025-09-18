@@ -45,6 +45,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
    - [Random baseline](./dev/baselines/random.md) — how to use and configure
  - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
+ - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
 
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training

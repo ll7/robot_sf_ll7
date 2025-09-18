@@ -15,22 +15,16 @@ from typing import List
 from robot_sf.benchmark.ablation import (
     compute_ablation_summary as _abl_summary,
 )
-from robot_sf.benchmark.ablation import (
-    compute_snqi_ablation as _abl_compute,
-)
-from robot_sf.benchmark.ablation import (
-    format_csv as _abl_format_csv,
-)
-from robot_sf.benchmark.ablation import (
-    format_markdown as _abl_format_md,
-)
-from robot_sf.benchmark.ablation import (
-    to_json as _abl_to_json,
-)
+from robot_sf.benchmark.ablation import compute_snqi_ablation as _abl_compute
+from robot_sf.benchmark.ablation import format_csv as _abl_format_csv
+from robot_sf.benchmark.ablation import format_markdown as _abl_format_md
+from robot_sf.benchmark.ablation import to_json as _abl_to_json
 from robot_sf.benchmark.aggregate import compute_aggregates as _agg_compute
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci as _agg_compute_ci
 from robot_sf.benchmark.aggregate import read_jsonl as _agg_read_jsonl
 from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
+from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.plots import save_pareto_png as _save_pareto_png
 from robot_sf.benchmark.ranking import compute_ranking as _compute_ranking
@@ -457,6 +451,34 @@ def _handle_plot_pareto(args) -> int:
             out_pdf=(str(args.out_pdf) if getattr(args, "out_pdf", None) else None),
         )
         print(json.dumps({"wrote": str(args.out), **meta}, indent=2))
+        return 0
+    except Exception as e:  # pragma: no cover - error path
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+
+def _handle_plot_distributions(args) -> int:
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
+        grouped = _dist_collect(
+            records,
+            metrics=metrics,
+            group_by=str(args.group_by),
+            fallback_group_by=str(args.fallback_group_by),
+        )
+        meta = _dist_save(
+            grouped,
+            out_dir=str(args.out_dir),
+            bins=int(args.bins),
+            kde=bool(args.kde),
+            out_pdf=bool(args.out_pdf),
+        )
+        print(
+            json.dumps(
+                {"wrote": meta.wrote, **({"pdfs": meta.pdfs} if meta.pdfs else {})}, indent=2
+            )
+        )
         return 0
     except Exception as e:  # pragma: no cover - error path
         print(f"Error: {e}", file=sys.stderr)
@@ -922,6 +944,41 @@ def _add_plot_pareto_subparser(
     p.set_defaults(cmd="plot-pareto")
 
 
+def _add_plot_distributions_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser(
+        "plot-distributions",
+        help="Plot per-metric distributions (histograms, optional KDE) per group",
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out-dir", required=True, help="Output directory for plots")
+    p.add_argument(
+        "--metrics",
+        required=True,
+        help="Comma-separated metric names under metrics.<name>",
+    )
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="scenario_id",
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument("--bins", type=int, default=30)
+    p.add_argument("--kde", action="store_true", default=False, help="Overlay KDE when available")
+    p.add_argument(
+        "--out-pdf",
+        action="store_true",
+        default=False,
+        help="Also export LaTeX-friendly vector PDFs",
+    )
+    p.set_defaults(cmd="plot-distributions")
+
+
 def _base_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
@@ -941,6 +998,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_table_subparser(subparsers)
     _add_debug_seeds_subparser(subparsers)
     _add_plot_pareto_subparser(subparsers)
+    _add_plot_distributions_subparser(subparsers)
     _add_list_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
@@ -1232,6 +1290,7 @@ def cli_main(argv: List[str] | None = None) -> int:
         "table": _handle_table,
         "debug-seeds": _handle_debug_seeds,
         "plot-pareto": _handle_plot_pareto,
+        "plot-distributions": _handle_plot_distributions,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

@@ -40,3 +40,24 @@ def test_save_png_creates_file(tmp_path):
     assert out.exists()
     assert out.stat().st_size > 0
     assert "front_size" in meta
+
+
+def test_save_pdf_option(tmp_path):
+    records = [
+        _rec("A", 1.0, 0.5),
+        _rec("B", 0.8, 0.9),
+        _rec("C", 1.5, 0.4),
+    ]
+    out_png = tmp_path / "pareto.png"
+    out_pdf = tmp_path / "pareto.pdf"
+    meta = save_pareto_png(
+        records,
+        str(out_png),
+        "collisions",
+        "comfort_exposure",
+        title="PDF Test",
+        out_pdf=str(out_pdf),
+    )
+    assert out_png.exists() and out_png.stat().st_size > 0
+    assert out_pdf.exists() and out_pdf.stat().st_size > 0
+    assert meta.get("pdf") == str(out_pdf)

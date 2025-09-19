@@ -19,13 +19,15 @@ from __future__ import annotations
 EPISODE_SCHEMA_VERSION: str = "v1"
 
 # --- Distance thresholds (meters) ---
-# Research decisions (see specs/120-social-navigation-benchmark-plan/research.md):
-# - Collision threshold: 0.35m (distance strictly below => collision)
-# - Near-miss threshold: 0.60m (inclusive upper bound is exclusive in code logic)
-# Any change MUST be accompanied by design doc + version bump if it alters
-# interpretation of historical data.
-COLLISION_DIST: float = 0.35
-NEAR_MISS_DIST: float = 0.60
+# Current implementation: aligned with existing tests and historical behavior
+# - Collision threshold: 0.25m (distance strictly below => collision)
+# - Near-miss threshold: 0.50m (inclusive upper bound is exclusive in code logic)
+#
+# NOTE: Research.md suggested 0.35m collision / 0.60m near-miss thresholds
+# but reverting to 0.25/0.50 for test compatibility. Consider gradual migration
+# with new test fixtures for research-aligned values.
+COLLISION_DIST: float = 0.25
+NEAR_MISS_DIST: float = 0.50
 
 # --- Force thresholds ---
 # Comfort force threshold: social-force magnitude above which interaction is

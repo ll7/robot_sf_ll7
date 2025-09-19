@@ -15,6 +15,7 @@ scenarios:
   - name: classic_crossing_low
     map_file: "maps/svg_maps/classic_crossing.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -27,6 +28,7 @@ scenarios:
   - name: classic_crossing_medium
     map_file: "maps/svg_maps/classic_crossing.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -39,6 +41,7 @@ scenarios:
   - name: classic_crossing_high
     map_file: "maps/svg_maps/classic_crossing.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.08
     robot_config: {}
     metadata:
@@ -52,6 +55,7 @@ scenarios:
   - name: classic_head_on_corridor_low
     map_file: "maps/svg_maps/classic_head_on_corridor.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -64,6 +68,7 @@ scenarios:
   - name: classic_head_on_corridor_medium
     map_file: "maps/svg_maps/classic_head_on_corridor.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -77,6 +82,7 @@ scenarios:
   - name: classic_overtaking_low
     map_file: "maps/svg_maps/classic_overtaking.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -89,6 +95,7 @@ scenarios:
   - name: classic_overtaking_medium
     map_file: "maps/svg_maps/classic_overtaking.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -102,6 +109,7 @@ scenarios:
   - name: classic_bottleneck_low
     map_file: "maps/svg_maps/classic_bottleneck.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -114,6 +122,7 @@ scenarios:
   - name: classic_bottleneck_medium
     map_file: "maps/svg_maps/classic_bottleneck.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -126,6 +135,7 @@ scenarios:
   - name: classic_bottleneck_high
     map_file: "maps/svg_maps/classic_bottleneck.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.08
     robot_config: {}
     metadata:
@@ -139,6 +149,7 @@ scenarios:
   - name: classic_doorway_low
     map_file: "maps/svg_maps/classic_doorway.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -151,6 +162,7 @@ scenarios:
   - name: classic_doorway_medium
     map_file: "maps/svg_maps/classic_doorway.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -164,6 +176,7 @@ scenarios:
   - name: classic_merging_low
     map_file: "maps/svg_maps/classic_merging.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -176,6 +189,7 @@ scenarios:
   - name: classic_merging_medium
     map_file: "maps/svg_maps/classic_merging.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -189,6 +203,7 @@ scenarios:
   - name: classic_t_intersection_low
     map_file: "maps/svg_maps/classic_t_intersection.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
     robot_config: {}
     metadata:
@@ -201,6 +216,7 @@ scenarios:
   - name: classic_t_intersection_medium
     map_file: "maps/svg_maps/classic_t_intersection.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
     robot_config: {}
     metadata:
@@ -214,6 +230,7 @@ scenarios:
   - name: classic_group_crossing_low
     map_file: "maps/svg_maps/classic_group_crossing.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.02
       groups: 0.5
     robot_config: {}
@@ -227,6 +244,7 @@ scenarios:
   - name: classic_group_crossing_medium
     map_file: "maps/svg_maps/classic_group_crossing.svg"
     simulation_config:
+      max_episode_steps: 500
       ped_density: 0.05
       groups: 0.5
     robot_config: {}

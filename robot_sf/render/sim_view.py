@@ -176,6 +176,8 @@ class SimulationView:
     current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
     display_text: bool = field(default=False)  # Add this field to control text visibility
     ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
+    # Internal flag: True when a display window is created via pygame.display.set_mode
+    _use_display: bool = field(init=False, default=False)
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -184,11 +186,17 @@ class SimulationView:
         pygame.font.init()
         self.clock = pygame.time.Clock()
 
+        if self.record_video and not self.video_path:
+            logger.warning(
+                "record_video=True but no video_path provided; frames will be buffered but no file will be written."
+            )
+
         # Check if we're running in a headless environment
         is_headless = self._is_headless_environment()
 
         if self.record_video or is_headless:
             # Create offscreen surface for recording or headless mode
+            self._use_display = False
             self.screen = pygame.Surface((int(self.width), int(self.height)))
             if self.record_video:
                 logger.info("Created offscreen surface for video recording")
@@ -196,6 +204,7 @@ class SimulationView:
                 logger.info("Created offscreen surface for headless mode")
         else:
             # Create window for display
+            self._use_display = True
             self.screen = pygame.display.set_mode(
                 (int(self.width), int(self.height)), pygame.RESIZABLE
             )
@@ -299,14 +308,16 @@ class SimulationView:
 
     def _draw_sensor_data(self, state: VisualizableSimState):
         """Draw sensor data like lidar rays."""
-        if hasattr(state, "ray_vecs"):
+        if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
             self._augment_lidar(state.ray_vecs)
         if (
             hasattr(state, "ego_ped_pose")
             and state.ego_ped_pose
             and hasattr(state, "ego_ped_ray_vecs")
         ):
-            self._augment_lidar(state.ego_ped_ray_vecs)
+            # ego_ped_ray_vecs is Optional; skip if None to avoid TypeError
+            if state.ego_ped_ray_vecs is not None:
+                self._augment_lidar(state.ego_ped_ray_vecs)
 
     def _draw_actions(self, state: VisualizableSimState):
         """Draw action indicators for all entities."""
@@ -354,7 +365,8 @@ class SimulationView:
         else:
             # Store the current target FPS for display
             self.current_target_fps = target_fps
-            pygame.display.update()
+            if self._use_display:
+                pygame.display.update()
             # Control frame rate with pygame's clock
             self.clock.tick(target_fps)
 
@@ -391,12 +403,16 @@ class SimulationView:
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
-        if self.record_video and self.frames and MOVIEPY_AVAILABLE:
+        if self.record_video and self.frames and MOVIEPY_AVAILABLE and self.video_path:
             logger.debug("Writing video file.")
             # TODO: get the correct fps from the simulation
             clip = ImageSequenceClip(self.frames, fps=self.video_fps)
             clip.write_videofile(self.video_path)
             self.frames = []
+        elif self.record_video and self.frames and MOVIEPY_AVAILABLE and not self.video_path:
+            logger.warning(
+                "record_video=True but video_path is None; cannot write video file. Skipping write."
+            )
         elif self.record_video and self.frames and not MOVIEPY_AVAILABLE:
             logger.warning("MoviePy is not available. Cannot write video file.")
 
@@ -473,12 +489,17 @@ class SimulationView:
         adds text at position 0, and updates the display.
         """
         self.screen.fill(BACKGROUND_COLOR)
-        pygame.display.update()
+        if self._use_display:
+            pygame.display.update()
 
     def _resize_window(self):
         logger.debug("Resizing the window.")
         old_surface = self.screen
-        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        if self._use_display:
+            self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        else:
+            # In offscreen mode, just recreate the Surface at the new size
+            self.screen = pygame.Surface((int(self.width), int(self.height)))
         self.screen.blit(old_surface, (0, 0))
 
     def _move_camera(self, state: VisualizableSimState):
@@ -555,6 +576,20 @@ class SimulationView:
         )
 
     def _augment_lidar(self, ray_vecs: np.ndarray):
+        """Draw lidar rays given an array of point pairs.
+
+        Accepts an empty array and returns early. If None is provided, does nothing.
+        """
+        if ray_vecs is None:
+            return
+        # Handle empty arrays/lists gracefully
+        try:
+            if len(ray_vecs) == 0:  # works for np.ndarray and list-like
+                return
+        except TypeError:
+            # Not iterable or no length; nothing to draw
+            return
+
         for p1, p2 in ray_vecs:
             pygame.draw.line(
                 self.screen,

@@ -52,3 +52,5 @@ In [plot_npc_trajectory.py](../robot_sf/data_analysis/plot_npc_trajectory.py) th
 ## More Information
 
 A more detailed explanation of each plot can be found in the [PED_METRICS.md](./ped_metrics/PED_METRICS.md) file.
+
+See also: [Pareto plotting for benchmark metrics](./pareto_plotting.md)

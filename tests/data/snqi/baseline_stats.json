@@ -1,0 +1,18 @@
+{
+    "collisions": {
+        "med": 0.0,
+        "p95": 2.0
+    },
+    "near_misses": {
+        "med": 0.0,
+        "p95": 5.0
+    },
+    "force_exceed_events": {
+        "med": 0.0,
+        "p95": 10.0
+    },
+    "jerk_mean": {
+        "med": 0.1,
+        "p95": 0.6
+    }
+}

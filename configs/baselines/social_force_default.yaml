@@ -1,0 +1,71 @@
+# Social Force Planner Default Configuration
+# 
+# This configuration provides sensible defaults for the Social Force planner
+# that work well across a variety of scenarios. Parameters are documented
+# with their physical meaning and typical ranges.
+
+# Kinematics and Control
+mode: "velocity"  # Control mode: "velocity" (vx, vy) or "unicycle" (v, omega)
+v_max: 2.0        # Maximum linear velocity [m/s]
+omega_max: 1.0    # Maximum angular velocity [rad/s] (unicycle mode only)
+accel_max: 2.0    # Maximum acceleration [m/s²] (for future use)
+dt: 0.1           # Integration timestep [s] (can be overridden by environment)
+
+# Goal Dynamics
+desired_speed: 1.0  # Preferred movement speed towards goal [m/s]
+tau: 0.5           # Relaxation time for desired force [s] - controls acceleration
+
+# Social Force Parameters
+# These control repulsion between agents (pedestrians and robot)
+A: 5.1                # Social force amplitude [N] - strength of repulsion
+B: 0.35              # Social force range parameter [m] - decay distance
+lambda_anisotropy: 2.0  # Anisotropy factor - stronger repulsion in front
+sigma_phi: 90.0      # Field of view angle [degrees] for anisotropic forces
+cutoff_radius: 10.0  # Maximum interaction distance [m] - ignore distant agents
+
+# Obstacle Force Parameters  
+# These control repulsion from static obstacles (walls, barriers)
+A_obs: 10.0  # Obstacle force amplitude [N] - strength of wall repulsion
+B_obs: 0.0   # Obstacle force range parameter [m] - typically small for hard walls
+
+# Body Contact Forces (Optional)
+# These handle physical contact between agents - typically disabled for prediction
+k_body: 0.0      # Body force stiffness [N/m] - set > 0 to enable contact forces
+kappa_slide: 0.0 # Sliding friction coefficient - for tangential contact forces
+
+# Numerical Integration
+integration: "euler"    # Integration method: "euler" or "semi_implicit"
+clip_force: true       # Whether to clip forces to prevent numerical instability
+max_force: 100.0       # Maximum total force magnitude [N] when clipping enabled
+
+# Stochasticity Control
+noise_std: 0.0  # Standard deviation of force noise [N] - set > 0 for stochastic behavior
+
+# Input/Output Configuration
+action_space: "velocity"  # Output action format: "velocity" or "unicycle"
+safety_clamp: true       # Whether to enforce velocity/acceleration limits
+
+# Parameter Notes:
+#
+# - A and A_obs control the strength of repulsive forces. Higher values mean
+#   stronger avoidance but may cause oscillations if too high.
+#
+# - B and B_obs control the range of repulsive forces. Smaller values create
+#   sharper force profiles that activate closer to obstacles/agents.
+#
+# - tau controls how quickly the agent accelerates towards goals. Smaller
+#   values cause faster response but may be less stable.
+#
+# - desired_speed should typically match the robot's preferred operating speed.
+#   The planner will automatically reduce speed near goals.
+#
+# - lambda_anisotropy > 1 creates stronger repulsion in the forward direction,
+#   modeling the tendency to avoid agents in one's path more than those behind.
+#
+# - cutoff_radius limits computational cost by ignoring distant agents. Should
+#   be set large enough to capture relevant interactions (typically 5-20m).
+#
+# - For deterministic behavior, keep noise_std = 0 and use consistent seeding.
+#
+# - safety_clamp should generally be true to prevent commands that exceed
+#   robot physical limits or violate safety constraints.

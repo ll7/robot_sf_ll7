@@ -1,0 +1,9 @@
+- density: low
+  flow: uni
+  goal_topology: point
+  groups: 0.0
+  id: demo-agg-uni-low-open
+  obstacle: open
+  repeats: 3
+  robot_context: embedded
+  speed_var: low

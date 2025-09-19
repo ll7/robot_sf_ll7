@@ -1,0 +1,28 @@
+# Simple test scenario for Social Force baseline validation
+---
+id: "test_empty_simple"
+description: "Simple empty environment test"
+map_file: null  # Empty map
+repeats: 1
+pedestrians:
+  total_count: 0
+robot:
+  start: [0.5, 3.0]
+  goal: [9.5, 3.0]
+settings:
+  time_limit: 30.0
+  
+---
+id: "test_single_ped"
+description: "Single pedestrian avoidance test"
+map_file: null
+repeats: 1
+pedestrians:
+  total_count: 1
+  spawn_zones: [[2.5, 2.5, 3.5, 3.5]]
+  goals: [[7.0, 3.0]]
+robot:
+  start: [0.5, 3.0]
+  goal: [9.5, 3.0]
+settings:
+  time_limit: 30.0

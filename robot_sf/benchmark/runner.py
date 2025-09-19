@@ -31,6 +31,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 import numpy as np
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import make_episode_id
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.scenario_generator import generate_scenario
@@ -111,14 +112,19 @@ def _config_hash(obj: Any) -> str:
     return hashlib.sha256(data).hexdigest()[:16]
 
 
-def compute_episode_id(scenario_params: Dict[str, Any], seed: int) -> str:
-    """Compute a deterministic episode identifier.
+def compute_episode_id(scenario_params: Dict[str, Any], seed: int) -> str:  # legacy wrapper
+    """Backward-compatible wrapper returning deterministic episode id.
 
-    For v1, we retain the legacy format to preserve compatibility with existing
-    outputs and make resume effective immediately. In a future iteration we may
-    extend this to include algo/config and sim params via a stable hash.
+    Uses new `make_episode_id` (sha256-based) while preserving previous readable
+    prefix by embedding scenario id when available. Existing manifests that
+    relied on the old format will naturally diverge (different ids) — identity
+    hash below ensures resume manifests invalidate cleanly.
     """
-    return f"{scenario_params.get('id', 'unknown')}--{seed}"
+    scenario_id = scenario_params.get("id", "unknown")
+    # Use canonical hash short form for uniqueness
+    new_id = make_episode_id({"scenario_id": scenario_id, **scenario_params}, seed)
+    # Present final id as: <scenario_id>--<hash12>
+    return f"{scenario_id}--{new_id.split('_', 1)[1]}"
 
 
 def _episode_identity_hash() -> str:

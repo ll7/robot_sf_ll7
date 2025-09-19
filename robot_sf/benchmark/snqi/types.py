@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict
 
 
@@ -60,6 +62,22 @@ class SNQIWeights:
             components=data.get("components", []),
             weights=data.get("weights", {}),
         )
+
+    def save(self, path: Path | str) -> None:
+        """Save weights to JSON file."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+
+    @classmethod
+    def load(cls, path: Path | str) -> SNQIWeights:
+        """Load weights from JSON file."""
+        path = Path(path)
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
 
 
 __all__ = ["SNQIWeights"]

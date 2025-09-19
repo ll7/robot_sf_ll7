@@ -1,8 +1,8 @@
 
-# Implementation Plan: Social Navigation Benchmark Platform Foundations
+# Implementation Plan: Social Navigation Benchmark Platform Foundations (Extended: Classical Interaction Maps Pack)
 
 **Branch**: `120-social-navigation-benchmark-plan` | **Date**: 2025-09-19 | **Spec**: `specs/120-social-navigation-benchmark-plan/spec.md`
-**Input**: Feature specification from `/specs/120-social-navigation-benchmark-plan/spec.md`
+**Input**: Feature specification plus extension scope: add canonical robot–pedestrian interaction SVG maps & scenario config.
 
 ## Execution Flow (/plan command scope)
 ```
@@ -31,74 +31,33 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-Establish a reproducible benchmark layer for robot social navigation comprising: (1) canonical scenario matrix (≥12 scenarios), (2) episode JSONL schema with deterministic identities and provenance hashes, (3) metrics suite + SNQI composite, (4) baseline planners (SocialForce, PPO, Random), (5) aggregation + bootstrap CI tooling, (6) figure/visualization orchestrator (distribution, Pareto, force-field, thumbnails, tables), (7) resume/caching manifest, (8) SNQI weight recomputation + ablation CLI. Technical approach: leverage existing environment factories and fast-pysf wrapper; introduce unified planner interface; add metrics module and aggregation pipeline; implement manifest-based resume; produce deterministic figure generation scripts writing versioned directories.
+Core benchmark foundations implemented. This extension adds a curated set of SVG maps modeling classical human–robot interaction patterns (crossing, head‑on corridor passing, overtaking, bottleneck negotiation, doorway traversal, merging flows, T‑intersection, group crossing). A unified scenario matrix (`classic_interactions.yaml`) will reference these maps with density/flow variants, enabling reproducible evaluation of social navigation policies in well‑studied micro‑navigation motifs.
 
 ## Technical Context
-**Language/Version**: Python 3.12
-**Primary Dependencies**: Gymnasium (environment API), StableBaselines3 (RL baseline inference), fast-pysf (SocialForce physics), numpy, torch (policy inference), ruff (lint), pytest (tests), uv (dependency/runtime), tqdm (optional progress), matplotlib (figures)
-**Storage**: Filesystem (JSONL episodes, JSON summaries, PNG/PDF figures, YAML configs, weight JSON)
-**Testing**: pytest (unit, integration, metrics), headless GUI tests (Pygame), schema validation tests
-**Target Platform**: Linux/macOS headless CI + local dev
-**Project Type**: single project (library + scripts + examples)
-**Performance Goals**: ~20–25 env steps/sec baseline; aggregation <5s for 10k episodes; figure regeneration deterministic and <60s for core set
-**Constraints**: Deterministic seeds; no external DB; submodule must be initialized; episode schema stability; headless execution required
-**Scale/Scope**: O(10–100) scenarios × O(10) repetitions × O(3–5) baselines per research batch → thousands of episode lines (manageable in-memory)
-
-## Structure Decision
-**Project Type**: single project  
-**Structure**: Library with scripts/examples and comprehensive documentation
-
-```
-robot_sf/
-├── benchmark/     # Core benchmark module
-│   ├── cli.py    # All 15 CLI subcommands
-│   ├── runner.py # Episode execution with parallel workers
-│   ├── baseline_stats.py # Baseline metric computation
-│   ├── aggregate.py # Bootstrap CI aggregation
-│   ├── figures/  # Figure orchestrator and templates
-│   └── metrics/  # SNQI and standard metrics
-├── baselines/     # Unified planner interface
-├── gym_env/       # Environment factories
-└── sim/           # FastPysf wrapper integration
-
-examples/          # Demonstration scripts
-scripts/           # Training and evaluation runners
-docs/              # Documentation including quickstart guides
-configs/           # YAML scenario definitions
-results/           # Generated outputs (JSONL, figures, summaries)
-```
-
-**Rationale**: Single cohesive library with modular benchmark components, leveraging existing gym environment infrastructure while adding comprehensive benchmarking capabilities.
+**Language/Version**: Python 3.12+ (uv managed)  
+**Primary Dependencies**: Gymnasium-like env layer (internal), Fast-pysf (pedestrian physics submodule), NumPy, Matplotlib (figures), PPO model artifacts.  
+**Storage**: File-system (JSONL episodes, SVG maps, generated figures).  
+**Testing**: pytest (unit + integration + schema), headless CI with dummy video backend.  
+**Target Platform**: Linux (CI) & macOS dev; headless execution required.  
+**Project Type**: Single Python library + scripts (benchmark & docs generators).  
+**Performance Goals**: Maintain creation <3s, reset throughput soft >0.5/s (already instrumented).  
+**Constraints**: Deterministic seeding; maps must not introduce non-deterministic ordering; keep SVG obstacle sets minimal (perf).  
+**Scale/Scope**: 8 new interaction map archetypes * density variants (low/med/high) generating ~24–32 scenario entries.
 
 ## Constitution Check
-The Social Navigation Benchmark Platform aligns with all ten constitutional principles:
+All additions comply with Constitution principles:
+I Reproducibility: Maps are deterministic static SVG assets (versioned).  
+II Factory Abstraction: No new factory functions; scenarios reference existing env factory.  
+III Benchmark First: Each scenario produces standardized episodes (no schema change).  
+IV Unified Config: Scenario YAML only; no ad-hoc kwargs added in code.  
+V Minimal Baselines: No new baselines introduced.  
+VI Metrics Transparency: Metrics unchanged; scenarios just expand coverage.  
+VII Backward Compatibility: No interface or schema change → no version bump.  
+VIII Documentation: New quickstart + index link will be added.  
+IX Tests: Add smoke for scenario matrix validation + one spawn parsing test.  
+X Scope Discipline: Focus remains social navigation micro‑interaction contexts.
 
-✅ **1. Reproducible and deterministic**: All episode generation uses fixed seeds; scenario parameters stored with every episode; SNQI weight recomputation produces identical outputs; figure generation deterministic.
-
-✅ **2. Version-controlled and auditable**: All code, configs, and documentation tracked; episode provenance includes git hashes; no ad-hoc parameter modifications.
-
-✅ **3. Minimally viable and iterative**: Started with core scenario matrix (≥12), added capabilities incrementally; each phase validates before next.
-
-✅ **4. Transparent and interpretable**: Comprehensive metrics suite including SNQI breakdown; force field visualizations; clear episode schema; baseline algorithms well-documented.
-
-✅ **5. Robust to parameter variations**: Scenario matrix spans diverse pedestrian densities, robot policies, environmental conditions; bootstrap confidence intervals quantify uncertainty.
-
-✅ **6. Scientifically rigorous**: Episode schema includes all metadata for replication; baseline statistics computed consistently; proper statistical aggregation with CIs.
-
-✅ **7. Computationally efficient**: Parallel episode execution; manifest-based resume; optimized aggregation pipeline; reasonable performance targets (~20-25 steps/sec).
-
-✅ **8. Extensible and modular**: PlannerProtocol allows easy baseline addition; unified config system; figure orchestrator supports new visualization types.
-
-✅ **9. Documentation-driven**: Comprehensive quickstart guides; API documentation; experiment execution workflows; troubleshooting guides.
-
-✅ **10. Community-oriented**: Open interfaces for researchers; baseline planners easily comparable; results exportable in standard formats.
-
-**No constitutional violations identified**. The platform design inherently promotes reproducible social navigation research.
-
-## Constitution Check (Legacy Template Section)
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
-[Gates determined based on constitution file]
+Initial Gate: PASS (no violations requiring Complexity Tracking).
 
 ## Project Structure
 
@@ -150,7 +109,7 @@ ios/ or android/
 └── [platform-specific structure]
 ```
 
-**Structure Decision**: [DEFAULT to Option 1 unless Technical Context indicates web/mobile app]
+**Structure Decision**: Option 1 (single project) — existing repository layout already conforms.
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
@@ -171,7 +130,7 @@ ios/ or android/
    - Rationale: [why chosen]
    - Alternatives considered: [what else evaluated]
 
-**Output**: research.md with all NEEDS CLARIFICATION resolved
+**Output**: research.md (classical interaction taxonomy + design decisions) — TO BE GENERATED (this run will create file).
 
 ## Phase 1: Design & Contracts
 *Prerequisites: research.md complete*
@@ -203,7 +162,9 @@ ios/ or android/
    - Keep under 150 lines for token efficiency
    - Output to repository root
 
-**Output**: data-model.md, /contracts/*, failing tests, quickstart.md, agent-specific file
+Adaptation: No external API endpoints; contracts map to internal scenario schema validation. A lightweight contract document (schema reference table) will be included in `data-model.md`. No new failing tests auto-generated here; instead we will plan explicit pytest additions in Phase 2 tasks (matrix validation + spawn zone parsing). Quickstart will document invoking the new matrix with benchmark runner.
+
+**Output (for this extension)**: data-model.md (map archetype table + scenario matrix spec), quickstart.md (usage for classic interactions), research.md.
 
 ## Phase 2: Task Planning Approach
 *This section describes what the /tasks command will do - DO NOT execute during /plan*
@@ -245,27 +206,18 @@ ios/ or android/
 *This checklist is updated during execution flow*
 
 **Phase Status**:
-- [x] Phase 0: Research complete (/plan command) - Implementation already exists
-- [x] Phase 1: Design complete (/plan command) - Architecture validated
-- [x] Phase 2: Task planning complete (/plan command) - Tasks documented in tasks.md
-- [x] Phase 3: Tasks generated (/tasks command) - See tasks.md with 3.8-3.11 completed
-- [x] Phase 4: Implementation complete - All major features implemented and tested
-- [ ] Phase 5: Validation passed - Need comprehensive documentation and quickstart guides
+- [ ] Phase 0: Research complete (/plan command)
+- [ ] Phase 1: Design complete (/plan command)
+- [ ] Phase 2: Task planning complete (/plan command - describe approach only)
+- [ ] Phase 3: Tasks generated (/tasks command)
+- [ ] Phase 4: Implementation complete
+- [ ] Phase 5: Validation passed
 
 **Gate Status**:
-- [x] Initial Constitution Check: PASS - All principles aligned
-- [x] Post-Design Constitution Check: PASS - No violations detected
-- [x] All NEEDS CLARIFICATION resolved - Technical context complete
-- [x] Complexity deviations documented - None required
-
-**Implementation Status** (Current):
-- [x] CLI with 15 subcommands operational
-- [x] Episode runner with parallel workers and resume functionality
-- [x] SNQI metrics and weight recomputation
-- [x] Figure orchestrator with multiple visualization types
-- [x] Unified baseline planner interface (PlannerProtocol)
-- [x] Comprehensive test suite (108 tests passing)
-- [ ] **REMAINING**: Comprehensive quickstart documentation and experiment guides
+- [x] Initial Constitution Check: PASS
+- [ ] Post-Design Constitution Check: PASS
+- [ ] All NEEDS CLARIFICATION resolved
+- [ ] Complexity deviations documented
 
 ---
 *Based on Constitution v2.1.1 - See `/memory/constitution.md`*

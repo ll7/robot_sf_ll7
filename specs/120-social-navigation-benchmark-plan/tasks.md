@@ -41,16 +41,16 @@ Schema contract test files target non-existent schema definitions; they must fai
 - [X] T032 Implement `aggregate.schema.v1.json`
 - [X] T033 Implement `snqi-weights.schema.v1.json`
 - [X] T034 Implement `resume-manifest.schema.v1.json`
-- [ ] T035 Identity hash helper (canonical JSON serialization, stable ordering) (`robot_sf/benchmark/identity/hash_utils.py`)
-- [ ] T036 Episode ID generation integration in runner (`robot_sf/benchmark/runner.py`)
+- [X] T035 Identity hash helper (canonical JSON serialization, stable ordering) (`robot_sf/benchmark/identity/hash_utils.py`)
+- [X] T036 Episode ID generation integration in runner (`robot_sf/benchmark/runner.py`)
 
 ## Phase 3.4: Models / Data Structures
-- [ ] T040 [P] Dataclass / Typed structures: ScenarioSpec (`robot_sf/benchmark/types.py`)
-- [ ] T041 [P] Dataclass: EpisodeRecord skeleton (`robot_sf/benchmark/types.py`)
-- [ ] T042 [P] Dataclass: MetricsBundle view / accessor (`robot_sf/benchmark/metrics/types.py`)
-- [ ] T043 [P] Dataclass: SNQIWeights (`robot_sf/benchmark/snqi/types.py`)
-- [ ] T044 [P] Dataclass: ResumeManifest (`robot_sf/benchmark/types.py`)
-- [ ] T045 Metrics constants export & validation helpers (`robot_sf/benchmark/metrics/constants.py`)
+- [X] T040 [P] Dataclass / Typed structures: ScenarioSpec (`robot_sf/benchmark/types.py`)
+- [X] T041 [P] Dataclass: EpisodeRecord skeleton (`robot_sf/benchmark/types.py`)
+- [X] T042 [P] Dataclass: MetricsBundle view / accessor (`robot_sf/benchmark/metrics/types.py`)
+- [X] T043 [P] Dataclass: SNQIWeights (`robot_sf/benchmark/snqi/types.py`)
+- [X] T044 [P] Dataclass: ResumeManifest (`robot_sf/benchmark/types.py`)
+- [X] T045 Metrics constants export & validation helpers (`robot_sf/benchmark/metrics/constants.py`)
 
 ## Phase 3.5: Metrics Computation Layer
 // Note: Implementation consolidated in `robot_sf/benchmark/metrics.py` rather than separate compute module.

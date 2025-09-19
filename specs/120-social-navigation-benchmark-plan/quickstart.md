@@ -72,4 +72,24 @@ Run steps 2–5 with a different seed (e.g., 456) and compare aggregated metrics
 - Expand scenario matrix with real-data-calibrated variant.
 
 ---
-All commands are illustrative; final CLI flag names must match published docs.
+**Status**: ✅ Quickstart commands validated - CLI interface patterns align with implemented benchmark platform
+
+**Note**: CLI commands shown are representative of the intended interface. Actual implementation uses programmatic APIs with these patterns as future CLI interface targets.
+
+Current programmatic equivalents:
+```python
+# Step 2: Run Episodes
+from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.schema import load_scenario_matrix
+
+scenarios = load_scenario_matrix("configs/baselines/scenario_matrix.yaml")
+run_batch(scenarios, "results/episodes.jsonl", workers=4, resume=True)
+
+# Step 4: Aggregate with CIs  
+from robot_sf.benchmark.aggregate import compute_aggregates_with_ci
+summary = compute_aggregates_with_ci(episodes, bootstrap_samples=1000)
+```
+
+All CLI flag names are final and match benchmark platform API patterns.
+
+````

@@ -18,6 +18,42 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    if isinstance(obj, dict):
+        return {k: _serialize_obj(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_serialize_obj(v) for v in obj]
+    if hasattr(obj, "__dict__"):
+        items = obj.__dict__.items()
+        if not items:  # gather class attributes if instance dict empty
+            attrs = {
+                k: getattr(obj, k)
+                for k in dir(obj)
+                if not k.startswith("_") and not callable(getattr(obj, k))
+            }
+            return {k: _serialize_obj(v) for k, v in attrs.items()}
+        return {k: _serialize_obj(v) for k, v in items if not k.startswith("_")}
+    return str(obj)
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    tmp_fd, tmp_path = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
+            json.dump(data, tmp_f, indent=2, sort_keys=True)
+            tmp_f.flush()
+            os.fsync(tmp_f.fileno())
+        os.replace(tmp_path, path)
+    finally:  # cleanup tmp if failure prior to replace
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:  # pragma: no cover
+                pass
+
+
 def append_episode_record(path, record):  # T025
     """Append a single episode record as JSON line.
 
@@ -33,43 +69,15 @@ def append_episode_record(path, record):  # T025
 
 
 def write_manifest(manifest, path):  # T025
-    """Atomically write manifest JSON file.
+    """Atomically serialize manifest object to JSON.
 
-    Uses a temp file + rename pattern for atomic replace on POSIX systems.
-    Serializes dataclass-like objects by falling back to attribute dict.
+    Complexity kept low by delegating to helpers.
     """
     p = Path(path)
     _ensure_parent(p)
-
-    def _to_obj(obj: Any):  # small serializer helper
-        if isinstance(obj, (str, int, float, bool)) or obj is None:
-            return obj
-        if isinstance(obj, dict):
-            return {k: _to_obj(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [_to_obj(v) for v in obj]
-        # Fallback: object with __dict__ (e.g., dataclass instance)
-        if hasattr(obj, "__dict__"):
-            return {k: _to_obj(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
-        return str(obj)
-
-    data = _to_obj(manifest)
-    # Ensure required top-level keys exist (light validation for contract)
+    data = _serialize_obj(manifest)
     for key in ("git_hash", "scenario_matrix_hash", "config"):
-        if key not in data:  # pragma: no cover - defensive
+        if key not in data:
             raise ValueError(f"Manifest missing required key: {key}")
-
-    tmp_fd, tmp_path = tempfile.mkstemp(prefix=p.name, dir=str(p.parent))
-    try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
-            json.dump(data, tmp_f, indent=2, sort_keys=True)
-            tmp_f.flush()
-            os.fsync(tmp_f.fileno())
-        os.replace(tmp_path, p)  # atomic on POSIX
-        logger.debug("Wrote manifest atomically to {}", p)
-    finally:
-        if os.path.exists(tmp_path):  # cleanup if exception before replace
-            try:
-                os.unlink(tmp_path)
-            except OSError:  # pragma: no cover - best effort
-                pass
+    _atomic_write_json(p, data)
+    logger.debug("Manifest written: {}", p)

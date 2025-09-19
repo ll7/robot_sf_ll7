@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from robot_sf.benchmark.full_classic.io_utils import write_manifest
 
 
@@ -29,5 +27,5 @@ def test_write_manifest_creates_file(temp_results_dir):
         start_time = 0.0
         end_time = None
 
-    with pytest.raises(NotImplementedError):  # until T025
-        write_manifest(_Manifest(), str(manifest_path))
+    write_manifest(_Manifest(), str(manifest_path))
+    assert manifest_path.exists()

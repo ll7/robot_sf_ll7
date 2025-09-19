@@ -1343,6 +1343,66 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
 def _configure_parser() -> argparse.ArgumentParser:
     parser = _base_parser()
     _attach_core_subcommands(parser)
+    # Install intermixed args behavior directly so both get_parser() and cli_main share it.
+    if hasattr(parser, "parse_intermixed_args"):
+        _orig = parser.parse_args  # type: ignore[assignment]
+
+        def _mixed_parse(args=None, namespace=None):  # type: ignore[override]
+            if args is not None:
+                # Allow global flags placed after the subcommand by hoisting them before parsing.
+                # Pattern observed in tests: [subcommand, --log-level, DEBUG, --quiet]
+                # Argparse expects global flags before subcommand; we rewrite the argv sequence.
+                try:
+                    rewritten: list[str] = []
+                    if (
+                        args
+                        and isinstance(args, (list, tuple))
+                        and args
+                        and not str(args[0]).startswith("-")
+                    ):
+                        tokens = list(args)
+                        subcmd = tokens[0]
+                        rest = tokens[1:]
+                        i = 0
+                        hoisted: list[str] = []
+                        while i < len(rest):
+                            tok = rest[i]
+                            if tok == "--quiet":
+                                hoisted.append(tok)
+                                i += 1
+                                continue
+                            if tok == "--log-level":
+                                # Expect a value token next
+                                if i + 1 < len(rest):
+                                    hoisted.extend([tok, rest[i + 1]])
+                                    i += 2
+                                    continue
+                            # Not a global flag → keep in place
+                            i += 1
+                        # Remove hoisted tokens from rest
+                        j = 0
+                        filtered: list[str] = []
+                        while j < len(rest):
+                            if rest[j] == "--quiet":
+                                j += 1
+                                continue
+                            if rest[j] == "--log-level":
+                                # Skip flag and its value if we successfully hoisted earlier
+                                if j + 1 < len(rest):
+                                    j += 2
+                                    continue
+                            filtered.append(rest[j])
+                            j += 1
+                        rewritten = hoisted + [subcmd] + filtered
+                        args = rewritten
+                except Exception:  # pragma: no cover - fallback safety
+                    pass
+            try:  # pragma: no cover (normal success path still covered elsewhere)
+                return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
+            except Exception:
+                return _orig(args, namespace)
+
+        parser.parse_args = _mixed_parse  # type: ignore[assignment]
     return parser
 
 
@@ -1369,15 +1429,7 @@ def get_parser() -> argparse.ArgumentParser:
 
 def cli_main(argv: List[str] | None = None) -> int:
     parser = _configure_parser()
-    # Support users providing global flags after the subcommand by attempting
-    # intermixed parsing first; if it fails, fall back.
-    if argv is None:
-        args = parser.parse_args(None)
-    else:
-        try:  # Python 3.7+ provides parse_intermixed_args
-            args = parser.parse_intermixed_args(argv)  # type: ignore[attr-defined]
-        except Exception:
-            args = parser.parse_args(argv)
+    args = parser.parse_args(argv)
     _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
     # macOS safe start method for multiprocessing
     if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:

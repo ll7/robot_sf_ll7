@@ -2,6 +2,32 @@
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.
 
+## 🚀 Social Navigation Benchmark Platform (Complete)
+
+**The Social Navigation Benchmark Platform is now fully operational!** 
+
+### Quick Start
+- **[Complete Quickstart Guide](../specs/120-social-navigation-benchmark-plan/quickstart.md)** - Step-by-step experiment execution, visualization, and interpretation
+- **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - All 15 CLI subcommands with examples
+- **Implementation Status**: All major features complete, 108 tests passing
+
+### Core Capabilities
+- **Episode Runner**: Parallel execution with resume functionality and deterministic seeding
+- **Metrics Suite**: SNQI composite index with component breakdown and weight recomputation
+- **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners  
+- **Statistical Analysis**: Bootstrap confidence intervals and robust aggregation
+- **Figure Orchestrator**: Distribution plots, Pareto frontiers, force fields, thumbnails, tables
+- **CLI Tools**: 15 subcommands covering full experiment workflow
+
+### Ready-to-Use Workflows
+1. **Quick Assessment** (~15 min): Compare robot policies against baselines
+2. **Research Study** (~2-4 hours): Multi-parameter analysis with publication figures
+3. **Weight Sensitivity** (~45 min): Analyze SNQI component importance
+
+**Start Here**: [specs/120-social-navigation-benchmark-plan/quickstart.md](../specs/120-social-navigation-benchmark-plan/quickstart.md)
+
+---
+
 - [📚 Documentation Index](#-documentation-index)
   - [🏗️ Architecture \& Development](#️-architecture--development)
   - [🎮 Simulation \& Environment](#-simulation--environment)

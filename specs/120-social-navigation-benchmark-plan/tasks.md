@@ -66,10 +66,10 @@ Schema contract test files target non-existent schema definitions; they must fai
 - [X] T063 Ensure parallel workers parent-only write enforcement (`robot_sf/benchmark/runner.py`)
 
 ## Phase 3.7: Aggregation & Bootstrap
-- [ ] T070 Aggregation module: compute mean/median/p95 per metric (`robot_sf/benchmark/aggregate.py`)
-- [ ] T071 Bootstrap CI logic (resampling) (`robot_sf/benchmark/bootstrap.py`)
-- [ ] T072 Integrate aggregation + bootstrap CLI entry points (`robot_sf/benchmark/cli.py`)
-- [ ] T073 Unit test bootstrap statistical shape (CI array length=2, ordering) (`tests/unit/test_bootstrap_shapes.py`)
+- [X] T070 Aggregation module: compute mean/median/p95 per metric (`robot_sf/benchmark/aggregate.py`)
+- [X] T071 Bootstrap CI logic (resampling) (`robot_sf/benchmark/aggregate.py` - integrated `_bootstrap_ci`)
+- [X] T072 Integrate aggregation + bootstrap CLI entry points (`robot_sf/benchmark/cli.py`)
+- [X] T073 Unit test bootstrap statistical shape (CI array length=2, ordering) (`tests/test_aggregate.py::test_compute_aggregates_with_ci_shape_and_determinism`)
 
 ## Phase 3.8: SNQI Tooling
 - [ ] T080 Implement weight recompute CLI (read baseline stats → produce weight file) (`robot_sf/benchmark/snqi/cli.py`)

@@ -1348,12 +1348,36 @@ def _configure_parser() -> argparse.ArgumentParser:
 
 def get_parser() -> argparse.ArgumentParser:
     """Return a configured parser (for tests)."""
-    return _configure_parser()
+    # NOTE: Tests (and some users) supply global flags *after* the subcommand, e.g.:
+    #   list-algorithms --log-level DEBUG
+    # Vanilla argparse only supports global options before a subcommand. We wrap
+    # parse_args to attempt parse_intermixed_args first (Python 3.7+) and fall
+    # back silently if unsupported or if parsing fails.
+    parser = _configure_parser()
+    if hasattr(parser, "parse_intermixed_args"):
+        _orig = parser.parse_args  # type: ignore[assignment]
+
+        def _mixed_parse(args=None, namespace=None):  # type: ignore[override]
+            try:  # pragma: no cover - fallback path only hit if feature absent/fails
+                return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
+            except Exception:
+                return _orig(args, namespace)
+
+        parser.parse_args = _mixed_parse  # type: ignore[assignment]
+    return parser
 
 
 def cli_main(argv: List[str] | None = None) -> int:
     parser = _configure_parser()
-    args = parser.parse_args(argv)
+    # Support users providing global flags after the subcommand by attempting
+    # intermixed parsing first; if it fails, fall back.
+    if argv is None:
+        args = parser.parse_args(None)
+    else:
+        try:  # Python 3.7+ provides parse_intermixed_args
+            args = parser.parse_intermixed_args(argv)  # type: ignore[attr-defined]
+        except Exception:
+            args = parser.parse_args(argv)
     _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
     # macOS safe start method for multiprocessing
     if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:

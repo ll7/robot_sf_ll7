@@ -1,6 +1,8 @@
-"""JSON Schemas for benchmark artifacts (episodes, aggregates, manifests, etc.).
+"""JSON Schemas for Social Navigation Benchmark artifacts.
 
-Individual schema files (episode.schema.v1.json, ...) will be added here during
-Phase 3.3 implementation tasks. Keeping a package namespace early makes imports
-stable for upcoming contract tests.
+Schemas are versioned and mirrored from
+`specs/120-social-navigation-benchmark-plan/contracts/` during implementation.
+Runtime code should treat these as read-only validation assets.
 """
+
+__all__: list[str] = []

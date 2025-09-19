@@ -29,9 +29,11 @@ def _assert_fast_pysf_initialized() -> None:
 
     if not submodule_dir.exists() or not expected_pkg.exists():
         raise RuntimeError(
-            "fast-pysf submodule not initialized. Run: \n"
-            "  git submodule update --init --recursive\n"
-            "Then re-run your command (the pedestrian physics wrapper depends on it)."
+            "fast-pysf submodule not initialized or incomplete.\n"
+            "Expected directory: 'fast-pysf/pysocialforce'.\n"
+            "Fix by running: \n"
+            "  git submodule update --init --recursive\n\n"
+            "If this was intentional (e.g., lightweight docs build), avoid importing 'robot_sf.sim' modules."
         )
 
 

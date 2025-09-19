@@ -14,20 +14,20 @@ Format: `[ID] [P?] Description (File(s))`
 
 ---
 ## Phase 3.1: Setup
-- [ ] T001 Ensure fast-pysf submodule initialized guard check (add import-time error message) (`robot_sf/sim/__init__.py`)
-- [ ] T002 Add episode schema version constant `EPISODE_SCHEMA_VERSION = "v1"` (`robot_sf/benchmark/constants.py`)
-- [ ] T003 [P] Add new package module scaffolds: `robot_sf/benchmark/schemas/`, `robot_sf/benchmark/identity/`, `robot_sf/benchmark/snqi/` (empty `__init__.py`)
-- [ ] T004 [P] Add docs index link section "Social Navigation Benchmark" (`docs/README.md`)
-- [ ] T005 Define central collision & near-miss threshold constants (`robot_sf/benchmark/constants.py`)
-- [ ] T006 Define force comfort threshold constant and expose via metrics module (`robot_sf/benchmark/constants.py`)
+- [X] T001 Ensure fast-pysf submodule initialized guard check (add import-time error message) (`robot_sf/sim/__init__.py`)
+- [X] T002 Add episode schema version constant `EPISODE_SCHEMA_VERSION = "v1"` (`robot_sf/benchmark/constants.py`)
+- [X] T003 [P] Add new package module scaffolds: `robot_sf/benchmark/schemas/`, `robot_sf/benchmark/identity/`, `robot_sf/benchmark/snqi/` (empty `__init__.py`)
+- [X] T004 [P] Add docs index link section "Social Navigation Benchmark" (`docs/README.md`)
+- [X] T005 Define central collision & near-miss threshold constants (`robot_sf/benchmark/constants.py`)
+- [X] T006 Define force comfort threshold constant and expose via metrics module (`robot_sf/benchmark/constants.py`)
 
 ## Phase 3.2: Contract & Integration Tests (Must FAIL initially)
 Schema contract test files target non-existent schema definitions; they must fail before implementation.
-- [ ] T010 [P] Contract test: episode schema validation (`tests/contract/test_episode_schema.py`)
-- [ ] T011 [P] Contract test: scenario matrix schema validation (`tests/contract/test_scenario_matrix_schema.py`)
-- [ ] T012 [P] Contract test: aggregate summary schema (`tests/contract/test_aggregate_schema.py`)
-- [ ] T013 [P] Contract test: SNQI weights schema (`tests/contract/test_snqi_weights_schema.py`)
-- [ ] T014 [P] Contract test: resume manifest schema (`tests/contract/test_resume_manifest_schema.py`)
+- [X] T010 [P] Contract test: episode schema validation (`tests/contract/test_episode_schema.py`)
+- [X] T011 [P] Contract test: scenario matrix schema validation (`tests/contract/test_scenario_matrix_schema.py`)
+- [X] T012 [P] Contract test: aggregate summary schema (`tests/contract/test_aggregate_schema.py`)
+- [X] T013 [P] Contract test: SNQI weights schema (`tests/contract/test_snqi_weights_schema.py`)
+- [X] T014 [P] Contract test: resume manifest schema (`tests/contract/test_resume_manifest_schema.py`)
 - [ ] T015 Integration test: run single scenario → produce 1 episode line (`tests/integration/test_single_episode_run.py`)
 - [ ] T016 Integration test: resume run skips existing episode ids (`tests/integration/test_resume_behavior.py`)
 - [ ] T017 Integration test: aggregation with bootstrap outputs CI keys (`tests/integration/test_aggregation_bootstrap.py`)
@@ -36,11 +36,11 @@ Schema contract test files target non-existent schema definitions; they must fai
 - [ ] T020 Integration test: identity hash stable across runs (`tests/integration/test_episode_identity_stability.py`)
 
 ## Phase 3.3: Core Schemas & Identity
-- [ ] T030 Implement `episode.schema.v1.json` (`specs/120-social-navigation-benchmark-plan/contracts/episode.schema.v1.json` & copy to `robot_sf/benchmark/schemas/episode.schema.v1.json`)
-- [ ] T031 Implement `scenario-matrix.schema.v1.json` (same twin locations) 
-- [ ] T032 Implement `aggregate.schema.v1.json`
-- [ ] T033 Implement `snqi-weights.schema.v1.json`
-- [ ] T034 Implement `resume-manifest.schema.v1.json`
+- [X] T030 Implement `episode.schema.v1.json` (`specs/120-social-navigation-benchmark-plan/contracts/episode.schema.v1.json` & copy to `robot_sf/benchmark/schemas/episode.schema.v1.json`)
+- [X] T031 Implement `scenario-matrix.schema.v1.json` (same twin locations) 
+- [X] T032 Implement `aggregate.schema.v1.json`
+- [X] T033 Implement `snqi-weights.schema.v1.json`
+- [X] T034 Implement `resume-manifest.schema.v1.json`
 - [ ] T035 Identity hash helper (canonical JSON serialization, stable ordering) (`robot_sf/benchmark/identity/hash_utils.py`)
 - [ ] T036 Episode ID generation integration in runner (`robot_sf/benchmark/runner.py`)
 

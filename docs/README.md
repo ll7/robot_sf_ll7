@@ -48,6 +48,16 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
  - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
  - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
+
+#### Social Navigation Benchmark (Overview)
+
+The benchmark layer provides:
+ - Deterministic episode JSONL schema (versioned) with per-episode metrics.
+ - Batch runner with resume manifest for incremental extensions.
+ - Metrics suite + SNQI composite index (with weight recomputation tooling).
+ - Aggregation + bootstrap CI utilities for statistical reporting.
+ - Figure orchestrator to generate distributions, Pareto frontiers, force-field visualizations, thumbnails, and tables.
+See the dedicated design page above for full specification and usage examples.
 #### Figures naming and outputs
 
 See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. A small tracker lives at `docs/dev/issues/figures-naming/todo.md`.

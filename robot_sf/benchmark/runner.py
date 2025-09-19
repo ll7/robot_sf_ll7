@@ -16,14 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from concurrent.futures import (
-    ProcessPoolExecutor,
-    ThreadPoolExecutor,
-    as_completed,
-)
-from concurrent.futures import (
-    TimeoutError as FuturesTimeoutError,
-)
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set
@@ -31,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 import numpy as np
 import yaml
 
+from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.scenario_generator import generate_scenario
@@ -662,7 +657,9 @@ def run_batch(
     if resume and out_path.exists():
         # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
         existing_ids = load_manifest(
-            out_path, expected_identity_hash=_episode_identity_hash()
+            out_path,
+            expected_identity_hash=_episode_identity_hash(),
+            expected_schema_version=EPISODE_SCHEMA_VERSION,
         ) or index_existing(out_path)
         if existing_ids:
             filtered: List[tuple[Dict[str, Any], int]] = []
@@ -701,5 +698,10 @@ def run_batch(
     # Save/update manifest to speed up future resume if we wrote anything
     if resume and wrote > 0 and out_path.exists():
         # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
-        save_manifest(out_path, index_existing(out_path), identity_hash=_episode_identity_hash())
+        save_manifest(
+            out_path,
+            index_existing(out_path),
+            identity_hash=_episode_identity_hash(),
+            schema_version=EPISODE_SCHEMA_VERSION,
+        )
     return summary

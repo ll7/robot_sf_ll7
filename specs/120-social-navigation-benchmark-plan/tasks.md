@@ -60,10 +60,10 @@ Schema contract test files target non-existent schema definitions; they must fai
 - [X] T053 Unit test SNQI weighting & sensitivity with synthetic metrics (`tests/unit/test_snqi_weights.py`)
 
 ## Phase 3.6: Runner & Resume
-- [ ] T060 Integrate schema validation & identity hashing into batch runner (`robot_sf/benchmark/runner.py`)
-- [ ] T061 Implement resume manifest creation & update logic (`robot_sf/benchmark/resume/manifest.py`)
-- [ ] T062 Unit test manifest invalidation triggers (`tests/unit/test_resume_manifest.py`)
-- [ ] T063 Ensure parallel workers parent-only write enforcement (`robot_sf/benchmark/runner.py`)
+- [X] T060 Integrate schema validation & identity hashing into batch runner (`robot_sf/benchmark/runner.py`)
+- [X] T061 Implement resume manifest creation & update logic (`robot_sf/benchmark/manifest.py`)
+- [X] T062 Unit test manifest invalidation triggers (`tests/unit/test_resume_manifest.py`)
+- [X] T063 Ensure parallel workers parent-only write enforcement (`robot_sf/benchmark/runner.py`)
 
 ## Phase 3.7: Aggregation & Bootstrap
 - [ ] T070 Aggregation module: compute mean/median/p95 per metric (`robot_sf/benchmark/aggregate.py`)

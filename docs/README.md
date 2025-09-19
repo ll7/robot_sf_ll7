@@ -52,6 +52,41 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. A small tracker lives at `docs/dev/issues/figures-naming/todo.md`.
 
+#### LaTeX Table Embedding (SNQI / Benchmark Tables)
+
+The figures orchestration script writes `baseline_table.md` by default. To obtain a LaTeX version suitable for direct inclusion:
+
+1. Fast path: run the figures orchestrator with `--table-tex` to produce `baseline_table.tex` automatically.
+```bash
+uv run python scripts/generate_figures.py \
+  --episodes results/episodes_sf_long_fix1.jsonl \
+  --auto-out-dir --no-pareto --table-tex \
+  --dmetrics collisions,comfort_exposure,snqi --table-metrics collisions,comfort_exposure,snqi
+```
+2. Alternative: use the CLI table command with `--format tex` for custom file naming:
+```bash
+uv run python -m robot_sf.benchmark.cli table \
+  --episodes results/episodes_sf_long_fix1.jsonl \
+  --metrics collisions,comfort_exposure,near_misses,snqi \
+  --format tex > docs/figures/table_snqi.tex
+```
+3. Include in LaTeX:
+```latex
+\input{docs/figures/table_snqi.tex}
+```
+4. The output uses `booktabs`; ensure your preamble contains:
+```latex
+\usepackage{booktabs}
+```
+
+Optional tuning:
+- Reorder metrics via `--metrics` list order.
+- Add confidence intervals by first aggregating with bootstrap (then feeding the summary into your own formatter—future enhancement placeholder).
+
+Fast iteration tip:
+- Use `--no-pareto` with `scripts/generate_figures.py` to skip Pareto plot during rapid table refinement.
+- Restrict distributions via `--dmetrics collisions,snqi` for quick rebuilds.
+
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager

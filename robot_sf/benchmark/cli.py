@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import traceback
@@ -592,12 +593,7 @@ def _add_baseline_subparser(
         action="store_true",
         help="Disable resume (skip detection of already present episodes)",
     )
-    p.add_argument(
-        "--quiet",
-        action="store_true",
-        default=False,
-        help="Suppress per-episode progress output",
-    )
+    # Global --quiet handled at top-level parser
     p.set_defaults(cmd="baseline")
 
 
@@ -661,12 +657,7 @@ def _add_run_subparser(
         default=False,
         help="Stop on first failure instead of collecting errors",
     )
-    p.add_argument(
-        "--quiet",
-        action="store_true",
-        default=False,
-        help="Suppress per-episode progress output",
-    )
+    # Global --quiet handled at top-level parser
     p.set_defaults(cmd="run")
 
 
@@ -1044,9 +1035,46 @@ def _add_plot_scenarios_subparser(
 
 
 def _base_parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress non-essential output (sets WARNING unless CRITICAL explicitly chosen)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("ROBOT_SF_LOG_LEVEL", "INFO"),
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        help="Logging verbosity (default INFO or $ROBOT_SF_LOG_LEVEL)",
+    )
+    return parser
+
+
+def _configure_logging(quiet: bool, level: str) -> None:
+    """Configure root logger once.
+
+    If quiet, downgrade to WARNING unless CRITICAL requested.
+    """
+    desired_level = getattr(logging, level.upper(), logging.INFO)
+    if quiet and desired_level < logging.CRITICAL:
+        desired_level = logging.WARNING
+    root = logging.getLogger()
+    # If already configured, just adjust level
+    if root.handlers:
+        root.setLevel(desired_level)
+        return
+    logging.basicConfig(
+        level=desired_level,
+        format="%(levelname)s:%(name)s:%(message)s",
+    )
+
+
+def configure_logging(quiet: bool, level: str) -> None:
+    """Public wrapper for logging configuration (used in tests)."""
+    _configure_logging(quiet, level)
 
 
 def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: C901
@@ -1318,9 +1346,15 @@ def _configure_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def get_parser() -> argparse.ArgumentParser:
+    """Return a configured parser (for tests)."""
+    return _configure_parser()
+
+
 def cli_main(argv: List[str] | None = None) -> int:
     parser = _configure_parser()
     args = parser.parse_args(argv)
+    _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
     # macOS safe start method for multiprocessing
     if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:
         try:
@@ -1369,4 +1403,4 @@ def main() -> None:  # pragma: no cover - thin wrapper
     raise SystemExit(cli_main())
 
 
-__all__ = ["cli_main", "main"]
+__all__ = ["cli_main", "main", "get_parser", "configure_logging"]

@@ -428,11 +428,16 @@ Workflow location: `.github/workflows/ci.yml`.
 ./scripts/validation/test_basic_environment.sh
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
+
+# Performance baseline validation
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python scripts/validation/performance_smoke_test.py
 ```
 Success criteria:
 - Basic environment: exits 0; no exceptions.
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
+- Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
 
 ### Performance benchmarking (optional)
 ```bash

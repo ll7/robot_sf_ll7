@@ -1,0 +1,16 @@
+{
+  "timestamp": "2025-09-19 14:37:38",
+  "environment_creation_sec": 1.0173790454864502,
+  "resets_per_sec": 2119.83422622056,
+  "ms_per_reset": 0.47173500061035156,
+  "total_test_resets": 5,
+  "total_test_time_sec": 0.002358675003051758,
+  "thresholds": {
+    "creation_soft": 3.0,
+    "creation_hard": 8.0,
+    "reset_soft": 0.5,
+    "reset_hard": 0.2,
+    "enforce": false,
+    "ci": false
+  }
+}

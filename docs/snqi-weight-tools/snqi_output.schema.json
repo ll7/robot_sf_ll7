@@ -1,0 +1,260 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/snqi_output.schema.json",
+    "title": "SNQI Script Output (schema_version 1)",
+    "type": "object",
+    "required": [
+        "_metadata",
+        "summary"
+    ],
+    "properties": {
+        "_metadata": {
+            "type": "object",
+            "required": [
+                "schema_version",
+                "generated_at",
+                "git_commit",
+                "seed",
+                "provenance"
+            ],
+            "properties": {
+                "schema_version": {
+                    "type": "integer",
+                    "const": 1
+                },
+                "generated_at": {
+                    "type": "string"
+                },
+                "git_commit": {
+                    "type": "string"
+                },
+                "seed": {
+                    "type": [
+                        "integer",
+                        "null"
+                    ]
+                },
+                "start_time": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "end_time": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "runtime_seconds": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "provenance": {
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true
+        },
+        "summary": {
+            "type": "object",
+            "required": [
+                "weights"
+            ],
+            "properties": {
+                "method": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "objective_value": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "ranking_stability": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "weights": {
+                    "$ref": "#/definitions/WeightsObject"
+                },
+                "runtime_seconds": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                }
+            },
+            "additionalProperties": true
+        },
+        "recommended": {
+            "$ref": "#/definitions/RecommendedBlock"
+        },
+        "grid_search": {
+            "$ref": "#/definitions/MethodBlock"
+        },
+        "differential_evolution": {
+            "$ref": "#/definitions/MethodBlock"
+        },
+        "sensitivity_analysis": {
+            "type": "object",
+            "patternProperties": {
+                "^w_[a-zA-Z0-9_]+$": {
+                    "type": "object",
+                    "properties": {
+                        "base_mean": {
+                            "type": "number"
+                        },
+                        "up_mean": {
+                            "type": "number"
+                        },
+                        "down_mean": {
+                            "type": "number"
+                        },
+                        "score_sensitivity": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "base_mean",
+                        "up_mean",
+                        "down_mean",
+                        "score_sensitivity"
+                    ],
+                    "additionalProperties": true
+                }
+            },
+            "additionalProperties": true
+        },
+        "recommended_weights": {
+            "$ref": "#/definitions/WeightsObject"
+        },
+        "strategy_comparison": {
+            "type": "object",
+            "patternProperties": {
+                "^[a-zA-Z0-9_]+$": {
+                    "type": "object",
+                    "properties": {
+                        "weights": {
+                            "$ref": "#/definitions/WeightsObject"
+                        }
+                    },
+                    "required": [
+                        "weights"
+                    ],
+                    "additionalProperties": true
+                }
+            },
+            "additionalProperties": true
+        },
+        "strategy_correlations": {
+            "type": "object",
+            "additionalProperties": {
+                "type": [
+                    "number",
+                    "null"
+                ]
+            }
+        },
+        "external_weights": {
+            "type": "object",
+            "properties": {
+                "weights": {
+                    "$ref": "#/definitions/WeightsObject"
+                },
+                "correlation_with_recommended": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                }
+            },
+            "required": [
+                "weights"
+            ],
+            "additionalProperties": true
+        },
+        "normalization_comparison": {
+            "type": "object",
+            "patternProperties": {
+                "^[a-zA-Z0-9_]+$": {
+                    "type": "object",
+                    "properties": {
+                        "mean_score": {
+                            "type": [
+                                "number",
+                                "null"
+                            ]
+                        },
+                        "correlation_with_base": {
+                            "type": [
+                                "number",
+                                "null"
+                            ]
+                        }
+                    },
+                    "additionalProperties": true
+                }
+            }
+        },
+        "initial_weights": {
+            "$ref": "#/definitions/WeightsObject"
+        }
+    },
+    "definitions": {
+        "WeightsObject": {
+            "type": "object",
+            "patternProperties": {
+                "^w_[a-zA-Z0-9_]+$": {
+                    "type": "number"
+                }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+        },
+        "MethodBlock": {
+            "type": "object",
+            "required": [
+                "weights",
+                "objective_value",
+                "ranking_stability"
+            ],
+            "properties": {
+                "weights": {
+                    "$ref": "#/definitions/WeightsObject"
+                },
+                "objective_value": {
+                    "type": "number"
+                },
+                "ranking_stability": {
+                    "type": "number"
+                },
+                "convergence_info": {
+                    "type": "object"
+                }
+            },
+            "additionalProperties": true
+        },
+        "RecommendedBlock": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/MethodBlock"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "method_used"
+                    ]
+                }
+            ]
+        }
+    },
+    "additionalProperties": true
+}

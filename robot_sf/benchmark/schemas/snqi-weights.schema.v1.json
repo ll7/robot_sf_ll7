@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/robot-sf/snqi-weights.schema.v1.json",
+    "title": "RobotSF SNQI Weights File (v1)",
+    "type": "object",
+    "required": [
+        "version",
+        "weights"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "version": {
+            "const": "v1"
+        },
+        "meta": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "weights": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+                "type": "number"
+            },
+            "properties": {
+                "w_success": {
+                    "type": "number"
+                },
+                "w_time": {
+                    "type": "number"
+                }
+            }
+        }
+    }
+}

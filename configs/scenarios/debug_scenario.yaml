@@ -1,0 +1,10 @@
+scenarios:
+  - name: debug_05
+    map_file: "maps/svg_maps/debug_05.svg"
+    robot_config:
+      max_robot_speed: 1.2
+      robot_radius: 0.3
+    simulation_config:
+      max_episode_steps: 500
+      ped_density : 0.02
+    seeds: [42, 43, 44, 45, 46]  # 5 repetitions

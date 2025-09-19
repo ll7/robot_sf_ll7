@@ -253,7 +253,12 @@ def main() -> int:
         "--table-include-ci",
         action="store_true",
         default=False,
-        help="When using --table-summary, include *_ci_low/*_ci_high columns for stats with bootstrap intervals.",
+        help="When using --table-summary, include confidence interval columns. Default suffix is 'ci', producing *_ci_low/high.",
+    )
+    ap.add_argument(
+        "--ci-column-suffix",
+        default="ci",
+        help="Suffix used for CI columns when --table-include-ci is set (e.g. ci -> *_ci_low/high, ci95 -> *_ci95_low/high).",
     )
     # Thumbnails
     ap.add_argument("--thumbs-matrix", default=None, help="Scenario matrix YAML for thumbnails")
@@ -348,6 +353,7 @@ def _generate_table(records, out_dir: Path, args) -> None:
             metrics=[m.strip() for m in str(args.table_metrics).split(",") if m.strip()],
             stats=[s.strip() for s in str(args.table_stats).split(",") if s.strip()],
             include_ci=bool(args.table_include_ci),
+            ci_suffix=str(args.ci_column_suffix),
         )
     else:
         metric_cols = [m.strip() for m in str(args.table_metrics).split(",") if m.strip()]
@@ -402,50 +408,104 @@ def _maybe_force_field(out_dir: Path, args) -> None:
     )
 
 
+def _summary_build_columns(
+    metrics: list[str], stats: list[str], include_ci: bool, ci_suffix: str
+) -> list[str]:
+    cols: list[str] = []
+    for m in metrics:
+        for st in stats:
+            base = f"{m}_{st}"
+            cols.append(base)
+            if include_ci:
+                cols.append(f"{base}_{ci_suffix}_low")
+                cols.append(f"{base}_{ci_suffix}_high")
+    return cols
+
+
+def _summary_ci_pair(metric_dict: dict, stat: str) -> tuple[float | None, float | None]:
+    ci = metric_dict.get(f"{stat}_ci")
+    if not (isinstance(ci, (list, tuple)) and len(ci) == 2):
+        return None, None
+    a, b = ci
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        return None, None
+    return float(a), float(b)
+
+
+def _summary_extract_row(
+    group: str,
+    metrics_map: dict,
+    metrics: list[str],
+    stats: list[str],
+    include_ci: bool,
+    ci_suffix: str,
+    missing: set[str],
+) -> TableRow:
+    values: dict[str, float] = {}
+    for m in metrics:
+        mm = metrics_map.get(m)
+        if not isinstance(mm, dict):
+            if include_ci:
+                for st in stats:
+                    missing.add(f"{m}:{st}")
+            continue
+        for st in stats:
+            base = f"{m}_{st}"
+            val = mm.get(st)
+            if isinstance(val, (int, float)):
+                values[base] = float(val)
+            if not include_ci:
+                continue
+            lo, hi = _summary_ci_pair(mm, st)
+            if lo is None or hi is None:
+                missing.add(f"{m}:{st}")
+                continue
+            values[f"{base}_{ci_suffix}_low"] = lo
+            values[f"{base}_{ci_suffix}_high"] = hi
+    return TableRow(group=group, values=values)
+
+
 def _rows_from_summary(
     summary_path: Path,
     *,
     metrics: list[str],
     stats: list[str],
     include_ci: bool,
+    ci_suffix: str,
 ) -> tuple[list[TableRow], list[str]]:
     """Convert an aggregate summary JSON into TableRow objects.
 
-    Summary structure expected: {group: {metric: {stat: value, stat_ci: [low, high], ...}}}
-    We expand to columns: <metric>_<stat> and optionally <metric>_<stat>_ci_low/high.
+    Structure expected: {group: {metric: {stat: value, stat_ci: [low, high]}}}.
+    Produces columns <metric>_<stat> (+ optional CI low/high with suffix).
+    Missing CIs yield blank cells and a consolidated warning.
     """
     raw = json.loads(summary_path.read_text(encoding="utf-8"))
+    columns = _summary_build_columns(metrics, stats, include_ci, ci_suffix)
+    missing: set[str] = set()
     rows: list[TableRow] = []
-    col_names: list[str] = []
-    # Build deterministic column order
-    for m in metrics:
-        for st in stats:
-            base_col = f"{m}_{st}"
-            col_names.append(base_col)
-            if include_ci:
-                col_names.append(f"{base_col}_ci_low")
-                col_names.append(f"{base_col}_ci_high")
     for group, metrics_map in raw.items():
-        values: dict[str, float] = {}
-        for m in metrics:
-            mm = metrics_map.get(m, {}) if isinstance(metrics_map.get(m), dict) else {}
-            for st in stats:
-                key = f"{m}_{st}"
-                val = mm.get(st)
-                if isinstance(val, (int, float)):
-                    values[key] = float(val)
-                if include_ci:
-                    ci_key = f"{st}_ci"
-                    ci_val = mm.get(ci_key)
-                    if (
-                        isinstance(ci_val, (list, tuple))
-                        and len(ci_val) == 2
-                        and all(isinstance(x, (int, float)) for x in ci_val)
-                    ):
-                        values[f"{key}_ci_low"] = float(ci_val[0])
-                        values[f"{key}_ci_high"] = float(ci_val[1])
-        rows.append(TableRow(group=group, values=values))
-    return rows, col_names
+        if not isinstance(metrics_map, dict):  # skip malformed groups
+            continue
+        rows.append(
+            _summary_extract_row(
+                group,
+                metrics_map,
+                metrics,
+                stats,
+                include_ci,
+                ci_suffix,
+                missing,
+            )
+        )
+    if include_ci and missing:
+        import sys
+
+        print(
+            f"[WARN] Missing CI arrays for {len(missing)} metric/stat combos: "
+            + ", ".join(sorted(missing)),
+            file=sys.stderr,
+        )
+    return rows, columns
 
 
 if __name__ == "__main__":

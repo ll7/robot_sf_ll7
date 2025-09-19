@@ -81,7 +81,45 @@ uv run python -m robot_sf.benchmark.cli table \
 
 Optional tuning:
 - Reorder metrics via `--metrics` list order.
-- Add confidence intervals by first aggregating with bootstrap (then feeding the summary into your own formatter—future enhancement placeholder).
+- Confidence intervals (bootstrap):
+  1. Produce an aggregate summary with bootstrap CIs:
+     ```bash
+     uv run robot_sf_bench aggregate \
+       --in results/episodes_sf_long_fix1.jsonl \
+       --out results/summary_ci.json \
+       --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 123
+     ```
+  2. Generate tables from the summary adding CI columns:
+     ```bash
+     uv run python scripts/generate_figures.py \
+       --episodes results/episodes_sf_long_fix1.jsonl \
+       --table-summary results/summary_ci.json \
+       --table-metrics collisions,comfort_exposure,snqi \
+       --table-stats mean,median,p95 \
+       --table-include-ci --table-tex --no-pareto \
+       --out-dir docs/figures/ci_example
+     ```
+  3. Column naming pattern in Markdown: `<metric>_<stat>` plus `<metric>_<stat>_ci_low` / `_ci_high` (or with a custom suffix if `--ci-column-suffix ci95` is used → `_ci95_low/_ci95_high`).
+  4. LaTeX version escapes underscores automatically; just `\input{...}` as usual.
+  5. Missing CI arrays (e.g., when a stat lacked bootstrap) trigger a consolidated warning and empty cells.
+
+Available CI options:
+- `--table-include-ci` add interval columns.
+- `--ci-column-suffix ci95` change suffix (default `ci`).
+
+Example (custom suffix for 90% CIs):
+```bash
+uv run robot_sf_bench aggregate \
+  --in results/episodes.jsonl --out results/summary_ci90.json \
+  --bootstrap-samples 1000 --bootstrap-confidence 0.90
+uv run python scripts/generate_figures.py \
+  --episodes results/episodes.jsonl \
+  --table-summary results/summary_ci90.json \
+  --table-metrics collisions,snqi \
+  --table-stats mean,median \
+  --table-include-ci --ci-column-suffix ci90 --table-tex \
+  --no-pareto --out-dir docs/figures/ci90_example
+```
 
 Fast iteration tip:
 - Use `--no-pareto` with `scripts/generate_figures.py` to skip Pareto plot during rapid table refinement.

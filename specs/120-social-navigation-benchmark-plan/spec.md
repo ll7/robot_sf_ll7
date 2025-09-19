@@ -67,7 +67,7 @@ NFR6. Documentation: Central docs index updated with new benchmark section and S
 - Fast-pysf submodule must remain unmodified except for scoped updates documented separately.
 
 ## Open Questions (initial)
-1. Final ORCA inclusion decision? (Deferred)
+1. Final ORCA inclusion decision? (Deferred) [](../../docs/dev/issues/social-navigation-benchmark/adding_orca.md)
 2. Formal mathematical specification of SNQI weighting normalization baseline? (Partially documented; refine in metrics spec.)
 
 ## Risks

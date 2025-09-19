@@ -72,29 +72,29 @@ Schema contract test files target non-existent schema definitions; they must fai
 - [X] T073 Unit test bootstrap statistical shape (CI array length=2, ordering) (`tests/test_aggregate.py::test_compute_aggregates_with_ci_shape_and_determinism`)
 
 ## Phase 3.8: SNQI Tooling
-- [ ] T080 Implement weight recompute CLI (read baseline stats → produce weight file) (`robot_sf/benchmark/snqi/cli.py`)
-- [ ] T081 Implement ablation CLI (remove each component → ranking deltas) (`robot_sf/benchmark/snqi/cli.py`)
-- [ ] T082 Unit test recompute deterministic with seed (`tests/unit/test_snqi_recompute_determinism.py`)
+- [X] T080 Implement weight recompute CLI (read baseline stats → produce weight file) (`robot_sf/benchmark/snqi/cli.py`)
+- [X] T081 Implement ablation CLI (remove each component → ranking deltas) (`robot_sf/benchmark/snqi/cli.py`)
+- [X] T082 Unit test recompute deterministic with seed (`tests/unit/test_snqi_recompute_determinism.py`)
 
 ## Phase 3.9: Figure Orchestrator & Visualization
-- [ ] T090 Implement figure orchestrator script enhancements (auto out dir naming) (`scripts/generate_figures.py`)
-- [ ] T091 Force-field figure generation integration (existing logic adapt to orchestrator) (`scripts/generate_figures.py` + `robot_sf/benchmark/figures/force_field.py`)
-- [ ] T092 Scenario thumbnails montage builder module (`robot_sf/benchmark/figures/thumbnails.py`)
-- [ ] T093 Unit test orchestrator required artifact list generation (`tests/unit/test_figure_orchestrator_requirements.py`)
+- [X] T090 Implement figure orchestrator script enhancements (auto out dir naming) (`scripts/generate_figures.py`)
+- [X] T091 Force-field figure generation integration (existing logic adapt to orchestrator) (`scripts/generate_figures.py` + `robot_sf/benchmark/figures/force_field.py`)
+- [X] T092 Scenario thumbnails montage builder module (`robot_sf/benchmark/figures/thumbnails.py`)
+- [X] T093 Unit test orchestrator required artifact list generation (`tests/unit/test_figure_orchestrator_requirements.py`)
 
 ## Phase 3.10: CLI Enhancements
-- [ ] T100 Add `validate-config` subcommand hooking scenario matrix schema (`robot_sf/benchmark/cli.py`)
-- [ ] T101 Add `list-scenarios` subcommand (`robot_sf/benchmark/cli.py`)
-- [ ] T102 Add `baseline` subcommand (stats computation) (`robot_sf/benchmark/cli.py`)
-- [ ] T103 Add `aggregate` subcommand (with CI flags) (`robot_sf/benchmark/cli.py`)
-- [ ] T104 Add `seed-variance` diagnostic subcommand (`robot_sf/benchmark/cli.py`)
+- [X] T100 Add `validate-config` subcommand hooking scenario matrix schema (`robot_sf/benchmark/cli.py`)
+- [X] T101 Add `list-scenarios` subcommand (`robot_sf/benchmark/cli.py`)
+- [X] T102 Add `baseline` subcommand (stats computation) (`robot_sf/benchmark/cli.py`)
+- [X] T103 Add `aggregate` subcommand (with CI flags) (`robot_sf/benchmark/cli.py`)
+- [X] T104 Add `seed-variance` diagnostic subcommand (`robot_sf/benchmark/cli.py`)
 
 ## Phase 3.11: Baseline Planner Interface
-- [ ] T110 Define planner interface protocol (step(obs)->action) (`robot_sf/baselines/interface.py`)
-- [ ] T111 Adapt SocialForce baseline to interface (`robot_sf/baselines/social_force_planner.py`)
-- [ ] T112 Adapt PPO model loader baseline (`robot_sf/baselines/ppo_planner.py`)
-- [ ] T113 Implement Random planner (`robot_sf/baselines/random_planner.py`)
-- [ ] T114 Unit tests: planner action shape & type (`tests/unit/test_planner_interface.py`)
+- [X] T110 Define planner interface protocol (step(obs)->action) (`robot_sf/baselines/interface.py`)
+- [X] T111 Adapt SocialForce baseline to interface (`robot_sf/baselines/social_force_planner.py`)
+- [X] T112 Adapt PPO model loader baseline (`robot_sf/baselines/ppo_planner.py`)
+- [X] T113 Implement Random planner (`robot_sf/baselines/random_planner.py`)
+- [X] T114 Unit tests: planner action shape & type (`tests/unit/test_planner_interface.py`)
 
 ## Phase 3.13: Polish & Quality Gates
 - [X] T130 Ruff + formatting pass (ensure repo clean) (root)
@@ -133,13 +133,13 @@ Group C (dataclasses): T040–T044 concurrently.
 Group D (docs batch at end): T121–T124 concurrently.  
 
 ## Validation Checklist
-- [ ] All schema contracts have tests (T010–T014)
-- [ ] All entities have dataclass tasks (T040–T044)
-- [ ] Tests precede implementation (ordering honored)
-- [ ] Identity & resume implemented before aggregation
-- [ ] SNQI optimization & ablation tasks defined
-- [ ] Documentation tasks cover metrics, provenance, figures naming
-- [ ] CI integration task present
+- [X] All schema contracts have tests (T010–T014)
+- [X] All entities have dataclass tasks (T040–T044)
+- [X] Tests precede implementation (ordering honored)
+- [X] Identity & resume implemented before aggregation
+- [X] SNQI optimization & ablation tasks defined
+- [X] Documentation tasks cover metrics, provenance, figures naming
+- [X] CI integration task present
 
 ---
 Generated: 2025-09-19

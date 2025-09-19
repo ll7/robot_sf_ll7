@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: Head-On Corridor Passing -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="160"
+    height="200" viewBox="0 0 160 200">
+    <g id="obstacles" inkscape:label="Obstacles">
+        <rect x="0" y="0" width="160" height="10" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="190" width="160" height="10" fill="#000" inkscape:label="obstacle" />
+        <!-- Narrow corridor side walls -->
+        <rect x="0" y="10" width="10" height="180" fill="#000" inkscape:label="obstacle" />
+        <rect x="150" y="10" width="10" height="180" fill="#000" inkscape:label="obstacle" />
+    </g>
+    <g id="robot" inkscape:label="Robot">
+        <rect x="20" y="30" width="18" height="18" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="120" y="150" width="18" height="18" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+</svg>

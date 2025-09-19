@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: Flow Merge (Y) -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="220"
+    height="200" viewBox="0 0 220 200">
+    <g id="obstacles" inkscape:label="Obstacles">
+        <!-- Outer frame -->
+        <rect x="0" y="0" width="220" height="5" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="195" width="220" height="5" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="0" width="5" height="200" fill="#000" inkscape:label="obstacle" />
+        <rect x="215" y="0" width="5" height="200" fill="#000" inkscape:label="obstacle" />
+        <!-- Y arms separators -->
+        <rect x="70" y="5" width="10" height="80" fill="#000" inkscape:label="obstacle" />
+        <rect x="140" y="5" width="10" height="80" fill="#000" inkscape:label="obstacle" />
+        <!-- Stem narrowing -->
+        <rect x="95" y="120" width="30" height="50" fill="#000" inkscape:label="obstacle" />
+    </g>
+    <g id="robot" inkscape:label="Robot">
+        <rect x="30" y="30" width="20" height="20" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="170" y="160" width="20" height="20" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+</svg>

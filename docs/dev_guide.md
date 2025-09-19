@@ -438,6 +438,14 @@ Success criteria:
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
 - Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
+  - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.
+    - Environment variables:
+      - `ROBOT_SF_PERF_CREATION_SOFT` (default 3.0)
+      - `ROBOT_SF_PERF_CREATION_HARD` (default 8.0)
+      - `ROBOT_SF_PERF_RESET_SOFT` (default 0.50 resets/sec)
+      - `ROBOT_SF_PERF_RESET_HARD` (default 0.20 resets/sec)
+      - `ROBOT_SF_PERF_ENFORCE=1` to fail on soft breaches (use locally for strict tuning).
+    - Hard threshold breaches always FAIL.
 
 ### Performance benchmarking (optional)
 ```bash

@@ -28,10 +28,17 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ---
 
+- [🚀 Social Navigation Benchmark Platform (Complete)](#-social-navigation-benchmark-platform-complete)
+  - [Quick Start](#quick-start)
+  - [Core Capabilities](#core-capabilities)
+  - [Ready-to-Use Workflows](#ready-to-use-workflows)
 - [📚 Documentation Index](#-documentation-index)
   - [🏗️ Architecture \& Development](#️-architecture--development)
   - [🎮 Simulation \& Environment](#-simulation--environment)
   - [📊 Analysis \& Tools](#-analysis--tools)
+    - [Social Navigation Benchmark (Overview)](#social-navigation-benchmark-overview)
+    - [Figures naming and outputs](#figures-naming-and-outputs)
+    - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi--benchmark-tables)
   - [⚙️ Setup \& Configuration](#️-setup--configuration)
   - [📈 Pedestrian Metrics](#-pedestrian-metrics)
   - [📁 Media Resources](#-media-resources)

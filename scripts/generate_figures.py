@@ -26,7 +26,12 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
 from robot_sf.benchmark.metrics import snqi as _snqi
 from robot_sf.benchmark.plots import save_pareto_png
-from robot_sf.benchmark.report_table import compute_table, format_latex_booktabs, format_markdown
+from robot_sf.benchmark.report_table import (
+    TableRow,
+    compute_table,
+    format_latex_booktabs,
+    format_markdown,
+)
 from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_thumbnails import save_montage, save_scenario_thumbnails
 
@@ -233,6 +238,23 @@ def main() -> int:
         default=False,
         help="Also emit baseline_table.tex (LaTeX booktabs) alongside Markdown table",
     )
+    ap.add_argument(
+        "--table-summary",
+        type=Path,
+        default=None,
+        help="Path to pre-computed aggregate summary JSON (group -> metric -> stats) to build table from instead of raw episodes",
+    )
+    ap.add_argument(
+        "--table-stats",
+        default="mean",
+        help="Comma-separated stats to include from summary when --table-summary is used (e.g. mean,median,p95)",
+    )
+    ap.add_argument(
+        "--table-include-ci",
+        action="store_true",
+        default=False,
+        help="When using --table-summary, include *_ci_low/*_ci_high columns for stats with bootstrap intervals.",
+    )
     # Thumbnails
     ap.add_argument("--thumbs-matrix", default=None, help="Scenario matrix YAML for thumbnails")
     ap.add_argument("--thumbs-pdf", action="store_true", default=False)
@@ -320,22 +342,28 @@ def _generate_distributions(records, out_dir: Path, args) -> None:
 
 
 def _generate_table(records, out_dir: Path, args) -> None:
-    table_metrics = [m.strip() for m in str(args.table_metrics).split(",") if m.strip()]
-    if any(isinstance(r.get("metrics"), dict) and "snqi" in r["metrics"] for r in records):
-        if "snqi" not in table_metrics:
-            table_metrics.append("snqi")
-    rows = compute_table(
-        records,
-        metrics=table_metrics,
-        group_by=args.group_by,
-        fallback_group_by=args.fallback_group_by,
-    )
-    (out_dir / "baseline_table.md").write_text(
-        format_markdown(rows, table_metrics), encoding="utf-8"
-    )
+    if args.table_summary:
+        rows, metric_cols = _rows_from_summary(
+            summary_path=Path(args.table_summary),
+            metrics=[m.strip() for m in str(args.table_metrics).split(",") if m.strip()],
+            stats=[s.strip() for s in str(args.table_stats).split(",") if s.strip()],
+            include_ci=bool(args.table_include_ci),
+        )
+    else:
+        metric_cols = [m.strip() for m in str(args.table_metrics).split(",") if m.strip()]
+        if any(isinstance(r.get("metrics"), dict) and "snqi" in r["metrics"] for r in records):
+            if "snqi" not in metric_cols:
+                metric_cols.append("snqi")
+        rows = compute_table(
+            records,
+            metrics=metric_cols,
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+        )
+    (out_dir / "baseline_table.md").write_text(format_markdown(rows, metric_cols), encoding="utf-8")
     if bool(getattr(args, "table_tex", False)):
         (out_dir / "baseline_table.tex").write_text(
-            format_latex_booktabs(rows, table_metrics), encoding="utf-8"
+            format_latex_booktabs(rows, metric_cols), encoding="utf-8"
         )
 
 
@@ -372,6 +400,52 @@ def _maybe_force_field(out_dir: Path, args) -> None:
         grid=int(args.ff_grid),
         quiver_step=int(args.ff_quiver_step),
     )
+
+
+def _rows_from_summary(
+    summary_path: Path,
+    *,
+    metrics: list[str],
+    stats: list[str],
+    include_ci: bool,
+) -> tuple[list[TableRow], list[str]]:
+    """Convert an aggregate summary JSON into TableRow objects.
+
+    Summary structure expected: {group: {metric: {stat: value, stat_ci: [low, high], ...}}}
+    We expand to columns: <metric>_<stat> and optionally <metric>_<stat>_ci_low/high.
+    """
+    raw = json.loads(summary_path.read_text(encoding="utf-8"))
+    rows: list[TableRow] = []
+    col_names: list[str] = []
+    # Build deterministic column order
+    for m in metrics:
+        for st in stats:
+            base_col = f"{m}_{st}"
+            col_names.append(base_col)
+            if include_ci:
+                col_names.append(f"{base_col}_ci_low")
+                col_names.append(f"{base_col}_ci_high")
+    for group, metrics_map in raw.items():
+        values: dict[str, float] = {}
+        for m in metrics:
+            mm = metrics_map.get(m, {}) if isinstance(metrics_map.get(m), dict) else {}
+            for st in stats:
+                key = f"{m}_{st}"
+                val = mm.get(st)
+                if isinstance(val, (int, float)):
+                    values[key] = float(val)
+                if include_ci:
+                    ci_key = f"{st}_ci"
+                    ci_val = mm.get(ci_key)
+                    if (
+                        isinstance(ci_val, (list, tuple))
+                        and len(ci_val) == 2
+                        and all(isinstance(x, (int, float)) for x in ci_val)
+                    ):
+                        values[f"{key}_ci_low"] = float(ci_val[0])
+                        values[f"{key}_ci_high"] = float(ci_val[1])
+        rows.append(TableRow(group=group, values=values))
+    return rows, col_names
 
 
 if __name__ == "__main__":

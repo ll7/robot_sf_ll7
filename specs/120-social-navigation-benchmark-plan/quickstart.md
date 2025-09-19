@@ -54,13 +54,29 @@ export SDL_VIDEODRIVER="dummy"
 Verify your installation with these smoke tests:
 
 ```bash
-# Test 1: Environment creation
-uv run python -c "
+# Test 1: Environment creation (robust printing)
+# Some environments return a NumPy array, others a dict (e.g., image or multi-modal).
+# This snippet prints shape if available, else keys/type.
+uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; \
+env = make_robot_env(debug=True); obs, info = env.reset(seed=42); \
+import numpy as _np; \
+print('✓ Environment reset successful.', end=' '); \
+print('Obs shape:' , getattr(obs,'shape',None)) if hasattr(obs,'shape') else \
+print('Obs keys:' , list(obs.keys())) if isinstance(obs, dict) else \
+print('Obs type:', type(obs).__name__)"
+
+# Alternative (clearer) here‑doc form (copy/paste friendly):
+uv run python - <<'PY'
 from robot_sf.gym_env.environment_factory import make_robot_env
 env = make_robot_env(debug=True)
 obs, info = env.reset(seed=42)
-print(f'✓ Environment reset successful. Obs shape: {obs.shape}')
-"
+if hasattr(obs, 'shape'):
+  print(f"✓ Environment reset successful. Obs shape: {obs.shape}")
+elif isinstance(obs, dict):
+  print(f"✓ Environment reset successful. Obs keys: {list(obs.keys())}")
+else:
+  print(f"✓ Environment reset successful. Obs type: {type(obs).__name__}")
+PY
 
 # Test 2: CLI functionality  
 uv run python -m robot_sf.benchmark.cli list-scenarios configs/baselines/example.yaml

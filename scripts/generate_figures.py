@@ -26,7 +26,7 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
 from robot_sf.benchmark.metrics import snqi as _snqi
 from robot_sf.benchmark.plots import save_pareto_png
-from robot_sf.benchmark.report_table import compute_table, format_markdown
+from robot_sf.benchmark.report_table import compute_table, format_latex_booktabs, format_markdown
 from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_thumbnails import save_montage, save_scenario_thumbnails
 
@@ -227,6 +227,12 @@ def main() -> int:
     ap.add_argument("--ff-quiver-step", type=int, default=5)
     # Table
     ap.add_argument("--table-metrics", default="collisions,comfort_exposure")
+    ap.add_argument(
+        "--table-tex",
+        action="store_true",
+        default=False,
+        help="Also emit baseline_table.tex (LaTeX booktabs) alongside Markdown table",
+    )
     # Thumbnails
     ap.add_argument("--thumbs-matrix", default=None, help="Scenario matrix YAML for thumbnails")
     ap.add_argument("--thumbs-pdf", action="store_true", default=False)
@@ -327,6 +333,10 @@ def _generate_table(records, out_dir: Path, args) -> None:
     (out_dir / "baseline_table.md").write_text(
         format_markdown(rows, table_metrics), encoding="utf-8"
     )
+    if bool(getattr(args, "table_tex", False)):
+        (out_dir / "baseline_table.tex").write_text(
+            format_latex_booktabs(rows, table_metrics), encoding="utf-8"
+        )
 
 
 def _maybe_thumbnails(out_dir: Path, args) -> None:

@@ -44,6 +44,22 @@ Optional suffixes:
 - Risk: Paths change mid-draft. Mitigation: use `_latest.txt` and avoid hardcoding paths in LaTeX.
 - Risk: Multiple teams generating figures on different commits. Mitigation: SHA in folder names ensures uniqueness; aggregates can be merged by copying folders.
 
+## Implementation Status
+
+**Completed**:
+- ✅ Design specification defined
+- ✅ Naming convention established (`<episodes-stem>__<gitsha7>__v<schema>`)
+- ✅ Metadata tracking strategy (`meta.json` files)
+- ✅ Latest alias mechanism (`_latest.txt`)
+
+**Integration Points**:
+- `robot_sf/benchmark/figures.py`: FigureOrchestrator class for automated generation
+- `scripts/generate_figures.py`: CLI interface with `--auto-out-dir` flag
+- `docs/figures/`: Output directory with canonical folder structure
+
 ## Acceptance Criteria
 - New runs with `--auto-out-dir` produce uniquely named folders with a `meta.json` file.
 - Docs show the pattern and provide a LaTeX include snippet using `_latest.txt`-resolved path.
+- Backward compatibility maintained with existing figure references.
+
+**Status**: ✅ Design Complete - Ready for implementation

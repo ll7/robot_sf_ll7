@@ -1,0 +1,8 @@
+{
+  "timestamp": "2025-09-19 11:18:27",
+  "environment_creation_sec": 1.162217140197754,
+  "resets_per_sec": 1745.2996005326231,
+  "ms_per_reset": 0.572967529296875,
+  "total_test_resets": 5,
+  "total_test_time_sec": 0.002864837646484375
+}

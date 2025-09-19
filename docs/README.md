@@ -63,6 +63,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**Simulation View**](./SIM_VIEW.md) - Visualization and rendering system
 - [**Map Editor Usage**](./MAP_EDITOR_USAGE.md) - Creating and editing simulation maps
 - [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
+ - **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
 
 ### 📊 Analysis & Tools  
  - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights

@@ -53,10 +53,11 @@ Schema contract test files target non-existent schema definitions; they must fai
 - [ ] T045 Metrics constants export & validation helpers (`robot_sf/benchmark/metrics/constants.py`)
 
 ## Phase 3.5: Metrics Computation Layer
-- [ ] T050 Implement metrics computation functions (collisions, near-misses, path efficiency, force stats, smoothness, energy) (`robot_sf/benchmark/metrics/compute.py`)
-- [ ] T051 Add unit tests for edge cases (zero-length trajectory, no pedestrians) (`tests/unit/test_metrics_edge_cases.py`)
-- [ ] T052 Implement SNQI computation function (weights applied, missing weights => skip) (`robot_sf/benchmark/snqi/compute.py`)
-- [ ] T053 Unit test SNQI weighting & sensitivity with synthetic metrics (`tests/unit/test_snqi_weights.py`)
+// Note: Implementation consolidated in `robot_sf/benchmark/metrics.py` rather than separate compute module.
+- [X] T050 Implement metrics computation functions (collisions, near-misses, path efficiency, force stats, smoothness, energy) (`robot_sf/benchmark/metrics.py`)
+- [X] T051 Add unit tests for edge cases (zero-length trajectory, no pedestrians, boundary distances, force thresholds) (`tests/unit/test_metrics_edge_cases.py`)
+- [X] T052 Implement SNQI computation function (weights applied, missing weights => skip) (`robot_sf/benchmark/metrics.py`)
+- [X] T053 Unit test SNQI weighting & sensitivity with synthetic metrics (`tests/unit/test_snqi_weights.py`)
 
 ## Phase 3.6: Runner & Resume
 - [ ] T060 Integrate schema validation & identity hashing into batch runner (`robot_sf/benchmark/runner.py`)

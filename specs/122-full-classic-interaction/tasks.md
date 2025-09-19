@@ -43,11 +43,11 @@
 - [ ] T016 [P] Test contract for `run_full_benchmark` smoke path in `tests/benchmark_full/test_integration_smoke_run.py` (creates directory tree & files; videos skipped).
 
 ### Integration / User Story Tests (from spec + quickstart)
-- [ ] T017 [P] Full resume test: run partial, rerun with resume expecting fewer executed jobs in `tests/benchmark_full/test_integration_resume.py`.
-- [ ] T018 [P] Adaptive early stop test: configure low thresholds to trigger early pass quickly `tests/benchmark_full/test_integration_adaptive_stop.py`.
-- [ ] T019 [P] Effect size report presence sanity per archetype/density pair `tests/benchmark_full/test_integration_effect_sizes_present.py`.
-- [ ] T020 [P] Statistical sufficiency report structure test verifying precision entries `tests/benchmark_full/test_integration_precision_report.py`.
-- [ ] T021 [P] Reproducibility test: same seed & config produce identical episode_ids `tests/benchmark_full/test_integration_reproducibility.py`.
+- [X] T017 [P] Full resume test: run partial, rerun with resume expecting fewer executed jobs in `tests/benchmark_full/test_integration_resume.py`.
+- [X] T018 [P] Adaptive early stop test: configure low thresholds to trigger early pass quickly `tests/benchmark_full/test_integration_adaptive_stop.py`.
+- [X] T019 [P] Effect size report presence sanity per archetype/density pair `tests/benchmark_full/test_integration_effect_sizes_present.py`.
+- [X] T020 [P] Statistical sufficiency report structure test verifying precision entries `tests/benchmark_full/test_integration_precision_report.py`.
+- [X] T021 [P] Reproducibility test: same seed & config produce identical episode_ids `tests/benchmark_full/test_integration_reproducibility.py`.
 
 ## Phase 3.3: Core Implementation (Only After Above Tests Added)
 ### Data & Planning Layer

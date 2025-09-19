@@ -12,10 +12,10 @@
 - Follow TDD: write failing tests before implementing functionality.
 
 ## Phase 3.1: Setup & Scaffolding
-- [ ] T001 Create package directory `robot_sf/benchmark/full_classic/__init__.py` and placeholder module files (`orchestrator.py`, `planning.py`, `aggregation.py`, `effects.py`, `precision.py`, `plots.py`, `videos.py`, `io_utils.py`) with docstring headers only.
-- [ ] T002 Add `scripts/classic_benchmark_full.py` skeleton (argument parser only, calls placeholder `run_full_benchmark`).
+- [X] T001 Create package directory `robot_sf/benchmark/full_classic/__init__.py` and placeholder module files (`orchestrator.py`, `planning.py`, `aggregation.py`, `effects.py`, `precision.py`, `plots.py`, `videos.py`, `io_utils.py`) with docstring headers only.
+- [X] T002 Add `scripts/classic_benchmark_full.py` skeleton (argument parser only, calls placeholder `run_full_benchmark`).
 - [ ] T003 [P] Add `tests/benchmark_full/conftest.py` with shared fixtures: temp results dir, minimal BenchmarkConfig factory, synthetic EpisodeRecord generator.
-- [ ] T004 [P] Update `docs/README.md` linking quickstart (placeholder link comment) and add note to add full docs after implementation.
+- [X] T004 [P] Update `docs/README.md` linking quickstart (placeholder link comment) and add note to add full docs after implementation.
 
 ## Phase 3.2: Tests First (Contract & Integration) – MUST FAIL INITIALLY
 ### Contract Tests (from `contracts/benchmark_full_contract.md`)

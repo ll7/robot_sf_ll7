@@ -64,6 +64,16 @@ class ScenarioDescriptor:  # duplicated light form; real version will live centr
     hash_fragment: str
 
 
+@dataclass
+class EpisodeJob:  # lightweight form for planning layer
+    job_id: str
+    scenario_id: str
+    seed: int
+    archetype: str
+    density: str
+    horizon: int
+
+
 def load_scenario_matrix(path: str) -> list[dict]:  # T022
     """Load scenario matrix YAML returning the raw scenario dictionaries.
 
@@ -193,5 +203,31 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
     return scenarios
 
 
-def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg) -> list:  # T024
-    raise NotImplementedError("Implemented in task T024")
+def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg) -> list[EpisodeJob]:  # T024
+    """Create concrete episode jobs for initial execution plan.
+
+    - One job per planned seed per scenario.
+    - Horizon override: if cfg.horizon_override provided, use it; else scenario.max_episode_steps.
+    - job_id construction: sha1 of scenario_id + seed + horizon for determinism; truncated.
+    """
+    jobs: list[EpisodeJob] = []
+    for sc in scenarios:
+        horizon = (
+            int(cfg.horizon_override)
+            if getattr(cfg, "horizon_override", None)
+            else sc.max_episode_steps
+        )
+        for seed in sc.planned_seeds:
+            base = f"{sc.scenario_id}:{seed}:{horizon}"
+            job_hash = hashlib.sha1(base.encode("utf-8")).hexdigest()[:10]
+            jobs.append(
+                EpisodeJob(
+                    job_id=job_hash,
+                    scenario_id=sc.scenario_id,
+                    seed=seed,
+                    archetype=sc.archetype,
+                    density=sc.density,
+                    horizon=horizon,
+                )
+            )
+    return jobs

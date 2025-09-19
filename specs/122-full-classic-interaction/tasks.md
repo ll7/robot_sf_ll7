@@ -14,13 +14,23 @@
 ## Phase 3.1: Setup & Scaffolding
 - [X] T001 Create package directory `robot_sf/benchmark/full_classic/__init__.py` and placeholder module files (`orchestrator.py`, `planning.py`, `aggregation.py`, `effects.py`, `precision.py`, `plots.py`, `videos.py`, `io_utils.py`) with docstring headers only.
 - [X] T002 Add `scripts/classic_benchmark_full.py` skeleton (argument parser only, calls placeholder `run_full_benchmark`).
-- [ ] T003 [P] Add `tests/benchmark_full/conftest.py` with shared fixtures: temp results dir, minimal BenchmarkConfig factory, synthetic EpisodeRecord generator.
+- [X] T003 [P] Add `tests/benchmark_full/conftest.py` with shared fixtures: temp results dir, minimal BenchmarkConfig factory, synthetic EpisodeRecord generator.
 - [X] T004 [P] Update `docs/README.md` linking quickstart (placeholder link comment) and add note to add full docs after implementation.
 
 ## Phase 3.2: Tests First (Contract & Integration) – MUST FAIL INITIALLY
 ### Contract Tests (from `contracts/benchmark_full_contract.md`)
-- [ ] T005 [P] Test contract for `load_scenario_matrix` in `tests/benchmark_full/test_contract_load_scenario_matrix.py` (validate error on invalid path).
-- [ ] T006 [P] Test contract for `plan_scenarios` in `tests/benchmark_full/test_contract_plan_scenarios.py` (ensure seeds count = initial_episodes for one scenario).
+- [X] T005 [P] Test contract for `load_scenario_matrix` in `tests/benchmark_full/test_contract_load_scenario_matrix.py` (validate error on invalid path).
+- [X] T006 [P] Test contract for `plan_scenarios` in `tests/benchmark_full/test_contract_plan_scenarios.py` (ensure seeds count = initial_episodes for one scenario).
+- [X] T007 [P] Test contract for `expand_episode_jobs` in `tests/benchmark_full/test_contract_expand_jobs.py` (job count = planned seeds; horizon override applied).
+- [X] T008 [P] Test contract for `run_episode_jobs` in `tests/benchmark_full/test_contract_run_jobs.py` (resume skip behavior using pre-existing episodes file stub).
+- [X] T009 [P] Test contract for `aggregate_metrics` in `tests/benchmark_full/test_contract_aggregate_metrics.py` (bootstrap seeded reproducibility; required metric keys present).
+- [X] T010 [P] Test contract for `compute_effect_sizes` in `tests/benchmark_full/test_contract_effect_sizes.py` (Cohen's h formula sanity with synthetic rates).
+- [X] T011 [P] Test contract for `evaluate_precision` in `tests/benchmark_full/test_contract_precision.py` (passing + failing precision scenarios synthetic).
+- [X] T012 [P] Test contract for `generate_plots` in `tests/benchmark_full/test_contract_plots.py` (creates expected PDF files; smoke mode minimal subset).
+- [X] T013 [P] Test contract for `generate_videos` in `tests/benchmark_full/test_contract_videos.py` (graceful skip when smoke or ffmpeg missing, status recorded).
+- [X] T014 [P] Test contract for `write_manifest` in `tests/benchmark_full/test_contract_manifest.py` (JSON structure fields exist).
+- [X] T015 [P] Test contract for `adaptive_sampling_iteration` in `tests/benchmark_full/test_contract_adaptive_sampling.py` (returns additional jobs until thresholds reached).
+- [X] T016 [P] Test contract for `run_full_benchmark` smoke path in `tests/benchmark_full/test_integration_smoke_run.py` (creates directory tree & files; videos skipped).
 - [ ] T007 [P] Test contract for `expand_episode_jobs` in `tests/benchmark_full/test_contract_expand_jobs.py` (job count = planned seeds; horizon override applied).
 - [ ] T008 [P] Test contract for `run_episode_jobs` in `tests/benchmark_full/test_contract_run_jobs.py` (resume skip behavior using pre-existing episodes file stub).
 - [ ] T009 [P] Test contract for `aggregate_metrics` in `tests/benchmark_full/test_contract_aggregate_metrics.py` (bootstrap seeded reproducibility; required metric keys present).

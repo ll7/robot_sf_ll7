@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Social Navigation Benchmark Platform** - Complete benchmark infrastructure for reproducible social navigation research
+- **Full Classic Interaction Benchmark (Initial Implementation)**
+  - Synthetic placeholder execution pipeline (planning → execution → aggregation → effect sizes → precision loop)
+  - Adaptive sampling with CI half-width early stop targets (collision_rate, success_rate, placeholder snqi target)
+  - Plot artifacts (distribution, trajectory, KDE/Pareto/force heatmap placeholders) and annotated video generation (graceful fallback)
+  - CLI `scripts/classic_benchmark_full.py` exposing comprehensive flags (episodes, precision thresholds, videos)
+  - Manifest instrumentation for runtime, episodes_per_second, scaling_efficiency placeholder metrics
+  - Resume idempotency and performance smoke tests (T042, T044) plus failure injection test for videos (T043)
+  - Dedicated documentation page `docs/benchmark_full_classic.md`
+
   - **Episode Runner**: Parallel execution with manifest-based resume functionality
   - **CLI Interface**: 15 comprehensive subcommands covering full experiment workflow
     - `run` - Execute episodes with parallel workers

@@ -94,11 +94,11 @@
 - [X] T050 [P] Add unit test for Wilson interval correctness vs known values `tests/benchmark_full/test_unit_wilson.py`.
 - [X] T051 [P] Add unit test for bootstrap reproducibility (seeded) `tests/benchmark_full/test_unit_bootstrap_seed.py`.
 - [X] T052 [P] Add unit test for video selection logic `tests/benchmark_full/test_unit_video_selection.py`.
-- [ ] T053 Run Ruff + type check + pytest full suite; fix issues (commit). (Meta task) 
-- [ ] T054 Add validation script extension (optional) to include new benchmark in a validation shell script.
-- [ ] T055 Generate example benchmark run artifacts and add figure thumbnails to `docs/scenario_thumbnails.md` (if appropriate) or a new section.
-- [ ] T056 Final documentation review for reproducibility claims (ensure git hash & matrix hash captured) & update manifest fields if gaps.
-- [ ] T057 Create final smoke CI task integration note (if pipeline updated externally) placeholder.
+- [X] T053 Run Ruff + type check + pytest full suite; fix issues (commit). (Meta task) 
+- [X] T054 Add validation script extension (optional) to include new benchmark in a validation shell script.
+- [X] T055 Generate example benchmark run artifacts and add figure thumbnails to `docs/scenario_thumbnails.md` (if appropriate) or a new section.
+- [X] T056 Final documentation review for reproducibility claims (ensure git hash & matrix hash captured) & update manifest fields if gaps.
+- [X] T057 Create final smoke CI task integration note (if pipeline updated externally) placeholder.
 
 ## Dependencies & Ordering Summary
 - Setup (T001-T004) precedes tests.
@@ -125,12 +125,12 @@ T049 T050 T051 T052
 ```
 
 ## Validation Checklist
-- [ ] All contracts have corresponding test tasks (T005-T016 cover 13 functions).
-- [ ] All entities from data model represented by implementation tasks (BenchmarkConfig implicit in planning code; others via planning/aggregation/effects/precision/plots/videos modules).
-- [ ] Tests precede implementation tasks numerically.
-- [ ] [P] tasks do not share target file paths.
-- [ ] Resume, adaptive sampling, effect sizes, sufficiency, plotting, video requirements each mapped to tasks.
-- [ ] Documentation and changelog updates included.
+- [X] All contracts have corresponding test tasks (T005-T016 cover 13 functions).
+- [X] All entities from data model represented by implementation tasks (BenchmarkConfig implicit in planning code; others via planning/aggregation/effects/precision/plots/videos modules).
+- [X] Tests precede implementation tasks numerically.
+- [X] [P] tasks do not share target file paths.
+- [X] Resume, adaptive sampling, effect sizes, sufficiency, plotting, video requirements each mapped to tasks.
+- [X] Documentation and changelog updates included.
 
 ## Mapping to Functional Requirements (Traceability)
 | FR | Tasks |

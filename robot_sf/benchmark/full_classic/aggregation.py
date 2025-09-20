@@ -178,6 +178,12 @@ def _aggregate_single_metric(
     group_seed = hash((master_seed, arch, dens, metric_name)) & 0xFFFFFFFF
     rng = random.Random(group_seed)
     mean_ci, median_ci = _bootstrap_ci(sorted_vals, bootstrap_samples, conf, rng)
+    # Replace mean_ci for rate metrics with Wilson interval (T031) for better coverage when near bounds.
+    if metric_name in {"collision_rate", "success_rate"} and sorted_vals:
+        # Interpret values as Bernoulli outcomes; approximate p via mean.
+        p = m_mean
+        n = len(sorted_vals)
+        mean_ci = _wilson_interval(p, n, conf)
     return AggregateMetric(
         name=metric_name,
         mean=m_mean,
@@ -186,3 +192,95 @@ def _aggregate_single_metric(
         mean_ci=mean_ci,
         median_ci=median_ci,
     )
+
+
+def _wilson_interval(p: float, n: int, conf: float) -> tuple[float, float]:  # T031
+    """Wilson score interval for a Bernoulli proportion.
+
+    Parameters
+    ----------
+    p : float
+        Observed proportion (mean of Bernoulli samples).
+    n : int
+        Number of trials (episodes).
+    conf : float
+        Confidence level in (0,1), typically 0.95.
+
+    Returns
+    -------
+    (low, high) tuple clipped to [0,1]. For n<=0 returns (nan,nan).
+    """
+    if n <= 0 or not (0.0 <= p <= 1.0):  # defensive
+        return (math.nan, math.nan)
+    # Approximate z via inverse error function for standard normal quantile.
+    # For common confidence 0.95, z ≈ 1.959963984540054.
+    # To keep dependency-light, we precompute z from conf using a simple approximation if needed.
+    z = _z_from_conf(conf)
+    denom = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt((p * (1 - p) + z * z / (4 * n)) / n) / denom
+    low = max(0.0, center - half)
+    high = min(1.0, center + half)
+    return (low, high)
+
+
+def _z_from_conf(conf: float) -> float:
+    # Map a set of common confidence levels; fallback to 0.95 if unknown.
+    mapping = {
+        0.90: 1.6448536269514722,
+        0.95: 1.959963984540054,
+        0.975: 2.241402727604947,
+        0.99: 2.5758293035489004,
+    }
+    if conf in mapping:
+        return mapping[conf]
+    # Simple rational approximation for inverse normal CDF (Acklam) for two-tailed alpha.
+    # We implement minimal subset since tests will likely use standard 0.95.
+    alpha = 1 - conf
+    # Two-tailed so tail probability each side:
+    tail = alpha / 2
+    # Coefficients for approximation
+    a = [
+        -39.6968302866538,
+        220.946098424521,
+        -275.928510446969,
+        138.357751867269,
+        -30.6647980661472,
+        2.50662827745924,
+    ]
+    b = [
+        -54.4760987982241,
+        161.585836858041,
+        -155.698979859887,
+        66.8013118877197,
+        -13.2806815528857,
+    ]
+    c = [
+        -0.00778489400243029,
+        -0.322396458041136,
+        -2.40075827716184,
+        -2.54973253934373,
+        4.37466414146497,
+        2.93816398269878,
+    ]
+    d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742]
+    # Break-points
+    plow = 0.02425
+    phigh = 1 - plow
+    if tail < plow:
+        q = math.sqrt(-2 * math.log(tail))
+        num = ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
+        den = (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+        z = num / den
+    elif tail > phigh:
+        q = math.sqrt(-2 * math.log(1 - tail))
+        num = ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
+        den = (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
+        z = -num / den
+    else:
+        q = tail - 0.5
+        r = q * q
+        num = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
+        den = ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1
+        z = num / den
+    return abs(z)  # symmetric

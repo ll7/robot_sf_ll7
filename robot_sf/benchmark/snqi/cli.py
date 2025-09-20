@@ -8,10 +8,16 @@ This module provides command-line interfaces for SNQI weight management:
 
 import argparse
 import json
+import statistics
 import sys
 from pathlib import Path
+from typing import Dict, Iterable, List
 
-from robot_sf.benchmark.snqi.compute import compute_snqi_ablation, recompute_snqi_weights
+from robot_sf.benchmark.snqi.compute import (
+    WEIGHT_NAMES,
+    compute_snqi_ablation,
+    recompute_snqi_weights,
+)
 from robot_sf.benchmark.snqi.types import SNQIWeights
 
 
@@ -55,51 +61,142 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         return 1
 
 
+def _load_episodes_jsonl(path: Path) -> List[dict]:
+    episodes: List[dict] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                episodes.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue  # skip malformed
+    return episodes
+
+
+def _extract_metric_values(episodes: Iterable[dict], metric: str) -> List[float]:
+    vals = []
+    for ep in episodes:
+        metrics = ep.get("metrics", {})
+        v = metrics.get(metric)
+        if v is not None:
+            try:
+                vals.append(float(v))
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                continue
+    return vals
+
+
+def _compute_baseline_stats(episodes: List[dict]) -> Dict[str, Dict[str, float]]:
+    """Compute median & p95 for metrics required in SNQI normalization.
+
+    Metrics chosen align with those referenced in compute_snqi(): collisions, near_misses,
+    force_exceed_events, jerk_mean. Missing metrics default to med=0, p95=1 for neutral scaling.
+    """
+    metric_names = [
+        "collisions",
+        "near_misses",
+        "force_exceed_events",
+        "jerk_mean",
+    ]
+    stats: Dict[str, Dict[str, float]] = {}
+    for name in metric_names:
+        values = _extract_metric_values(episodes, name)
+        if not values:
+            stats[name] = {"med": 0.0, "p95": 1.0}
+            continue
+        values_sorted = sorted(values)
+        med = statistics.median(values_sorted)
+        # p95 index calculation
+        idx = min(len(values_sorted) - 1, max(0, int(round(0.95 * (len(values_sorted) - 1)))))
+        p95 = float(values_sorted[idx])
+        if abs(p95 - med) < 1e-12:  # ensure non-zero span for normalization downstream
+            p95 = med + 1.0
+        stats[name] = {"med": float(med), "p95": float(p95)}
+    return stats
+
+
 def cmd_ablation_analysis(args: argparse.Namespace) -> int:
-    """Implement SNQI ablation CLI command."""
+    """Implement SNQI ablation CLI command.
+
+    This implementation loads episodes from JSONL, derives baseline statistics on-the-fly
+    (unless future extension supplies an external stats file), and computes the impact on
+    mean SNQI when zeroing each component weight individually.
+    """
     try:
-        # Load episodes data
         episodes_path = Path(args.episodes)
         if not episodes_path.exists():
             print(f"ERROR: Episodes file not found: {episodes_path}", file=sys.stderr)
             return 1
 
-        # Load SNQI weights if provided
-        weights = None
+        episodes = _load_episodes_jsonl(episodes_path)
+        if not episodes:
+            print("ERROR: No valid episode records found (empty episodes file)", file=sys.stderr)
+            return 1
+
+        # Determine weights
+        weight_map: Dict[str, float]
         if args.weights:
             weights_path = Path(args.weights)
             if not weights_path.exists():
                 print(f"ERROR: Weights file not found: {weights_path}", file=sys.stderr)
                 return 1
-            weights = SNQIWeights.from_file(weights_path)
+            weight_obj = SNQIWeights.from_file(weights_path)
+            weight_map = dict(weight_obj.weights)
+        else:
+            # Fallback canonical defaults (mirrors compute.recompute_snqi_weights canonical branch)
+            weight_map = {
+                "w_success": 1.0,
+                "w_time": 0.8,
+                "w_collisions": 2.0,
+                "w_near": 1.0,
+                "w_comfort": 0.5,
+                "w_force_exceed": 1.5,
+                "w_jerk": 0.3,
+            }
 
-        # Perform ablation analysis
-        ablation_results = compute_snqi_ablation(
-            episodes_path=episodes_path, weights=weights, components=args.components, seed=args.seed
+        # Filter components if user provided subset
+        target_components = args.components if args.components else list(WEIGHT_NAMES)
+
+        baseline_stats = _compute_baseline_stats(episodes)
+
+        # Run ablation
+        impacts = compute_snqi_ablation(
+            episodes_data=episodes,
+            weights=weight_map,
+            baseline_stats=baseline_stats,
+            components=target_components,
         )
 
-        # Save ablation results
+        # Compose output structure (extensible for future ranking deltas)
+        result_payload = {
+            "impacts": impacts,
+            "baseline_stats": baseline_stats,
+            "weights_used": weight_map,
+            "components": target_components,
+            "episode_count": len(episodes),
+            "seed": args.seed,
+        }
+
         output_path = Path(args.summary_out)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with output_path.open("w") as f:
-            json.dump(ablation_results, f, indent=2)
+        with output_path.open("w", encoding="utf-8") as f:
+            json.dump(result_payload, f, indent=2, sort_keys=True)
 
         print("✅ SNQI ablation analysis completed")
-        print(f"🧪 Components analyzed: {len(args.components) if args.components else 'all'}")
-        print(f"🌱 Seed: {args.seed}")
+        print(f"🧪 Components analyzed: {len(target_components)}")
+        print(f"🌱 Seed (reserved): {args.seed}")
+        print(f"� Episodes: {episodes_path}")
         print(f"💾 Results saved to: {output_path}")
 
-        # Print ranking sensitivity summary
-        if "ranking_deltas" in ablation_results:
-            print("\\n📊 Ranking Impact Summary:")
-            for component, delta_info in ablation_results["ranking_deltas"].items():
-                avg_delta = delta_info.get("avg_rank_change", 0)
-                print(f"  {component}: {avg_delta:.2f} avg rank change")
+        print("\n📊 Component Impact Summary (mean SNQI drop when removed):")
+        for comp in target_components:
+            delta = impacts.get(comp, 0.0)
+            print(f"  {comp}: {delta:.4f}")
 
         return 0
-
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"ERROR: Failed to perform SNQI ablation analysis: {e}", file=sys.stderr)
         return 1
 

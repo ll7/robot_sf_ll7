@@ -6,13 +6,19 @@ T029 (full run orchestration skeleton).
 
 from __future__ import annotations
 
+import hashlib
+import json
+import random
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Set
 
 from loguru import logger
 
-from .io_utils import append_episode_record
+from .io_utils import append_episode_record, write_manifest
+from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
 
 
 def _episode_id_from_job(job) -> str:
@@ -35,9 +41,7 @@ def _scan_existing_episode_ids(path: Path) -> Set[str]:
                 line = line.strip()
                 if not line:
                     continue
-                # Lightweight JSON parse without importing json if possible? Simplicity first.
-                import json  # local import keeps module import surface minimal
-
+                # Lightweight JSON parse (json imported at module top level)
                 try:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
@@ -229,4 +233,81 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
 
 
 def run_full_benchmark(cfg):  # T029
-    raise NotImplementedError("Implemented in task T029")
+    """Execute the minimal end‑to‑end benchmark skeleton (planning → initial episodes).
+
+    Scope (T029 skeleton only):
+      - Resolve output directory structure under cfg.output_root.
+      - Load + plan scenarios, expand initial jobs.
+      - Create directories: episodes/, aggregates/, reports/, plots/ (empty placeholders for now).
+      - Execute initial episode jobs (respecting resume) and append to episodes.jsonl.
+      - Write manifest.json capturing config serialization + git/matrix hash placeholders.
+
+    Out of scope (future tasks): aggregation, effect sizes, precision/adaptive loop integration,
+    plots, videos, timing instrumentation. These will extend the manifest and add artifacts.
+    """
+
+    # --- Prepare output directories ---
+    root = Path(cfg.output_root)
+    episodes_dir = root / "episodes"
+    aggregates_dir = root / "aggregates"
+    reports_dir = root / "reports"
+    plots_dir = root / "plots"
+    for d in (episodes_dir, aggregates_dir, reports_dir, plots_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    episodes_path = episodes_dir / "episodes.jsonl"
+
+    # --- Planning phase ---
+    raw = load_scenario_matrix(cfg.scenario_matrix_path)
+    # Compute scenario matrix hash (stable canonical JSON dump)
+    matrix_bytes = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    scenario_matrix_hash = hashlib.sha1(matrix_bytes).hexdigest()[:12]
+    rng = random.Random(int(getattr(cfg, "master_seed", 123)))
+    scenarios = plan_scenarios(raw, cfg, rng=rng)
+    jobs = expand_episode_jobs(scenarios, cfg)
+
+    # --- Manifest structure (lightweight dataclass for serialization) ---
+    @dataclass
+    class BenchmarkManifest:  # noqa: D401 - simple container
+        output_root: Path
+        git_hash: str
+        scenario_matrix_hash: str
+        config: object
+        episodes_path: str
+        created_at: float = field(default_factory=time.time)
+        executed_jobs: int = 0
+        skipped_jobs: int = 0
+        notes: str = "skeleton_t029"
+
+    # Attempt to derive git hash (best effort, fallback to unknown)
+    git_hash = "unknown"
+    try:  # pragma: no cover - ephemeral environment differences
+        head_ref = root / ".git" / "HEAD"
+        if head_ref.exists():
+            content = head_ref.read_text(encoding="utf-8").strip()
+            if content.startswith("ref:"):
+                ref_path = content.split(" ", 1)[1].strip()
+                ref_file = root / ".git" / ref_path
+                if ref_file.exists():
+                    git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
+            else:
+                git_hash = content[:12]
+    except Exception:  # noqa: BLE001
+        pass
+
+    manifest = BenchmarkManifest(
+        output_root=root,
+        git_hash=git_hash,
+        scenario_matrix_hash=scenario_matrix_hash,
+        config=cfg,
+        episodes_path=str(episodes_path),
+    )
+
+    # --- Execute initial jobs ---
+    list(run_episode_jobs(jobs, cfg, manifest))  # materialize generator for side effects
+
+    # --- Write manifest (atomic) ---
+    manifest_path = root / "manifest.json"
+    write_manifest(manifest, str(manifest_path))
+
+    return manifest

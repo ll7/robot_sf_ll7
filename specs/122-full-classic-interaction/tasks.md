@@ -51,10 +51,10 @@
 
 ## Phase 3.3: Core Implementation (Only After Above Tests Added)
 ### Data & Planning Layer
-- [ ] T022 Implement `load_scenario_matrix` in `planning.py` (YAML load + validation, hashing) & make test pass.
-- [ ] T023 Implement `plan_scenarios` & `ScenarioDescriptor` construction (seed planning, hash_fragment) in `planning.py`.
-- [ ] T024 Implement `expand_episode_jobs` in `planning.py`.
-- [ ] T025 Implement `io_utils.append_episode_record` & `io_utils.write_manifest` with atomic write.
+- [X] T022 Implement `load_scenario_matrix` in `planning.py` (YAML load + validation, hashing) & make test pass.
+- [X] T023 Implement `plan_scenarios` & `ScenarioDescriptor` construction (seed planning, hash_fragment) in `planning.py`.
+- [X] T024 Implement `expand_episode_jobs` in `planning.py`.
+- [X] T025 Implement `io_utils.append_episode_record` & `io_utils.write_manifest` with atomic write.
 
 ### Orchestrator & Execution
 - [X] T026 Implement basic `run_episode_jobs` in `orchestrator.py` (sequential first) with resume scan logic.

@@ -58,6 +58,7 @@
 - [Quick reference and TL;DR checklist](#quick-reference-and-tldr-checklist)
   - [Quick reference commands](#quick-reference-commands)
   - [TL;DR workflow checklist](#tldr-workflow-checklist)
+  - [Per-Test Performance Budget](#per-test-performance-budget)
 
 ## Setup
 
@@ -653,3 +654,46 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests
 6) Update docs/diagrams; run “Generate UML” if classes changed
 7) Open PR with summary, risks, and links to docs/tests
+
+### Per-Test Performance Budget
+
+To prevent regression of integration test runtime, a performance budget policy is enforced for all tests:
+
+Policy defaults (feature 124):
+- Soft threshold: < 20s (advisory – prints guidance when exceeded)
+- Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` or signal alarms inside long-running integration tests)
+- Report count: Top 10 slowest tests printed at session end
+- Relax mode: Set `ROBOT_SF_PERF_RELAX=1` to suppress soft breach warnings (use sparingly; still prints report)
+- Enforce mode: Set `ROBOT_SF_PERF_ENFORCE=1` to escalate any soft breach to a test session failure
+
+Implementation components (all under `tests/perf_utils/`):
+- `policy.py` – `PerformanceBudgetPolicy` dataclass providing `classify(duration)-> none|soft|hard`
+- `reporting.py` – aggregation and formatted slow test report
+- `guidance.py` – deterministic heuristic suggestions (reduce episodes, horizon, matrix size, etc.)
+- `minimal_matrix.py` – single-source helper for minimal benchmark scenario matrix (used by resume & reproducibility tests)
+
+Collector flow:
+1. Each test call duration captured via a timing hook in `tests/conftest.py`.
+2. At terminal summary the top-N slow tests are ranked and printed with breach classification & guidance lines.
+3. If `ROBOT_SF_PERF_ENFORCE=1` (and relax not set) any soft breach converts the run to a failure (exit code changed).
+
+Guidance examples:
+- Soft breach near 25s: "Reduce episode count / seeds", "Use minimal scenario matrix helper"
+- Very long (>40s) test: horizon + matrix recommendations prioritized
+
+Authoring guidance for new tests:
+- Keep semantic assertions; minimize episodes (`max_episodes=2`), horizon, seed list
+- Reuse `write_minimal_matrix` instead of duplicating inline YAML
+- Assert absence of heavy artifacts (videos) where not required
+
+Performance troubleshooting checklist:
+1. Confirm `smoke=True` or minimal workload flags applied
+2. Reduce `max_episodes`, `initial_episodes`, `batch_size`
+3. Disable bootstrap sampling (`bootstrap_samples=0`)
+4. Lower `horizon_override`
+5. Ensure `workers=1` for deterministic ordering in timing-sensitive tests
+
+When relaxing:
+Use `ROBOT_SF_PERF_RELAX=1` temporarily only for known CI variance; file a follow-up issue if sustained.
+
+Hard timeout breaches should be rare; investigate infinite loops or large scenario expansions if encountered.

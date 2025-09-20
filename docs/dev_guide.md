@@ -445,7 +445,8 @@ Success criteria:
       - `ROBOT_SF_PERF_CREATION_HARD` (default 8.0)
       - `ROBOT_SF_PERF_RESET_SOFT` (default 0.50 resets/sec)
       - `ROBOT_SF_PERF_RESET_HARD` (default 0.20 resets/sec)
-      - `ROBOT_SF_PERF_ENFORCE=1` to fail on soft breaches (use locally for strict tuning).
+  - `ROBOT_SF_PERF_ENFORCE=1` to fail on soft (and hard) breaches (use locally for strict tuning).
+  - (Advanced) `ROBOT_SF_PERF_SOFT` / `ROBOT_SF_PERF_HARD` may be set to numeric seconds to temporarily override thresholds (intended only for internal testing of enforcement logic; not part of the stable public interface).
     - Hard threshold breaches always FAIL.
 
 ### Performance benchmarking (optional)
@@ -664,7 +665,7 @@ Policy defaults (feature 124):
 - Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` or signal alarms inside long-running integration tests)
 - Report count: Top 10 slowest tests printed at session end
 - Relax mode: Set `ROBOT_SF_PERF_RELAX=1` to suppress soft breach warnings (use sparingly; still prints report)
-- Enforce mode: Set `ROBOT_SF_PERF_ENFORCE=1` to escalate any soft breach to a test session failure
+- Enforce mode: Set `ROBOT_SF_PERF_ENFORCE=1` to escalate any soft or hard breach to a test session failure
 
 Implementation components (all under `tests/perf_utils/`):
 - `policy.py` – `PerformanceBudgetPolicy` dataclass providing `classify(duration)-> none|soft|hard`
@@ -675,7 +676,7 @@ Implementation components (all under `tests/perf_utils/`):
 Collector flow:
 1. Each test call duration captured via a timing hook in `tests/conftest.py`.
 2. At terminal summary the top-N slow tests are ranked and printed with breach classification & guidance lines.
-3. If `ROBOT_SF_PERF_ENFORCE=1` (and relax not set) any soft breach converts the run to a failure (exit code changed).
+3. If `ROBOT_SF_PERF_ENFORCE=1` (and relax not set) any soft or hard breach converts the run to a failure (exit code changed). Optional internal overrides: set `ROBOT_SF_PERF_SOFT` / `ROBOT_SF_PERF_HARD` for targeted enforcement tests.
 
 Guidance examples:
 - Soft breach near 25s: "Reduce episode count / seeds", "Use minimal scenario matrix helper"

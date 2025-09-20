@@ -245,6 +245,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 ## 📖 Documentation Highlights
 
 ### 🆕 Latest Updates
+**Benchmark Visual Artifacts (Plots + Videos Manifests)**: The Full Classic Interaction Benchmark now emits deterministic plot PDFs and representative (synthetic placeholder, SimulationView-ready) episode video artifacts with machine-readable manifests (`plot_artifacts.json`, `video_artifacts.json`, `performance_visuals.json`). See feature quickstart: `specs/126-title-integrate-plots/quickstart.md`.
 - **Environment Refactoring Complete**: New unified architecture deployed
 - **Migration Tools Available**: Automated migration script for updating code
 - **Factory Pattern**: Clean, consistent environment creation interface

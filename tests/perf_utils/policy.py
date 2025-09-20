@@ -30,6 +30,20 @@ class PerformanceBudgetPolicy:
     relax_env_var: str = "ROBOT_SF_PERF_RELAX"
     enforce_env_var: str = "ROBOT_SF_PERF_ENFORCE"
 
+    def __post_init__(self) -> None:  # lightweight construction validation
+        """Validate configuration invariants.
+
+        Raises:
+            ValueError: If soft/hard thresholds have invalid ordering or report_count < 1.
+        """
+        if not (
+            self.soft_threshold_seconds > 0
+            and self.soft_threshold_seconds < self.hard_timeout_seconds
+        ):
+            raise ValueError("soft_threshold_seconds must be > 0 and < hard_timeout_seconds")
+        if self.report_count < 1:
+            raise ValueError("report_count must be >= 1")
+
     def classify(self, duration_seconds: float) -> BreachType:
         """Classify a test duration.
 

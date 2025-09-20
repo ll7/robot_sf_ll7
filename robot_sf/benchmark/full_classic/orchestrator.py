@@ -363,7 +363,8 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     scenarios_list = list(scenarios)
     max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
 
-    # Adaptive loop
+    # Adaptive loop (iteration guard for smoke / tiny budgets)
+    iteration_count = 0
     while True:
         groups = aggregate_metrics(all_records, cfg)
         effects = compute_effect_sizes(groups, cfg)
@@ -395,6 +396,12 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
             break
         new_records = list(run_episode_jobs(new_jobs, cfg, manifest))
         all_records.extend(new_records)
+        iteration_count += 1
+        # Safety: In smoke mode with very small episode budgets we break after first iteration
+        # to prevent runaway loops in early scaffolding stages.
+        if getattr(cfg, "smoke", False) and max_episodes <= 2 and iteration_count >= 1:
+            logger.info("Early exit guard (smoke small-budget) triggered after first iteration")
+            break
 
     # Finalize & persist manifest
     _update_scaling_efficiency(manifest, cfg)

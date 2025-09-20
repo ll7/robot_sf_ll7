@@ -57,7 +57,7 @@
 - [ ] T025 Implement `io_utils.append_episode_record` & `io_utils.write_manifest` with atomic write.
 
 ### Orchestrator & Execution
-- [ ] T026 Implement basic `run_episode_jobs` in `orchestrator.py` (sequential first) with resume scan logic.
+- [X] T026 Implement basic `run_episode_jobs` in `orchestrator.py` (sequential first) with resume scan logic.
 - [ ] T027 Add parallel workers support (process pool) and update manifest counts in `orchestrator.py`.
 - [ ] T028 Implement `adaptive_sampling_iteration` logic (threshold evaluation stub calling precision evaluator later) in `orchestrator.py`.
 - [ ] T029 Implement `run_full_benchmark` orchestration skeleton integrating planning → execution → aggregation placeholders.

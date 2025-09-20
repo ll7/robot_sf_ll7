@@ -103,6 +103,13 @@ Episodes are added via `adaptive_sampling_iteration` in batches (default 1) unti
 ## Scaling & Efficiency
 Current efficiency metric is a placeholder (episodes_per_second / (workers * episodes_per_second)) and will be replaced with a more meaningful comparison vs. sequential baseline timing in a future optimization task.
 
+## Reproducibility Guarantees
+Determinism hinges on two persisted identifiers:
+- `git_hash`: Short commit hash captured at run start for exact code provenance.
+- `scenario_matrix_hash`: SHA1 (first 12 chars) of a canonical JSON dump of the scenario matrix file.
+
+If these two values plus `master_seed` and the scenario matrix file content are the same, the benchmark will produce identical episode IDs and (with the current synthetic metrics path) identical aggregates/effect sizes. The manifest stores all three, enabling downstream verification scripts to compare runs. Future extensions integrating real simulations must retain these fields to preserve this guarantee.
+
 ## Plots & Videos
 - Plots always created (placeholders if data limited) unless matplotlib missing.
 - Videos require matplotlib + moviepy; gracefully skipped otherwise. Smoke mode always skips.
@@ -122,6 +129,24 @@ Current efficiency metric is a placeholder (episodes_per_second / (workers * epi
 - `specs/122-full-classic-interaction/quickstart.md`
 - `specs/122-full-classic-interaction/data-model.md`
 
+## CI Integration (Planned)
+A lightweight smoke validation (`scripts/validation/test_classic_benchmark_full.sh`) can be integrated into CI as a separate job or appended to an existing validation stage:
+```yaml
+  classic-benchmark-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install deps
+        run: uv sync
+      - name: Run classic benchmark smoke
+        run: ./scripts/validation/test_classic_benchmark_full.sh
+```
+This job should finish in a few seconds (synthetic metrics path). Future real simulation integration may require marking it optional or adding a time budget.
+
 ## Validation
 Run the performance smoke test:
 ```bash
@@ -131,6 +156,30 @@ uv run pytest tests/benchmark_full/test_integration_performance_smoke.py::test_p
 Run the resume test:
 ```bash
 uv run pytest tests/benchmark_full/test_integration_resume.py::test_resume_skips_existing -q
+```
+
+Validation shell smoke (added T054):
+```bash
+./scripts/validation/test_classic_benchmark_full.sh
+```
+
+Example artifact tree (smoke run):
+```
+full_classic_smoke/
+  episodes/
+    episodes.jsonl
+  aggregates/
+    summary.json
+  reports/
+    effect_sizes.json
+    statistical_sufficiency.json
+  plots/
+    distribution.pdf
+    trajectory.pdf
+    kde_placeholder.pdf
+    pareto_placeholder.pdf
+    force_heatmap_placeholder.pdf
+  manifest.json
 ```
 
 ## Changelog

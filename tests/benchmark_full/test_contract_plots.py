@@ -54,9 +54,9 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     # Each artifact expected to contain minimally these keys/attributes
     for art in artifacts:
         # Accept both dict (future) or simple object with attributes
-        kind = getattr(art, "kind", None) or art.get("kind") if isinstance(art, dict) else None
-        status = (
-            getattr(art, "status", None) or art.get("status") if isinstance(art, dict) else None
+        kind = getattr(art, "kind", None) or (art.get("kind") if isinstance(art, dict) else None)
+        status = getattr(art, "status", None) or (
+            art.get("status") if isinstance(art, dict) else None
         )
-        assert kind in {"distribution", "trajectory"}
+        assert kind in {"distribution", "trajectory", "kde", "pareto", "force_heatmap"}
         assert status in {"generated", "skipped"}

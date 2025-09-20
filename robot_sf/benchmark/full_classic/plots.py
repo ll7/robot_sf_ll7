@@ -87,12 +87,55 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     return _PlotArtifact("trajectory", str(pdf_path), "skipped")
 
 
-def generate_plots(groups, records, out_dir, cfg):  # T035 basic implementation
-    """Generate a minimal set of plots (distribution + trajectory) in smoke mode.
+def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
+    pdf_path = out_dir / "kde_placeholder.pdf"
+    if plt is None:
+        return _PlotArtifact("kde", str(pdf_path), "skipped", note="matplotlib missing")
+    # Placeholder text figure; real implementation would compute spatial density KDE
+    generated = _write_placeholder_text(
+        pdf_path,
+        "KDE Spatial Density (placeholder)",
+        ["Not yet implemented: spatial sampling"],
+    )
+    return _PlotArtifact("kde", str(pdf_path), "generated" if generated else "skipped")
 
-    This satisfies contract test T012 (post-update). Extended plots (KDE, Pareto,
-    force heatmap) will be added in T036. Returns list of artifact objects with
-    kind/status fields. Gracefully skips when matplotlib not available.
+
+def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
+    pdf_path = out_dir / "pareto_placeholder.pdf"
+    if plt is None:
+        return _PlotArtifact("pareto", str(pdf_path), "skipped", note="matplotlib missing")
+    lines = ["Pareto Frontier (placeholder)"]
+    for g in groups:
+        suc = g.metrics.get("success_rate")
+        col = g.metrics.get("collision_rate")
+        if suc and col:
+            lines.append(f"{g.archetype}/{g.density}: S={suc.mean:.2f} C={col.mean:.2f}")
+    generated = _write_placeholder_text(pdf_path, "Pareto", lines)
+    return _PlotArtifact("pareto", str(pdf_path), "generated" if generated else "skipped")
+
+
+def _force_heatmap_placeholder(out_dir: Path) -> _PlotArtifact:
+    pdf_path = out_dir / "force_heatmap_placeholder.pdf"
+    if plt is None:
+        return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="matplotlib missing")
+    generated = _write_placeholder_text(
+        pdf_path,
+        "Force Interaction Heatmap (placeholder)",
+        ["No force data provided; skipped"],
+    )
+    return _PlotArtifact(
+        "force_heatmap", str(pdf_path), "generated" if generated else "skipped", note="placeholder"
+    )
+
+
+def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended placeholders
+    """Generate plots returning artifact metadata list.
+
+    Includes:
+      - Distribution & trajectory (implemented minimal versions)
+      - KDE, Pareto, force heatmap placeholders (T036) always produced as placeholder PDFs
+        unless matplotlib missing (then skipped).
+    In smoke mode all artifacts are still generated as lightweight placeholders.
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -100,5 +143,8 @@ def generate_plots(groups, records, out_dir, cfg):  # T035 basic implementation
     artifacts: List[_PlotArtifact] = []
     artifacts.append(_distribution_plot(groups, out_path))
     artifacts.append(_trajectory_plot(records, out_path))
+    artifacts.append(_kde_plot_placeholder(groups, out_path))
+    artifacts.append(_pareto_plot_placeholder(groups, out_path))
+    artifacts.append(_force_heatmap_placeholder(out_path))
 
     return artifacts

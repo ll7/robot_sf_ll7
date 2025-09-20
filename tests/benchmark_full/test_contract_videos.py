@@ -3,12 +3,10 @@
 Expectation (final):
   - In smoke mode or when ffmpeg missing, videos are skipped gracefully and artifacts list records status.
 
-Current state: NotImplementedError expected.
+Implements T037 basic stub: should return a list of artifacts with status 'skipped' in smoke mode.
 """
 
 from __future__ import annotations
-
-import pytest
 
 from robot_sf.benchmark.full_classic.videos import generate_videos
 
@@ -26,5 +24,10 @@ def test_generate_videos_smoke_skip(temp_results_dir, synthetic_episode_record):
         smoke = True
         output_root = str(temp_results_dir)
 
-    with pytest.raises(NotImplementedError):  # until T037
-        generate_videos(records, str(temp_results_dir / "videos"), _Cfg())
+    artifacts = generate_videos(records, str(temp_results_dir / "videos"), _Cfg())
+    assert len(artifacts) == 1
+    a = artifacts[0]
+    assert a.status == "skipped"
+    assert a.scenario_id == "scenario_a"
+    assert a.episode_id == "ep1"
+    assert a.path_mp4.endswith(".mp4")

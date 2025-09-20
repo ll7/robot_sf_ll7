@@ -1,8 +1,8 @@
 
-# Implementation Plan: Integrate Plots & Videos into Full Classic Benchmark
+# Implementation Plan: [FEATURE]
 
-**Branch**: `126-title-integrate-plots` | **Date**: 2025-09-20 | **Spec**: `specs/126-title-integrate-plots/spec.md`
-**Input**: Feature specification from `specs/126-title-integrate-plots/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -31,28 +31,23 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-Add post-run visual artifact generation (placeholder PDF plots + representative MP4 videos) to the full classic benchmark orchestrator. Artifacts produced once after adaptive sampling completes; videos respect existing `disable_videos`, `max_videos`, `smoke` flags. Missing optional dependencies (matplotlib, moviepy) degrade gracefully with skipped manifest entries. No changes to existing metrics or episode schemas.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
-**Language/Version**: Python 3.11 (project `pyproject.toml` indicates modern Python)  
-**Primary Dependencies**: Core project modules; optional: matplotlib, moviepy (ffmpeg)  
-**Storage**: File-based outputs (JSONL, JSON, PDF, MP4)  
-**Testing**: pytest suites (add unit & integration tests for artifact manifests)  
-**Target Platform**: Headless-capable Linux/macOS CI + local dev  
-**Project Type**: Single Python research/benchmark library  
-**Performance Goals**: Visual generation overhead: plots < 2s, videos (1 default) < 5s soft targets  
-**Constraints**: Must not break existing benchmark outputs; must not require display; deterministic ordering  
-**Scale/Scope**: Tens to hundreds of episodes per run; small number (<=5) representative videos by default
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [single/web/mobile - determines source structure]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
-Alignment with Constitution principles:
-- Principle I (Reproducibility): Deterministic episode selection & filenames ✔️
-- Principle III (Benchmark & Metrics First): Adds non-invasive artifacts; does not alter metrics ✔️
-- Principle VI (Transparency): Skip reasons recorded ✔️
-- Principle VII (Backward Compatibility): No schema changes to existing outputs ✔️
-- Principle VIII (Documentation as API): Quickstart & spec entries added ✔️
-Potential Concern: Performance targets (soft) – documented, not enforced; acceptable.
-Initial Check: PASS
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+[Gates determined based on constitution file]
 
 ## Project Structure
 
@@ -104,7 +99,7 @@ ios/ or android/
 └── [platform-specific structure]
 ```
 
-**Structure Decision**: Option 1 (single project) – unchanged.
+**Structure Decision**: [DEFAULT to Option 1 unless Technical Context indicates web/mobile app]
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
@@ -125,7 +120,7 @@ ios/ or android/
    - Rationale: [why chosen]
    - Alternatives considered: [what else evaluated]
 
-**Output**: `research.md` completed (no remaining clarifications)
+**Output**: research.md with all NEEDS CLARIFICATION resolved
 
 ## Phase 1: Design & Contracts
 *Prerequisites: research.md complete*
@@ -157,7 +152,7 @@ ios/ or android/
    - Keep under 150 lines for token efficiency
    - Output to repository root
 
-**Output**: `data-model.md`, `contracts/plot_artifact.schema.json`, `contracts/video_artifact.schema.json`, `quickstart.md` (tests to be added during implementation phase)
+**Output**: data-model.md, /contracts/*, failing tests, quickstart.md, agent-specific file
 
 ## Phase 2: Task Planning Approach
 *This section describes what the /tasks command will do - DO NOT execute during /plan*
@@ -199,18 +194,18 @@ ios/ or android/
 *This checklist is updated during execution flow*
 
 **Phase Status**:
-- [x] Phase 0: Research complete (/plan command)
-- [x] Phase 1: Design complete (/plan command)
-- [x] Phase 2: Task planning approach documented (tasks not yet generated)
+- [ ] Phase 0: Research complete (/plan command)
+- [ ] Phase 1: Design complete (/plan command)
+- [ ] Phase 2: Task planning complete (/plan command - describe approach only)
 - [ ] Phase 3: Tasks generated (/tasks command)
 - [ ] Phase 4: Implementation complete
 - [ ] Phase 5: Validation passed
 
 **Gate Status**:
-- [x] Initial Constitution Check: PASS
-- [x] Post-Design Constitution Check: PASS
-- [x] All NEEDS CLARIFICATION resolved
-- [ ] Complexity deviations documented (none needed)
+- [ ] Initial Constitution Check: PASS
+- [ ] Post-Design Constitution Check: PASS
+- [ ] All NEEDS CLARIFICATION resolved
+- [ ] Complexity deviations documented
 
 ---
 *Based on Constitution v2.1.1 - See `/memory/constitution.md`*

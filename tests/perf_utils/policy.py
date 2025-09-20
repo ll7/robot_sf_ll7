@@ -21,12 +21,14 @@ class PerformanceBudgetPolicy:
         hard_timeout_seconds: Hard fail threshold (>= leads to timeout/failure logic elsewhere).
         report_count: Number of slow tests to surface in a report.
         relax_env_var: Environment variable name that, if set ("1"), relaxes soft enforcement.
+        enforce_env_var: Environment variable name that, if set ("1"), escalates soft breaches to failures.
     """
 
     soft_threshold_seconds: float = 20.0
     hard_timeout_seconds: float = 60.0
     report_count: int = 10
     relax_env_var: str = "ROBOT_SF_PERF_RELAX"
+    enforce_env_var: str = "ROBOT_SF_PERF_ENFORCE"
 
     def classify(self, duration_seconds: float) -> BreachType:
         """Classify a test duration.

@@ -17,8 +17,11 @@ from typing import Any, Dict, Iterable, Iterator, List, Set
 
 from loguru import logger
 
+from .aggregation import aggregate_metrics
+from .effects import compute_effect_sizes
 from .io_utils import append_episode_record, write_manifest
 from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
+from .precision import evaluate_precision
 
 
 def _episode_id_from_job(job) -> str:
@@ -232,18 +235,22 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     return done_flag, jobs
 
 
-def run_full_benchmark(cfg):  # T029
-    """Execute the minimal end‑to‑end benchmark skeleton (planning → initial episodes).
+def run_full_benchmark(cfg):  # T029 + T034 integration
+    """Execute benchmark run with adaptive precision loop (extended in T034).
 
-    Scope (T029 skeleton only):
-      - Resolve output directory structure under cfg.output_root.
-      - Load + plan scenarios, expand initial jobs.
-      - Create directories: episodes/, aggregates/, reports/, plots/ (empty placeholders for now).
-      - Execute initial episode jobs (respecting resume) and append to episodes.jsonl.
-      - Write manifest.json capturing config serialization + git/matrix hash placeholders.
+    Steps now included:
+        1. Directory + manifest initialization (legacy T029 scope).
+        2. Initial planning and episode execution.
+        3. Adaptive sampling loop:
+             - Aggregate metrics
+             - Compute effect sizes
+             - Evaluate precision
+             - If precision criteria met (report.final_pass) OR max episodes reached → stop
+                 else schedule additional jobs via adaptive_sampling_iteration.
+        4. Persist artifact JSON files: aggregates/summary.json, reports/effect_sizes.json,
+             reports/statistical_sufficiency.json each iteration (overwrite for latest state).
 
-    Out of scope (future tasks): aggregation, effect sizes, precision/adaptive loop integration,
-    plots, videos, timing instrumentation. These will extend the manifest and add artifacts.
+    Future (not yet): plots, videos, scaling efficiency timing.
     """
 
     # --- Prepare output directories ---
@@ -304,10 +311,128 @@ def run_full_benchmark(cfg):  # T029
     )
 
     # --- Execute initial jobs ---
-    list(run_episode_jobs(jobs, cfg, manifest))  # materialize generator for side effects
+    episode_records = list(run_episode_jobs(jobs, cfg, manifest))
+
+    # Adaptive precision loop (T034)
+    all_records = list(episode_records)
+    scenarios_list = list(scenarios)
+    max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
+    done = False
+    iteration = 0
+    while not done:
+        iteration += 1
+        groups = aggregate_metrics(all_records, cfg)
+        effects = compute_effect_sizes(groups, cfg)
+        precision_report = evaluate_precision(groups, cfg)
+
+        # Write/update artifacts each iteration
+        _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
+        _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
+        _write_json(
+            root / "reports" / "statistical_sufficiency.json",
+            _serialize_precision(precision_report),
+        )
+
+        if precision_report.final_pass:
+            logger.info("Precision criteria met; stopping after iteration {}", iteration)
+            break
+        # Check if we've hit max episodes already
+        if max_episodes and sum(g.count for g in groups) >= max_episodes * len(scenarios_list):
+            logger.info("Reached max episodes; stopping adaptive loop")
+            break
+
+        # Request additional jobs
+        done_flag, new_jobs = adaptive_sampling_iteration(
+            all_records, cfg, scenarios_list, manifest
+        )
+        if not new_jobs:
+            done = done_flag or True
+            break
+        new_records = list(run_episode_jobs(new_jobs, cfg, manifest))
+        all_records.extend(new_records)
+        # Continue loop
 
     # --- Write manifest (atomic) ---
     manifest_path = root / "manifest.json"
     write_manifest(manifest, str(manifest_path))
 
     return manifest
+
+
+def _write_json(path: Path, obj):  # helper
+    try:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, sort_keys=True)
+        tmp.replace(path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed writing JSON artifact {}: {}", path, exc)
+
+
+def _serialize_groups(groups):
+    out = []
+    for g in groups:
+        out.append(
+            {
+                "archetype": g.archetype,
+                "density": g.density,
+                "count": g.count,
+                "metrics": {
+                    k: {
+                        "mean": m.mean,
+                        "median": m.median,
+                        "p95": m.p95,
+                        "mean_ci": m.mean_ci,
+                        "median_ci": m.median_ci,
+                    }
+                    for k, m in g.metrics.items()
+                },
+            }
+        )
+    return out
+
+
+def _serialize_effects(effects):
+    out = []
+    for rep in effects:
+        out.append(
+            {
+                "archetype": rep.archetype,
+                "comparisons": [
+                    {
+                        "metric": c.metric,
+                        "density_low": c.density_low,
+                        "density_high": c.density_high,
+                        "diff": c.diff,
+                        "standardized": c.standardized,
+                    }
+                    for c in rep.comparisons
+                ],
+            }
+        )
+    return out
+
+
+def _serialize_precision(report):
+    return {
+        "final_pass": report.final_pass,
+        "evaluations": [
+            {
+                "scenario_id": ev.scenario_id,
+                "archetype": ev.archetype,
+                "density": ev.density,
+                "episodes": ev.episodes,
+                "all_pass": ev.all_pass,
+                "metric_status": [
+                    {
+                        "metric": ms.metric,
+                        "half_width": ms.half_width,
+                        "target": ms.target,
+                        "passed": ms.passed,
+                    }
+                    for ms in ev.metric_status
+                ],
+            }
+            for ev in report.evaluations
+        ],
+    }

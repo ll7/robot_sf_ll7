@@ -39,7 +39,7 @@ A researcher runs the full classic benchmark and expects high‑fidelity represe
 - **FR-009**: System MUST enforce performance measurement and include timing + soft budget boolean flags in `performance_visuals.json`.
 - **FR-010**: System MUST keep plot generation total wall time < 2 seconds for default matrix scale (soft budget; breach only flagged, not failing run).
 - **FR-011**: System MUST keep a single SimulationView video wall time < 5 seconds under default conditions (soft budget; breach flagged).
-- **FR-012**: System MUST stream frame encoding (not accumulate all frames in memory) for SimulationView videos when possible. [NEEDS CLARIFICATION: acceptable peak memory target?]
+- **FR-012**: System MUST stream frame encoding (not accumulate all frames in memory) for SimulationView videos when possible, with a soft peak resident memory target < 100 MB per concurrent video encode (flag breach in logs, do not fail run).
 - **FR-013**: System MUST expose distinct skip notes for each degradation case (smoke-mode, disabled, simulation-view-missing, moviepy-missing, insufficient-replay-state).
 - **FR-014**: System MUST ensure reproducible filenames (`video_<episode_id>.mp4`).
 - **FR-015**: System MUST include at least one test asserting renderer == "simulation_view" in success path.
@@ -64,7 +64,7 @@ A researcher runs the full classic benchmark and expects high‑fidelity represe
 - [x] All mandatory sections completed
 
 ### Requirement Completeness
-- [ ] No [NEEDS CLARIFICATION] markers remain (FR-012 needs resolution)
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous (except performance nuance marked)
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded (visual artifact enhancement only)

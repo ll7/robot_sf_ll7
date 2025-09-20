@@ -15,8 +15,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
-
 from robot_sf.benchmark.full_classic.orchestrator import run_episode_jobs
 
 
@@ -63,5 +61,13 @@ def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record):
     cfg.algo = "ppo"
 
     jobs = [existing_job, new_job]
-    with pytest.raises(NotImplementedError):  # until T026
-        list(run_episode_jobs(jobs, cfg, manifest))
+    # Execute run_episode_jobs; should skip existing (seed=1) and yield only new (seed=2)
+    new_records = list(run_episode_jobs(jobs, cfg, manifest))
+    assert len(new_records) == 1
+    rec = new_records[0]
+    assert rec["seed"] == 2
+    assert rec["scenario_id"] == new_job.scenario_id
+    # File should now contain 2 lines (existing + new)
+    with episodes_file.open("r", encoding="utf-8") as f:
+        lines = [ln for ln in f.read().splitlines() if ln.strip()]
+    assert len(lines) == 2, "Episodes file should contain both existing and newly appended record"

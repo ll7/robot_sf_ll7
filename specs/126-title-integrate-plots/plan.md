@@ -1,8 +1,8 @@
 
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Integrate Plots & Videos into Full Classic Benchmark
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Branch**: `126-title-integrate-plots` | **Date**: 2025-09-20 | **Spec**: `specs/126-title-integrate-plots/spec.md`
+**Input**: Feature specification from `specs/126-title-integrate-plots/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -31,23 +31,35 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-[Extract from feature spec: primary requirement + technical approach from research]
+Wire existing placeholder plot & video generation into the Full Classic Benchmark orchestrator so that after the adaptive benchmark loop finishes a single post-processing pass produces (a) deterministic lightweight plots under `plots/` and (b) representative episode videos under `videos/` accompanied by machine-readable manifests (`plot_artifacts.json`, `video_artifacts.json`). Primary renderer for videos is the existing headless-capable PyGame `SimulationView` replaying recorded episode state; fallback is the current synthetic path renderer when `SimulationView` cannot initialize or replay state. No changes to existing episode or aggregate JSON schemas; optional dependencies (matplotlib, moviepy/ffmpeg, pygame) degrade gracefully via skipped artifact entries. Performance soft budgets: plots < 2s, one default video < 5s (documented if exceeded, not failing run). Deterministic selection: first N completed episodes (respect `max_videos`).
 
 ## Technical Context
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11 (repo standard)  
+**Primary Dependencies**: Core repo (robot_sf), optional: matplotlib (plots), pygame (`SimulationView`), moviepy + ffmpeg (mp4 encoding; fallback synthetic writer already present).  
+**Storage**: File system outputs (JSONL episodes, JSON summaries, PDFs, MP4s).  
+**Testing**: pytest (unit + integration); add new tests under `tests/benchmark_full_classic/` or reuse existing structure; headless video tests require dummy SDL vars.  
+**Target Platform**: Headless CI (Linux/macOS) + local dev.  
+**Project Type**: Single library/research benchmark repository (Option 1 structure).  
+**Performance Goals**: Additional overhead: plots < 2s total, one video < 5s (soft), deterministic selection; zero impact on adaptive convergence logic.  
+**Constraints**: Must not break benchmark resume semantics; no new CLI flags unless later justified; no schema changes to existing JSON files; graceful skip on missing optional deps; reproducible outputs (stable filenames).  
+**Scale/Scope**: Typical benchmark run: tens of episodes (<= ~200) — video generation limited to small N (default small, user bounded by existing `max_videos`).
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Assessment vs Constitution (v1.0.0):
+- Principle I (Reproducibility): Deterministic episode selection & stable filenames uphold reproducibility.
+- Principle II (Factory Abstraction): No change to env factories; compliant.
+- Principle III (Benchmark & Metrics First): Adds non-metric artifacts post-run without altering metrics pipeline; compliant.
+- Principle IV (Unified Config): Reuses existing flags; no new ad-hoc params; compliant.
+- Principle V (Baselines): Unaffected.
+- Principle VI (Transparency): Manifests with status/notes increase transparency.
+- Principle VII (Backward Compatibility): No schema breaks; compliant.
+- Principle VIII (Documentation): Spec + quickstart ensure discoverability; will update docs index on implementation PR.
+- Principle IX (Test Coverage): Plan includes new tests for artifact creation & skip logic.
+- Principle X (Scope Discipline): Feature squarely within visualization/analysis; in scope.
+
+Result: PASS (no violations). Post-design recheck unchanged.
 
 ## Project Structure
 
@@ -99,7 +111,7 @@ ios/ or android/
 └── [platform-specific structure]
 ```
 
-**Structure Decision**: [DEFAULT to Option 1 unless Technical Context indicates web/mobile app]
+**Structure Decision**: Option 1 (single project) retained — only adds logic inside existing benchmark module and new tests.
 
 ## Phase 0: Outline & Research
 1. **Extract unknowns from Technical Context** above:
@@ -120,10 +132,10 @@ ios/ or android/
    - Rationale: [why chosen]
    - Alternatives considered: [what else evaluated]
 
-**Output**: research.md with all NEEDS CLARIFICATION resolved
+**Output**: research.md with all NEEDS CLARIFICATION resolved (Completed; no remaining unknowns).
 
 ## Phase 1: Design & Contracts
-*Prerequisites: research.md complete*
+*Prerequisites: research.md complete (Yes)*
 
 1. **Extract entities from feature spec** → `data-model.md`:
    - Entity name, fields, relationships
@@ -182,30 +194,23 @@ ios/ or android/
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking
-*Fill ONLY if Constitution Check has violations that must be justified*
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+No violations; table intentionally omitted.
 
 
 ## Progress Tracking
-*This checklist is updated during execution flow*
-
 **Phase Status**:
-- [ ] Phase 0: Research complete (/plan command)
-- [ ] Phase 1: Design complete (/plan command)
+- [x] Phase 0: Research complete (/plan command)
+- [x] Phase 1: Design complete (/plan command)
 - [ ] Phase 2: Task planning complete (/plan command - describe approach only)
 - [ ] Phase 3: Tasks generated (/tasks command)
 - [ ] Phase 4: Implementation complete
 - [ ] Phase 5: Validation passed
 
 **Gate Status**:
-- [ ] Initial Constitution Check: PASS
-- [ ] Post-Design Constitution Check: PASS
-- [ ] All NEEDS CLARIFICATION resolved
-- [ ] Complexity deviations documented
+- [x] Initial Constitution Check: PASS
+- [x] Post-Design Constitution Check: PASS
+- [x] All NEEDS CLARIFICATION resolved
+- [x] Complexity deviations documented (none required)
 
 ---
 *Based on Constitution v2.1.1 - See `/memory/constitution.md`*

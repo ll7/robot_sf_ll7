@@ -27,10 +27,12 @@ Constraints:
 | path_mp4 | string | Path to mp4 (even if skipped; indicates intended name). |
 | status | string | generated, skipped, error. |
 | note | string? | Reason or meta description. |
+| renderer | string | One of: simulation_view, synthetic. Indicates which rendering backend attempted/used. |
 
 Constraints:
 - `episode_id` must reference existing episodes.jsonl record.
 - If `status=generated`, file SHOULD exist.
+- If `renderer=simulation_view` but PyGame unavailable, status MUST be skipped with explanatory note.
 
 ### PerformanceMeta (inline extension optional)
 | Field | Type | Description |

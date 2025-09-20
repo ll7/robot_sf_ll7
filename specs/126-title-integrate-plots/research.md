@@ -25,6 +25,10 @@ Alternatives: Embed inside existing summary.json (mixes concerns). Rejected.
 ### D6: Performance envelope
 Target overhead: plots <2s, video generation default (1 video) <5s on reference CI. Aligns with FR-014 guidance.
 
+### D7: SimulationView-first with renderer field
+Rationale: Consolidate on existing visualization for fidelity while preserving fallback; explicit `renderer` field in VideoArtifact enables downstream filtering & validation.
+Alternatives: Implicit renderer assumption (opaque); rejected due to reduced transparency.
+
 ## Resolved Unknowns
 - Performance thresholds: Adopt target (plots <2s, videos <5s) as soft gates — not failing runs if exceeded but document in manifest if > threshold.
 

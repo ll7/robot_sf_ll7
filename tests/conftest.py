@@ -68,8 +68,11 @@ _SLOW_SAMPLES: list[tuple[str, float]] = []
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
     start = time.perf_counter()
-    outcome = yield
-    _SLOW_SAMPLES.append((item.nodeid, time.perf_counter() - start))
+    try:
+        outcome = yield
+    finally:
+        # Always record duration, even if the test raised/failed (ensures slow report completeness).
+        _SLOW_SAMPLES.append((item.nodeid, time.perf_counter() - start))
     return outcome
 
 

@@ -18,6 +18,12 @@ from typing import Any, List
 from loguru import logger
 
 from . import videos as synthetic_videos
+from .constants import (
+    NOTE_DISABLED,
+    NOTE_SMOKE_MODE,
+    RENDERER_SIM_VIEW,
+    RENDERER_SYNTHETIC,
+)
 from .plots import generate_plots
 
 try:  # Try to import SimulationView lazily (primary renderer)
@@ -133,7 +139,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
             video_artifacts = _synthetic_fallback_videos(selected_records, videos_dir, cfg)
     else:
         # Directly mark skipped cases
-        reason = "video generation disabled" if disable_videos else "smoke mode"
+        reason = NOTE_DISABLED if disable_videos else NOTE_SMOKE_MODE
         for rec in selected_records:
             ep_id = rec.get("episode_id", "unknown")
             sc_id = rec.get("scenario_id", "unknown")
@@ -145,7 +151,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
                     episode_id=ep_id,
                     path_mp4=str(mp4_path),
                     status="skipped",
-                    renderer="synthetic" if not _SIM_VIEW_AVAILABLE else "simulation_view",
+                    renderer=RENDERER_SIM_VIEW if _SIM_VIEW_AVAILABLE else RENDERER_SYNTHETIC,
                     note=reason,
                 )
             )

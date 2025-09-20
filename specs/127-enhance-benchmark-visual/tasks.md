@@ -25,9 +25,9 @@ Legend:
 ### Setup & Constants
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T001 | Create constants module | `robot_sf/benchmark/visuals/constants.py` with note enums & renderer names | - | [P] | |
-| T002 | Add import + usage placeholder in visuals orchestrator | Update `robot_sf/benchmark/visuals.py` to reference constants (no behavior change) | T001 |  | |
-| T003 | Add optional deps detection util | `robot_sf/benchmark/visuals/deps.py` functions: `has_pygame()`, `has_moviepy()`, `moviepy_ready()` (ffmpeg check attempt) | - | [P] | |
+| T001 | Create constants module | `robot_sf/benchmark/full_classic/visual_constants.py` with note enums & renderer names | - | [P] | Done |
+| T002 | Add import + usage placeholder in visuals orchestrator | Update `robot_sf/benchmark/full_classic/visuals.py` to reference constants (no behavior change) | T001 |  | Done |
+| T003 | Add optional deps detection util | `robot_sf/benchmark/full_classic/visual_deps.py` functions: `has_pygame()`, `has_moviepy()`, `moviepy_ready()` (ffmpeg check attempt) | - | [P] | Done |
 
 ### Schema & Determinism Tests (Pre-Implementation)
 | ID | Task | Details / File Paths | Depends | Parallel | Status |

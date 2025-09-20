@@ -39,6 +39,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
     - [Social Navigation Benchmark (Overview)](#social-navigation-benchmark-overview)
     - [Figures naming and outputs](#figures-naming-and-outputs)
     - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi--benchmark-tables)
+  - [Per-Test Performance Budget](#per-test-performance-budget)
   - [⚙️ Setup \& Configuration](#️-setup--configuration)
   - [📈 Pedestrian Metrics](#-pedestrian-metrics)
   - [📁 Media Resources](#-media-resources)
@@ -169,6 +170,18 @@ uv run python scripts/generate_figures.py \
 Fast iteration tip:
 - Use `--no-pareto` with `scripts/generate_figures.py` to skip Pareto plot during rapid table refinement.
 - Restrict distributions via `--dmetrics collisions,snqi` for quick rebuilds.
+
+### Per-Test Performance Budget
+
+A performance budget for tests helps prevent runtime regressions:
+
+- Soft threshold: <20s (advisory)
+- Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
+- Report: Top 10 slowest tests printed with guidance at session end
+- Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
+- Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`, `ROBOT_SF_PERF_HARD`.
+
+Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training

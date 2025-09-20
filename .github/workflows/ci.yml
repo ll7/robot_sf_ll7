@@ -117,7 +117,7 @@ jobs:
             --matrix matrix.yaml \
             --out episodes.jsonl \
             --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
-            --horizon 3 --dt 0.1 --base-seed 0 --quiet
+            --horizon 3 --dt 0.1 --base-seed 0
           test -s episodes.jsonl
 
       - name: Validate JSONL (optional jq)

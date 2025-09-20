@@ -11,10 +11,16 @@ Later tasks (T035+) will add plots content; for now only directory creation asse
 
 from __future__ import annotations
 
+import time
+
+import pytest
+
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
-def test_smoke_run_creates_structure(config_factory):
+@pytest.mark.timeout(60)
+def test_smoke_run_creates_structure(config_factory, perf_policy):
+    start = time.perf_counter()
     cfg = config_factory(smoke=True, workers=1)
     manifest = run_full_benchmark(cfg)
     # Root path
@@ -40,3 +46,8 @@ def test_smoke_run_creates_structure(config_factory):
     # Basic attribute checks on returned manifest object
     for attr in ["git_hash", "scenario_matrix_hash", "config"]:
         assert hasattr(manifest, attr)
+    elapsed = time.perf_counter() - start
+    # Use perf_policy to ensure we don't breach hard threshold
+    assert perf_policy.classify(elapsed) != "hard", (
+        f"Smoke run unexpectedly exceeded hard threshold: {elapsed:.2f}s"
+    )

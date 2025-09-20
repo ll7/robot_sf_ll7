@@ -11,12 +11,17 @@ rates.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
+
+import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
-def test_adaptive_early_stop(config_factory):
+@pytest.mark.timeout(60)
+def test_adaptive_early_stop(config_factory, perf_policy):
+    start = time.perf_counter()
     cfg = config_factory(
         smoke=True,
         workers=1,
@@ -52,3 +57,7 @@ def test_adaptive_early_stop(config_factory):
     precision = json.loads(precision_path.read_text(encoding="utf-8"))
     assert "final_pass" in precision and "evaluations" in precision
     assert isinstance(precision["evaluations"], list)
+    elapsed = time.perf_counter() - start
+    assert perf_policy.classify(elapsed) != "hard", (
+        f"Adaptive stop test exceeded hard threshold: {elapsed:.2f}s"
+    )

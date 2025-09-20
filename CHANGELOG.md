@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Performance Budget Feature 124)
+- Per-test performance budget enforcement (soft 20s, hard 60s) with slow test report (top 10) and guidance suggestions.
+- Environment variables: `ROBOT_SF_PERF_RELAX` (suppress soft breach enforcement) and `ROBOT_SF_PERF_ENFORCE` (escalate soft breaches to failures).
+- Shared performance utilities (`tests/perf_utils/`): policy, reporting, guidance, minimal scenario matrix helper.
+- Refactored benchmark integration tests (resume, reproducibility) to use minimal matrix for faster deterministic runs.
+- Synthetic slow test and guidance validation tests.
+
 ### Added
 - **Social Navigation Benchmark Platform** - Complete benchmark infrastructure for reproducible social navigation research
 - **Full Classic Interaction Benchmark (Initial Implementation)**

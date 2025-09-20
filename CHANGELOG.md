@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Synthetic slow test and guidance validation tests.
 
 ### Added
+- Benchmark visual artifact integration (plots + videos manifests) for Full Classic Interaction Benchmark:
+  - Post-run single-pass generation of placeholder plots and representative episode videos
+  - SimulationView-first architecture with graceful synthetic fallback (current release uses synthetic until replay support added)
+  - Deterministic selection (first N episodes) and machine-readable manifests: `plot_artifacts.json`, `video_artifacts.json`, `performance_visuals.json`
+  - Renderer attribution field (`renderer`) and budget timing flags
 - **Social Navigation Benchmark Platform** - Complete benchmark infrastructure for reproducible social navigation research
 - **Full Classic Interaction Benchmark (Initial Implementation)**
   - Synthetic placeholder execution pipeline (planning → execution → aggregation → effect sizes → precision loop)

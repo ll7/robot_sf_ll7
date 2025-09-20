@@ -36,36 +36,27 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+from tests.perf_utils.minimal_matrix import write_minimal_matrix  # Shared helper (T011)
 
-_MINI_MATRIX_CONTENT = """scenarios:\n  - name: mini\n    map_file: dummy_map.svg\n    simulation_config:\n      max_episode_steps: 30\n    metadata:\n      archetype: crossing\n      density: low\n"""
 
-
-def _tune_config(cfg):
-    if hasattr(cfg, "workers"):
-        cfg.workers = 1  # type: ignore[attr-defined]
-    if hasattr(cfg, "bootstrap_samples"):
-        cfg.bootstrap_samples = 0  # type: ignore[attr-defined]
-    # We attempt to minimize workload; adaptive logic may still expand beyond these.
-    for attr in ("initial_episodes", "batch_size", "max_episodes"):
+def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
+    for attr, value in [
+        ("workers", 1),
+        ("bootstrap_samples", 0),
+        ("initial_episodes", 2),
+        ("batch_size", 2),
+        ("max_episodes", 2),
+        ("horizon_override", 12),
+    ]:
         if hasattr(cfg, attr):
-            setattr(cfg, attr, 2)
-    if hasattr(cfg, "horizon_override"):
-        cfg.horizon_override = 12  # type: ignore[attr-defined]
+            setattr(cfg, attr, value)
     return cfg
 
 
-def _inject_minimal_matrix(cfg):
-    """Write a minimal single-scenario matrix next to the output root and retarget cfg.
-
-    Rationale: Drastically reduces scenario count so that the adaptive loop's
-    max episodes budget (``max_episodes * len(scenarios)``) remains tiny, keeping
-    the test fast and deterministic.
-    """
+def _inject_minimal_matrix(cfg):  # delegate to shared writer
     root = Path(cfg.output_root)
     root.mkdir(parents=True, exist_ok=True)
-    mini_path = root / "mini_matrix.yaml"
-    if not mini_path.exists():  # idempotent; safe across resume runs
-        mini_path.write_text(_MINI_MATRIX_CONTENT, encoding="utf-8")
+    mini_path = write_minimal_matrix(root)
     if hasattr(cfg, "scenario_matrix_path"):
         cfg.scenario_matrix_path = str(mini_path)  # type: ignore[attr-defined]
     return cfg
@@ -81,7 +72,7 @@ def _assert_no_video_artifacts(root: Path):
 
 
 @pytest.mark.timeout(60)
-def test_resume_skips_existing(config_factory):
+def test_resume_skips_existing(config_factory, perf_policy):
     start = time.perf_counter()
     hard_timeout_sec = 60
 
@@ -118,7 +109,14 @@ def test_resume_skips_existing(config_factory):
         _assert_no_video_artifacts(Path(manifest_first.output_root))
 
         elapsed = time.perf_counter() - start
-        assert elapsed < 20, f"Resume test too slow: {elapsed:.2f}s (>20s)"
+        classification = perf_policy.classify(elapsed)
+        assert classification != "hard", (
+            f"Elapsed {elapsed:.2f}s breached hard threshold {perf_policy.hard_timeout_seconds}s."
+        )
+        # Maintain broad expectation (<20s) using policy soft threshold (currently 20s)
+        assert elapsed < perf_policy.soft_threshold_seconds + 1e-6, (
+            f"Resume test too slow: {elapsed:.2f}s (>{perf_policy.soft_threshold_seconds}s)"
+        )
         ci = bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
         soft = 5.0 if ci else 2.0
         if elapsed > soft:

@@ -28,6 +28,9 @@ import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
+# New shared helper for minimal scenario matrix (performance refactor T010)
+from tests.perf_utils.minimal_matrix import write_minimal_matrix
+
 
 def _read_episode_records(root: Path) -> list[dict]:
     """Read all episode JSON records from a benchmark output root."""
@@ -49,45 +52,34 @@ def _run_minimal_benchmark(
 ) -> tuple[list[str], str]:  # T010/T020/T031
     """Execute a minimal benchmark run and return ordered episode_ids and scenario_matrix_hash.
 
-    Implementation notes (T010):
-        - Uses smoke=True to disable heavy outputs (videos, plots, bootstrap) per spec.
-        - Forces workers=1 for determinism and speed.
-        - Applies provided deterministic seed list (length expected = 2 per spec) if supported.
+    Refactored (T010): now delegates minimal matrix creation to shared helper
+    tests.perf_utils.minimal_matrix.write_minimal_matrix to avoid duplicate YAML
+    logic across benchmark tests. This keeps semantic focus (ordering + hash)
+    while minimizing runtime.
     """
     cfg = config_factory(smoke=True, master_seed=seeds[0])
-    # T020/T031: isolate each run; allow overriding base root to validate independence
     base_root = Path(cfg.output_root) if base_root_override is None else base_root_override
     run_root = base_root / f"repro_{run_label}"
     run_root.mkdir(parents=True, exist_ok=True)
     cfg.output_root = str(run_root)
-    if hasattr(cfg, "seeds"):
-        cfg.seeds = seeds  # type: ignore[attr-defined]
-    if hasattr(cfg, "workers"):
-        cfg.workers = 1  # type: ignore[attr-defined]
-    # Minimize planned episodes to exactly two (one per provided seed) when planning layer uses initial_episodes
-    if hasattr(cfg, "initial_episodes"):
-        cfg.initial_episodes = 2  # type: ignore[attr-defined]
-    if hasattr(cfg, "batch_size"):
-        cfg.batch_size = 2  # type: ignore[attr-defined]
-    if hasattr(cfg, "max_episodes"):
-        cfg.max_episodes = 2  # type: ignore[attr-defined]
-    # T021: disable bootstrap to cut aggregation overhead
-    if hasattr(cfg, "bootstrap_samples"):
-        cfg.bootstrap_samples = 0  # type: ignore[attr-defined]
-    # T023: minimal horizon override (keep >1 step to exercise logic)
-    if hasattr(cfg, "horizon_override"):
-        cfg.horizon_override = 12  # type: ignore[attr-defined]
+    # Deterministic & minimal settings
+    for attr, value in [
+        ("seeds", seeds),
+        ("workers", 1),
+        ("initial_episodes", 2),
+        ("batch_size", 2),
+        ("max_episodes", 2),
+        ("bootstrap_samples", 0),
+        ("horizon_override", 12),
+    ]:
+        if hasattr(cfg, attr):
+            setattr(cfg, attr, value)  # type: ignore[arg-type]
 
-    # Inject a minimal single-scenario matrix (T020 refinement) to avoid loading the full classic matrix (which has many scenarios)
-    mini_matrix_path = run_root / "mini_matrix.yaml"
-    if not mini_matrix_path.exists():  # idempotent
-        mini_matrix_path.write_text(
-            """scenarios:\n  - name: mini\n    map_file: dummy_map.svg\n    simulation_config:\n      max_episode_steps: 30\n    metadata:\n      archetype: crossing\n      density: low\n""",
-            encoding="utf-8",
-        )
-    # Point config to the minimal matrix
+    # Create & point to minimal matrix
+    mini_matrix_path = write_minimal_matrix(run_root)
     if hasattr(cfg, "scenario_matrix_path"):
         cfg.scenario_matrix_path = str(mini_matrix_path)  # type: ignore[attr-defined]
+
     manifest = run_full_benchmark(cfg)
     records = _read_episode_records(Path(manifest.output_root))
     ordered_ids = [r["episode_id"] for r in records]
@@ -97,8 +89,8 @@ def _run_minimal_benchmark(
 
 @pytest.mark.timeout(60)  # marker declared in pytest.ini options; enforcement done manually below
 def test_reproducibility_same_seed(
-    config_factory,
-):  # T011-T016 T020-T023 T030-T032 + timeout requirement
+    config_factory, perf_policy
+):  # T011-T016 T020-T023 T030-T032 + timeout requirement (policy integrated)
     """Accelerated reproducibility test.
 
     Contract (specs/123-reduce-runtime-of/):
@@ -159,10 +151,12 @@ def test_reproducibility_same_seed(
     # Soft timing guard (currently enforced as hard assert per spec performance envelope)
     ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS")
     limit = 4.0 if ci else 2.0
-    # Additional broad requirement: total completion under 20s (explicit verification)
-    assert elapsed < 20.0, (
-        f"Test took {elapsed:.2f}s which exceeds 20s broad performance expectation."
+    # Additional broad requirement: total completion should not breach hard policy threshold
+    classification = perf_policy.classify(elapsed)
+    assert classification != "hard", (
+        f"Elapsed {elapsed:.2f}s breached hard threshold {perf_policy.hard_timeout_seconds}s."
     )
+    # (Soft classification is acceptable here because this test has its own tighter envelopes below.)
 
     if elapsed >= limit:  # stricter accelerated envelope
         # T042: richer guidance message

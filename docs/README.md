@@ -45,6 +45,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [🚀 Quick Start Guides](#-quick-start-guides)
   - [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
   - [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
+  - [Per-Test Performance Budget](#per-test-performance-budget)
 - [🎯 Key Features](#-key-features)
   - [Environment System](#environment-system)
   - [Simulation Capabilities](#simulation-capabilities)
@@ -169,6 +170,18 @@ uv run python scripts/generate_figures.py \
 Fast iteration tip:
 - Use `--no-pareto` with `scripts/generate_figures.py` to skip Pareto plot during rapid table refinement.
 - Restrict distributions via `--dmetrics collisions,snqi` for quick rebuilds.
+
+### Per-Test Performance Budget
+
+A performance budget for tests helps prevent runtime regressions:
+
+- Soft threshold: <20s (advisory)
+- Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
+- Report: Top 10 slowest tests printed with guidance at session end
+- Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
+- Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft breach into a failure (unless relax set)
+
+Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training

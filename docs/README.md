@@ -78,6 +78,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Full SNQI Flow (episodes → baseline → figures)**](../examples/snqi_full_flow.py) - End-to-end reproducible pipeline script
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
  - **Full Classic Interaction Benchmark (WIP)** – See `specs/122-full-classic-interaction/quickstart.md` (will migrate to dedicated docs page after implementation)
+ - **Full Classic Interaction Benchmark** – Initial implementation complete (episodes, aggregation, effect sizes, precision, plots, videos, CLI, scaling metrics). Quickstart: `specs/122-full-classic-interaction/quickstart.md` (will be superseded by `docs/benchmark_full_classic.md`).
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
    - [Random baseline](./dev/baselines/random.md) — how to use and configure
  - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)

@@ -1,0 +1,36 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "PerformanceVisualsManifest",
+    "type": "object",
+    "properties": {
+        "plots_time_s": {
+            "type": "number",
+            "minimum": 0
+        },
+        "first_video_time_s": {
+            "type": [
+                "number",
+                "null"
+            ],
+            "minimum": 0
+        },
+        "plots_over_budget": {
+            "type": "boolean"
+        },
+        "video_over_budget": {
+            "type": "boolean"
+        },
+        "memory_over_budget": {
+            "type": [
+                "boolean",
+                "null"
+            ]
+        }
+    },
+    "required": [
+        "plots_time_s",
+        "plots_over_budget",
+        "video_over_budget"
+    ],
+    "additionalProperties": false
+}

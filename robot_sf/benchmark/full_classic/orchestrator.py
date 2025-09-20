@@ -22,6 +22,7 @@ from .effects import compute_effect_sizes
 from .io_utils import append_episode_record, write_manifest
 from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
 from .precision import evaluate_precision
+from .visuals import generate_visual_artifacts  # new visual artifact integration
 
 # -----------------------------
 # Manifest dataclass & helpers
@@ -407,6 +408,13 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     _update_scaling_efficiency(manifest, cfg)
     manifest.scaling_efficiency.setdefault("finalized", True)
     write_manifest(manifest, str(root / "manifest.json"))
+
+    # Visual artifacts (plots + videos) generation (post adaptive loop single pass)
+    try:
+        generate_visual_artifacts(root, cfg, groups, all_records)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Visual artifact generation failed (non-fatal): {}", exc)
+
     return manifest
 
 

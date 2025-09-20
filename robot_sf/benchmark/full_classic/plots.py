@@ -26,7 +26,14 @@ class _PlotArtifact:  # lightweight internal representation matching data model 
 
 def _safe_fig_close(fig):  # pragma: no cover - trivial
     try:
+        # Clear and fully close to avoid accumulating many open figures triggering warnings.
         fig.clf()
+        import matplotlib.pyplot as _plt  # type: ignore
+
+        try:
+            _plt.close(fig)
+        except Exception:  # noqa: BLE001
+            pass
     except Exception:  # noqa: BLE001
         pass
 

@@ -123,14 +123,22 @@ def test_reproducibility_same_seed(
             f"Reproducibility test exceeded hard timeout of {hard_timeout_sec}s (signal)."
         )
 
-    try:
-        orig_handler = signal.getsignal(signal.SIGALRM)
+    # Cross‑platform guard: Windows and some environments may not expose SIGALRM.
+    # We gracefully skip the alarm setup if unavailable (the @pytest.mark.timeout provides a fallback).
+    sigalrm = getattr(signal, "SIGALRM", None)
+    orig_handler = None
+    if sigalrm is not None:  # Only attempt alarm logic when supported by the platform
         try:
-            signal.signal(signal.SIGALRM, _timeout_handler)
+            orig_handler = signal.getsignal(sigalrm)
+            signal.signal(sigalrm, _timeout_handler)
             signal.alarm(hard_timeout_sec)
-        except AttributeError:  # platform without SIGALRM
-            orig_handler = None  # type: ignore
+        except Exception:  # noqa: BLE001 - best effort; skip alarm if any issue arises
+            try:
+                signal.alarm(0)  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001
+                pass
 
+    try:
         # First run uses default base root from fixture
         ids1, hash1 = _run_minimal_benchmark(config_factory, seeds, run_label="a")
         # Second run uses an alternate base root to validate independence from parent temp dir (T031)
@@ -140,12 +148,14 @@ def test_reproducibility_same_seed(
             config_factory, seeds, run_label="b", base_root_override=alt_base
         )
     finally:
-        try:
-            signal.alarm(0)
-            if "orig_handler" in locals() and orig_handler is not None:
-                signal.signal(signal.SIGALRM, orig_handler)
-        except Exception:  # noqa: BLE001 - best effort cleanup
-            pass
+        # Best effort cleanup – only if SIGALRM existed
+        if sigalrm is not None:
+            try:
+                signal.alarm(0)
+                if orig_handler is not None:
+                    signal.signal(sigalrm, orig_handler)
+            except Exception:  # noqa: BLE001 - alarm cleanup should never fail test
+                pass
 
     elapsed = time.perf_counter() - start
 

@@ -179,7 +179,7 @@ A performance budget for tests helps prevent runtime regressions:
 - Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
 - Report: Top 10 slowest tests printed with guidance at session end
 - Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
-- Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft breach into a failure (unless relax set)
+- Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`, `ROBOT_SF_PERF_HARD`.
 
 Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
 

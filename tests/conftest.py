@@ -121,7 +121,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # type: igno
         # Treat any soft or hard breach as failure. Hard breaches ideally already handled
         # by per-test timeout markers, but we enforce here for determinism in minimal runs.
         if any(r.breach_type in {"soft", "hard"} for r in records):
-            terminalreporter.write_line(
-                "Performance breach (soft/hard) detected under enforce mode -> failing build"
-            )
-            raise SystemExit(pytest.ExitCode.TESTS_FAILED)
+            msg = "Performance breach (soft/hard) detected under enforce mode"
+            terminalreporter.write_line(msg)
+            # Use pytest's exit API to set return code cleanly (avoids raw SystemExit trace noise)
+            pytest.exit(msg, returncode=pytest.ExitCode.TESTS_FAILED)

@@ -14,6 +14,14 @@ If this test starts failing due to timing on a legitimately slower CI node,
 set STRICT_REPRO_TEST=0 (future enhancement) or adjust thresholds in spec.
 For functional determinism failures, inspect the first differing episode_id
 and scenario planning logic. See research & contract docs for rationale.
+
+Minimization Rationale (T026):
+    This test deliberately constrains workload to the bare minimum needed to
+    validate determinism (2 episodes total). Any increase (extra scenarios,
+    seeds, horizon, bootstrap sampling, multi-worker fan-out, artifact
+    generation) would add latency without improving signal for the contract
+    assertions. If future determinism regressions require broader coverage,
+    add a separate extended test rather than expanding this accelerated one.
 """
 
 from __future__ import annotations
@@ -71,6 +79,8 @@ def _run_minimal_benchmark(
         ("max_episodes", 2),
         ("bootstrap_samples", 0),
         ("horizon_override", 12),
+        ("collision_ci", 1.0),
+        ("success_ci", 1.0),
     ]:
         if hasattr(cfg, attr):
             setattr(cfg, attr, value)  # type: ignore[arg-type]

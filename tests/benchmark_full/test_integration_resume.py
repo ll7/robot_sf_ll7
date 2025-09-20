@@ -24,6 +24,14 @@ Failure Guidance:
     iteration. The budget is ``max_episodes * len(scenarios)``; with one scenario
     and max_episodes=2 the adaptive loop should terminate immediately after the
     initial two jobs.
+
+Minimization Rationale (T026):
+    Uses the same minimal matrix + 2 episode budget as the reproducibility
+    test to keep runtime low while targeting a distinct property (resume
+    idempotency). Increasing episode count, horizon, or enabling bootstrap
+    would not improve confidence in the resume behavior and would slow the
+    suite. Keep this file focused; create a separate stress test if higher
+    load resume scenarios need validation.
 """
 
 from __future__ import annotations
@@ -47,6 +55,8 @@ def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
         ("batch_size", 2),
         ("max_episodes", 2),
         ("horizon_override", 12),
+        ("collision_ci", 1.0),  # lenient precision targets for early exit
+        ("success_ci", 1.0),
     ]:
         if hasattr(cfg, attr):
             setattr(cfg, attr, value)

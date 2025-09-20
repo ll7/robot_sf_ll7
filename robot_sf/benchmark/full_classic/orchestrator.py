@@ -6,8 +6,9 @@ T029 (full run orchestration skeleton).
 
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, Set
+from typing import Any, Dict, Iterable, Iterator, List, Set
 
 from loguru import logger
 
@@ -82,34 +83,79 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
     return record
 
 
-def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  # T026
-    """Execute episode jobs sequentially with basic resume support.
+def _partition_jobs(existing_ids: Set[str], job_iter: Iterable[object]) -> tuple[List[object], int]:
+    run_list: List[object] = []
+    skip_count = 0
+    for jb in job_iter:
+        if _episode_id_from_job(jb) in existing_ids:
+            skip_count += 1
+        else:
+            run_list.append(jb)
+    return run_list, skip_count
 
-    Responsibilities (T026 scope):
-      - Read existing episodes file (if any) and collect existing episode_ids.
-      - For each job, derive deterministic episode_id; skip if already present.
-      - For new jobs, create a synthetic placeholder EpisodeRecord and append it.
-      - Yield each newly created record (iterator semantics allow future streaming / parallelism).
 
-    Notes:
-      - Parallel execution & timing metrics deferred to T027/T041.
-      - Adaptive sampling integration deferred to T028/T034.
+def _execute_seq(
+    job_list: List[object], existing_ids: Set[str], episodes_path: Path, cfg, manifest
+) -> Iterator[dict]:
+    for jb in job_list:
+        rec = _make_episode_record(jb, cfg)
+        append_episode_record(episodes_path, rec)
+        existing_ids.add(rec["episode_id"])
+        if hasattr(manifest, "executed_jobs"):
+            manifest.executed_jobs += 1
+        yield rec
+
+
+def _worker_job_wrapper(job, algo):  # top-level for pickling on spawn
+    class _TempCfg:  # noqa: D401
+        def __init__(self, a):
+            self.algo = a
+
+    return _make_episode_record(job, _TempCfg(algo))
+
+
+def _execute_parallel(
+    job_list: List[object], existing_ids: Set[str], episodes_path: Path, cfg, manifest, workers: int
+) -> Iterator[dict]:
+    logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
+    algo = getattr(cfg, "algo", "unknown")
+    results_map: Dict[str, dict] = {}
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        future_map = {ex.submit(_worker_job_wrapper, j, algo): j for j in job_list}
+        for fut in as_completed(future_map):
+            rec = fut.result()
+            results_map[rec["episode_id"]] = rec
+    # Deterministic ordering for append
+    for jb in job_list:
+        ep_id = _episode_id_from_job(jb)
+        rec = results_map[ep_id]
+        append_episode_record(episodes_path, rec)
+        existing_ids.add(ep_id)
+        if hasattr(manifest, "executed_jobs"):
+            manifest.executed_jobs += 1
+        yield rec
+
+
+def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  # T026/T027
+    """Execute episode jobs with resume + optional parallel workers.
+
+    T026 (completed earlier): sequential execution + resume scan.
+    T027 extension:
+      - If cfg.workers > 1 use a process pool to compute episode records in parallel.
+      - Parent process performs file appends (avoids concurrent writes).
+      - Update manifest counters: executed_jobs, skipped_jobs.
     """
     episodes_path = Path(getattr(manifest, "episodes_path"))
     existing_ids = _scan_existing_episode_ids(episodes_path)
     logger.debug("Found {} existing episode records (resume)", len(existing_ids))
-
-    for job in jobs:
-        ep_id = _episode_id_from_job(job)
-        if ep_id in existing_ids:
-            logger.debug(
-                "Skipping existing episode {} (job {})", ep_id, getattr(job, "job_id", "?")
-            )
-            continue
-        record = _make_episode_record(job, cfg)
-        append_episode_record(episodes_path, record)
-        existing_ids.add(ep_id)
-        yield record
+    to_run, skipped = _partition_jobs(existing_ids, list(jobs))
+    if hasattr(manifest, "skipped_jobs"):
+        manifest.skipped_jobs += skipped
+    workers = int(getattr(cfg, "workers", 1) or 1)
+    if workers <= 1 or len(to_run) <= 1:
+        yield from _execute_seq(to_run, existing_ids, episodes_path, cfg, manifest)
+    else:
+        yield from _execute_parallel(to_run, existing_ids, episodes_path, cfg, manifest, workers)
 
 
 def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T028

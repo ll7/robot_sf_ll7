@@ -9,5 +9,5 @@ Fix any upcoming smaller issues, lint errors, or formatting problems. If bigger 
 `uv run pytest tests`
 
 ## Type check
-`uvx ty check . --exit-zero``
+`uvx ty check . --exit-zero`
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
@@ -24,6 +26,8 @@ def _read_episode_ids(root: Path) -> set[str]:
     return ids
 
 
+# tracked in https://github.com/ll7/robot_sf_ll7/issues/210
+@pytest.mark.slow
 def test_reproducibility_same_seed(config_factory):
     cfg = config_factory(smoke=True, master_seed=123)
     manifest1 = run_full_benchmark(cfg)

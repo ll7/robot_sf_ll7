@@ -49,6 +49,18 @@ As a benchmark consumer (researcher or CI reviewer), after running the Full Clas
 - **Benchmark Output Root**: Directory chosen by user where all benchmark products (episodes, aggregates, reports, plots, videos) reside.
 - **Benchmark Configuration Flags**: Existing parameters controlling mode (smoke), disabling videos, and maximum count for representative videos.
 
+### Existing Visualization Context (Informational)
+The project already includes an interactive / programmatic visualization layer using PyGame (`SimulationView` in `robot_sf/render/sim_view.py`). That system:
+- Renders real simulation frames with robot, pedestrians, sensors, actions.
+- Optionally records frame sequences to video (if moviepy/ffmpeg available) when explicitly enabled during simulation runs.
+
+This feature (plots & representative videos for the classic benchmark) is intentionally distinct:
+- Focuses on lightweight, post-run summary artifacts for reporting, not interactive playback.
+- Uses synthetic or placeholder representations (deterministic paths, summary PDFs) to keep CI overhead low.
+- Does not depend on opening a display window or running live simulation loops.
+
+Clarification: We are NOT replacing or extending the PyGame `SimulationView` here; we are adding benchmark-scoped artifact generation triggered after statistical aggregation. Future work could integrate higher-fidelity frame capture from `SimulationView`, but that is explicitly out of scope (see Non‑Goals).
+
 ## Review & Acceptance Checklist
 
 ### Content Quality

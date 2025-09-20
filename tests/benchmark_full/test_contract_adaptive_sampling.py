@@ -8,8 +8,6 @@ Current state: NotImplementedError expected.
 
 from __future__ import annotations
 
-import pytest
-
 from robot_sf.benchmark.full_classic.orchestrator import adaptive_sampling_iteration
 
 
@@ -29,5 +27,10 @@ def test_adaptive_sampling_iteration():
         smoke = True
 
     manifest = type("M", (), {})()
-    with pytest.raises(NotImplementedError):  # until T028
-        adaptive_sampling_iteration([], _Cfg(), scenarios, manifest)
+    done, new_jobs = adaptive_sampling_iteration([], _Cfg(), scenarios, manifest)
+    assert done is False
+    assert len(new_jobs) > 0
+    # Simulate adding returned episodes until cap
+    records = [{"scenario_id": scenarios[0].scenario_id} for _ in range(len(new_jobs))]
+    done2, _ = adaptive_sampling_iteration(records, _Cfg(), scenarios, manifest)
+    assert done2 is False  # Still below max_episodes=10 after one batch of 5

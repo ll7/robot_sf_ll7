@@ -59,7 +59,7 @@
 ### Orchestrator & Execution
 - [X] T026 Implement basic `run_episode_jobs` in `orchestrator.py` (sequential first) with resume scan logic.
 - [X] T027 Add parallel workers support (process pool) and update manifest counts in `orchestrator.py`.
-- [ ] T028 Implement `adaptive_sampling_iteration` logic (threshold evaluation stub calling precision evaluator later) in `orchestrator.py`.
+- [X] T028 Implement `adaptive_sampling_iteration` logic (threshold evaluation stub calling precision evaluator later) in `orchestrator.py`.
 - [ ] T029 Implement `run_full_benchmark` orchestration skeleton integrating planning → execution → aggregation placeholders.
 
 ### Aggregation & Metrics

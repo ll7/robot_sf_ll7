@@ -159,7 +159,73 @@ def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  
 
 
 def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T028
-    raise NotImplementedError("Implemented in task T028")
+    """Decide whether additional episode jobs are required (placeholder T028).
+
+    Minimal implementation for contract phase:
+      - Count existing episodes per scenario from current_records.
+      - If counts >= cfg.max_episodes (or no scenarios needing more) -> return (True, []).
+      - Else create up to cfg.batch_size new synthetic jobs per iteration (evenly per scenario needing more, but simplified here: all remaining for first scenario).
+
+    Future iterations (T034) will incorporate precision evaluation. Seeds are derived
+    by extending scenario.planned_seeds with deterministic incremental integers if
+    needed (placeholder logic) to avoid blocking on full seeding strategy.
+    """
+    # Touch manifest to avoid unused param lint (future: record iteration stats)
+    _ = manifest  # noqa: F841
+    # Gather counts
+    per_scenario: Dict[str, int] = {}
+    for r in current_records:
+        sid = r.get("scenario_id")
+        if sid is not None:
+            per_scenario[sid] = per_scenario.get(sid, 0) + 1
+
+    # Identify scenarios needing more episodes
+    needs: List[object] = []
+    max_eps = int(getattr(cfg, "max_episodes", 0) or 0)
+    batch_size = int(getattr(cfg, "batch_size", 1) or 1)
+    for sc in scenarios:
+        count = per_scenario.get(sc.scenario_id, 0)
+        if count < max_eps:
+            needs.append(sc)
+
+    if not needs:
+        return True, []
+
+    # Generate new jobs for first needing scenario (simple contract satisfaction)
+    target_sc = needs[0]
+    existing = per_scenario.get(target_sc.scenario_id, 0)
+    remaining = max_eps - existing
+    to_create = min(batch_size, remaining)
+
+    # Derive seeds: reuse planned_seeds then extend with increasing integers
+    seeds: List[int] = list(getattr(target_sc, "planned_seeds", []))
+    # Ensure enough seeds
+    while len(seeds) < existing + to_create:
+        seeds.append(len(seeds))  # deterministic extension
+
+    # Build lightweight job objects (mirroring EpisodeJob subset) without relying on full dataclass
+    jobs = []
+    horizon = getattr(cfg, "horizon_override", None) or 100
+    start_index = existing
+    for i in range(to_create):
+        seed = seeds[start_index + i]
+        job_id = f"{target_sc.scenario_id}:{seed}:{horizon}"  # simple deterministic id
+        job = type("EpisodeJobLite", (), {})()
+        job.job_id = job_id
+        job.scenario_id = target_sc.scenario_id
+        job.seed = seed
+        job.archetype = getattr(target_sc, "archetype", "unknown")
+        job.density = getattr(target_sc, "density", "unknown")
+        job.horizon = horizon
+        jobs.append(job)
+
+    done_flag = False  # more iterations likely needed until max reached
+    # If after adding this batch we would reach or exceed max for all scenarios mark done next time
+    if existing + to_create >= max_eps and len(needs) == 1:
+        # After these jobs scenario will be full; check others already full.
+        done_flag = all(per_scenario.get(sc.scenario_id, 0) >= max_eps for sc in scenarios)
+
+    return done_flag, jobs
 
 
 def run_full_benchmark(cfg):  # T029

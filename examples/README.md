@@ -15,6 +15,32 @@
 Other demos:
 - See `examples/demo_*` and `examples/plot_*` for environment and plotting walkthroughs.
 
+### Full Classic Benchmark Demo
+
+Run the adaptive full classic benchmark end-to-end (episodes + aggregates + visual artifacts):
+
+```bash
+uv run python examples/demo_full_classic_benchmark.py
+```
+
+Fast defaults inside the script:
+- initial_episodes=2, max_episodes=4, batch_size=2
+- workers=1 (deterministic order)
+- max_videos=1 (synthetic fallback unless SimulationView implemented)
+
+Generated artifacts (timestamped results directory):
+- episodes/episodes.jsonl
+- aggregates/summary.json
+- reports/plot_artifacts.json, video_artifacts.json, performance_visuals.json
+- plots/*.pdf (if matplotlib installed)
+- videos/*.mp4
+
+Toggle flags in the script:
+- Set `smoke=True` for even faster placeholders
+- Set `disable_videos=True` to skip video generation
+
+For full CLI flag coverage see `scripts/classic_benchmark_full.py`.
+
 ## Full SNQI Flow (Episodes → Baseline → Figures)
 
 The script `snqi_full_flow.py` automates an end-to-end reproducible pipeline:

@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "VideoArtifact",
+    "type": "object",
+    "required": [
+        "artifact_id",
+        "scenario_id",
+        "episode_id",
+        "path_mp4",
+        "status"
+    ],
+    "properties": {
+        "artifact_id": {
+            "type": "string"
+        },
+        "scenario_id": {
+            "type": "string"
+        },
+        "episode_id": {
+            "type": "string"
+        },
+        "path_mp4": {
+            "type": "string"
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "generated",
+                "skipped",
+                "error"
+            ]
+        },
+        "note": {
+            "type": [
+                "string",
+                "null"
+            ]
+        }
+    },
+    "additionalProperties": false
+}

@@ -8,10 +8,10 @@
 ## User Scenarios & Testing *(mandatory)*
 
 ### Primary User Story
-As a benchmark consumer (researcher or CI reviewer), after running the Full Classic Interaction Benchmark, I want automatically generated visual artifacts (summary plots and representative episode videos or explicit skipped markers) so that I can quickly assess qualitative behavior, detect regressions, and attach visuals to reports without manual post‑processing.
+As a benchmark consumer (researcher or CI reviewer), after running the Full Classic Interaction Benchmark, I want automatically generated visual artifacts (summary plots and representative episode videos or explicit skipped markers) so that I can quickly assess qualitative behavior, detect regressions, and attach visuals to reports without manual post‑processing. Video artifacts SHOULD, by default, be rendered using the existing headless‑capable PyGame `SimulationView` (replaying recorded episode state) unless a blocking concern (performance, dependency absence, or incompatibility) forces fallback to the lightweight synthetic path renderer.
 
 ### Acceptance Scenarios
-1. **Given** I run the benchmark with default settings (non-smoke, videos enabled), **When** it completes, **Then** the output root contains `plots/*.pdf`, a `videos/` folder with up to the configured number of MP4 files, and JSON manifest files enumerating each artifact with status `generated` (or `skipped` if deps missing) without errors.
+1. **Given** I run the benchmark with default settings (non-smoke, videos enabled), **When** it completes, **Then** the output root contains `plots/*.pdf`, a `videos/` folder with up to the configured number of MP4 files rendered via `SimulationView` in headless mode (or synthetic fallback if PyGame/video capture unavailable), and JSON manifest files enumerating each artifact with status `generated` (or `skipped` if deps missing) without errors.
 2. **Given** I run the benchmark with `--disable-videos`, **When** it completes, **Then** the video artifact manifest lists selected episodes with status `skipped` and note indicating videos disabled, and no MP4 files are produced.
 3. **Given** I run the benchmark in smoke mode, **When** it completes, **Then** placeholder plot PDFs still exist (or are marked skipped only if plotting dependency absent) and videos are all skipped with a smoke note.
 4. **Given** optional dependencies (matplotlib or moviepy/ffmpeg) are not installed, **When** the benchmark runs, **Then** the manifests show `skipped` with a reason ("matplotlib missing" or "moviepy missing") and the run otherwise succeeds.
@@ -29,6 +29,7 @@ As a benchmark consumer (researcher or CI reviewer), after running the Full Clas
 ### Functional Requirements
 - **FR-001**: System MUST generate a deterministic set of plot artifact metadata after the benchmark run completes (or mark each plot as skipped with a clear reason).
 - **FR-002**: System MUST generate up to a configured maximum number of representative episode video artifacts (status generated or skipped) based on episodes collected during the run.
+- **FR-002a**: System SHOULD prefer using `SimulationView` (PyGame) for video rendering headlessly; MUST fall back to synthetic video generation only if `SimulationView` cannot be initialized or required state replay data is insufficient.
 - **FR-003**: System MUST respect a user flag to disable video creation, producing skip entries instead of errors.
 - **FR-004**: System MUST operate correctly in smoke mode by skipping video generation while still producing (or attempting) lightweight plot placeholders.
 - **FR-005**: System MUST expose artifact metadata in machine-readable JSON files (one for plots, one for videos) for downstream automation.
@@ -40,7 +41,7 @@ As a benchmark consumer (researcher or CI reviewer), after running the Full Clas
 - **FR-011**: System MUST allow subsequent analytical tooling to proceed even if all artifacts are skipped.
 - **FR-012**: System MUST avoid unbounded growth by generating visuals only once per completed benchmark run (not per adaptive iteration) to minimize overhead.
 - **FR-013**: System MUST record video artifacts only for existing episodes at time of finalization (no speculative or empty videos).
-- **FR-014**: System SHOULD keep added runtime overhead minimal (target: plots < 2s total, videos < 5s for 1 default video) for typical CI usage. [NEEDS CLARIFICATION: precise performance thresholds acceptance?]
+- **FR-014**: System SHOULD keep added runtime overhead minimal (target: plots < 2s total, videos < 5s for 1 default video using `SimulationView` or fallback) for typical CI usage.
 - **FR-015**: System SHOULD maintain deterministic artifact filenames for reproducibility.
 
 ### Key Entities
@@ -52,14 +53,16 @@ As a benchmark consumer (researcher or CI reviewer), after running the Full Clas
 ### Existing Visualization Context (Informational)
 The project already includes an interactive / programmatic visualization layer using PyGame (`SimulationView` in `robot_sf/render/sim_view.py`). That system:
 - Renders real simulation frames with robot, pedestrians, sensors, actions.
-- Optionally records frame sequences to video (if moviepy/ffmpeg available) when explicitly enabled during simulation runs.
+- Can operate headless (offscreen surface) enabling CI-friendly video capture.
 
-This feature (plots & representative videos for the classic benchmark) is intentionally distinct:
-- Focuses on lightweight, post-run summary artifacts for reporting, not interactive playback.
-- Uses synthetic or placeholder representations (deterministic paths, summary PDFs) to keep CI overhead low.
-- Does not depend on opening a display window or running live simulation loops.
+Updated Approach: This feature will leverage `SimulationView` as the primary video renderer by replaying a minimal serialized episode state (poses, actions, sensor rays) when available. Only if `SimulationView` initialization or replay prerequisites fail (e.g., PyGame import failure in unusual environment, missing episodic replay data, or explicit dry-run mode) will the system fall back to the existing synthetic path renderer.
 
-Clarification: We are NOT replacing or extending the PyGame `SimulationView` here; we are adding benchmark-scoped artifact generation triggered after statistical aggregation. Future work could integrate higher-fidelity frame capture from `SimulationView`, but that is explicitly out of scope (see Non‑Goals).
+Rationale:
+- Reuse mature visualization pathway (reduces divergence, aligns with intention to interpret policy behavior).
+- Maintains determinism via recorded state replay.
+- Falls back gracefully preserving prior placeholder behavior to avoid regressions.
+
+Out of Scope Clarification: Enhancing `SimulationView` fidelity (textures, advanced overlays) remains a separate concern; this feature restricts itself to wiring and minimal state capture needed for representative replay.
 
 ## Review & Acceptance Checklist
 

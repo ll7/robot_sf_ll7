@@ -1,27 +1,23 @@
 """Contract test T010 for `compute_effect_sizes`.
 
 Expectations:
-  - Produces list of EffectSizeReport objects (one per archetype).
-  - Uses rate metrics (e.g., collision_rate) to compute standardized differences (Cohen's h).
-
-Current state: compute_effect_sizes not implemented -> expect NotImplementedError.
+  - Produces list of EffectSizeReport objects (one per archetype) once implemented.
+  - Contains comparisons with standardized (Cohen's h) values for rate metrics.
 """
 
 from __future__ import annotations
 
-import pytest
-
 from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
-def test_compute_effect_sizes_not_implemented():
+def test_compute_effect_sizes_structure():
     class _Metric:
         def __init__(self, name, mean):
             self.name = name
             self.mean = mean
             self.median = mean
             self.p95 = mean
-            self.mean_ci = None
+            self.mean_ci = (mean * 0.9, mean * 1.1)
             self.median_ci = None
 
     class _Group:
@@ -39,5 +35,11 @@ def test_compute_effect_sizes_not_implemented():
     class _Cfg:
         effect_size_reference_density = "low"
 
-    with pytest.raises(NotImplementedError):  # until T032
-        compute_effect_sizes(groups, _Cfg())
+    reports = compute_effect_sizes(groups, _Cfg())
+    assert reports and len(reports) == 1
+    rep = reports[0]
+    assert rep.archetype == "crossing"
+    assert rep.comparisons
+    comp = rep.comparisons[0]
+    for attr in ["metric", "density_low", "density_high", "diff", "standardized"]:
+        assert hasattr(comp, attr)

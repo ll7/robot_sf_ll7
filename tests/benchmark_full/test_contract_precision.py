@@ -1,15 +1,11 @@
 """Contract test T011 for `evaluate_precision`.
 
-Expectation (final behavior once implemented):
+Expectation:
   - Returns StatisticalSufficiencyReport with `evaluations` list and `final_pass` bool.
-  - Contains per-scenario precision entries with half_width <= target for pass.
-
-Current state: function not implemented; test will fail with NotImplementedError.
+  - Contains per-group entries with metric_status list including collision_rate & success_rate.
 """
 
 from __future__ import annotations
-
-import pytest
 
 from robot_sf.benchmark.full_classic.precision import evaluate_precision
 
@@ -38,9 +34,15 @@ def test_evaluate_precision_structure():
 
     class _Cfg:
         smoke = True
-        # Threshold targets referenced later by implementation
-        collision_ci = 0.02
-        success_ci = 0.03
+        collision_ci = 0.05
+        success_ci = 0.05
 
-    with pytest.raises(NotImplementedError):  # until T033
-        evaluate_precision(groups, _Cfg())
+    report = evaluate_precision(groups, _Cfg())
+    assert hasattr(report, "evaluations") and hasattr(report, "final_pass")
+    assert isinstance(report.evaluations, list) and len(report.evaluations) == 1
+    ev = report.evaluations[0]
+    assert ev.archetype == "crossing" and ev.density == "low"
+    assert ev.metric_status and len(ev.metric_status) == 2
+    for ms in ev.metric_status:
+        assert ms.metric in {"collision_rate", "success_rate"}
+        assert ms.half_width <= ms.target

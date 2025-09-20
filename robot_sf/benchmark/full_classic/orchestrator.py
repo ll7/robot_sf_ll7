@@ -23,6 +23,103 @@ from .io_utils import append_episode_record, write_manifest
 from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
 from .precision import evaluate_precision
 
+# -----------------------------
+# Manifest dataclass & helpers
+# -----------------------------
+
+
+@dataclass
+class BenchmarkManifest:  # noqa: D401 - simple container for benchmark run metadata
+    output_root: Path
+    git_hash: str
+    scenario_matrix_hash: str
+    config: object
+    episodes_path: str
+    created_at: float = field(default_factory=time.time)
+    executed_jobs: int = 0
+    skipped_jobs: int = 0
+    notes: str = "skeleton_t029"
+    runtime_sec: float = 0.0
+    episodes_per_second: float = 0.0
+    workers: int = 1
+    scaling_efficiency: dict = field(default_factory=dict)
+
+
+def _compute_git_hash(root: Path) -> str:
+    """Best‑effort retrieval of current git HEAD short hash.
+
+    Falls back to 'unknown' if repository metadata is inaccessible. Separated to keep
+    orchestration function lean (polish phase refactor for C901).
+    """
+    git_hash = "unknown"
+    try:  # pragma: no cover - environment dependent
+        head_ref = root / ".git" / "HEAD"
+        if head_ref.exists():
+            content = head_ref.read_text(encoding="utf-8").strip()
+            if content.startswith("ref:"):
+                ref_path = content.split(" ", 1)[1].strip()
+                ref_file = root / ".git" / ref_path
+                if ref_file.exists():
+                    git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
+            else:
+                git_hash = content[:12]
+    except Exception:  # noqa: BLE001
+        pass
+    return git_hash
+
+
+def _prepare_output_dirs(cfg):
+    root = Path(cfg.output_root)
+    episodes_dir = root / "episodes"
+    aggregates_dir = root / "aggregates"
+    reports_dir = root / "reports"
+    plots_dir = root / "plots"
+    for d in (episodes_dir, aggregates_dir, reports_dir, plots_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    return root, episodes_dir, aggregates_dir, reports_dir, plots_dir
+
+
+def _init_manifest(
+    root: Path, episodes_path: Path, cfg, scenario_matrix_hash: str
+) -> BenchmarkManifest:
+    return BenchmarkManifest(
+        output_root=root,
+        git_hash=_compute_git_hash(root),
+        scenario_matrix_hash=scenario_matrix_hash,
+        config=cfg,
+        episodes_path=str(episodes_path),
+    )
+
+
+def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
+    """Update runtime, throughput and synthetic parallel efficiency stats in manifest."""
+    now = time.time()
+    manifest.runtime_sec = max(0.0, now - manifest.created_at)
+    manifest.workers = int(getattr(cfg, "workers", 1) or 1)
+    if manifest.runtime_sec > 0:
+        manifest.episodes_per_second = manifest.executed_jobs / manifest.runtime_sec
+    ideal_rate = manifest.workers * manifest.episodes_per_second if manifest.workers > 0 else 0
+    efficiency = 0.0
+    if ideal_rate > 0:
+        efficiency = manifest.episodes_per_second / ideal_rate
+    manifest.scaling_efficiency = {
+        "runtime_sec": manifest.runtime_sec,
+        "executed_jobs": manifest.executed_jobs,
+        "skipped_jobs": manifest.skipped_jobs,
+        "episodes_per_second": manifest.episodes_per_second,
+        "workers": manifest.workers,
+        "parallel_efficiency_placeholder": efficiency,
+    }
+    return manifest.scaling_efficiency
+
+
+def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
+    _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
+    _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
+    _write_json(
+        root / "reports" / "statistical_sufficiency.json", _serialize_precision(precision_report)
+    )
+
 
 def _episode_id_from_job(job) -> str:
     """Deterministically derive an episode_id from a job.
@@ -66,6 +163,7 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
     aggregation/effects tasks to proceed under TDD.
     """
     episode_id = _episode_id_from_job(job)
+    now = time.time()
     record: Dict[str, Any] = {
         "episode_id": episode_id,
         "scenario_id": job.scenario_id,
@@ -83,9 +181,10 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
             "snqi": 0.75,
         },
         "steps": min(job.horizon, 120),  # bounded placeholder
-        "wall_time_sec": 0.0,  # will be populated with timing later (T041)
+        # Basic timing placeholders updated by caller for sequential path
+        "wall_time_sec": 0.0,
         "algo": getattr(cfg, "algo", "unknown"),
-        "created_at": 0.0,  # real timestamp added later
+        "created_at": now,
     }
     return record
 
@@ -105,7 +204,10 @@ def _execute_seq(
     job_list: List[object], existing_ids: Set[str], episodes_path: Path, cfg, manifest
 ) -> Iterator[dict]:
     for jb in job_list:
+        start = time.time()
         rec = _make_episode_record(jb, cfg)
+        end = time.time()
+        rec["wall_time_sec"] = end - start
         append_episode_record(episodes_path, rec)
         existing_ids.add(rec["episode_id"])
         if hasattr(manifest, "executed_jobs"):
@@ -118,7 +220,10 @@ def _worker_job_wrapper(job, algo):  # top-level for pickling on spawn
         def __init__(self, a):
             self.algo = a
 
-    return _make_episode_record(job, _TempCfg(algo))
+    start = time.time()
+    rec = _make_episode_record(job, _TempCfg(algo))
+    rec["wall_time_sec"] = time.time() - start
+    return rec
 
 
 def _execute_parallel(
@@ -235,127 +340,66 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     return done_flag, jobs
 
 
-def run_full_benchmark(cfg):  # T029 + T034 integration
-    """Execute benchmark run with adaptive precision loop (extended in T034).
+def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish phase)
+    """Execute classic benchmark with adaptive precision loop.
 
-    Steps now included:
-        1. Directory + manifest initialization (legacy T029 scope).
-        2. Initial planning and episode execution.
-        3. Adaptive sampling loop:
-             - Aggregate metrics
-             - Compute effect sizes
-             - Evaluate precision
-             - If precision criteria met (report.final_pass) OR max episodes reached → stop
-                 else schedule additional jobs via adaptive_sampling_iteration.
-        4. Persist artifact JSON files: aggregates/summary.json, reports/effect_sizes.json,
-             reports/statistical_sufficiency.json each iteration (overwrite for latest state).
-
-    Future (not yet): plots, videos, scaling efficiency timing.
+    Refactored to reduce cyclomatic complexity (extracting helpers for setup, manifest
+    initialization, scaling efficiency instrumentation, artifact writes). Public
+    semantics preserved for existing tests.
     """
-
-    # --- Prepare output directories ---
-    root = Path(cfg.output_root)
-    episodes_dir = root / "episodes"
-    aggregates_dir = root / "aggregates"
-    reports_dir = root / "reports"
-    plots_dir = root / "plots"
-    for d in (episodes_dir, aggregates_dir, reports_dir, plots_dir):
-        d.mkdir(parents=True, exist_ok=True)
-
+    # Output & planning
+    root, episodes_dir, _aggregates_dir, _reports_dir, _plots_dir = _prepare_output_dirs(cfg)
     episodes_path = episodes_dir / "episodes.jsonl"
-
-    # --- Planning phase ---
     raw = load_scenario_matrix(cfg.scenario_matrix_path)
-    # Compute scenario matrix hash (stable canonical JSON dump)
     matrix_bytes = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
     scenario_matrix_hash = hashlib.sha1(matrix_bytes).hexdigest()[:12]
     rng = random.Random(int(getattr(cfg, "master_seed", 123)))
     scenarios = plan_scenarios(raw, cfg, rng=rng)
     jobs = expand_episode_jobs(scenarios, cfg)
 
-    # --- Manifest structure (lightweight dataclass for serialization) ---
-    @dataclass
-    class BenchmarkManifest:  # noqa: D401 - simple container
-        output_root: Path
-        git_hash: str
-        scenario_matrix_hash: str
-        config: object
-        episodes_path: str
-        created_at: float = field(default_factory=time.time)
-        executed_jobs: int = 0
-        skipped_jobs: int = 0
-        notes: str = "skeleton_t029"
-
-    # Attempt to derive git hash (best effort, fallback to unknown)
-    git_hash = "unknown"
-    try:  # pragma: no cover - ephemeral environment differences
-        head_ref = root / ".git" / "HEAD"
-        if head_ref.exists():
-            content = head_ref.read_text(encoding="utf-8").strip()
-            if content.startswith("ref:"):
-                ref_path = content.split(" ", 1)[1].strip()
-                ref_file = root / ".git" / ref_path
-                if ref_file.exists():
-                    git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
-            else:
-                git_hash = content[:12]
-    except Exception:  # noqa: BLE001
-        pass
-
-    manifest = BenchmarkManifest(
-        output_root=root,
-        git_hash=git_hash,
-        scenario_matrix_hash=scenario_matrix_hash,
-        config=cfg,
-        episodes_path=str(episodes_path),
-    )
-
-    # --- Execute initial jobs ---
-    episode_records = list(run_episode_jobs(jobs, cfg, manifest))
-
-    # Adaptive precision loop (T034)
-    all_records = list(episode_records)
+    # Manifest & initial execution
+    manifest = _init_manifest(root, episodes_path, cfg, scenario_matrix_hash)
+    all_records = list(run_episode_jobs(jobs, cfg, manifest))
     scenarios_list = list(scenarios)
     max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
-    done = False
-    iteration = 0
-    while not done:
-        iteration += 1
+
+    # Adaptive loop
+    while True:
         groups = aggregate_metrics(all_records, cfg)
         effects = compute_effect_sizes(groups, cfg)
         precision_report = evaluate_precision(groups, cfg)
 
-        # Write/update artifacts each iteration
-        _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
-        _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
-        _write_json(
-            root / "reports" / "statistical_sufficiency.json",
-            _serialize_precision(precision_report),
-        )
+        # Instrumentation & artifact persistence
+        scaling = _update_scaling_efficiency(manifest, cfg)
+        try:  # attach for downstream JSON serialization if model allows attribute
+            precision_report.scaling_efficiency = scaling  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            pass
+        _write_iteration_artifacts(root, groups, effects, precision_report)
 
+        # Exit conditions
         if precision_report.final_pass:
-            logger.info("Precision criteria met; stopping after iteration {}", iteration)
+            logger.info("Precision criteria met; stopping adaptive loop")
             break
-        # Check if we've hit max episodes already
         if max_episodes and sum(g.count for g in groups) >= max_episodes * len(scenarios_list):
-            logger.info("Reached max episodes; stopping adaptive loop")
+            logger.info("Reached max episodes budget; stopping adaptive loop")
             break
 
-        # Request additional jobs
+        # Additional sampling
         done_flag, new_jobs = adaptive_sampling_iteration(
             all_records, cfg, scenarios_list, manifest
         )
         if not new_jobs:
-            done = done_flag or True
+            if done_flag:
+                logger.info("Adaptive iteration indicated done; no new jobs.")
             break
         new_records = list(run_episode_jobs(new_jobs, cfg, manifest))
         all_records.extend(new_records)
-        # Continue loop
 
-    # --- Write manifest (atomic) ---
-    manifest_path = root / "manifest.json"
-    write_manifest(manifest, str(manifest_path))
-
+    # Finalize & persist manifest
+    _update_scaling_efficiency(manifest, cfg)
+    manifest.scaling_efficiency.setdefault("finalized", True)
+    write_manifest(manifest, str(root / "manifest.json"))
     return manifest
 
 

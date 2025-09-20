@@ -90,10 +90,10 @@
  - [X] T048 Update `CHANGELOG.md` (new script + benchmark capability) if user-facing. (entry added under Unreleased)
 
 ## Phase 3.5: Polish & Quality Gates
-- [ ] T049 [P] Add additional unit tests for edge cases (zero collisions CI, zero variance effect size) `tests/benchmark_full/test_unit_edge_cases.py`.
-- [ ] T050 [P] Add unit test for Wilson interval correctness vs known values `tests/benchmark_full/test_unit_wilson.py`.
-- [ ] T051 [P] Add unit test for bootstrap reproducibility (seeded) `tests/benchmark_full/test_unit_bootstrap_seed.py`.
-- [ ] T052 [P] Add unit test for video selection logic `tests/benchmark_full/test_unit_video_selection.py`.
+- [X] T049 [P] Add additional unit tests for edge cases (zero collisions CI, zero variance effect size) `tests/benchmark_full/test_unit_edge_cases.py`.
+- [X] T050 [P] Add unit test for Wilson interval correctness vs known values `tests/benchmark_full/test_unit_wilson.py`.
+- [X] T051 [P] Add unit test for bootstrap reproducibility (seeded) `tests/benchmark_full/test_unit_bootstrap_seed.py`.
+- [X] T052 [P] Add unit test for video selection logic `tests/benchmark_full/test_unit_video_selection.py`.
 - [ ] T053 Run Ruff + type check + pytest full suite; fix issues (commit). (Meta task) 
 - [ ] T054 Add validation script extension (optional) to include new benchmark in a validation shell script.
 - [ ] T055 Generate example benchmark run artifacts and add figure thumbnails to `docs/scenario_thumbnails.md` (if appropriate) or a new section.

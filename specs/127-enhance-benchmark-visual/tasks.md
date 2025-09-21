@@ -32,11 +32,11 @@ Legend:
 ### Schema & Determinism Tests (Pre-Implementation)
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T010 | Test: video schema validity | New `tests/visuals/test_video_schema_validation.py`: load schema + sample good/bad objects | contracts schema | [P] | |
-| T011 | Test: plot schema validity | `tests/visuals/test_plot_schema_validation.py` | contracts schema | [P] | |
-| T012 | Test: performance schema validity | `tests/visuals/test_performance_schema_validation.py` | contracts schema | [P] | |
-| T013 | Test: deterministic episode selection | `tests/visuals/test_deterministic_selection.py` simulate list ordering + selection logic (mock) | T001 | [P] | |
-| T014 | Test: skip note constants stable | `tests/visuals/test_skip_notes.py` assert exported values set membership | T001 | [P] | |
+| T010 | Test: video schema validity | New `tests/visuals/test_video_schema_validation.py`: load schema + sample good/bad objects | contracts schema | [P] | Done |
+| T011 | Test: plot schema validity | `tests/visuals/test_plot_schema_validation.py` | contracts schema | [P] | Done |
+| T012 | Test: performance schema validity | `tests/visuals/test_performance_schema_validation.py` | contracts schema | [P] | Done |
+| T013 | Test: deterministic episode selection | `tests/visuals/test_deterministic_selection.py` simulate list ordering + selection logic (mock) | T001 | [P] | Done |
+| T014 | Test: skip note constants stable | `tests/visuals/test_skip_notes.py` assert exported values set membership | T001 | [P] | Done |
 
 ### Replay Adapter & Data Structures
 | ID | Task | Details / File Paths | Depends | Parallel | Status |

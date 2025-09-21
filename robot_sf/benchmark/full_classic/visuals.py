@@ -17,7 +17,9 @@ from typing import Any, List
 
 from loguru import logger
 
+from .encode import encode_frames
 from .plots import generate_plots
+from .render_sim_view import generate_frames
 from .render_synthetic import generate_fallback_videos
 from .replay import extract_replay_episodes, validate_replay_episode
 from .visual_constants import (
@@ -83,47 +85,95 @@ def _convert_plot_artifacts(raw_list) -> List[dict]:
 
 
 def _attempt_sim_view_videos(_records, _out_dir: Path, _cfg, replay_map) -> List[VideoArtifact]:
-    """Attempt to render videos using SimulationView (placeholder).
+    """Attempt to render + encode videos using SimulationView first path (FR-001, FR-008, T036).
 
-    Ordering rationale (FR-008 vs readiness probe):
-    - If SimulationView module import failed entirely → immediate fallback (empty list).
-    - If capture enabled, we FIRST emit skip artifacts for insufficient replay even if
-      the runtime readiness probe would fail. This ensures the skip note uses the
-      SimulationView renderer identifier, matching test expectations and providing
-      clearer diagnostics ("why no SimulationView video was produced").
-    - Only if we have no skip artifacts do we check runtime readiness; failing that
-      we fall back (empty list) letting synthetic path proceed.
-    - Actual frame rendering not implemented yet (future tasks T031+T035).
+    Behavior summary:
+    1. If SimulationView import or readiness probe fails → return [] (caller triggers fallback).
+    2. For each selected record with valid replay episode, stream frames via generate_frames
+       into encode_frames (moviepy). Memory sampling + encode time captured.
+    3. Invalid / insufficient replay → skipped artifact (NOTE_INSUFFICIENT_REPLAY) using SIM_VIEW renderer.
+    4. Encoding failure → failed artifact (status=failed, note propagated) and partial file (<1KB) removed.
+    5. If moviepy missing (encode_frames returns skipped) we short‑circuit returning [] so synthetic path
+       can still attempt (maintains prior behavior tests expect for moviepy-missing path). We only do this
+       if *all* attempted encodes report moviepy-missing; mixed states still return produced artifacts.
     """
-    artifacts: List[VideoArtifact] = []
+    if not _SIM_VIEW_AVAILABLE or not simulation_view_ready():
+        return []
+
     capture_enabled = bool(getattr(_cfg, "capture_replay", False))
-    if capture_enabled:
-        for rec in _records:
-            ep_id = rec.get("episode_id", "unknown")
-            sc_id = rec.get("scenario_id", "unknown")
-            rep = replay_map.get(ep_id) if isinstance(replay_map, dict) else None
-            if rep is None or not validate_replay_episode(rep, min_length=2):
-                artifacts.append(
-                    VideoArtifact(
-                        artifact_id=f"video_{ep_id}",
-                        scenario_id=sc_id,
-                        episode_id=ep_id,
-                        path_mp4=str(_out_dir / f"video_{ep_id}.mp4"),
-                        status="skipped",
-                        renderer=RENDERER_SIM_VIEW,
-                        note=NOTE_INSUFFICIENT_REPLAY,
-                    )
+    if not capture_enabled:
+        return []  # Without replay we cannot reconstruct frames
+
+    fps = int(getattr(_cfg, "video_fps", 10))
+    smoke = bool(getattr(_cfg, "smoke", False))
+    max_frames = int(getattr(_cfg, "sim_view_max_frames", 0)) or None
+    artifacts: List[VideoArtifact] = []
+    moviepy_missing_all = True
+    for rec in _records:
+        ep_id = rec.get("episode_id", "unknown")
+        sc_id = rec.get("scenario_id", "unknown")
+        mp4_path = _out_dir / f"video_{ep_id}.mp4"
+        ep = replay_map.get(ep_id) if isinstance(replay_map, dict) else None
+        if ep is None or not validate_replay_episode(ep, min_length=2):
+            artifacts.append(
+                VideoArtifact(
+                    artifact_id=f"video_{ep_id}",
+                    scenario_id=sc_id,
+                    episode_id=ep_id,
+                    path_mp4=str(mp4_path),
+                    status="skipped",
+                    renderer=RENDERER_SIM_VIEW,
+                    note=NOTE_INSUFFICIENT_REPLAY,
                 )
-        if artifacts:
-            return artifacts
-    # If SimulationView import failed entirely we cannot proceed further; return empty to trigger fallback
-    if not _SIM_VIEW_AVAILABLE:
+            )
+            continue
+        try:
+            frame_iter = generate_frames(
+                ep, fps=fps, max_frames=(10 if smoke and max_frames is None else max_frames)
+            )
+            enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
+        except Exception as exc:  # noqa: BLE001
+            # Best effort cleanup of tiny partial file
+            try:
+                if mp4_path.exists() and mp4_path.stat().st_size < 1024:
+                    mp4_path.unlink()
+            except Exception:  # noqa: BLE001
+                pass
+            artifacts.append(
+                VideoArtifact(
+                    artifact_id=f"video_{ep_id}",
+                    scenario_id=sc_id,
+                    episode_id=ep_id,
+                    path_mp4=str(mp4_path),
+                    status="failed",
+                    renderer=RENDERER_SIM_VIEW,
+                    note=f"render-error:{exc.__class__.__name__}",
+                )
+            )
+            moviepy_missing_all = False
+            continue
+        if enc.status == "skipped" and enc.note == "moviepy-missing":
+            # Defer decision until we know if all are missing
+            continue
+        moviepy_missing_all = False
+        artifacts.append(
+            VideoArtifact(
+                artifact_id=f"video_{ep_id}",
+                scenario_id=sc_id,
+                episode_id=ep_id,
+                path_mp4=str(mp4_path),
+                status=enc.status,
+                renderer=RENDERER_SIM_VIEW,
+                note=enc.note,
+                encode_time_s=enc.encode_time_s,
+                peak_rss_mb=enc.peak_rss_mb,
+            )
+        )
+
+    # If we produced only insufficient or no artifacts and every encode reported moviepy missing → fallback
+    if moviepy_missing_all and not artifacts:
         return []
-    # No skip artifacts produced; verify readiness for a (future) render attempt
-    if not simulation_view_ready():  # probe failure → fallback
-        return []
-    # Placeholder: real rendering path not implemented yet; return empty list to trigger fallback
-    return []
+    return artifacts
 
 
 def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> List[VideoArtifact]:

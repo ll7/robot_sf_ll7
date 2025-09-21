@@ -58,8 +58,8 @@ Legend:
 | T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | |
 | T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | Done |
 | T032 | Implement synthetic fallback path parity refactor | Ensure existing synthetic code moved/cleaned to `visuals/render_synthetic.py` | T001 | [P] | |
-| T033 | Implement moviepy encoding wrapper (streaming) | `visuals/encode.py` function with generator + memory sampling hook | T031 |  | |
-| T034 | Memory sampler (optional psutil) | Helper in `encode.py` or `perf.py` thread sampling RSS; returns peak MB | T033 |  | |
+| T033 | Implement moviepy encoding wrapper (streaming) | `visuals/encode.py` function with generator + memory sampling hook | T031 |  | Done |
+| T034 | Memory sampler (optional psutil) | Helper in `encode.py` or `perf.py` thread sampling RSS; returns peak MB | T033 |  | Done |
 | T035 | Integrate encoding + renderer selection | Update `visuals.py` main flow: choose simulation_view vs synthetic vs skip; write artifact entries | T033 T032 |  | |
 | T036 | Failure cleanup logic | Ensure partial file removal + status=failed note path implemented | T035 |  | |
 

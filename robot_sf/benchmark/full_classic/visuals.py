@@ -19,8 +19,10 @@ from loguru import logger
 
 from . import videos as synthetic_videos
 from .plots import generate_plots
+from .replay import extract_replay_episodes, validate_replay_episode
 from .visual_constants import (
     NOTE_DISABLED,
+    NOTE_INSUFFICIENT_REPLAY,
     NOTE_SMOKE_MODE,
     RENDERER_SIM_VIEW,
     RENDERER_SYNTHETIC,
@@ -75,17 +77,37 @@ def _convert_plot_artifacts(raw_list) -> List[dict]:
     return out
 
 
-def _attempt_sim_view_videos(_records, _out_dir: Path, _cfg) -> List[VideoArtifact]:
+def _attempt_sim_view_videos(_records, _out_dir: Path, _cfg, replay_map) -> List[VideoArtifact]:
     """Attempt to render videos using SimulationView.
 
     Current placeholder implementation: falls back immediately if SimulationView not available.
     Future extension: reconstruct environment state replay per episode.
     """
     artifacts: List[VideoArtifact] = []
+    capture_enabled = bool(getattr(_cfg, "capture_replay", False))
     if not _SIM_VIEW_AVAILABLE:
         return artifacts
-    # Placeholder: we currently do not have replay state; return empty list to force fallback.
-    return artifacts
+    if capture_enabled:
+        # Apply insufficient replay skip logic (FR-008)
+        for rec in _records:
+            ep_id = rec.get("episode_id", "unknown")
+            sc_id = rec.get("scenario_id", "unknown")
+            rep = replay_map.get(ep_id) if isinstance(replay_map, dict) else None
+            if rep is None or not validate_replay_episode(rep, min_length=2):
+                artifacts.append(
+                    VideoArtifact(
+                        artifact_id=f"video_{ep_id}",
+                        scenario_id=sc_id,
+                        episode_id=ep_id,
+                        path_mp4=str(_out_dir / f"video_{ep_id}.mp4"),
+                        status="skipped",
+                        renderer=RENDERER_SIM_VIEW,
+                        note=NOTE_INSUFFICIENT_REPLAY,
+                    )
+                )
+        if artifacts:  # only skip artifacts produced; rendering not implemented yet
+            return artifacts
+    return artifacts  # empty list triggers fallback downstream
 
 
 def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> List[VideoArtifact]:
@@ -131,8 +153,12 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
     selected_records = records[: max_videos or 1]
     video_artifacts: List[VideoArtifact] = []
 
+    replay_map = {}
+    if bool(getattr(cfg, "capture_replay", False)):
+        replay_map = extract_replay_episodes(selected_records)
+
     if selected_records and not disable_videos and not smoke:
-        sim_view_attempt = _attempt_sim_view_videos(selected_records, videos_dir, cfg)
+        sim_view_attempt = _attempt_sim_view_videos(selected_records, videos_dir, cfg, replay_map)
         if sim_view_attempt:
             video_artifacts = sim_view_attempt
         else:

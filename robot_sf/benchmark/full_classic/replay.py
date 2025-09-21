@@ -123,3 +123,30 @@ __all__ = [
     "validate_replay_episode",
     "build_replay_episode",
 ]
+
+
+def extract_replay_episodes(records: List[dict], min_length: int = 2):
+    """Extract replay episodes from raw episode records (T022 adapter).
+
+    Returns mapping episode_id -> ReplayEpisode for those with a valid
+    `replay_steps` list of (t,x,y,heading) tuples. Invalid or too-short
+    sequences are ignored (caller may apply skip logic per FR-008).
+    """
+    out: dict[str, ReplayEpisode] = {}
+    for rec in records:
+        ep_id = rec.get("episode_id")
+        sc_id = rec.get("scenario_id", "unknown")
+        steps_raw = rec.get("replay_steps")
+        if not isinstance(ep_id, str) or not isinstance(steps_raw, list):
+            continue
+        try:
+            seq = [(float(t), float(x), float(y), float(h)) for (t, x, y, h) in steps_raw]
+        except Exception:  # noqa: BLE001
+            continue
+        ep = build_replay_episode(ep_id, sc_id, seq)
+        if validate_replay_episode(ep, min_length=min_length):
+            out[ep_id] = ep
+    return out
+
+
+__all__.append("extract_replay_episodes")

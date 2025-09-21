@@ -10,6 +10,7 @@ Implements spec FR-001..FR-015:
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ from .plots import generate_plots
 from .render_sim_view import generate_frames
 from .render_synthetic import generate_fallback_videos
 from .replay import extract_replay_episodes, validate_replay_episode
+from .validation import validate_visual_manifests
 from .visual_constants import (
     NOTE_DISABLED,
     NOTE_INSUFFICIENT_REPLAY,
@@ -297,11 +299,22 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
     video_end = time.perf_counter()
     _final_normalize_insufficient(cfg, selected_records, video_artifacts)
 
+    # Performance aggregation (T040/T041)
+    first_success = next((v for v in video_artifacts if v.status == "success"), None)
+    first_video_time = first_success.encode_time_s if first_success else None
+    first_video_peak = first_success.peak_rss_mb if first_success else None
     perf_meta = {
         "plots_runtime_sec": round(t1 - t0, 4),
         "videos_runtime_sec": round(video_end - video_start, 4),
         "plots_over_budget": (t1 - t0) > 2.0,
-        "videos_over_budget": (video_end - video_start) > 5.0,
+        "videos_over_budget": (first_video_time or 0) > 5.0
+        if first_video_time is not None
+        else False,
+        "first_video_encode_time_s": first_video_time,
+        "first_video_peak_rss_mb": first_video_peak,
+        "memory_over_budget": (first_video_peak or 0) > 100
+        if first_video_peak is not None
+        else False,
     }
 
     _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)
@@ -323,6 +336,18 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
         ],
     )
     _write_json(reports_dir / "performance_visuals.json", perf_meta)
+
+    # Optional schema validation (T043) triggered by env var
+    if os.environ.get("ROBOT_SF_VALIDATE_VISUALS") == "1":
+        contracts_dir = (
+            Path(__file__).parent / "../../../../specs/127-enhance-benchmark-visual/contracts"
+        ).resolve()
+        try:
+            validated = validate_visual_manifests(reports_dir, contracts_dir)
+            logger.info("Validated visual manifests: %s", validated)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Visual manifest validation failed: %s", exc)
+            raise
 
     smoke = bool(getattr(cfg, "smoke", False))
     disable_videos = bool(getattr(cfg, "disable_videos", False))

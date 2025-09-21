@@ -42,15 +42,21 @@ Legend:
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
 | T020 | Implement ReplayState dataclass | `robot_sf/benchmark/visuals/replay.py` with validation helper | T001 |  | |
+| T020 | Implement ReplayState dataclass | `robot_sf/benchmark/visuals/replay.py` with validation helper | T001 |  | Done |
 | T021 | Hook capture in benchmark loop (if missing) | Identify episode data source; modify `robot_sf/benchmark/orchestrator.py` or related collector to store minimal replay arrays (guarded by flag) | T020 |  | |
+| T021 | Hook capture in benchmark loop (if missing) | Identify episode data source; modify `robot_sf/benchmark/orchestrator.py` or related collector to store minimal replay arrays (guarded by flag) | T020 |  | Done |
 | T022 | Adapter: extract replay states post-run | Extend `visuals.py` to build list of `ReplayState` objects from stored episode info | T021 |  | |
+| T022 | Adapter: extract replay states post-run | Extend `visuals.py` to build list of `ReplayState` objects from stored episode info | T021 |  | Done |
 | T023 | Test: insufficient replay state skip | `tests/visuals/test_insufficient_replay_skip.py` create malformed ReplayState -> expect skip note | T022 | [P] | |
+| T023 | Test: insufficient replay state skip | `tests/visuals/test_insufficient_replay_skip.py` create malformed ReplayState -> expect skip note | T022 | [P] | Done |
 
 ### SimulationView & Encoding Pipeline
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
 | T030 | Utility: simulation view availability probe | In `deps.py` implement probe caching result | T003 |  | |
+| T030 | Utility: simulation view availability probe | In `deps.py` implement probe caching result | T003 |  | Done |
 | T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | |
+| T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | Done |
 | T032 | Implement synthetic fallback path parity refactor | Ensure existing synthetic code moved/cleaned to `visuals/render_synthetic.py` | T001 | [P] | |
 | T033 | Implement moviepy encoding wrapper (streaming) | `visuals/encode.py` function with generator + memory sampling hook | T031 |  | |
 | T034 | Memory sampler (optional psutil) | Helper in `encode.py` or `perf.py` thread sampling RSS; returns peak MB | T033 |  | |

@@ -22,6 +22,7 @@ from .effects import compute_effect_sizes
 from .io_utils import append_episode_record, write_manifest
 from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
 from .precision import evaluate_precision
+from .replay import ReplayCapture  # T021 optional replay capture
 from .visuals import generate_visual_artifacts  # new visual artifact integration
 
 # -----------------------------
@@ -187,6 +188,17 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
         "algo": getattr(cfg, "algo", "unknown"),
         "created_at": now,
     }
+    # Optional: attach placeholder replay steps when capture enabled (T021)
+    if getattr(cfg, "capture_replay", False):
+        # Build a tiny deterministic trajectory: straight line x increasing, heading fixed.
+        horizon = min(job.horizon, 20)
+        cap = ReplayCapture(episode_id=episode_id, scenario_id=job.scenario_id)
+        for i in range(horizon):
+            t_rel = float(i) * 0.1
+            cap.record(t=t_rel, x=float(i) * 0.05, y=0.0, heading=0.0, speed=0.5)
+        record["replay_steps"] = [
+            (s.t, s.x, s.y, s.heading) for s in cap.finalize().steps
+        ]  # compact tuple form for adapter (T022)
     return record
 
 

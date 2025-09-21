@@ -1,10 +1,8 @@
 """Constants for visual artifact generation.
 
 Defines canonical renderer identifiers and skip / note codes to ensure
-stable manifest values and reduce risk of typos across tests.
-
-This module is internal; values are not part of the benchmark episode
-schema (FR-020) but are used in auxiliary manifest schemas.
+stable manifest values and reduce risk of typos across tests. Kept in a
+dedicated module so both internal code and tests can import the same symbols.
 """
 
 from __future__ import annotations

@@ -18,13 +18,13 @@ from typing import Any, List
 from loguru import logger
 
 from . import videos as synthetic_videos
-from .constants import (
+from .plots import generate_plots
+from .visual_constants import (
     NOTE_DISABLED,
     NOTE_SMOKE_MODE,
     RENDERER_SIM_VIEW,
     RENDERER_SYNTHETIC,
 )
-from .plots import generate_plots
 
 try:  # Try to import SimulationView lazily (primary renderer)
     from robot_sf.render.sim_view import SimulationView  # type: ignore  # noqa: F401

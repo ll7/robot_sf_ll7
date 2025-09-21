@@ -56,6 +56,8 @@ class VideoArtifact:
     status: str
     renderer: str
     note: str | None = None
+    encode_time_s: float | None = None
+    peak_rss_mb: float | None = None
 
 
 def _write_json(path: Path, obj: Any) -> None:
@@ -125,6 +127,12 @@ def _attempt_sim_view_videos(_records, _out_dir: Path, _cfg, replay_map) -> List
 
 
 def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> List[VideoArtifact]:
+    """Generate synthetic fallback + encode with moviepy if possible.
+
+    The existing synthetic generator currently produces mp4s itself; for integration
+    with the new encoding pipeline we treat its output as pre-encoded if present.
+    Future refactor could switch synthetic path to yield raw frames and call encode_frames.
+    """
     raw = generate_fallback_videos(records, out_dir, cfg)
     out: List[VideoArtifact] = []
     for a in raw:
@@ -135,7 +143,7 @@ def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> List[VideoArtifac
                 episode_id=getattr(a, "episode_id", "unknown"),
                 path_mp4=getattr(a, "path_mp4", ""),
                 status=getattr(a, "status", "skipped"),
-                renderer=RENDERER_SYNTHETIC,  # synthetic fallback
+                renderer=RENDERER_SYNTHETIC,
                 note=getattr(a, "note", None),
             )
         )
@@ -230,6 +238,12 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
         replay_map = extract_replay_episodes(selected_records)
     video_start = time.perf_counter()
     video_artifacts = _build_video_artifacts(cfg, selected_records, videos_dir, replay_map)
+    # Attach encode timing placeholders: synthetic path already encoded; SimulationView path not yet implemented
+    # For now we only fill encode_time_s / peak_rss_mb if file exists and not skipped.
+    for va in video_artifacts:
+        if va.status == "success" and Path(va.path_mp4).exists():
+            # Can't derive encode_time from legacy path; leave None
+            pass
     video_end = time.perf_counter()
     _final_normalize_insufficient(cfg, selected_records, video_artifacts)
 
@@ -252,6 +266,8 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
                 "status": a.status,
                 "renderer": a.renderer,
                 "note": a.note,
+                "encode_time_s": a.encode_time_s,
+                "peak_rss_mb": a.peak_rss_mb,
             }
             for a in video_artifacts
         ],

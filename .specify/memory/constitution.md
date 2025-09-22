@@ -1,14 +1,15 @@
 <!--
 Sync Impact Report
-Previous Version: 1.0.0 -> New Version: 1.1.0 (MINOR bump)
-Rationale: Added new Principle XI (Internal Maintainability & Private Helper Documentation) – material expansion of guidance; clarified Principle VIII wording (documentation scope) without semantic contract change.
+Previous Version: 1.1.0 -> New Version: 1.2.0 (MINOR bump)
+Rationale: Added new Principle XII (Preferred Logging & Observability) establishing Loguru as the canonical logging facade and prohibiting ad-hoc print usage in library code. This is a forward-looking governance addition (material expansion) without modifying existing public runtime contracts.
 Modified Principles:
- - VIII. Documentation as an API Surface (clarified internal vs public docs statement)
+ - (New) XII. Preferred Logging & Observability
+ - (Clarification) XI reference to logging docstrings kept intact (no semantic change)
 Added Sections:
- - XI. Internal Maintainability & Private Helper Documentation
+ - XII. Preferred Logging & Observability
 Removed Sections: None
 Templates Updated:
- - .specify/templates/plan-template.md (footer version reference) ✅
+ - (None required) – existing templates do not contradict logging guidance
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -52,6 +53,30 @@ Out of scope: general robotics control stacks, unrelated perception models, arbi
 
 ### XI. Internal Maintainability & Private Helper Documentation
 Private (underscore‑prefixed or local/inner) helpers that embody non‑obvious branching, fallback semantics, resource management, or performance trade‑offs MUST include a concise docstring or inline comment summarizing: (1) purpose, (2) key decision rules / edge cases, (3) side effects (e.g., filesystem writes, environment access). This requirement ensures future refactors preserve reproducibility and benchmarking invariants. Purely trivial pass‑through wrappers (e.g., one‑line value adapters) are exempt. When complexity is reduced (e.g., helper decomposition, signature introspection replacing branching), newly introduced inner helpers inherit the same documentation requirement at creation time—retroactive addition counts as maintenance (PATCH) unless accompanied by principle changes (MINOR).
+
+### XII. Preferred Logging & Observability
+All non-trivial runtime messaging in library code (anything under `robot_sf/` or `fast-pysf/` wrappers) MUST use the designated logging facade: Loguru. Direct `print()` calls are prohibited in library modules except for:
+1. Explicit CLI entry points (e.g., short scripts where user-facing stdout output is the primary UX) – these may still prefer Loguru but can print for succinct CLI summaries.
+2. Failing fast during early bootstrap before logging is configured (must be replaced once initialization pattern stabilizes).
+3. Tests asserting stdout semantics (only when verifying user-visible CLI behavior).
+
+Requirements & Rationale:
+ - Unified Formatting & Routing: Loguru provides structured, leveled logging; adopting a single framework avoids fragmented logger setup and simplifies redirection during headless benchmarking or CI.
+ - Deterministic Reproducibility: Benchmark and environment runs must allow suppression or capture of logs without code edits; using Loguru centralizes this control.
+ - Observability Budget: Excessive verbose (DEBUG) logging in tight simulation loops is disallowed unless guarded by an explicit performance/debug flag; INFO level in hot paths should remain minimal.
+ - Migration Policy: Legacy `print()` discovered in library code triggers a maintenance task (PATCH) unless removal alters user-visible CLI output (then MINOR with documentation note).
+ - Error & Warning Levels: Use WARNING for recoverable degradations (e.g., missing optional dependencies, zero/empty frame capture) and ERROR for failures that abort an operation. CRITICAL reserved for irreversible state corruption or guaranteed data loss scenarios.
+
+Implementation Guidance:
+ - Prefer lazy formatting (Loguru handles this natively with `{}` style) and include contextual keys (seed, scenario id) where logs aid reproducibility triage.
+ - Avoid logging inside tight inner loops per-step unless aggregated (e.g., log every N steps or at episode end) to protect performance targets.
+ - Tests may temporarily elevate logging to DEBUG when diagnosing flaky behavior but should reset configuration to avoid polluting benchmark outputs.
+
+Non-compliance Handling:
+ - New code introducing unapproved `print()` statements in library modules should be revised in review before merge.
+ - Existing stray prints: create an issue referencing this Principle XII and replace with `logger.info`/`logger.warning` within a maintenance cycle.
+
+This principle adds governance scope (hence MINOR bump) but does not change public API or schema contracts; no migration guide required beyond updating contributing/dev documentation.
 
 ## Domain Scope & Deliverables
 
@@ -135,4 +160,4 @@ Traceability Requirements:
 
 This Constitution supersedes ad‑hoc practices. Amendments require: (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected contracts (env, config, metrics, benchmark schema), (3) migration guidance or deprecation plan, (4) version/date update below. Pull Requests must assert compliance by referencing relevant sections. Any introduction of out‑of‑scope functionality must include justification aligning with Core Principles I–X or be rejected.
 
-**Version**: 1.1.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-22
+**Version**: 1.2.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-22

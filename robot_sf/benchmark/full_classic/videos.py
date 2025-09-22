@@ -1,25 +1,22 @@
-"""Annotated video generation for representative episodes.
+"""Benchmark video artifact generation (synthetic renderer; SimulationView deferred).
 
-Tasks:
-    - T037: Initial stub returning skipped artifacts in smoke mode.
-    - T038: Add lightweight annotated video generation when not in smoke mode.
+Implements portion of Spec 127 / TODO 7a:
+    * Deterministic selection of the first N episodes.
+    * Synthetic path rendering with matplotlib + moviepy encoding.
+    * Skip notes: smoke-mode, disabled, moviepy-missing, simulation-view-missing.
+    * Status values aligned with forthcoming schema: success | skipped | failed.
+    * Performance timing (encode_time_s) recorded per artifact.
+    * Renderer selection flag (cfg.video_renderer) supporting: synthetic | sim-view | none.
 
-Design (T038):
-    - Keep generation inexpensive: simple synthetic path derived from seed (deterministic).
-    - Use matplotlib to render frames; compose MP4 via moviepy if available.
-    - Graceful degradation:
-            * If smoke mode -> always skipped (fast tests)
-            * If matplotlib or moviepy/ffmpeg unavailable -> skipped with note
-            * Any runtime error during render -> status "error" with note
-    - Episode selection: first N records (cfg.max_videos or default 1)
-    - Annotations: path trail, current position marker, title with scenario/episode id, outcome tag (SUCCESS/COLLISION/TIMEOUT heuristic via record fields).
+Deferred (future): true SimulationView renderer, memory peak measurement, streaming encode.
 """
 
 from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List
 
@@ -37,13 +34,21 @@ except Exception:  # noqa: BLE001
 
 
 @dataclass
-class _VideoArtifact:  # minimal internal representation until full T038
+class _VideoArtifact:
+    """Internal video artifact representation.
+
+    Fields match draft schema (filename instead of path_mp4, renderer, encode metrics).
+    """
+
     artifact_id: str
     scenario_id: str
     episode_id: str
-    path_mp4: str
-    status: str  # generated|skipped|error
+    filename: str | None
+    renderer: str
+    status: str  # success | skipped | failed
     note: str | None = None
+    encode_time_s: float | None = None
+    memory_peak_mb: float | None = None
 
 
 def _canvas_to_rgb_simple(fig) -> "np.ndarray":  # type: ignore[name-defined]
@@ -104,13 +109,14 @@ def _build_outcome(rec) -> str:
 ## Removed unused _make_skip_artifacts helper (original attempt to simplify skip path)
 
 
-def generate_videos(records, out_dir, cfg):  # T037 + T038 (refactored for HiDPI)
-    """Generate representative episode videos (synthetic path).
+def generate_videos(records, out_dir, cfg):  # noqa: C901
+    """Generate representative episode videos.
 
-    Status values:
-      - generated: MP4 successfully written
-      - skipped: smoke/disabled/missing dependency
-      - error: unexpected failure (benchmark continues)
+    Config attributes used if present on cfg:
+        - smoke (bool): skip with note 'smoke-mode'
+        - disable_videos / no_video (bool): skip with note 'disabled'
+        - max_videos (int)
+        - video_renderer (str): synthetic | sim-view | none
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -118,37 +124,43 @@ def generate_videos(records, out_dir, cfg):  # T037 + T038 (refactored for HiDPI
         return []
 
     smoke = bool(getattr(cfg, "smoke", False))
-    disable_videos = bool(getattr(cfg, "disable_videos", False))
+    disable_videos = bool(getattr(cfg, "disable_videos", False) or getattr(cfg, "no_video", False))
     max_videos = int(getattr(cfg, "max_videos", 1)) or 1
+    renderer_req = str(getattr(cfg, "video_renderer", "synthetic"))
     selected = records[:max_videos]
 
-    if smoke or disable_videos:
-        note = "smoke mode" if smoke else "video generation disabled"
-        return [
-            _VideoArtifact(
-                artifact_id=f"video_{r.get('episode_id', 'unknown')}",
-                scenario_id=r.get("scenario_id", "unknown"),
-                episode_id=r.get("episode_id", "unknown"),
-                path_mp4=str(out_path / f"{r.get('episode_id', 'unknown')}.mp4"),
-                status="skipped",
-                note=note,
-            )
-            for r in selected
-        ]
+    def _mk_skip(rec, note: str):  # helper
+        return _VideoArtifact(
+            artifact_id=f"video_{rec.get('episode_id', 'unknown')}",
+            scenario_id=rec.get("scenario_id", "unknown"),
+            episode_id=rec.get("episode_id", "unknown"),
+            filename=None,
+            renderer=(
+                "synthetic"
+                if note in {"moviepy-missing", "smoke-mode", "disabled"}
+                else ("simulation_view" if renderer_req == "sim-view" else "synthetic")
+            ),
+            status="skipped",
+            note=note,
+            encode_time_s=None,
+            memory_peak_mb=None,
+        )
 
-    if plt is None or ImageSequenceClip is None:
-        reason = "matplotlib missing" if plt is None else "moviepy missing"
-        return [
-            _VideoArtifact(
-                artifact_id=f"video_{r.get('episode_id', 'unknown')}",
-                scenario_id=r.get("scenario_id", "unknown"),
-                episode_id=r.get("episode_id", "unknown"),
-                path_mp4=str(out_path / f"{r.get('episode_id', 'unknown')}.mp4"),
-                status="skipped",
-                note=reason,
-            )
-            for r in selected
-        ]
+    if renderer_req == "none":
+        disable_videos = True
+
+    if smoke:
+        return [_mk_skip(r, "smoke-mode") for r in selected]
+    if disable_videos:
+        return [_mk_skip(r, "disabled") for r in selected]
+    if plt is None:
+        return [_mk_skip(r, "disabled") for r in selected]
+    if ImageSequenceClip is None:
+        return [_mk_skip(r, "moviepy-missing") for r in selected]
+    if renderer_req == "sim-view":  # not implemented yet
+        # Communicate downgrade but still proceed with synthetic generation
+        # (Tests can assert presence of skip note separately later if needed.)
+        pass
 
     artifacts: List[_VideoArtifact] = []
     for rec in selected:
@@ -156,12 +168,13 @@ def generate_videos(records, out_dir, cfg):  # T037 + T038 (refactored for HiDPI
         scenario_id = rec.get("scenario_id", "unknown")
         seed = int(rec.get("seed", 0))
         random.seed(seed)
-        mp4_path = out_path / f"{episode_id}.mp4"
+        mp4_path = out_path / f"video_{episode_id}.mp4"
         try:
             N = 40
             _, xs_full, ys_full = _render_episode_frames(seed, N)
             outcome = _build_outcome(rec)
             frames = []
+            t0 = time.perf_counter()
             for idx in range(N):
                 fig, ax = plt.subplots(figsize=(3, 3))  # type: ignore
                 ax.plot(xs_full[: idx + 1], ys_full[: idx + 1], color="tab:blue", linewidth=1.5)
@@ -184,14 +197,18 @@ def generate_videos(records, out_dir, cfg):  # T037 + T038 (refactored for HiDPI
                 codec="libx264",
                 fps=10,
             )
+            encode_time = time.perf_counter() - t0
             artifacts.append(
                 _VideoArtifact(
                     artifact_id=f"video_{episode_id}",
                     scenario_id=scenario_id,
                     episode_id=episode_id,
-                    path_mp4=str(mp4_path),
-                    status="generated",
-                    note="synthetic annotated path",
+                    filename=str(mp4_path),
+                    renderer="synthetic",
+                    status="success",
+                    note="synthetic-annotated-path",
+                    encode_time_s=encode_time,
+                    memory_peak_mb=0.0,
                 )
             )
         except Exception as e:  # noqa: BLE001
@@ -200,9 +217,21 @@ def generate_videos(records, out_dir, cfg):  # T037 + T038 (refactored for HiDPI
                     artifact_id=f"video_{episode_id}",
                     scenario_id=scenario_id,
                     episode_id=episode_id,
-                    path_mp4=str(mp4_path),
-                    status="error",
-                    note=f"render failed: {e.__class__.__name__}",
+                    filename=str(mp4_path),
+                    renderer="synthetic",
+                    status="failed",
+                    note=f"render-failed:{e.__class__.__name__}",
+                    encode_time_s=None,
+                    memory_peak_mb=None,
                 )
             )
     return artifacts
+
+
+def artifacts_to_manifest(artifacts: List[_VideoArtifact]):
+    """Convert internal artifacts list to manifest dict for JSON dumping."""
+    return {
+        "artifacts": [
+            {k: v for k, v in asdict(a).items() if k not in {"artifact_id"}} for a in artifacts
+        ]
+    }

@@ -118,29 +118,38 @@ def _write_clip(
     clip_class, frame_list: list[np.ndarray], out_path: Path, codec: str, fps: int, preset: str
 ) -> None:  # type: ignore[no-untyped-def]
     clip = clip_class(frame_list, fps=fps)  # type: ignore
-    # We prefer keyword arguments for readability, but the existing test
-    # `tests/visuals/test_encode_wrapper.py` monkeypatches a fake clip whose
-    # signature only accepts positional parameters (path, _codec, _fps, _audio,
-    # _preset, _logger). To remain backward‑compatible with that test (and any
-    # third‑party mocks), we attempt a keyword invocation first and fall back to
-    # positional arguments on TypeError.
-    try:  # primary path (real moviepy signature)
-        clip.write_videofile(
-            str(out_path),
-            fps=fps,
-            codec=codec,
-            audio=False,
-            preset=preset,
-            logger=None,
-        )  # type: ignore[arg-type]
-        return
-    except TypeError:
-        pass  # retry positional below
-    except Exception:
-        # Some mocks may raise different exception types for unexpected keywords
-        pass
-    # Fallback: positional order expected by legacy/mock signature
-    clip.write_videofile(  # type: ignore[call-arg]
+    write_fn = getattr(clip, "write_videofile")
+
+    # Introspect signature to decide invocation style for better maintainability.
+    import inspect
+
+    try:
+        sig = inspect.signature(write_fn)
+    except Exception:  # noqa: BLE001
+        sig = None  # Fallback to positional path
+
+    if sig is not None:
+        params = list(sig.parameters.values())
+        names = [p.name for p in params]
+        # Heuristic: real moviepy signature exposes keyword names like 'fps', 'codec', 'audio', 'preset'.
+        has_named = {"fps", "codec", "audio", "preset"}.issubset(set(names))
+        if has_named:
+            try:
+                write_fn(  # keyword-friendly path
+                    str(out_path),
+                    fps=fps,
+                    codec=codec,
+                    audio=False,
+                    preset=preset,
+                    logger=None,
+                )  # type: ignore[arg-type]
+                return
+            except Exception:  # noqa: BLE001
+                # Fall through to positional attempt
+                pass
+
+    # Positional fallback (mock/legacy signature)
+    write_fn(  # type: ignore[call-arg]
         str(out_path), codec, fps, False, preset, None
     )
 

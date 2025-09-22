@@ -354,7 +354,13 @@ def run_demo(
 
     # Env creation
     sim_cfg = RobotSimulationConfig()
-    env = make_robot_env(config=sim_cfg, debug=False)
+    # Create environment with visualization enabled (debug=True) so rendering/recording paths are active.
+    env = make_robot_env(
+        config=sim_cfg,
+        debug=True,
+        record_video=eff_record,
+        video_path=str(OUTPUT_DIR) if eff_record else None,
+    )
     logger.info(
         "Environment created (reward fallback active if custom reward not provided)."
     )  # (T022)

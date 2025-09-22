@@ -23,6 +23,7 @@ from typing import Generator
 import numpy as np
 
 from .replay import ReplayEpisode
+from .state_builder import iter_states  # T037
 from .visual_deps import has_pygame, simulation_view_ready
 
 try:  # lightweight import gate
@@ -64,21 +65,27 @@ def generate_frames(
     _sim_view = SimulationView(record_video=True, video_fps=fps, width=640, height=360)  # type: ignore  # noqa: F841
 
     produced = 0
-    for _ in episode.steps:
-        # For now we create a simple placeholder visualization: solid color
-        # gradient based on timestep index. A richer reconstruction requires
-        # environment state enrichment (future task when available).
-        arr = np.zeros((360, 640, 3), dtype=np.uint8)
+    for st in iter_states(episode):
+        # Construct a gradient frame first (placeholder background)
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
         shade = int(min(255, (produced / max(1, len(episode.steps) - 1)) * 255))
-        arr[:, :, 0] = shade  # Red channel gradient
-        arr[:, :, 1] = 20
-        arr[:, :, 2] = 255 - shade
+        frame[:, :, 0] = shade
+        frame[:, :, 1] = 20
+        frame[:, :, 2] = 255 - shade
+        # Attempt SimulationView rendering onto its surface if available
+        try:
+            # Minimal state object has robot_pose attribute, satisfying render expectations for now.
+            # Future enrichment will pass full VisualizableSimState.
+            if hasattr(_sim_view, "render"):
+                # We call render only for potential side-effects (e.g., future drawing); current minimal
+                # state lacks attributes so internal drawing will be limited.
+                _sim_view.render(st)  # type: ignore[arg-type]
+                # If recording, SimulationView may have appended a frame; we ignore here and use synthetic frame.
+        except Exception:  # noqa: BLE001
+            # Fail silently; fallback to synthetic frame (keeps pipeline robust)
+            pass
         produced += 1
-        # Future: when replay contains physical state + poses we will construct a
-        # VisualizableSimState and call `_sim_view.render(state)` here. For now we
-        # simply keep the SimulationView instance alive (ensuring pygame surfaces
-        # persist) and emit a synthetic gradient frame to exercise the video pipeline.
-        yield arr
+        yield frame
         if max_frames is not None and produced >= max_frames:
             break
 

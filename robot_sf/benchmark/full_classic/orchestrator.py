@@ -193,12 +193,32 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
         # Build a tiny deterministic trajectory: straight line x increasing, heading fixed.
         horizon = min(job.horizon, 20)
         cap = ReplayCapture(episode_id=episode_id, scenario_id=job.scenario_id)
+        ped_positions_series: list[list[tuple[float, float]]] = []
+        actions_series: list[tuple[float, float]] = []
         for i in range(horizon):
             t_rel = float(i) * 0.1
-            cap.record(t=t_rel, x=float(i) * 0.05, y=0.0, heading=0.0, speed=0.5)
-        record["replay_steps"] = [
-            (s.t, s.x, s.y, s.heading) for s in cap.finalize().steps
-        ]  # compact tuple form for adapter (T022)
+            # Simple oscillating lateral motion for pedestrians & dummy action vector
+            ped_positions = (
+                [(float(i) * 0.05, 0.2), (float(i) * 0.05, -0.2)]
+                if i % 2 == 0
+                else [(float(i) * 0.05, 0.25)]
+            )
+            action = (0.05, 0.0)
+            ped_positions_series.append(ped_positions)
+            actions_series.append(action)
+            cap.record(
+                t=t_rel,
+                x=float(i) * 0.05,
+                y=0.0,
+                heading=0.0,
+                speed=0.5,
+                ped_positions=ped_positions,
+                action=action,
+            )
+        finalized = cap.finalize().steps
+        record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
+        record["replay_peds"] = ped_positions_series
+        record["replay_actions"] = actions_series
     return record
 
 

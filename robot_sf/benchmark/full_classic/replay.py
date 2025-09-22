@@ -26,19 +26,26 @@ from typing import List, Sequence
 
 @dataclass(slots=True)
 class ReplayStep:
-    """Single timestep state snapshot.
+    """Single timestep state snapshot (enriched T039).
 
-    Fields kept minimal: position (x, y), heading (radians), timestamp (seconds).
-    Additional optional fields (speed, goal vectors, etc.) can be appended later
-    without breaking existing usage since dataclass provides defaults.
+    Core fields:
+        - t: relative time (seconds)
+        - x, y: robot position
+        - heading: robot orientation (radians)
+
+    Optional enrichment:
+        - speed: scalar robot speed
+        - ped_positions: list of (x,y) pedestrian positions
+        - action: (ax, ay) or (vx, vy) tuple representing last action
     """
 
     t: float
     x: float
     y: float
     heading: float
-    # Optional extensions (kept None when not captured)
     speed: float | None = None
+    ped_positions: list[tuple[float, float]] | None = None
+    action: tuple[float, float] | None = None
 
 
 @dataclass(slots=True)
@@ -74,9 +81,26 @@ class ReplayCapture:
     _steps: List[ReplayStep] = field(default_factory=list)
 
     def record(
-        self, t: float, x: float, y: float, heading: float, speed: float | None = None
+        self,
+        t: float,
+        x: float,
+        y: float,
+        heading: float,
+        speed: float | None = None,
+        ped_positions: list[tuple[float, float]] | None = None,
+        action: tuple[float, float] | None = None,
     ) -> None:
-        self._steps.append(ReplayStep(t=t, x=x, y=y, heading=heading, speed=speed))
+        self._steps.append(
+            ReplayStep(
+                t=t,
+                x=x,
+                y=y,
+                heading=heading,
+                speed=speed,
+                ped_positions=ped_positions,
+                action=action,
+            )
+        )
 
     def finalize(self) -> ReplayEpisode:
         return ReplayEpisode(
@@ -105,14 +129,26 @@ def validate_replay_episode(ep: ReplayEpisode, min_length: int = 2) -> bool:
 
 
 def build_replay_episode(
-    episode_id: str, scenario_id: str, seq: Sequence[tuple[float, float, float, float]]
+    episode_id: str,
+    scenario_id: str,
+    seq: Sequence[tuple[float, float, float, float]],
+    ped_seq: Sequence[list[tuple[float, float]] | None] | None = None,
+    action_seq: Sequence[tuple[float, float] | None] | None = None,
 ) -> ReplayEpisode:
-    """Convenience constructor from a sequence of (t, x, y, heading) tuples.
+    """Convenience constructor from basic sequences.
 
-    Useful for tests (e.g., insufficient replay skip) and adapter code. Speed
-    left unset to keep interface lean for now.
+    Parameters
+    ----------
+    seq : sequence of (t, x, y, heading)
+        Core robot kinematic samples.
+    ped_seq : optional sequence parallel to seq with pedestrian position lists.
+    action_seq : optional sequence parallel to seq with action tuples.
     """
-    steps = [ReplayStep(t=t, x=x, y=y, heading=h) for (t, x, y, h) in seq]
+    steps: list[ReplayStep] = []
+    for i, (t, x, y, h) in enumerate(seq):
+        peds = ped_seq[i] if ped_seq and i < len(ped_seq) else None
+        act = action_seq[i] if action_seq and i < len(action_seq) else None
+        steps.append(ReplayStep(t=t, x=x, y=y, heading=h, ped_positions=peds, action=act))
     return ReplayEpisode(episode_id=episode_id, scenario_id=scenario_id, steps=steps)
 
 
@@ -137,13 +173,23 @@ def extract_replay_episodes(records: List[dict], min_length: int = 2):
         ep_id = rec.get("episode_id")
         sc_id = rec.get("scenario_id", "unknown")
         steps_raw = rec.get("replay_steps")
+        ped_raw = rec.get("replay_peds")  # parallel list of lists or None
+        action_raw = rec.get("replay_actions")  # parallel list of tuples or None
         if not isinstance(ep_id, str) or not isinstance(steps_raw, list):
             continue
         try:
-            seq = [(float(t), float(x), float(y), float(h)) for (t, x, y, h) in steps_raw]
+            seq = []
+            for tpl in steps_raw:
+                # Support legacy 4-tuple or enriched 6-tuple (t,x,y,h, ped_list, action_tuple)
+                if not isinstance(tpl, (list, tuple)) or len(tpl) < 4:
+                    raise ValueError
+                t, x, y, h = tpl[:4]
+                seq.append((float(t), float(x), float(y), float(h)))
+            ped_seq = ped_raw if isinstance(ped_raw, list) else None
+            action_seq = action_raw if isinstance(action_raw, list) else None
         except Exception:  # noqa: BLE001
             continue
-        ep = build_replay_episode(ep_id, sc_id, seq)
+        ep = build_replay_episode(ep_id, sc_id, seq, ped_seq=ped_seq, action_seq=action_seq)
         if validate_replay_episode(ep, min_length=min_length):
             out[ep_id] = ep
     return out

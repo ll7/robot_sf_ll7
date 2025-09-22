@@ -62,35 +62,45 @@ def generate_frames(
     # Create SimulationView primarily for future integration & to validate that
     # dependencies are functioning. We don't yet render real state, so the
     # instance is intentionally unused beyond lifecycle side effects.
-    _sim_view = SimulationView(record_video=True, video_fps=fps, width=640, height=360)  # type: ignore  # noqa: F841
-
+    _sim_view = SimulationView(record_video=False, video_fps=fps, width=640, height=360)  # type: ignore
     produced = 0
-    for st in iter_states(episode):
-        # Construct a gradient frame first (placeholder background)
-        frame = np.zeros((360, 640, 3), dtype=np.uint8)
-        shade = int(min(255, (produced / max(1, len(episode.steps) - 1)) * 255))
-        frame[:, :, 0] = shade
-        frame[:, :, 1] = 20
-        frame[:, :, 2] = 255 - shade
-        # Attempt SimulationView rendering onto its surface if available
-        try:
-            # Minimal state object has robot_pose attribute, satisfying render expectations for now.
-            # Future enrichment will pass full VisualizableSimState.
-            if hasattr(_sim_view, "render"):
-                # We call render only for potential side-effects (e.g., future drawing); current minimal
-                # state lacks attributes so internal drawing will be limited.
-                _sim_view.render(st)  # type: ignore[arg-type]
-                # If recording, SimulationView may have appended a frame; we ignore here and use synthetic frame.
-        except Exception:  # noqa: BLE001
-            # Fail silently; fallback to synthetic frame (keeps pipeline robust)
-            pass
-        produced += 1
-        yield frame
-        if max_frames is not None and produced >= max_frames:
-            break
+    try:
+        for st in iter_states(episode):
+            # Placeholder gradient fallback (will be replaced when real capture succeeds)
+            frame = np.zeros((360, 640, 3), dtype=np.uint8)
+            shade = int(min(255, (produced / max(1, len(episode.steps) - 1)) * 255))
+            frame[:, :, 0] = shade
+            frame[:, :, 1] = 20
+            frame[:, :, 2] = 255 - shade
+            try:
+                if hasattr(_sim_view, "render"):
+                    _sim_view.render(st)  # type: ignore[arg-type]
+                    # Attempt to grab pixel buffer from pygame surface
+                    import pygame  # type: ignore
 
-    # Explicit cleanup: rely on pygame.quit invoked by probe earlier if needed.
-    # We purposely do not call view.exit_simulation() to avoid side effects on global state.
+                    if hasattr(_sim_view, "screen") and isinstance(
+                        _sim_view.screen, pygame.Surface
+                    ):  # type: ignore[attr-defined]
+                        surf = _sim_view.screen  # type: ignore[attr-defined]
+                        # Ensure consistent size (H,W) = (surface.get_height(), surface.get_width())
+                        arr = pygame.surfarray.array3d(surf)  # (W,H,3)
+                        arr = np.transpose(arr, (1, 0, 2))  # to (H,W,3)
+                        frame_h, frame_w = frame.shape[:2]
+                        if arr.shape[0] == frame_h and arr.shape[1] == frame_w:
+                            frame = arr
+            except Exception:  # noqa: BLE001
+                # Ignore and keep synthetic frame
+                pass
+            produced += 1
+            yield frame
+            if max_frames is not None and produced >= max_frames:
+                break
+    finally:  # T041A cleanup
+        try:  # noqa: SIM105
+            if hasattr(_sim_view, "exit_simulation"):
+                _sim_view.exit_simulation()  # type: ignore[call-arg]
+        except Exception:  # noqa: BLE001
+            pass
 
 
 __all__ = ["generate_frames"]

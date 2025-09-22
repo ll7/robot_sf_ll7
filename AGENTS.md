@@ -1,5 +1,8 @@
 # Repository Guidelines
 
+Use `.specify/memory/constitution.md`, `docs/dev-guide.md` and `.github/copilot-instructions.md` to guide AI assistants.
+This document covers briefly the repository structure, coding style, testing workflow, and contributor conventions.
+
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `test_pygame/` (GUI regressions), and the `fast-pysf/` submodule, which must be initialized via `git submodule update --init --recursive`. Assets and checkpoints are versioned under `maps/svg_maps/`, `model/`, and `results/`.
 

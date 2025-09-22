@@ -15,7 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Synthetic slow test and guidance validation tests.
 
 ### Added
-- Classic Interactions PPO Visualization (Feature 128) – foundations: test package scaffold, feature docs folder, changelog stub, docs index link (MVP in progress; includes deterministic PPO demo script with planned recording & summary features).
+- Classic Interactions PPO Visualization (Feature 128) – deterministic PPO-driven classic interaction scenario visualization script (`examples/classic_interactions_pygame.py`) with:
+  - Constants-based configuration (no CLI) and dry-run validation path
+  - Deterministic seed ordering & structured episode summaries (scenario, seed, steps, outcome, success/collision/timeout booleans, recorded)
+  - Graceful recording guard (moviepy/ffmpeg optional) with informative skip notes
+  - Logging verbosity toggle (`LOGGING_ENABLED`) and performance-friendly frame sampling
+  - Improved model load error guidance (actionable download/help message)
+  - Headless safety via SDL_VIDEODRIVER=dummy detection
+  - Reward fallback integration log (env already falls back to simple_reward)
+  - Summary table printer helper for human-readable output
 - Benchmark visual artifact integration (plots + videos manifests) for Full Classic Interaction Benchmark:
   - Post-run single-pass generation of placeholder plots and representative episode videos
   - SimulationView-first architecture with graceful synthetic fallback (current release uses synthetic until replay support added)

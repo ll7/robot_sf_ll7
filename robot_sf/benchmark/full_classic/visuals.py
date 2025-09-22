@@ -203,22 +203,22 @@ def _select_records(records, cfg) -> List[dict]:
 def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
     cfg, records: List[dict], videos_dir: Path, replay_map: dict
 ) -> List[VideoArtifact]:
-    smoke = bool(getattr(cfg, "smoke", False))
-    disable_videos = bool(getattr(cfg, "disable_videos", False))
-    mode = str(getattr(cfg, "video_renderer", "auto")).strip().lower() or "auto"
-    if mode == "sim_view":  # alias
-        mode = "sim-view"
-    if mode not in {"auto", "synthetic", "sim-view"}:
-        logger.warning("Unknown video_renderer '%s' -> auto", mode)
-        mode = "auto"
-    if not records:
-        return []
-    if disable_videos or smoke:
-        reason = NOTE_DISABLED if disable_videos else NOTE_SMOKE_MODE
+    # --- Inner helpers (local to keep namespace clean) ------------------
+    def _normalize_mode(raw) -> str:
+        m = str(raw or "auto").strip().lower()
+        if m == "sim_view":  # alias
+            m = "sim-view"
+        if m not in {"auto", "synthetic", "sim-view"}:
+            logger.warning("Unknown video_renderer '%s' -> auto", m)
+            m = "auto"
+        return m
+
+    def _build_skipped(reason: str) -> List[VideoArtifact]:
         out: List[VideoArtifact] = []
         for r in records:
             ep_id = r.get("episode_id", "unknown")
             sc_id = r.get("scenario_id", "unknown")
+            # Note: historical path naming (no 'video_' prefix) preserved
             mp4_path = videos_dir / f"{ep_id}.mp4"
             out.append(
                 VideoArtifact(
@@ -232,13 +232,12 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
                 )
             )
         return out
-    if mode == "synthetic":
-        return _synthetic_fallback_videos(records, videos_dir, cfg)
-    if mode == "sim-view":
+
+    def _build_forced_sim_view() -> List[VideoArtifact]:
         attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if attempt:
             return attempt
-        # Forced sim-view but unavailable / no encodes
+        # Forced sim-view but unavailable / no encodes: decide note
         note = NOTE_SIM_VIEW_MISSING
         if (
             bool(getattr(cfg, "capture_replay", False))
@@ -246,7 +245,6 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
             and simulation_view_ready()
             and not moviepy_ready()
         ):
-            # SimulationView ready and replay captured but moviepy missing
             note = NOTE_MOVIEPY_MISSING
         out: List[VideoArtifact] = []
         for r in records:
@@ -265,21 +263,29 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
                 )
             )
         return out
-    # Auto mode
-    sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
-    if sim_attempt:
-        return sim_attempt
-    synthetic = _synthetic_fallback_videos(records, videos_dir, cfg)
-    if bool(getattr(cfg, "capture_replay", False)):
-        rec_index = {r.get("episode_id"): r for r in records}
-        for a in synthetic:
-            rec = rec_index.get(a.episode_id, {})
-            steps_raw = rec.get("replay_steps")
-            if isinstance(steps_raw, list) and len(steps_raw) < 2:
-                a.renderer = RENDERER_SIM_VIEW
-                a.status = "skipped"
-                a.note = NOTE_INSUFFICIENT_REPLAY
-    return synthetic
+
+    def _build_auto() -> List[VideoArtifact]:
+        sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
+        if sim_attempt:
+            return sim_attempt
+        # Use synthetic; insufficient replay normalization is deferred to _final_normalize_insufficient
+        return _synthetic_fallback_videos(records, videos_dir, cfg)
+
+    # --- Main logic -----------------------------------------------------
+    if not records:
+        return []
+    smoke = bool(getattr(cfg, "smoke", False))
+    disable_videos = bool(getattr(cfg, "disable_videos", False))
+    mode = _normalize_mode(getattr(cfg, "video_renderer", "auto"))
+
+    if disable_videos or smoke:
+        return _build_skipped(NOTE_DISABLED if disable_videos else NOTE_SMOKE_MODE)
+    if mode == "synthetic":
+        return _synthetic_fallback_videos(records, videos_dir, cfg)
+    if mode == "sim-view":
+        return _build_forced_sim_view()
+    # auto
+    return _build_auto()
 
 
 def _final_normalize_insufficient(cfg, records: List[dict], video_artifacts: List[VideoArtifact]):

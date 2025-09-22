@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Synthetic slow test and guidance validation tests.
 
 ### Added
+- Benchmark visual artifact integration (plots + videos manifests) for Full Classic Interaction Benchmark:
+  - Post-run single-pass generation of placeholder plots and representative episode videos
+  - SimulationView-first architecture with graceful synthetic fallback (current release uses synthetic until replay support added)
+  - Deterministic selection (first N episodes) and machine-readable manifests: `plot_artifacts.json`, `video_artifacts.json`, `performance_visuals.json`
+  - Renderer attribution field (`renderer`) and budget timing flags
+  - Renderer toggle flag (`--renderer=auto|synthetic|sim-view`) with forced mode diagnostics
+  - Replay capture adapter enabling SimulationView reconstruction (episode + step validation)
+  - Extended skip-note taxonomy: `simulation-view-missing`, `moviepy-missing`, `insufficient-replay`, `render-error:<Type>`, `disabled`, `smoke-mode`
+  - Performance split metrics (`first_video_render_time_s`, `first_video_encode_time_s`) plus memory sampling & over‑budget flags
+  - Dependency matrix + lifecycle documentation (`docs/benchmark_visuals.md`) covering fallback ladder and required optional deps (pygame, moviepy/ffmpeg, jsonschema, psutil)
 - **Social Navigation Benchmark Platform** - Complete benchmark infrastructure for reproducible social navigation research
 - **Full Classic Interaction Benchmark (Initial Implementation)**
   - Synthetic placeholder execution pipeline (planning → execution → aggregation → effect sizes → precision loop)

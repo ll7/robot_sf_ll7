@@ -19,7 +19,7 @@
     - [CLI vs programmatic use](#cli-vs-programmatic-use)
   - [Code reviews](#code-reviews)
     - [Docstrings](#docstrings)
-  - [Ask clarifying questions (with options)](#ask-clarifying-questions-with-options)
+  - [Clarify questions (with options)](#clarify-questions-with-options)
   - [Problem‑solving approach](#problemsolving-approach)
   - [Tooling and tasks (uv, Ruff, pytest, ty, VS Code)](#tooling-and-tasks-uv-ruff-pytest-ty-vs-code)
 - [Documentation Standards](#documentation-standards)
@@ -137,7 +137,7 @@ env = make_robot_env(config=config)
 ## Design and development workflow recommendations
 
 - Clarify exact requirements before starting implementation.
-- Ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
+- If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.
   - Give arguments to the options for easy decision-making.
   - Provide options to quickly converge on a decision.
@@ -241,13 +241,15 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Use GitHub’s review tools to leave comments and approve changes.
 
 #### Docstrings
-- Every public module, function, class, and method should have a docstring.
+- Every module, function, class, and method should have a docstring.
 - Docstrings should use triple double quotes (""").
 - The first line should be a short summary of the object’s purpose, starting with a capital letter and ending with a period.
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
+- Private/internal code should also have docstrings explaining their purpose for easier maintainability.
 
-### Ask clarifying questions (with options)
+### Clarify questions (with options)
+-In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
 - Add arguments to the options for easy decision-making.

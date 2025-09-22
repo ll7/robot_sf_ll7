@@ -46,113 +46,144 @@ class _VideoArtifact:  # minimal internal representation until full T038
     note: str | None = None
 
 
-def generate_videos(records, out_dir, cfg):  # T037 + T038
-    """Generate representative episode videos.
+def _canvas_to_rgb_simple(fig) -> "np.ndarray":  # type: ignore[name-defined]
+    """Return RGB array from figure using the simplest, backend-agnostic path.
 
-    Returns list of ``_VideoArtifact`` items with status among:
-      - generated: successful MP4 creation
-      - skipped: smoke mode, missing deps, or disabled
-      - error: unexpected render failure (continues benchmark)
+    We intentionally avoid complex HiDPI / ARGB logic here; on macOS the default
+    interactive backend (`macosx`) lacks `tostring_rgb`. Users (or the benchmark
+    harness) should set MPLBACKEND=Agg before importing matplotlib to ensure
+    `tostring_rgb` is available. If absent we raise a clear error directing the
+    user to set MPLBACKEND=Agg.
+    """
+    import numpy as _np  # local import
+
+    fig.canvas.draw()  # type: ignore[attr-defined]
+    w, h = fig.canvas.get_width_height()  # type: ignore[attr-defined]
+    if hasattr(fig.canvas, "tostring_rgb"):
+        buf = fig.canvas.tostring_rgb()  # type: ignore[attr-defined]
+        return _np.frombuffer(buf, dtype="uint8").reshape((h, w, 3))
+    # Portable fallback: render figure to PNG in-memory and decode with matplotlib.image
+    import io
+
+    from matplotlib import image as mpimg  # type: ignore
+
+    bio = io.BytesIO()
+    fig.savefig(bio, format="png", dpi=100)  # type: ignore[attr-defined]
+    bio.seek(0)
+    png_arr = mpimg.imread(bio)
+    # mpimg may return float [0,1] array; convert to uint8 RGB (drop alpha if present)
+    if png_arr.dtype != _np.uint8:
+        png_arr = (png_arr * 255).astype("uint8")
+    if png_arr.shape[-1] == 4:  # RGBA -> RGB
+        png_arr = png_arr[:, :, :3]
+    return png_arr
+
+
+def _render_episode_frames(seed: int, N: int) -> tuple[list, List[float], List[float]]:
+    """Generate synthetic (x,y) path coordinates for episode rendering."""
+    xs = [math.cos((seed + i) * 0.15) for i in range(N)]
+    ys = [math.sin((seed + i) * 0.15) for i in range(N)]
+    return [], xs, ys
+
+
+def _build_outcome(rec) -> str:
+    collision_flag = bool(rec.get("collisions") or rec.get("collision"))
+    success_flag = bool(rec.get("success", not collision_flag))
+    timeout_flag = bool(rec.get("timeout")) and not success_flag and not collision_flag
+    return (
+        "COLLISION"
+        if collision_flag
+        else "SUCCESS"
+        if success_flag
+        else "TIMEOUT"
+        if timeout_flag
+        else "EPISODE"
+    )
+
+
+## Removed unused _make_skip_artifacts helper (original attempt to simplify skip path)
+
+
+def generate_videos(records, out_dir, cfg):  # T037 + T038 (refactored for HiDPI)
+    """Generate representative episode videos (synthetic path).
+
+    Status values:
+      - generated: MP4 successfully written
+      - skipped: smoke/disabled/missing dependency
+      - error: unexpected failure (benchmark continues)
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-    artifacts: List[_VideoArtifact] = []
     if not records:
-        return artifacts
+        return []
 
     smoke = bool(getattr(cfg, "smoke", False))
     disable_videos = bool(getattr(cfg, "disable_videos", False))
-    max_videos = int(getattr(cfg, "max_videos", 1))
-    # Ensure deterministic selection order
-    selected = records[: max_videos or 1]
+    max_videos = int(getattr(cfg, "max_videos", 1)) or 1
+    selected = records[:max_videos]
 
     if smoke or disable_videos:
-        for rec in selected:
-            episode_id = rec.get("episode_id", "unknown")
-            scenario_id = rec.get("scenario_id", "unknown")
-            mp4_path = out_path / f"{episode_id}.mp4"
-            artifacts.append(
-                _VideoArtifact(
-                    artifact_id=f"video_{episode_id}",
-                    scenario_id=scenario_id,
-                    episode_id=episode_id,
-                    path_mp4=str(mp4_path),
-                    status="skipped",
-                    note="smoke mode" if smoke else "video generation disabled",
-                )
+        note = "smoke mode" if smoke else "video generation disabled"
+        return [
+            _VideoArtifact(
+                artifact_id=f"video_{r.get('episode_id', 'unknown')}",
+                scenario_id=r.get("scenario_id", "unknown"),
+                episode_id=r.get("episode_id", "unknown"),
+                path_mp4=str(out_path / f"{r.get('episode_id', 'unknown')}.mp4"),
+                status="skipped",
+                note=note,
             )
-        return artifacts
+            for r in selected
+        ]
 
     if plt is None or ImageSequenceClip is None:
         reason = "matplotlib missing" if plt is None else "moviepy missing"
-        for rec in selected:
-            episode_id = rec.get("episode_id", "unknown")
-            scenario_id = rec.get("scenario_id", "unknown")
-            mp4_path = out_path / f"{episode_id}.mp4"
-            artifacts.append(
-                _VideoArtifact(
-                    artifact_id=f"video_{episode_id}",
-                    scenario_id=scenario_id,
-                    episode_id=episode_id,
-                    path_mp4=str(mp4_path),
-                    status="skipped",
-                    note=reason,
-                )
+        return [
+            _VideoArtifact(
+                artifact_id=f"video_{r.get('episode_id', 'unknown')}",
+                scenario_id=r.get("scenario_id", "unknown"),
+                episode_id=r.get("episode_id", "unknown"),
+                path_mp4=str(out_path / f"{r.get('episode_id', 'unknown')}.mp4"),
+                status="skipped",
+                note=reason,
             )
-        return artifacts
+            for r in selected
+        ]
 
-    # Render videos
+    artifacts: List[_VideoArtifact] = []
     for rec in selected:
         episode_id = rec.get("episode_id", "unknown")
         scenario_id = rec.get("scenario_id", "unknown")
         seed = int(rec.get("seed", 0))
         random.seed(seed)
         mp4_path = out_path / f"{episode_id}.mp4"
-        frames = []
         try:
-            # Generate synthetic path (deterministic) length N
             N = 40
-            xs = [math.cos((seed + i) * 0.15) for i in range(N)]
-            ys = [math.sin((seed + i) * 0.15) for i in range(N)]
-
-            # Heuristic outcome inference
-            collision_flag = bool(rec.get("collisions") or rec.get("collision"))
-            success_flag = bool(rec.get("success", not collision_flag))
-            timeout_flag = bool(rec.get("timeout")) and not success_flag and not collision_flag
-            outcome = (
-                "COLLISION"
-                if collision_flag
-                else "SUCCESS"
-                if success_flag
-                else "TIMEOUT"
-                if timeout_flag
-                else "EPISODE"
-            )
-
+            _, xs_full, ys_full = _render_episode_frames(seed, N)
+            outcome = _build_outcome(rec)
+            frames = []
             for idx in range(N):
                 fig, ax = plt.subplots(figsize=(3, 3))  # type: ignore
-                ax.plot(xs[: idx + 1], ys[: idx + 1], color="tab:blue", linewidth=1.5)
-                ax.scatter(xs[idx], ys[idx], color="red", s=20)
+                ax.plot(xs_full[: idx + 1], ys_full[: idx + 1], color="tab:blue", linewidth=1.5)
+                ax.scatter(xs_full[idx], ys_full[idx], color="red", s=20)
                 ax.set_xlim(-1.2, 1.2)
                 ax.set_ylim(-1.2, 1.2)
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.set_title(f"{scenario_id} / {episode_id}\n{outcome}")
                 fig.tight_layout()
-                # Convert to RGB array
-                fig.canvas.draw()  # type: ignore
-                width, height = fig.canvas.get_width_height()  # type: ignore
-                image = np.frombuffer(fig.canvas.tostring_rgb(), dtype="uint8")  # type: ignore
-                image = image.reshape((height, width, 3))
-                frames.append(image)
+                frame = _canvas_to_rgb_simple(fig)
+                frames.append(frame)
                 plt.close(fig)  # type: ignore
-
             if not frames:
                 raise RuntimeError("No frames generated")
-
             clip = ImageSequenceClip(frames, fps=10)  # type: ignore
-            # Suppress verbose moviepy logging
-            clip.write_videofile(str(mp4_path), codec="libx264", fps=10, verbose=False, logger=None)  # type: ignore
+            # moviepy version in environment does not accept verbose/logger kwargs
+            clip.write_videofile(
+                str(mp4_path),
+                codec="libx264",
+                fps=10,
+            )
             artifacts.append(
                 _VideoArtifact(
                     artifact_id=f"video_{episode_id}",

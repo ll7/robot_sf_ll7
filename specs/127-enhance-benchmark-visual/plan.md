@@ -1,8 +1,8 @@
 
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Enhance Benchmark Visual Artifacts
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Branch**: `127-enhance-benchmark-visual` | **Date**: 2025-09-20 | **Spec**: `specs/127-enhance-benchmark-visual/spec.md`
+**Input**: Feature specification from `/specs/127-enhance-benchmark-visual/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -31,23 +31,33 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-[Extract from feature spec: primary requirement + technical approach from research]
+Implement real SimulationView-based MP4 video generation with streaming encoding, replay adapter, JSON Schema validation of manifests (plots, videos, performance), and performance/memory instrumentation while preserving deterministic selection and existing benchmark schema. Fallback to synthetic videos or skips is explicit with canonical notes. Memory soft target <100 MB per encode; performance soft budgets: plots <2s total, first video <5s.
 
 ## Technical Context
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11 (per project toolchain uv/ruff/pytest)  
+**Primary Dependencies**: pygame (SimulationView), moviepy+ffmpeg (encoding), jsonschema (validation), psutil (memory sampling), matplotlib (plots existing), numpy  
+**Storage**: File system manifests + MP4 artifacts only (no DB)  
+**Testing**: pytest (unit/integration), jsonschema validation tests, existing smoke tests extended  
+**Target Platform**: macOS/Linux headless CI (SDL dummy for pygame)  
+**Project Type**: single (library + scripts)  
+**Performance Goals**: plots <2s, first video <5s wall time; streaming encode constant memory target <100MB peak  
+**Constraints**: Deterministic ordering, no benchmark schema changes, optional dependencies degrade gracefully  
+**Scale/Scope**: ≤5 videos default selection; episodes moderate length (hundreds of timesteps)  
 
 ## Constitution Check
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*Initial + Post-Design (Phases 0 & 1 complete)*
 
-[Gates determined based on constitution file]
+| Principle / Contract | Assessment | Action |
+|----------------------|-----------|--------|
+| Reproducibility & Determinism (I, IV) | Maintained: deterministic episode selection & fixed FPS | None |
+| Benchmark Schema Stability (VII) | Unchanged; new manifests auxiliary | None |
+| Documentation as API (VIII) | quickstart + future docs section planned (FR-018) | Implement docs section in implementation phase |
+| Test Coverage (IX) | New tests planned for success/fallback/skip notes | Implement in Phase 4 |
+| Performance Targets | Soft budgets instrumented; flags not failing | None |
+| Scope Discipline (X) | Feature confined to visualization artifacts | None |
+| Contracts & Invariants | Additional JSON Schemas isolated | None |
+
+No violations requiring Complexity Tracking.
 
 ## Project Structure
 
@@ -99,9 +109,9 @@ ios/ or android/
 └── [platform-specific structure]
 ```
 
-**Structure Decision**: [DEFAULT to Option 1 unless Technical Context indicates web/mobile app]
+**Structure Decision**: Option 1 (single project) — repository already organized as Python library + scripts.
 
-## Phase 0: Outline & Research
+## Phase 0: Outline & Research (Completed)
 1. **Extract unknowns from Technical Context** above:
    - For each NEEDS CLARIFICATION → research task
    - For each dependency → best practices task
@@ -122,7 +132,14 @@ ios/ or android/
 
 **Output**: research.md with all NEEDS CLARIFICATION resolved
 
-## Phase 1: Design & Contracts
+## Phase 1: Design & Contracts (Completed)
+Artifacts produced:
+- `research.md`
+- `data-model.md`
+- `contracts/video_artifacts.schema.json`
+- `contracts/plot_artifacts.schema.json`
+- `contracts/performance_visuals.schema.json`
+- `quickstart.md`
 *Prerequisites: research.md complete*
 
 1. **Extract entities from feature spec** → `data-model.md`:
@@ -154,7 +171,7 @@ ios/ or android/
 
 **Output**: data-model.md, /contracts/*, failing tests, quickstart.md, agent-specific file
 
-## Phase 2: Task Planning Approach
+## Phase 2: Task Planning Approach (Planned, not executed by /plan)
 *This section describes what the /tasks command will do - DO NOT execute during /plan*
 
 **Task Generation Strategy**:
@@ -191,21 +208,19 @@ ios/ or android/
 
 
 ## Progress Tracking
-*This checklist is updated during execution flow*
-
 **Phase Status**:
-- [ ] Phase 0: Research complete (/plan command)
-- [ ] Phase 1: Design complete (/plan command)
-- [ ] Phase 2: Task planning complete (/plan command - describe approach only)
+- [x] Phase 0: Research complete (/plan command)
+- [x] Phase 1: Design complete (/plan command)
+- [ ] Phase 2: Task planning complete (/plan command - approach only)
 - [ ] Phase 3: Tasks generated (/tasks command)
 - [ ] Phase 4: Implementation complete
 - [ ] Phase 5: Validation passed
 
 **Gate Status**:
-- [ ] Initial Constitution Check: PASS
-- [ ] Post-Design Constitution Check: PASS
-- [ ] All NEEDS CLARIFICATION resolved
-- [ ] Complexity deviations documented
+- [x] Initial Constitution Check: PASS
+- [x] Post-Design Constitution Check: PASS
+- [x] All NEEDS CLARIFICATION resolved
+- [ ] Complexity deviations documented (N/A)
 
 ---
-*Based on Constitution v1.1.0 - See `/memory/constitution.md`*
+*Based on Constitution v2.1.1 - See `/memory/constitution.md`*

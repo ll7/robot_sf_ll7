@@ -22,6 +22,8 @@ from .effects import compute_effect_sizes
 from .io_utils import append_episode_record, write_manifest
 from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
 from .precision import evaluate_precision
+from .replay import ReplayCapture  # T021 optional replay capture
+from .visuals import generate_visual_artifacts  # new visual artifact integration
 
 # -----------------------------
 # Manifest dataclass & helpers
@@ -186,6 +188,37 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
         "algo": getattr(cfg, "algo", "unknown"),
         "created_at": now,
     }
+    # Optional: attach placeholder replay steps when capture enabled (T021)
+    if getattr(cfg, "capture_replay", False):
+        # Build a tiny deterministic trajectory: straight line x increasing, heading fixed.
+        horizon = min(job.horizon, 20)
+        cap = ReplayCapture(episode_id=episode_id, scenario_id=job.scenario_id)
+        ped_positions_series: list[list[tuple[float, float]]] = []
+        actions_series: list[tuple[float, float]] = []
+        for i in range(horizon):
+            t_rel = float(i) * 0.1
+            # Simple oscillating lateral motion for pedestrians & dummy action vector
+            ped_positions = (
+                [(float(i) * 0.05, 0.2), (float(i) * 0.05, -0.2)]
+                if i % 2 == 0
+                else [(float(i) * 0.05, 0.25)]
+            )
+            action = (0.05, 0.0)
+            ped_positions_series.append(ped_positions)
+            actions_series.append(action)
+            cap.record(
+                t=t_rel,
+                x=float(i) * 0.05,
+                y=0.0,
+                heading=0.0,
+                speed=0.5,
+                ped_positions=ped_positions,
+                action=action,
+            )
+        finalized = cap.finalize().steps
+        record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
+        record["replay_peds"] = ped_positions_series
+        record["replay_actions"] = actions_series
     return record
 
 
@@ -407,6 +440,13 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     _update_scaling_efficiency(manifest, cfg)
     manifest.scaling_efficiency.setdefault("finalized", True)
     write_manifest(manifest, str(root / "manifest.json"))
+
+    # Visual artifacts (plots + videos) generation (post adaptive loop single pass)
+    try:
+        generate_visual_artifacts(root, cfg, groups, all_records)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Visual artifact generation failed (non-fatal): {}", exc)
+
     return manifest
 
 

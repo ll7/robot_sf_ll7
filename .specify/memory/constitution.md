@@ -1,6 +1,22 @@
+<!--
+Sync Impact Report
+Previous Version: 1.0.0 -> New Version: 1.1.0 (MINOR bump)
+Rationale: Added new Principle XI (Internal Maintainability & Private Helper Documentation) – material expansion of guidance; clarified Principle VIII wording (documentation scope) without semantic contract change.
+Modified Principles:
+ - VIII. Documentation as an API Surface (clarified internal vs public docs statement)
+Added Sections:
+ - XI. Internal Maintainability & Private Helper Documentation
+Removed Sections: None
+Templates Updated:
+ - .specify/templates/plan-template.md (footer version reference) ✅
+Pending Template Updates: None
+Deferred TODOs: None
+All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
+-->
+
 # Robot SF Project Constitution
 
-This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, reproducible research and engineering platform for social navigation of a robot among pedestrians. It intentionally avoids HOW (implementation details) and focuses on scope, boundaries, artifacts, contracts, and non‑negotiable principles.
+This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, reproducible research and engineering platform for social navigation of a robot among pedestrians. It intentionally avoids HOW (implementation details) and focuses on scope, boundaries, artifacts, contracts, and non‑negotiable principles. Internal engineering rigor (naming, docstrings, helper clarity) is encoded where it impacts long‑term reproducibility or the stability of public contracts.
 
 ## Core Principles
 
@@ -26,13 +42,16 @@ Aggregations must report descriptive statistics (mean, median, p95) and optional
 Public environment factory signatures, configuration field names, and episode/metric JSON schema form the stable contract. Breaking changes require a versioned schema bump, migration notes, and dual‑read (old + new) capability or deprecation path. Silent breaking changes are prohibited.
 
 ### VIII. Documentation as an API Surface
-Core guides (development guide, environment overview, benchmark docs, SNQI tooling) define expected usage. Every new surface area (env variant, metric, baseline, figure generator) must have a discoverable entry in the central docs index and a concise README describing WHAT it provides and WHAT assumptions it encodes.
+Core guides (development guide, environment overview, benchmark docs, SNQI tooling) define expected usage. Every new public surface (environment factory variant, metric, baseline, figure generator, configuration field) MUST have a discoverable entry in the central docs index and a concise README (or clearly linked section) describing WHAT it provides and WHAT assumptions it encodes. Clarifications that do not alter semantics (typo fixes, examples, internal helper docstrings) may be added without version bumps, but any change that modifies a public contract or user‑visible invariant requires governance review.
 
 ### IX. Test Coverage for Public Behavior
 Any change to public environment behavior, benchmark schema, or metrics computation must be accompanied by at least a smoke test (reset/step loop), and if logic‑bearing, an assertion‑based unit/integration test. Omission requires an explicit, temporary TODO with rationale and follow‑up tracking.
 
 ### X. Scope Discipline
 Out of scope: general robotics control stacks, unrelated perception models, arbitrary RL algorithm zoo, generic data science utilities, unversioned experiment notebooks. The repo remains focused strictly on social navigation simulation, evaluation, and analysis.
+
+### XI. Internal Maintainability & Private Helper Documentation
+Private (underscore‑prefixed or local/inner) helpers that embody non‑obvious branching, fallback semantics, resource management, or performance trade‑offs MUST include a concise docstring or inline comment summarizing: (1) purpose, (2) key decision rules / edge cases, (3) side effects (e.g., filesystem writes, environment access). This requirement ensures future refactors preserve reproducibility and benchmarking invariants. Purely trivial pass‑through wrappers (e.g., one‑line value adapters) are exempt. When complexity is reduced (e.g., helper decomposition, signature introspection replacing branching), newly introduced inner helpers inherit the same documentation requirement at creation time—retroactive addition counts as maintenance (PATCH) unless accompanied by principle changes (MINOR).
 
 ## Domain Scope & Deliverables
 
@@ -116,4 +135,4 @@ Traceability Requirements:
 
 This Constitution supersedes ad‑hoc practices. Amendments require: (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected contracts (env, config, metrics, benchmark schema), (3) migration guidance or deprecation plan, (4) version/date update below. Pull Requests must assert compliance by referencing relevant sections. Any introduction of out‑of‑scope functionality must include justification aligning with Core Principles I–X or be rejected.
 
-**Version**: 1.0.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-19
+**Version**: 1.1.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-22

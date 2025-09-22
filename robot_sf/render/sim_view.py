@@ -208,6 +208,10 @@ class SimulationView:
     ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
     # Internal flag: True when a display window is created via pygame.display.set_mode
     _use_display: bool = field(init=False, default=False)
+    # Maximum number of frames to retain in memory when recording. None means no hard cap.
+    # Default chosen to balance typical 720p usage (<~4.4GB for 1200 frames) vs runaway memory.
+    max_frames: int | None = field(default=2000)
+    _frame_cap_warned: bool = field(init=False, default=False)
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -402,11 +406,23 @@ class SimulationView:
 
     def _capture_frame(self):
         """Capture the current frame for video recording."""
-        frame_data = pygame.surfarray.array3d(self.screen)
-        frame_data = frame_data.swapaxes(0, 1)
+        # Enforce frame cap (if configured) before capturing new frame
+        if self.max_frames is not None and len(self.frames) >= self.max_frames:
+            if not self._frame_cap_warned:
+                est_bytes = int(self.width * self.height * 3 * len(self.frames))
+                est_gb = est_bytes / (1024**3)
+                logger.warning(
+                    "Max video frame buffer reached (max_frames=%d, ~%.2f GiB est). "
+                    "Halting further frame capture to prevent excessive memory use. "
+                    "You can raise this via SimulationView(max_frames=...) or disable via max_frames=None.",
+                    self.max_frames,
+                    est_gb,
+                )
+                self._frame_cap_warned = True
+            return
+
+        frame_data = pygame.surfarray.array3d(self.screen).swapaxes(0, 1)
         self.frames.append(frame_data)
-        if len(self.frames) > 2000:
-            logger.warning("Too many frames recorded. Stopping video recording.")
 
     @property
     def _timestep_text_pos(self) -> Vec2D:

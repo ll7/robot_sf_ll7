@@ -10,6 +10,23 @@ Legend:
 - Status columns to be updated during execution (NOT started / In progress / Done)
 - Keep TDD ordering: write failing tests first where feasible
 
+- [Ordering Rationale](#ordering-rationale)
+- [Task List](#task-list)
+  - [Setup \& Constants](#setup--constants)
+  - [Schema \& Determinism Tests (Pre-Implementation)](#schema--determinism-tests-pre-implementation)
+  - [Replay Adapter \& Data Structures](#replay-adapter--data-structures)
+  - [SimulationView \& Encoding Pipeline](#simulationview--encoding-pipeline)
+  - [SimulationView Enhancement Delta (Added 2025-09-22)](#simulationview-enhancement-delta-added-2025-09-22)
+  - [Performance \& Budget Instrumentation](#performance--budget-instrumentation)
+  - [Tests for Core Paths (Post Implementation Core)](#tests-for-core-paths-post-implementation-core)
+  - [Documentation \& Demo Updates](#documentation--demo-updates)
+  - [Final Polish \& Validation](#final-polish--validation)
+- [Parallel Execution Guidance](#parallel-execution-guidance)
+- [Environment / Flags](#environment--flags)
+- [Acceptance Mapping](#acceptance-mapping)
+- [Notes](#notes)
+
+
 ## Ordering Rationale
 1. Setup & constants foundation
 2. Tests for schemas, skip codes, and selection determinism (to drive implementation)
@@ -57,11 +74,27 @@ Legend:
 | T030 | Utility: simulation view availability probe | In `deps.py` implement probe caching result | T003 |  | Done |
 | T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | |
 | T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | Done |
-| T032 | Implement synthetic fallback path parity refactor | Ensure existing synthetic code moved/cleaned to `visuals/render_synthetic.py` | T001 | [P] | |
+| T032 | Implement synthetic fallback path parity refactor | Ensure existing synthetic code moved/cleaned to `visuals/render_synthetic.py` | T001 | [P] | Done (2025-09-22) |
 | T033 | Implement moviepy encoding wrapper (streaming) | `visuals/encode.py` function with generator + memory sampling hook | T031 |  | Done |
 | T034 | Memory sampler (optional psutil) | Helper in `encode.py` or `perf.py` thread sampling RSS; returns peak MB | T033 |  | Done |
-| T035 | Integrate encoding + renderer selection | Update `visuals.py` main flow: choose simulation_view vs synthetic vs skip; write artifact entries | T033 T032 |  | |
+| T035 | Integrate encoding + renderer selection | Update `visuals.py` main flow: choose simulation_view vs synthetic vs skip; write artifact entries | T033 T032 |  | Done (2025-09-22) |
 | T036 | Failure cleanup logic | Ensure partial file removal + status=failed note path implemented | T035 |  | Done |
+
+### SimulationView Enhancement Delta (Added 2025-09-22)
+| ID | Task | Details / File Paths | Depends | Parallel | Status |
+|----|------|----------------------|---------|----------|--------|
+| T037 | VisualizableSimState builder adapter | New helper `robot_sf/benchmark/full_classic/state_builder.py` mapping ReplayEpisode -> minimal VisualizableSimState (poses, ped positions if available) | T022 T031 |  | Not started |
+| T038 | Invoke real render loop | Update `render_sim_view.py` to construct state and call `_sim_view.render(state)` (guard missing fields -> skip note) | T037 |  | Not started |
+| T039 | Replay enrichment (ped + robot trajectories) | Extend capture to store robot pose, pedestrian positions, actions per step; update `replay.py` schema | T021 |  | Not started |
+| T040A | (Split) Timing instrumentation (moved) | Refine T040: separate render timing (ms/frame) from encode timing; add to performance manifest | T040 | [P] | Not started |
+| T041A | Cleanup & exit handling | Ensure `_sim_view.exit_simulation()` invoked after generator exhaustion; add try/finally in `generate_frames` | T038 | [P] | Not started |
+| T050A | Test: SimulationView placeholder guard | Add test asserting placeholder (pre-state-builder) produces synthetic frames with note indicating 'placeholder' until T038 done | T031 | [P] | Not started |
+| T050B | Test: SimulationView real render | After T038/T037, assert frames differ from flat gradient and `_sim_view.render` was invoked (mock/spies) | T038 |  | Not started |
+| T052A | Test: renderer toggle flag | Add CLI/config flag `--renderer=synthetic|sim-view` ensuring selection logic respects explicit choice | T035 | [P] | Not started |
+| T060A | Docs: video rendering lifecycle | Section in `docs/benchmark_visuals.md` describing synthetic vs sim-view pipeline, state requirements, fallback ladder | T060 |  | Not started |
+| T063A | Dependency matrix update | Add SimulationView row specifying additional replay fields required | T063 | [P] | Not started |
+| T074A | Perf benchmark (render) | Measure render+encode split timings (N=50 frames) and document baseline numbers; store under `results/visual_perf.json` | T074 |  | Not started |
+
 
 ### Performance & Budget Instrumentation
 | ID | Task | Details / File Paths | Depends | Parallel | Status |

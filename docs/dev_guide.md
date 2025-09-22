@@ -201,6 +201,7 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Refactoring and architecture notes: `docs/refactoring/`
 - SNQI tools and metrics: `docs/snqi-weight-tools/README.md`
 - Data analysis helpers: `docs/DATA_ANALYSIS.md`
+- Contributor onboarding / repo structure: `AGENTS.md`
 
 ### Executive summary
 - **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` submodule, StableBaselines3 training pipeline

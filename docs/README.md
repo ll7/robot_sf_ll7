@@ -66,6 +66,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   - [Migration Guide](./refactoring/migration_guide.md) - Step-by-step migration instructions
   - [Implementation Summary](./refactoring/refactoring_summary.md) - What was accomplished
   - [Migration Report](./refactoring/migration_report.md) - Automated codebase analysis
+ - **[Agents & Contributor Onboarding](../AGENTS.md)** – High-level repository structure, coding/testing conventions, and workflow tips for new contributors
 
 ### 🎮 Simulation & Environment
 - [**Simulation View**](./SIM_VIEW.md) - Visualization and rendering system

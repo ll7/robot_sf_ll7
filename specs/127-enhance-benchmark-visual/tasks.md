@@ -121,12 +121,12 @@ Legend:
 ### Final Polish & Validation
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T070 | Ruff + format pass | Run lint/format; resolve issues | All impl | [P] | |
-| T071 | Type checking adjustments | Add/ refine type hints for new modules; fix ty check warnings | All impl | [P] | |
-| T072 | Run test suites (core + visuals) | Ensure new tests pass headless; mark skips appropriately | T050 T051 T052 T053 T054 T055 |  | |
-| T073 | Validation scripts smoke run | Run existing validation scripts verifying no regression | T072 |  | |
-| T074 | Performance sanity benchmark | Optional: measure single encode time & memory; document in PR | T072 | [P] | |
-| T075 | Update plan progress & close feature | Mark tasks completed in plan & add summary section to spec or PR | T073 |  | |
+| T070 | Ruff + format pass | Run lint/format; resolve issues | All impl | [P] | Done (2025-09-22) |
+| T071 | Type checking adjustments | Add/ refine type hints for new modules; fix ty check warnings | All impl | [P] | Done (2025-09-22) |
+| T072 | Run test suites (core + visuals) | Ensure new tests pass headless; mark skips appropriately | T050 T051 T052 T053 T054 T055 |  | Done (2025-09-22) |
+| T073 | Validation scripts smoke run | Run existing validation scripts verifying no regression | T072 |  | Done (2025-09-22) |
+| T074 | Performance sanity benchmark | Optional: measure single encode time & memory; document in PR | T072 | [P] | Done (2025-09-22) |
+| T075 | Update plan progress & close feature | Mark tasks completed in plan & add summary section to spec or PR | T073 |  | Done (2025-09-22) |
 
 ## Parallel Execution Guidance
 - Safe early parallel group: T001, T003
@@ -171,3 +171,17 @@ Legend:
 
 ---
 Generated on 2025-09-20.
+
+## Completion Checklist (2025-09-22)
+- [x] Core renderer + encoding integration
+- [x] Replay adapter & validation
+- [x] Schema contracts & validation helper
+- [x] Performance & memory instrumentation (render vs encode split)
+- [x] Skip note taxonomy & tests
+- [x] Moviepy missing, synthetic fallback, success path tests
+- [x] Renderer toggle flag & tests
+- [x] Documentation (benchmark_visuals.md) + dependency matrix
+- [x] Demo script updated
+- [x] CHANGELOG entry added
+- [x] Polish: lint, tests, performance sanity
+

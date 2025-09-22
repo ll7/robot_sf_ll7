@@ -71,6 +71,8 @@ LOGGING_ENABLED = True  # toggle for non-essential prints (FR-014)
 # Internal: headless detection (FR-012). If SDL_VIDEODRIVER=dummy treat as headless.
 HEADLESS = os.environ.get("SDL_VIDEODRIVER", "").lower() == "dummy"
 
+_CACHED_MODEL_SENTINEL = object()
+
 
 class EpisodeSummary(TypedDict):  # (FR-020)
     scenario: str
@@ -102,6 +104,9 @@ def _validate_constants() -> None:  # (FR-019)
 
 
 def _load_policy(path: str):  # (FR-004, FR-007 guidance)
+    cache = getattr(_load_policy, "_cache", _CACHED_MODEL_SENTINEL)
+    if cache is not _CACHED_MODEL_SENTINEL:
+        return cache  # type: ignore[return-value]
     if PPO is None:
         raise RuntimeError(
             "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this demo."
@@ -113,7 +118,9 @@ def _load_policy(path: str):  # (FR-004, FR-007 guidance)
             "Download or place the pre-trained PPO model at this path. "
             "See docs/dev/issues/classic-interactions-ppo/ for guidance."
         )
-    return PPO.load(path)
+    model = PPO.load(path)
+    setattr(_load_policy, "_cache", model)
+    return model
 
 
 def _determine_outcome(info: dict[str, Any]) -> str:
@@ -200,6 +207,14 @@ def run_episode(
         timeout=timeout,
         recorded=recorded_flag,
     )
+
+
+def _overlay_text(scenario: str, seed: int, step: int, outcome: str | None = None) -> str:
+    """Format overlay text (FR-016 helper). Not yet wired into a renderer; provided for future integration."""
+    base = f"{scenario} | seed={seed} | step={step}"
+    if outcome:
+        return base + f" | {outcome}"
+    return base
 
 
 def _format_summary_table(rows: Iterable[EpisodeSummary]) -> str:

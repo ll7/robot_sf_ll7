@@ -182,6 +182,8 @@ pytest test_pygame
 ```sh
 python3 examples/demo_offensive.py
 python3 examples/demo_defensive.py
+# Classic interactions deterministic PPO visualization (Feature 128)
+python3 examples/classic_interactions_pygame.py
 ```
 
 [Visualization](./docs/SIM_VIEW.md)

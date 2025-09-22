@@ -14,6 +14,22 @@
             ],
             "minimum": 0
         },
+        "first_video_render_time_s": {
+            "description": "Time spent rendering (frame generation) for the first successful SimulationView video (excludes encoding), null if no video rendered",
+            "type": [
+                "number",
+                "null"
+            ],
+            "minimum": 0
+        },
+        "first_video_encode_time_s": {
+            "description": "Encoding time for first successful video (mirrors legacy key kept for compatibility)",
+            "type": [
+                "number",
+                "null"
+            ],
+            "minimum": 0
+        },
         "plots_over_budget": {
             "type": "boolean"
         },

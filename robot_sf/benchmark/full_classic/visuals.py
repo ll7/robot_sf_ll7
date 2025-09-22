@@ -331,12 +331,24 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
     first_success = next((v for v in video_artifacts if v.status == "success"), None)
     first_video_time = first_success.encode_time_s if first_success else None
     first_video_peak = first_success.peak_rss_mb if first_success else None
+    # Render vs encode split (T040A): approximate render time as total video phase minus encode time
+    first_video_render_time = None
+    if (
+        first_success
+        and first_success.encode_time_s is not None
+        and first_success.renderer == RENDERER_SIM_VIEW
+    ):
+        total_video_phase = video_end - video_start
+        enc_time = first_success.encode_time_s
+        if total_video_phase >= enc_time:
+            first_video_render_time = round(total_video_phase - enc_time, 4)
     plots_time_s = round(t1 - t0, 4)
     videos_time_s = round(video_end - video_start, 4)
     perf_meta = {
         "plots_time_s": plots_time_s,
         "videos_time_s": videos_time_s,
         "first_video_time_s": first_video_time,
+        "first_video_render_time_s": first_video_render_time,
         "first_video_peak_rss_mb": first_video_peak,
         "plots_over_budget": plots_time_s > 2.0,
         "video_over_budget": (first_video_time or 0) > 5.0

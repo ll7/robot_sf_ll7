@@ -241,11 +241,12 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Use GitHub’s review tools to leave comments and approve changes.
 
 #### Docstrings
-- Every public module, function, class, and method should have a docstring.
+- Every module, function, class, and method should have a docstring.
 - Docstrings should use triple double quotes (""").
 - The first line should be a short summary of the object’s purpose, starting with a capital letter and ending with a period.
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
+- Private/internal code should also have docstrings explaining their purpose for easier maintainability.
 
 ### Ask clarifying questions (with options)
 - Before implementing, confirm requirements with targeted questions.

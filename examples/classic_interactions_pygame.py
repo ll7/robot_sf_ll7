@@ -170,6 +170,7 @@ def run_episode(
     while not done:
         action, _ = policy.predict(obs, deterministic=True)
         obs, _reward, terminated, truncated, info = env.step(action)
+        env.render()  # ensure frame capture if env has sim_ui (FR-013)
         done = terminated or truncated
         step += 1
         last_info = info

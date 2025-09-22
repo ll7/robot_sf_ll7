@@ -32,7 +32,6 @@ unavailable (FR-008/FR-009). Logging verbosity controlled by LOGGING_ENABLED (FR
 from __future__ import annotations
 
 import contextlib
-import os
 import time
 from pathlib import Path
 from typing import Any, Iterable, List, TypedDict, cast
@@ -62,14 +61,14 @@ from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 MODEL_PATH = Path("model/ppo_model_retrained_10m_2025-02-01.zip")
 SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
 SCENARIO_NAME: str | None = None  # default = first scenario
-MAX_EPISODES = 1
-ENABLE_RECORDING = False
-OUTPUT_DIR = Path("results/vis_runs")
+MAX_EPISODES = 8
+ENABLE_RECORDING = True
+OUTPUT_DIR = Path("tmp/vis_runs/" + time.strftime("%Y%m%d_%H%M%S"))
 DRY_RUN = False  # global default dry_run if run_demo not passed a value
 LOGGING_ENABLED = True  # toggle for non-essential prints (FR-014)
 
 # Internal: headless detection (FR-012). If SDL_VIDEODRIVER=dummy treat as headless.
-HEADLESS = os.environ.get("SDL_VIDEODRIVER", "").lower() == "dummy"
+HEADLESS = False  # os.environ.get("SDL_VIDEODRIVER", "").lower() == "dummy"
 
 _CACHED_MODEL_SENTINEL = object()
 

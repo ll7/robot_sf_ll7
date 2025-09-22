@@ -303,18 +303,28 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
     first_success = next((v for v in video_artifacts if v.status == "success"), None)
     first_video_time = first_success.encode_time_s if first_success else None
     first_video_peak = first_success.peak_rss_mb if first_success else None
+    # Performance meta naming aligned with spec/data-model (plots_time_s, first_video_time_s, etc.)
+    plots_time_s = round(t1 - t0, 4)
+    videos_time_s = round(video_end - video_start, 4)
+    first_video_time_s = first_video_time  # already encode wall time when available
+    first_video_peak_mb = first_video_peak
     perf_meta = {
-        "plots_runtime_sec": round(t1 - t0, 4),
-        "videos_runtime_sec": round(video_end - video_start, 4),
-        "plots_over_budget": (t1 - t0) > 2.0,
-        "videos_over_budget": (first_video_time or 0) > 5.0
-        if first_video_time is not None
+        # Canonical field names (preferred going forward)
+        "plots_time_s": plots_time_s,
+        "videos_time_s": videos_time_s,
+        "first_video_time_s": first_video_time_s,
+        "first_video_peak_rss_mb": first_video_peak_mb,
+        "plots_over_budget": plots_time_s > 2.0,
+        "video_over_budget": (first_video_time_s or 0) > 5.0
+        if first_video_time_s is not None
         else False,
-        "first_video_encode_time_s": first_video_time,
-        "first_video_peak_rss_mb": first_video_peak,
-        "memory_over_budget": (first_video_peak or 0) > 100
-        if first_video_peak is not None
+        "memory_over_budget": (first_video_peak_mb or 0) > 100
+        if first_video_peak_mb is not None
         else False,
+        # Backward‑compat legacy keys (scheduled for removal after downstream update window)
+        "plots_runtime_sec": plots_time_s,
+        "videos_runtime_sec": videos_time_s,
+        "first_video_encode_time_s": first_video_time_s,
     }
 
     _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)

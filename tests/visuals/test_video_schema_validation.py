@@ -54,10 +54,12 @@ def test_valid_success_entry():
 
 
 def test_missing_required_field():
-    with pytest.raises(Exception):
+    # Expect schema validation failure due to missing required 'episode_id' field
+    with pytest.raises(jsonschema.ValidationError):  # type: ignore[name-defined]
         validate({"artifacts": [{"renderer": "synthetic", "status": "skipped"}]})
 
 
 def test_success_without_filename_fails():
-    with pytest.raises(Exception):
+    # Success status requires a filename according to schema
+    with pytest.raises(jsonschema.ValidationError):  # type: ignore[name-defined]
         validate({"artifacts": [{"episode_id": "1", "renderer": "synthetic", "status": "success"}]})

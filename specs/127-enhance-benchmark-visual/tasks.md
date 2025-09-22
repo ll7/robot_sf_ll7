@@ -79,7 +79,6 @@ Legend:
 |----|------|----------------------|---------|----------|--------|
 | T037 | VisualizableSimState builder adapter | New helper `robot_sf/benchmark/full_classic/state_builder.py` mapping ReplayEpisode -> minimal VisualizableSimState (poses, ped positions if available) | T022 T031 |  | Done (2025-09-22) |
 | T038 | Invoke real render loop | Update `render_sim_view.py` to construct state and call `_sim_view.render(state)` (guard missing fields -> skip note) | T037 |  | Done (2025-09-22) |
-| T039 | Replay enrichment (ped + robot trajectories) | Extend capture to store robot pose, pedestrian positions, actions per step; update `replay.py` schema | T021 |  | Not started |
 | T039 | Replay enrichment (ped + robot trajectories) | Extend capture to store robot pose, pedestrian positions, actions per step; update `replay.py` schema | T021 |  | Done (2025-09-22) |
 | T040A | (Split) Timing instrumentation (moved) | Refine T040: separate render timing (ms/frame) from encode timing; add to performance manifest | T040 | [P] | Done (2025-09-22) |
 | T041A | Cleanup & exit handling | Ensure `_sim_view.exit_simulation()` invoked after generator exhaustion; add try/finally in `generate_frames` | T038 | [P] | Done (2025-09-22) |

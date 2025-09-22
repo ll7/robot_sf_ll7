@@ -103,7 +103,8 @@ Legend:
 | T040 | Timing instrumentation for plots & first video | Amend `visuals.py` measuring durations | T035 |  | Done (2025-09-22) |
 | T041 | Memory over-budget flag logic | Add logic after first video encode to set `memory_over_budget` if peak >100 | T034 T035 |  | Done (2025-09-22) |
 | T042 | Schema validation helper | `visuals/validation.py` (conditional jsonschema usage) | T010 T011 T012 | [P] | |
-| T043 | Integrate validation call (dev/test mode) | Invoke after manifests written with env var toggle | T042 T035 |  | |
+| T042 | Schema validation helper | `visuals/validation.py` (conditional jsonschema usage) | T010 T011 T012 | [P] | Done (2025-09-22) |
+| T043 | Integrate validation call (dev/test mode) | Invoke after manifests written with env var toggle | T042 T035 |  | Done (2025-09-22) |
 
 ### Tests for Core Paths (Post Implementation Core)
 | ID | Task | Details / File Paths | Depends | Parallel | Status |

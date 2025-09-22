@@ -81,11 +81,11 @@ Legend:
 | T038 | Invoke real render loop | Update `render_sim_view.py` to construct state and call `_sim_view.render(state)` (guard missing fields -> skip note) | T037 |  | Done (2025-09-22) |
 | T039 | Replay enrichment (ped + robot trajectories) | Extend capture to store robot pose, pedestrian positions, actions per step; update `replay.py` schema | T021 |  | Not started |
 | T039 | Replay enrichment (ped + robot trajectories) | Extend capture to store robot pose, pedestrian positions, actions per step; update `replay.py` schema | T021 |  | Done (2025-09-22) |
-| T040A | (Split) Timing instrumentation (moved) | Refine T040: separate render timing (ms/frame) from encode timing; add to performance manifest | T040 | [P] | Not started |
+| T040A | (Split) Timing instrumentation (moved) | Refine T040: separate render timing (ms/frame) from encode timing; add to performance manifest | T040 | [P] | Done (2025-09-22) |
 | T041A | Cleanup & exit handling | Ensure `_sim_view.exit_simulation()` invoked after generator exhaustion; add try/finally in `generate_frames` | T038 | [P] | Done (2025-09-22) |
 | T050A | Test: SimulationView placeholder guard | Add test asserting placeholder (pre-state-builder) produces synthetic frames with note indicating 'placeholder' until T038 done | T031 | [P] | Not started |
 | T050B | Test: SimulationView real render | After T038/T037, assert frames differ from flat gradient and `_sim_view.render` was invoked (mock/spies) | T038 |  | Not started |
-| T052A | Test: renderer toggle flag | Add CLI/config flag `--renderer=synthetic|sim-view` ensuring selection logic respects explicit choice | T035 | [P] | Not started |
+| T052A | Test: renderer toggle flag | Add CLI/config flag `--renderer=synthetic|sim-view` ensuring selection logic respects explicit choice | T035 | [P] | Done (2025-09-22) |
 | T060A | Docs: video rendering lifecycle | Section in `docs/benchmark_visuals.md` describing synthetic vs sim-view pipeline, state requirements, fallback ladder | T060 |  | Not started |
 | T063A | Dependency matrix update | Add SimulationView row specifying additional replay fields required | T063 | [P] | Not started |
 | T074A | Perf benchmark (render) | Measure render+encode split timings (N=50 frames) and document baseline numbers; store under `results/visual_perf.json` | T074 |  | Not started |

@@ -38,7 +38,7 @@ from .visual_constants import (
     RENDERER_SIM_VIEW,
     RENDERER_SYNTHETIC,
 )
-from .visual_deps import simulation_view_ready
+from .visual_deps import moviepy_ready, simulation_view_ready
 
 try:  # Lazy import SimulationView
     from robot_sf.render.sim_view import SimulationView  # type: ignore  # noqa: F401
@@ -171,6 +171,8 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
             )
         )
     if moviepy_missing_all and not artifacts:
+        # Signal to caller that SimulationView path attempted but moviepy missing
+        # Caller (sim-view forced) will interpret empty attempt as NOTE_MOVIEPY_MISSING.
         return []
     return artifacts
 
@@ -242,8 +244,9 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
             bool(getattr(cfg, "capture_replay", False))
             and _SIM_VIEW_AVAILABLE
             and simulation_view_ready()
+            and not moviepy_ready()
         ):
-            # SimulationView ready so encode likely skipped due to moviepy
+            # SimulationView ready and replay captured but moviepy missing
             note = NOTE_MOVIEPY_MISSING
         out: List[VideoArtifact] = []
         for r in records:

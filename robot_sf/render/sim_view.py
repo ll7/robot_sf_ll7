@@ -51,6 +51,35 @@ TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
 TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
 
 
+def _empty_map_definition() -> MapDefinition:
+    """Return a minimal valid MapDefinition used as a safe default.
+
+    This avoids needing callers to always supply a map and keeps SimulationView
+    construction lightweight for utility or test contexts. The map is a 1x1 square
+    with a single spawn/goal triangle; routes are empty.
+    """
+    rect = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+    bounds = [
+        (0.0, 0.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0, 1.0),
+        (1.0, 1.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 0.0),
+    ]
+    return MapDefinition(
+        width=1.0,
+        height=1.0,
+        obstacles=[],
+        robot_spawn_zones=[rect],
+        ped_spawn_zones=[rect],
+        robot_goal_zones=[rect],
+        bounds=bounds,
+        robot_routes=[],
+        ped_goal_zones=[rect],
+        ped_crowded_zones=[],
+        ped_routes=[],
+    )
+
+
 @dataclass
 class VisualizableAction:
     pose: RobotPose
@@ -152,7 +181,8 @@ class SimulationView:
     ego_ped_radius: float = 0.4
     ped_radius: float = 0.4
     goal_radius: float = 1.0
-    map_def: MapDefinition = field(default_factory=MapDefinition)
+    # Provide a minimal valid default map definition (see _empty_map_definition)
+    map_def: MapDefinition = field(default_factory=_empty_map_definition)
     obstacles: List[Obstacle] = field(default_factory=list)
     caption: str = "RobotSF Simulation"
     focus_on_robot: bool = True
@@ -392,6 +422,25 @@ class SimulationView:
         """Exit the simulation."""
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
+        # Diagnostic guard: warn if recording requested but no frames captured
+        if self.record_video:
+            if not self.frames:
+                logger.warning(
+                    "record_video=True but zero frames were captured; video file will not be written. "
+                    "Likely causes: (1) render() was never called; (2) early exit before any frame finalized. "
+                    "Call render() each step (or enable debug mode) to populate frames."
+                )
+            else:
+                # Heuristic: sample up to first 5 frames; if all sums are zero, content may be blank
+                try:  # pragma: no cover - defensive
+                    sample = self.frames[:5]
+                    if sample and all(np.array(f).sum() == 0 for f in sample):
+                        logger.warning(
+                            "record_video=True but captured frames appear empty (all-zero pixel data). "
+                            "Ensure drawing code executed before frame capture; verify entities are rendered."
+                        )
+                except Exception:
+                    pass
         if return_frames:
             intermediate_frames = self.frames
         self._handle_quit()

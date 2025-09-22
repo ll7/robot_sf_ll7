@@ -216,6 +216,31 @@ class SimulationView:
     def __post_init__(self):
         """Initialize PyGame components."""
         logger.info("Initializing the simulation view.")
+        # Environment variable override for max_frames (e.g., runtime tuning / CI scenarios)
+        env_cap = os.environ.get("ROBOT_SF_MAX_VIDEO_FRAMES")
+        if env_cap is not None:
+            raw = env_cap.strip().lower()
+            if raw in {"none", "", "-1"}:
+                self.max_frames = None
+                logger.debug(
+                    "ROBOT_SF_MAX_VIDEO_FRAMES set to '%s' -> disabling frame cap (max_frames=None)",
+                    env_cap,
+                )
+            else:
+                try:
+                    parsed = int(raw)
+                    if parsed <= 0:
+                        raise ValueError
+                    self.max_frames = parsed
+                    logger.debug(
+                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d", parsed
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '%s' (expected positive int or 'none'). Using default %s.",
+                        env_cap,
+                        self.max_frames,
+                    )
         pygame.init()
         pygame.font.init()
         self.clock = pygame.time.Clock()

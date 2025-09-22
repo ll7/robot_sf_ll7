@@ -1,20 +1,41 @@
-"""Example: Classic Interaction Scenario Visualization with PPO (No CLI).
+"""Classic Interaction Scenario Visualization with PPO (Feature 128).
 
-This out-of-the-box demo replays a classic interaction scenario using a
-pre-trained PPO model. Configuration is controlled by constants below – no
-argument parsing or CLI flags are used (per feature requirement).
+Implemented per spec/tasks (FR-001..FR-021). Constants configure behavior; no CLI.
 
 Quick start:
     uv run python examples/classic_interactions_pygame.py
 
-Adjust the CONFIG CONSTANTS section to change scenario, number of episodes,
-recording behavior, or paths.
+Public API:
+    run_demo(dry_run: bool | None = None,
+             scenario_name: str | None = None,
+             max_episodes: int | None = None,
+             enable_recording: bool | None = None) -> list[EpisodeSummary]
+
+Return schema (EpisodeSummary TypedDict):
+    {
+      'scenario': str,
+      'seed': int,
+      'steps': int,
+      'outcome': str,              # one of {'success','collision','timeout','done'}
+      'success': bool,
+      'collision': bool,
+      'timeout': bool,
+      'recorded': bool,
+    }
+
+Dry run (`dry_run=True`) validates resources & prints a summary but does not load the model
+or step the environment (FR-004). Deterministic ordering of seeds is guaranteed as listed
+in scenario YAML (FR-002/FR-003). Recording gracefully degrades when moviepy/ffmpeg are
+unavailable (FR-008/FR-009). Logging verbosity controlled by LOGGING_ENABLED (FR-014).
 """
 
 from __future__ import annotations
 
+import contextlib
+import os
+import time
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Iterable, List, TypedDict, cast
 
 import numpy as np  # type: ignore
 
@@ -40,114 +61,237 @@ from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 # ---------------------------------------------------------------------------
 MODEL_PATH = Path("model/ppo_model_retrained_10m_2025-02-01.zip")
 SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
-SCENARIO_NAME: str | None = None  # e.g., "classic_crossing_low" or None for first
+SCENARIO_NAME: str | None = None  # default = first scenario
 MAX_EPISODES = 1
 ENABLE_RECORDING = False
 OUTPUT_DIR = Path("results/vis_runs")
-DRY_RUN = False  # If True, validates resources then exits
+DRY_RUN = False  # global default dry_run if run_demo not passed a value
+LOGGING_ENABLED = True  # toggle for non-essential prints (FR-014)
+
+# Internal: headless detection (FR-012). If SDL_VIDEODRIVER=dummy treat as headless.
+HEADLESS = os.environ.get("SDL_VIDEODRIVER", "").lower() == "dummy"
+
+
+class EpisodeSummary(TypedDict):  # (FR-020)
+    scenario: str
+    seed: int
+    steps: int
+    outcome: str
+    success: bool
+    collision: bool
+    timeout: bool
+    recorded: bool
+
 
 # ---------------------------------------------------------------------------
 
 
-def _load_policy(path: str):
+def _log(msg: str) -> None:
+    if LOGGING_ENABLED:
+        print(msg)
+
+
+def _validate_constants() -> None:  # (FR-019)
+    if not SCENARIO_MATRIX_PATH.exists():
+        raise FileNotFoundError(
+            f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant."
+        )
+    # MODEL_PATH validated lazily (allows dry_run to pass even if missing when not executing episodes)
+    if ENABLE_RECORDING and not OUTPUT_DIR.exists():
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _load_policy(path: str):  # (FR-004, FR-007 guidance)
     if PPO is None:
         raise RuntimeError(
-            f"stable_baselines3 PPO import failed: {_PPO_IMPORT_ERROR}. Install dependency to use this example."
+            "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this demo."
         )
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(f"Model file not found: {path}")
+        raise FileNotFoundError(
+            f"Model file not found: {path}\n"  # explicit newline
+            "Download or place the pre-trained PPO model at this path. "
+            "See docs/dev/issues/classic-interactions-ppo/ for guidance."
+        )
     return PPO.load(path)
 
 
+def _determine_outcome(info: dict[str, Any]) -> str:
+    if info.get("collision"):
+        return "collision"
+    if info.get("success"):
+        return "success"
+    if info.get("timeout"):
+        return "timeout"
+    return "done"
+
+
+def _maybe_record(
+    frames: list[Any], scenario_name: str, seed: int, episode_index: int, out_dir: Path
+) -> bool:
+    if not frames:
+        return False
+    try:
+        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+        video_name = f"{scenario_name}_seed{seed}_ep{episode_index}.mp4"
+        clip = ImageSequenceClip(frames, fps=10)
+        # Some moviepy versions differ in signature; use minimal args
+        clip.write_videofile(str(out_dir / video_name), codec="libx264", fps=10)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        _log(f"[recording skipped] error: {exc}")
+        return False
+
+
 def run_episode(
-    env, policy, record: bool, out_dir: Path, scenario_name: str, seed: int, episode_index: int
-) -> dict[str, Any]:  # noqa: D401
+    env,
+    policy,
+    record: bool,
+    out_dir: Path,
+    scenario_name: str,
+    seed: int,
+    episode_index: int,
+) -> EpisodeSummary:  # noqa: D401
     obs, _ = env.reset(seed=seed)
     done = False
-    frames = []  # collected only when recording
     step = 0
-    outcome = None
+    last_info: dict[str, Any] = {}
+    frames: list[Any] = [] if (record and MOVIEPY_AVAILABLE) else []
+    # Performance: capture frames only if recording enabled & moviepy available (FR-025)
     while not done:
         action, _ = policy.predict(obs, deterministic=True)
         obs, _reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
-        # The environment may already perform rendering; we only increment step count here.
         step += 1
-    # Determine outcome heuristically
-    if info.get("collision"):
-        outcome = "collision"
-    elif info.get("success"):
-        outcome = "success"
-    elif info.get("timeout"):
-        outcome = "timeout"
-    else:
-        outcome = "done"
-
-    if record and MOVIEPY_AVAILABLE:
-        try:
-            out_dir.mkdir(parents=True, exist_ok=True)
-            # If env has its own recorded frames use them; else create a simple placeholder frame summary.
-            if hasattr(env, "sim_ui") and getattr(
-                env.sim_ui, "frames", None
-            ):  # pragma: no branch - simple attribute check
-                frames = env.sim_ui.frames  # type: ignore[attr-defined]
+        last_info = info
+        if frames is not None and record and MOVIEPY_AVAILABLE:
+            # Attempt to reuse env frames if present; else sample minimal frame at small stride
+            if hasattr(env, "sim_ui") and getattr(env.sim_ui, "frames", None):  # type: ignore[attr-defined]
+                # Defer using env-managed frames after loop; no per-step copy
+                pass
             else:
-                frames = [np.zeros((360, 640, 3), dtype=np.uint8)]
-            if frames:
-                from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
+                if step % 5 == 0:  # light sampling to limit memory (future FR-023 could refine)
+                    frames.append(np.zeros((360, 640, 3), dtype=np.uint8))
 
-                clip = ImageSequenceClip(frames, fps=10)
-                video_name = f"{scenario_name}_seed{seed}_ep{episode_index}.mp4"
-                clip.write_videofile(str(out_dir / video_name), codec="libx264", fps=10)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[recording skipped] error: {exc}")
-    elif record and not MOVIEPY_AVAILABLE:
-        print("[recording skipped] moviepy/ffmpeg not available")
+    outcome = _determine_outcome(last_info)
+    success = bool(last_info.get("success"))
+    collision = bool(last_info.get("collision"))
+    timeout = bool(last_info.get("timeout"))
 
-    return {
-        "scenario": scenario_name,
-        "seed": seed,
-        "steps": step,
-        "outcome": outcome,
-        "recorded": bool(frames),
-    }
+    recorded_flag = False
+    if record:
+        if MOVIEPY_AVAILABLE:
+            # If env stored frames, prefer them
+            if hasattr(env, "sim_ui") and getattr(env.sim_ui, "frames", None):  # type: ignore[attr-defined]
+                frames = getattr(env.sim_ui, "frames")  # type: ignore[assignment]
+            recorded_flag = _maybe_record(frames, scenario_name, seed, episode_index, out_dir)
+        else:
+            _log("[recording skipped] moviepy/ffmpeg not available")
+
+    return EpisodeSummary(
+        scenario=scenario_name,
+        seed=int(seed),
+        steps=step,
+        outcome=outcome,
+        success=success,
+        collision=collision,
+        timeout=timeout,
+        recorded=recorded_flag,
+    )
 
 
-def run_demo() -> List[dict[str, Any]]:
-    """Run the configured demo and return episode summaries."""
+def _format_summary_table(rows: Iterable[EpisodeSummary]) -> str:
+    rows = list(rows)
+    if not rows:
+        return "(no episodes)"
+    headers: list[str] = ["scenario", "seed", "steps", "outcome", "recorded"]
+    col_widths = {h: max(len(h), *(len(str(cast(Any, r)[h])) for r in rows)) for h in headers}
+
+    def fmt_row(r: EpisodeSummary | dict[str, Any]) -> str:
+        return " | ".join(str(cast(Any, r)[h]).ljust(col_widths[h]) for h in headers)
+
+    header_row: EpisodeSummary | dict[str, Any] = {h: h for h in headers}
+    lines = [fmt_row(header_row)]
+    lines.append("-|-".join("-" * col_widths[h] for h in headers))
+    lines.extend(fmt_row(r) for r in rows)
+    return "\n" + "\n".join(lines)
+
+
+def run_demo(
+    dry_run: bool | None = None,
+    scenario_name: str | None = None,
+    max_episodes: int | None = None,
+    enable_recording: bool | None = None,
+) -> List[EpisodeSummary]:
+    """Execute the PPO visualization demo.
+
+    Parameters
+    ----------
+    dry_run: bool | None
+        If True, validate resources and exit without loading model or running episodes.
+        If None, fall back to module-level DRY_RUN constant.
+    scenario_name: str | None
+        Override scenario selection; defaults to SCENARIO_NAME constant (first scenario if None).
+    max_episodes: int | None
+        Limit number of episodes (defaults to MAX_EPISODES constant).
+    enable_recording: bool | None
+        Override recording toggle; defaults to ENABLE_RECORDING constant.
+
+    Returns
+    -------
+    list[EpisodeSummary]
+        Ordered list of episode summaries (deterministic), possibly empty when dry_run.
+    """
+    _validate_constants()
+    effective_dry = DRY_RUN if dry_run is None else dry_run
+    eff_name = SCENARIO_NAME if scenario_name is None else scenario_name
+    eff_max = MAX_EPISODES if max_episodes is None else max_episodes
+    eff_record = ENABLE_RECORDING if enable_recording is None else enable_recording
+
     scenarios = load_classic_matrix(str(SCENARIO_MATRIX_PATH))
-    scenario = select_scenario(scenarios, SCENARIO_NAME)
+    scenario = select_scenario(scenarios, eff_name)
     seeds = iter_episode_seeds(scenario)
-    if DRY_RUN:
-        print(
+    # Deterministic ordering explicit (FR-017) — convert to list to avoid reuse side-effects
+    seeds = list(seeds)
+
+    if effective_dry:
+        _log(
             f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}"
         )
         return []
+
+    # Model load (FR-004, FR-007)
+    model_start = time.time()
     model = _load_policy(str(MODEL_PATH))
+    _log(f"Loaded model in {time.time() - model_start:.2f}s: {MODEL_PATH}")
+
+    # Env creation
     sim_cfg = RobotSimulationConfig()
     env = make_robot_env(config=sim_cfg, debug=False)
-    results: List[dict[str, Any]] = []
-    for ep_index, seed in enumerate(seeds):
-        if ep_index >= MAX_EPISODES:
-            break
-        print(
-            f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{MAX_EPISODES})"
-        )
-        res = run_episode(
-            env=env,
-            policy=model,
-            record=ENABLE_RECORDING,
-            out_dir=OUTPUT_DIR,
-            scenario_name=scenario.get("name", "unknown"),
-            seed=seed,
-            episode_index=ep_index,
-        )
-        results.append(res)
-    print("Summary:")
-    for r in results:
-        print(r)
-    env.close()
+    _log("Environment created (reward fallback active if custom reward not provided).")  # (T022)
+
+    results: List[EpisodeSummary] = []
+    with contextlib.ExitStack() as stack:  # ensures close even on error
+        stack.callback(env.close)
+        for ep_index, seed in enumerate(seeds):
+            if ep_index >= eff_max:
+                break
+            _log(f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{eff_max})")
+            summary = run_episode(
+                env=env,
+                policy=model,
+                record=eff_record,
+                out_dir=OUTPUT_DIR,
+                scenario_name=scenario.get("name", "unknown"),
+                seed=seed,
+                episode_index=ep_index,
+            )
+            results.append(summary)
+    if LOGGING_ENABLED:
+        print("Summary:")
+        print(_format_summary_table(results))
     return results
 
 

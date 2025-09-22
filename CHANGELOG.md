@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Synthetic slow test and guidance validation tests.
 
 ### Added
+- Classic Interactions PPO Visualization (Feature 128) – foundations: test package scaffold, feature docs folder, changelog stub, docs index link (MVP in progress; includes deterministic PPO demo script with planned recording & summary features).
 - Benchmark visual artifact integration (plots + videos manifests) for Full Classic Interaction Benchmark:
   - Post-run single-pass generation of placeholder plots and representative episode videos
   - SimulationView-first architecture with graceful synthetic fallback (current release uses synthetic until replay support added)

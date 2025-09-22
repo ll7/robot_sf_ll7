@@ -18,10 +18,10 @@ Directory conventions (existing / proposed):
 - Docs (feature issue folder): `docs/dev/issues/classic-interactions-ppo/`
 
 ## Phase 1: Setup (Foundations)
-- [ ] T001 Ensure tests package folder `tests/classic_interactions/` exists (mkdir, `__init__.py`). (Infra)
-- [ ] T002 [P] Create docs folder `docs/dev/issues/classic-interactions-ppo/` with `README.md` (purpose, link spec/plan). (Doc infra)
-- [ ] T003 [P] Add feature entry stub to `CHANGELOG.md` under Added (will finalize after MVP). (Meta)
-- [ ] T004 [P] Add link in `docs/README.md` referencing new feature docs folder. (Doc integration)
+- [X] T001 Ensure tests package folder `tests/classic_interactions/` exists (mkdir, `__init__.py`). (Infra)
+- [X] T002 [P] Create docs folder `docs/dev/issues/classic-interactions-ppo/` with `README.md` (purpose, link spec/plan). (Doc infra)
+- [X] T003 [P] Add feature entry stub to `CHANGELOG.md` under Added (will finalize after MVP). (Meta)
+- [X] T004 [P] Add link in `docs/README.md` referencing new feature docs folder. (Doc integration)
 
 ## Phase 2: Tests First (TDD) – MUST FAIL INITIALLY
 Smoke & integration tests encode FR requirements before code adjustments.

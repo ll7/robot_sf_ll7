@@ -73,6 +73,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**Map Editor Usage**](./MAP_EDITOR_USAGE.md) - Creating and editing simulation maps
 - [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
  - **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
+ - **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
 
 ### 📊 Analysis & Tools  
  - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights

@@ -58,7 +58,10 @@ def generate_frames(
         after producing at most this many frames.
     """
     _assert_ready()
-    view = SimulationView(record_video=True, video_fps=fps, width=640, height=360)  # type: ignore
+    # Create SimulationView primarily for future integration & to validate that
+    # dependencies are functioning. We don't yet render real state, so the
+    # instance is intentionally unused beyond lifecycle side effects.
+    _sim_view = SimulationView(record_video=True, video_fps=fps, width=640, height=360)  # type: ignore  # noqa: F841
 
     produced = 0
     for _ in episode.steps:
@@ -71,7 +74,10 @@ def generate_frames(
         arr[:, :, 1] = 20
         arr[:, :, 2] = 255 - shade
         produced += 1
-        _ = view  # touch to silence unused warning for now
+        # Future: when replay contains physical state + poses we will construct a
+        # VisualizableSimState and call `_sim_view.render(state)` here. For now we
+        # simply keep the SimulationView instance alive (ensuring pygame surfaces
+        # persist) and emit a synthetic gradient frame to exercise the video pipeline.
         yield arr
         if max_frames is not None and produced >= max_frames:
             break

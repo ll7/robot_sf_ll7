@@ -66,9 +66,7 @@ Legend:
 ### SimulationView & Encoding Pipeline
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T030 | Utility: simulation view availability probe | In `deps.py` implement probe caching result | T003 |  | |
 | T030 | Utility: simulation view availability probe | In `deps.py` implement probe caching result | T003 |  | Done |
-| T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | |
 | T031 | Implement SimulationView frame generator | `visuals/render_sim_view.py` generate frame (numpy array) from ReplayState | T030 T022 |  | Done |
 | T032 | Implement synthetic fallback path parity refactor | Ensure existing synthetic code moved/cleaned to `visuals/render_synthetic.py` | T001 | [P] | Done (2025-09-22) |
 | T033 | Implement moviepy encoding wrapper (streaming) | `visuals/encode.py` function with generator + memory sampling hook | T031 |  | Done |
@@ -96,10 +94,8 @@ Legend:
 ### Performance & Budget Instrumentation
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T040 | Timing instrumentation for plots & first video | Amend `visuals.py` measuring durations | T035 |  | |
 | T040 | Timing instrumentation for plots & first video | Amend `visuals.py` measuring durations | T035 |  | Done (2025-09-22) |
 | T041 | Memory over-budget flag logic | Add logic after first video encode to set `memory_over_budget` if peak >100 | T034 T035 |  | Done (2025-09-22) |
-| T042 | Schema validation helper | `visuals/validation.py` (conditional jsonschema usage) | T010 T011 T012 | [P] | |
 | T042 | Schema validation helper | `visuals/validation.py` (conditional jsonschema usage) | T010 T011 T012 | [P] | Done (2025-09-22) |
 | T043 | Integrate validation call (dev/test mode) | Invoke after manifests written with env var toggle | T042 T035 |  | Done (2025-09-22) |
 

@@ -1,9 +1,11 @@
 """Demo: Run the Full Classic Interaction Benchmark (programmatic helper).
 
 Purpose:
-    Provide a concise, reproducible example for invoking the new
-    full classic benchmark orchestrator (adaptive sampling + post-run
-    visual artifact generation: plots + videos + manifests).
+    Provide a concise, reproducible example for invoking the full
+    classic benchmark orchestrator (adaptive sampling + post-run
+    visual artifact generation: plots + videos + manifests). The visuals
+    subsystem now supports a renderer toggle and SimulationView-first
+    fallback ladder documented below.
 
 What it does:
     1. Resolves repository root and selects a scenario matrix.
@@ -16,18 +18,32 @@ Smoke / fast run defaults:
     - initial_episodes=2, max_episodes=4, batch_size=2 (one adaptive iteration)
     - workers=1 for determinism
     - max_videos=1 to keep runtime low
+    - video_renderer defaults to 'auto' (try sim-view then fallback synthetic)
 
 Adjust the parameters at the bottom if you need a longer or heavier run.
 
 Related docs:
-    - docs/benchmark_full_classic.md (if present)
-    - specs/126-title-integrate-plots/* (feature spec + tasks + plan)
+    - docs/benchmark_full_classic.md (benchmark overview)
+    - docs/benchmark_visuals.md (renderer toggle, lifecycle, dependency matrix)
+    - specs/127-enhance-benchmark-visual/* (feature spec + tasks + plan)
 
 Usage:
     uv run python examples/demo_full_classic_benchmark.py
 
-Optional arguments:
-    Pass environment variables to tweak behavior (e.g., ROBOT_SF_PERF_ENFORCE=1 to enforce perf budgets).
+Optional arguments / env vars:
+    - Set cfg.video_renderer = 'synthetic' or 'sim-view' to force mode.
+    - Env ROBOT_SF_VALIDATE_VISUALS=1 to enable JSON Schema validation.
+    - Env ROBOT_SF_PERF_ENFORCE=1 to enforce performance budgets.
+    - Disable videos: set cfg.disable_videos = True (skip with note 'disabled').
+
+Renderer fallback ladder (auto mode):
+    1. SimulationView path (requires: pygame + replay capture + moviepy/ffmpeg)
+    2. Synthetic gradient placeholder video(s)
+    3. Skip with diagnostic note if both disabled or insufficient replay
+
+Skip note taxonomy (subset):
+    simulation-view-missing | moviepy-missing | insufficient-replay |
+    disabled | smoke-mode | render-error:<Type>
 
 NOTE:
     This example intentionally avoids argparse to stay minimal. For full

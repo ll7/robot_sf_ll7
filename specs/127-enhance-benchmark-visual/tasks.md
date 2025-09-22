@@ -102,7 +102,7 @@ Legend:
 ### Tests for Core Paths (Post Implementation Core)
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T050 | Test: simulation_view success path | `tests/visuals/test_simulation_view_success.py` (skip if pygame/moviepy missing) verifies renderer field and mp4 exists | T035 |  | |
+| T050 | Test: simulation_view success path | `tests/visuals/test_simulation_view_success.py` (skip if pygame/moviepy missing) verifies renderer field and mp4 exists | T035 |  | Done (2025-09-22) |
 | T051 | Test: synthetic fallback path | `tests/visuals/test_synthetic_fallback.py` simulate missing pygame; expect renderer synthetic | T035 | [P] | Done (2025-09-22) |
 | T052 | Test: moviepy-missing skip | `tests/visuals/test_moviepy_missing.py` monkeypatch detection to False; expect skip notes | T033 | [P] | Done (2025-09-22) |
 | T052A | Test: renderer toggle flag | Added `tests/test_full_classic_visuals_renderer_toggle.py` verifying forced synthetic and sim-view modes (implemented 2025-09-22) | T035 | [P] | Done (2025-09-22) |
@@ -114,8 +114,8 @@ Legend:
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
 | T060 | Add documentation section | Update `docs/benchmark_full_classic.md` or create new `docs/benchmark_visuals.md` + link in `docs/README.md` | T035 T040 |  | Done (2025-09-22) |
-| T061 | Update demo script docstring | `examples/demo_full_classic_benchmark.py` reflect SimulationView path & fallback table | T050 | [P] |  |
-| T062 | Update CHANGELOG.md | Add enhancement entry referencing feature branch & key capabilities | T050 |  |  |
+| T061 | Update demo script docstring | `examples/demo_full_classic_benchmark.py` reflect SimulationView path & fallback table | T050 | [P] | Done (2025-09-22) |
+| T062 | Update CHANGELOG.md | Add enhancement entry referencing feature branch & key capabilities | T050 |  | Done (2025-09-22) |
 | T063 | Add dependency matrix table | Ensure matrix included in new docs page (pygame/moviepy/jsonschema/psutil) | T060 |  | Done (2025-09-22) |
 
 ### Final Polish & Validation

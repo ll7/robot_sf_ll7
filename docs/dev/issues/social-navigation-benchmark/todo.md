@@ -41,6 +41,50 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - Artifact completeness: public repo + schema + lockfile + figure regeneration scripts + minimal usage tutorial.
 - CI green run: lint + unit tests + smoke benchmark (≤ 5 min) pass on clean clone.
 
+## 🚦 Release Readiness (Gating Checklist)
+Focused list of MUST‑complete items before announcing the benchmark as a stable, reproducible release. Keep this block short; strike through (or check) as each is finished and remove the entire section once all are done.
+
+### A. Core Definition & Baselines
+- [ ] Finalize target venues & internal submission timeline (ICRA / IROS / CoRL / NeurIPS D&B) → add dates
+- [ ] Finalize baseline set (SF, PPO, Random) + explicit ORCA/RVO decision documented (`adding_orca.md` linked & status line updated)
+- [ ] Formal metric specification document (single source: definitions, formulae, units, edge cases)
+
+### B. Metrics & Data Integrity
+- [ ] Implement per‑pedestrian force magnitude quantiles (current: only aggregated) + tests
+- [ ] Contact / collision stress scenario (narrow corridor or tuned density) ensures non‑zero collision counts appear in seed batch
+- [ ] SNQI baseline med/p95 stats persisted to `results/baseline_stats.json` & automatically consumed by orchestrator (documented)
+
+### C. Video Artifacts Minimal Viable Set
+- [ ] Micro batch integration test (1–2 episodes) asserts: MP4 exists, size>0, frames == steps
+- [ ] `--no-video` (or config toggle) implemented and documented
+- [ ] Manifest / JSON Schema extension: video artifact entries (format=mp4, file_size>0)
+- [ ] Performance sample recorded (encode ms/frame + % overhead <5%) attached to docs
+
+### D. Reproducibility & Tooling
+- [ ] Pre-commit hook / CI guard preventing silent schema drift (metric or episode schema)
+- [ ] Figure output canonical naming + `--auto-out-dir` implemented (`<episodes-stem>__<gitsha7>__v<schema>` + `_latest.txt` alias)
+- [ ] One-shot regeneration script (episodes → baseline → aggregate → figures) documented (`scripts/generate_full_benchmark.sh` or Python driver)
+- [ ] Zenodo deposition draft metadata (title, authors, abstract, keywords) prepared
+
+### E. Validation & Evidence
+- [ ] Cross-seed stability run (≥5 seeds) with CV <10% for success & comfort exposure (store JSON summary)
+- [ ] Discriminative power table: each baseline differs on ≥2 metrics in ≥60% scenarios (stored under `docs/figures/` or `results/`)
+- [ ] SNQI component ablation ranking shift analysis (≥50% baselines move >1 slot) – figure or table
+
+### F. Documentation & Onboarding
+- [ ] `video-artifacts/design.md` (capture approach, fallbacks, perf notes) + linked from `docs/README.md`
+- [ ] Metrics spec linked from docs index & README
+- [ ] Add “Release Reproduction Guide” section: exact commands to regenerate all published artifacts
+
+### G. Paper Readiness (Minimum Pre-outline)
+- [ ] Draft outline (sections + bullet list) committed under `docs/paper/outline.md`
+- [ ] Populate placeholders in TODO: mark Paper Writing section start date
+
+### Progress Tracking Meta
+- [ ] Add date when all items above are checked → then remove this section and announce release readiness milestone.
+
+---
+
 ## 1. Scenario & Dataset Specification
 - [x] Enumerate scenario dimensions (density, flow pattern, obstacles, groups) (2025-09-02)
 - [x] Draft scenario matrix (table of N core scenarios, each with parameter ranges) (see `scenario_matrix.yaml`) (2025-09-02)

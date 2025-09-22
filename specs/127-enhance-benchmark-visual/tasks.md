@@ -83,8 +83,8 @@ Legend:
 ### SimulationView Enhancement Delta (Added 2025-09-22)
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T037 | VisualizableSimState builder adapter | New helper `robot_sf/benchmark/full_classic/state_builder.py` mapping ReplayEpisode -> minimal VisualizableSimState (poses, ped positions if available) | T022 T031 |  | Not started |
-| T038 | Invoke real render loop | Update `render_sim_view.py` to construct state and call `_sim_view.render(state)` (guard missing fields -> skip note) | T037 |  | Not started |
+| T037 | VisualizableSimState builder adapter | New helper `robot_sf/benchmark/full_classic/state_builder.py` mapping ReplayEpisode -> minimal VisualizableSimState (poses, ped positions if available) | T022 T031 |  | Done (2025-09-22) |
+| T038 | Invoke real render loop | Update `render_sim_view.py` to construct state and call `_sim_view.render(state)` (guard missing fields -> skip note) | T037 |  | Done (2025-09-22) |
 | T039 | Replay enrichment (ped + robot trajectories) | Extend capture to store robot pose, pedestrian positions, actions per step; update `replay.py` schema | T021 |  | Not started |
 | T040A | (Split) Timing instrumentation (moved) | Refine T040: separate render timing (ms/frame) from encode timing; add to performance manifest | T040 | [P] | Not started |
 | T041A | Cleanup & exit handling | Ensure `_sim_view.exit_simulation()` invoked after generator exhaustion; add try/finally in `generate_frames` | T038 | [P] | Not started |
@@ -100,7 +100,8 @@ Legend:
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
 | T040 | Timing instrumentation for plots & first video | Amend `visuals.py` measuring durations | T035 |  | |
-| T041 | Memory over-budget flag logic | Add logic after first video encode to set `memory_over_budget` if peak >100 | T034 T035 |  | |
+| T040 | Timing instrumentation for plots & first video | Amend `visuals.py` measuring durations | T035 |  | Done (2025-09-22) |
+| T041 | Memory over-budget flag logic | Add logic after first video encode to set `memory_over_budget` if peak >100 | T034 T035 |  | Done (2025-09-22) |
 | T042 | Schema validation helper | `visuals/validation.py` (conditional jsonschema usage) | T010 T011 T012 | [P] | |
 | T043 | Integrate validation call (dev/test mode) | Invoke after manifests written with env var toggle | T042 T035 |  | |
 

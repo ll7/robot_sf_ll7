@@ -58,13 +58,9 @@ Legend:
 ### Replay Adapter & Data Structures
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T020 | Implement ReplayState dataclass | `robot_sf/benchmark/visuals/replay.py` with validation helper | T001 |  | |
 | T020 | Implement ReplayState dataclass | `robot_sf/benchmark/visuals/replay.py` with validation helper | T001 |  | Done |
-| T021 | Hook capture in benchmark loop (if missing) | Identify episode data source; modify `robot_sf/benchmark/orchestrator.py` or related collector to store minimal replay arrays (guarded by flag) | T020 |  | |
 | T021 | Hook capture in benchmark loop (if missing) | Identify episode data source; modify `robot_sf/benchmark/orchestrator.py` or related collector to store minimal replay arrays (guarded by flag) | T020 |  | Done |
-| T022 | Adapter: extract replay states post-run | Extend `visuals.py` to build list of `ReplayState` objects from stored episode info | T021 |  | |
 | T022 | Adapter: extract replay states post-run | Extend `visuals.py` to build list of `ReplayState` objects from stored episode info | T021 |  | Done |
-| T023 | Test: insufficient replay state skip | `tests/visuals/test_insufficient_replay_skip.py` create malformed ReplayState -> expect skip note | T022 | [P] | |
 | T023 | Test: insufficient replay state skip | `tests/visuals/test_insufficient_replay_skip.py` create malformed ReplayState -> expect skip note | T022 | [P] | Done |
 
 ### SimulationView & Encoding Pipeline

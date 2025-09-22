@@ -32,7 +32,5 @@ def test_success_entry():
 
 
 def test_success_missing_filename():
-    import pytest as _pytest
-
-    with _pytest.raises(Exception):
+    with pytest.raises(Exception):
         _validate({"artifacts": [{"name": "p1", "status": "success"}]})

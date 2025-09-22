@@ -234,6 +234,7 @@ python3 examples/demo_pedestrian.py
 - [SVG Map Editor](./docs/SVG_MAP_EDITOR.md) - SVG-based map creation
 - [Simulation View](./docs/SIM_VIEW.md) - Visualization and rendering
 - [UV Migration](./docs/UV_MIGRATION.md) - Migration to UV package manager
+ - [Contributing Agents Guide](./AGENTS.md) – Repository structure, coding style, test workflow, and contributor conventions (start here if new!)
 
 ### Environment Architecture (New!)
 The project has been refactored to provide a **consistent, extensible environment system**:

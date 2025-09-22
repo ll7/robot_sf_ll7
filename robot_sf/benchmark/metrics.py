@@ -16,10 +16,16 @@ from typing import Dict, Iterable, List
 
 import numpy as np
 
-# --- Constants (draft; duplicated from spec for local use) ---
-D_COLL = 0.25  # collision distance threshold (m)
-D_NEAR = 0.50  # near-miss lower bound (m)
-FORCE_EXCEED_PLACEHOLDER = 5.0  # temporary placeholder; will be calibrated
+# Centralized constants imported from benchmark.constants to avoid drift.
+from robot_sf.benchmark.constants import (
+    COLLISION_DIST as D_COLL,
+)
+from robot_sf.benchmark.constants import (
+    COMFORT_FORCE_THRESHOLD,
+)
+from robot_sf.benchmark.constants import (
+    NEAR_MISS_DIST as D_NEAR,
+)
 
 
 @dataclass
@@ -171,7 +177,7 @@ def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -
     return {f"force_q{int(q * 100)}": float(np.quantile(flat, q)) for q in qs}
 
 
-def force_exceed_events(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOLDER) -> float:
+def force_exceed_events(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHOLD) -> float:
     """Count (t,k) events where |F| > threshold.
 
     Returns 0 if no pedestrians.
@@ -182,7 +188,7 @@ def force_exceed_events(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACE
     return float(np.count_nonzero(mags > threshold))
 
 
-def comfort_exposure(data: EpisodeData, threshold: float = FORCE_EXCEED_PLACEHOLDER) -> float:
+def comfort_exposure(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHOLD) -> float:
     """Normalized exposure to high force events.
 
     force_exceed_events / (K * T) where K=#peds, T=#timesteps. 0 if K==0 or T==0.

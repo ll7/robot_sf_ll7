@@ -24,6 +24,7 @@ from pathlib import Path
 from results.figures.fig_force_field import generate_force_field_figure
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
+from robot_sf.benchmark.figures.thumbnails import save_montage, save_scenario_thumbnails
 from robot_sf.benchmark.metrics import snqi as _snqi
 from robot_sf.benchmark.plots import save_pareto_png
 from robot_sf.benchmark.report_table import (
@@ -33,7 +34,6 @@ from robot_sf.benchmark.report_table import (
     format_markdown,
 )
 from robot_sf.benchmark.runner import load_scenario_matrix
-from robot_sf.benchmark.scenario_thumbnails import save_montage, save_scenario_thumbnails
 
 SCHEMA_VERSION = 1  # Fallback schema version; replaced at runtime if inferred from episodes
 SCRIPT_VERSION = "0.1.0"

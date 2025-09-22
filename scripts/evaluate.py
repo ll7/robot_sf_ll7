@@ -86,7 +86,9 @@ def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMet
         obs = env.reset()
         while not is_end_of_route:
             action, _ = model.predict(obs, deterministic=True)
-            obs, _, done, meta = env.step(action)
+            # Env step returns obs, reward, terminated, truncated, info
+            obs, _reward, terminated, truncated, meta = env.step(action)
+            done = terminated or truncated
             meta = meta["meta"]
             eval_metrics.update(meta)
             if done:

@@ -30,7 +30,8 @@ def _get_random_planner():
 
 # Registry of available baseline algorithms
 BASELINES: Dict[str, Type] = {
-    "baseline_sf": _get_social_force_planner,
+    "social_force": _get_social_force_planner,
+    "baseline_sf": _get_social_force_planner,  # Backward compatibility
     "ppo": _get_ppo_planner,
     "random": _get_random_planner,
 }

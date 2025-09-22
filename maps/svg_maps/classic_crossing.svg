@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: Perpendicular Crossing -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="200"
+    height="200" viewBox="0 0 200 200">
+    <g id="obstacles" inkscape:label="Obstacles">
+        <!-- Frame walls -->
+        <rect x="0" y="0" width="200" height="5" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="195" width="200" height="5" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="0" width="5" height="200" fill="#000" inkscape:label="obstacle" />
+        <rect x="195" y="0" width="5" height="200" fill="#000" inkscape:label="obstacle" />
+        <!-- Open central crossing, thin islands to shape orthogonal flows -->
+        <rect x="95" y="60" width="10" height="80" fill="#000" inkscape:label="obstacle" />
+        <rect x="60" y="95" width="80" height="10" fill="#000" inkscape:label="obstacle" />
+    </g>
+    <g id="robot" inkscape:label="Robot">
+        <rect x="20" y="20" width="20" height="20" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="160" y="160" width="20" height="20" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+</svg>

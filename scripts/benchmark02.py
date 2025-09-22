@@ -2,7 +2,7 @@ import json
 import platform
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 import numpy as np
 import psutil
@@ -57,12 +57,18 @@ def run_standardized_benchmark(
     env = RobotEnv(env_config)
 
     # Record observation space info
+    from gymnasium import spaces as _spaces  # local import to avoid global dependency for types
+
+    obs_dict = cast(_spaces.Dict, env.observation_space)
+    drive_space = cast(_spaces.Box, obs_dict["drive_state"])  # type: ignore[index]
+    rays_space = cast(_spaces.Box, obs_dict["rays"])  # type: ignore[index]
+
     obs_space_info = {
-        "drive_state_shape": env.observation_space["drive_state"].shape,
-        "rays_shape": env.observation_space["rays"].shape,
+        "drive_state_shape": drive_space.shape,
+        "rays_shape": rays_space.shape,
         "drive_state_bounds": {
-            "low": env.observation_space["drive_state"].low.tolist(),
-            "high": env.observation_space["drive_state"].high.tolist(),
+            "low": drive_space.low.tolist(),
+            "high": drive_space.high.tolist(),
         },
     }
 
@@ -109,8 +115,8 @@ def run_standardized_benchmark(
             logger.debug(f"Completed {i}/{num_steps} steps")
 
     # Calculate metrics
-    avg_step_time = np.mean(step_times)
-    steps_per_sec = 1.0 / avg_step_time
+    avg_step_time = float(np.mean(step_times))
+    steps_per_sec = float(1.0 / avg_step_time) if avg_step_time > 0 else 0.0
 
     env.close()
     logger.info("Benchmark run complete. env closed. return metrics")

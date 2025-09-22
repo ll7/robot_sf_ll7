@@ -4,6 +4,8 @@ Updated test file demonstrating both old and new patterns.
 This shows backward compatibility while encouraging migration to the new factory pattern.
 """
 
+from typing import cast
+
 from gymnasium import spaces
 from stable_baselines3 import PPO
 
@@ -45,8 +47,9 @@ def test_can_create_env_new():
 def test_can_return_valid_observation_legacy():
     """Test observations with legacy pattern."""
     env = RobotEnv()
-    drive_state_spec: spaces.Box = env.observation_space[OBS_DRIVE_STATE]
-    lidar_state_spec: spaces.Box = env.observation_space[OBS_RAYS]
+    obs_dict = cast(spaces.Dict, env.observation_space)
+    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
 
     obs, info = env.reset()
 
@@ -59,8 +62,9 @@ def test_can_return_valid_observation_legacy():
 def test_can_return_valid_observation_new():
     """Test observations with new factory pattern."""
     env = make_robot_env()
-    drive_state_spec: spaces.Box = env.observation_space[OBS_DRIVE_STATE]
-    lidar_state_spec: spaces.Box = env.observation_space[OBS_RAYS]
+    obs_dict = cast(spaces.Dict, env.observation_space)
+    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
 
     obs, info = env.reset()
 
@@ -104,7 +108,8 @@ def test_image_robot_env():
     assert env.config.use_image_obs
 
     # Should have image observations in observation space
-    obs_space_keys = set(env.observation_space.spaces.keys())
+    obs_space = cast(spaces.Dict, env.observation_space)
+    obs_space_keys = set(obs_space.spaces.keys())
     expected_keys = {OBS_DRIVE_STATE, OBS_RAYS, "image"}
     assert expected_keys.issubset(obs_space_keys)
 

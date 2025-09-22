@@ -2,10 +2,44 @@
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.
 
+## 🚀 Social Navigation Benchmark Platform (Complete)
+
+**The Social Navigation Benchmark Platform is now fully operational!** 
+
+### Quick Start
+- **[Complete Quickstart Guide](../specs/120-social-navigation-benchmark-plan/quickstart.md)** - Step-by-step experiment execution, visualization, and interpretation
+- **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - All 15 CLI subcommands with examples
+- **Implementation Status**: All major features complete, 108 tests passing
+
+### Core Capabilities
+- **Episode Runner**: Parallel execution with resume functionality and deterministic seeding
+- **Metrics Suite**: SNQI composite index with component breakdown and weight recomputation
+- **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners  
+- **Statistical Analysis**: Bootstrap confidence intervals and robust aggregation
+- **Figure Orchestrator**: Distribution plots, Pareto frontiers, force fields, thumbnails, tables
+- **CLI Tools**: 15 subcommands covering full experiment workflow
+
+### Ready-to-Use Workflows
+1. **Quick Assessment** (~15 min): Compare robot policies against baselines
+2. **Research Study** (~2-4 hours): Multi-parameter analysis with publication figures
+3. **Weight Sensitivity** (~45 min): Analyze SNQI component importance
+
+**Start Here**: [specs/120-social-navigation-benchmark-plan/quickstart.md](../specs/120-social-navigation-benchmark-plan/quickstart.md)
+
+---
+
+- [🚀 Social Navigation Benchmark Platform (Complete)](#-social-navigation-benchmark-platform-complete)
+  - [Quick Start](#quick-start)
+  - [Core Capabilities](#core-capabilities)
+  - [Ready-to-Use Workflows](#ready-to-use-workflows)
 - [📚 Documentation Index](#-documentation-index)
   - [🏗️ Architecture \& Development](#️-architecture--development)
   - [🎮 Simulation \& Environment](#-simulation--environment)
   - [📊 Analysis \& Tools](#-analysis--tools)
+    - [Social Navigation Benchmark (Overview)](#social-navigation-benchmark-overview)
+    - [Figures naming and outputs](#figures-naming-and-outputs)
+    - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi--benchmark-tables)
+  - [Per-Test Performance Budget](#per-test-performance-budget)
   - [⚙️ Setup \& Configuration](#️-setup--configuration)
   - [📈 Pedestrian Metrics](#-pedestrian-metrics)
   - [📁 Media Resources](#-media-resources)
@@ -32,22 +66,36 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   - [Migration Guide](./refactoring/migration_guide.md) - Step-by-step migration instructions
   - [Implementation Summary](./refactoring/refactoring_summary.md) - What was accomplished
   - [Migration Report](./refactoring/migration_report.md) - Automated codebase analysis
+ - **[Agents & Contributor Onboarding](../AGENTS.md)** – High-level repository structure, coding/testing conventions, and workflow tips for new contributors
 
 ### 🎮 Simulation & Environment
 - [**Simulation View**](./SIM_VIEW.md) - Visualization and rendering system
 - [**Map Editor Usage**](./MAP_EDITOR_USAGE.md) - Creating and editing simulation maps
 - [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
+ - **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
 
 ### 📊 Analysis & Tools  
  - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
  - [**SNQI Figures (orchestrator usage)**](../examples/README.md) - Generate SNQI-augmented figures from existing episodes
  - [**Full SNQI Flow (episodes → baseline → figures)**](../examples/snqi_full_flow.py) - End-to-end reproducible pipeline script
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
+ - **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [`benchmark_full_classic.md`](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/`).
+ - **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [`benchmark_visuals.md`](./benchmark_visuals.md)
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
    - [Random baseline](./dev/baselines/random.md) — how to use and configure
  - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
  - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
  - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
+
+#### Social Navigation Benchmark (Overview)
+
+The benchmark layer provides:
+ - Deterministic episode JSONL schema (versioned) with per-episode metrics.
+ - Batch runner with resume manifest for incremental extensions.
+ - Metrics suite + SNQI composite index (with weight recomputation tooling).
+ - Aggregation + bootstrap CI utilities for statistical reporting.
+ - Figure orchestrator to generate distributions, Pareto frontiers, force-field visualizations, thumbnails, and tables.
+See the dedicated design page above for full specification and usage examples.
 #### Figures naming and outputs
 
 See `docs/dev/issues/figures-naming/design.md` for the canonical figure folder naming scheme and migration plan. A small tracker lives at `docs/dev/issues/figures-naming/todo.md`.
@@ -125,6 +173,18 @@ Fast iteration tip:
 - Use `--no-pareto` with `scripts/generate_figures.py` to skip Pareto plot during rapid table refinement.
 - Restrict distributions via `--dmetrics collisions,snqi` for quick rebuilds.
 
+### Per-Test Performance Budget
+
+A performance budget for tests helps prevent runtime regressions:
+
+- Soft threshold: <20s (advisory)
+- Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` markers)
+- Report: Top 10 slowest tests printed with guidance at session end
+- Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
+- Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`, `ROBOT_SF_PERF_HARD`.
+
+Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
+
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager
@@ -187,6 +247,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 ## 📖 Documentation Highlights
 
 ### 🆕 Latest Updates
+**Benchmark Visual Artifacts (Plots + Videos Manifests)**: The Full Classic Interaction Benchmark now emits deterministic plot PDFs and representative (synthetic placeholder, SimulationView-ready) episode video artifacts with machine-readable manifests (`plot_artifacts.json`, `video_artifacts.json`, `performance_visuals.json`). See feature quickstart: `specs/126-title-integrate-plots/quickstart.md`.
 - **Environment Refactoring Complete**: New unified architecture deployed
 - **Migration Tools Available**: Automated migration script for updating code
 - **Factory Pattern**: Clean, consistent environment creation interface

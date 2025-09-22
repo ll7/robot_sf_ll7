@@ -19,7 +19,7 @@
     - [CLI vs programmatic use](#cli-vs-programmatic-use)
   - [Code reviews](#code-reviews)
     - [Docstrings](#docstrings)
-  - [Ask clarifying questions (with options)](#ask-clarifying-questions-with-options)
+  - [Clarify questions (with options)](#clarify-questions-with-options)
   - [Problem‑solving approach](#problemsolving-approach)
   - [Tooling and tasks (uv, Ruff, pytest, ty, VS Code)](#tooling-and-tasks-uv-ruff-pytest-ty-vs-code)
 - [Documentation Standards](#documentation-standards)
@@ -58,6 +58,7 @@
 - [Quick reference and TL;DR checklist](#quick-reference-and-tldr-checklist)
   - [Quick reference commands](#quick-reference-commands)
   - [TL;DR workflow checklist](#tldr-workflow-checklist)
+  - [Per-Test Performance Budget](#per-test-performance-budget)
 
 ## Setup
 
@@ -136,7 +137,7 @@ env = make_robot_env(config=config)
 ## Design and development workflow recommendations
 
 - Clarify exact requirements before starting implementation.
-- Ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
+- If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.
   - Give arguments to the options for easy decision-making.
   - Provide options to quickly converge on a decision.
@@ -200,6 +201,7 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Refactoring and architecture notes: `docs/refactoring/`
 - SNQI tools and metrics: `docs/snqi-weight-tools/README.md`
 - Data analysis helpers: `docs/DATA_ANALYSIS.md`
+- Contributor onboarding / repo structure: `AGENTS.md`
 
 ### Executive summary
 - **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` submodule, StableBaselines3 training pipeline
@@ -240,13 +242,15 @@ uv run python -m pytest fast-pysf/tests/ -v
 - Use GitHub’s review tools to leave comments and approve changes.
 
 #### Docstrings
-- Every public module, function, class, and method should have a docstring.
+- Every module, function, class, and method should have a docstring.
 - Docstrings should use triple double quotes (""").
 - The first line should be a short summary of the object’s purpose, starting with a capital letter and ending with a period.
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
+- Private/internal code should also have docstrings explaining their purpose for easier maintainability.
 
-### Ask clarifying questions (with options)
+### Clarify questions (with options)
+-In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.
 - Before implementing, confirm requirements with targeted questions.
 - Prefer multiple‑choice options to speed decisions; group by scope, interfaces, data, UX, performance.
 - Add arguments to the options for easy decision-making.
@@ -428,11 +432,25 @@ Workflow location: `.github/workflows/ci.yml`.
 ./scripts/validation/test_basic_environment.sh
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
+
+# Performance baseline validation
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python scripts/validation/performance_smoke_test.py
 ```
 Success criteria:
 - Basic environment: exits 0; no exceptions.
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
+- Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
+  - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.
+    - Environment variables:
+      - `ROBOT_SF_PERF_CREATION_SOFT` (default 3.0)
+      - `ROBOT_SF_PERF_CREATION_HARD` (default 8.0)
+      - `ROBOT_SF_PERF_RESET_SOFT` (default 0.50 resets/sec)
+      - `ROBOT_SF_PERF_RESET_HARD` (default 0.20 resets/sec)
+  - `ROBOT_SF_PERF_ENFORCE=1` to fail on soft (and hard) breaches (use locally for strict tuning).
+  - (Advanced) `ROBOT_SF_PERF_SOFT` / `ROBOT_SF_PERF_HARD` may be set to numeric seconds to temporarily override thresholds (intended only for internal testing of enforcement logic; not part of the stable public interface).
+    - Hard threshold breaches always FAIL.
 
 ### Performance benchmarking (optional)
 ```bash
@@ -640,3 +658,46 @@ DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests
 6) Update docs/diagrams; run “Generate UML” if classes changed
 7) Open PR with summary, risks, and links to docs/tests
+
+### Per-Test Performance Budget
+
+To prevent regression of integration test runtime, a performance budget policy is enforced for all tests:
+
+Policy defaults (feature 124):
+- Soft threshold: < 20s (advisory – prints guidance when exceeded)
+- Hard timeout: 60s (enforced via `@pytest.mark.timeout(60)` or signal alarms inside long-running integration tests)
+- Report count: Top 10 slowest tests printed at session end
+- Relax mode: Set `ROBOT_SF_PERF_RELAX=1` to suppress soft breach warnings (use sparingly; still prints report)
+- Enforce mode: Set `ROBOT_SF_PERF_ENFORCE=1` to escalate any soft or hard breach to a test session failure
+
+Implementation components (all under `tests/perf_utils/`):
+- `policy.py` – `PerformanceBudgetPolicy` dataclass providing `classify(duration)-> none|soft|hard`
+- `reporting.py` – aggregation and formatted slow test report
+- `guidance.py` – deterministic heuristic suggestions (reduce episodes, horizon, matrix size, etc.)
+- `minimal_matrix.py` – single-source helper for minimal benchmark scenario matrix (used by resume & reproducibility tests)
+
+Collector flow:
+1. Each test call duration captured via a timing hook in `tests/conftest.py`.
+2. At terminal summary the top-N slow tests are ranked and printed with breach classification & guidance lines.
+3. If `ROBOT_SF_PERF_ENFORCE=1` (and relax not set) any soft or hard breach converts the run to a failure (exit code changed). Optional internal overrides: set `ROBOT_SF_PERF_SOFT` / `ROBOT_SF_PERF_HARD` for targeted enforcement tests.
+
+Guidance examples:
+- Soft breach near 25s: "Reduce episode count / seeds", "Use minimal scenario matrix helper"
+- Very long (>40s) test: horizon + matrix recommendations prioritized
+
+Authoring guidance for new tests:
+- Keep semantic assertions; minimize episodes (`max_episodes=2`), horizon, seed list
+- Reuse `write_minimal_matrix` instead of duplicating inline YAML
+- Assert absence of heavy artifacts (videos) where not required
+
+Performance troubleshooting checklist:
+1. Confirm `smoke=True` or minimal workload flags applied
+2. Reduce `max_episodes`, `initial_episodes`, `batch_size`
+3. Disable bootstrap sampling (`bootstrap_samples=0`)
+4. Lower `horizon_override`
+5. Ensure `workers=1` for deterministic ordering in timing-sensitive tests
+
+When relaxing:
+Use `ROBOT_SF_PERF_RELAX=1` temporarily only for known CI variance; file a follow-up issue if sustained.
+
+Hard timeout breaches should be rare; investigate infinite loops or large scenario expansions if encountered.

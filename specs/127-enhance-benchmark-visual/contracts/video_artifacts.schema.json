@@ -1,0 +1,89 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "VideoArtifactsManifest",
+    "type": "object",
+    "properties": {
+        "artifacts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "episode_id",
+                    "renderer",
+                    "status"
+                ],
+                "properties": {
+                    "episode_id": {
+                        "type": [
+                            "string",
+                            "integer"
+                        ]
+                    },
+                    "filename": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "renderer": {
+                        "type": "string",
+                        "enum": [
+                            "simulation_view",
+                            "synthetic"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "success",
+                            "skipped",
+                            "failed"
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "smoke-mode",
+                            "disabled",
+                            "simulation-view-missing",
+                            "moviepy-missing",
+                            "insufficient-replay-state",
+                            null
+                        ]
+                    },
+                    "encode_time_s": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "memory_peak_mb": {
+                        "type": "number",
+                        "minimum": 0
+                    }
+                },
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "status": {
+                                    "const": "success"
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "filename"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "required": [
+        "artifacts"
+    ],
+    "additionalProperties": false
+}

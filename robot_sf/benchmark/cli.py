@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import traceback
@@ -592,12 +593,7 @@ def _add_baseline_subparser(
         action="store_true",
         help="Disable resume (skip detection of already present episodes)",
     )
-    p.add_argument(
-        "--quiet",
-        action="store_true",
-        default=False,
-        help="Suppress per-episode progress output",
-    )
+    # Global --quiet handled at top-level parser
     p.set_defaults(cmd="baseline")
 
 
@@ -661,12 +657,7 @@ def _add_run_subparser(
         default=False,
         help="Stop on first failure instead of collecting errors",
     )
-    p.add_argument(
-        "--quiet",
-        action="store_true",
-        default=False,
-        help="Suppress per-episode progress output",
-    )
+    # Global --quiet handled at top-level parser
     p.set_defaults(cmd="run")
 
 
@@ -1044,9 +1035,46 @@ def _add_plot_scenarios_subparser(
 
 
 def _base_parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress non-essential output (sets WARNING unless CRITICAL explicitly chosen)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("ROBOT_SF_LOG_LEVEL", "INFO"),
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        help="Logging verbosity (default INFO or $ROBOT_SF_LOG_LEVEL)",
+    )
+    return parser
+
+
+def _configure_logging(quiet: bool, level: str) -> None:
+    """Configure root logger once.
+
+    If quiet, downgrade to WARNING unless CRITICAL requested.
+    """
+    desired_level = getattr(logging, level.upper(), logging.INFO)
+    if quiet and desired_level < logging.CRITICAL:
+        desired_level = logging.WARNING
+    root = logging.getLogger()
+    # If already configured, just adjust level
+    if root.handlers:
+        root.setLevel(desired_level)
+        return
+    logging.basicConfig(
+        level=desired_level,
+        format="%(levelname)s:%(name)s:%(message)s",
+    )
+
+
+def configure_logging(quiet: bool, level: str) -> None:
+    """Public wrapper for logging configuration (used in tests)."""
+    _configure_logging(quiet, level)
 
 
 def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: C901
@@ -1315,12 +1343,94 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
 def _configure_parser() -> argparse.ArgumentParser:
     parser = _base_parser()
     _attach_core_subcommands(parser)
+    # Install intermixed args behavior directly so both get_parser() and cli_main share it.
+    if hasattr(parser, "parse_intermixed_args"):
+        _orig = parser.parse_args  # type: ignore[assignment]
+
+        def _mixed_parse(args=None, namespace=None):  # type: ignore[override]
+            if args is not None:
+                # Allow global flags placed after the subcommand by hoisting them before parsing.
+                # Pattern observed in tests: [subcommand, --log-level, DEBUG, --quiet]
+                # Argparse expects global flags before subcommand; we rewrite the argv sequence.
+                try:
+                    rewritten: list[str] = []
+                    if (
+                        args
+                        and isinstance(args, (list, tuple))
+                        and args
+                        and not str(args[0]).startswith("-")
+                    ):
+                        tokens = list(args)
+                        subcmd = tokens[0]
+                        rest = tokens[1:]
+                        i = 0
+                        hoisted: list[str] = []
+                        while i < len(rest):
+                            tok = rest[i]
+                            if tok == "--quiet":
+                                hoisted.append(tok)
+                                i += 1
+                                continue
+                            if tok == "--log-level":
+                                # Expect a value token next
+                                if i + 1 < len(rest):
+                                    hoisted.extend([tok, rest[i + 1]])
+                                    i += 2
+                                    continue
+                            # Not a global flag → keep in place
+                            i += 1
+                        # Remove hoisted tokens from rest
+                        j = 0
+                        filtered: list[str] = []
+                        while j < len(rest):
+                            if rest[j] == "--quiet":
+                                j += 1
+                                continue
+                            if rest[j] == "--log-level":
+                                # Skip flag and its value if we successfully hoisted earlier
+                                if j + 1 < len(rest):
+                                    j += 2
+                                    continue
+                            filtered.append(rest[j])
+                            j += 1
+                        rewritten = hoisted + [subcmd] + filtered
+                        args = rewritten
+                except Exception:  # pragma: no cover - fallback safety
+                    pass
+            try:  # pragma: no cover (normal success path still covered elsewhere)
+                return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
+            except Exception:
+                return _orig(args, namespace)
+
+        parser.parse_args = _mixed_parse  # type: ignore[assignment]
+    return parser
+
+
+def get_parser() -> argparse.ArgumentParser:
+    """Return a configured parser (for tests)."""
+    # NOTE: Tests (and some users) supply global flags *after* the subcommand, e.g.:
+    #   list-algorithms --log-level DEBUG
+    # Vanilla argparse only supports global options before a subcommand. We wrap
+    # parse_args to attempt parse_intermixed_args first (Python 3.7+) and fall
+    # back silently if unsupported or if parsing fails.
+    parser = _configure_parser()
+    if hasattr(parser, "parse_intermixed_args"):
+        _orig = parser.parse_args  # type: ignore[assignment]
+
+        def _mixed_parse(args=None, namespace=None):  # type: ignore[override]
+            try:  # pragma: no cover - fallback path only hit if feature absent/fails
+                return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
+            except Exception:
+                return _orig(args, namespace)
+
+        parser.parse_args = _mixed_parse  # type: ignore[assignment]
     return parser
 
 
 def cli_main(argv: List[str] | None = None) -> int:
     parser = _configure_parser()
     args = parser.parse_args(argv)
+    _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
     # macOS safe start method for multiprocessing
     if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:
         try:
@@ -1369,4 +1479,4 @@ def main() -> None:  # pragma: no cover - thin wrapper
     raise SystemExit(cli_main())
 
 
-__all__ = ["cli_main", "main"]
+__all__ = ["cli_main", "main", "get_parser", "configure_logging"]

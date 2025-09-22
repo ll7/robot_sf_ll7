@@ -111,6 +111,12 @@ class PPOPlanner:
     def close(self) -> None:
         self._model = None
 
+    def configure(self, config: Union[PPOPlannerConfig, Dict[str, Any]]) -> None:
+        """Update the planner's configuration."""
+        self.config = self._parse_config(config)
+        # Need to reload the model if model_path changed
+        self._load_model()
+
     # --- API -----------------------------------------------------------
     def step(self, obs: Union[Observation, Dict[str, Any]]) -> Dict[str, float]:
         if isinstance(obs, dict):

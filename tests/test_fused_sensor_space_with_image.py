@@ -2,6 +2,8 @@
 Test suite for the extended sensor fusion space functionality with image observations.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 from gymnasium import spaces
@@ -120,31 +122,25 @@ class TestFusedSensorSpaceWithImage:
         image_obs = image_sensor_space(image_settings)
 
         # Get spaces with image
-        norm_space_img, orig_space_img = fused_sensor_space_with_image(
+        norm_space_img, _orig_space_img = fused_sensor_space_with_image(
             timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
         )
 
         # Get spaces without image for comparison
-        norm_space_no_img, orig_space_no_img = fused_sensor_space(
+        norm_space_no_img, _orig_space_no_img = fused_sensor_space(
             timesteps, robot_obs, target_obs, lidar_obs
         )
 
         # Drive state and LiDAR spaces should be identical
-        assert np.array_equal(
-            norm_space_img.spaces[OBS_DRIVE_STATE].low,
-            norm_space_no_img.spaces[OBS_DRIVE_STATE].low,
-        )
-        assert np.array_equal(
-            norm_space_img.spaces[OBS_DRIVE_STATE].high,
-            norm_space_no_img.spaces[OBS_DRIVE_STATE].high,
-        )
+        drive_img = cast(spaces.Box, norm_space_img.spaces[OBS_DRIVE_STATE])
+        drive_no_img = cast(spaces.Box, norm_space_no_img.spaces[OBS_DRIVE_STATE])
+        rays_img = cast(spaces.Box, norm_space_img.spaces[OBS_RAYS])
+        rays_no_img = cast(spaces.Box, norm_space_no_img.spaces[OBS_RAYS])
 
-        assert np.array_equal(
-            norm_space_img.spaces[OBS_RAYS].low, norm_space_no_img.spaces[OBS_RAYS].low
-        )
-        assert np.array_equal(
-            norm_space_img.spaces[OBS_RAYS].high, norm_space_no_img.spaces[OBS_RAYS].high
-        )
+        assert np.array_equal(drive_img.low, drive_no_img.low)
+        assert np.array_equal(drive_img.high, drive_no_img.high)
+        assert np.array_equal(rays_img.low, rays_no_img.low)
+        assert np.array_equal(rays_img.high, rays_no_img.high)
 
     def test_return_types(self, basic_spaces):
         """Test that return types are correct."""
@@ -178,22 +174,22 @@ class TestFusedSensorSpaceWithImage:
 
         # Test different timestep values
         for timesteps in [1, 2, 3, 5]:
-            norm_space, orig_space = fused_sensor_space_with_image(
+            norm_space, _orig_space = fused_sensor_space_with_image(
                 timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
             )
 
             # Drive state should be stacked according to timesteps
-            drive_shape = norm_space.spaces[OBS_DRIVE_STATE].shape
+            drive_shape = cast(spaces.Box, norm_space.spaces[OBS_DRIVE_STATE]).shape
             expected_drive_features = len(robot_obs.low) + len(target_obs.low)  # 2 + 3 = 5
             assert drive_shape == (timesteps, expected_drive_features)
 
             # LiDAR should be stacked according to timesteps
-            lidar_shape = norm_space.spaces[OBS_RAYS].shape
+            lidar_shape = cast(spaces.Box, norm_space.spaces[OBS_RAYS]).shape
             expected_lidar_features = len(lidar_obs.low)  # 4
             assert lidar_shape == (timesteps, expected_lidar_features)
 
             # Image should not be affected by timesteps
-            image_shape = norm_space.spaces[OBS_IMAGE].shape
+            image_shape = cast(spaces.Box, norm_space.spaces[OBS_IMAGE]).shape
             assert image_shape == image_obs.shape
 
     def test_edge_cases(self, basic_spaces):
@@ -204,12 +200,12 @@ class TestFusedSensorSpaceWithImage:
         image_settings = ImageSensorSettings()
         image_obs = image_sensor_space(image_settings)
 
-        norm_space, orig_space = fused_sensor_space_with_image(
+        norm_space, _orig_space = fused_sensor_space_with_image(
             1, robot_obs, target_obs, lidar_obs, image_obs=image_obs
         )
 
-        assert norm_space.spaces[OBS_DRIVE_STATE].shape[0] == 1
-        assert norm_space.spaces[OBS_RAYS].shape[0] == 1
+        assert cast(spaces.Box, norm_space.spaces[OBS_DRIVE_STATE]).shape[0] == 1
+        assert cast(spaces.Box, norm_space.spaces[OBS_RAYS]).shape[0] == 1
         assert OBS_IMAGE in norm_space.spaces
 
 
@@ -280,7 +276,7 @@ class TestImageObservationSpaceIntegration:
 
         # Create fused space
         timesteps = 3
-        norm_space, orig_space = fused_sensor_space_with_image(
+        norm_space, _orig_space = fused_sensor_space_with_image(
             timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
         )
 

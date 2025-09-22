@@ -1,3 +1,5 @@
+from typing import cast
+
 from gymnasium import spaces
 from stable_baselines3 import PPO
 
@@ -13,10 +15,12 @@ def test_can_create_env():
 
 def test_can_return_valid_observation():
     env = RobotEnv()
-    drive_state_spec: spaces.Box = env.observation_space[OBS_DRIVE_STATE]
-    lidar_state_spec: spaces.Box = env.observation_space[OBS_RAYS]
+    # Cast observation_space to spaces.Dict for static type checkers
+    obs_dict = cast(spaces.Dict, env.observation_space)
+    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
 
-    obs, info = env.reset()
+    obs, _ = env.reset()
 
     assert isinstance(obs, dict)
     assert OBS_DRIVE_STATE in obs and OBS_RAYS in obs

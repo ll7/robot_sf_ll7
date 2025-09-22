@@ -30,7 +30,7 @@ def test_recording_creates_mp4_when_enabled():  # noqa: D401
     original_out = getattr(mod, "OUTPUT_DIR", None)
     mod.DRY_RUN = False  # type: ignore
     mod.ENABLE_RECORDING = True  # type: ignore
-    tmp_out = Path("results/test_recording_success")
+    tmp_out = Path("tmp/recordings/test_recording_success")
     if tmp_out.exists():
         # Clean stale artifacts
         for p in tmp_out.glob("*.mp4"):
@@ -56,3 +56,10 @@ def test_recording_creates_mp4_when_enabled():  # noqa: D401
     # Expect at least one mp4 in tmp_out
     mp4_files = list(tmp_out.glob("*.mp4"))
     assert mp4_files, "Expected at least one MP4 recording file (TDD failing until implementation)."
+
+    # Cleanup: remove generated mp4 artifacts to keep workspace clean.
+    for f in mp4_files:
+        try:
+            f.unlink()
+        except Exception:  # noqa: BLE001
+            pass

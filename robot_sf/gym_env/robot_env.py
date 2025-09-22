@@ -244,7 +244,10 @@ class RobotEnv(BaseEnv):
         Raises RuntimeError if debug mode is not enabled.
         """
         if not self.sim_ui:
-            raise RuntimeError("Debug mode is not activated! Consider setting `debug=True!`")
+            raise RuntimeError(
+                "Render unavailable: environment was created with debug=False (no sim_ui). "
+                "Recreate via make_robot_env(..., debug=True) to enable visualization and frame capture."
+            )
 
         state = self._prepare_visualizable_state()
 

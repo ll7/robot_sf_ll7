@@ -32,7 +32,14 @@ def test_model_path_missing_provides_actionable_message():  # noqa: D401
     original_dry = getattr(mod, "DRY_RUN", None)
     original_model_path = getattr(mod, "MODEL_PATH", None)
     mod.DRY_RUN = False  # type: ignore
-    mod.MODEL_PATH = Path("model/__this_model_file_does_not_exist__.zip")  # type: ignore
+    # Use a deeply nested, improbable path to avoid accidental existence from fixtures or prior artifacts.
+    missing_path = Path(
+        "model/__definitely_missing_do_not_create__/__this_model_file_does_not_exist__.zip"
+    )
+    assert not missing_path.exists(), (
+        "Test invariant violated: missing model path unexpectedly exists (choose a different sentinel)."
+    )
+    mod.MODEL_PATH = missing_path  # type: ignore
 
     try:
         with pytest.raises((FileNotFoundError, RuntimeError)) as excinfo:

@@ -104,9 +104,23 @@ def _validate_constants() -> None:  # (FR-019)
 
 
 def _load_policy(path: str):  # (FR-004, FR-007 guidance)
-    cache = getattr(_load_policy, "_cache", _CACHED_MODEL_SENTINEL)
-    if cache is not _CACHED_MODEL_SENTINEL:
-        return cache  # type: ignore[return-value]
+    """Load (and cache) the PPO policy at `path`.
+
+    Caching detail:
+        The cache is keyed by the absolute path string so that tests which mutate
+        the module-level MODEL_PATH (e.g., to a deliberately missing file) will
+        still trigger path validation instead of returning a previously loaded
+        model for a different path. This fixes earlier behavior where changing
+        MODEL_PATH after the first successful load prevented FileNotFoundError
+        from being raised in the missing-path test (T011).
+    """
+    abs_path = str(Path(path).resolve())
+    cache_map = getattr(_load_policy, "_cache_map", None)
+    if cache_map is None:
+        cache_map = {}
+        setattr(_load_policy, "_cache_map", cache_map)
+    if abs_path in cache_map:
+        return cache_map[abs_path]
     if PPO is None:
         raise RuntimeError(
             "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this demo."
@@ -119,7 +133,7 @@ def _load_policy(path: str):  # (FR-004, FR-007 guidance)
             "See docs/dev/issues/classic-interactions-ppo/ for guidance."
         )
     model = PPO.load(path)
-    setattr(_load_policy, "_cache", model)
+    cache_map[abs_path] = model
     return model
 
 
@@ -170,7 +184,12 @@ def run_episode(
     while not done:
         action, _ = policy.predict(obs, deterministic=True)
         obs, _reward, terminated, truncated, info = env.step(action)
-        env.render()  # ensure frame capture if env has sim_ui (FR-013)
+        # Only attempt render when a Simulation UI is present (debug or recording-enabled env)
+        # This prevents RuntimeError in headless/debug=False test paths while still capturing
+        # frames when visualization is available. (Fix for failing classic_interactions tests.)
+        if getattr(env, "sim_ui", None):  # type: ignore[attr-defined]
+            with contextlib.suppress(RuntimeError):
+                env.render()  # ensure frame capture if env has sim_ui (FR-013)
         done = terminated or truncated
         step += 1
         last_info = info
@@ -339,6 +358,11 @@ def run_demo(
     logger.info(
         "Environment created (reward fallback active if custom reward not provided)."
     )  # (T022)
+    if eff_record and not getattr(env, "sim_ui", None):  # user expects video but debug disabled
+        logger.warning(
+            "Recording enabled but environment created with debug=False: no real frames will be captured. "
+            "Recreate with debug=True to enable visualization and non-empty video frames."
+        )
 
     results: List[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error

@@ -208,6 +208,56 @@ def run_episode(
     )
 
 
+def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
+    """Emit a diagnostic warning if recording was requested but no real frames were captured.
+
+    Conditions triggering the warning:
+    - `record` is True AND MOVIEPY_AVAILABLE
+    - Either the environment has no `sim_ui` (not created with debug=True / record_video=True)
+      OR the collected `frames` list is empty / only placeholder zero arrays.
+
+    This helps users understand why produced videos may be black or missing (root cause of
+    recent issue). The guidance is actionable and points to remediation steps.
+    """
+    if not (record and MOVIEPY_AVAILABLE):  # nothing to do
+        return
+
+    has_sim_ui = hasattr(env, "sim_ui") and getattr(env, "sim_ui") is not None  # type: ignore[attr-defined]
+    env_frames = []
+    if has_sim_ui:
+        env_frames = getattr(env.sim_ui, "frames", [])  # type: ignore[attr-defined]
+
+    candidate_frames = env_frames if env_frames else frames
+
+    if not candidate_frames:
+        _log(
+            "[recording warning] Recording enabled but zero frames were captured. "
+            "Likely causes: (1) Environment created without debug=True or record_video=True so no SimulationView present; "
+            "(2) You never called env.render() inside the episode loop. Remediation: create env with debug=True or record_video and call env.render() each step."
+        )
+        return
+
+    # Detect placeholder zero frames (heuristic: all frames have sum == 0)
+    try:
+
+        def frame_sum(frame_obj):
+            # Prefer ndarray.sum if present, else construct array
+            if hasattr(frame_obj, "sum") and callable(getattr(frame_obj, "sum")):
+                try:
+                    return frame_obj.sum()  # type: ignore[no-any-return]
+                except Exception:  # pragma: no cover - defensive inner
+                    return np.array(frame_obj).sum()
+            return np.array(frame_obj).sum()
+
+        if candidate_frames and all(frame_sum(f) == 0 for f in candidate_frames):
+            _log(
+                "[recording warning] All captured frames appear empty (sum=0). Videos will look black. "
+                "Ensure the rendering path draws entities before frame capture and avoid placeholder arrays."
+            )
+    except Exception:  # pragma: no cover - defensive outer
+        pass
+
+
 def _overlay_text(scenario: str, seed: int, step: int, outcome: str | None = None) -> str:
     """Format overlay text (FR-016 helper). Not yet wired into a renderer; provided for future integration."""
     base = f"{scenario} | seed={seed} | step={step}"
@@ -303,6 +353,13 @@ def run_demo(
                 episode_index=ep_index,
             )
             results.append(summary)
+        # Post-run diagnostics: warn if user expected a video but no real frames were captured.
+        if eff_record:
+            # Try to surface the frames reference (frames stored on env.sim_ui if present)
+            frames_ref = []
+            if hasattr(env, "sim_ui") and getattr(env, "sim_ui") is not None:  # type: ignore[attr-defined]
+                frames_ref = getattr(env.sim_ui, "frames", [])  # type: ignore[attr-defined]
+            _warn_if_no_frames(env, eff_record, frames_ref)
     if LOGGING_ENABLED:
         print("Summary:")
         print(_format_summary_table(results))

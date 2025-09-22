@@ -38,7 +38,12 @@ class MultiRobotEnv(VectorEnv):
             dtype=self.single_action_space.low.dtype,
         )
 
-        self.reward_func, self.debug = reward_func, debug
+        # Ensure a usable reward function even if None explicitly provided
+        if reward_func is None:
+            self.reward_func = simple_reward
+        else:
+            self.reward_func = reward_func
+        self.debug = debug
         self.simulators = init_simulators(env_config, map_def, num_robots, random_start_pos=False)
         self.states: List[RobotState] = []
         d_t = env_config.sim_config.time_per_step_in_secs

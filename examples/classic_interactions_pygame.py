@@ -1,28 +1,20 @@
-"""Example: Visualize Classic Interaction Scenarios with a PPO Policy.
+"""Example: Classic Interaction Scenario Visualization with PPO (No CLI).
 
-Run a selected scenario from `configs/scenarios/classic_interactions.yaml` using the
-pre-trained PPO model and render with `SimulationView`.
+This out-of-the-box demo replays a classic interaction scenario using a
+pre-trained PPO model. Configuration is controlled by constants below – no
+argument parsing or CLI flags are used (per feature requirement).
 
-Usage (interactive window if display available):
-  uv run python examples/classic_interactions_pygame.py \
-      --model model/ppo_model_retrained_10m_2025-02-01.zip \
-      --scenario classic_crossing_low \
-      --matrix configs/scenarios/classic_interactions.yaml \
-      --episodes 2 --record
+Quick start:
+    uv run python examples/classic_interactions_pygame.py
 
-Headless (record only) example:
-  DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
-  uv run python examples/classic_interactions_pygame.py --episodes 1 --record
-
-This script is intentionally self-contained and lightweight.
+Adjust the CONFIG CONSTANTS section to change scenario, number of episodes,
+recording behavior, or paths.
 """
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 import numpy as np  # type: ignore
 
@@ -43,18 +35,18 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
+# ---------------------------------------------------------------------------
+# CONFIG CONSTANTS (edit these to adjust behavior)
+# ---------------------------------------------------------------------------
+MODEL_PATH = Path("model/ppo_model_retrained_10m_2025-02-01.zip")
+SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
+SCENARIO_NAME: str | None = None  # e.g., "classic_crossing_low" or None for first
+MAX_EPISODES = 1
+ENABLE_RECORDING = False
+OUTPUT_DIR = Path("results/vis_runs")
+DRY_RUN = False  # If True, validates resources then exits
 
-def _parse_args(argv: list[str]) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Classic Interaction PPO Visualization")
-    p.add_argument("--model", default="model/ppo_model_retrained_10m_2025-02-01.zip")
-    p.add_argument("--matrix", default="configs/scenarios/classic_interactions.yaml")
-    p.add_argument("--scenario", default=None, help="Scenario name to run (default: first in file)")
-    p.add_argument("--episodes", type=int, default=1, help="Max episodes to run")
-    p.add_argument("--record", action="store_true", help="Enable MP4 recording per episode")
-    p.add_argument("--outdir", default="results/vis_runs", help="Output directory for recordings")
-    p.add_argument("--no-overlay", action="store_true", help="Disable overlay text for perf")
-    p.add_argument("--dry-run", action="store_true", help="Validate inputs then exit")
-    return p.parse_args(argv)
+# ---------------------------------------------------------------------------
 
 
 def _load_policy(path: str):
@@ -122,51 +114,42 @@ def run_episode(
     }
 
 
-def main(argv: list[str]) -> int:
-    args = _parse_args(argv)
-    scenarios = load_classic_matrix(args.matrix)
-    scenario = select_scenario(scenarios, args.scenario)
+def run_demo() -> List[dict[str, Any]]:
+    """Run the configured demo and return episode summaries."""
+    scenarios = load_classic_matrix(str(SCENARIO_MATRIX_PATH))
+    scenario = select_scenario(scenarios, SCENARIO_NAME)
     seeds = iter_episode_seeds(scenario)
-    model = None
-    if args.dry_run:
-        # Validate model path existence only
-        if not Path(args.model).exists():
-            print(f"Model file missing: {args.model}")
-            return 1
-        print(f"Dry run OK. First scenario: {scenario.get('name')} (seeds: {seeds})")
-        return 0
-    model = _load_policy(args.model)
-
-    # Configure environment
+    if DRY_RUN:
+        print(
+            f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}"
+        )
+        return []
+    model = _load_policy(str(MODEL_PATH))
     sim_cfg = RobotSimulationConfig()
-    # Optionally adjust config here (e.g., shorter max steps for interactive demo)
     env = make_robot_env(config=sim_cfg, debug=False)
-
-    # Note: Environment internally manages its SimulationView when configured; external view not required here.
-
-    results = []
+    results: List[dict[str, Any]] = []
     for ep_index, seed in enumerate(seeds):
-        if ep_index >= args.episodes:
+        if ep_index >= MAX_EPISODES:
             break
         print(
-            f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{args.episodes})"
+            f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{MAX_EPISODES})"
         )
-        result = run_episode(
+        res = run_episode(
             env=env,
             policy=model,
-            record=args.record,
-            out_dir=Path(args.outdir),
+            record=ENABLE_RECORDING,
+            out_dir=OUTPUT_DIR,
             scenario_name=scenario.get("name", "unknown"),
             seed=seed,
             episode_index=ep_index,
         )
-        results.append(result)
+        results.append(res)
     print("Summary:")
     for r in results:
         print(r)
     env.close()
-    return 0
+    return results
 
 
-if __name__ == "__main__":  # pragma: no cover - manual usage
-    raise SystemExit(main(sys.argv[1:]))
+if __name__ == "__main__":  # pragma: no cover
+    run_demo()

@@ -78,8 +78,14 @@ class RobotEnv(BaseEnv):
             env_config, self.map_def
         )
 
-        # Assign the reward function and debug flag
-        self.reward_func = reward_func
+        # Assign the reward function; ensure a valid callable even if None passed via factory
+        if reward_func is None:  # defensive: factory allows Optional
+            logger.warning(
+                "No reward_func provided to RobotEnv; falling back to simple_reward for safety."
+            )
+            self.reward_func = simple_reward
+        else:
+            self.reward_func = reward_func
 
         # Initialize simulator with a random start position
         self.simulator = init_simulators(

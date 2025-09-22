@@ -111,6 +111,30 @@ The Social Navigation Benchmark provides a reproducible, force-field–aware eva
 - [x] Baseline comparison table auto-generation (CLI + docs) (2025-09-18)
 - [x] Scripts to regenerate paper figures (initial: pareto, dists, table) (2025-09-18)
 
+### 7a. Episode Video Artifacts (NEW 2025-09-22)
+Goal: Provide lightweight, reproducible per-episode MP4s for qualitative inspection without introducing backend‑specific fragility or large runtime overhead.
+
+Completed (2025-09-22):
+- [x] Backend‑agnostic frame capture via in‑memory PNG fallback (replaces brittle `tostring_rgb` usage). (2025-09-22)
+- [x] Removed abandoned ARGB / HiDPI buffer manipulation path (simpler + portable). (2025-09-22)
+- [x] Fixed `moviepy` invocation (dropped unsupported `verbose` / `logger` kwargs). (2025-09-22)
+- [x] Integrated video generation in classic benchmark script producing per‑episode MP4 artifacts. (2025-09-22)
+
+Planned / Pending:
+- [ ] Add integration test: run a 1–2 episode micro batch and assert MP4 exists, >0 bytes, and frame count matches expectation.
+- [ ] Performance sampling: record encode ms/frame & cumulative overhead; target <5% added wall time for default batch.
+- [ ] Add `--no-video` / config toggle to disable video generation for pure metric runs.
+- [ ] Add renderer selection flag (`--video-renderer=synthetic|sim-view|none`) anticipating SimulationView path.
+- [ ] Optional SimulationView high‑fidelity renderer (deferred until post core benchmark freeze).
+- [ ] JSON Schema extension / manifest spec for video artifact entries (validate size >0, format=mp4).
+- [ ] Documentation: create `docs/dev/issues/video-artifacts/design.md` (rationale, capture method, perf notes) and link from `docs/README.md` & this TODO.
+- [ ] Benchmark figure regeneration script: add optional gallery sheet (contact-sheet style) of first frame per video.
+- [ ] Perf regression guard: add lightweight CI smoke that runs video generation for 1 episode (skipped on Windows if needed).
+
+Notes:
+- PNG fallback ensures portability across macOS (FigureCanvasMac), Agg, and headless CI without backend feature assumptions.
+- Future SimulationView integration should reuse the same writer abstraction; avoid duplicating encode logic.
+
 ### Next picks (2025-09-18) — Research kickoff
 1) Lock scenario matrix for the “core” suite (12+ scenarios) and commit final YAML.
 2) Run baseline batch for SF, PPO, Random with resume enabled; store JSONL under `results/episodes.jsonl`.
@@ -183,5 +207,5 @@ Next picks (2025-09-08):
 - [x] Lightweight CI job: lint + unit tests + tiny batch run as smoke test (2025-09-09)
 
 ---
-Last updated: 2025-09-18 (Pareto plotting CLI+docs; seed utils + debug-seeds CLI; SNQI ablation --top/--summary; CI green)
+Last updated: 2025-09-22 (Video artifact pipeline + PNG fallback; moviepy invocation fix; added video subsection)
 

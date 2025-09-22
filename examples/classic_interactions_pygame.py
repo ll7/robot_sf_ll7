@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, Iterable, List, TypedDict, cast
 
 import numpy as np  # type: ignore
+from loguru import logger
 
 try:
     from stable_baselines3 import PPO  # type: ignore
@@ -84,12 +85,12 @@ class EpisodeSummary(TypedDict):  # (FR-020)
     recorded: bool
 
 
+if LOGGING_ENABLED:
+    logger.level("DEBUG")
+else:
+    logger.level("INFO")
+
 # ---------------------------------------------------------------------------
-
-
-def _log(msg: str) -> None:
-    if LOGGING_ENABLED:
-        print(msg)
 
 
 def _validate_constants() -> None:  # (FR-019)
@@ -147,7 +148,7 @@ def _maybe_record(
         clip.write_videofile(str(out_dir / video_name), codec="libx264", fps=10)
         return True
     except Exception as exc:  # noqa: BLE001
-        _log(f"[recording skipped] error: {exc}")
+        logger.error(f"[recording skipped] error: {exc}")
         return False
 
 
@@ -194,7 +195,7 @@ def run_episode(
                 frames = getattr(env.sim_ui, "frames")  # type: ignore[assignment]
             recorded_flag = _maybe_record(frames, scenario_name, seed, episode_index, out_dir)
         else:
-            _log("[recording skipped] moviepy/ffmpeg not available")
+            logger.warning("[recording skipped] moviepy/ffmpeg not available")
 
     return EpisodeSummary(
         scenario=scenario_name,
@@ -230,7 +231,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
     candidate_frames = env_frames if env_frames else frames
 
     if not candidate_frames:
-        _log(
+        logger.warning(
             "[recording warning] Recording enabled but zero frames were captured. "
             "Likely causes: (1) Environment created without debug=True or record_video=True so no SimulationView present; "
             "(2) You never called env.render() inside the episode loop. Remediation: create env with debug=True or record_video and call env.render() each step."
@@ -250,7 +251,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
             return np.array(frame_obj).sum()
 
         if candidate_frames and all(frame_sum(f) == 0 for f in candidate_frames):
-            _log(
+            logger.warning(
                 "[recording warning] All captured frames appear empty (sum=0). Videos will look black. "
                 "Ensure the rendering path draws entities before frame capture and avoid placeholder arrays."
             )
@@ -321,7 +322,7 @@ def run_demo(
     seeds = list(seeds)
 
     if effective_dry:
-        _log(
+        logger.debug(
             f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}"
         )
         return []
@@ -329,12 +330,14 @@ def run_demo(
     # Model load (FR-004, FR-007)
     model_start = time.time()
     model = _load_policy(str(MODEL_PATH))
-    _log(f"Loaded model in {time.time() - model_start:.2f}s: {MODEL_PATH}")
+    logger.info(f"Loaded model in {time.time() - model_start:.2f}s: {MODEL_PATH}")
 
     # Env creation
     sim_cfg = RobotSimulationConfig()
     env = make_robot_env(config=sim_cfg, debug=False)
-    _log("Environment created (reward fallback active if custom reward not provided).")  # (T022)
+    logger.info(
+        "Environment created (reward fallback active if custom reward not provided)."
+    )  # (T022)
 
     results: List[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error
@@ -342,7 +345,9 @@ def run_demo(
         for ep_index, seed in enumerate(seeds):
             if ep_index >= eff_max:
                 break
-            _log(f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{eff_max})")
+            logger.info(
+                f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{eff_max})"
+            )
             summary = run_episode(
                 env=env,
                 policy=model,

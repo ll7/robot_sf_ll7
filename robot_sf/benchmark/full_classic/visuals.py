@@ -205,6 +205,12 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
 ) -> List[VideoArtifact]:
     # --- Inner helpers (local to keep namespace clean) ------------------
     def _normalize_mode(raw) -> str:
+        """Normalize renderer mode string.
+
+        Accepts user/config input (case/alias tolerant) and maps legacy
+        'sim_view' -> 'sim-view'. Falls back to 'auto' for unknown values
+        (with warning) so upstream config typos do not crash but still log.
+        """
         m = str(raw or "auto").strip().lower()
         if m == "sim_view":  # alias
             m = "sim-view"
@@ -214,6 +220,13 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
         return m
 
     def _build_skipped(reason: str) -> List[VideoArtifact]:
+        """Return synthetic 'skipped' artifacts for each selected record.
+
+        Used when videos are disabled (explicit flag) or smoke mode is active.
+        Maintains historical path naming (episode_id.mp4) while attaching
+        a stable artifact_id prefix. Renderer choice reflects availability so
+        downstream logic can still distinguish sim-view capability.
+        """
         out: List[VideoArtifact] = []
         for r in records:
             ep_id = r.get("episode_id", "unknown")
@@ -234,6 +247,14 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
         return out
 
     def _build_forced_sim_view() -> List[VideoArtifact]:
+        """Attempt sim-view encode path unconditionally.
+
+        Returns successful artifacts if at least one encode succeeds; otherwise
+        synthesizes 'skipped' artifacts with a diagnostic note describing
+        why sim-view could not be produced (renderer missing, moviepy absent,
+        or empty attempt set). Distinguishes MOVIEPY_MISSING from generic
+        SIM_VIEW_MISSING for clearer caller reporting.
+        """
         attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if attempt:
             return attempt
@@ -265,6 +286,13 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
         return out
 
     def _build_auto() -> List[VideoArtifact]:
+        """Adaptive path preferring sim-view then synthetic fallback.
+
+        Tries sim-view first; on failure (no encodes) falls back to synthetic
+        placeholder videos. Replay insufficiency normalization (marking skipped)
+        is postponed to a later pass so this function stays focused on source
+        selection rather than edge-case annotation.
+        """
         sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if sim_attempt:
             return sim_attempt

@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced baseline planner interface with unified PlannerProtocol
 - Improved test coverage with comprehensive benchmark validation
 - Updated main documentation with prominent benchmark platform section
+- Simplified video encode invocation by replacing signature introspection with ordered fallback attempts (keyword → positional → minimal) for improved maintainability and clearer failure surface.
 
 ### Technical Details
 - All baseline planners (SocialForce, PPO, Random) now implement PlannerProtocol interface

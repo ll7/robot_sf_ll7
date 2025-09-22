@@ -117,41 +117,61 @@ def _materialize_frames(first: np.ndarray, rest: Iterable[np.ndarray]) -> list[n
 def _write_clip(
     clip_class, frame_list: list[np.ndarray], out_path: Path, codec: str, fps: int, preset: str
 ) -> None:  # type: ignore[no-untyped-def]
+    """Write frames to disk using a best‑effort multi‑signature strategy.
+
+    We purposely avoid runtime signature introspection complexity and instead
+    attempt a small ordered set of invocation patterns observed across
+    moviepy versions and common mocks:
+
+    1. Keyword form (modern moviepy):
+       write_videofile(path, fps=.., codec=.., audio=False, preset=.., logger=None)
+    2. Positional legacy form (older examples / some mocks):
+       write_videofile(path, codec, fps, audio_flag, preset, logger)
+    3. Minimal path‑only form (very thin mocks that ignore extra params):
+       write_videofile(path)
+
+    The first variant gives us explicitness (codec, preset). If it fails for
+    any reason we cascade to the next. Exceptions are swallowed until the
+    final attempt so encode callers receive a unified failure pathway.
+    """
     clip = clip_class(frame_list, fps=fps)  # type: ignore
     write_fn = getattr(clip, "write_videofile")
 
-    # Introspect signature to decide invocation style for better maintainability.
-    import inspect
+    attempts = [
+        {
+            "kind": "keyword",
+            "call": lambda: write_fn(  # type: ignore[arg-type]
+                str(out_path),
+                fps=fps,
+                codec=codec,
+                audio=False,
+                preset=preset,
+                logger=None,
+            ),
+        },
+        {
+            "kind": "positional",
+            "call": lambda: write_fn(  # type: ignore[call-arg]
+                str(out_path), codec, fps, False, preset, None
+            ),
+        },
+        {
+            "kind": "minimal",
+            "call": lambda: write_fn(str(out_path)),  # type: ignore[misc]
+        },
+    ]
 
-    try:
-        sig = inspect.signature(write_fn)
-    except Exception:  # noqa: BLE001
-        sig = None  # Fallback to positional path
-
-    if sig is not None:
-        params = list(sig.parameters.values())
-        names = [p.name for p in params]
-        # Heuristic: real moviepy signature exposes keyword names like 'fps', 'codec', 'audio', 'preset'.
-        has_named = {"fps", "codec", "audio", "preset"}.issubset(set(names))
-        if has_named:
-            try:
-                write_fn(  # keyword-friendly path
-                    str(out_path),
-                    fps=fps,
-                    codec=codec,
-                    audio=False,
-                    preset=preset,
-                    logger=None,
-                )  # type: ignore[arg-type]
-                return
-            except Exception:  # noqa: BLE001
-                # Fall through to positional attempt
-                pass
-
-    # Positional fallback (mock/legacy signature)
-    write_fn(  # type: ignore[call-arg]
-        str(out_path), codec, fps, False, preset, None
-    )
+    last_exc: Exception | None = None
+    for spec in attempts:
+        try:
+            spec["call"]()
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            continue
+    # Re-raise the last exception so caller surfaces encode failure uniformly.
+    if last_exc is not None:
+        raise last_exc
 
 
 def encode_frames(

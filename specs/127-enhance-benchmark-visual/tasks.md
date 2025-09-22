@@ -86,8 +86,8 @@ Legend:
 | T050A | Test: SimulationView placeholder guard | Add test asserting placeholder (pre-state-builder) produces synthetic frames with note indicating 'placeholder' until T038 done | T031 | [P] | Not started |
 | T050B | Test: SimulationView real render | After T038/T037, assert frames differ from flat gradient and `_sim_view.render` was invoked (mock/spies) | T038 |  | Not started |
 | T052A | Test: renderer toggle flag | Add CLI/config flag `--renderer=synthetic|sim-view` ensuring selection logic respects explicit choice | T035 | [P] | Done (2025-09-22) |
-| T060A | Docs: video rendering lifecycle | Section in `docs/benchmark_visuals.md` describing synthetic vs sim-view pipeline, state requirements, fallback ladder | T060 |  | Not started |
-| T063A | Dependency matrix update | Add SimulationView row specifying additional replay fields required | T063 | [P] | Not started |
+| T060A | Docs: video rendering lifecycle | Section in `docs/benchmark_visuals.md` describing synthetic vs sim-view pipeline, state requirements, fallback ladder | T060 |  | Done (2025-09-22) |
+| T063A | Dependency matrix update | Add SimulationView row specifying additional replay fields required | T063 | [P] | Done (2025-09-22) |
 | T074A | Perf benchmark (render) | Measure render+encode split timings (N=50 frames) and document baseline numbers; store under `results/visual_perf.json` | T074 |  | Not started |
 
 
@@ -113,10 +113,10 @@ Legend:
 ### Documentation & Demo Updates
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
-| T060 | Add documentation section | Update `docs/benchmark_full_classic.md` or create new `docs/benchmark_visuals.md` + link in `docs/README.md` | T035 T040 |  | |
-| T061 | Update demo script docstring | `examples/demo_full_classic_benchmark.py` reflect SimulationView path & fallback table | T050 | [P] | |
-| T062 | Update CHANGELOG.md | Add enhancement entry referencing feature branch & key capabilities | T050 |  | |
-| T063 | Add dependency matrix table | Ensure matrix included in new docs page (pygame/moviepy/jsonschema/psutil) | T060 |  | |
+| T060 | Add documentation section | Update `docs/benchmark_full_classic.md` or create new `docs/benchmark_visuals.md` + link in `docs/README.md` | T035 T040 |  | Done (2025-09-22) |
+| T061 | Update demo script docstring | `examples/demo_full_classic_benchmark.py` reflect SimulationView path & fallback table | T050 | [P] |  |
+| T062 | Update CHANGELOG.md | Add enhancement entry referencing feature branch & key capabilities | T050 |  |  |
+| T063 | Add dependency matrix table | Ensure matrix included in new docs page (pygame/moviepy/jsonschema/psutil) | T060 |  | Done (2025-09-22) |
 
 ### Final Polish & Validation
 | ID | Task | Details / File Paths | Depends | Parallel | Status |

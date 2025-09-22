@@ -118,8 +118,22 @@ def _write_clip(
     clip_class, frame_list: list[np.ndarray], out_path: Path, codec: str, fps: int, preset: str
 ) -> None:  # type: ignore[no-untyped-def]
     clip = clip_class(frame_list, fps=fps)  # type: ignore
-    # Use positional args for easier mocking compatibility
-    clip.write_videofile(str(out_path), codec, fps, False, preset, None)  # type: ignore[arg-type]
+    # Explicit keyword args for clarity (moviepy signature inspected at runtime):
+    # filename=str(out_path)
+    # fps=fps (already applied at clip creation; still pass for safety)
+    # codec=codec (video codec, e.g. libx264)
+    # audio=False (no audio track; avoids unnecessary probing)
+    # preset=preset (x264 speed/quality)
+    # logger=None (silence verbose progress to keep benchmark output clean)
+    # We intentionally omit bitrate/audio settings to let moviepy defaults stand.
+    clip.write_videofile(
+        str(out_path),
+        fps=fps,
+        codec=codec,
+        audio=False,
+        preset=preset,
+        logger=None,
+    )  # type: ignore[arg-type]
 
 
 def encode_frames(

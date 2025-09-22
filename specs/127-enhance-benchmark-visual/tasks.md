@@ -103,12 +103,12 @@ Legend:
 | ID | Task | Details / File Paths | Depends | Parallel | Status |
 |----|------|----------------------|---------|----------|--------|
 | T050 | Test: simulation_view success path | `tests/visuals/test_simulation_view_success.py` (skip if pygame/moviepy missing) verifies renderer field and mp4 exists | T035 |  | |
-| T051 | Test: synthetic fallback path | `tests/visuals/test_synthetic_fallback.py` simulate missing pygame; expect renderer synthetic | T035 | [P] | |
-| T052 | Test: moviepy-missing skip | `tests/visuals/test_moviepy_missing.py` monkeypatch detection to False; expect skip notes | T033 | [P] | |
+| T051 | Test: synthetic fallback path | `tests/visuals/test_synthetic_fallback.py` simulate missing pygame; expect renderer synthetic | T035 | [P] | Done (2025-09-22) |
+| T052 | Test: moviepy-missing skip | `tests/visuals/test_moviepy_missing.py` monkeypatch detection to False; expect skip notes | T033 | [P] | Done (2025-09-22) |
 | T052A | Test: renderer toggle flag | Added `tests/test_full_classic_visuals_renderer_toggle.py` verifying forced synthetic and sim-view modes (implemented 2025-09-22) | T035 | [P] | Done (2025-09-22) |
-| T053 | Test: performance flags | `tests/visuals/test_performance_flags.py` mock timings to trigger over_budget booleans | T040 | [P] | |
-| T054 | Test: memory sampling over-budget flag | `tests/visuals/test_memory_over_budget.py` simulate peak >100MB via monkeypatch sampler | T041 | [P] | |
-| T055 | Test: validation errors raise in dev mode | `tests/visuals/test_schema_validation_mode.py` corrupt manifest then assert validation exception/log | T043 | [P] | |
+| T053 | Test: performance flags | `tests/visuals/test_performance_flags.py` mock timings to trigger over_budget booleans | T040 | [P] | Done (2025-09-22) |
+| T054 | Test: memory sampling over-budget flag | `tests/visuals/test_memory_over_budget.py` simulate peak >100MB via monkeypatch sampler | T041 | [P] | Done (2025-09-22) |
+| T055 | Test: validation errors raise in dev mode | `tests/visuals/test_schema_validation_mode.py` corrupt manifest then assert validation exception/log | T043 | [P] | Done (2025-09-22) |
 
 ### Documentation & Demo Updates
 | ID | Task | Details / File Paths | Depends | Parallel | Status |

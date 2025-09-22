@@ -155,6 +155,21 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
             moviepy_missing_all = False
             continue
         if enc.status == "skipped" and enc.note == NOTE_MOVIEPY_MISSING:
+            # Previously this silently dropped the episode from the manifest unless
+            # ALL episodes were missing moviepy. That prevented downstream tooling
+            # from understanding per-episode degradation. Emit an explicit skipped
+            # artifact so artifact count always matches selected records.
+            artifacts.append(
+                VideoArtifact(
+                    artifact_id=f"video_{ep_id}",
+                    scenario_id=sc_id,
+                    episode_id=ep_id,
+                    path_mp4=str(mp4_path),
+                    status="skipped",
+                    renderer=RENDERER_SIM_VIEW,
+                    note=NOTE_MOVIEPY_MISSING,
+                )
+            )
             continue
         moviepy_missing_all = False
         artifacts.append(

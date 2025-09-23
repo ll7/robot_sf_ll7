@@ -13,4 +13,12 @@
         <rect x="20" y="30" width="18" height="18" fill="#ffd800" inkscape:label="robot_spawn_zone" />
         <rect x="120" y="150" width="18" height="18" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
     </g>
+    <g id="pedestrians" inkscape:label="Pedestrians">
+        <rect x="20" y="150" width="18" height="18" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="120" y="30" width="18" height="18" fill="#107400" inkscape:label="ped_goal_zone" />
+    </g>
+    <g id="routes" inkscape:label="Routes">
+        <path d="M 29 39 L 129 159" stroke="#0300d5" stroke-width="3" fill="none" inkscape:label="robot_route_0_0" />
+        <path d="M 29 159 L 129 39" stroke="#c40202" stroke-width="3" fill="none" inkscape:label="ped_route_0_0" />
+    </g>
 </svg>

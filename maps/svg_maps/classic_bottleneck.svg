@@ -14,5 +14,14 @@
     <g id="robot" inkscape:label="Robot">
         <rect x="30" y="30" width="20" height="20" fill="#ffd800" inkscape:label="robot_spawn_zone" />
         <rect x="150" y="150" width="20" height="20" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+        <!-- Added minimal robot route from spawn (index 0) to goal (index 0) -->
+        <path d="M 40 50 40 120 160 160" stroke="#0300d5" stroke-width="2" fill="none"
+            inkscape:label="robot_route_0_0" />
+    </g>
+    <g id="pedestrians" inkscape:label="Pedestrian">
+        <!-- Add a simple pedestrian spawn/goal and route to satisfy parser -->
+        <rect x="90" y="30" width="20" height="20" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="90" y="150" width="20" height="20" fill="#107400" inkscape:label="ped_goal_zone" />
+        <path d="M 100 50 100 140" stroke="#c40202" stroke-width="2" fill="none" inkscape:label="ped_route_0_0" />
     </g>
 </svg>

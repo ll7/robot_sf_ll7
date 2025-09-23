@@ -1,19 +1,145 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Classical Interaction Map: Perpendicular Crossing -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="200"
-    height="200" viewBox="0 0 200 200">
-    <g id="obstacles" inkscape:label="Obstacles">
-        <!-- Frame walls -->
-        <rect x="0" y="0" width="200" height="5" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="195" width="200" height="5" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="0" width="5" height="200" fill="#000" inkscape:label="obstacle" />
-        <rect x="195" y="0" width="5" height="200" fill="#000" inkscape:label="obstacle" />
-        <!-- Open central crossing, thin islands to shape orthogonal flows -->
-        <rect x="95" y="60" width="10" height="80" fill="#000" inkscape:label="obstacle" />
-        <rect x="60" y="95" width="80" height="10" fill="#000" inkscape:label="obstacle" />
-    </g>
-    <g id="robot" inkscape:label="Robot">
-        <rect x="20" y="20" width="20" height="20" fill="#ffd800" inkscape:label="robot_spawn_zone" />
-        <rect x="160" y="160" width="20" height="20" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
-    </g>
+
+<svg
+   width="200"
+   height="200"
+   viewBox="0 0 200 200"
+   version="1.1"
+   id="svg8"
+   sodipodi:docname="classic_crossing.svg"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8" />
+  <sodipodi:namedview
+     id="namedview8"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="4.5084439"
+     inkscape:cx="71.754248"
+     inkscape:cy="136.2998"
+     inkscape:window-width="2560"
+     inkscape:window-height="1384"
+     inkscape:window-x="3440"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg8" />
+  <g
+     id="obstacles"
+     inkscape:label="Obstacles">
+    <!-- Frame walls -->
+    <rect
+       x="0"
+       y="0"
+       width="200"
+       height="5"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect1" />
+    <rect
+       x="0"
+       y="195"
+       width="200"
+       height="5"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect2" />
+    <rect
+       x="0"
+       y="0"
+       width="5"
+       height="200"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect3" />
+    <rect
+       x="195"
+       y="0"
+       width="5"
+       height="200"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect4" />
+    <!-- Open central crossing, thin islands to shape orthogonal flows -->
+    <rect
+       x="95"
+       y="60"
+       width="10"
+       height="80"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect5" />
+    <rect
+       x="60"
+       y="95"
+       width="80"
+       height="10"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect6" />
+  </g>
+  <g
+     id="robot"
+     inkscape:label="Robot">
+    <rect
+       x="160"
+       y="160"
+       width="20"
+       height="20"
+       fill="#ff7f2a"
+       inkscape:label="robot_goal_zone"
+       id="rect8"
+       style="fill:#ff6c00;fill-opacity:1" />
+    <rect
+       x="20"
+       y="20"
+       width="20"
+       height="20"
+       fill="#ffd800"
+       inkscape:label="robot_spawn_zone"
+       id="rect7"
+       style="fill:#ffdf00;fill-opacity:1" />
+    <path
+       style="fill:#0300d5;stroke:#0300d5;fill-opacity:1;stroke-opacity:1"
+       d="M 53.437605,105.57185 94.276099,147.27925"
+       id="path8"
+       inkscape:label="robot_route_0_0" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer1"
+     inkscape:label="Pedestrian">
+    <rect
+       x="43.021168"
+       y="11.247913"
+       width="20"
+       height="20"
+       fill="#ffd800"
+       inkscape:label="ped_spawn_zone"
+       id="rect7-5"
+       style="fill:#23ff00;fill-opacity:1" />
+    <rect
+       x="132.45735"
+       y="170.62558"
+       width="20"
+       height="20"
+       fill="#ffd800"
+       inkscape:label="ped_goal_zone"
+       id="rect7-5-0"
+       style="fill:#107400;fill-opacity:1" />
+    <path
+       style="fill:#c40202;fill-opacity:1;stroke:#c40202;stroke-opacity:1"
+       d="M 52.808359,109.68065 93.646853,151.38805"
+       id="path8-2"
+       inkscape:label="ped_route_0_0" />
+  </g>
 </svg>

@@ -68,6 +68,9 @@ from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 MODEL_PATH = Path("model/run_043.zip")
 SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
 SCENARIO_NAME: str | None = None  # default = first scenario
+# When True (or when run_demo(scenario_name="ALL") / run_demo(sweep=True)), iterate over all
+# scenarios defined in the classic interaction matrix instead of selecting only one.
+SWEEP_ALL = False
 MAX_EPISODES = 8
 ENABLE_RECORDING = True
 OUTPUT_DIR = Path("tmp/vis_runs/" + time.strftime("%Y%m%d_%H%M%S"))
@@ -326,21 +329,22 @@ def _compute_fast_mode_and_cap(max_episodes: int) -> tuple[bool, int]:
     return fast_mode, max_episodes
 
 
-def _prepare_scenario_and_seeds(scenario_name: str | None) -> tuple[dict[str, Any], list[int]]:
-    """Load matrix, resolve scenario (treat literal 'None' string as unspecified) and seeds.
+def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str, Any]]:
+    """Return a list of scenario dicts based on requested name & sweep flag.
 
-    The refactor earlier passed ``str(eff_name)`` which converts ``None`` to the literal
-    string ``'None'``. Existing tests expect that an unspecified scenario (None) selects
-    the *first* scenario. We recover that intent by interpreting the exact string 'None'
-    as a sentinel for an unspecified scenario.
+    Rules:
+      - If sweep==True OR scenario_name == "ALL" (case-sensitive) → return all scenarios in file order.
+      - Else resolve a single scenario (None selects the first) via select_scenario.
+      - Treat the literal string "None" as an unspecified scenario (historic quirk recovery).
     """
     scenarios = load_classic_matrix(str(SCENARIO_MATRIX_PATH))
+    if sweep or scenario_name == "ALL":  # ALL sentinel triggers full sweep
+        return scenarios
     effective_name: str | None = scenario_name
     if effective_name == "None":  # produced by str(None); treat as unset
         effective_name = None
-    scenario = select_scenario(scenarios, effective_name)  # type: ignore[arg-type]
-    seeds_iter = iter_episode_seeds(scenario)
-    return scenario, list(seeds_iter)
+    single = select_scenario(scenarios, effective_name)  # type: ignore[arg-type]
+    return [single]
 
 
 def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
@@ -470,6 +474,7 @@ def run_demo(
     scenario_name: str | None = None,
     max_episodes: int | None = None,
     enable_recording: bool | None = None,
+    sweep: bool | None = None,
 ) -> List[EpisodeSummary]:
     """Execute the PPO visualization demo.
 
@@ -480,10 +485,14 @@ def run_demo(
         If None, fall back to module-level DRY_RUN constant.
     scenario_name: str | None
         Override scenario selection; defaults to SCENARIO_NAME constant (first scenario if None).
+        Special value: "ALL" (or sweep=True) runs every scenario in the matrix.
     max_episodes: int | None
         Limit number of episodes (defaults to MAX_EPISODES constant).
     enable_recording: bool | None
         Override recording toggle; defaults to ENABLE_RECORDING constant.
+    sweep: bool | None
+        If True, iterate over all scenarios (overrides scenario_name unless scenario_name names a
+        single scenario not equal to "ALL"). If None, falls back to SWEEP_ALL constant.
 
     Returns
     -------
@@ -495,57 +504,66 @@ def run_demo(
     eff_name = SCENARIO_NAME if scenario_name is None else scenario_name
     eff_max = MAX_EPISODES if max_episodes is None else max_episodes
     eff_record = ENABLE_RECORDING if enable_recording is None else enable_recording
+    eff_sweep = SWEEP_ALL if sweep is None else sweep
 
     fast_mode, eff_max = _compute_fast_mode_and_cap(max_episodes=eff_max)
-    # Pass through None directly (helper also guards against accidental 'None' string usage)
-    scenario, seeds = _prepare_scenario_and_seeds(eff_name)
+    scenarios = _prepare_scenarios(eff_name, sweep=eff_sweep or (eff_name == "ALL"))
 
     if effective_dry:
-        _log_dry_run(scenario, seeds)
+        dry_msgs: list[str] = []
+        for sc in scenarios:
+            seeds_list = list(iter_episode_seeds(sc))
+            dry_msgs.append(f"{sc.get('name')} seeds={seeds_list}")
+        logger.debug(
+            "Dry run OK. Scenarios="
+            + "; ".join(dry_msgs)
+            + f" model_exists={MODEL_PATH.exists()} sweep={len(scenarios) > 1}"
+        )
         return []
 
     model = _load_or_stub_model(fast_mode=fast_mode, eff_max=eff_max)
-    # Scenario-specific map injection
-    map_file = scenario.get("map_file")
-    sim_cfg = _create_demo_env(fast_mode=fast_mode)
-    if isinstance(map_file, str):
-        try:
-            md = _load_map_definition(map_file)
-            # Fallback if map has no robot start positions (no routes) – avoid zero division in simulator init.
-            start_pos = getattr(md, "num_start_pos", 0)
-            if start_pos and start_pos > 0:
-                sim_cfg.map_pool = MapDefinitionPool(map_defs={Path(map_file).stem: md})  # type: ignore[attr-defined]
-                logger.info(
-                    "Loaded scenario map file: {mf} (start_positions={sp})",
-                    mf=map_file,
-                    sp=start_pos,
-                )
-            else:
+    all_results: List[EpisodeSummary] = []
+    for scenario in scenarios:
+        map_file = scenario.get("map_file")
+        sim_cfg = _create_demo_env(fast_mode=fast_mode)
+        if isinstance(map_file, str):
+            try:
+                md = _load_map_definition(map_file)
+                start_pos = getattr(md, "num_start_pos", 0)
+                if start_pos and start_pos > 0:
+                    sim_cfg.map_pool = MapDefinitionPool(map_defs={Path(map_file).stem: md})  # type: ignore[attr-defined]
+                    logger.info(
+                        "Loaded scenario map file: {mf} (start_positions={sp})",
+                        mf=map_file,
+                        sp=start_pos,
+                    )
+                else:
+                    logger.warning(
+                        "Scenario map '{mf}' has zero start positions (no robot routes); using default map pool instead.",
+                        mf=map_file,
+                    )
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Scenario map '{mf}' has zero start positions (no robot routes); using default map pool instead.",
+                    "Failed to load scenario map '{mf}' ({err}); falling back to default map pool.",
                     mf=map_file,
+                    err=exc,
                 )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Failed to load scenario map '{mf}' ({err}); falling back to default map pool.",
-                mf=map_file,
-                err=exc,
-            )
-    env = make_robot_env(
-        config=sim_cfg,
-        reward_func=simple_reward,
-        debug=True,
-        record_video=eff_record,
-        video_path=str(OUTPUT_DIR) if eff_record else None,
-    )
-    logger.info(
-        "Environment created (reward fallback active if custom reward not provided)."
-    )  # (T022)
-    _warn_if_recording_without_ui(env, eff_record)
-
-    results = _run_episodes(env, model, scenario, seeds, eff_max, eff_record)
-    _maybe_print_summary(results)
-    return results
+        env = make_robot_env(
+            config=sim_cfg,
+            reward_func=simple_reward,
+            debug=True,
+            record_video=eff_record,
+            video_path=str(OUTPUT_DIR) if eff_record else None,
+        )
+        logger.info(
+            "Environment created (reward fallback active if custom reward not provided)."
+        )  # (T022)
+        _warn_if_recording_without_ui(env, eff_record)
+        seeds = list(iter_episode_seeds(scenario))
+        scenario_results = _run_episodes(env, model, scenario, seeds, eff_max, eff_record)
+        all_results.extend(scenario_results)
+    _maybe_print_summary(all_results)
+    return all_results
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -567,4 +567,4 @@ def run_demo(
 
 
 if __name__ == "__main__":  # pragma: no cover
-    run_demo()
+    run_demo(sweep=True)

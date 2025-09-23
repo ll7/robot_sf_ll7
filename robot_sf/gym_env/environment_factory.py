@@ -142,6 +142,8 @@ class EnvironmentFactory:
     ) -> MultiAgentEnv:
         if config is None:
             config = MultiRobotConfig()
+        if config.num_robots != num_robots:
+            config.num_robots = num_robots
         from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
 
         return MultiRobotEnv(

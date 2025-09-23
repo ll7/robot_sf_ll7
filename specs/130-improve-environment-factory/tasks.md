@@ -44,24 +44,24 @@ Deps: T005.
 Accept: Prior failing test passes; type hints clean.
 
 ### Deprecation & Normalization Layer
-**T007**: Create `robot_sf/gym_env/_factory_compat.py` implementing `DeprecationMap` and function `apply_legacy_kwargs(kwargs, strict: bool)` returning (normalized_kwargs, warnings_emitted).  
+**T007 [X]**: Create `robot_sf/gym_env/_factory_compat.py` implementing `DeprecationMap` and function `apply_legacy_kwargs(kwargs, strict: bool)` returning (normalized_kwargs, warnings_emitted).  
 Deps: T006, T003.  
 Accept: Unit tests (next task) can import and manipulate.
 
-**T008**: Add tests `tests/factories/test_deprecation_mapping.py` covering: mapped kw, unmapped strict error, permissive mode via env var, warning messages (Loguru capture).  
+**T008 [X]**: Add tests `tests/factories/test_deprecation_mapping.py` covering: mapped kw, unmapped strict error, permissive mode via env var, warning messages (Loguru capture).  
 Deps: T007.  
 Accept: Tests fail until factories integrate layer.
 
 ### Factory Refactor (Incremental)
-**T009**: Refactor `environment_factory.py` to accept new `render_options` / `recording_options` parameters (without yet removing old paths); integrate call to `apply_legacy_kwargs`.  
+**T009 [X]**: Refactor `environment_factory.py` to accept new `render_options` / `recording_options` parameters (without yet removing old paths); integrate call to `apply_legacy_kwargs`.  
 Deps: T008.  
 Accept: Code compiles; legacy usage still works; new params accepted (no behavior change yet).
 
-**T010**: Implement normalization logic: precedence rules (explicit options over booleans) with logging; boolean convenience path auto-constructs RecordingOptions.  
+**T010 [X]**: Implement normalization logic: precedence rules (explicit options over booleans) with logging; boolean convenience path auto-constructs RecordingOptions.  
 Deps: T009.  
 Accept: Add/extend tests `tests/factories/test_normalization.py` verifying precedence & warning emission.
 
-**T011**: Add validation for incompatible combos (e.g., `record_video=True` + `recording_options.record=False` → enforce True + warning).  
+**T011 [X]**: Add validation for incompatible combos (e.g., `record_video=True` + `recording_options.record=False` → enforce True + warning).  
 Deps: T010.  
 Accept: Extend normalization test or new `test_incompatible_combinations.py`.
 

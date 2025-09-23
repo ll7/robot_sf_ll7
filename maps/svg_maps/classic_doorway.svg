@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Classical Interaction Map: Doorway Transition -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="220"
-    height="140" viewBox="0 0 220 140">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="44"
+    height="28" viewBox="0 0 44 28">
     <g id="obstacles" inkscape:label="Obstacles">
         <!-- Two rooms separated by narrow doorway gap -->
-        <rect x="0" y="0" width="220" height="5" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="135" width="220" height="5" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="0" width="5" height="140" fill="#000" inkscape:label="obstacle" />
-        <rect x="215" y="0" width="5" height="140" fill="#000" inkscape:label="obstacle" />
-        <!-- Interior wall with doorway (gap at center) -->
-        <rect x="105" y="5" width="10" height="50" fill="#000" inkscape:label="obstacle" />
-        <rect x="105" y="85" width="10" height="50" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="0" width="44" height="1" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="27" width="44" height="1" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="0" width="1" height="28" fill="#000" inkscape:label="obstacle" />
+        <rect x="43" y="0" width="1" height="28" fill="#000" inkscape:label="obstacle" />
+        <!-- Interior wall with doorway (gap at center) scaled -->
+        <rect x="21" y="1" width="2" height="10" fill="#000" inkscape:label="obstacle" />
+        <rect x="21" y="17" width="2" height="10" fill="#000" inkscape:label="obstacle" />
     </g>
     <g id="robot" inkscape:label="Robot">
-        <rect x="20" y="20" width="20" height="20" fill="#ffd800" inkscape:label="robot_spawn_zone" />
-        <rect x="180" y="100" width="20" height="20" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+        <rect x="4" y="4" width="4" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="36" y="20" width="4" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
     </g>
     <!-- Added minimal required routes and pedestrian zones -->
     <g id="pedestrians" inkscape:label="Pedestrians">
-        <rect x="20" y="100" width="20" height="20" fill="#23ff00" inkscape:label="ped_spawn_zone" />
-        <rect x="180" y="20" width="20" height="20" fill="#107400" inkscape:label="ped_goal_zone" />
+        <rect x="4" y="20" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="36" y="4" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" />
     </g>
     <g id="routes" inkscape:label="Routes">
         <!-- Robot route from spawn center (30,30) to goal center (190,110) -->
-        <path d="M 30 30 L 190 110" stroke="#0300d5" stroke-width="3" fill="none" inkscape:label="robot_route_0_0" />
-        <!-- Pedestrian route from spawn center (30,110) to goal center (190,30) -->
-        <path d="M 30 110 L 190 30" stroke="#c40202" stroke-width="3" fill="none" inkscape:label="ped_route_0_0" />
+        <path d="M 6 6 L 38 22" stroke="#0300d5" stroke-width="1" fill="none" inkscape:label="robot_route_0_0" />
+        <!-- Pedestrian route scaled -->
+        <path d="M 6 22 L 38 6" stroke="#c40202" stroke-width="1" fill="none" inkscape:label="ped_route_0_0" />
     </g>
 </svg>

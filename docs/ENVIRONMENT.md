@@ -76,3 +76,42 @@ Use these after generating benchmark episode data (`robot_sf_bench run`) and bas
 - Dependencies are pinned via `uv.lock` for reproducibility.
 - A local editable source for `pysocialforce` is configured in `pyproject.toml` under `[tool.uv.sources]` (path `fast-pysf`).
 - The CI job runs lint, tests, and the tiny batch smoke as shown above.
+
+## Ergonomic Environment Factory Options (Feature 130)
+
+Environment creation now supports structured option objects while retaining legacy convenience flags.
+
+### Quick Examples
+```python
+from robot_sf.gym_env.environment_factory import (
+  make_robot_env, make_image_robot_env,
+  RecordingOptions, RenderOptions
+)
+
+# Minimal
+env = make_robot_env()
+
+# Recording via convenience boolean
+env = make_robot_env(record_video=True, video_path="episode.mp4")
+
+# Structured options (preferred for explicit control)
+render_opts = RenderOptions(max_fps_override=30)
+rec_opts = RecordingOptions(record=True, video_path="episode.mp4")
+env = make_robot_env(render_options=render_opts, recording_options=rec_opts, debug=True)
+
+# Image observations
+img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=24))
+```
+
+### Precedence & Deprecation
+- `record_video=True` overrides `RecordingOptions(record=False)` (warning emitted).
+- `video_fps` maps to `RenderOptions.max_fps_override` unless that field already set.
+- Legacy kwargs (`fps`, `video_output_path`) are mapped with warnings; unknown legacy kwargs raise unless `ROBOT_SF_FACTORY_LEGACY=1`.
+
+### Logging
+Each factory emits an INFO creation line with effective recording and fps settings plus WARNING lines for any deprecation or precedence events.
+
+### Performance Guard
+Test `tests/perf/test_factory_creation_perf.py` ensures mean creation time remains within the regression budget relative to `results/factory_perf_baseline.json`.
+
+See detailed migration guidance in `docs/dev/issues/130-improve-environment-factory/migration.md`.

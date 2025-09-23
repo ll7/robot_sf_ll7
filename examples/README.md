@@ -15,6 +15,20 @@
 Other demos:
 - See `examples/demo_*` and `examples/plot_*` for environment and plotting walkthroughs.
 
+### Classic Interactions Pygame Demo – Scenario Maps
+
+`classic_interactions_pygame.py` now loads the scenario-specific `map_file` defined in the classic interactions scenario matrix. Supported formats:
+
+- SVG maps (converted on the fly via the internal SVG → MapDefinition converter)
+- JSON map definition files
+
+Behavior:
+- Each scenario selection injects a single-entry `MapDefinitionPool` so the environment uses exactly that map.
+- A small in‑process cache avoids repeated SVG parsing across seeds.
+- If the file is missing or fails to convert, the demo logs a warning and falls back to the default map set (previous behavior).
+
+This makes the visual output reflect the intended environment geometry per scenario (previous versions always showed the default campus map).
+
 ### Full Classic Benchmark Demo
 
 Run the adaptive full classic benchmark end-to-end (episodes + aggregates + visual artifacts):

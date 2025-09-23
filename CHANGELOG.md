@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance Validation**: 20-25 steps/second with linear parallel scaling
 
 ### Changed
+- Classic interactions pygame demo now respects per-scenario `map_file` entries in the scenario matrix: on each selected scenario it loads the referenced SVG (via converter) or JSON map definition and injects a single-map `MapDefinitionPool` into the environment config. Falls back gracefully (with a warning) to the default pool if loading fails.
 - Enhanced baseline planner interface with unified PlannerProtocol
 - Improved test coverage with comprehensive benchmark validation
 - Updated main documentation with prominent benchmark platform section

@@ -56,6 +56,7 @@ from robot_sf.benchmark.classic_interactions_loader import (
     select_scenario,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
@@ -64,7 +65,7 @@ from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 # ---------------------------------------------------------------------------
 # CONFIG CONSTANTS (edit these to adjust behavior)
 # ---------------------------------------------------------------------------
-MODEL_PATH = Path("model/ppo_model_retrained_10m_2025-02-01.zip")
+MODEL_PATH = Path("model/run_043.zip")
 SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
 SCENARIO_NAME: str | None = None  # default = first scenario
 MAX_EPISODES = 8
@@ -532,6 +533,7 @@ def run_demo(
             )
     env = make_robot_env(
         config=sim_cfg,
+        reward_func=simple_reward,
         debug=True,
         record_video=eff_record,
         video_path=str(OUTPUT_DIR) if eff_record else None,

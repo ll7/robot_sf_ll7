@@ -16,7 +16,7 @@ scenarios:
     map_file: "maps/svg_maps/classic_crossing.svg"
     simulation_config:
       max_episode_steps: 500
-      ped_density: 0.02
+      ped_density: 0.2
     robot_config: {}
     metadata:
       archetype: crossing

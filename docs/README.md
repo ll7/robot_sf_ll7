@@ -194,6 +194,7 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 - [**Pedestrian Metrics Overview**](./ped_metrics/PED_METRICS.md) - Summary of implemented metrics and their purpose
 - [**Metric Analysis**](./ped_metrics/PED_METRICS_ANALYSIS.md) - Overview of metrics used in research and validation
 - [**NPC Pedestrian Design**](./ped_metrics/NPC_PEDESTRIAN.md) - Details on the design and behavior of NPC pedestrians
+ - [**Pedestrian Density Reference**](./ped_metrics/PEDESTRIAN_DENSITY.md) - Units, canonical triad (0.02/0.05/0.08), advisory range, difficulty mapping & test policy
 
 ### 📁 Media Resources
 - [`img/`](./img/) - Documentation images and diagrams
@@ -217,6 +218,9 @@ ped_env = make_pedestrian_env(robot_model=model, debug=True)
 ```
 
 ### Legacy Pattern (Still Supported)
+
+#### Environment Factory Ergonomics Migration (Feature 130)
+See the new migration guide: [Environment Factory Migration](./dev/issues/130-improve-environment-factory/migration.md). Includes before/after examples, seeding, legacy env vars (`ROBOT_SF_FACTORY_LEGACY`, `ROBOT_SF_FACTORY_STRICT`), and precedence rules. Quickstart examples: `specs/130-improve-environment-factory/quickstart.md`.
 ```python
 # Traditional approach - still works for backward compatibility
 from robot_sf.gym_env.robot_env import RobotEnv

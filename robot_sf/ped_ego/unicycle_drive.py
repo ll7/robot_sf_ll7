@@ -93,12 +93,14 @@ class UnicycleMotion:
         new_orient = self._norm_angle(orient + angular_velocity * d_t)
 
         # Update position coordinates based on current orientation and speed
-        new_x = x + velocity * cos(orient) * d_t
-        new_y = y + velocity * sin(orient) * d_t
+        # Use the updated forward speed (new_velocity) for translational motion
+        v = float(new_velocity)
+        new_x = x + v * cos(orient) * d_t
+        new_y = y + v * sin(orient) * d_t
 
         # Update state with new pose and velocity
         state.pose = ((new_x, new_y), new_orient)
-        state.velocity = new_velocity
+        state.velocity = float(new_velocity)
 
     def _norm_angle(self, angle: float) -> float:
         """

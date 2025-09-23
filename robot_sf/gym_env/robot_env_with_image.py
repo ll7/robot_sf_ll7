@@ -2,7 +2,7 @@
 Extended robot environment with image-based observation space support.
 """
 
-from typing import Callable
+from typing import Callable, Optional
 
 from robot_sf.gym_env.env_config import RobotEnvSettings
 from robot_sf.gym_env.env_util import (
@@ -29,8 +29,8 @@ class RobotEnvWithImage(RobotEnv):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: Optional[str] = None,
+        video_fps: Optional[float] = None,
         peds_have_obstacle_forces: bool = False,
     ):
         """

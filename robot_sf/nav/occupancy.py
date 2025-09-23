@@ -67,6 +67,7 @@ def is_circle_circle_intersection(c_1: Circle2D, c_2: Circle2D) -> bool:
 def is_circle_line_intersection(circle: Circle2D, segment: Line2D) -> bool:
     """Simple vector math implementation using quadratic solution formula."""
     (c_x, c_y), r = circle
+    # Line2D is ((x1, y1), (x2, y2))
     (p1_x, p1_y), (p2_x, p2_y) = segment
 
     # shift circle's center to the origin (0, 0)

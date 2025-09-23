@@ -43,6 +43,7 @@ def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_v
     float: The distance to the intersection point, or infinity if no intersection.
     """
     # Unpack segment endpoints, sensor position, and ray vector
+    # Line2D is ((x1, y1), (x2, y2))
     (x_1, y_1), (x_2, y_2) = segment
     x_sensor, y_sensor = sensor_pos
     x_ray, y_ray = ray_vec

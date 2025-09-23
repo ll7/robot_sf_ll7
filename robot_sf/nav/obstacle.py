@@ -41,6 +41,14 @@ class Obstacle:
         if not self.vertices:
             raise ValueError("No vertices specified for obstacle!")
 
+        # Normalize potential numpy array vertices (e.g., from path based obstacles) to tuples
+        # to ensure downstream equality checks (edge[0] != edge[1]) operate on plain Python
+        # tuples instead of broadcasting numpy arrays which leads to the ambiguous truth value
+        # error: "The truth value of an array with more than one element is ambiguous".
+        # This keeps the public API unchanged while hardening against SVG path derived
+        # obstacle vertices provided as np.ndarray rows.
+        self.vertices = [tuple(v) if not isinstance(v, tuple) else v for v in self.vertices]
+
         # Convert vertices to numpy array
         self.vertices_np = np.array(self.vertices)
 

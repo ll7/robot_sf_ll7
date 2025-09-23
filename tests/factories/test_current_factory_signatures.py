@@ -21,6 +21,7 @@ def test_make_robot_env_signature_snapshot():
     # Adjust this list only when intentional API evolution occurs.
     expected_prefix = [
         "config",
+        "seed",
         "peds_have_obstacle_forces",
         "reward_func",
         "debug",
@@ -38,6 +39,7 @@ def test_make_image_robot_env_signature_snapshot():
     params = _param_names(ef.make_image_robot_env)
     expected_prefix = [
         "config",
+        "seed",
         "peds_have_obstacle_forces",
         "reward_func",
         "debug",
@@ -56,6 +58,7 @@ def test_make_pedestrian_env_signature_snapshot():
     # Note: pedestrian env may have an additional required robot_model param currently.
     expected_prefix = [
         "config",
+        "seed",
         "robot_model",
         "reward_func",
         "debug",

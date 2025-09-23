@@ -211,6 +211,14 @@ def init_simulators(
         raise TypeError(f"map_def should be of type MapDefinition, got {type(map_def)}")
 
     # Calculate the number of simulators needed based on the number of robots and start positions
+    if map_def.num_start_pos <= 0:
+        # Defensive guard: division-by-zero would occur and route sampling will fail later anyway.
+        raise ValueError(
+            "Cannot initialize simulators: map definition provides zero robot start positions "
+            "(no robot routes detected). Ensure the map JSON/SVG conversion produced robot_routes "
+            "and that spawn/goal zones plus routes are present."
+        )
+
     num_sims = ceil(num_robots / map_def.num_start_pos)
 
     # Calculate the proximity to the goal based on the robot radius and goal radius

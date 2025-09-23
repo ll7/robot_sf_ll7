@@ -48,19 +48,24 @@ except Exception as exc:  # noqa: BLE001
 else:
     _PPO_IMPORT_ERROR = None
 
+import json
+
 from robot_sf.benchmark.classic_interactions_loader import (
     iter_episode_seeds,
     load_classic_matrix,
     select_scenario,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
+from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
 # ---------------------------------------------------------------------------
 # CONFIG CONSTANTS (edit these to adjust behavior)
 # ---------------------------------------------------------------------------
-MODEL_PATH = Path("model/ppo_model_retrained_10m_2025-02-01.zip")
+MODEL_PATH = Path("model/run_043.zip")
 SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
 SCENARIO_NAME: str | None = None  # default = first scenario
 MAX_EPISODES = 8
@@ -371,16 +376,43 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
     return model
 
 
-def _create_demo_env(fast_mode: bool, record: bool):
+def _create_demo_env(fast_mode: bool):
     sim_cfg = RobotSimulationConfig()
     if fast_mode:
         sim_cfg.sim_config.sim_time_in_secs = min(sim_cfg.sim_config.sim_time_in_secs, 3.0)
-    return make_robot_env(
-        config=sim_cfg,
-        debug=True,
-        record_video=record,
-        video_path=str(OUTPUT_DIR) if record else None,
-    )
+    return sim_cfg
+
+
+_MAP_CACHE: dict[str, object] = {}
+
+
+def _load_map_definition(map_file: str):  # type: ignore[return-any]
+    """Load a scenario-specific map definition.
+
+    Supports:
+      - SVG map paths (converted via convert_map)
+      - JSON map definition files (serialized via serialize_map)
+
+    Results cached by absolute path to avoid repeated parsing across seeds.
+    Returns MapDefinition (not pooled) for caller to wrap.
+    """
+    abs_path = str(Path(map_file).resolve())
+    if abs_path in _MAP_CACHE:
+        return _MAP_CACHE[abs_path]
+    p = Path(abs_path)
+    if not p.exists():
+        raise FileNotFoundError(f"Scenario map file not found: {abs_path}")
+    if p.suffix.lower() == ".svg":
+        md = convert_map(abs_path)
+        if md is None:
+            raise RuntimeError(f"Failed to convert SVG map: {abs_path}")
+    elif p.suffix.lower() == ".json":
+        data = json.loads(p.read_text(encoding="utf-8"))
+        md = serialize_map(data)
+    else:
+        raise ValueError(f"Unsupported map file extension for scenario map: {p.suffix}")
+    _MAP_CACHE[abs_path] = md
+    return md
 
 
 def _run_episodes(
@@ -473,7 +505,39 @@ def run_demo(
         return []
 
     model = _load_or_stub_model(fast_mode=fast_mode, eff_max=eff_max)
-    env = _create_demo_env(fast_mode=fast_mode, record=eff_record)
+    # Scenario-specific map injection
+    map_file = scenario.get("map_file")
+    sim_cfg = _create_demo_env(fast_mode=fast_mode)
+    if isinstance(map_file, str):
+        try:
+            md = _load_map_definition(map_file)
+            # Fallback if map has no robot start positions (no routes) – avoid zero division in simulator init.
+            start_pos = getattr(md, "num_start_pos", 0)
+            if start_pos and start_pos > 0:
+                sim_cfg.map_pool = MapDefinitionPool(map_defs={Path(map_file).stem: md})  # type: ignore[attr-defined]
+                logger.info(
+                    "Loaded scenario map file: {mf} (start_positions={sp})",
+                    mf=map_file,
+                    sp=start_pos,
+                )
+            else:
+                logger.warning(
+                    "Scenario map '{mf}' has zero start positions (no robot routes); using default map pool instead.",
+                    mf=map_file,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to load scenario map '{mf}' ({err}); falling back to default map pool.",
+                mf=map_file,
+                err=exc,
+            )
+    env = make_robot_env(
+        config=sim_cfg,
+        reward_func=simple_reward,
+        debug=True,
+        record_video=eff_record,
+        video_path=str(OUTPUT_DIR) if eff_record else None,
+    )
     logger.info(
         "Environment created (reward fallback active if custom reward not provided)."
     )  # (T022)

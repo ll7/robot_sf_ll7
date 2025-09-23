@@ -77,6 +77,9 @@ Use these after generating benchmark episode data (`robot_sf_bench run`) and bas
 - A local editable source for `pysocialforce` is configured in `pyproject.toml` under `[tool.uv.sources]` (path `fast-pysf`).
 - The CI job runs lint, tests, and the tiny batch smoke as shown above.
 
+### Pedestrian Density Reference
+For guidance on choosing and validating pedestrian densities (units, canonical triad, advisory range, and test policy) see: [`ped_metrics/PEDESTRIAN_DENSITY.md`](./ped_metrics/PEDESTRIAN_DENSITY.md)
+
 ## Ergonomic Environment Factory Options (Feature 130)
 
 Environment creation now supports structured option objects while retaining legacy convenience flags.

@@ -10,6 +10,7 @@ Ensures that:
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,12 @@ REQUIRED_SCENARIO_KEYS = {
     "metadata",
     "seeds",
 }
-ALLOWED_DENSITIES = {0.02, 0.05, 0.08}
+# Recommended canonical density triad retained for benchmarking summaries.
+# Tests now accept any positive ped_density but emit a warning when a value
+# falls outside the recommended inclusive range [0.02, 0.08]. This enables
+# exploratory sweeps while preserving guidance for benchmark stability.
+RECOMMENDED_DENSITIES = {0.02, 0.05, 0.08}
+RECOMMENDED_RANGE = (0.02, 0.08)
 
 
 def load_yaml(path: Path) -> dict:
@@ -57,9 +63,17 @@ def test_each_scenario_structure_and_files() -> None:
         assert isinstance(sim_cfg, dict), "simulation_config must be a mapping"
         density = sim_cfg.get("ped_density")
         if density is not None:
-            assert density in ALLOWED_DENSITIES, (
-                f"Unexpected ped_density {density} in {scenario['name']}"
-            )
+            assert density > 0, f"ped_density must be positive (got {density})"
+            low, high = RECOMMENDED_RANGE
+            if not (low <= density <= high):
+                warnings.warn(
+                    (
+                        f"Scenario {scenario['name']} ped_density={density} is outside the "
+                        f"recommended [{low}, {high}] range. This is allowed, but may reduce "
+                        "comparability with canonical benchmark results."
+                    ),
+                    UserWarning,
+                )
         # groups usage rule
         groups_val = sim_cfg.get("groups", 0.0)
         archetype = scenario["metadata"].get("archetype")

@@ -41,10 +41,8 @@ class SvgRectangle:
 
 @dataclass
 class SvgPath:
-    """
-    A class to represent a path in an SVG file.
-    """
+    """Represents a path in an SVG file (sequence of 2D waypoints)."""
 
-    coordinates: Tuple[Vec2D]
+    coordinates: Tuple[Vec2D, ...]
     label: str
     id: str

@@ -510,11 +510,20 @@ def run_demo(
     if isinstance(map_file, str):
         try:
             md = _load_map_definition(map_file)
-            sim_cfg.map_pool = MapDefinitionPool(map_defs={Path(map_file).stem: md})  # type: ignore[attr-defined]
-            logger.info(
-                "Loaded scenario map file: {mf}",
-                mf=map_file,
-            )
+            # Fallback if map has no robot start positions (no routes) – avoid zero division in simulator init.
+            start_pos = getattr(md, "num_start_pos", 0)
+            if start_pos and start_pos > 0:
+                sim_cfg.map_pool = MapDefinitionPool(map_defs={Path(map_file).stem: md})  # type: ignore[attr-defined]
+                logger.info(
+                    "Loaded scenario map file: {mf} (start_positions={sp})",
+                    mf=map_file,
+                    sp=start_pos,
+                )
+            else:
+                logger.warning(
+                    "Scenario map '{mf}' has zero start positions (no robot routes); using default map pool instead.",
+                    mf=map_file,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Failed to load scenario map '{mf}' ({err}); falling back to default map pool.",

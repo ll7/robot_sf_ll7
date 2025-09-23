@@ -30,7 +30,9 @@ from robot_sf.render.sim_view import (
 )
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
-from robot_sf.sim.simulator import init_simulators
+from robot_sf.sim.simulator import (
+    init_simulators,  # noqa: F401 (retained for backwards compatibility; may be removed later)
+)
 
 
 class RobotEnv(BaseEnv):
@@ -46,8 +48,8 @@ class RobotEnv(BaseEnv):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
     ):
         """
@@ -87,15 +89,8 @@ class RobotEnv(BaseEnv):
         else:
             self.reward_func = reward_func
 
-        # Initialize simulator with a random start position
-        self.simulator = init_simulators(
-            env_config,
-            self.map_def,
-            random_start_pos=True,
-            peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )[0]
-
-        # Initialize collision detectors and sensor data processors
+        # BaseEnv has already created self.simulator; avoid redundant initialization.
+        # Initialize collision detectors and sensor data processors using existing simulator.
         occupancies, sensors = init_collision_and_sensors(
             self.simulator, env_config, orig_obs_space
         )

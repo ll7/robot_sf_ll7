@@ -28,6 +28,8 @@ def test_make_robot_env_signature_snapshot():
         "record_video",
         "video_path",
         "video_fps",
+        "render_options",
+        "recording_options",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
 
@@ -43,6 +45,8 @@ def test_make_image_robot_env_signature_snapshot():
         "record_video",
         "video_path",
         "video_fps",
+        "render_options",
+        "recording_options",
     ]
     assert params[: len(expected_prefix)] == expected_prefix, params
 

@@ -18,28 +18,28 @@ All tasks follow Constitution Principles II, IV, VII, XII.
 ## Task List
 
 ### Setup & Baseline
-**T001**: Create baseline timing helper script (`scripts/perf/baseline_factory_creation.py`) to measure current env creation (30 iterations each) → output JSON to `results/factory_perf_baseline.json`.  
+**T001** [X]: Create baseline timing helper script (`scripts/perf/baseline_factory_creation.py`) to measure current env creation (30 iterations each) → output JSON to `results/factory_perf_baseline.json`.  
 Deps: None.  
 Accept: File created; runs and prints mean & p95; no imports fail.
 
-**T002 [P]**: Add test `tests/factories/test_current_factory_signatures.py` asserting existing signatures (pre-change snapshot) to detect unintended drift during refactor.  
+**T002 [P] [X]**: Add test `tests/factories/test_current_factory_signatures.py` asserting existing signatures (pre-change snapshot) to detect unintended drift during refactor.  
 Deps: None.  
 Accept: Test passes and fails meaningfully if signature changes prematurely.
 
-**T003 [P]**: Grep usage of `make_*_env` across repo; generate `specs/130-improve-environment-factory/deprecation_map_raw.txt` listing legacy kwargs & frequency.  
+**T003 [P] [X]**: Grep usage of `make_*_env` across repo; generate `specs/130-improve-environment-factory/deprecation_map_raw.txt` listing legacy kwargs & frequency.  
 Deps: None.  
 Accept: File contains frequency table.
 
 ### Option Dataclasses & Contracts (Failing Tests First)
-**T004**: Create `robot_sf/gym_env/options.py` module with placeholder (unimplemented) `RenderOptions`, `RecordingOptions` dataclasses (slots, type hints) – minimal stub.  
+**T004 [X]**: Create `robot_sf/gym_env/options.py` module with placeholder (unimplemented) `RenderOptions`, `RecordingOptions` dataclasses (slots, type hints) – minimal stub.  
 Deps: T002.  
 Accept: Module imports; attributes docstring skeleton present.
 
-**T005**: Add tests `tests/factories/test_option_dataclasses_api.py` expecting fields (from data-model). Initially failing until full implementation.  
+**T005 [X]**: Add tests `tests/factories/test_option_dataclasses_api.py` expecting fields (from data-model). Initially failing until full implementation.  
 Deps: T004.  
 Accept: Test fails on missing validation logic initially.
 
-**T006**: Implement full `RenderOptions` & `RecordingOptions` with validation (value checks, repr) in `options.py`; add factory methods `from_bool_and_path(record_video, video_path, existing)` for normalization.  
+**T006 [X]**: Implement full `RenderOptions` & `RecordingOptions` with validation (value checks, repr) in `options.py`; add factory methods `from_bool_and_path(record_video, video_path, existing)` for normalization.  
 Deps: T005.  
 Accept: Prior failing test passes; type hints clean.
 

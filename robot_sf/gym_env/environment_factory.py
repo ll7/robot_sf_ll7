@@ -5,9 +5,11 @@ This factory provides a consistent interface for creating different types
 of environments while hiding the complexity of configuration and setup.
 """
 
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
+from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
+from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -189,6 +191,9 @@ def make_robot_env(
     record_video: bool = False,
     video_path: Optional[str] = None,
     video_fps: Optional[float] = None,
+    render_options: Optional[RenderOptions] = None,
+    recording_options: Optional[RecordingOptions] = None,
+    **kwargs: Any,
 ) -> SingleAgentEnv:
     """Create a standard robot environment (non-image observations).
 
@@ -211,6 +216,35 @@ def make_robot_env(
     video_fps: float | None
         Frames per second for recorded video.
     """
+    # Legacy preprocessing & mapping (T009). We treat incoming kwargs for legacy support.
+    if kwargs:
+        mapped, _warns = apply_legacy_kwargs(kwargs, strict=True)
+    else:
+        mapped = {}
+
+    # Extract any flattened mapping results and merge into provided option objects (placeholder; precedence in T010).
+    if "render_options.max_fps_override" in mapped:
+        ro = render_options or RenderOptions()
+        ro.max_fps_override = mapped.pop("render_options.max_fps_override")
+        render_options = ro
+    if "recording_options.record" in mapped or "recording_options.video_path" in mapped:
+        rec = recording_options or RecordingOptions()
+        if "recording_options.record" in mapped:
+            rec.record = mapped.pop("recording_options.record")
+        if "recording_options.video_path" in mapped:
+            rec.video_path = mapped.pop("recording_options.video_path")
+        recording_options = rec
+
+    # Convenience boolean still supported (normalization precedence handled in T010):
+    if recording_options is None and (record_video or video_path):
+        recording_options = RecordingOptions.from_bool_and_path(record_video, video_path, None)
+    # FPS convenience (legacy direct param) remains via video_fps; map to render option if not already set.
+    if video_fps is not None:
+        ro = render_options or RenderOptions()
+        if ro.max_fps_override is None:
+            ro.max_fps_override = int(video_fps)
+        render_options = ro
+
     return EnvironmentFactory.create_robot_env(
         config=config,
         use_image_obs=False,
@@ -218,9 +252,12 @@ def make_robot_env(
         reward_func=reward_func,
         debug=debug,
         recording_enabled=recording_enabled,
-        record_video=record_video,
-        video_path=video_path,
-        video_fps=video_fps,
+        record_video=record_video if (recording_options is None) else recording_options.record,
+        video_path=video_path if (recording_options is None) else recording_options.video_path,
+        video_fps=video_fps
+        if (render_options is None or render_options.max_fps_override is None)
+        else float(render_options.max_fps_override),
+        **mapped,
     )
 
 
@@ -234,11 +271,39 @@ def make_image_robot_env(
     record_video: bool = False,
     video_path: Optional[str] = None,
     video_fps: Optional[float] = None,
+    render_options: Optional[RenderOptions] = None,
+    recording_options: Optional[RecordingOptions] = None,
+    **kwargs: Any,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
 
     Mirrors `make_robot_env` but sets image observation mode.
     """
+    if kwargs:
+        mapped, _warns = apply_legacy_kwargs(kwargs, strict=True)
+    else:
+        mapped = {}
+
+    if "render_options.max_fps_override" in mapped:
+        ro = render_options or RenderOptions()
+        ro.max_fps_override = mapped.pop("render_options.max_fps_override")
+        render_options = ro
+    if "recording_options.record" in mapped or "recording_options.video_path" in mapped:
+        rec = recording_options or RecordingOptions()
+        if "recording_options.record" in mapped:
+            rec.record = mapped.pop("recording_options.record")
+        if "recording_options.video_path" in mapped:
+            rec.video_path = mapped.pop("recording_options.video_path")
+        recording_options = rec
+
+    if recording_options is None and (record_video or video_path):
+        recording_options = RecordingOptions.from_bool_and_path(record_video, video_path, None)
+    if video_fps is not None:
+        ro = render_options or RenderOptions()
+        if ro.max_fps_override is None:
+            ro.max_fps_override = int(video_fps)
+        render_options = ro
+
     return EnvironmentFactory.create_robot_env(
         config=config,  # type: ignore[arg-type]
         use_image_obs=True,
@@ -246,9 +311,12 @@ def make_image_robot_env(
         reward_func=reward_func,
         debug=debug,
         recording_enabled=recording_enabled,
-        record_video=record_video,
-        video_path=video_path,
-        video_fps=video_fps,
+        record_video=record_video if (recording_options is None) else recording_options.record,
+        video_path=video_path if (recording_options is None) else recording_options.video_path,
+        video_fps=video_fps
+        if (render_options is None or render_options.max_fps_override is None)
+        else float(render_options.max_fps_override),
+        **mapped,
     )
 
 

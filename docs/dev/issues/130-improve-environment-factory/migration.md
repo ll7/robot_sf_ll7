@@ -1,92 +1,96 @@
-# Migration Guide: Environment Factory Ergonomics (Feature 130)
+---
+title: Migration Guide – Environment Factory Ergonomics (Feature 130)
+updated: 2025-09-23
+status: Final
+---
 
-Status: In Progress (pre-release)
+## Purpose
+Explain how to migrate from legacy environment factory usage (implicit kwargs) to the new explicit, option‑based API with deterministic seeding and strengthened performance guarantees.
 
-## Overview
-This guide explains the ergonomic improvements to environment factory functions (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`) and how to migrate from legacy keyword arguments to the new structured option objects while preserving backward compatibility.
+## Before vs After Summary
+| Concern | Legacy Pattern | New Pattern |
+|---------|---------------|-------------|
+| Recording enable | `record_video=True` | `RecordingOptions(record=True, video_path=...)` or convenience flag (same) |
+| FPS cap | `fps=30` | `RenderOptions(max_fps_override=30)` |
+| Video path | `video_path="run.mp4"` / `video_output_path` | `RecordingOptions(video_path="run.mp4")` |
+| Ped recording opt-out | Overridden by boolean | Explicit `RecordingOptions(record=False)` preserved |
+| Seeding | Manual / ad-hoc | `seed=123` parameter (Python, NumPy, Torch, hash) |
+| Legacy unknown kw | Often silently ignored | Error unless `ROBOT_SF_FACTORY_LEGACY=1` (warn & map) |
+| Perf guard | Informal | Test-enforced (+5% mean budget) |
 
-## Goals
-- Improve discoverability and IDE autocomplete with explicit parameters.
-- Introduce structured `RenderOptions` and `RecordingOptions` dataclasses.
-- Provide a deprecation shim for legacy kwargs with clear Loguru warnings.
-- Maintain performance (< +10% creation mean, target +5%).
+## Key Changes
+1. Explicit factory signatures eliminate ambiguous `**kwargs` for new features.
+2. Option dataclasses group semantically related parameters; convenience flags remain for quick usage.
+3. Legacy compatibility preserved during deprecation window using mapping + warnings.
+4. Deterministic seeding unified via `_apply_global_seed` and `seed` param.
+5. Pedestrian factory divergence: respects explicit opt-out for recording.
 
-## Deprecation Window
-| Phase | Action | Timeline |
-|-------|--------|----------|
-| Initial Release | Warnings for legacy kwargs (strict error on unknown unless permissive mode) | Current version |
-| +1 Minor | Continue warnings; update docs to remove legacy examples | Next minor |
-| +2 Minor | Potential removal of mapping layer (subject to adoption metrics) | Two minors ahead |
-
-## Legacy to New Mapping
-| Legacy Kwarg | New Form | Notes |
-|--------------|----------|-------|
-| `record_video` | `RecordingOptions(record=True)` OR keep boolean convenience | Boolean convenience retained |
-| `video_output_path` | `RecordingOptions(video_path=...)` | Renamed for clarity |
-| `fps` | `RenderOptions(max_fps_override=...)` | Scopes rendering concerns |
-
-## Example Migration
-**Before**
-```python
-env = make_robot_env(debug=True, record_video=True, video_path="episode.mp4", fps=30)
+## Seeding Details
 ```
-**After (Structured)**
-```python
-from robot_sf.gym_env.environment_factory import make_robot_env, RecordingOptions, RenderOptions
-
-render_opts = RenderOptions(max_fps_override=30)
-rec_opts = RecordingOptions(record=True, video_path="episode.mp4")
-env = make_robot_env(debug=True, render_options=render_opts, recording_options=rec_opts)
+env = make_robot_env(seed=42)
+print(env.applied_seed)  # 42
 ```
-**After (Mixed Convenience)**
-```python
-env = make_robot_env(record_video=True, video_path="episode.mp4")
-```
+Sequence: Python `random.seed`, NumPy `np.random.seed`, optional Torch `manual_seed`, set `PYTHONHASHSEED`.
 
-## Precedence Rules
-| Scenario | Outcome | Log |
-|----------|---------|-----|
-| `record_video=True` + `RecordingOptions(record=False)` | Recording enabled (flip) | WARNING with precedence message |
-| `video_fps=30` + `RenderOptions(max_fps_override=20)` | Uses 20 | INFO (creation) |
-| Legacy kw + strict mode | Error | ValueError |
-| Legacy kw + permissive env (`ROBOT_SF_FACTORY_LEGACY=1`) | Warning + mapping | WARNING |
-
-## Logging Diagnostics
-- INFO: Creation line (env type, record flags, fps, video path).
-- WARNING: Each mapped legacy kw.
-- WARNING: Precedence override when boolean convenience conflicts with explicit options.
-
-## Performance Considerations
-Baseline results stored in `results/factory_perf_baseline.json`. Regression guard test ensures mean creation time stays within +10% (target +5%). Use `scripts/perf/baseline_factory_creation.py` to regenerate baselines after significant optimization.
-
-## Seed Determinism
-A relaxed test (`test_seed_determinism.py`) attempts to compare a stable slice of the initial observation. Full determinism is not enforced yet if stochastic components are present; test will skip in that case.
-
-## Recording Path
-Using `record_video=True` or an explicit `RecordingOptions(record=True)` triggers creation of a `SimulationView` (even if `debug=False`) to buffer frames. Video encoding still depends on downstream flush logic (unchanged by this feature).
-
-## Environment Variable Controls
+## Legacy Environment Variables
 | Variable | Effect |
 |----------|--------|
-| `ROBOT_SF_FACTORY_LEGACY=1` | Permissive legacy mode (unknown legacy kwargs ignored w/ warning) |
-| `ROBOT_SF_FAST_DEMO=1` | Fast path for classic interactions demo (test performance aid; not part of public API) |
+| `ROBOT_SF_FACTORY_LEGACY=1` | Permissive legacy kw acceptance (warnings) |
+| `ROBOT_SF_FACTORY_STRICT=1` | Strict mode: unknown legacy kw raises |
 
-## Migration Strategy Recommendations
-1. Replace `fps` with a `RenderOptions` instance in new code.
-2. Gradually phase out `video_output_path` in favor of `RecordingOptions(video_path=...)`.
-3. Keep `record_video` convenience for quick prototypes; prefer explicit dataclass in production scripts.
-4. Monitor logs for warnings during transition.
+## Precedence Rules (Robot/Image)
+1. Map legacy → structured first.
+2. Explicit options override convenience booleans.
+3. `record_video=True` upgrades `RecordingOptions.record=False` (user convenience).
+4. `video_fps` sets `RenderOptions.max_fps_override` if unset.
 
-## Future Work (Deferred)
-- Multi-robot ergonomic factory (`_make_multi_robot_env_future`).
-- Potential telemetry hook (stub tasks T027/T028).
-- Stronger determinism guarantees for initial observations.
+## Precedence Rules (Pedestrian Differences)
+* Explicit `RecordingOptions(record=False)` is honored even with `record_video=True`.
+* Debug may auto-enable when effective recording is active.
 
-## References
-- Spec: `specs/130-improve-environment-factory/spec.md`
-- Tasks: `specs/130-improve-environment-factory/tasks.md`
-- Data Model: `specs/130-improve-environment-factory/data-model.md`
-- Quickstart: `specs/130-improve-environment-factory/quickstart.md`
+## Migration Steps
+1. Replace legacy kwargs with option instances (optional: keep booleans short-term).
+2. Add `seed=` argument where reproducibility needed.
+3. Set `ROBOT_SF_FACTORY_STRICT=1` in CI to surface any stale legacy params early.
+4. Monitor performance test to ensure no regression after refactors.
 
----
-*Document generated as part of Task T018.*
+## Examples
+```python
+from robot_sf.gym_env.environment_factory import make_robot_env, RenderOptions, RecordingOptions
+
+env = make_robot_env(
+    seed=123,
+    render_options=RenderOptions(max_fps_override=30),
+    recording_options=RecordingOptions(record=True, video_path="demo.mp4"),
+)
+```
+
+## Deprecation Timeline (Tentative)
+| Phase | Window | Action |
+|-------|--------|--------|
+| 1 | Current release | Warnings for legacy params; mapping active |
+| 2 | +2 releases | Introduce strict mode default (permissive opt-in) |
+| 3 | +3 releases | Remove legacy mapping layer |
+
+## Troubleshooting
+| Symptom | Likely Cause | Resolution |
+|---------|--------------|-----------|
+| Legacy param error | Strict mode enabled | Set `ROBOT_SF_FACTORY_LEGACY=1` temporarily; update code |
+| Recording disabled unexpectedly (pedestrian) | Explicit opt-out | Remove `record=False` or drop convenience flag |
+| Perf test failure | Creation mean > +5% | Profile import path; defer heavy imports; rebaseline only after justified improvement |
+
+## Related Docs
+* `specs/130-improve-environment-factory/plan.md`
+* `specs/130-improve-environment-factory/tasks.md`
+* Development Guide (seeding + performance sections)
+
+## Rejected Alternatives (FR-019)
+| Alternative | Decision | Rationale |
+|-------------|----------|-----------|
+| Builder Pattern (`Factory().with_recording().with_seed().build()`) | Rejected | Adds ceremony, hides discoverability in IDE; no multi-step state needed. |
+| Single Monolithic Options Object | Rejected | Reduces autocomplete clarity; groups unrelated concerns. |
+| Dynamic Registry of Factories | Rejected | YAGNI; current set of factories stable and small. |
+| Immediate Removal of Legacy Mapping | Rejected | Violates backward compatibility (Principle VII); need deprecation window. |
+
+## Finalization
+Deprecation timeline consolidated (three phases). All references updated. This document satisfies FR-010, FR-011, FR-019 and completes T035.

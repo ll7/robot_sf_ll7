@@ -217,6 +217,9 @@ ped_env = make_pedestrian_env(robot_model=model, debug=True)
 ```
 
 ### Legacy Pattern (Still Supported)
+
+#### Environment Factory Ergonomics Migration (Feature 130)
+See the new migration guide: [Environment Factory Migration](./dev/issues/130-improve-environment-factory/migration.md). Includes before/after examples, seeding, legacy env vars (`ROBOT_SF_FACTORY_LEGACY`, `ROBOT_SF_FACTORY_STRICT`), and precedence rules. Quickstart examples: `specs/130-improve-environment-factory/quickstart.md`.
 ```python
 # Traditional approach - still works for backward compatibility
 from robot_sf.gym_env.robot_env import RobotEnv

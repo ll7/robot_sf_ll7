@@ -139,27 +139,27 @@ Accept: Perf test passes under new threshold; diff file committed.
 Deps: T030.  
 Accept: Docstrings present; lint/type checks clean.
 
-**T033 (MEDIUM)**: Edge-case tests: (1) headless + debug + recording interplay; (2) recording without video_path warns & buffers; (3) pedestrian explicit opt-out respected with seed.  
+**T033 (MEDIUM) [X]**: Edge-case tests: (1) headless + debug + recording interplay; (2) recording without video_path warns & buffers; (3) pedestrian explicit opt-out respected with seed.  
 Deps: T030.  
 Accept: Tests added & pass.
 
-**T034 (MEDIUM)**: Create `coverage_checklist.md` mapping FR-001..FR-021 → code/tests/status (Done/Deferred). Mark `max_episode_steps` deferred.  
+**T034 (MEDIUM) [X]**: Create `coverage_checklist.md` mapping FR-001..FR-021 → code/tests/status (Done/Deferred). Mark `max_episode_steps` deferred.  
 Deps: T029, T030.  
 Accept: Checklist complete.
 
-**T035 (HIGH)**: Migration guide `docs/dev/issues/130-improve-environment-factory/migration.md` (before/after, env vars, precedence divergence, seeding examples). Link from `docs/README.md` & quickstart.  
+**T035 (HIGH) [X]**: Migration guide `docs/dev/issues/130-improve-environment-factory/migration.md` (before/after, env vars, precedence divergence, seeding examples). Link from `docs/README.md` & quickstart.  
 Deps: T029, T030.  
 Accept: Links valid; guide thorough.
 
-**T036 (LOW)**: Import purity test `tests/factories/test_factory_import_purity.py` ensuring no side-effects (prints/file writes) on import.  
+**T036 (LOW) [X]**: Import purity test `tests/factories/test_factory_import_purity.py` ensuring no side-effects (prints/file writes) on import.  
 Deps: T029.  
 Accept: Test passes; fails if side-effects appear.
 
-**T037 (MEDIUM)**: Logging enforcement test scanning `environment_factory.py` for stray `print(` excluding docstrings/comments.  
+**T037 (MEDIUM) [X]**: Logging enforcement test scanning `environment_factory.py` for stray `print(` excluding docstrings/comments.  
 Deps: T032.  
 Accept: Test fails if print introduced.
 
-**T038 (LOW)**: Update spec & quickstart: integrate seed param; mark `max_episode_steps` deferred; remove outdated references.  
+**T038 (LOW) [X]**: Update spec & quickstart: integrate seed param; mark `max_episode_steps` deferred; remove outdated references.  
 Deps: T030.  
 Accept: Spec & quickstart updated consistently.
 

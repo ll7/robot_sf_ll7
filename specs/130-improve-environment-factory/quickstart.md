@@ -62,4 +62,6 @@ ped_env = make_pedestrian_env(robot_model=policy, recording_options=RecordingOpt
 - Recording and image observations remain the dominant cost centers; unchanged by ergonomics refactor.
 
 ## Next Steps
-Refer to `data-model.md` for field definitions and to migration guide (forthcoming) in `docs/dev/issues/130-improve-environment-factory/`.
+Refer to `data-model.md` for field definitions and the finalized migration guide in `docs/dev/issues/130-improve-environment-factory/migration.md`.
+
+Seeding: pass `seed=` for deterministic initialization across Python random, NumPy (and Torch if installed). Performance guard: creation mean kept within +5% of baseline (see perf test + `perf_diff.md`).

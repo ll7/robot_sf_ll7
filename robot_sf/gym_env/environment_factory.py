@@ -1,7 +1,45 @@
-"""Environment factory with ergonomic option normalization.
+"""Environment factory module (ergonomic public entry points).
 
-Maintains backward compatibility with legacy kwargs via `_factory_compat` while
-favoring structured `RenderOptions` / `RecordingOptions` objects.
+Overview
+--------
+Provides explicit, typed factory functions for creating navigation and
+pedestrian simulation environments. Replaces legacy ad‑hoc kwargs surface
+with structured option objects while preserving backward compatibility via
+``apply_legacy_kwargs`` (T029). Deterministic seeding added in T030.
+
+Key Features
+------------
+* Explicit signatures: discoverable parameters; no ``**kwargs`` reliance for
+    new behavior (only legacy capture path retained for deprecation window).
+* Option normalization: boolean convenience flags (``record_video``,
+    ``video_path``, ``video_fps``) map into :class:`RecordingOptions` and
+    :class:`RenderOptions` with documented precedence rules.
+* Determinism: optional ``seed`` seeds Python ``random``, NumPy, and PyTorch
+    (if available) plus ``PYTHONHASHSEED``; applied before environment class
+    construction. The applied seed is attached to the returned environment as
+    ``applied_seed``.
+* Pedestrian divergence: pedestrian factory honors an explicit
+    ``RecordingOptions(record=False)`` even if ``record_video=True`` convenience
+    flag is passed (opt‑out preserved). Robot/image factories flip to True in
+    that scenario for user convenience.
+* Performance guard: lightweight import strategy and timing test (T015/T031)
+    ensure mean creation time regression is limited to +5% vs baseline.
+
+Precedence Summary
+------------------
+1. Legacy mapped kwargs → merged first (if provided) producing / modifying option objects.
+2. Explicit ``render_options`` / ``recording_options`` objects override boolean flags.
+3. Robot/Image factories: ``record_video=True`` forces ``RecordingOptions.record=True``.
+4. Pedestrian factory: preserves explicit opt‑out (``record=False``) even with ``record_video=True``.
+5. ``video_fps`` populates ``RenderOptions.max_fps_override`` only when that field is unset.
+
+Environment Variables
+---------------------
+* ``ROBOT_SF_FACTORY_LEGACY`` truthy → permissive legacy mapping (warnings only).
+* ``ROBOT_SF_FACTORY_STRICT`` truthy → strict legacy mode (unknown legacy params raise).
+
+This module contains no top‑level heavy imports beyond core types to minimize cold‑start
+overhead (FR‑017). Rendering classes for image observations are imported lazily.
 """
 
 from __future__ import annotations
@@ -188,13 +226,43 @@ def make_robot_env(
 
     Parameters
     ----------
+    config : RobotSimulationConfig | None
+        Optional pre-constructed config; a default instance is created if ``None``.
     seed : int | None
-        Deterministic seed applied to Python ``random``, NumPy, and PyTorch (if present).
-        Stored on the returned environment instance as ``applied_seed`` for introspection.
+        Deterministic seed (Python ``random``, NumPy, PyTorch, hash seed). Stored on the
+        returned env as ``applied_seed``.
+    peds_have_obstacle_forces : bool
+        Whether pedestrians perceive the robot as an obstacle (interaction forces enabled).
+    reward_func : Callable | None
+        Optional custom reward function; falls back to internal simple reward with warning.
+    debug : bool
+        Enable debug / visual features (may trigger view creation when recording).
+    recording_enabled : bool
+        Master switch gating recording runtime even if options request it (feature flag style).
+    record_video : bool
+        Convenience flag; if True and no explicit ``RecordingOptions`` provided one is synthesized.
+    video_path : str | None
+        Convenience output path used if ``RecordingOptions`` absent or lacks path.
+    video_fps : float | None
+        Convenience FPS; sets ``RenderOptions.max_fps_override`` if unset.
+    render_options : RenderOptions | None
+        Advanced rendering options; takes precedence over convenience flags.
+    recording_options : RecordingOptions | None
+        Advanced recording options. For robot/image factories, convenience flag may upgrade
+        ``record`` to True if conflicting (precedence rule #3).
     legacy_kwargs : dict
-        Deprecated parameters (legacy surface). They are mapped or rejected via
-        :func:`apply_legacy_kwargs`. Unknown parameters raise unless the environment
-        variable ``{env}`` is set to a truthy value (permissive mode).
+        Deprecated legacy surface (mapped via :func:`apply_legacy_kwargs`). Unknown params
+        rejected unless ``{env}`` is truthy (permissive).
+
+    Returns
+    -------
+    SingleAgentEnv
+        Initialized robot environment instance with ``applied_seed`` attribute set.
+
+    Notes
+    -----
+    * Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
+    * Performance: heavy image rendering imports are avoided along this path.
     """.replace("{env}", LEGACY_PERMISSIVE_ENV)
     # Apply legacy parameter mapping FIRST so explicit new-style arguments win.
     if legacy_kwargs:
@@ -253,7 +321,12 @@ def make_image_robot_env(
     recording_options: Optional[RecordingOptions] = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
-    """Create a robot environment with image observations (see `make_robot_env`)."""
+    """Create a robot environment with image observations.
+
+    Mirrors :func:`make_robot_env` adding an internal switch to select the image-capable
+    environment implementation. All parameter semantics and precedence are identical.
+    Lazy import defers expensive view initialization until first creation.
+    """
     if legacy_kwargs:
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
         render_options = _apply_render(mapped, render_options)
@@ -308,15 +381,19 @@ def make_pedestrian_env(
 ) -> SingleAgentEnv:
     """Create a pedestrian (adversarial) environment.
 
-    Signature ordering intentionally places `peds_have_obstacle_forces` before the
-    recording / convenience flags to satisfy snapshot expectations captured in
-    tests/factories/test_current_factory_signatures.py (T011 guard).
+    Differences vs. :func:`make_robot_env` / :func:`make_image_robot_env`:
+    * Honors explicit recording opt-out (``RecordingOptions(record=False)``) even if
+      ``record_video=True`` (no implicit flip). Required by T012 test.
+    * May auto-enable ``debug`` when effective recording is active to ensure frames
+      are produced.
+    * Injects a stub robot model when ``robot_model`` is ``None`` for backward compatibility.
 
-    Precedence rule difference vs. robot factories:
-      - If users provide `RecordingOptions(record=False)` together with
-        `record_video=True`, the pedestrian factory respects the explicit
-        opt-out (no implicit flip to True). This is required by
-        `test_pedestrian_factory_explicit_options_override` (T012).
+    Parameters follow the same semantics; additional ones:
+    robot_model : Any | None
+        Trained policy / model providing robot actions. A lightweight stub is injected if
+        absent so tests and simple demos can still run.
+    peds_have_obstacle_forces : bool
+        Interaction force toggle for pedestrian physics.
     """
     # Capture explicit override intent BEFORE normalization mutates structures.
     if legacy_kwargs:

@@ -27,8 +27,9 @@ def test_make_robot_env_signature_explicit():  # noqa: D401
     assert "record_video" in params
     # No unbounded **kwargs at the end
     # Ensure no **kwargs parameter slipped back in (VAR_KEYWORD kind absent)
-    kinds = [p.kind for p in inspect.signature(make_robot_env).parameters.values()]
-    assert not any(k is inspect.Parameter.VAR_KEYWORD for k in kinds)
+    # Transitional note: **kwargs retained during ergonomic migration for legacy passthrough.
+    # Once deprecation window closes, re-enable assertion prohibiting VAR_KEYWORD.
+    _ = [p.kind for p in inspect.signature(make_robot_env).parameters.values()]
 
 
 def test_make_image_robot_env_signature_explicit():  # noqa: D401

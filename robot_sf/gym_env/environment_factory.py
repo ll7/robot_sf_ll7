@@ -10,7 +10,17 @@ from typing import Any, Callable, Optional
 
 from loguru import logger
 
-from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
+# Hoisted imports (avoid per-call import overhead for performance regression guard)
+try:  # pragma: no cover - import errors would surface in tests
+    from robot_sf.gym_env.robot_env import RobotEnv  # type: ignore
+
+    # Intentionally do NOT import robot_env_with_image here to avoid heavy first-call cost.
+    RobotEnvWithImage = None  # type: ignore
+except Exception:  # noqa: BLE001
+    # Defer errors until factory invocation (lazy fallback)
+    RobotEnv = None  # type: ignore
+    RobotEnvWithImage = None  # type: ignore
+
 from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.unified_config import (
@@ -36,16 +46,19 @@ class EnvironmentFactory:
         record_video: bool,
         video_path: Optional[str],
         video_fps: Optional[float],
-        **kwargs: Any,
     ) -> SingleAgentEnv:
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
         if use_image_obs:
-            from robot_sf.gym_env.robot_env_with_image import RobotEnvWithImage as EnvCls
+            from robot_sf.gym_env.robot_env_with_image import (  # type: ignore
+                RobotEnvWithImage as EnvCls,  # noqa: F401
+            )
         else:
-            from robot_sf.gym_env.robot_env import RobotEnv as EnvCls
+            EnvCls = RobotEnv  # type: ignore[assignment]
+        if EnvCls is None:  # pragma: no cover - defensive
+            raise RuntimeError("Environment classes failed to import; check installation.")
         return EnvCls(
             env_config=config,
             reward_func=reward_func,
@@ -55,7 +68,6 @@ class EnvironmentFactory:
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-            **kwargs,
         )
 
     @staticmethod
@@ -67,7 +79,6 @@ class EnvironmentFactory:
         debug: bool,
         recording_enabled: bool,
         peds_have_obstacle_forces: bool,
-        **kwargs: Any,
     ) -> SingleAgentEnv:
         if config is None:
             config = PedestrianSimulationConfig()
@@ -80,7 +91,6 @@ class EnvironmentFactory:
             debug=debug,
             recording_enabled=recording_enabled,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-            **kwargs,
         )
 
     @staticmethod
@@ -127,11 +137,14 @@ def _normalize_factory_inputs(
     video_fps: Optional[float],
     render_options: Optional[RenderOptions],
     recording_options: Optional[RecordingOptions],
-    kwargs: dict[str, Any],
 ):
-    mapped, _warns = apply_legacy_kwargs(kwargs, strict=True) if kwargs else ({}, [])
-    render_options = _apply_render(mapped, render_options)
-    recording_options = _apply_recording(mapped, recording_options)
+    """Normalize convenience flags into structured option objects.
+
+    Legacy kwargs support was removed from the public factories to provide
+    strict, explicit signatures (T009 expectation). This helper now focuses
+    purely on boolean/primitive convenience mapping which keeps complexity
+    low (addresses C901 exceedance after refactor).
+    """
     if recording_options is None and (record_video or video_path):
         recording_options = RecordingOptions.from_bool_and_path(record_video, video_path, None)
     if video_fps is not None and (
@@ -141,7 +154,7 @@ def _normalize_factory_inputs(
         render_options.max_fps_override = int(video_fps)
     if recording_options and record_video and not recording_options.record:
         logger.warning(
-            "record_video=True but RecordingOptions.record is False; enabling recording (precedence to boolean convenience)."
+            "record_video=True but RecordingOptions.record is False; enabling recording (boolean convenience precedence)."
         )
         recording_options.record = True
     eff_record = record_video if recording_options is None else recording_options.record
@@ -151,7 +164,7 @@ def _normalize_factory_inputs(
         if (render_options is None or render_options.max_fps_override is None)
         else float(render_options.max_fps_override)
     )
-    return render_options, recording_options, eff_record, eff_path, eff_fps, mapped
+    return render_options, recording_options, eff_record, eff_path, eff_fps
     # Public factory functions follow.
 
 
@@ -167,17 +180,15 @@ def make_robot_env(
     video_fps: Optional[float] = None,
     render_options: Optional[RenderOptions] = None,
     recording_options: Optional[RecordingOptions] = None,
-    **kwargs: Any,
 ) -> SingleAgentEnv:
     """Create a standard robot environment (non-image observations)."""
-    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps, mapped = (
+    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
             video_path=video_path,
             video_fps=video_fps,
             render_options=render_options,
             recording_options=recording_options,
-            kwargs=kwargs,
         )
     )
     logger.info(
@@ -197,7 +208,6 @@ def make_robot_env(
         record_video=eff_record_video,
         video_path=eff_video_path,
         video_fps=eff_video_fps,
-        **mapped,
     )
 
 
@@ -213,17 +223,15 @@ def make_image_robot_env(
     video_fps: Optional[float] = None,
     render_options: Optional[RenderOptions] = None,
     recording_options: Optional[RecordingOptions] = None,
-    **kwargs: Any,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations."""
-    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps, mapped = (
+    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
             video_path=video_path,
             video_fps=video_fps,
             render_options=render_options,
             recording_options=recording_options,
-            kwargs=kwargs,
         )
     )
     logger.info(
@@ -243,7 +251,6 @@ def make_image_robot_env(
         record_video=eff_record_video,
         video_path=eff_video_path,
         video_fps=eff_video_fps,
-        **mapped,
     )
 
 
@@ -254,31 +261,65 @@ def make_pedestrian_env(
     reward_func: Optional[Callable] = None,
     debug: bool = False,
     recording_enabled: bool = False,
+    peds_have_obstacle_forces: bool = False,
     record_video: bool = False,
     video_path: Optional[str] = None,
     video_fps: Optional[float] = None,
     render_options: Optional[RenderOptions] = None,
     recording_options: Optional[RecordingOptions] = None,
-    peds_have_obstacle_forces: bool = False,
-    **kwargs: Any,
 ) -> SingleAgentEnv:
-    """Create a pedestrian (adversarial) environment."""
-    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps, mapped = (
+    """Create a pedestrian (adversarial) environment.
+
+    Signature ordering intentionally places `peds_have_obstacle_forces` before the
+    recording / convenience flags to satisfy snapshot expectations captured in
+    tests/factories/test_current_factory_signatures.py (T011 guard).
+
+    Precedence rule difference vs. robot factories:
+      - If users provide `RecordingOptions(record=False)` together with
+        `record_video=True`, the pedestrian factory respects the explicit
+        opt-out (no implicit flip to True). This is required by
+        `test_pedestrian_factory_explicit_options_override` (T012).
+    """
+    # Capture explicit override intent BEFORE normalization mutates structures.
+    _explicit_no_record = (
+        recording_options is not None and recording_options.record is False and record_video
+    )
+
+    render_options, recording_options, eff_record_video, _eff_video_path, _eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
             video_path=video_path,
             video_fps=video_fps,
             render_options=render_options,
             recording_options=recording_options,
-            kwargs=kwargs,
         )
     )
+
+    # Reinstate explicit opt-out if requested (override robot-style convenience precedence).
+    if _explicit_no_record:
+        eff_record_video = False
+        if recording_options is not None:
+            recording_options.record = False  # ensure consistency for any downstream logic
+
+    if robot_model is None:
+
+        class _StubRobotModel:  # pragma: no cover - trivial
+            def predict(self, _obs, **_ignored):  # noqa: D401
+                import numpy as np  # local import to avoid global dependency
+
+                return np.zeros(2, dtype=float), None
+
+        robot_model = _StubRobotModel()
+
+    # Determine effective debug flag (enable view only if actually recording here)
+    if eff_record_video and not _explicit_no_record:
+        if recording_options is None or recording_options.record:
+            debug = True
+
     logger.info(
-        "Creating pedestrian env debug={debug} record_video={record} video_path={path} fps={fps} robot_model={has_model}",
+        "Creating pedestrian env debug={debug} record_video={record} robot_model={has_model}",
         debug=debug,
         record=eff_record_video,
-        path=eff_video_path,
-        fps=eff_video_fps,
         has_model=robot_model is not None,
     )
     return EnvironmentFactory.create_pedestrian_env(
@@ -288,7 +329,6 @@ def make_pedestrian_env(
         debug=debug,
         recording_enabled=recording_enabled,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
-        **mapped,
     )
 
 

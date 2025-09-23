@@ -1,10 +1,25 @@
-"""Option dataclasses for environment factory ergonomics (stub for T004).
+"""Option dataclasses for environment factory ergonomics.
 
-These dataclasses will encapsulate advanced rendering / recording parameters so
-the primary factory signatures remain concise. Full validation logic will be
-added in T006; currently only structure and docstrings are provided.
+Purpose
+-------
+Encapsulate advanced rendering & recording configuration to keep public factory
+signatures focused and explicit. Introduced in tasks T004–T006 with validation
+and normalization helpers.
 
-Do not rely on runtime validation yet (placeholder implementation).
+Design Principles
+-----------------
+* Validation methods (`validate`) surface misconfiguration early.
+* Instances are lightweight (``slots=True``) to minimize per‑creation overhead.
+* Convenience flag normalization (``RecordingOptions.from_bool_and_path``) allows
+    gradual migration from legacy boolean parameters.
+
+Precedence (summarized)
+-----------------------
+1. Explicit options objects override boolean convenience flags.
+2. For robot/image factories: ``record_video=True`` upgrades ``record`` to True if False.
+3. For pedestrian factory: explicit ``record=False`` is preserved (no upgrade).
+
+See also: :mod:`robot_sf.gym_env.environment_factory` for detailed precedence narrative.
 """
 
 from __future__ import annotations
@@ -19,10 +34,15 @@ class RenderOptions:
 
     Attributes
     ----------
-    enable_overlay: Show debug overlay information.
-    max_fps_override: Optional FPS cap for rendering loop (>0 when set).
-    ped_velocity_scale: Scale multiplier for velocity vectors (>0).
-    headless_ok: Allow creation when display not available.
+    enable_overlay : bool
+        Display debug overlay (perf metrics, entity counts) when rendering.
+    max_fps_override : int | None
+        Optional FPS cap for the rendering loop (>0). If set via convenience ``video_fps``
+        and this field is already non-``None`` the existing value wins.
+    ped_velocity_scale : float
+        Scale multiplier for pedestrian velocity vectors; must be > 0.
+    headless_ok : bool
+        Permit creation without an available display (CI/headless servers).
     """
 
     enable_overlay: bool = False
@@ -50,11 +70,16 @@ class RecordingOptions:
 
     Attributes
     ----------
-    record: Enable frame capture.
-    video_path: Output mp4 path (optional: buffer only if None).
-    max_frames: Override internal frame cap (>0 when set; None keeps default behavior).
-    codec: Preferred video codec (non-empty when recording).
-    bitrate: Optional bitrate specification string (non-empty when provided).
+    record : bool
+        Enable frame capture (may still be gated by factory ``recording_enabled`` flag).
+    video_path : str | None
+        Output file path (``.mp4``). If ``None`` frames may be buffered/transient only.
+    max_frames : int | None
+        Hard cap on captured frames; ``None`` uses internal default.
+    codec : str
+        Video codec identifier (default libx264). Must be non-empty when recording.
+    bitrate : str | None
+        Target bitrate hint passed to encoder; non-empty string when provided.
     """
 
     record: bool = False

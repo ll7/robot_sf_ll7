@@ -15,8 +15,8 @@ Range2D = Tuple[float, float]  # (low, high)
 `(low, high)``
 """
 
-Line2D = Tuple[float, float, float, float]
-"""Type alias for a 2D line represented as a tuple of two 2D vectors (start and end points)"""
+Line2D = Tuple[Vec2D, Vec2D]
+"""Type alias for a 2D line represented as a tuple of two 2D vectors ``((x1, y1), (x2, y2))``."""
 
 Point2D = Tuple[float, float]
 

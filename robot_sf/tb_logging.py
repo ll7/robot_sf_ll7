@@ -23,10 +23,11 @@ class BaseMetricsCallback(BaseCallback):
     def _on_training_start(self):
         if self.logger is not None:
             output_formats = self.logger.output_formats
-            tb_formatter: TensorBoardOutputFormat = next(
-                filter(lambda f: isinstance(f, TensorBoardOutputFormat), output_formats), None
+            tb_formatter: Optional[TensorBoardOutputFormat] = next(
+                (f for f in output_formats if isinstance(f, TensorBoardOutputFormat)),
+                None,
             )
-            self.writer = tb_formatter.writer if tb_formatter else None
+            self.writer = tb_formatter.writer if tb_formatter is not None else None
 
         if self.writer is None:
             print("WARNING: failed to initialize tensorboard environment metrics!")

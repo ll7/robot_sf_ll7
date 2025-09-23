@@ -3,7 +3,7 @@ import os
 import sys
 from typing import List
 
-from svgelements import SVG, Path, Point
+from svgelements import SVG, Path, Point  # type: ignore[attr-defined]
 
 from robot_sf.util.types import RgbColor, Vec2D
 

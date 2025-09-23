@@ -14,11 +14,12 @@ import datetime
 import os
 import pickle
 from copy import deepcopy
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import loguru
 from gymnasium import Env
 
+from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.env_util import (
     init_ped_collision_and_sensors,
@@ -48,7 +49,7 @@ class PedestrianEnv(Env):
 
     def __init__(
         self,
-        env_config: PedEnvSettings = None,
+        env_config: Optional[PedEnvSettings] = None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         robot_model=None,
         debug: bool = False,
@@ -127,14 +128,8 @@ class PedestrianEnv(Env):
         # none was provided; some tests rely on this permissive behavior. We retain
         # that here to ensure backward compatibility with older usage patterns.
         if robot_model is None:
-
-            class _StubRobotModel:  # pragma: no cover - trivial
-                def predict(self, _obs, **_ignored):
-                    import numpy as _np
-
-                    return _np.zeros(2, dtype=float), None
-
-            robot_model = _StubRobotModel()
+            # Use shared stub to keep behavior consistent with factory fallback.
+            robot_model = StubRobotModel()
         self.robot_model = robot_model
 
         # Store last state executed by the robot
@@ -308,7 +303,7 @@ class PedestrianEnv(Env):
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
 
-    def save_recording(self, filename: str = None):
+    def save_recording(self, filename: Optional[str] = None):
         """
         save the recorded states to a file
         filname: str, must end with *.pkl

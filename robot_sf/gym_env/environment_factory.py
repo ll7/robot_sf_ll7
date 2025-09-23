@@ -425,13 +425,9 @@ def make_pedestrian_env(
 
     if robot_model is None:
         # Maintain previous behavior (tests rely on automatic stub when not provided)
-        class _StubRobotModel:  # pragma: no cover - trivial
-            def predict(self, _obs, **_ignored):  # noqa: D401
-                import numpy as _np  # local import to avoid global dependency
+        from robot_sf.gym_env._stub_robot_model import StubRobotModel
 
-                return _np.zeros(2, dtype=float), None
-
-        robot_model = _StubRobotModel()
+        robot_model = StubRobotModel()
 
     # Determine effective debug flag (enable view only if actually recording here)
     if eff_record_video and not _explicit_no_record:

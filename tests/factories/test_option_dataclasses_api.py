@@ -1,7 +1,22 @@
-"""T005: Failing tests for option dataclasses prior to full implementation.
+"""Tests for option dataclasses (``RenderOptions`` and ``RecordingOptions``).
 
-These tests enforce field presence and validation behavior to be added in T006.
-Initially, validate() is a no-op, so tests expecting errors will fail.
+Purpose:
+    Ensure option dataclasses expose the expected fields with correct default
+    values and that their ``validate()`` methods enforce invalid parameter
+    constraints (e.g., non‑positive FPS overrides, non‑positive velocity scale,
+    invalid max frame counts, or unsupported video formats).
+
+Scope covered by this suite:
+    * Field presence & default values
+    * Validation error raising for invalid numeric bounds
+    * Validation of recording path / codec expectations
+    * Convenience constructor precedence in ``RecordingOptions.from_bool_and_path``
+
+All tests are expected to pass with the current implementation. If new
+fields or validation rules are introduced, update tests (additions should
+generally be additive—avoid silently changing existing semantics without
+adjusting this suite). The original provisional "failing test" scaffolding
+phase (T005/T006) has been completed.
 """
 
 from __future__ import annotations

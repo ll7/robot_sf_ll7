@@ -21,6 +21,7 @@ except Exception:  # noqa: BLE001
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
 
+from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
 from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.unified_config import (
@@ -171,6 +172,7 @@ def _normalize_factory_inputs(
 def make_robot_env(
     config: Optional[RobotSimulationConfig] = None,
     *,
+    seed: Optional[int] = None,
     peds_have_obstacle_forces: bool = False,
     reward_func: Optional[Callable] = None,
     debug: bool = False,
@@ -180,8 +182,31 @@ def make_robot_env(
     video_fps: Optional[float] = None,
     render_options: Optional[RenderOptions] = None,
     recording_options: Optional[RecordingOptions] = None,
+    **legacy_kwargs,
 ) -> SingleAgentEnv:
-    """Create a standard robot environment (non-image observations)."""
+    """Create a standard robot environment (non-image observations).
+
+    Parameters
+    ----------
+    seed : int | None
+        Deterministic seed applied to Python ``random``, NumPy, and PyTorch (if present).
+        Stored on the returned environment instance as ``applied_seed`` for introspection.
+    legacy_kwargs : dict
+        Deprecated parameters (legacy surface). They are mapped or rejected via
+        :func:`apply_legacy_kwargs`. Unknown parameters raise unless the environment
+        variable ``{env}`` is set to a truthy value (permissive mode).
+    """.replace("{env}", LEGACY_PERMISSIVE_ENV)
+    # Apply legacy parameter mapping FIRST so explicit new-style arguments win.
+    if legacy_kwargs:
+        mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
+        # Fold mapped flattened keys into current option objects.
+        render_options_local = _apply_render(mapped, render_options)
+        recording_options_local = _apply_recording(mapped, recording_options)
+        # Any leftover keys after application are ignored (already validated by strict handling).
+        render_options = render_options_local
+        recording_options = recording_options_local
+
+    _apply_global_seed(seed)
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
@@ -198,7 +223,7 @@ def make_robot_env(
         path=eff_video_path,
         fps=eff_video_fps,
     )
-    return EnvironmentFactory.create_robot_env(
+    env = EnvironmentFactory.create_robot_env(
         config=config,
         use_image_obs=False,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
@@ -209,11 +234,14 @@ def make_robot_env(
         video_path=eff_video_path,
         video_fps=eff_video_fps,
     )
+    setattr(env, "applied_seed", seed)
+    return env
 
 
 def make_image_robot_env(
     config: Optional[ImageRobotConfig] = None,
     *,
+    seed: Optional[int] = None,
     peds_have_obstacle_forces: bool = False,
     reward_func: Optional[Callable] = None,
     debug: bool = False,
@@ -223,8 +251,14 @@ def make_image_robot_env(
     video_fps: Optional[float] = None,
     render_options: Optional[RenderOptions] = None,
     recording_options: Optional[RecordingOptions] = None,
+    **legacy_kwargs,
 ) -> SingleAgentEnv:
-    """Create a robot environment with image observations."""
+    """Create a robot environment with image observations (see `make_robot_env`)."""
+    if legacy_kwargs:
+        mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
+        render_options = _apply_render(mapped, render_options)
+        recording_options = _apply_recording(mapped, recording_options)
+    _apply_global_seed(seed)
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
@@ -241,7 +275,7 @@ def make_image_robot_env(
         path=eff_video_path,
         fps=eff_video_fps,
     )
-    return EnvironmentFactory.create_robot_env(
+    env = EnvironmentFactory.create_robot_env(
         config=config,
         use_image_obs=True,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
@@ -252,11 +286,14 @@ def make_image_robot_env(
         video_path=eff_video_path,
         video_fps=eff_video_fps,
     )
+    setattr(env, "applied_seed", seed)
+    return env
 
 
 def make_pedestrian_env(
     config: Optional[PedestrianSimulationConfig] = None,
     *,
+    seed: Optional[int] = None,
     robot_model=None,
     reward_func: Optional[Callable] = None,
     debug: bool = False,
@@ -267,6 +304,7 @@ def make_pedestrian_env(
     video_fps: Optional[float] = None,
     render_options: Optional[RenderOptions] = None,
     recording_options: Optional[RecordingOptions] = None,
+    **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a pedestrian (adversarial) environment.
 
@@ -281,6 +319,13 @@ def make_pedestrian_env(
         `test_pedestrian_factory_explicit_options_override` (T012).
     """
     # Capture explicit override intent BEFORE normalization mutates structures.
+    if legacy_kwargs:
+        mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
+        render_options = _apply_render(mapped, render_options)
+        recording_options = _apply_recording(mapped, recording_options)
+
+    _apply_global_seed(seed)
+
     _explicit_no_record = (
         recording_options is not None and recording_options.record is False and record_video
     )
@@ -302,12 +347,12 @@ def make_pedestrian_env(
             recording_options.record = False  # ensure consistency for any downstream logic
 
     if robot_model is None:
-
+        # Maintain previous behavior (tests rely on automatic stub when not provided)
         class _StubRobotModel:  # pragma: no cover - trivial
             def predict(self, _obs, **_ignored):  # noqa: D401
-                import numpy as np  # local import to avoid global dependency
+                import numpy as _np  # local import to avoid global dependency
 
-                return np.zeros(2, dtype=float), None
+                return _np.zeros(2, dtype=float), None
 
         robot_model = _StubRobotModel()
 
@@ -322,7 +367,7 @@ def make_pedestrian_env(
         record=eff_record_video,
         has_model=robot_model is not None,
     )
-    return EnvironmentFactory.create_pedestrian_env(
+    env = EnvironmentFactory.create_pedestrian_env(
         config=config,
         robot_model=robot_model,
         reward_func=reward_func,
@@ -330,6 +375,39 @@ def make_pedestrian_env(
         recording_enabled=recording_enabled,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
     )
+    setattr(env, "applied_seed", seed)
+    return env
+
+
+def _apply_global_seed(seed: Optional[int]) -> None:
+    """Apply a deterministic seed to common RNG sources.
+
+    Positioned at end of module to keep import block contiguous (PEP8). Seeds Python's
+    ``random`` module, NumPy, and PyTorch (if available); sets PYTHONHASHSEED. Silent
+    failures for optional libraries keep dependency surface minimal for lightweight usages.
+    """
+    if seed is None:
+        return
+    import os as _os
+    import random as _random
+
+    _random.seed(seed)
+    try:  # NumPy optional
+        import numpy as _np  # type: ignore
+
+        _np.random.seed(seed)
+    except Exception:  # noqa: BLE001
+        pass
+    try:  # PyTorch optional
+        import torch as _torch  # type: ignore
+
+        if hasattr(_torch, "manual_seed"):
+            _torch.manual_seed(seed)
+        if hasattr(_torch, "cuda") and hasattr(_torch.cuda, "manual_seed_all"):
+            _torch.cuda.manual_seed_all(seed)
+    except Exception:  # noqa: BLE001
+        pass
+    _os.environ["PYTHONHASHSEED"] = str(seed)
 
 
 def make_multi_robot_env(

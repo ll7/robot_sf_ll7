@@ -135,7 +135,7 @@ Accept: T016 passes; signatures updated; docs adjusted.
 Deps: T015, T022.  
 Accept: Perf test passes under new threshold; diff file committed.
 
-**T032 (HIGH)**: Expand docstrings (factories & option dataclasses) with param tables, precedence rules, pedestrian divergence, seeding sequence, performance note.  
+**T032 (HIGH) [X]**: Expand docstrings (factories & option dataclasses) with param tables, precedence rules, pedestrian divergence, seeding sequence, performance note.  
 Deps: T030.  
 Accept: Docstrings present; lint/type checks clean.
 

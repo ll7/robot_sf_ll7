@@ -18,8 +18,8 @@ from robot_sf.gym_env.environment_factory import make_image_robot_env, make_robo
 from robot_sf.gym_env.unified_config import ImageRobotConfig, RobotSimulationConfig
 
 BASELINE_PATH = Path("results/factory_perf_baseline.json")
-THRESHOLD = 1.10  # +10% hard budget (initial post-refactor tolerance)
-SOFT_THRESHOLD = 1.15  # emit warning if between 10% and 15%
+THRESHOLD = 1.05  # +5% hard budget (tightened per T031 spec compliance)
+SOFT_THRESHOLD = 1.08  # soft warn band (>5% and <=8%)
 ITERATIONS = 5  # keep light for CI; baseline may have been generated with more
 
 
@@ -61,15 +61,23 @@ def test_factory_creation_mean_within_budget(monkeypatch):
     current_robot_mean = sum(robot_times) / len(robot_times)
     current_image_mean = sum(image_times) / len(image_times)
 
-    # Hard assertions
+    # Hard assertions (tightened)
     assert current_robot_mean <= base_robot * THRESHOLD, (
-        f"Robot env creation mean {current_robot_mean:.2f}ms exceeds hard budget ({THRESHOLD * 100:.0f}% of {base_robot:.2f}ms)"
+        f"Robot env creation mean {current_robot_mean:.2f}ms exceeds hard budget (+5% {base_robot * THRESHOLD:.2f}ms ceiling from baseline {base_robot:.2f}ms)"
     )
     assert current_image_mean <= base_image * THRESHOLD, (
-        f"Image env creation mean {current_image_mean:.2f}ms exceeds hard budget ({THRESHOLD * 100:.0f}% of {base_image:.2f}ms)"
+        f"Image env creation mean {current_image_mean:.2f}ms exceeds hard budget (+5% {base_image * THRESHOLD:.2f}ms ceiling from baseline {base_image:.2f}ms)"
     )
-    # Soft warning (pytest - not failing): provide guidance if close to threshold
-    if current_robot_mean > base_robot * (THRESHOLD - 0.02):  # pragma: no cover
+    # Soft warnings (informational only within new narrow band)
+    if (
+        base_robot * THRESHOLD < current_robot_mean <= base_robot * SOFT_THRESHOLD
+    ):  # pragma: no cover
         print(
-            f"[PERF SOFT WARN] Robot env mean {current_robot_mean:.2f}ms near threshold vs baseline {base_robot:.2f}ms"
+            f"[PERF SOFT WARN] Robot env mean {current_robot_mean:.2f}ms within soft band (>+5% <=+8%) baseline {base_robot:.2f}ms"
+        )
+    if (
+        base_image * THRESHOLD < current_image_mean <= base_image * SOFT_THRESHOLD
+    ):  # pragma: no cover
+        print(
+            f"[PERF SOFT WARN] Image env mean {current_image_mean:.2f}ms within soft band (>+5% <=+8%) baseline {base_image:.2f}ms"
         )

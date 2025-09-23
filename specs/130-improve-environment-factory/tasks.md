@@ -65,24 +65,24 @@ Accept: Add/extend tests `tests/factories/test_normalization.py` verifying prece
 Deps: T010.  
 Accept: Extend normalization test or new `test_incompatible_combinations.py`.
 
-**T012 [P]**: Update pedestrian factory path (`make_pedestrian_env`) to mirror normalization logic; add test for required `robot_model` presence unaffected.  
+**T012 [P] [X]**: Update pedestrian factory path (`make_pedestrian_env`) to mirror normalization logic; add test for required `robot_model` presence unaffected.  
 Deps: T010.
 
-**T013 [P]**: (Optional placeholder) Insert stub for prospective `make_multi_robot_env` raising NotImplementedError with docstring referencing future extension—documented but not exposed publicly yet.  
+**T013 [P] [X]**: (Optional placeholder) Insert stub for prospective `make_multi_robot_env` raising NotImplementedError with docstring referencing future extension—documented but not exposed publicly yet.  
 Deps: T010.
 
 ### Logging & Diagnostics
-**T014**: Add Loguru logging points (INFO creation, WARNING deprecation, WARNING precedence overrides) inside factories; unit test capturing log messages with `caplog` or Loguru sink.  
+**T014 [X]**: Add Loguru logging points (INFO creation, WARNING deprecation, WARNING precedence overrides) inside factories; unit test capturing log messages with `caplog` or Loguru sink.  
 Deps: T011.
 
 ### Tests Enhancements & Performance Guard
-**T015**: Add performance regression test `tests/perf/test_factory_creation_perf.py` comparing new creation time vs baseline JSON (< +5% mean). Skip if baseline file missing.  
+**T015 [X]**: Add performance regression test `tests/perf/test_factory_creation_perf.py` comparing new creation time vs baseline JSON (< +5% mean). Skip if baseline file missing.  
 Deps: T001, T011.
 
-**T016 [P]**: Add RNG seed determinism test `tests/factories/test_seed_determinism.py` ensuring two env creations with same seed produce equal initial observations (within tolerance).  
+**T016 [P] [X]**: Add RNG seed determinism test `tests/factories/test_seed_determinism.py` ensuring two env creations with same seed produce equal initial observations (within tolerance).  
 Deps: T011.
 
-**T017 [P]**: Add frame recording integration test reusing existing rendering test harness verifying `record_video=True` path still records frames with new options.  
+**T017 [P] [X]**: Add frame recording integration test reusing existing rendering test harness verifying `record_video=True` path still records frames with new options.  
 Deps: T011.
 
 ### Documentation & Migration

@@ -1,154 +1,13 @@
+
 # Implementation Plan: Improve Environment Factory Ergonomics
 
-**Branch**: `130-improve-environment-factory` | **Date**: 2025-09-22 | **Spec**: `specs/130-improve-environment-factory/spec.md`
-**Input**: Feature specification from `/specs/130-improve-environment-factory/spec.md`
+**Branch**: `130-improve-environment-factory`  
+**Date**: 2025-09-23  
+**Spec**: `specs/130-improve-environment-factory/spec.md`  
+**Tasks**: `specs/130-improve-environment-factory/tasks.md`  
+**Context**: Plan updated post partial implementation + analysis pass (legacy shim removed, seed param missing, perf threshold mismatch). This document restores concrete content and realigns execution with Constitution v1.2.0.
 
-## Execution Flow (/plan command scope)
-```
-1. Load feature spec from Input path
-   → Found OK
-2. Fill Technical Context (scan for NEEDS CLARIFICATION)
-   → Collected ambiguities & environment traits
-3. Fill the Constitution Check section based on the content of the constitution document.
-4. Evaluate Constitution Check section below
-   → No blocking violations (pending clarifications noted)
-5. Execute Phase 0 → research.md (to be generated)
-6. Execute Phase 1 → contracts/, data-model.md, quickstart.md (design-level for factories)
-7. Re-evaluate Constitution Check section post-design
-8. Plan Phase 2 task generation approach (describe only; do not create tasks.md)
-9. STOP
-```
-
-## Summary
-Goal: Enhance ergonomics of environment factory functions by making parameter surfaces explicit, adding structured option objects (render/recording), providing deprecation and migration pathways, and strengthening discoverability (docstrings + examples + quickstart). Target: zero breaking runtime behavior; purely additive/improving developer UX while honoring Constitution Principles II (Factory-Based), IV (Unified Config), VII (Backward Compatibility), XII (Logging).
-
-Core approach: Introduce typed `RenderOptions` & `RecordingOptions` dataclasses; update factories to accept these (optional) while retaining primary convenience booleans (`record_video`). Implement a legacy shim capturing previously used kwargs; emit Loguru warnings guiding migration. Extend tests for signature stability, deprecation mapping, invalid combination warnings, and ensure no performance regressions beyond +5% env creation time.
-
-## Technical Context
-Language/Version: Python (project currently aligns with 3.13 usage; confirm in runtime env)  
-Primary Dependencies: Gymnasium-style interfaces, Loguru, Stable-Baselines3 (optional), NumPy, rendering stack (Pygame / MoviePy)  
-Storage: N/A (in-memory objects + optional video artifacts on filesystem)  
-Testing: pytest (existing suite: unit + integration + rendering + performance policies)  
-Target Platform: Cross-platform, CI headless (macOS + Linux)  
-Project Type: Single library/research framework (Option 1 structure)  
-Performance Goals: Maintain <1s environment creation; no >5% regression (FR-017)  
-Constraints: Backward compatibility (Constitution Principle VII), logging standard (XII), unified config (IV), no direct env class instantiation (II), avoid signature bloat (>~8 primary params)  
-Scale/Scope: Limited to ergonomic improvements for 4 factory functions (robot, image, pedestrian, potential multi-robot future placeholder)  
-
-Unknowns / NEEDS CLARIFICATION (from spec):
-1. Policy for unknown legacy kwargs: strict error vs permissive mapping.
-2. Validation severity for incompatible inputs (warning vs exception).
-3. Separation strategy for multi-robot/pedestrian-specific option dataclasses.
-4. Mode toggle name for permissive legacy behavior (if chosen).
-5. Confirm Python version baseline for dataclass / typing features (e.g., `kw_only`, `Annotated`).
-
-Assumptions (tentative pending clarification):
-- Adopt STRICT-by-default (raise) with opt-in permissive via env var `ROBOT_SF_FACTORY_LEGACY=1` for migration (minimizes silent issues).
-- Incompatible combos produce WARNING (non-fatal) plus automatic enabling where safe (e.g., auto-enable minimal render pathway for recording).
-- Multi-robot path deferred; pedestrian-specific toggles remain inside `RenderOptions` (document future separation plan) to reduce premature complexity.
-- Python baseline >=3.11 allows dataclass `slots=True`; will use for lightweight option objects to reduce memory footprint.
-
-## Constitution Check
-Mapping to Principles:
-- II (Factory Abstraction): Strengthened via explicit signatures and option objects. PASS.
-- IV (Unified Configuration): Preserved—config object remains central; new options supplement, not replace. PASS.
-- VII (Backward Compatibility): Implement deprecation layer + optional permissive mode; must ensure warnings not errors by default. CONDITIONAL (needs final policy decision).
-- VIII (Documentation): Requires updates to `docs/ENVIRONMENT.md`, new migration note folder. PASS contingent on delivery.
-- IX (Test Coverage): New tests required (signatures, deprecation warnings, option object behavior). PASS contingent.
-- XII (Logging): All new diagnostics via Loguru. PASS.
-
-No constitutional violations provided unknown policies resolved. Complexity minimal (no new architectural layer).  
-
-## Project Structure
-Structure Decision: Option 1 (single project) retained. Only spec directory enriched with new artifacts.
-
-### Documentation (this feature)
-```
-specs/130-improve-environment-factory/
-├── spec.md
-├── plan.md              # (this file)
-├── research.md          # Phase 0
-├── data-model.md        # Phase 1
-├── quickstart.md        # Phase 1
-├── contracts/           # Phase 1 (factory param surface & validation contract)
-└── tasks.md             # Phase 2 (NOT created yet)
-```
-
-## Phase 0: Outline & Research
-Focus Areas:
-1. Survey current factory signatures & test coverage (baseline snapshot).
-2. Identify all presently used legacy kwargs in repository usage sites (grep search) → build DeprecationMap.
-3. Assess typical parameter frequency (which kwargs appear most often) to justify which stay in primary signature.
-4. Validate performance cost of additional option object instantiation (micro-benchmark env creation time before/after).
-5. Investigate existing patterns in similar RL env libraries (Gymnasium wrappers) for option objects vs flat params (best practices).
-
-Deliverable (`research.md`) Sections:
-- Current State Inventory (signatures, call sites).
-- Legacy Kwarg Frequency Table.
-- Decision Log (unknowns resolved).
-- Performance Baseline Numbers (N=30 creations timing).
-- Alternatives Considered (builder pattern, dynamic registry, single monolithic options object).
-
-Exit Criteria: All NEEDS CLARIFICATION resolved with decisions & rationale; no unresolved unknowns.
-
-## Phase 1: Design & Contracts
-Artifacts:
-1. `data-model.md`: Define dataclasses `RenderOptions`, `RecordingOptions`, `DeprecationMap` structure, validation rules.
-2. `contracts/`: Provide a markdown contract (or simple schema doc) enumerating factory parameter lists & validation outcomes (pseudo OpenAPI-like table for functions).
-3. `quickstart.md`: Before/after examples (old usage -> new usage), minimal recipe for each factory variant, migration snippet.
-4. Update agent context (if repository uses AI assistant context file) limited to newly added terminology.
-
-Design Elements:
-- Validation Flow Diagram: input params -> normalization -> implicit enabling -> final env creation.
-- Logging Points: creation info, deprecation warning, incompatible combo warning, legacy toggle info.
-- Deprecation Strategy: 2 release cycle window before strict errors (document timeline expectation; implement warnings only now).
-
-Exit Criteria: Post-design constitution check passes; all FR-001..FR-021 mapped to design components; no unresolved unknowns.
-
-## Phase 2: Task Planning Approach
-Task Generation Strategy (future /tasks):
-- Each FR becomes at least one implementation + one test task.
-- Legacy mapping extraction tasks per legacy kw category.
-- Performance validation task (benchmark env creation pre/post, assert delta <5%).
-- Documentation tasks: migration guide, environment doc update, examples update.
-- Parallelizable tasks flagged: tests, docs, performance benchmark independent of dataclass code once stubs exist.
-
-Ordering:
-1. Research finalize (Phase 0)
-2. Option dataclasses & contract tests (failing)
-3. Deprecation adaptor layer
-4. Factory refactor + logging
-5. Tests (unit → integration)
-6. Docs & examples
-7. Performance validation & adjustments
-
-## Phase 3+: Future Implementation
-Out of scope for /plan (will execute after tasks.md creation).
-
-## Complexity Tracking
-Currently none—feature stays within existing architectural boundaries; no additional project roots or service layers introduced.
-
-## Progress Tracking
-Phase Status:
-- [ ] Phase 0: Research complete (/plan command)
-- [ ] Phase 1: Design complete (/plan command)
-- [ ] Phase 2: Task planning complete (/plan command - describe approach only)
-- [ ] Phase 3: Tasks generated (/tasks command)
-- [ ] Phase 4: Implementation complete
-- [ ] Phase 5: Validation passed
-
-Gate Status:
-- [ ] Initial Constitution Check: PASS (conditionally; finalize after unknowns decisions)
-- [ ] Post-Design Constitution Check: PASS
-- [ ] All NEEDS CLARIFICATION resolved
-- [ ] Complexity deviations documented
-
----
-*Based on Constitution v1.2.0 - See `.specify/memory/constitution.md`*
-# Implementation Plan: [FEATURE]
-
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+> NOTE: Template was re-copied; this revision reconstructs plan from analysis findings.
 
 ## Execution Flow (/plan command scope)
 ```
@@ -176,36 +35,70 @@ Gate Status:
 - Phase 2: /tasks command creates tasks.md
 - Phase 3-4: Implementation execution (manual or via tools)
 
+## Clarifications (Session 1 – 2025-09-23)
+| Item | Question | Decision | Rationale | Impact |
+|------|----------|----------|-----------|--------|
+| Legacy kwargs policy (FR-005/006) | Strict error vs permissive mapping? | Reinstate compatibility shim with mapping + WARNING; strict errors only when `ROBOT_SF_FACTORY_STRICT=1`. | Constitution VII (backward compatibility). | Re-wire factories to call `_factory_compat.apply_legacy_kwargs`. |
+| Permissive toggle name | Which env var? | `ROBOT_SF_FACTORY_LEGACY=1` enables legacy acceptance; `ROBOT_SF_FACTORY_STRICT=1` forces error on unknown unmapped keys. | Explicit, mirrors existing env style. | Add to spec + migration guide. |
+| Validation severity (FR-004) | Warning vs exception? | Use WARNING + auto-adjust (e.g., auto-enable debug when recording) except type errors. | Ergonomics over friction. | Ensure tests assert WARN + corrected state. |
+| Seed support (FR-008) | What gets seeded? | Add `seed: Optional[int]`; seed Python `random`, NumPy, env RNG; store `env.unwrapped.seed_applied`. | Determinism (Principle IV). | Add implementation + test. |
+| `max_episode_steps` mention | Implement now? | DEFER (remove from FR scope). | Prevent scope creep. | Mark deferred in spec. |
+| Pedestrian precedence divergence | Accept explicit opt-out? | Yes, explicit `RecordingOptions(record=False)` overrides boolean convenience. | User intent clarity. | Document & test already present. |
+| Performance threshold (FR-017 +5%) | Current test uses +10%. | Tighten back to +5% mean. | Align spec + protect perf. | Adjust constant & docs. |
+| Option dataclasses expansion | Add ped-specific variants? | Not now (YAGNI). | Avoid fragmentation. | Revisit when >2 ped-only flags. |
+| Ped factory signature order | Freeze now? | Yes; current order locked by snapshot tests. | Stability for users. | Doc in spec & migration. |
+
+All previous NEEDS CLARIFICATION markers are resolved; spec must be updated to remove markers and reflect above decisions.
+
 ## Summary
-[Extract from feature spec: primary requirement + technical approach from research]
+Improve ergonomics of environment creation by:
+- Explicit factory signatures (no `**kwargs`).
+- Structured option objects (`RenderOptions`, `RecordingOptions`).
+- Legacy compatibility shim (to be reinstated) with warnings + env var toggles.
+- Deterministic seeding (`seed` param) – missing currently.
+- Normalized precedence with intentional pedestrian divergence for explicit opt-out.
+- Performance guard (+5% mean baseline) – test currently at +10% (to fix).
+- Comprehensive docstrings + migration guide + quick reference table.
+
+Current divergence vs spec: legacy shim inactive, seed param absent, performance threshold mismatch, incomplete docstrings. This plan enumerates remediation tasks.
 
 ## Technical Context
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.13  
+**Primary Dependencies**: Gymnasium-like env interface, Loguru, NumPy, Pygame (render), `fast-pysf` SocialForce submodule.  
+**Storage**: N/A (in-memory; optional video outputs).  
+**Testing**: Pytest (signature, normalization, performance, pedestrian precedence, future seed determinism).  
+**Target Platform**: macOS + Linux (CI headless).  
+**Project Type**: Research framework (single codebase).  
+**Performance Goals**: Env creation mean <= baseline_mean * 1.05; cold <1s, warm <25ms typical.  
+**Constraints**: Honor Principles II, IV, VII, XII; no silent breaking changes.  
+**Scale/Scope**: Limited to four factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`, `make_multi_robot_env`).
 
 ## Constitution Check
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+| Principle | Status | Notes / Action |
+|-----------|--------|----------------|
+| II (Factory Abstraction) | PARTIAL | Explicit sigs done; restore legacy shim. |
+| IV (Unified Config & Seeds) | FAIL | Add `seed` param + propagation. |
+| VII (Backward Compatibility) | FAIL | Legacy kwargs mapping removed – reinstate. |
+| XII (Logging) | PASS | Uses Loguru; add test to block stray prints. |
+| IX (Test Coverage) | PARTIAL | Need seed determinism + edge case tests. |
+| Performance (FR-017) | PARTIAL | Threshold mismatch (10% vs 5%). |
 
-[Gates determined based on constitution file]
+Gate: Cannot finalize until FAIL items resolved; PARTIAL items scheduled in remediation tasks.
 
 ## Project Structure
 
-### Documentation (this feature)
+### Documentation (Feature Directory)
 ```
-specs/[###-feature]/
-├── plan.md              # This file (/plan command output)
-├── research.md          # Phase 0 output (/plan command)
-├── data-model.md        # Phase 1 output (/plan command)
-├── quickstart.md        # Phase 1 output (/plan command)
-├── contracts/           # Phase 1 output (/plan command)
-└── tasks.md             # Phase 2 output (/tasks command - NOT created by /plan)
+specs/130-improve-environment-factory/
+├── spec.md        (needs marker cleanup & decisions merge)
+├── plan.md        (this file)
+├── tasks.md       (existing; will append remediation tasks)
+├── research.md    (retrofit Session 1 decisions)
+├── data-model.md  (option dataclasses captured)
+├── quickstart.md  (update with seed & legacy flags)
+├── contracts/     (N/A for this feature – keep empty or remove if policy allows)
+├── perf_diff.md   (T024 to add once guard tightened)
+└── coverage_checklist.md (T025)
 ```
 
 ### Source Code (repository root)
@@ -247,111 +140,67 @@ ios/ or android/
 
 **Structure Decision**: [DEFAULT to Option 1 unless Technical Context indicates web/mobile app]
 
-## Phase 0: Outline & Research
-1. **Extract unknowns from Technical Context** above:
-   - For each NEEDS CLARIFICATION → research task
-   - For each dependency → best practices task
-   - For each integration → patterns task
+## Phase 0: Outline & Research (Retroactive Update)
+Actions:
+1. Append Session 1 decisions table to `research.md`.
+2. Add performance measurement methodology (sample size=30, discard first run, compute mean+stdev+p95).
+3. Document pedestrian precedence divergence rationale.
 
-2. **Generate and dispatch research agents**:
-   ```
-   For each unknown in Technical Context:
-     Task: "Research {unknown} for {feature context}"
-   For each technology choice:
-     Task: "Find best practices for {tech} in {domain}"
-   ```
+Exit Criteria: research.md updated; no remaining NEEDS CLARIFICATION markers.
 
-3. **Consolidate findings** in `research.md` using format:
-   - Decision: [what was chosen]
-   - Rationale: [why chosen]
-   - Alternatives considered: [what else evaluated]
+## Phase 1: Design & Contracts (Status: Partial)
+Additions required:
+- Design contract for `seed` parameter (inputs, seeding sequence, stored attribute, error modes).
+- Sequence diagram: user kwargs → legacy shim → normalization → env creation.
+- Validation mapping table (condition → auto-adjust → log level) per FR-004.
+- Update quickstart with examples (legacy vs strict mode; seeding usage).
 
-**Output**: research.md with all NEEDS CLARIFICATION resolved
+## Phase 2: Task Planning (Done – augment instead of regenerate)
+Will append remediation tasks (T029+). Avoid re-indexing existing tasks to preserve history.
 
-## Phase 1: Design & Contracts
-*Prerequisites: research.md complete*
+## Phase 3+: Implementation & Remediation Roadmap
+| New ID | Title | Depends | Severity | Description |
+|--------|-------|---------|----------|-------------|
+| T029 | Reinstate legacy shim integration | T011 | CRITICAL | Re-wire factories to call `apply_legacy_kwargs`; add tests for mapped + unknown keys (warn vs strict). |
+| T030 | Introduce `seed` parameter + deterministic test | T016 | CRITICAL | Add `seed` to all factories; propagate to RNGs; test identical first obs when same seed. |
+| T031 | Tighten performance guard to 5% | T015 | HIGH | Adjust test constant; update baseline notes & add perf_diff.md. |
+| T032 | Extend docstrings & perf notes | T014 | HIGH | Full parameter docs + precedence explanation + performance note. |
+| T033 | Edge case tests (headless+debug, missing video_path) | T010 | MEDIUM | Assert warning and graceful defaults. |
+| T034 | Coverage checklist | T029 | MEDIUM | Map each FR → code/tests; flag deferred FRs. |
+| T035 | Migration guide & decision log | T018 | HIGH | Create `migration.md` (before/after, env vars, precedence). |
+| T036 | Repr/readability & side-effect smoke | T006 | LOW | Ensure factory import has no side-effects; simple repr checks. |
+| T037 | Logging no-print enforcement test | T014 | MEDIUM | Fail test if `print(` appears in factory module (except guarded). |
+| T038 | Spec update removing deferred `max_episode_steps` | T001 | LOW | Mark FR deferred; adjust spec & coverage. |
 
-1. **Extract entities from feature spec** → `data-model.md`:
-   - Entity name, fields, relationships
-   - Validation rules from requirements
-   - State transitions if applicable
-
-2. **Generate API contracts** from functional requirements:
-   - For each user action → endpoint
-   - Use standard REST/GraphQL patterns
-   - Output OpenAPI/GraphQL schema to `/contracts/`
-
-3. **Generate contract tests** from contracts:
-   - One test file per endpoint
-   - Assert request/response schemas
-   - Tests must fail (no implementation yet)
-
-4. **Extract test scenarios** from user stories:
-   - Each story → integration test scenario
-   - Quickstart test = story validation steps
-
-5. **Update agent file incrementally** (O(1) operation):
-   - Run `.specify/scripts/bash/update-agent-context.sh copilot` for your AI assistant
-   - If exists: Add only NEW tech from current plan
-   - Preserve manual additions between markers
-   - Update recent changes (keep last 3)
-   - Keep under 150 lines for token efficiency
-   - Output to repository root
-
-**Output**: data-model.md, /contracts/*, failing tests, quickstart.md, agent-specific file
-
-## Phase 2: Task Planning Approach
-*This section describes what the /tasks command will do - DO NOT execute during /plan*
-
-**Task Generation Strategy**:
-- Load `.specify/templates/tasks-template.md` as base
-- Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
-- Each contract → contract test task [P]
-- Each entity → model creation task [P] 
-- Each user story → integration test task
-- Implementation tasks to make tests pass
-
-**Ordering Strategy**:
-- TDD order: Tests before implementation 
-- Dependency order: Models before services before UI
-- Mark [P] for parallel execution (independent files)
-
-**Estimated Output**: 25-30 numbered, ordered tasks in tasks.md
-
-**IMPORTANT**: This phase is executed by the /tasks command, NOT by /plan
-
-## Phase 3+: Future Implementation
-*These phases are beyond the scope of the /plan command*
-
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
-**Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
+Completion Criteria:
+- Milestone M1 (T029, T030): All FAIL gates resolved.
+- Milestone M2 (T031, T032, T035): High severity tasks done; docs updated.
+- Milestone M3 (T033, T034, T036–T038): Medium/Low complete; ready for final validation.
 
 ## Complexity Tracking
-*Fill ONLY if Constitution Check has violations that must be justified*
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+Temporary dual-interface complexity (explicit signature + legacy shim) justified by Principle VII. Simpler alternative (removal) rejected: would break existing user code without deprecation window.
 
 
 ## Progress Tracking
-*This checklist is updated during execution flow*
-
 **Phase Status**:
-- [ ] Phase 0: Research complete (/plan command)
-- [ ] Phase 1: Design complete (/plan command)
-- [ ] Phase 2: Task planning complete (/plan command - describe approach only)
-- [ ] Phase 3: Tasks generated (/tasks command)
-- [ ] Phase 4: Implementation complete
-- [ ] Phase 5: Validation passed
+- [ ] Phase 0: Research (retrofit decisions)
+- [ ] Phase 1: Design (seed + validation table)
+- [x] Phase 2: Task planning (baseline tasks present)
+- [x] Phase 3: Partial impl (T001–T017 complete)
+- [ ] Phase 3 Remediation (T029–T038)
+- [ ] Phase 4: Validation (post-remediation full suite)
+- [ ] Phase 5: Finalization (coverage + migration docs)
 
 **Gate Status**:
-- [ ] Initial Constitution Check: PASS
-- [ ] Post-Design Constitution Check: PASS
-- [ ] All NEEDS CLARIFICATION resolved
-- [ ] Complexity deviations documented
+- [ ] Constitution Gate (Initial) – pending legacy + seed
+- [ ] Constitution Gate (Post-Design) – re-eval after M1
+- [x] Clarifications resolved (spec updates pending)
+- [x] Complexity deviation documented
+
+**Milestones**:
+- M1: Legacy + seed (CRITICAL)
+- M2: Perf guard tightened + docstrings + migration
+- M3: Coverage & polish complete
 
 ---
-*Based on Constitution v1.1.0 - See `/memory/constitution.md`*
+*Based on Constitution v1.2.0 – see `.specify/memory/constitution.md`*

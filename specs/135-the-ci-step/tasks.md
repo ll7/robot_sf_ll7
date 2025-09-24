@@ -1,6 +1,8 @@
 # Tasks: Optimize CI System Package Installation
 
-**Input**: Design documents from `/Users/lennart/git/robot_sf_ll7/specs/135-the-ci-step/`
+**Input- [x] T010 [P] CIJob monitoring setup in scripts/ci_monitoring.py
+- [x] T011 [P] SystemPackage validation in scripts/ci-tests/package_validation.py
+- [x] T012 [P] PerformanceMetric collection in scripts/ci-tests/performance_metrics.py Design documents from `/Users/lennart/git/robot_sf_ll7/specs/135-the-ci-step/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
 ## Execution Flow (main)
@@ -41,20 +43,20 @@
 - **Scripts**: Repository root for CI validation scripts
 
 ## Phase 3.1: Setup
-- [ ] T001 Install apt-fast and caching tools in CI environment
-- [ ] T002 [P] Configure CI performance monitoring scripts
+- [x] T001 Install apt-fast and caching tools in CI environment
+- [x] T002 [P] Configure CI performance monitoring scripts
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T003 [P] Contract test for CI workflow interface in specs/135-the-ci-step/contracts/test_ci_workflow_contract.py
-- [ ] T004 [P] Integration test for performance validation in scripts/test_ci_performance.py
-- [ ] T005 [P] Integration test for reliability validation in scripts/test_ci_reliability.py
-- [ ] T006 [P] Integration test for functionality preservation in scripts/test_ci_functionality.py
-- [ ] T007 [P] Integration test for cache effectiveness in scripts/test_ci_cache.py
+- [x] T003 [P] Contract test for CI workflow interface in specs/135-the-ci-step/contracts/test_ci_workflow_contract.py
+- [x] T004 [P] Integration test for performance validation in scripts/ci-tests/test_ci_performance.py
+- [x] T005 [P] Integration test for reliability validation in scripts/ci-tests/test_ci_reliability.py
+- [x] T006 [P] Integration test for functionality preservation in scripts/ci-tests/test_ci_functionality.py
+- [x] T007 [P] Integration test for cache effectiveness in scripts/ci-tests/test_ci_cache.py
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [ ] T008 Modify CI workflow to add package caching in .github/workflows/ci.yml
-- [ ] T009 Modify CI workflow to install and use apt-fast in .github/workflows/ci.yml
+- [x] T008 Modify CI workflow to add package caching in .github/workflows/ci.yml
+- [x] T009 Modify CI workflow to install and use apt-fast in .github/workflows/ci.yml
 - [ ] T010 [P] CIJob monitoring setup in scripts/ci_monitoring.py
 - [ ] T011 [P] SystemPackage validation in scripts/package_validation.py
 - [ ] T012 [P] PerformanceMetric collection in scripts/performance_metrics.py

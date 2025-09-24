@@ -50,8 +50,22 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+
+      - name: Install apt-fast
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2
+          wget https://raw.githubusercontent.com/ilikenwf/apt-fast/master/apt-fast
+          sudo mv apt-fast /usr/local/bin/apt-fast
+          sudo chmod +x /usr/local/bin/apt-fast
+
       - name: System packages for headless
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
+        run: sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 
       - name: Sync dependencies (locked)
         run: uv sync --frozen

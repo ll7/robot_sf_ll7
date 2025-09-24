@@ -66,15 +66,15 @@ As a researcher running the full classic interaction benchmark, I want the syste
 3. **Given** benchmark execution with valid scenario configurations, **When** the system computes metrics, **Then** it should use properly implemented metric calculations instead of placeholder values
 
 ### Edge Cases
-- What happens when video rendering dependencies (MoviePy, matplotlib) are not available?
-- How does system handle scenarios with insufficient data for meaningful plots?
-- What happens when metric computation fails for specific episodes?
+- What happens when video rendering dependencies (MoviePy, matplotlib) are not available? **SPECIFIED**: System MUST provide clear error messages and continue benchmark execution with warnings, generating placeholder outputs if possible
+- How does system handle scenarios with insufficient data for meaningful plots? **SPECIFIED**: System MUST validate data completeness and provide warnings for insufficient data, generating available plots with clear data limitations noted
+- What happens when metric computation fails for specific episodes? **SPECIFIED**: System MUST log specific failures and continue processing valid episodes, providing partial results with failure summaries
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
-- **FR-001**: System MUST generate actual PDF plots showing real benchmark metrics and distributions instead of placeholder graphics
-- **FR-002**: System MUST render actual videos of robot navigation scenarios using proper simulation replay instead of dummy placeholder videos
+- **FR-001**: System MUST generate actual PDF plots showing real benchmark metrics and distributions instead of placeholder graphics (DEFINITION: Plots containing computed statistical data from episode metrics, not hardcoded placeholder images)
+- **FR-002**: System MUST render actual videos of robot navigation scenarios using proper simulation replay instead of dummy placeholder videos (DEFINITION: Videos showing robot trajectories and pedestrian interactions, either through simulation replay or data-driven animation, not static dummy footage)
 - **FR-003**: System MUST compute and use properly implemented benchmark metrics for all plot and video generation
 - **FR-004**: System MUST validate that generated plots and videos contain real data before marking benchmark as complete
 - **FR-005**: System MUST provide clear error messages when plot/video generation fails due to missing dependencies or data issues

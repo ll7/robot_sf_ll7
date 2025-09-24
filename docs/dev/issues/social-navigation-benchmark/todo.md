@@ -172,15 +172,16 @@ Completed (2025-09-22):
 - [x] Removed abandoned ARGB / HiDPI buffer manipulation path (simpler + portable). (2025-09-22)
 - [x] Fixed `moviepy` invocation (dropped unsupported `verbose` / `logger` kwargs). (2025-09-22)
 - [x] Integrated video generation in classic benchmark script producing per‑episode MP4 artifacts. (2025-09-22)
+- [x] Added structured skip handling for empty-frame or unwritable video cases (warnings + manifest notes) with regression tests. (2025-09-24)
 
 Planned / Pending:
 - [x] Add integration test: run a 1–2 episode micro batch and assert MP4 exists, >0 bytes, and frame count matches expectation. (2025-09-24) — tests: `tests/test_cli_run_video.py`, `tests/unit/test_runner_video.py` (skip when moviepy missing)
-- [ ] Performance sampling: record encode ms/frame & cumulative overhead; target <5% added wall time for default batch.
+- [ ] Performance sampling: record encode ms/frame & cumulative overhead; target <5% added wall time for default batch. (Instrumentation present via `encode_seconds`/`overhead_ratio`; need documented sample + docs hook.)
 - [x] Add `--no-video` / config toggle to disable video generation for pure metric runs. (2025-09-24) — CLI flag implemented and wired
 - [x] Add renderer selection flag (`--video-renderer=synthetic|sim-view|none`) anticipating SimulationView path. (2025-09-24) — wired; default remains none unless requested
 - [ ] Optional SimulationView high‑fidelity renderer (deferred until post core benchmark freeze).
 - [x] JSON Schema extension / manifest spec for video artifact entries (validate size >0, format=mp4). (2025-09-24)
-- [ ] Documentation: create `docs/dev/issues/video-artifacts/design.md` (rationale, capture method, perf notes) and link from `docs/README.md` & this TODO.
+- [x] Documentation: create `docs/dev/issues/video-artifacts/design.md` (rationale, capture method, perf notes) and link from `docs/README.md` & this TODO. (2025-09-24)
 - [ ] Benchmark figure regeneration script: add optional gallery sheet (contact-sheet style) of first frame per video.
 - [ ] Perf regression guard: add lightweight CI smoke that runs video generation for 1 episode (skipped on Windows if needed).
 

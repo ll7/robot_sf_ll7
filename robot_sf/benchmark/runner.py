@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
@@ -378,7 +380,118 @@ def _try_encode_synthetic_video(
     }
 
 
-def run_episode(
+def _annotate_and_check_video_perf(
+    record: Dict[str, Any],
+    vid: Dict[str, Any],
+    perf_start: float,
+    enc_start: float,
+    enc_end: float,
+) -> None:
+    """Annotate manifest with encode timing and enforce optional budgets.
+
+    Adds keys: encode_seconds, overhead_ratio.
+    Budget env vars:
+      - ROBOT_SF_VIDEO_OVERHEAD_SOFT (default 0.10)
+      - ROBOT_SF_VIDEO_OVERHEAD_HARD (default 0.50)
+      - ROBOT_SF_PERF_ENFORCE (any non-empty to enforce)
+    """
+    encode_seconds = float(max(0.0, enc_end - enc_start))
+    total_elapsed = float(max(1e-9, enc_end - perf_start))
+    overhead_ratio = float(encode_seconds / total_elapsed)
+    vid["encode_seconds"] = encode_seconds
+    vid["overhead_ratio"] = overhead_ratio
+    record["video"] = vid
+
+    soft = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.10"))
+    hard = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.50"))
+    enforce = bool(os.getenv("ROBOT_SF_PERF_ENFORCE"))
+    if overhead_ratio > hard:
+        if enforce:
+            raise RuntimeError(
+                f"video overhead hard breach: ratio={overhead_ratio:.3f} > {hard:.3f}"
+            )
+        else:
+            try:
+                from loguru import logger  # type: ignore
+
+                logger.warning(
+                    (
+                        "Video overhead hard breach but continue: "
+                        "ratio={ratio:.3f} > {hard:.3f} episode_id={episode_id} "
+                        "scenario_id={scenario_id} seed={seed} renderer={renderer}"
+                    ),
+                    ratio=overhead_ratio,
+                    hard=hard,
+                    episode_id=record.get("episode_id"),
+                    scenario_id=record.get("scenario_id"),
+                    seed=record.get("seed"),
+                    renderer=vid.get("renderer"),
+                )
+            except Exception:  # pragma: no cover - logging optional
+                pass
+    elif overhead_ratio > soft:
+        if enforce:
+            raise RuntimeError(
+                f"video overhead soft breach: ratio={overhead_ratio:.3f} > {soft:.3f}"
+            )
+        else:
+            try:
+                from loguru import logger  # type: ignore
+
+                logger.warning(
+                    (
+                        "Video overhead soft breach: "
+                        "ratio={ratio:.3f} > {soft:.3f} episode_id={episode_id} "
+                        "scenario_id={scenario_id} seed={seed} renderer={renderer}"
+                    ),
+                    ratio=overhead_ratio,
+                    soft=soft,
+                    episode_id=record.get("episode_id"),
+                    scenario_id=record.get("scenario_id"),
+                    seed=record.get("seed"),
+                    renderer=vid.get("renderer"),
+                )
+            except Exception:  # pragma: no cover - logging optional
+                pass
+
+
+def _maybe_encode_video(
+    *,
+    record: Dict[str, Any],
+    robot_pos_traj: List[np.ndarray],
+    episode_id: str,
+    scenario_id: str,
+    videos_dir: Optional[str],
+    video_enabled: bool,
+    video_renderer: str,
+    perf_start: float,
+) -> None:
+    """Best-effort video encoding wrapper with perf annotation and budget checks.
+
+    Swallows all exceptions to keep batch robust.
+    """
+    if not (video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None):
+        return
+    try:
+        enc_t0 = time.perf_counter()
+        vid = _try_encode_synthetic_video(
+            robot_pos_traj,
+            episode_id=episode_id,
+            scenario_id=scenario_id,
+            out_dir=Path(videos_dir),
+            fps=10,
+        )
+        enc_t1 = time.perf_counter()
+        if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
+            _annotate_and_check_video_perf(record, vid, perf_start, enc_t0, enc_t1)
+    except RuntimeError:
+        # Budget enforcement: bubble up to runner to record a failure
+        raise
+    except Exception:  # pragma: no cover - defensive path
+        pass
+
+
+def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
     scenario_params: Dict[str, Any],
     seed: int,
     *,
@@ -400,74 +513,96 @@ def run_episode(
 
     The robot can use different algorithms based on the 'algo' parameter.
     """
+    # Wall-clock start time for timestamps and perf accounting
+    _perf_start = time.perf_counter()
+    _ts_start = datetime.now(timezone.utc).isoformat()
     # Create robot policy based on algorithm
     robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
 
-    gen = generate_scenario(scenario_params, seed=seed)
-    sim = gen.simulator
-    if sim is None:
-        raise RuntimeError("pysocialforce not available; cannot run episode")
-    wrapper = FastPysfWrapper(sim)
+    def _simulate_episode() -> tuple[
+        List[np.ndarray],
+        List[np.ndarray],
+        List[np.ndarray],
+        List[np.ndarray],
+        List[np.ndarray],
+        np.ndarray,
+        int | None,
+    ]:
+        gen = generate_scenario(scenario_params, seed=seed)
+        sim = gen.simulator
+        if sim is None:
+            raise RuntimeError("pysocialforce not available; cannot run episode")
+        wrapper = FastPysfWrapper(sim)
 
-    # Determine robot start/goal: default start left boundary mid-height, goal right boundary mid-height
-    robot_start_arr, robot_goal_arr = _prepare_robot_points(robot_start, robot_goal)
+        # Determine robot start/goal: defaults if absent
+        robot_start_arr, robot_goal_arr = _prepare_robot_points(robot_start, robot_goal)
+        robot_pos = robot_start_arr.copy()
+        robot_vel = np.zeros(2)
 
-    robot_pos = robot_start_arr.copy()
-    robot_vel = np.zeros(2)
+        robot_pos_traj: List[np.ndarray] = []
+        robot_vel_traj: List[np.ndarray] = []
+        robot_acc_traj: List[np.ndarray] = []
+        peds_pos_traj: List[np.ndarray] = []
+        ped_forces_traj: List[np.ndarray] = []
 
-    # Buffers
-    robot_pos_traj: List[np.ndarray] = []
-    robot_vel_traj: List[np.ndarray] = []
-    robot_acc_traj: List[np.ndarray] = []
-    peds_pos_traj: List[np.ndarray] = []
-    ped_forces_traj: List[np.ndarray] = []
-
-    reached_goal_step: int | None = None
-    goal_radius = 0.3
-
-    last_vel = robot_vel.copy()
-
-    def _step_robot(
-        curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
-        new_pos = curr_pos + new_vel * dt
-        acc_vec = (new_vel - curr_vel) / dt
-        return new_pos, new_vel, acc_vec
-
-    for t in range(horizon):
-        # Capture pedestrian positions directly via pysocialforce API
-        ped_pos = sim.peds.pos().copy()
-        peds_pos_traj.append(ped_pos)
-
-        # Policy (now algorithm-based)
-        robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
+        reached_goal_step: int | None = None
+        goal_radius = 0.3
         last_vel = robot_vel.copy()
 
-        # Force sampling per pedestrian if requested
-        if record_forces:
-            # Use float dtype to avoid truncating small forces to zero when assigning
-            # float vectors returned by FastPysfWrapper.get_forces_at(...).
-            # Using zeros_like(ped_pos) without dtype may default to integers depending
-            # on the simulator's internal array dtype, causing silent casts to 0.
-            forces = np.zeros_like(ped_pos, dtype=float)
-            for i, p in enumerate(ped_pos):
-                forces[i] = wrapper.get_forces_at(p)
-            ped_forces_traj.append(forces)
-        else:
-            ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
+        def _step_robot(
+            curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
+        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
+            new_pos = curr_pos + new_vel * dt
+            acc_vec = (new_vel - curr_vel) / dt
+            return new_pos, new_vel, acc_vec
 
-        robot_pos_traj.append(robot_pos.copy())
-        robot_vel_traj.append(robot_vel.copy())
-        robot_acc_traj.append(acc.copy())
+        for t in range(horizon):
+            ped_pos = sim.peds.pos().copy()
+            peds_pos_traj.append(ped_pos)
 
-        # Goal check
-        if reached_goal_step is None and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius:
-            reached_goal_step = t
-            break
+            robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
+            last_vel = robot_vel.copy()
 
-        # Advance pedestrian simulation one step
-        sim.step()
+            if record_forces:
+                forces = np.zeros_like(ped_pos, dtype=float)
+                for i, p in enumerate(ped_pos):
+                    forces[i] = wrapper.get_forces_at(p)
+                ped_forces_traj.append(forces)
+            else:
+                ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
+
+            robot_pos_traj.append(robot_pos.copy())
+            robot_vel_traj.append(robot_vel.copy())
+            robot_acc_traj.append(acc.copy())
+
+            if (
+                reached_goal_step is None
+                and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius
+            ):
+                reached_goal_step = t
+                break
+            sim.step()
+
+        return (
+            robot_pos_traj,
+            robot_vel_traj,
+            robot_acc_traj,
+            peds_pos_traj,
+            ped_forces_traj,
+            np.asarray(robot_goal_arr, dtype=float),
+            reached_goal_step,
+        )
+
+    (
+        robot_pos_traj,
+        robot_vel_traj,
+        robot_acc_traj,
+        peds_pos_traj,
+        ped_forces_traj,
+        robot_goal_arr,
+        reached_goal_step,
+    ) = _simulate_episode()
 
     ep: EpisodeData = _build_episode_data(
         robot_pos_traj,
@@ -502,14 +637,12 @@ def run_episode(
         "algorithm_metadata": algo_metadata,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
-        "timestamps": {
-            "start": datetime.now(timezone.utc).isoformat(),
-            "end": datetime.now(timezone.utc).isoformat(),
-        },
+        "timestamps": {"start": _ts_start, "end": _ts_start},
     }
     # Optional per‑episode video artifact (synthetic only for now)
     if video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None:
         try:
+            _enc_t0 = time.perf_counter()
             vid = _try_encode_synthetic_video(
                 robot_pos_traj,
                 episode_id=episode_id,
@@ -517,11 +650,14 @@ def run_episode(
                 out_dir=Path(videos_dir),
                 fps=10,
             )
+            _enc_t1 = time.perf_counter()
             if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
-                record["video"] = vid
+                _annotate_and_check_video_perf(record, vid, _perf_start, _enc_t0, _enc_t1)
         except Exception:
             # Do not fail the batch on video problems
             pass
+    # Update timestamps with end time after optional encoding
+    record["timestamps"]["end"] = datetime.now(timezone.utc).isoformat()
     return record
 
 

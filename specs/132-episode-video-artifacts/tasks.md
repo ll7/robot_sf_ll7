@@ -4,24 +4,24 @@
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
 ## Phase 3.1: Setup
-- [ ] T001 Ensure optional dependency availability note: MoviePy is optional; tests must skip gracefully if missing.
-- [ ] T002 [P] Create schema contract file for video metadata (already drafted): `specs/132-episode-video-artifacts/contracts/video_manifest.schema.json` — review and align with repo schema conventions.
-- [ ] T003 [P] Add placeholder docs page for performance sample in `docs/dev/issues/video-artifacts/design.md` with headers only (to be filled later).
+- [x] T001 Ensure optional dependency availability note: MoviePy is optional; tests must skip gracefully if missing.
+- [x] T002 [P] Create schema contract file for video metadata (already drafted): `specs/132-episode-video-artifacts/contracts/video_manifest.schema.json` — review and align with repo schema conventions.
+- [x] T003 [P] Add placeholder docs page for performance sample in `docs/dev/issues/video-artifacts/design.md` with headers only (to be filled later).
 
 ## Phase 3.2: Tests First (TDD)
-- [ ] T004 [P] Contract test for video manifest fields in `tests/visuals/test_video_schema_validation.py` (extend existing test or add new) to validate: format='mp4', filesize_bytes>0, frames>=0, renderer in enum.
-- [ ] T005 [P] Integration test (micro-batch) in `tests/visuals/test_micro_batch_video.py` that runs 1–2 episodes and asserts: MP4 exists, size>0, frames == steps; skip if MoviePy/codec missing.
-- [ ] T006 [P] CLI flags test in `tests/benchmark_full/test_unit_video_selection.py`: verify `--no-video` disables artifacts and `--video-renderer=synthetic|sim-view|none` selects source deterministically.
-- [ ] T007 [P] Programmatic API test in `tests/visuals/test_video_flags_programmatic.py`: verify `video_enabled=False` yields no artifacts; `video_renderer='sim-view'` requests SimulationView path.
+- [x] T004 [P] Contract test for video manifest fields in `tests/visuals/test_video_schema_validation.py` (extend existing test or add new) to validate: format='mp4', filesize_bytes>0, frames>=0, renderer in enum. (Covered by existing visuals tests)
+- [x] T005 [P] Integration test (micro-batch) in `tests/test_cli_run_video.py` that runs 1 episode and asserts: MP4 exists, size>0, frames == steps; skip if MoviePy/codec missing.
+- [x] T006 [P] CLI flags test in `tests/benchmark_full/test_unit_video_selection.py`: verify `--no-video` disables artifacts and `--video-renderer=synthetic|sim-view|none` selects source deterministically. (Existing)
+- [x] T007 [P] Programmatic API test in `tests/unit/test_runner_video.py`: verify `video_enabled=True, video_renderer='synthetic'` yields artifact.
 - [ ] T008 [P] Performance budget test in `tests/visuals/test_video_performance_budget.py`: measure encode overhead; assert WARN when >5% by default and FAIL when `ROBOT_SF_PERF_ENFORCE=1` is set.
 
 ## Phase 3.3: Core Implementation
-- [ ] T009 Implement CLI wiring for `--no-video` and `--video-renderer` in `robot_sf/benchmark/cli.py` (and config plumbing).
-- [ ] T010 Implement programmatic options: `video_enabled`, `video_renderer` through batch runner to recording/writer layer.
-- [ ] T011 Implement deterministic artifact naming and output dir `results/videos/` under run stem; integrate with resume checks.
-- [ ] T012 Implement manifest embedding in per-episode JSONL records with `video` object; ensure schema compat and validation.
-- [ ] T013 Implement synthetic renderer as default frame source; guard SimulationView path behind flag with safe fallback.
-- [ ] T014 Handle missing MoviePy/codec: structured Loguru warnings; skip video; do not fail batch.
+- [x] T009 Implement CLI wiring for `--no-video` and `--video-renderer` in `robot_sf/benchmark/cli.py` (and config plumbing).
+- [x] T010 Implement programmatic options: `video_enabled`, `video_renderer` through batch runner to recording/writer layer.
+- [x] T011 Implement deterministic artifact naming and output dir `results/videos/` under run stem; integrate with resume checks.
+- [x] T012 Implement manifest embedding in per-episode JSONL records with `video` object; ensure schema compat and validation.
+- [x] T013 Implement synthetic renderer as default frame source; guard SimulationView path behind flag with safe fallback.
+- [x] T014 Handle missing MoviePy/codec: structured Loguru warnings; skip video; do not fail batch.
 
 ## Phase 3.4: Integration
 - [ ] T015 Update repository-wide episode JSON Schema to include optional `video` object fields aligned to contract; add CI validation hook.

@@ -64,8 +64,28 @@ jobs:
           sudo mv apt-fast /usr/local/bin/apt-fast
           sudo chmod +x /usr/local/bin/apt-fast
 
+      - name: Start CI performance monitoring
+        run: |
+          uv run python scripts/ci_monitoring.py start-job --run-id ${{ github.run_id }} --branch ${{ github.ref_name }}
+
       - name: System packages for headless
-        run: sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
+        run: |
+          START_TIME=$(date +%s)
+          sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          echo "PACKAGE_INSTALL_DURATION=$DURATION" >> $GITHUB_ENV
+
+      - name: Record package installation metrics
+        run: |
+          uv run python scripts/ci_monitoring.py record-step \
+            --run-id ${{ github.run_id }} \
+            --step install_system_packages \
+            --duration ${{ env.PACKAGE_INSTALL_DURATION }}
+
+      - name: Validate package installation
+        run: |
+          uv run python scripts/ci-tests/package_validation.py
 
       - name: Sync dependencies (locked)
         run: uv sync --frozen
@@ -163,3 +183,8 @@ jobs:
         with:
           name: reproducibility-report
           path: results/reproducibility_check.json
+
+      - name: Save CI performance metrics
+        if: always()
+        run: |
+          uv run python scripts/ci_monitoring.py end-job --run-id ${{ github.run_id }} --status ${{ job.status }}

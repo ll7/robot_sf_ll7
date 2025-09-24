@@ -77,6 +77,12 @@ OUTPUT_DIR = Path("tmp/vis_runs/" + time.strftime("%Y%m%d_%H%M%S"))
 DRY_RUN = False  # global default dry_run if run_demo not passed a value
 LOGGING_ENABLED = True  # toggle for non-essential prints (FR-014)
 
+# Placeholder frame defaults used only when env-managed frames are unavailable.
+# Prefer deriving width/height from SimulationView when present (avoids mismatched encodes).
+DEFAULT_FRAME_HEIGHT = 360
+DEFAULT_FRAME_WIDTH = 640
+FRAME_CHANNELS = 3
+
 # Internal: headless detection (FR-012). If SDL_VIDEODRIVER=dummy treat as headless.
 HEADLESS = False  # retained placeholder; dynamic headless detection handled in run_demo
 
@@ -156,6 +162,24 @@ def _determine_outcome(info: dict[str, Any]) -> str:
     return "done"
 
 
+def _placeholder_frame_shape(env) -> tuple[int, int, int]:
+    """Return (H, W, C) for placeholder frames.
+
+    Tries to read dimensions from env.sim_ui when available to match the actual render size.
+    Falls back to DEFAULT_FRAME_HEIGHT/DEFAULT_FRAME_WIDTH when not available.
+    """
+    try:
+        ui = getattr(env, "sim_ui", None)  # type: ignore[attr-defined]
+        if ui is not None:
+            h = int(getattr(ui, "height", DEFAULT_FRAME_HEIGHT))
+            w = int(getattr(ui, "width", DEFAULT_FRAME_WIDTH))
+            if h > 0 and w > 0:
+                return (h, w, FRAME_CHANNELS)
+    except Exception:  # pragma: no cover - defensive
+        pass
+    return (DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, FRAME_CHANNELS)
+
+
 def _maybe_record(
     frames: list[Any], scenario_name: str, seed: int, episode_index: int, out_dir: Path
 ) -> bool:
@@ -211,7 +235,7 @@ def run_episode(
                 pass
             else:
                 if step % 5 == 0:  # light sampling to limit memory (future FR-023 could refine)
-                    frames.append(np.zeros((360, 640, 3), dtype=np.uint8))
+                    frames.append(np.zeros(_placeholder_frame_shape(env), dtype=np.uint8))
 
         # Fast demo early break to keep performance smoke test under threshold
         if fast_step_cap is not None and step >= fast_step_cap:

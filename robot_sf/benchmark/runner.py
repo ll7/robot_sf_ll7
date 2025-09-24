@@ -569,8 +569,6 @@ def _maybe_encode_video(
     *,
     record: Dict[str, Any],
     robot_pos_traj: List[np.ndarray],
-    episode_id: str,
-    scenario_id: str,
     videos_dir: Optional[str],
     video_enabled: bool,
     video_renderer: str,
@@ -582,6 +580,8 @@ def _maybe_encode_video(
     """
     if not (video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None):
         return
+    episode_id = record["episode_id"]
+    scenario_id = record["scenario_id"]
     try:
         enc_t0 = time.perf_counter()
         vid, skip_info = _try_encode_synthetic_video(
@@ -733,54 +733,6 @@ def _build_episode_record(
     }
 
 
-def _handle_video_for_record(
-    record: Dict[str, Any],
-    robot_pos_traj: List[np.ndarray],
-    perf_start: float,
-    video_enabled: bool,
-    video_renderer: str,
-    videos_dir: Optional[str],
-) -> None:
-    if not (video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None):
-        return
-    episode_id = record["episode_id"]
-    scenario_id = record["scenario_id"]
-    try:
-        _enc_t0 = time.perf_counter()
-        vid, skip_info = _try_encode_synthetic_video(
-            robot_pos_traj,
-            episode_id=episode_id,
-            scenario_id=scenario_id,
-            out_dir=Path(videos_dir),
-            fps=10,
-            seed=record.get("seed"),
-        )
-        _enc_t1 = time.perf_counter()
-        if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
-            _annotate_and_check_video_perf(record, vid, perf_start, _enc_t0, _enc_t1)
-        else:
-            reason_payload = skip_info or {
-                "reason": "encoder-empty",
-                "renderer": str(video_renderer),
-                "steps": len(robot_pos_traj),
-            }
-            _emit_video_skip(
-                record=record,
-                episode_id=episode_id,
-                scenario_id=scenario_id,
-                seed=record.get("seed"),
-                renderer=str(reason_payload.get("renderer", video_renderer)),
-                reason=str(reason_payload.get("reason", "unknown")),
-                steps=reason_payload.get("steps"),
-                error=reason_payload.get("error"),
-            )
-    except RuntimeError:
-        raise
-    except Exception:
-        # Do not fail the batch on unexpected video problems
-        pass
-
-
 def run_episode(
     scenario_params: Dict[str, Any],
     seed: int,
@@ -849,8 +801,13 @@ def run_episode(
     record = _build_episode_record(scenario_params, seed, metrics, algo_metadata, ts_start)
 
     # Handle video
-    _handle_video_for_record(
-        record, robot_pos_traj, perf_start, video_enabled, video_renderer, videos_dir
+    _maybe_encode_video(
+        record=record,
+        robot_pos_traj=robot_pos_traj,
+        videos_dir=videos_dir,
+        video_enabled=video_enabled,
+        video_renderer=video_renderer,
+        perf_start=perf_start,
     )
 
     # Update end time

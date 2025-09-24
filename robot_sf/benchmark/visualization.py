@@ -16,6 +16,9 @@ from typing import List, Literal, Optional, Union
 import numpy as np
 from loguru import logger
 
+# Default robot speed for replay episodes when speed data is not available
+DEFAULT_ROBOT_SPEED = 0.5
+
 
 @dataclass
 class VisualArtifact:
@@ -505,7 +508,7 @@ def _episode_record_to_replay_episode(episode: dict):
             x=x,
             y=y,
             heading=heading,
-            speed=0.5,  # Default speed, could be enhanced
+            speed=DEFAULT_ROBOT_SPEED,  # Default speed, could be enhanced
             ped_positions=ped_positions,
             action=action,
         )

@@ -13,7 +13,7 @@
 - [x] T005 [P] Integration test (micro-batch) in `tests/test_cli_run_video.py` that runs 1 episode and asserts: MP4 exists, size>0, frames == steps; skip if MoviePy/codec missing.
 - [x] T006 [P] CLI flags test in `tests/benchmark_full/test_unit_video_selection.py`: verify `--no-video` disables artifacts and `--video-renderer=synthetic|sim-view|none` selects source deterministically. (Existing)
 - [x] T007 [P] Programmatic API test in `tests/unit/test_runner_video.py`: verify `video_enabled=True, video_renderer='synthetic'` yields artifact.
-- [ ] T008 [P] Performance budget test in `tests/visuals/test_video_performance_budget.py`: measure encode overhead; assert WARN when >5% by default and FAIL when `ROBOT_SF_PERF_ENFORCE=1` is set.
+- [x] T008 [P] Performance budget test in `tests/visuals/test_video_performance_budget.py`: measure encode overhead; assert WARN when >5% by default and FAIL when `ROBOT_SF_PERF_ENFORCE=1` is set.
 
 ## Phase 3.3: Core Implementation
 - [x] T009 Implement CLI wiring for `--no-video` and `--video-renderer` in `robot_sf/benchmark/cli.py` (and config plumbing).
@@ -24,14 +24,14 @@
 - [x] T014 Handle missing MoviePy/codec: structured Loguru warnings; skip video; do not fail batch.
 
 ## Phase 3.4: Integration
-- [ ] T015 Update repository-wide episode JSON Schema to include optional `video` object fields aligned to contract; add CI validation hook.
-- [ ] T016 Wire performance sampling to produce a small measurement artifact and link from docs (record OS, Python, hardware summary).
-- [ ] T017 Ensure micro-batch video test runs in CI (mark skip on unsupported platforms); add to CI job include list if necessary.
+- [x] T015 Update repository-wide episode JSON Schema to include optional `video` object fields aligned to contract; add CI validation hook.
+- [x] T016 Wire performance sampling to produce a small measurement artifact and link from docs (record OS, Python, hardware summary).
+- [x] T017 Ensure micro-batch video test runs in CI (mark skip on unsupported platforms); add to CI job include list if necessary.
 
 ## Phase 3.5: Polish
-- [ ] T018 [P] Update docs: `docs/dev/issues/video-artifacts/design.md` with capture approach, fallbacks, performance notes, and link from `docs/README.md` and the master TODO.
-- [ ] T019 [P] Add logging context keys (seed, scenario_id, renderer) to video-related warnings for reproducibility.
-- [ ] T020 [P] Add figure gallery optional script placeholder (contact-sheet) under `scripts/` (deferred implementation).
+- [x] T018 [P] Update docs: `docs/dev/issues/video-artifacts/design.md` with capture approach, fallbacks, performance notes, and link from `docs/README.md` and the master TODO.
+- [x] T019 [P] Add logging context keys (seed, scenario_id, renderer) to video-related warnings for reproducibility.
+- [x] T020 [P] Add figure gallery optional script placeholder (contact-sheet) under `scripts/` (deferred implementation).
 
 ## Dependencies
 - T004–T008 (tests) before T009–T014 (implementation)
@@ -50,9 +50,9 @@ Task: T008 Performance budget test
 ```
 
 ## Validation Checklist
-- [ ] Contract tests cover schema fields
-- [ ] Integration test asserts existence/size/frames
-- [ ] Flags tested in CLI and programmatic layers
-- [ ] Performance test enforces budget semantics
-- [ ] Manifest schema validated in CI
-- [ ] Docs updated and linked
+- [x] Contract tests cover schema fields
+- [x] Integration test asserts existence/size/frames
+- [x] Flags tested in CLI and programmatic layers
+- [x] Performance test enforces budget semantics
+- [x] Manifest schema validated in CI
+- [x] Docs updated and linked

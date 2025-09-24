@@ -64,10 +64,10 @@ Focused list of MUST‑complete items before announcing the benchmark as a stabl
 - [ ] SNQI baseline med/p95 stats persisted to `results/baseline_stats.json` & automatically consumed by orchestrator (documented)
 
 ### C. Video Artifacts Minimal Viable Set
-- [ ] Micro batch integration test (1–2 episodes) asserts: MP4 exists, size>0, frames == steps
-- [ ] `--no-video` (or config toggle) implemented and documented
-- [ ] Manifest / JSON Schema extension: video artifact entries (format=mp4, file_size>0)
-- [ ] Performance sample recorded (encode ms/frame + % overhead <5%) attached to docs
+- [x] Micro batch integration test (1–2 episodes) asserts: MP4 exists, size>0, frames == steps
+- [x] `--no-video` (or config toggle) implemented and documented
+- [x] Manifest / JSON Schema extension: video artifact entries (format=mp4, file_size>0)
+- [x] Performance sample recorded (encode ms/frame + % overhead <5%) attached to docs
 
 ### D. Reproducibility & Tooling
 - [ ] Pre-commit hook / CI guard preventing silent schema drift (metric or episode schema)
@@ -81,7 +81,7 @@ Focused list of MUST‑complete items before announcing the benchmark as a stabl
 - [ ] SNQI component ablation ranking shift analysis (≥50% baselines move >1 slot) – figure or table
 
 ### F. Documentation & Onboarding
-- [ ] `video-artifacts/design.md` (capture approach, fallbacks, perf notes) + linked from `docs/README.md`
+- [x] `video-artifacts/design.md` (capture approach, fallbacks, perf notes) + linked from `docs/README.md`
 - [ ] Metrics spec linked from docs index & README
 - [ ] Add “Release Reproduction Guide” section: exact commands to regenerate all published artifacts
 
@@ -262,4 +262,3 @@ Next picks (2025-09-08):
 
 ---
 Last updated: 2025-09-22 (Video artifact pipeline + PNG fallback; moviepy invocation fix; added video subsection)
-

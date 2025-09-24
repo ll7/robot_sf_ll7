@@ -156,6 +156,14 @@
                 },
                 "notes": {
                     "type": "string"
+                },
+                "encode_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "overhead_ratio": {
+                    "type": "number",
+                    "minimum": 0
                 }
             },
             "required": [

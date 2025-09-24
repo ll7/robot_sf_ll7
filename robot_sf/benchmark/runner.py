@@ -314,6 +314,7 @@ def _try_encode_synthetic_video(
     scenario_id: str,
     out_dir: Path,
     fps: int = 10,
+    seed: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """Encode a very lightweight synthetic MP4 from robot positions.
 
@@ -323,12 +324,42 @@ def _try_encode_synthetic_video(
     try:
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
     except Exception:
+        try:
+            from loguru import logger  # type: ignore
+
+            logger.warning(
+                (
+                    "Video skipped: moviepy unavailable "
+                    "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
+                ),
+                episode_id=episode_id,
+                scenario_id=scenario_id,
+                seed=seed,
+                renderer="synthetic",
+            )
+        except Exception:  # pragma: no cover - logging optional
+            pass
         return None
 
     import numpy as _np  # local alias to avoid confusion
 
     N = len(robot_pos_traj)
     if N == 0:
+        try:
+            from loguru import logger  # type: ignore
+
+            logger.warning(
+                (
+                    "Video skipped: no frames captured "
+                    "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
+                ),
+                episode_id=episode_id,
+                scenario_id=scenario_id,
+                seed=seed,
+                renderer="synthetic",
+            )
+        except Exception:  # pragma: no cover
+            pass
         return None
     H, W = 128, 128
     # Determine bounds for simple normalization
@@ -480,10 +511,27 @@ def _maybe_encode_video(
             scenario_id=scenario_id,
             out_dir=Path(videos_dir),
             fps=10,
+            seed=record.get("seed"),
         )
         enc_t1 = time.perf_counter()
         if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
             _annotate_and_check_video_perf(record, vid, perf_start, enc_t0, enc_t1)
+        else:
+            try:
+                from loguru import logger  # type: ignore
+
+                logger.warning(
+                    (
+                        "Video skipped: encoder returned empty artifact "
+                        "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
+                    ),
+                    episode_id=episode_id,
+                    scenario_id=scenario_id,
+                    seed=record.get("seed"),
+                    renderer=video_renderer,
+                )
+            except Exception:  # pragma: no cover - optional logging
+                pass
     except RuntimeError:
         # Budget enforcement: bubble up to runner to record a failure
         raise
@@ -649,12 +697,31 @@ def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
                 scenario_id=record["scenario_id"],
                 out_dir=Path(videos_dir),
                 fps=10,
+                seed=record.get("seed"),
             )
             _enc_t1 = time.perf_counter()
             if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
                 _annotate_and_check_video_perf(record, vid, _perf_start, _enc_t0, _enc_t1)
+            else:
+                try:
+                    from loguru import logger  # type: ignore
+
+                    logger.warning(
+                        (
+                            "Video skipped: encoder returned empty artifact "
+                            "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
+                        ),
+                        episode_id=episode_id,
+                        scenario_id=record.get("scenario_id"),
+                        seed=record.get("seed"),
+                        renderer=video_renderer,
+                    )
+                except Exception:  # pragma: no cover - optional logging
+                    pass
+        except RuntimeError:
+            raise
         except Exception:
-            # Do not fail the batch on video problems
+            # Do not fail the batch on unexpected video problems
             pass
     # Update timestamps with end time after optional encoding
     record["timestamps"]["end"] = datetime.now(timezone.utc).isoformat()

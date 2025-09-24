@@ -457,7 +457,7 @@ def generate_benchmark_videos(
             )
             artifacts.append(artifact)
 
-        except Exception as e:
+        except VisualizationError as e:
             logger.warning(f"Failed to generate video for episode {episode['episode_id']}: {e}")
             artifact = VisualArtifact(
                 artifact_id=f"video_{episode['episode_id']}_{datetime.now().timestamp()}",

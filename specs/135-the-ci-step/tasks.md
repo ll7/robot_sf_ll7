@@ -63,9 +63,9 @@
 
 ## Phase 3.4: Integration
 - [x] T013 Integrate performance monitoring with CI workflow
-- [ ] T014 Test CI workflow modifications end-to-end
-- [ ] T015 Validate package installation reliability
-- [ ] T016 Measure and validate performance improvements
+- [x] T014 Test CI workflow modifications end-to-end
+- [x] T015 Validate package installation reliability
+- [x] T016 Measure and validate performance improvements
 
 ## Phase 3.5: Polish
 - [ ] T017 [P] Update CI documentation in docs/dev_guide.md

@@ -67,11 +67,7 @@ def test_each_scenario_structure_and_files() -> None:
             low, high = RECOMMENDED_RANGE
             if not (low <= density <= high):
                 warnings.warn(
-                    (
-                        f"Scenario {scenario['name']} ped_density={density} is outside the "
-                        f"recommended [{low}, {high}] range. This is allowed, but may reduce "
-                        "comparability with canonical benchmark results."
-                    ),
+                    f"""Scenario {scenario["name"]} ped_density={density} is outside the recommended [{low}, {high}] range. This is allowed, but may reduce comparability with canonical benchmark results.""",
                     UserWarning,
                 )
         # groups usage rule

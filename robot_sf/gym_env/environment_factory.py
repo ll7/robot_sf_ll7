@@ -216,6 +216,7 @@ def make_robot_env(
     peds_have_obstacle_forces: bool = False,
     reward_func: Optional[Callable] = None,
     debug: bool = False,
+    scaling: Optional[float] = None,
     recording_enabled: bool = False,
     record_video: bool = False,
     video_path: Optional[str] = None,
@@ -304,6 +305,12 @@ def make_robot_env(
         video_path=eff_video_path,
         video_fps=eff_video_fps,
     )
+    if scaling is not None and hasattr(env, "sim_ui") and env.sim_ui is not None:
+        # Apply post-construction to avoid widening constructor signatures widely.
+        try:
+            env.sim_ui.scaling = scaling  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to set custom scaling on sim_ui; leaving default.")
     setattr(env, "applied_seed", seed)
     return env
 
@@ -315,6 +322,7 @@ def make_image_robot_env(
     peds_have_obstacle_forces: bool = False,
     reward_func: Optional[Callable] = None,
     debug: bool = False,
+    scaling: Optional[float] = None,
     recording_enabled: bool = False,
     record_video: bool = False,
     video_path: Optional[str] = None,
@@ -361,6 +369,11 @@ def make_image_robot_env(
         video_path=eff_video_path,
         video_fps=eff_video_fps,
     )
+    if scaling is not None and hasattr(env, "sim_ui") and env.sim_ui is not None:
+        try:
+            env.sim_ui.scaling = scaling  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to set custom scaling on sim_ui; leaving default.")
     setattr(env, "applied_seed", seed)
     return env
 
@@ -372,6 +385,7 @@ def make_pedestrian_env(
     robot_model=None,
     reward_func: Optional[Callable] = None,
     debug: bool = False,
+    scaling: Optional[float] = None,
     recording_enabled: bool = False,
     peds_have_obstacle_forces: bool = False,
     record_video: bool = False,
@@ -450,6 +464,11 @@ def make_pedestrian_env(
         recording_enabled=recording_enabled,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
     )
+    if scaling is not None and hasattr(env, "sim_ui") and env.sim_ui is not None:
+        try:
+            env.sim_ui.scaling = scaling  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to set custom scaling on sim_ui; leaving default.")
     setattr(env, "applied_seed", seed)
     return env
 

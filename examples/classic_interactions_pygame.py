@@ -551,6 +551,7 @@ def run_demo(
         env = make_robot_env(
             config=sim_cfg,
             reward_func=simple_reward,
+            scaling=int(20),
             debug=True,
             record_video=eff_record,
             video_path=str(OUTPUT_DIR) if eff_record else None,

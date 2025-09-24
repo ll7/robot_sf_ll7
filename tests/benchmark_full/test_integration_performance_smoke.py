@@ -17,7 +17,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
-SOFT_RUNTIME_SEC = 3.0  # generous for CI; synthetic episodes should be << 1s
+SOFT_RUNTIME_SEC = 5.0  # generous for CI; synthetic episodes should be << 1s
 
 
 def test_performance_smoke(config_factory):

@@ -534,18 +534,26 @@ def _episode_record_to_replay_episode(episode: dict):
 
 
 def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> List[np.ndarray]:
-    """Generate frames from a ReplayEpisode using the render_sim_view system."""
-    try:
-        from robot_sf.benchmark.full_classic.render_sim_view import generate_frames
-    except ImportError:
-        logger.warning("SimulationView rendering not available, cannot generate real video frames")
-        return []
+    """
+    Generate frames from a replay episode for video creation.
 
-    frames = []
-    for frame in generate_frames(replay_episode, fps=fps, max_frames=max_frames):
-        frames.append(frame)
+    This is a placeholder implementation. In a full implementation, this would
+    render frames using the simulation view system.
 
-    return frames
+    Args:
+        replay_episode: The ReplayEpisode object containing trajectory data
+        fps: Target frames per second for the video
+        max_frames: Maximum number of frames to generate
+
+    Returns:
+        List of numpy arrays representing video frames
+    """
+    # TODO: Implement actual frame generation using simulation view rendering
+    # For now, return empty list to skip video generation gracefully
+    logger.warning(
+        "_generate_frames_from_replay is not yet implemented - skipping video generation"
+    )
+    return []
 
 
 def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int) -> None:
@@ -558,7 +566,7 @@ def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int)
 
         # Convert frames to the format expected by moviepy (list of numpy arrays)
         clip = ImageSequenceClip(frames, fps=fps)
-        clip.write_videofile(video_path, codec="libx264", audio=False, verbose=False, logger=None)
+        clip.write_videofile(video_path, codec="libx264", audio=False, logger=None)
     except (ValueError, TypeError, OSError) as e:
         raise VisualizationError(f"Failed to encode video: {e}", "video")
 

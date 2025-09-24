@@ -29,6 +29,10 @@ Update etiquette:
 - [x] Progress bar integration for run/baseline via callback (tqdm optional) (2025-09-17)
 - [ ] Finalize baseline algorithm list (min: SF default, RL policy, Random, Optional: ORCA/RVO)
 
+### Recent Updates (2025-09-24)
+- [x] SimulationView: optimized frame capture using `pixels3d` view + `np.transpose(...).copy()` to reduce per-frame overhead during recording.
+- [x] Classic interactions demo: placeholder frame size now derived from `sim_ui` (H, W) with sensible defaults; removed hardcoded 360×640 constants.
+
 [x] Global flags: seed, progress bar, resume (2025-09-17)
 The Social Navigation Benchmark provides a reproducible, force-field–aware evaluation suite for robot policies operating amid dynamic pedestrian crowds. It offers a standardized set of procedurally generated scenarios varying density, flow patterns, obstacle complexity, and group behavior. Beyond traditional success and collision counts, it emphasizes comfort and social compliance via force, proximity, and smoothness metrics, aggregated into a transparent composite index (SNQI). The benchmark supplies baseline planners (social-force, RL, random) with deterministic seeding, locked dependencies, and schema-validated outputs to enable fair comparison, ablation, and rapid iteration. Its objective is not to maximize scenario realism initially, but to establish a rigorous, interpretable, and extensible foundation that can be incrementally enriched (e.g., real data calibration, risk-aware planning) while preserving backward compatibility and reproducibility.
 
@@ -51,6 +55,11 @@ Focused list of MUST‑complete items before announcing the benchmark as a stabl
 
 ### B. Metrics & Data Integrity
 - [ ] Implement per‑pedestrian force magnitude quantiles (current: only aggregated) + tests
+	- [ ] Data plumbing: expose per‑pedestrian instantaneous force magnitudes per step in episode records (schema update with optional `ped_force_mag_per_step: List[List[float]]]` gated behind a debug flag to control size).
+	- [ ] Computation: for each episode, compute per‑ped quantiles (e.g., q50/q90/q95) across time, then aggregate across pedestrians (mean/median) to produce episode‑level features `metrics.ped_force_q50_mean`, `metrics.ped_force_q95_mean`, etc.
+	- [ ] Aggregation: update aggregator to include new fields in group summaries and optional bootstrap CIs.
+	- [ ] Tests: unit test with a tiny synthetic trace (2 peds, 5 steps) verifying exact quantile math and episode aggregation; integration test to ensure fields appear in JSONL when enabled.
+	- [ ] Docs: extend `docs/ped_metrics/README.md` with formal definitions, units, and edge‑case handling (missing peds, zero length windows).
 - [ ] Contact / collision stress scenario (narrow corridor or tuned density) ensures non‑zero collision counts appear in seed batch
 - [ ] SNQI baseline med/p95 stats persisted to `results/baseline_stats.json` & automatically consumed by orchestrator (documented)
 
@@ -168,7 +177,7 @@ Planned / Pending:
 - [ ] Add integration test: run a 1–2 episode micro batch and assert MP4 exists, >0 bytes, and frame count matches expectation.
 - [ ] Performance sampling: record encode ms/frame & cumulative overhead; target <5% added wall time for default batch.
 - [ ] Add `--no-video` / config toggle to disable video generation for pure metric runs.
-- [ ] Add renderer selection flag (`--video-renderer=synthetic|sim-view|none`) anticipating SimulationView path.
+- [x] Add renderer selection flag (`--video-renderer=synthetic|sim-view|none`) anticipating SimulationView path. (2025-09-24) — internal wiring stubbed; default remains synthetic.
 - [ ] Optional SimulationView high‑fidelity renderer (deferred until post core benchmark freeze).
 - [ ] JSON Schema extension / manifest spec for video artifact entries (validate size >0, format=mp4).
 - [ ] Documentation: create `docs/dev/issues/video-artifacts/design.md` (rationale, capture method, perf notes) and link from `docs/README.md` & this TODO.
@@ -178,6 +187,7 @@ Planned / Pending:
 Notes:
 - PNG fallback ensures portability across macOS (FigureCanvasMac), Agg, and headless CI without backend feature assumptions.
 - Future SimulationView integration should reuse the same writer abstraction; avoid duplicating encode logic.
+- SimulationView frame capture path is now more efficient; when used as renderer, prefer env-managed frames over placeholders.
 
 ### Next picks (2025-09-18) — Research kickoff
 1) Lock scenario matrix for the “core” suite (12+ scenarios) and commit final YAML.

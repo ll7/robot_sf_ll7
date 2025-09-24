@@ -206,13 +206,24 @@ def validate_benchmark_results(results: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # Check for required output files
-    required_files = ["episodes.jsonl", "aggregated_results.json", "plots", "videos"]
-    output_root = results.get("output_root", "")
+    required_files_at_root = ["aggregated_results.json"]
+    required_files_per_baseline = ["episodes/episodes.jsonl", "plots", "videos"]
+    output_root_path = Path(results.get("output_root", ""))
+    baselines = results.get("baselines", [])
     missing_files = []
 
-    for file in required_files:
-        if not (Path(output_root) / file).exists():
-            missing_files.append(file)
+    # Check root-level files
+    for file in required_files_at_root:
+        file_path = output_root_path / file
+        if not file_path.exists():
+            missing_files.append(str(file_path))
+
+    # Check per-baseline files/directories
+    for baseline in baselines:
+        for file in required_files_per_baseline:
+            path_to_check = output_root_path / baseline / file
+            if not path_to_check.exists():
+                missing_files.append(str(path_to_check))
 
     validation_results["checks"]["required_outputs_present"] = len(missing_files) == 0
     validation_results["missing_files"] = missing_files

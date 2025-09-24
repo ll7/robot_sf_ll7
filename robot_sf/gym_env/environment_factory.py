@@ -75,7 +75,7 @@ class EnvironmentFactory:
 
     @staticmethod
     def create_robot_env(
-        config: Optional[RobotSimulationConfig],
+        config: Optional[RobotSimulationConfig] = None,
         *,
         use_image_obs: bool,
         peds_have_obstacle_forces: bool,
@@ -111,7 +111,7 @@ class EnvironmentFactory:
 
     @staticmethod
     def create_pedestrian_env(
-        config: Optional[PedestrianSimulationConfig],
+        config: Optional[PedestrianSimulationConfig] = None,
         *,
         robot_model,
         reward_func: Optional[Callable],
@@ -134,7 +134,7 @@ class EnvironmentFactory:
 
     @staticmethod
     def create_multi_robot_env(
-        config: Optional[MultiRobotConfig],
+        config: Optional[MultiRobotConfig] = None,
         *,
         num_robots: int,
         reward_func: Optional[Callable],

@@ -51,6 +51,35 @@ TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
 TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
 
 
+def _empty_map_definition() -> MapDefinition:
+    """Return a minimal valid MapDefinition used as a safe default.
+
+    This avoids needing callers to always supply a map and keeps SimulationView
+    construction lightweight for utility or test contexts. The map is a 1x1 square
+    with a single spawn/goal triangle; routes are empty.
+    """
+    rect = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+    bounds = [
+        (0.0, 0.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0, 1.0),
+        (1.0, 1.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 0.0),
+    ]
+    return MapDefinition(
+        width=1.0,
+        height=1.0,
+        obstacles=[],
+        robot_spawn_zones=[rect],
+        ped_spawn_zones=[rect],
+        robot_goal_zones=[rect],
+        bounds=bounds,
+        robot_routes=[],
+        ped_goal_zones=[rect],
+        ped_crowded_zones=[],
+        ped_routes=[],
+    )
+
+
 @dataclass
 class VisualizableAction:
     pose: RobotPose
@@ -152,7 +181,8 @@ class SimulationView:
     ego_ped_radius: float = 0.4
     ped_radius: float = 0.4
     goal_radius: float = 1.0
-    map_def: MapDefinition = field(default_factory=MapDefinition)
+    # Provide a minimal valid default map definition (see _empty_map_definition)
+    map_def: MapDefinition = field(default_factory=_empty_map_definition)
     obstacles: List[Obstacle] = field(default_factory=list)
     caption: str = "RobotSF Simulation"
     focus_on_robot: bool = True
@@ -178,10 +208,39 @@ class SimulationView:
     ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
     # Internal flag: True when a display window is created via pygame.display.set_mode
     _use_display: bool = field(init=False, default=False)
+    # Maximum number of frames to retain in memory when recording. None means no hard cap.
+    # Default chosen to balance typical 720p usage (<~4.4GB for 1200 frames) vs runaway memory.
+    max_frames: int | None = field(default=2000)
+    _frame_cap_warned: bool = field(init=False, default=False)
 
     def __post_init__(self):
         """Initialize PyGame components."""
         logger.info("Initializing the simulation view.")
+        # Environment variable override for max_frames (e.g., runtime tuning / CI scenarios)
+        env_cap = os.environ.get("ROBOT_SF_MAX_VIDEO_FRAMES")
+        if env_cap is not None:
+            raw = env_cap.strip().lower()
+            if raw in {"none", "", "-1"}:
+                self.max_frames = None
+                logger.debug(
+                    "ROBOT_SF_MAX_VIDEO_FRAMES set to '%s' -> disabling frame cap (max_frames=None)",
+                    env_cap,
+                )
+            else:
+                try:
+                    parsed = int(raw)
+                    if parsed <= 0:
+                        raise ValueError
+                    self.max_frames = parsed
+                    logger.debug(
+                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d", parsed
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '%s' (expected positive int or 'none'). Using default %s.",
+                        env_cap,
+                        self.max_frames,
+                    )
         pygame.init()
         pygame.font.init()
         self.clock = pygame.time.Clock()
@@ -372,11 +431,28 @@ class SimulationView:
 
     def _capture_frame(self):
         """Capture the current frame for video recording."""
-        frame_data = pygame.surfarray.array3d(self.screen)
-        frame_data = frame_data.swapaxes(0, 1)
+        # Enforce frame cap (if configured) before capturing new frame
+        if self.max_frames is not None and len(self.frames) >= self.max_frames:
+            if not self._frame_cap_warned:
+                est_bytes = int(self.width * self.height * 3 * len(self.frames))
+                est_gb = est_bytes / (1024**3)
+                logger.warning(
+                    "Max video frame buffer reached (max_frames=%d, ~%.2f GiB est). "
+                    "Halting further frame capture to prevent excessive memory use. "
+                    "You can raise this via SimulationView(max_frames=...) or disable via max_frames=None.",
+                    self.max_frames,
+                    est_gb,
+                )
+                self._frame_cap_warned = True
+            return
+
+        # Use a view for speed, then transpose to (H, W, C) and copy to detach from the Surface.
+        # pixels3d() avoids an immediate copy like array3d() does, improving per-frame performance.
+        surf_view = pygame.surfarray.pixels3d(self.screen)
+        frame_data = np.transpose(surf_view, (1, 0, 2)).copy()
+        # Ensure the surface is unlocked before returning (explicitly drop the view)
+        del surf_view
         self.frames.append(frame_data)
-        if len(self.frames) > 2000:
-            logger.warning("Too many frames recorded. Stopping video recording.")
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
@@ -392,6 +468,25 @@ class SimulationView:
         """Exit the simulation."""
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
+        # Diagnostic guard: warn if recording requested but no frames captured
+        if self.record_video:
+            if not self.frames:
+                logger.warning(
+                    "record_video=True but zero frames were captured; video file will not be written. "
+                    "Likely causes: (1) render() was never called; (2) early exit before any frame finalized. "
+                    "Call render() each step (or enable debug mode) to populate frames."
+                )
+            else:
+                # Heuristic: sample up to first 5 frames; if all sums are zero, content may be blank
+                try:  # pragma: no cover - defensive
+                    sample = self.frames[:5]
+                    if sample and all(np.array(f).sum() == 0 for f in sample):
+                        logger.warning(
+                            "record_video=True but captured frames appear empty (all-zero pixel data). "
+                            "Ensure drawing code executed before frame capture; verify entities are rendered."
+                        )
+                except Exception:
+                    pass
         if return_frames:
             intermediate_frames = self.frames
         self._handle_quit()

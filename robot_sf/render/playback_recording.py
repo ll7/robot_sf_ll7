@@ -54,8 +54,10 @@ def load_states(filename: str) -> Tuple[List[VisualizableSimState], MapDefinitio
     """
     # Check if the file is empty
     if os.path.getsize(filename) == 0:
-        logger.error(f"File {filename} is empty")
-        return []
+        # Treat an empty file as an error condition rather than returning an
+        # incorrectly typed empty list (improper tuple shape). This keeps the
+        # declared return type sound for callers and surfaces a clearer cause.
+        raise ValueError(f"File {filename} is empty; expected pickle with (states, map_def) tuple")
 
     logger.info(f"Loading states from {filename}")
     with open(filename, "rb") as f:  # rb = read binary

@@ -1,16 +1,28 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Classical Interaction Map: Overtaking Slower Pedestrian -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="260"
-    height="120" viewBox="0 0 260 120">
+<!-- Classical Interaction Map: Overtaking Slower Pedestrian (Rescaled to width=60) -->
+<!-- Original size 260x120. Scale factor s = 60/260 ≈ 0.23077, height≈27.69 -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="60"
+    height="27.69" viewBox="0 0 60 27.69">
     <g id="obstacles" inkscape:label="Obstacles">
-        <rect x="0" y="0" width="260" height="5" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="115" width="260" height="5" fill="#000" inkscape:label="obstacle" />
-        <!-- Gentle chicane to require lateral maneuver -->
-        <rect x="90" y="5" width="20" height="40" fill="#000" inkscape:label="obstacle" />
-        <rect x="150" y="75" width="20" height="40" fill="#000" inkscape:label="obstacle" />
+        <!-- Top & bottom borders -->
+        <rect x="0" y="0" width="60" height="1.15" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="26.54" width="60" height="1.15" fill="#000" inkscape:label="obstacle" />
+        <!-- Gentle chicane to require lateral maneuver (scaled) -->
+        <rect x="20.77" y="1.15" width="4.62" height="9.23" fill="#000" inkscape:label="obstacle" />
+        <rect x="34.62" y="17.31" width="4.62" height="9.23" fill="#000" inkscape:label="obstacle" />
     </g>
     <g id="robot" inkscape:label="Robot">
-        <rect x="20" y="50" width="20" height="20" fill="#ffd800" inkscape:label="robot_spawn_zone" />
-        <rect x="220" y="50" width="20" height="20" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+        <rect x="4.62" y="11.54" width="4.62" height="4.62" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="50.77" y="11.54" width="4.62" height="4.62" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+    <g id="pedestrians" inkscape:label="Pedestrians">
+        <rect x="4.62" y="4.62" width="4.62" height="4.62" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="50.77" y="4.62" width="4.62" height="4.62" fill="#107400" inkscape:label="ped_goal_zone" />
+    </g>
+    <g id="routes" inkscape:label="Routes">
+        <path d="M 6.92 13.85 L 53.08 13.85" stroke="#0300d5" stroke-width="1" fill="none"
+            inkscape:label="robot_route_0_0" />
+        <path d="M 6.92 6.92 L 53.08 6.92" stroke="#c40202" stroke-width="1" fill="none"
+            inkscape:label="ped_route_0_0" />
     </g>
 </svg>

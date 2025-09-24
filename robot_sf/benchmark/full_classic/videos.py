@@ -50,6 +50,11 @@ class _VideoArtifact:
     encode_time_s: float | None = None
     memory_peak_mb: float | None = None
 
+    # Backward compatibility for older tests expecting .path_mp4
+    @property
+    def path_mp4(self) -> str:
+        return self.filename or ""
+
 
 def _canvas_to_rgb_simple(fig) -> "np.ndarray":  # type: ignore[name-defined]
     """Return RGB array from figure using the simplest, backend-agnostic path.
@@ -130,14 +135,17 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
     selected = records[:max_videos]
 
     def _mk_skip(rec, note: str):  # helper
+        # Provide deterministic filename even when skipped (legacy expectation)
+        episode_id = rec.get("episode_id", "unknown")
+        mp4_name = f"video_{episode_id}.mp4"
         return _VideoArtifact(
             artifact_id=f"video_{rec.get('episode_id', 'unknown')}",
             scenario_id=rec.get("scenario_id", "unknown"),
             episode_id=rec.get("episode_id", "unknown"),
-            filename=None,
+            filename=str(out_path / mp4_name),
             renderer=(
                 "synthetic"
-                if note in {"moviepy-missing", "smoke-mode", "disabled"}
+                if note in {"moviepy missing", "smoke mode", "disabled"}
                 else ("simulation_view" if renderer_req == "sim-view" else "synthetic")
             ),
             status="skipped",
@@ -150,13 +158,13 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
         disable_videos = True
 
     if smoke:
-        return [_mk_skip(r, "smoke-mode") for r in selected]
+        return [_mk_skip(r, "smoke mode") for r in selected]
     if disable_videos:
         return [_mk_skip(r, "disabled") for r in selected]
     if plt is None:
         return [_mk_skip(r, "disabled") for r in selected]
     if ImageSequenceClip is None:
-        return [_mk_skip(r, "moviepy-missing") for r in selected]
+        return [_mk_skip(r, "moviepy missing") for r in selected]
     if renderer_req == "sim-view":  # not implemented yet
         # Communicate downgrade but still proceed with synthetic generation
         # (Tests can assert presence of skip note separately later if needed.)
@@ -205,8 +213,8 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
                     episode_id=episode_id,
                     filename=str(mp4_path),
                     renderer="synthetic",
-                    status="success",
-                    note="synthetic-annotated-path",
+                    status="generated",
+                    note="synthetic annotated path",
                     encode_time_s=encode_time,
                     memory_peak_mb=0.0,
                 )
@@ -219,8 +227,8 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
                     episode_id=episode_id,
                     filename=str(mp4_path),
                     renderer="synthetic",
-                    status="failed",
-                    note=f"render-failed:{e.__class__.__name__}",
+                    status="error",
+                    note=f"render failed: {e.__class__.__name__}",
                     encode_time_s=None,
                     memory_peak_mb=None,
                 )

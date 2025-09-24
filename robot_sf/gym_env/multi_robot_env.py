@@ -4,7 +4,7 @@ It overrides the `step_async` method to apply actions to all robots in the envir
 """
 
 from multiprocessing.pool import ThreadPool
-from typing import Callable, List
+from typing import Callable, List, Optional, Union
 
 import numpy as np
 from gymnasium import spaces
@@ -13,6 +13,7 @@ from gymnasium.vector import VectorEnv
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
 from robot_sf.gym_env.reward import simple_reward
+from robot_sf.gym_env.unified_config import MultiRobotConfig
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.simulator import init_simulators
@@ -24,22 +25,39 @@ class MultiRobotEnv(VectorEnv):
 
     def __init__(
         self,
-        env_config: EnvSettings = EnvSettings(),
-        reward_func: Callable[[dict], float] = simple_reward,
+        env_config: Union[EnvSettings, MultiRobotConfig] = EnvSettings(),
+        reward_func: Optional[Callable[[dict], float]] = simple_reward,
         debug: bool = False,
-        num_robots: int = 1,
+        num_robots: Optional[int] = None,
     ):
+        if isinstance(env_config, MultiRobotConfig):
+            resolved_num_robots = env_config.num_robots
+            if num_robots is not None and num_robots != resolved_num_robots:
+                raise ValueError(
+                    "num_robots argument ("
+                    f"{num_robots}) must match env_config.num_robots ({resolved_num_robots})."
+                )
+        else:
+            resolved_num_robots = num_robots or 1
+
         map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
-        super(MultiRobotEnv, self).__init__(num_robots, observation_space, action_space)
+        super(MultiRobotEnv, self).__init__(resolved_num_robots, observation_space, action_space)
         self.action_space = spaces.Box(
-            low=np.array([self.single_action_space.low for _ in range(num_robots)]),
-            high=np.array([self.single_action_space.high for _ in range(num_robots)]),
+            low=np.array([self.single_action_space.low for _ in range(resolved_num_robots)]),
+            high=np.array([self.single_action_space.high for _ in range(resolved_num_robots)]),
             dtype=self.single_action_space.low.dtype,
         )
 
-        self.reward_func, self.debug = reward_func, debug
-        self.simulators = init_simulators(env_config, map_def, num_robots, random_start_pos=False)
+        # Ensure a usable reward function even if None explicitly provided
+        if reward_func is None:
+            self.reward_func = simple_reward
+        else:
+            self.reward_func = reward_func
+        self.debug = debug
+        self.simulators = init_simulators(
+            env_config, map_def, resolved_num_robots, random_start_pos=False
+        )
         self.states: List[RobotState] = []
         d_t = env_config.sim_config.time_per_step_in_secs
         max_ep_time = env_config.sim_config.sim_time_in_secs
@@ -53,7 +71,7 @@ class MultiRobotEnv(VectorEnv):
             self.states.extend(states)
 
         self.sim_worker_pool = ThreadPool(len(self.simulators))
-        self.obs_worker_pool = ThreadPool(num_robots)
+        self.obs_worker_pool = ThreadPool(resolved_num_robots)
 
     def step(self, actions):
         actions = [self.simulators[0].robots[0].parse_action(a) for a in actions]

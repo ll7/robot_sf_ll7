@@ -6,7 +6,7 @@ and unified configuration system.
 """
 
 from copy import deepcopy
-from typing import Callable
+from typing import Callable, Optional
 
 import loguru
 
@@ -42,7 +42,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
     def __init__(
         self,
-        config: PedestrianSimulationConfig = None,
+        config: Optional[PedestrianSimulationConfig] = None,
         robot_model=None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         debug: bool = False,

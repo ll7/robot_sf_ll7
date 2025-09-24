@@ -2,6 +2,7 @@
 
 import re
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
@@ -141,7 +142,8 @@ class SvgMapConverter:
 
     def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
         """Process a path labeled as obstacle."""
-        vertices = path.coordinates.tolist()
+        # SvgPath.coordinates is a Tuple[Vec2D]; convert to list of tuples
+        vertices = list(path.coordinates)
 
         if not np.array_equal(vertices[0], vertices[-1]):
             logger.warning(
@@ -155,20 +157,38 @@ class SvgMapConverter:
         self, path: SvgPath, spawn_zones: List[Rect], goal_zones: List[Rect]
     ) -> GlobalRoute:
         """Process a path labeled as route (pedestrian or robot)."""
-        vertices = path.coordinates.tolist()
+        vertices = list(path.coordinates)
         spawn, goal = self.__get_path_number(path.label)
+
+        # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create
+        # minimal synthetic zones around first/last waypoint so downstream logic still works.
+        def _safe_zone(index: int, zones: List[Rect], waypoint, kind: str) -> Rect:  # noqa: D401
+            if zones and 0 <= index < len(zones):
+                return zones[index]
+            logger.warning(
+                "SVG route path '{pid}' refers to {k} index {idx} but only {avail} zones available; creating synthetic zone.",
+                pid=path.id,
+                k=kind,
+                idx=index,
+                avail=len(zones),
+            )
+            wx, wy = waypoint
+            return ((wx, wy), (wx + 0.1, wy), (wx + 0.1, wy + 0.1))
+
+        spawn_zone = _safe_zone(spawn, spawn_zones, vertices[0], "spawn")
+        goal_zone = _safe_zone(goal, goal_zones, vertices[-1], "goal")
 
         return GlobalRoute(
             spawn_id=spawn,
             goal_id=goal,
             waypoints=vertices,
-            spawn_zone=spawn_zones[spawn] if spawn_zones else (vertices[0], 0, 0),
-            goal_zone=goal_zones[goal] if goal_zones else (vertices[-1], 0, 0),
+            spawn_zone=spawn_zone,
+            goal_zone=goal_zone,
         )
 
     def _process_crowded_zone_path(self, path: SvgPath) -> Zone:
         """Process a path labeled as crowded zone."""
-        return Zone(path.coordinates.tolist())
+        return Zone(list(path.coordinates))
 
     def _process_rects(
         self, width: float, height: float
@@ -234,7 +254,15 @@ class SvgMapConverter:
             elif rect.label == "ped_crowded_zone":
                 ped_crowded_zones.append(rect.get_zone())
             else:
-                logger.error(f"Unknown label <{rect.label}> in id <{rect.id_}>")
+                # Downgrade to debug: some maps may contain decorative/helper rects without a
+                # semantic inkscape:label relevant to the simulation. Treat them as ignorable
+                # instead of erroring which previously caused noisy logs and could mask real
+                # issues. (Feature 131 hardening)
+                logger.debug(
+                    "Ignoring non-simulation rectangle id={id} label={lab}",
+                    id=rect.id_,
+                    lab=rect.label,
+                )
 
         return (
             obstacles,
@@ -246,7 +274,7 @@ class SvgMapConverter:
             ped_crowded_zones,
         )
 
-    def _info_to_mapdefintion(self) -> MapDefinition:
+    def _info_to_mapdefintion(self) -> None:
         """
         Create a MapDefinition object from the path and rectangle information.
         """
@@ -294,13 +322,19 @@ class SvgMapConverter:
             else:
                 logger.error(f"Unknown label <{label}> in id <{path.id}>")
 
-        # Log warnings if required elements are missing
+        # Log warnings / validation for required / optional elements
         if not obstacles:
             logger.warning("No obstacles found in the SVG file")
         if not ped_routes:
-            logger.warning("No routes found in the SVG file")
+            logger.warning("No pedestrian routes found in the SVG file")
         if not ped_crowded_zones:
-            logger.warning("No crowded zones found in the SVG file")
+            logger.info("No crowded zones found in the SVG file (optional)")
+
+        if not robot_routes:
+            # Hard validation: we cannot produce robot start positions => downstream division by zero.
+            raise ValueError(
+                "SVG map conversion produced zero robot routes. Ensure at least one 'robot_route_*_*' path label exists."
+            )
 
         logger.debug("Creating MapDefinition object")
         self.map_definition = MapDefinition(
@@ -344,7 +378,12 @@ class SvgMapConverter:
 
 
 def convert_map(svg_file: str):
-    """Create MapDefinition from svg file."""
+    """Create MapDefinition from svg file.
+
+    Returns None on conversion failure; raises no exceptions outward (they are logged) except
+    for the explicit validation error on missing robot routes which is also logged then rethrown
+    so callers can decide to fallback to a default map pool.
+    """
 
     logger.info("Converting SVG map to MapDefinition object.")
     logger.info(f"SVG file: {svg_file}")
@@ -352,10 +391,63 @@ def convert_map(svg_file: str):
     try:
         converter = SvgMapConverter(svg_file)
         assert isinstance(converter.map_definition, MapDefinition)
-        return converter.map_definition
+        md: MapDefinition = converter.map_definition
+        logger.info(
+            "SVG map converted: robot_routes={rr} ped_routes={pr} spawn_zones={sz} goal_zones={gz}",
+            rr=len(md.robot_routes),
+            pr=len(md.ped_routes),
+            sz=len(md.robot_spawn_zones),
+            gz=len(md.robot_goal_zones),
+        )
+        return md
+    except ValueError as ve:
+        # Propagate the specific validation error (e.g., zero robot routes) so caller can fallback.
+        logger.error(f"SVG validation error: {ve}")
+        raise
     except AssertionError:
         logger.error("Error converting SVG file: MapDefinition object not created.")
-        logger.error(f"type converter.map_definition: {type(converter.map_definition)}")
-    except Exception as e:
-        logger.error(f"Error converting SVG file: {e}")
-        return None
+        logger.exception("Assertion failure during SVG conversion")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Unexpected error converting SVG file: {e}")
+        logger.exception("Unhandled exception in convert_map")
+    return None
+
+
+def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
+    if file_path.suffix.lower() != ".svg":
+        raise ValueError(f"Expected an SVG file, got: {file_path}")
+    try:
+        md = convert_map(str(file_path))
+        if md is None:
+            raise ValueError(f"Failed to convert SVG file: {file_path}")
+        return {file_path.stem: md}
+    except Exception as exc:  # noqa: BLE001
+        if strict:
+            raise
+        logger.warning("Skipping invalid SVG map: {f} ({err})", f=str(file_path), err=exc)
+        return {}
+
+
+def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str, MapDefinition]:
+    svg_files = sorted(dir_path.glob(pattern))
+    if not svg_files:
+        raise ValueError(f"No SVG files found in directory {dir_path} with pattern '{pattern}'")
+    out: dict[str, MapDefinition] = {}
+    for f in svg_files:
+        if f.suffix.lower() != ".svg":
+            continue
+        out.update(_load_single_svg(f, strict))
+    if not out:
+        raise ValueError(f"No valid SVG maps loaded from directory {dir_path}")
+    logger.info("Loaded {n} SVG map(s) from {dir}", n=len(out), dir=str(dir_path))
+    return out
+
+
+def load_svg_maps(
+    path: str, pattern: str = "*.svg", strict: bool = False
+) -> dict[str, MapDefinition]:
+    """Load one or many SVG maps into a dict keyed by filename stem."""
+    p = Path(path)
+    if not p.exists():  # pragma: no cover
+        raise FileNotFoundError(f"Path does not exist: {path}")
+    return _load_single_svg(p, strict) if p.is_file() else _load_svg_directory(p, pattern, strict)

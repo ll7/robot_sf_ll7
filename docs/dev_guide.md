@@ -212,6 +212,18 @@ uv run python -m pytest fast-pysf/tests/ -v
 - **Documentation**: Comprehensive docs under `docs/` with design principles, architecture, usage, and migration notes
   - Development notes: `docs/dev/*`
 
+### Logging & Observability (Principle XII)
+The canonical logging facade is **Loguru**. Library code (anything under `robot_sf/` or wrappers over `fast-pysf`) must not use bare `print()` for informational or warning messages. Acceptable `print()` exceptions: (1) short CLI entry scripts in `scripts/` or `examples/` where stdout is the UX, (2) early bootstrap failures before logging configuration, (3) tests explicitly asserting stdout content. Migration of stray prints to `from loguru import logger` with `logger.info|warning|error` is treated as maintenance (PATCH) unless it changes user‑visible contract output.
+
+Guidelines:
+ - Prefer structured context (e.g., `logger.info("Reset complete seed={seed} scenario={sid}")`).
+ - Avoid inside per‑timestep loops; aggregate and log at episode boundaries to protect performance budgets.
+ - Use WARNING for degraded but continuing states (e.g., zero frames when recording requested), ERROR for aborting conditions, CRITICAL for irreversible state corruption.
+ - Tests may temporarily raise log level to DEBUG for diagnosing flakes but should reset after.
+ - Provide a toggle (env var or parameter) when adding verbose debug logging to hot paths.
+
+Rationale: Centralized logging enables deterministic capture/suppression in benchmarks, simplifies CI noise control, and aligns with Constitution Principle XII (Preferred Logging & Observability).
+
 ### Code quality standards
 - Clear, intent‑revealing names; small, cohesive functions; robust error handling.
 - Follow existing style; document non‑obvious choices with comments/docstrings.

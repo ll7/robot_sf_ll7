@@ -40,7 +40,33 @@ As a benchmark user running evaluation batches, I want each episode to optionall
 - FR-011: System MUST handle absent frames by not creating empty video files and by writing a structured log/warning with context (episode id, renderer, step count).
 - FR-012: System MUST ensure that enabling video does not change core metrics or episode control flow (non‑intrusive recording path).
 
-[NEEDS CLARIFICATION: exact flag/option names: use `--no-video` as flag.]
+- FR-013: System MUST update the episode JSON Schema to include video metadata and ensure CI validates these fields when present (format='mp4', filesize_bytes>0, frames≥0).
+- FR-014: System MUST record and publish a small performance sample in the documentation (encode ms/frame and % overhead) including hardware/OS/context, and link it from the docs index and benchmark TODO.
+- FR-015: System MUST run the micro‑batch video test in CI as a smoke guard (skip on platforms lacking codecs if needed) to prevent regressions.
+
+## Clarifications
+
+### Session 2025-09-24 — Options accepted
+- CLI flags and naming
+	- Video toggle: `--no-video` (boolean flag)
+	- Renderer selector: `--video-renderer=synthetic|sim-view|none`
+	- Programmatic API option names: `video_enabled: bool`, `video_renderer: Literal['synthetic','sim-view','none']`
+- Defaults and behavior
+	- Default video generation: Disabled by default; users enable explicitly
+	- Default renderer: `synthetic` (use `sim-view` only if explicitly selected)
+- Output location and naming
+	- Output directory: `results/videos/` under the run’s output stem
+	- File naming: `<scenario>__<seed>__<episode_idx>.mp4`
+	- Determinism: Overwrite by default with resume-aware checks
+- Manifest/schema fields
+	- Placement: In-episode JSONL record
+	- Fields: `video: { path, format: 'mp4', filesize_bytes, frames, renderer, notes? }`
+- Performance budget policy
+	- Target: <5% overhead; WARN by default, FAIL only when `ROBOT_SF_PERF_ENFORCE=1` is set
+- Headless/codec resilience
+	- If MoviePy/codec missing: Skip video with structured warning; batch succeeds
+- Test scope
+	- Micro-batch test: 1–2 episodes asserting existence, size>0, frames==steps
 
 ### Key Entities
 - Episode Video Artifact: Represents the per‑episode MP4 output with attributes: episode_id, file_path, format, filesize_bytes, renderer, frames, notes/skips.
@@ -56,7 +82,7 @@ As a benchmark user running evaluation batches, I want each episode to optionall
 - [x] All mandatory sections completed
 
 ### Requirement Completeness
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded

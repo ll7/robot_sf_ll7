@@ -66,33 +66,33 @@
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
 - [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
 - [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
-- [ ] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
-- [ ] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
-- [ ] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py
+- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
+- [x] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
+- [x] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
 - [x] T009 [P] VisualArtifact dataclass in robot_sf/benchmark/visualization.py
 - [x] T010 [P] VisualizationError exception class in robot_sf/benchmark/visualization.py
-- [ ] T011 [P] generate_benchmark_plots function in robot_sf/benchmark/visualization.py
-- [ ] T012 [P] generate_benchmark_videos function in robot_sf/benchmark/visualization.py
-- [ ] T013 [P] validate_visual_artifacts function in robot_sf/benchmark/visualization.py
-- [ ] T014 [P] _check_dependencies helper function in robot_sf/benchmark/visualization.py
-- [ ] T015 Extend benchmark orchestrator to call visualization functions in robot_sf/benchmark/orchestrator.py
-- [ ] T016 Add visualization phase to benchmark pipeline in robot_sf/benchmark/orchestrator.py
+- [x] T011 [P] generate_benchmark_plots function in robot_sf/benchmark/visualization.py
+- [x] T012 [P] generate_benchmark_videos function in robot_sf/benchmark/visualization.py
+- [x] T013 [P] validate_visual_artifacts function in robot_sf/benchmark/visualization.py
+- [x] T014 [P] _check_dependencies helper function in robot_sf/benchmark/visualization.py
+- [x] T015 Extend benchmark orchestrator to call visualization functions in robot_sf/benchmark/orchestrator.py
+- [x] T016 Add visualization phase to benchmark pipeline in robot_sf/benchmark/orchestrator.py
 
 ## Phase 3.4: Integration
-- [ ] T017 Connect visualization functions to episode data parsing in robot_sf/benchmark/visualization.py
+- [x] T017 Connect visualization functions to episode data parsing in robot_sf/benchmark/visualization.py
 - [ ] T018 Integrate with environment factory for video rendering in robot_sf/benchmark/visualization.py
-- [ ] T019 Add error handling for missing dependencies in robot_sf/benchmark/visualization.py
-- [ ] T020 Add logging for visualization generation progress in robot_sf/benchmark/visualization.py
+- [x] T019 Add error handling for missing dependencies in robot_sf/benchmark/visualization.py
+- [x] T020 Add logging for visualization generation progress in robot_sf/benchmark/visualization.py
 
 ## Phase 3.5: Polish
-- [ ] T021 [P] Unit tests for data processing helpers in tests/test_visualization_helpers.py
-- [ ] T022 Performance tests for visualization generation (< 60s) in tests/test_visualization_performance.py
-- [ ] T023 [P] Update docs for new visualization functions in docs/benchmark.md
-- [ ] T024 [P] Add troubleshooting section to docs for visualization issues in docs/benchmark.md
-- [ ] T025 Update benchmark CLI help text to mention real visualizations in robot_sf/benchmark/cli.py
-- [ ] T026 Run validation scripts to ensure visualizations work in scripts/validation/
+- [x] T021 [P] Unit tests for data processing helpers in tests/test_visualization_helpers.py
+- [x] T022 Performance tests for visualization generation (< 60s) in tests/test_visualization_performance.py
+- [x] T023 [P] Update docs for new visualization functions in docs/benchmark.md
+- [x] T024 [P] Add troubleshooting section to docs for visualization issues in docs/benchmark.md
+- [x] T025 Update benchmark CLI help text to mention real visualizations in robot_sf/benchmark/cli.py
+- [x] T026 Run validation scripts to ensure visualizations work in scripts/validation/
 
 ## Dependencies
 - Tests (T004-T008) before implementation (T009-T016)

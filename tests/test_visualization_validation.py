@@ -5,24 +5,41 @@ These tests define the expected behavior and will fail until the implementation 
 """
 
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
-import pytest
+from robot_sf.benchmark.visualization import (
+    ValidationResult,
+    VisualArtifact,
+    validate_visual_artifacts,
+)
 
 
 def test_validate_visual_artifacts_contract():
     """Test that validate_visual_artifacts meets its contract."""
 
-    # Given: Mock VisualArtifact objects (will need to be created once dataclass exists)
-    # For now, we'll test that the function doesn't exist
-    with pytest.raises((ImportError, NameError, AttributeError)):
-        from robot_sf.benchmark.visualization import validate_visual_artifacts
+    # Given: Mock VisualArtifact objects
+    artifacts = [
+        VisualArtifact(
+            artifact_id="plot_001",
+            artifact_type="plot",
+            format="pdf",
+            filename="test_plot.pdf",
+            source_data="Real plot data",
+            generation_time=datetime.now(),
+            file_size=1000,
+            status="generated",
+        )
+    ]
 
-        # mock_artifacts = [VisualArtifact(...)]  # Would need real artifacts
-        # result = validate_visual_artifacts(mock_artifacts)
-        # assert hasattr(result, 'passed')
-        # assert hasattr(result, 'failed_artifacts')
-        validate_visual_artifacts([])
+    # When: Function is called
+    result = validate_visual_artifacts(artifacts)
+
+    # Then: Returns ValidationResult
+    assert isinstance(result, ValidationResult)
+    assert hasattr(result, "passed")
+    assert hasattr(result, "failed_artifacts")
+    assert isinstance(result.failed_artifacts, list)
 
 
 def test_validate_visual_artifacts_with_real_files():
@@ -42,40 +59,36 @@ def test_validate_visual_artifacts_with_real_files():
         fake_video = videos_dir / "test_video.mp4"
         fake_video.write_bytes(b"fake mp4 content")
 
-        # When: Function is called (will fail until implemented)
-        # artifacts = [
-        #     VisualArtifact(
-        #         artifact_id="plot_001",
-        #         artifact_type="plot",
-        #         format="pdf",
-        #         filename="test_plot.pdf",
-        #         source_data="test data",
-        #         generation_time=datetime.now(),
-        #         file_size=fake_plot.stat().st_size,
-        #         status="generated"
-        #     ),
-        #     VisualArtifact(
-        #         artifact_id="video_001",
-        #         artifact_type="video",
-        #         format="mp4",
-        #         filename="test_video.mp4",
-        #         source_data="test data",
-        #         generation_time=datetime.now(),
-        #         file_size=fake_video.stat().st_size,
-        #         status="generated"
-        #     )
-        # ]
-        # result = validate_visual_artifacts(artifacts)
+        # Create VisualArtifact objects
+        artifacts = [
+            VisualArtifact(
+                artifact_id="plot_001",
+                artifact_type="plot",
+                format="pdf",
+                filename=str(fake_plot),
+                source_data="test data",
+                generation_time=datetime.now(),
+                file_size=fake_plot.stat().st_size,
+                status="generated",
+            ),
+            VisualArtifact(
+                artifact_id="video_001",
+                artifact_type="video",
+                format="mp4",
+                filename=str(fake_video),
+                source_data="test data",
+                generation_time=datetime.now(),
+                file_size=fake_video.stat().st_size,
+                status="generated",
+            ),
+        ]
+
+        # When: Function is called
+        result = validate_visual_artifacts(artifacts)
 
         # Then: Validation passes for real-looking files
-        # assert result.passed == True
-        # assert len(result.failed_artifacts) == 0
-
-        # For now, expect function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import validate_visual_artifacts
-
-            validate_visual_artifacts([])
+        assert result.passed
+        assert len(result.failed_artifacts) == 0
 
 
 def test_validate_visual_artifacts_detects_placeholders():
@@ -90,44 +103,33 @@ def test_validate_visual_artifacts_detects_placeholders():
         fake_plot = plots_dir / "placeholder.pdf"
         fake_plot.write_text("This is a placeholder - TODO: implement real plots")
 
-        # When: Function is called (will fail until implemented)
-        # artifacts = [
-        #     VisualArtifact(
-        #         artifact_id="placeholder_001",
-        #         artifact_type="plot",
-        #         format="pdf",
-        #         filename="placeholder.pdf",
-        #         source_data="placeholder data",
-        #         generation_time=datetime.now(),
-        #         file_size=fake_plot.stat().st_size,
-        #         status="generated"
-        #     )
-        # ]
-        # result = validate_visual_artifacts(artifacts)
+        artifacts = [
+            VisualArtifact(
+                artifact_id="placeholder_001",
+                artifact_type="plot",
+                format="pdf",
+                filename=str(fake_plot),
+                source_data="placeholder data",
+                generation_time=datetime.now(),
+                file_size=fake_plot.stat().st_size,
+                status="generated",
+            )
+        ]
+
+        # When: Function is called
+        result = validate_visual_artifacts(artifacts)
 
         # Then: Validation fails for placeholder files
-        # assert result.passed == False
-        # assert len(result.failed_artifacts) == 1
-
-        # For now, expect function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import validate_visual_artifacts
-
-            validate_visual_artifacts([])
+        assert not result.passed
+        assert len(result.failed_artifacts) == 1
 
 
 def test_validate_visual_artifacts_empty_list():
     """Test validate_visual_artifacts handles empty artifact list."""
 
     # When: Function called with empty list
-    # result = validate_visual_artifacts([])
+    result = validate_visual_artifacts([])
 
     # Then: Returns valid result for empty list
-    # assert result.passed == True
-    # assert len(result.failed_artifacts) == 0
-
-    # For now, expect function to not exist
-    with pytest.raises((ImportError, NameError, AttributeError)):
-        from robot_sf.benchmark.visualization import validate_visual_artifacts
-
-        validate_visual_artifacts([])
+    assert result.passed
+    assert len(result.failed_artifacts) == 0

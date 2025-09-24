@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark.visualization import generate_benchmark_videos
+
 
 def test_generate_benchmark_videos_contract():
     """Test that generate_benchmark_videos meets its contract."""
@@ -36,23 +38,17 @@ def test_generate_benchmark_videos_contract():
 
         output_dir = Path(tmp_dir) / "output"
 
-        # When: Function is called (will fail until implemented)
-        # artifacts = generate_benchmark_videos(episodes_path, output_dir)
+        # When: Function is called
+        artifacts = generate_benchmark_videos(episodes_path, output_dir)
 
-        # Then: Contract is satisfied (commented out until implementation)
-        # assert isinstance(artifacts, list)
-        # assert len(artifacts) > 0
-        # for artifact in artifacts:
-        #     assert artifact.status == "generated"
-        #     assert artifact.file_size > 0
-        #     assert (output_dir / "videos" / artifact.filename).exists()
-        #     assert artifact.filename.endswith(".mp4")
-
-        # For now, expect ImportError or NameError since function doesn't exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import generate_benchmark_videos
-
-            generate_benchmark_videos(episodes_path, output_dir)
+        # Then: Contract is satisfied
+        assert isinstance(artifacts, list)
+        assert len(artifacts) > 0
+        for artifact in artifacts:
+            assert artifact.status == "generated"
+            assert artifact.file_size > 0
+            assert (output_dir / "videos" / artifact.filename).exists()
+            assert artifact.filename.endswith(".mp4")
 
 
 def test_generate_benchmark_videos_with_custom_settings():
@@ -75,22 +71,13 @@ def test_generate_benchmark_videos_with_custom_settings():
 
         output_dir = Path(tmp_dir) / "output"
 
-        # When: Function called with custom settings (will fail until implemented)
-        # artifacts = generate_benchmark_videos(
-        #     episodes_path, output_dir,
-        #     fps=24, max_duration=5.0
-        # )
+        # When: Function called with custom settings
+        artifacts = generate_benchmark_videos(episodes_path, output_dir, fps=24, max_duration=5.0)
 
         # Then: Videos generated with custom settings
-        # assert len(artifacts) > 0
-        # for artifact in artifacts:
-        #     assert artifact.filename.endswith(".mp4")
-
-        # For now, expect function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import generate_benchmark_videos
-
-            generate_benchmark_videos(episodes_path, output_dir, fps=24, max_duration=5.0)
+        assert len(artifacts) > 0
+        for artifact in artifacts:
+            assert artifact.filename.endswith(".mp4")
 
 
 def test_generate_benchmark_videos_missing_trajectory():
@@ -114,9 +101,6 @@ def test_generate_benchmark_videos_missing_trajectory():
 
         output_dir = Path(tmp_dir) / "output"
 
-        # When/Then: Should handle gracefully or raise appropriate error
-        # This behavior needs to be defined - for now expect function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import generate_benchmark_videos
-
+        # When/Then: Should raise VisualizationError for no trajectory data
+        with pytest.raises(Exception):  # Could be VisualizationError or other
             generate_benchmark_videos(episodes_path, output_dir)

@@ -536,12 +536,8 @@ def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> L
         return []
 
     frames = []
-    try:
-        for frame in generate_frames(replay_episode, fps=fps, max_frames=max_frames):
-            frames.append(frame)
-    except Exception as e:
-        logger.warning(f"Failed to generate frames from replay: {e}")
-        return []
+    for frame in generate_frames(replay_episode, fps=fps, max_frames=max_frames):
+        frames.append(frame)
 
     return frames
 

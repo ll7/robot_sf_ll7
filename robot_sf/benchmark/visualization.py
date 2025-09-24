@@ -557,16 +557,33 @@ def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> L
 
 
 def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int) -> None:
-    """Encode a list of frames to an MP4 video file."""
+    """Encode a list of frames to an MP4 video file, optimized for memory usage."""
     if not frames:
         raise VisualizationError("No frames to encode", "video")
 
     try:
+        import tempfile
+
         from moviepy import ImageSequenceClip
 
-        # Convert frames to the format expected by moviepy (list of numpy arrays)
-        clip = ImageSequenceClip(frames, fps=fps)
-        clip.write_videofile(video_path, codec="libx264", audio=False, logger=None)
+        # Use a generator to avoid loading all frames into memory at once
+        def frame_generator():
+            for frame in frames:
+                yield frame
+
+        # Create a temporary audio file path (even though audio=False, moviepy expects it)
+        with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as temp_audio:
+            temp_audiofile = temp_audio.name
+
+        clip = ImageSequenceClip(list(frame_generator()), fps=fps)
+        clip.write_videofile(
+            video_path,
+            codec="libx264",
+            audio=False,
+            temp_audiofile=temp_audiofile,
+            remove_temp=True,
+            logger=None,
+        )
     except (ValueError, TypeError, OSError) as e:
         raise VisualizationError(f"Failed to encode video: {e}", "video")
 

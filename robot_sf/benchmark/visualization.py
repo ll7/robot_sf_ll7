@@ -17,7 +17,6 @@ import numpy as np
 from loguru import logger
 
 
-# TODO: Implement VisualArtifact dataclass (T009)
 @dataclass
 class VisualArtifact:
     """Metadata about a generated visual artifact (plot or video)."""
@@ -42,7 +41,6 @@ class ValidationResult:
     details: Optional[dict] = None
 
 
-# TODO: Implement VisualizationError exception class (T010)
 class VisualizationError(Exception):
     """Raised when visualization generation fails."""
 
@@ -52,7 +50,6 @@ class VisualizationError(Exception):
         self.details = details or {}
 
 
-# TODO: Implement generate_benchmark_plots function (T011) - COMPLETED
 def generate_benchmark_plots(
     episodes_data: Union[List[dict], str, Path],
     output_dir: str,
@@ -356,7 +353,6 @@ def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) ->
         raise VisualizationError(f"Failed to generate scenario comparison plot: {e}", "plot")
 
 
-# TODO: Implement generate_benchmark_videos function (T012) - COMPLETED
 def generate_benchmark_videos(
     episodes_data: Union[List[dict], str, Path],
     output_dir: str,
@@ -557,7 +553,6 @@ def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int)
         raise VisualizationError(f"Failed to encode video: {e}", "video")
 
 
-# TODO: Implement validate_visual_artifacts function (T013) - COMPLETED
 def validate_visual_artifacts(artifacts: List[VisualArtifact]) -> ValidationResult:
     """
     Validate that visual artifacts contain real data.
@@ -614,7 +609,6 @@ def validate_visual_artifacts(artifacts: List[VisualArtifact]) -> ValidationResu
     return ValidationResult(passed=passed, failed_artifacts=failed_artifacts, details=details)
 
 
-# TODO: Implement _check_dependencies helper function (T014)
 def _check_dependencies(required_deps: List[str]) -> None:
     """Check that required packages are available for visualization generation.
 
@@ -639,9 +633,3 @@ def _check_dependencies(required_deps: List[str]) -> None:
             artifact_type="dependency_check",
             details={"missing_dependencies": missing_deps},
         )
-
-
-# TODO: Connect visualization functions to episode data parsing (T017)
-# TODO: Integrate with environment factory for video rendering (T018)
-# TODO: Add error handling for missing dependencies (T019)
-# TODO: Add logging for visualization generation progress (T020)

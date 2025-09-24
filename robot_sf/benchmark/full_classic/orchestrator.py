@@ -28,6 +28,7 @@ from .visuals import generate_visual_artifacts  # new visual artifact integratio
 # Import new visualization functions for real plots/videos from episode data
 try:
     from robot_sf.benchmark.visualization import (
+        VisualizationError,
         generate_benchmark_plots,
         generate_benchmark_videos,
         validate_visual_artifacts,
@@ -485,10 +486,10 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
                         len(validation.failed_artifacts),
                     )
 
-            except Exception as vis_exc:  # noqa: BLE001
+            except (VisualizationError, FileNotFoundError) as vis_exc:
                 logger.warning("Real visualization generation failed (non-fatal): {}", vis_exc)
 
-    except Exception as exc:  # noqa: BLE001
+    except (VisualizationError, FileNotFoundError) as exc:
         logger.warning("Visual artifact generation failed (non-fatal): {}", exc)
 
     return manifest

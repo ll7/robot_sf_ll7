@@ -22,7 +22,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 import yaml
@@ -212,12 +212,18 @@ def _build_episode_data(
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
+    robot_pos = np.vstack(robot_pos_traj) if robot_pos_traj else np.zeros((0, 2))
+    robot_vel = np.vstack(robot_vel_traj) if robot_vel_traj else np.zeros((0, 2))
+    robot_acc = np.vstack(robot_acc_traj) if robot_acc_traj else np.zeros((0, 2))
+    peds_pos = np.stack(peds_pos_traj) if peds_pos_traj else np.zeros((0, 0, 2))
+    ped_forces = np.stack(ped_forces_traj) if ped_forces_traj else np.zeros((0, 0, 2))
+
     return EpisodeData(
-        robot_pos=np.vstack(robot_pos_traj),
-        robot_vel=np.vstack(robot_vel_traj),
-        robot_acc=np.vstack(robot_acc_traj),
-        peds_pos=(np.stack(peds_pos_traj) if peds_pos_traj else np.zeros((0, 0, 2))),
-        ped_forces=(np.stack(ped_forces_traj) if ped_forces_traj else np.zeros((0, 0, 2))),
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+        robot_acc=robot_acc,
+        peds_pos=peds_pos,
+        ped_forces=ped_forces,
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
@@ -307,6 +313,56 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     return policy_fn, metadata
 
 
+def _append_video_skip_note(record: Dict[str, Any], note: str) -> None:
+    existing = record.get("notes")
+    if existing:
+        record["notes"] = f"{existing}; {note}"
+    else:
+        record["notes"] = note
+
+
+def _emit_video_skip(
+    *,
+    record: Dict[str, Any],
+    episode_id: str,
+    scenario_id: str,
+    seed: Optional[int],
+    renderer: str,
+    reason: str,
+    steps: Optional[int],
+    error: Optional[str] = None,
+) -> None:
+    context = {
+        "episode_id": episode_id,
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "renderer": renderer,
+        "reason": reason,
+        "steps": steps if steps is not None else -1,
+    }
+    if error:
+        context["error"] = error
+    try:
+        from loguru import logger  # type: ignore
+
+        logger.warning(
+            (
+                "Video skipped: reason={reason} episode_id={episode_id} "
+                "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"  # noqa: E501
+            ),
+            **context,
+        )
+    except Exception:  # pragma: no cover - logging optional
+        pass
+
+    note_parts = [f"video skipped ({renderer}): {reason}"]
+    if steps is not None:
+        note_parts.append(f"steps={steps}")
+    if error:
+        note_parts.append(f"error={error}")
+    _append_video_skip_note(record, " ".join(note_parts))
+
+
 def _try_encode_synthetic_video(
     robot_pos_traj: list[np.ndarray],
     *,
@@ -315,7 +371,7 @@ def _try_encode_synthetic_video(
     out_dir: Path,
     fps: int = 10,
     seed: Optional[int] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """Encode a very lightweight synthetic MP4 from robot positions.
 
     - Draws a simple red dot for the robot position per frame on a black canvas.
@@ -324,43 +380,24 @@ def _try_encode_synthetic_video(
     try:
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
     except Exception:
-        try:
-            from loguru import logger  # type: ignore
-
-            logger.warning(
-                (
-                    "Video skipped: moviepy unavailable "
-                    "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
-                ),
-                episode_id=episode_id,
-                scenario_id=scenario_id,
-                seed=seed,
-                renderer="synthetic",
-            )
-        except Exception:  # pragma: no cover - logging optional
-            pass
-        return None
+        _skip_info = {
+            "reason": "moviepy-missing",
+            "renderer": "synthetic",
+            "steps": len(robot_pos_traj),
+        }
+        return None, _skip_info
+    # Successfully imported moviepy; proceed with encoding attempt
 
     import numpy as _np  # local alias to avoid confusion
 
     N = len(robot_pos_traj)
     if N == 0:
-        try:
-            from loguru import logger  # type: ignore
-
-            logger.warning(
-                (
-                    "Video skipped: no frames captured "
-                    "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
-                ),
-                episode_id=episode_id,
-                scenario_id=scenario_id,
-                seed=seed,
-                renderer="synthetic",
-            )
-        except Exception:  # pragma: no cover
-            pass
-        return None
+        _skip_info = {
+            "reason": "no-frames",
+            "renderer": "synthetic",
+            "steps": 0,
+        }
+        return None, _skip_info
     H, W = 128, 128
     # Determine bounds for simple normalization
     xs = _np.array([p[0] for p in robot_pos_traj], dtype=float)
@@ -394,21 +431,53 @@ def _try_encode_synthetic_video(
         img[y0:y1, x0:x1, :] = _np.array([220, 30, 30], dtype=_np.uint8)
         frames.append(img)
     mp4_path = out_dir / f"video_{episode_id}.mp4"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _skip_info = {
+            "reason": "unwritable-path",
+            "renderer": "synthetic",
+            "steps": N,
+            "error": str(exc),
+        }
+        return None, _skip_info
     clip = ImageSequenceClip(frames, fps=fps)  # type: ignore
-    # Keep args minimal for environment compatibility
-    clip.write_videofile(str(mp4_path), codec="libx264", fps=fps)
+    try:
+        # Keep args minimal for environment compatibility
+        clip.write_videofile(str(mp4_path), codec="libx264", fps=fps)
+    except OSError as exc:
+        _skip_info = {
+            "reason": "write-failed",
+            "renderer": "synthetic",
+            "steps": N,
+            "error": str(exc),
+        }
+        return None, _skip_info
+    except Exception as exc:  # pragma: no cover - defensive logging
+        _skip_info = {
+            "reason": "encode-failed",
+            "renderer": "synthetic",
+            "steps": N,
+            "error": str(exc),
+        }
+        return None, _skip_info
+    finally:
+        try:
+            clip.close()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - close best effort
+            pass
     try:
         size = mp4_path.stat().st_size
     except Exception:
         size = 0
     return {
+        "status": "success",
         "path": str(mp4_path),
         "format": "mp4",
         "filesize_bytes": int(size),
         "frames": int(N),
         "renderer": "synthetic",
-    }
+    }, None
 
 
 def _annotate_and_check_video_perf(
@@ -505,7 +574,7 @@ def _maybe_encode_video(
         return
     try:
         enc_t0 = time.perf_counter()
-        vid = _try_encode_synthetic_video(
+        vid, skip_info = _try_encode_synthetic_video(
             robot_pos_traj,
             episode_id=episode_id,
             scenario_id=scenario_id,
@@ -517,21 +586,21 @@ def _maybe_encode_video(
         if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
             _annotate_and_check_video_perf(record, vid, perf_start, enc_t0, enc_t1)
         else:
-            try:
-                from loguru import logger  # type: ignore
-
-                logger.warning(
-                    (
-                        "Video skipped: encoder returned empty artifact "
-                        "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
-                    ),
-                    episode_id=episode_id,
-                    scenario_id=scenario_id,
-                    seed=record.get("seed"),
-                    renderer=video_renderer,
-                )
-            except Exception:  # pragma: no cover - optional logging
-                pass
+            reason_payload = skip_info or {
+                "reason": "encoder-empty",
+                "renderer": str(video_renderer),
+                "steps": len(robot_pos_traj),
+            }
+            _emit_video_skip(
+                record=record,
+                episode_id=episode_id,
+                scenario_id=scenario_id,
+                seed=record.get("seed"),
+                renderer=str(reason_payload.get("renderer", video_renderer)),
+                reason=str(reason_payload.get("reason", "unknown")),
+                steps=reason_payload.get("steps"),
+                error=reason_payload.get("error"),
+            )
     except RuntimeError:
         # Budget enforcement: bubble up to runner to record a failure
         raise
@@ -691,7 +760,7 @@ def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
     if video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None:
         try:
             _enc_t0 = time.perf_counter()
-            vid = _try_encode_synthetic_video(
+            vid, skip_info = _try_encode_synthetic_video(
                 robot_pos_traj,
                 episode_id=episode_id,
                 scenario_id=record["scenario_id"],
@@ -703,21 +772,21 @@ def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
             if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
                 _annotate_and_check_video_perf(record, vid, _perf_start, _enc_t0, _enc_t1)
             else:
-                try:
-                    from loguru import logger  # type: ignore
-
-                    logger.warning(
-                        (
-                            "Video skipped: encoder returned empty artifact "
-                            "episode_id={episode_id} scenario_id={scenario_id} seed={seed}"
-                        ),
-                        episode_id=episode_id,
-                        scenario_id=record.get("scenario_id"),
-                        seed=record.get("seed"),
-                        renderer=video_renderer,
-                    )
-                except Exception:  # pragma: no cover - optional logging
-                    pass
+                reason_payload = skip_info or {
+                    "reason": "encoder-empty",
+                    "renderer": str(video_renderer),
+                    "steps": len(robot_pos_traj),
+                }
+                _emit_video_skip(
+                    record=record,
+                    episode_id=episode_id,
+                    scenario_id=record.get("scenario_id", "unknown"),
+                    seed=record.get("seed"),
+                    renderer=str(reason_payload.get("renderer", video_renderer)),
+                    reason=str(reason_payload.get("reason", "unknown")),
+                    steps=reason_payload.get("steps"),
+                    error=reason_payload.get("error"),
+                )
         except RuntimeError:
             raise
         except Exception:

@@ -68,10 +68,10 @@
 - [x] T016 Measure and validate performance improvements
 
 ## Phase 3.5: Polish
-- [ ] T017 [P] Update CI documentation in docs/dev_guide.md
-- [ ] T018 [P] Add performance monitoring to CI dashboard
-- [ ] T019 Clean up temporary CI optimization scripts
-- [ ] T020 Final validation of 50% performance improvement
+- [x] T017 [P] Update CI documentation in docs/dev_guide.md
+- [x] T018 [P] Add performance monitoring to CI dashboard
+- [x] T019 Clean up temporary CI optimization scripts
+- [x] T020 Final validation of 50% performance improvement
 
 ## Dependencies
 - Setup (T001-T002) before tests (T003-T007)

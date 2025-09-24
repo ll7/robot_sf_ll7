@@ -119,7 +119,10 @@ class TestVisualizationPerformance:
         """Test that visualization generation doesn't have excessive memory usage."""
         import os
 
-        import psutil
+        try:
+            import psutil
+        except ImportError:
+            pytest.skip("psutil not available, skipping memory usage test")
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB

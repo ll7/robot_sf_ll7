@@ -1,6 +1,23 @@
 # Tasks: Fix Benchmark Placeholder Outputs
 
-**Input**: Design documents from `/specs/133-all-generated-plots/`
+**I## Ph## Pha## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
+**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
+- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
+- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
+- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
+- [x] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
+- [x] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
+**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
+- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
+- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
+- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
+- [x] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
+- [ ] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
+**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
+- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
+- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
+- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
+- [ ] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py: Design documents from `/specs/133-all-generated-plots/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
 ## Execution Flow (main)
@@ -41,21 +58,21 @@
 - Paths shown below assume single project - adjust based on plan.md structure
 
 ## Phase 3.1: Setup
-- [ ] T001 Create visualization module structure in robot_sf/benchmark/visualization.py
-- [ ] T002 Add matplotlib and moviepy dependencies to pyproject.toml if not present
-- [ ] T003 [P] Configure type hints for new visualization functions
+- [x] T001 Create visualization module structure in robot_sf/benchmark/visualization.py
+- [x] T002 Add matplotlib and moviepy dependencies to pyproject.toml if not present
+- [x] T003 [P] Configure type hints for new visualization functions
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
-- [ ] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
+- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
+- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
 - [ ] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
 - [ ] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
 - [ ] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [ ] T009 [P] VisualArtifact dataclass in robot_sf/benchmark/visualization.py
-- [ ] T010 [P] VisualizationError exception class in robot_sf/benchmark/visualization.py
+- [x] T009 [P] VisualArtifact dataclass in robot_sf/benchmark/visualization.py
+- [x] T010 [P] VisualizationError exception class in robot_sf/benchmark/visualization.py
 - [ ] T011 [P] generate_benchmark_plots function in robot_sf/benchmark/visualization.py
 - [ ] T012 [P] generate_benchmark_videos function in robot_sf/benchmark/visualization.py
 - [ ] T013 [P] validate_visual_artifacts function in robot_sf/benchmark/visualization.py

@@ -19,7 +19,7 @@ The `pedestrian_factory` method creates a pedestrian instance based on the confi
 """
 
 from dataclasses import dataclass, field
-from typing import Union
+from typing import Optional, Union
 
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import (
@@ -42,6 +42,8 @@ class BaseEnvSettings:
 
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
+    # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
+    render_scaling: Optional[int] = None
 
     def __post_init__(self):
         """

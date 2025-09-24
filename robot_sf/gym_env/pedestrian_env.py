@@ -141,8 +141,10 @@ class PedestrianEnv(Env):
 
         # If in debug mode, create a simulation view to visualize the state
         if debug:
+            scaling_value = getattr(env_config, "render_scaling", None)
+            scaling_value = 10 if scaling_value is None else int(scaling_value)
             self.sim_ui = SimulationView(
-                scaling=10,
+                scaling=scaling_value,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,

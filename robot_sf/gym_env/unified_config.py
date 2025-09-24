@@ -6,7 +6,7 @@ duplication and provides clear separation of concerns.
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
@@ -32,6 +32,8 @@ class BaseSimulationConfig:
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
+    # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
+    render_scaling: Optional[int] = None
 
     def __post_init__(self):
         """Validate that all required fields are initialized."""

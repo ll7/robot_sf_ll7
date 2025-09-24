@@ -831,7 +831,7 @@ def _run_batch_parallel(
     return wrote, failures
 
 
-def run_batch(
+def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional snapshot
     scenarios_or_path: List[Dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
@@ -941,4 +941,48 @@ def run_batch(
             identity_hash=_episode_identity_hash(),
             schema_version=EPISODE_SCHEMA_VERSION,
         )
+    # Optional: write a small performance snapshot for video encoding if requested
+    try:
+        if os.getenv("ROBOT_SF_VIDEO_PERF_SNAPSHOT"):
+            import platform
+
+            vids: list[dict] = []
+            try:
+                with out_path.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        rec = json.loads(line)
+                        v = rec.get("video") if isinstance(rec, dict) else None
+                        if isinstance(v, dict):
+                            vids.append(v)
+            except FileNotFoundError:
+                vids = []
+            total_frames = sum(int(v.get("frames", 0)) for v in vids)
+            total_encode = sum(float(v.get("encode_seconds", 0.0)) for v in vids)
+            overheads = [float(v.get("overhead_ratio", 0.0)) for v in vids if "overhead_ratio" in v]
+            snap = {
+                "episodes": len(vids),
+                "total_frames": int(total_frames),
+                "total_encode_seconds": float(total_encode),
+                "encode_ms_per_frame": (1000.0 * total_encode / total_frames)
+                if total_frames > 0
+                else None,
+                "mean_overhead_ratio": (
+                    float(sum(overheads) / len(overheads)) if overheads else None
+                ),
+                "environment": {
+                    "os": platform.platform(),
+                    "python": platform.python_version(),
+                    "processor": platform.processor(),
+                },
+            }
+            perf_path = out_path.parent / "videos" / "perf_snapshot.json"
+            perf_path.parent.mkdir(parents=True, exist_ok=True)
+            with perf_path.open("w", encoding="utf-8") as f:
+                json.dump(snap, f, indent=2)
+    except Exception:
+        # Best-effort; ignore snapshot errors
+        pass
     return summary

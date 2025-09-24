@@ -202,6 +202,16 @@ def _prepare_robot_points(
     return rs, rg
 
 
+def _stack_or_zero(
+    traj: list[np.ndarray],
+    *,
+    stack_fn: Callable[[Sequence[np.ndarray]], np.ndarray],
+    empty_shape: tuple[int, ...],
+) -> np.ndarray:
+    """Stack recorded trajectory data or return an empty array of known shape."""
+    return stack_fn(traj) if traj else np.zeros(empty_shape)
+
+
 def _build_episode_data(
     robot_pos_traj: list[np.ndarray],
     robot_vel_traj: list[np.ndarray],
@@ -212,11 +222,11 @@ def _build_episode_data(
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
-    robot_pos = np.vstack(robot_pos_traj) if robot_pos_traj else np.zeros((0, 2))
-    robot_vel = np.vstack(robot_vel_traj) if robot_vel_traj else np.zeros((0, 2))
-    robot_acc = np.vstack(robot_acc_traj) if robot_acc_traj else np.zeros((0, 2))
-    peds_pos = np.stack(peds_pos_traj) if peds_pos_traj else np.zeros((0, 0, 2))
-    ped_forces = np.stack(ped_forces_traj) if ped_forces_traj else np.zeros((0, 0, 2))
+    robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
+    robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))
+    robot_acc = _stack_or_zero(robot_acc_traj, stack_fn=np.vstack, empty_shape=(0, 2))
+    peds_pos = _stack_or_zero(peds_pos_traj, stack_fn=np.stack, empty_shape=(0, 0, 2))
+    ped_forces = _stack_or_zero(ped_forces_traj, stack_fn=np.stack, empty_shape=(0, 0, 2))
 
     return EpisodeData(
         robot_pos=robot_pos,
@@ -608,7 +618,170 @@ def _maybe_encode_video(
         pass
 
 
-def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
+def _simulate_episode_with_policy(
+    scenario_params: Dict[str, Any],
+    seed: int,
+    robot_policy: Callable[[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float], np.ndarray],
+    horizon: int,
+    dt: float,
+    robot_start: Sequence[float] | None,
+    robot_goal: Sequence[float] | None,
+    record_forces: bool,
+) -> tuple[
+    List[np.ndarray],
+    List[np.ndarray],
+    List[np.ndarray],
+    List[np.ndarray],
+    List[np.ndarray],
+    np.ndarray,
+    int | None,
+]:
+    gen = generate_scenario(scenario_params, seed=seed)
+    sim = gen.simulator
+    if sim is None:
+        raise RuntimeError("pysocialforce not available; cannot run episode")
+    wrapper = FastPysfWrapper(sim)
+
+    # Determine robot start/goal: defaults if absent
+    robot_start_arr, robot_goal_arr = _prepare_robot_points(robot_start, robot_goal)
+    robot_pos = robot_start_arr.copy()
+    robot_vel = np.zeros(2)
+
+    robot_pos_traj: List[np.ndarray] = []
+    robot_vel_traj: List[np.ndarray] = []
+    robot_acc_traj: List[np.ndarray] = []
+    peds_pos_traj: List[np.ndarray] = []
+    ped_forces_traj: List[np.ndarray] = []
+
+    reached_goal_step: int | None = None
+    goal_radius = 0.3
+    last_vel = robot_vel.copy()
+
+    def _step_robot(
+        curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
+        new_pos = curr_pos + new_vel * dt
+        acc_vec = (new_vel - curr_vel) / dt
+        return new_pos, new_vel, acc_vec
+
+    for t in range(horizon):
+        ped_pos = sim.peds.pos().copy()
+        peds_pos_traj.append(ped_pos)
+
+        robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
+        last_vel = robot_vel.copy()
+
+        if record_forces:
+            forces = np.zeros_like(ped_pos, dtype=float)
+            for i, p in enumerate(ped_pos):
+                forces[i] = wrapper.get_forces_at(p)
+            ped_forces_traj.append(forces)
+        else:
+            ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
+
+        robot_pos_traj.append(robot_pos.copy())
+        robot_vel_traj.append(robot_vel.copy())
+        robot_acc_traj.append(acc.copy())
+
+        if reached_goal_step is None and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius:
+            reached_goal_step = t
+            break
+        sim.step()
+
+    return (
+        robot_pos_traj,
+        robot_vel_traj,
+        robot_acc_traj,
+        peds_pos_traj,
+        ped_forces_traj,
+        np.asarray(robot_goal_arr, dtype=float),
+        reached_goal_step,
+    )
+
+
+def _compute_metrics(
+    ep: EpisodeData,
+    horizon: int,
+    snqi_weights: Dict[str, float] | None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None,
+) -> Dict[str, Any]:
+    metrics_raw = compute_all_metrics(ep, horizon=horizon)
+    return _post_process_metrics(
+        metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
+    )
+
+
+def _build_episode_record(
+    scenario_params: Dict[str, Any],
+    seed: int,
+    metrics: Dict[str, Any],
+    algo_metadata: Dict[str, Any],
+    ts_start: str,
+) -> Dict[str, Any]:
+    episode_id = compute_episode_id(scenario_params, seed)
+    return {
+        "episode_id": episode_id,
+        "scenario_id": scenario_params.get("id", "unknown"),
+        "seed": seed,
+        "scenario_params": scenario_params,
+        "metrics": metrics,
+        "algorithm_metadata": algo_metadata,
+        "config_hash": _config_hash(scenario_params),
+        "git_hash": _git_hash_fallback(),
+        "timestamps": {"start": ts_start, "end": ts_start},
+    }
+
+
+def _handle_video_for_record(
+    record: Dict[str, Any],
+    robot_pos_traj: List[np.ndarray],
+    perf_start: float,
+    video_enabled: bool,
+    video_renderer: str,
+    videos_dir: Optional[str],
+) -> None:
+    if not (video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None):
+        return
+    episode_id = record["episode_id"]
+    scenario_id = record["scenario_id"]
+    try:
+        _enc_t0 = time.perf_counter()
+        vid, skip_info = _try_encode_synthetic_video(
+            robot_pos_traj,
+            episode_id=episode_id,
+            scenario_id=scenario_id,
+            out_dir=Path(videos_dir),
+            fps=10,
+            seed=record.get("seed"),
+        )
+        _enc_t1 = time.perf_counter()
+        if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
+            _annotate_and_check_video_perf(record, vid, perf_start, _enc_t0, _enc_t1)
+        else:
+            reason_payload = skip_info or {
+                "reason": "encoder-empty",
+                "renderer": str(video_renderer),
+                "steps": len(robot_pos_traj),
+            }
+            _emit_video_skip(
+                record=record,
+                episode_id=episode_id,
+                scenario_id=scenario_id,
+                seed=record.get("seed"),
+                renderer=str(reason_payload.get("renderer", video_renderer)),
+                reason=str(reason_payload.get("reason", "unknown")),
+                steps=reason_payload.get("steps"),
+                error=reason_payload.get("error"),
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        # Do not fail the batch on unexpected video problems
+        pass
+
+
+def run_episode(
     scenario_params: Dict[str, Any],
     seed: int,
     *,
@@ -631,86 +804,22 @@ def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
     The robot can use different algorithms based on the 'algo' parameter.
     """
     # Wall-clock start time for timestamps and perf accounting
-    _perf_start = time.perf_counter()
-    _ts_start = datetime.now(timezone.utc).isoformat()
+    perf_start = time.perf_counter()
+    ts_start = datetime.now(timezone.utc).isoformat()
     # Create robot policy based on algorithm
     robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
 
-    def _simulate_episode() -> tuple[
-        List[np.ndarray],
-        List[np.ndarray],
-        List[np.ndarray],
-        List[np.ndarray],
-        List[np.ndarray],
-        np.ndarray,
-        int | None,
-    ]:
-        gen = generate_scenario(scenario_params, seed=seed)
-        sim = gen.simulator
-        if sim is None:
-            raise RuntimeError("pysocialforce not available; cannot run episode")
-        wrapper = FastPysfWrapper(sim)
-
-        # Determine robot start/goal: defaults if absent
-        robot_start_arr, robot_goal_arr = _prepare_robot_points(robot_start, robot_goal)
-        robot_pos = robot_start_arr.copy()
-        robot_vel = np.zeros(2)
-
-        robot_pos_traj: List[np.ndarray] = []
-        robot_vel_traj: List[np.ndarray] = []
-        robot_acc_traj: List[np.ndarray] = []
-        peds_pos_traj: List[np.ndarray] = []
-        ped_forces_traj: List[np.ndarray] = []
-
-        reached_goal_step: int | None = None
-        goal_radius = 0.3
-        last_vel = robot_vel.copy()
-
-        def _step_robot(
-            curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
-        ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-            new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
-            new_pos = curr_pos + new_vel * dt
-            acc_vec = (new_vel - curr_vel) / dt
-            return new_pos, new_vel, acc_vec
-
-        for t in range(horizon):
-            ped_pos = sim.peds.pos().copy()
-            peds_pos_traj.append(ped_pos)
-
-            robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
-            last_vel = robot_vel.copy()
-
-            if record_forces:
-                forces = np.zeros_like(ped_pos, dtype=float)
-                for i, p in enumerate(ped_pos):
-                    forces[i] = wrapper.get_forces_at(p)
-                ped_forces_traj.append(forces)
-            else:
-                ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
-
-            robot_pos_traj.append(robot_pos.copy())
-            robot_vel_traj.append(robot_vel.copy())
-            robot_acc_traj.append(acc.copy())
-
-            if (
-                reached_goal_step is None
-                and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius
-            ):
-                reached_goal_step = t
-                break
-            sim.step()
-
-        return (
-            robot_pos_traj,
-            robot_vel_traj,
-            robot_acc_traj,
-            peds_pos_traj,
-            ped_forces_traj,
-            np.asarray(robot_goal_arr, dtype=float),
-            reached_goal_step,
-        )
-
+    # Simulate episode
+    trajectories = _simulate_episode_with_policy(
+        scenario_params,
+        seed,
+        robot_policy,
+        horizon,
+        dt,
+        robot_start,
+        robot_goal,
+        record_forces,
+    )
     (
         robot_pos_traj,
         robot_vel_traj,
@@ -719,80 +828,32 @@ def run_episode(  # noqa: C901 - acceptable complexity for episode orchestration
         ped_forces_traj,
         robot_goal_arr,
         reached_goal_step,
-    ) = _simulate_episode()
+    ) = trajectories
 
-    ep: EpisodeData = _build_episode_data(
+    # Build episode data
+    ep = _build_episode_data(
         robot_pos_traj,
         robot_vel_traj,
         robot_acc_traj,
         peds_pos_traj,
         ped_forces_traj,
-        np.asarray(robot_goal_arr, dtype=float),
+        robot_goal_arr,
         dt,
         reached_goal_step,
     )
 
-    metrics_raw = compute_all_metrics(ep, horizon=horizon)
-    metrics = _post_process_metrics(
-        metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
+    # Compute metrics
+    metrics = _compute_metrics(ep, horizon, snqi_weights, snqi_baseline)
+
+    # Build record
+    record = _build_episode_record(scenario_params, seed, metrics, algo_metadata, ts_start)
+
+    # Handle video
+    _handle_video_for_record(
+        record, robot_pos_traj, perf_start, video_enabled, video_renderer, videos_dir
     )
 
-    # Build record per schema
-    # Deterministic episode id consistent with resume filtering logic
-    episode_id = compute_episode_id(scenario_params, seed)
-    # NOTE: Legacy test schema (docs/dev/issues/social-navigation-benchmark/episode_schema.json)
-    # does not yet allow 'version' or 'identity' fields. We keep the internal
-    # schema (episode.schema.v1.json) richer, but only emit the subset accepted
-    # by the currently referenced test schema to keep tests green. Re‑introduce
-    # version/identity once tests migrate to the v1 runtime schema.
-    record: Dict[str, Any] = {
-        "episode_id": episode_id,
-        "scenario_id": scenario_params.get("id", "unknown"),
-        "seed": seed,
-        "scenario_params": scenario_params,
-        "metrics": metrics,
-        "algorithm_metadata": algo_metadata,
-        "config_hash": _config_hash(scenario_params),
-        "git_hash": _git_hash_fallback(),
-        "timestamps": {"start": _ts_start, "end": _ts_start},
-    }
-    # Optional per‑episode video artifact (synthetic only for now)
-    if video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None:
-        try:
-            _enc_t0 = time.perf_counter()
-            vid, skip_info = _try_encode_synthetic_video(
-                robot_pos_traj,
-                episode_id=episode_id,
-                scenario_id=record["scenario_id"],
-                out_dir=Path(videos_dir),
-                fps=10,
-                seed=record.get("seed"),
-            )
-            _enc_t1 = time.perf_counter()
-            if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
-                _annotate_and_check_video_perf(record, vid, _perf_start, _enc_t0, _enc_t1)
-            else:
-                reason_payload = skip_info or {
-                    "reason": "encoder-empty",
-                    "renderer": str(video_renderer),
-                    "steps": len(robot_pos_traj),
-                }
-                _emit_video_skip(
-                    record=record,
-                    episode_id=episode_id,
-                    scenario_id=record.get("scenario_id", "unknown"),
-                    seed=record.get("seed"),
-                    renderer=str(reason_payload.get("renderer", video_renderer)),
-                    reason=str(reason_payload.get("reason", "unknown")),
-                    steps=reason_payload.get("steps"),
-                    error=reason_payload.get("error"),
-                )
-        except RuntimeError:
-            raise
-        except Exception:
-            # Do not fail the batch on unexpected video problems
-            pass
-    # Update timestamps with end time after optional encoding
+    # Update end time
     record["timestamps"]["end"] = datetime.now(timezone.utc).isoformat()
     return record
 

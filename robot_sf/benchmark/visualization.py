@@ -54,7 +54,7 @@ class VisualizationError(Exception):
 
 # TODO: Implement generate_benchmark_plots function (T011) - COMPLETED
 def generate_benchmark_plots(
-    episodes_data: List[dict] | str,
+    episodes_data: List[dict] | str | Path,
     output_dir: str,
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,
@@ -63,7 +63,7 @@ def generate_benchmark_plots(
     Generate PDF plots by analyzing benchmark episodes.
 
     Args:
-        episodes_data: List of episode dictionaries from benchmark execution, or path to JSONL file
+        episodes_data: List of episode dictionaries from benchmark execution, or path (str | Path) to JSONL file
         output_dir: Directory to save generated PDF plots
         scenario_filter: Optional scenario ID to filter plots
         baseline_filter: Optional baseline name to filter plots
@@ -358,7 +358,7 @@ def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) ->
 
 # TODO: Implement generate_benchmark_videos function (T012) - COMPLETED
 def generate_benchmark_videos(
-    episodes_data: List[dict] | str,
+    episodes_data: List[dict] | str | Path,
     output_dir: str,
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,
@@ -369,7 +369,7 @@ def generate_benchmark_videos(
     Generate MP4 videos by replaying benchmark episodes.
 
     Args:
-        episodes_data: List of episode dictionaries from benchmark execution, or path to JSONL file
+        episodes_data: List of episode dictionaries from benchmark execution, or path (str | Path) to JSONL file
         output_dir: Directory to save generated MP4 videos
         scenario_filter: Optional scenario ID to filter videos
         baseline_filter: Optional baseline name to filter videos

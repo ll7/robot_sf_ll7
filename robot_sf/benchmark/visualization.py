@@ -91,13 +91,6 @@ def generate_benchmark_plots(
 
     filtered_episodes = _filter_episodes(episodes, scenario_filter, baseline_filter)
 
-    if not filtered_episodes:
-        raise VisualizationError(
-            "No episodes match the specified filters",
-            "plot",
-            {"scenario_filter": scenario_filter, "baseline_filter": baseline_filter},
-        )
-
     os.makedirs(output_dir, exist_ok=True)
     plots_dir = Path(output_dir) / "plots"
     plots_dir.mkdir(exist_ok=True)

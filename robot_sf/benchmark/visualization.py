@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
 
+import numpy as np
 from loguru import logger
 
 
@@ -388,8 +389,10 @@ def generate_benchmark_videos(
     if isinstance(episodes_data, (str, Path)):
         if not os.path.exists(episodes_data):
             raise FileNotFoundError(f"Episodes file not found: {episodes_data}")
-        episodes = _load_episodes(str(episodes_data))
+        episodes_path = str(episodes_data)
+        episodes = _load_episodes(episodes_path)
     else:
+        episodes_path = "episodes_data"
         episodes = episodes_data
 
     if not episodes:
@@ -401,54 +404,52 @@ def generate_benchmark_videos(
 
     filtered_episodes = _filter_episodes(episodes, scenario_filter, baseline_filter)
 
-    # Filter episodes that have trajectory data
-    episodes_with_trajectory = [ep for ep in filtered_episodes if ep.get("trajectory_data")]
+    # Filter episodes that have replay data
+    episodes_with_replay = [ep for ep in filtered_episodes if ep.get("replay_steps")]
 
-    if not episodes_with_trajectory:
-        # If no trajectory data, create placeholder videos or skip
+    if not episodes_with_replay:
         logger.warning(
-            "No episodes with trajectory data found for video generation. "
-            "Video generation requires trajectory data captured during simulation."
+            "No episodes with replay data found for video generation. "
+            "Video generation requires replay capture to be enabled during benchmark execution "
+            "(set capture_replay=True in benchmark configuration)."
         )
         return []
 
-    # For now, skip video generation since trajectory data format is not compatible
-    # with the existing replay system. This would need integration with the replay
-    # capture system used by the benchmark.
-    logger.info(
-        f"Found {len(episodes_with_trajectory)} episodes with trajectory data, but video generation is not yet implemented for this data format."
-    )
-    return []
+    os.makedirs(output_dir, exist_ok=True)
+    videos_dir = Path(output_dir) / "videos"
+    videos_dir.mkdir(exist_ok=True)
 
-
-def _check_moviepy_available() -> None:
-    """Check if moviepy is available, raise VisualizationError if not."""
-    _check_dependencies(["moviepy"])
-
-
-def _generate_episode_videos(
-    episodes: List[dict], videos_dir: Path, fps: int, max_duration: float, episodes_path: str
-) -> List[VisualArtifact]:
-    """Generate videos for episodes with trajectory data."""
     artifacts = []
+    max_frames = int(max_duration * fps)
 
-    for episode in episodes:
+    for episode in episodes_with_replay:
         try:
+            # Convert episode record to ReplayEpisode
+            replay_episode = _episode_record_to_replay_episode(episode)
+
+            # Generate video filename
             video_filename = f"episode_{episode['episode_id']}.mp4"
             video_path = videos_dir / video_filename
 
-            # For now, create a placeholder video since full environment replay
-            # would require significant integration with the simulation system
-            _create_placeholder_video(video_path, fps, max_duration)
+            # Generate frames using the existing render_sim_view system
+            frames = _generate_frames_from_replay(replay_episode, fps, max_frames)
 
+            if not frames:
+                logger.warning(f"No frames generated for episode {episode['episode_id']}")
+                continue
+
+            # Encode frames to video
+            _encode_frames_to_video(frames, str(video_path), fps)
+
+            # Create artifact
             generation_time = datetime.now()
             file_size = video_path.stat().st_size
 
             filter_info = []
-            if episode.get("scenario_id"):
-                filter_info.append(f"scenario={episode['scenario_id']}")
-            if episode.get("scenario_params", {}).get("algo"):
-                filter_info.append(f"baseline={episode['scenario_params']['algo']}")
+            if scenario_filter:
+                filter_info.append(f"scenario={scenario_filter}")
+            if baseline_filter:
+                filter_info.append(f"baseline={baseline_filter}")
             filter_str = f" ({', '.join(filter_info)})" if filter_info else ""
 
             artifact = VisualArtifact(
@@ -456,7 +457,7 @@ def _generate_episode_videos(
                 artifact_type="video",
                 format="mp4",
                 filename=video_filename,
-                source_data=f"Episode {episode['episode_id']} trajectory from {episodes_path}{filter_str}",
+                source_data=f"Episode {episode['episode_id']} replay from {episodes_path}{filter_str}",
                 generation_time=generation_time,
                 file_size=file_size,
                 status="generated",
@@ -464,12 +465,13 @@ def _generate_episode_videos(
             artifacts.append(artifact)
 
         except Exception as e:
+            logger.warning(f"Failed to generate video for episode {episode['episode_id']}: {e}")
             artifact = VisualArtifact(
                 artifact_id=f"video_{episode['episode_id']}_{datetime.now().timestamp()}",
                 artifact_type="video",
                 format="mp4",
                 filename=f"episode_{episode['episode_id']}.mp4",
-                source_data=f"Episode {episode['episode_id']} trajectory",
+                source_data=f"Episode {episode['episode_id']} replay",
                 generation_time=datetime.now(),
                 file_size=0,
                 status="failed",
@@ -480,32 +482,83 @@ def _generate_episode_videos(
     return artifacts
 
 
-def _create_placeholder_video(video_path: Path, fps: int, duration: float) -> None:
-    """Create a placeholder video for testing purposes."""
+def _check_moviepy_available() -> None:
+    """Check if moviepy is available, raise VisualizationError if not."""
+    _check_dependencies(["moviepy"])
+
+
+def _episode_record_to_replay_episode(episode: dict):
+    """Convert an episode record with replay data to a ReplayEpisode object."""
     try:
-        import numpy as np
-        from moviepy import VideoClip
+        from robot_sf.benchmark.full_classic.replay import ReplayEpisode, ReplayStep
+    except ImportError:
+        raise VisualizationError("ReplayEpisode not available", "video")
 
-        # Create a simple animated placeholder
-        def make_frame(t):
-            # Create a simple animated frame
-            frame = np.zeros((240, 320, 3), dtype=np.uint8)
-            # Add some movement based on time
-            y_pos = int(120 + 50 * np.sin(2 * np.pi * t / duration))
-            frame[y_pos - 10 : y_pos + 10, 150:170] = [255, 0, 0]  # Red rectangle
-            return frame
+    episode_id = episode["episode_id"]
+    scenario_id = episode["scenario_id"]
 
-        clip = VideoClip(make_frame, duration=duration)
-        clip.write_videofile(str(video_path), fps=fps, codec="libx264", audio=False)
+    replay_steps = []
+    replay_steps_data = episode.get("replay_steps", [])
+    replay_peds = episode.get("replay_peds", [])
+    replay_actions = episode.get("replay_actions", [])
+
+    for i, (t, x, y, heading) in enumerate(replay_steps_data):
+        # Get pedestrian positions and actions for this timestep
+        ped_positions = replay_peds[i] if i < len(replay_peds) else None
+        action = replay_actions[i] if i < len(replay_actions) else None
+
+        step = ReplayStep(
+            t=t,
+            x=x,
+            y=y,
+            heading=heading,
+            speed=0.5,  # Default speed, could be enhanced
+            ped_positions=ped_positions,
+            action=action,
+        )
+        replay_steps.append(step)
+
+    replay_episode = ReplayEpisode(
+        episode_id=episode_id,
+        scenario_id=scenario_id,
+        steps=replay_steps,
+    )
+
+    return replay_episode
+
+
+def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> List[np.ndarray]:
+    """Generate frames from a ReplayEpisode using the render_sim_view system."""
+    try:
+        from robot_sf.benchmark.full_classic.render_sim_view import generate_frames
+    except ImportError:
+        logger.warning("SimulationView rendering not available, cannot generate real video frames")
+        return []
+
+    frames = []
+    try:
+        for frame in generate_frames(replay_episode, fps=fps, max_frames=max_frames):
+            frames.append(frame)
     except Exception as e:
-        # If video creation fails, create an empty file as fallback
-        video_path.touch()
-        raise VisualizationError(f"Failed to create placeholder video: {e}", "video")
+        logger.warning(f"Failed to generate frames from replay: {e}")
+        return []
 
+    return frames
+
+
+def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int) -> None:
+    """Encode a list of frames to an MP4 video file."""
+    if not frames:
+        raise VisualizationError("No frames to encode", "video")
+
+    try:
+        from moviepy import ImageSequenceClip
+
+        # Convert frames to the format expected by moviepy (list of numpy arrays)
+        clip = ImageSequenceClip(frames, fps=fps)
+        clip.write_videofile(video_path, codec="libx264", audio=False, verbose=False, logger=None)
     except Exception as e:
-        # If video creation fails, create an empty file as fallback
-        video_path.touch()
-        raise VisualizationError(f"Failed to create placeholder video: {e}", "video")
+        raise VisualizationError(f"Failed to encode video: {e}", "video")
 
 
 # TODO: Implement validate_visual_artifacts function (T013) - COMPLETED

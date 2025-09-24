@@ -111,7 +111,7 @@ class TestEpisodeLoading:
         try:
             with pytest.raises(VisualizationError) as exc_info:
                 _load_episodes(temp_path)
-            assert "Failed to load episode data" in str(exc_info.value)
+            assert "Failed to decode JSON" in str(exc_info.value)
         finally:
             Path(temp_path).unlink()
 
@@ -119,7 +119,7 @@ class TestEpisodeLoading:
         """Test loading episodes from a nonexistent file."""
         with pytest.raises(VisualizationError) as exc_info:
             _load_episodes("nonexistent_file.jsonl")
-        assert "Failed to load episode data" in str(exc_info.value)
+        assert "Failed to read episode file" in str(exc_info.value)
 
 
 class TestEpisodeFiltering:

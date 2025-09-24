@@ -14,6 +14,8 @@
 - [x] T006 [P] CLI flags test in `tests/benchmark_full/test_unit_video_selection.py`: verify `--no-video` disables artifacts and `--video-renderer=synthetic|sim-view|none` selects source deterministically. (Existing)
 - [x] T007 [P] Programmatic API test in `tests/unit/test_runner_video.py`: verify `video_enabled=True, video_renderer='synthetic'` yields artifact.
 - [x] T008 [P] Performance budget test in `tests/visuals/test_video_performance_budget.py`: measure encode overhead; assert WARN when >5% by default and FAIL when `ROBOT_SF_PERF_ENFORCE=1` is set.
+- [x] T021 [P] Regression test ensuring zero-step/empty-frame episodes skip MP4 creation and emit structured warning with episode context and step count (`tests/unit/test_runner_video.py`).
+- [x] T022 [P] Metrics parity test comparing runs with `video_enabled=True` vs `False` on the same seed to assert identical metrics/control flow (`tests/unit/test_runner_video.py`).
 
 ## Phase 3.3: Core Implementation
 - [x] T009 Implement CLI wiring for `--no-video` and `--video-renderer` in `robot_sf/benchmark/cli.py` (and config plumbing).
@@ -22,6 +24,7 @@
 - [x] T012 Implement manifest embedding in per-episode JSONL records with `video` object; ensure schema compat and validation.
 - [x] T013 Implement synthetic renderer as default frame source; guard SimulationView path behind flag with safe fallback.
 - [x] T014 Handle missing MoviePy/codec: structured Loguru warnings; skip video; do not fail batch.
+- [x] T023 Harden synthetic encoder to skip gracefully on unwritable destinations and propagate structured skip metadata (reason, renderer, frames) without mutating episode metrics (`robot_sf/benchmark/runner.py`).
 
 ## Phase 3.4: Integration
 - [x] T015 Update repository-wide episode JSON Schema to include optional `video` object fields aligned to contract; add CI validation hook.

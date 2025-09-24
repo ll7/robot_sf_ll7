@@ -172,13 +172,8 @@ def _handle_run(args) -> int:
             horizon=args.horizon,
             dt=args.dt,
             record_forces=args.record_forces,
-            video_enabled=(not bool(getattr(args, "no_video", False)))
-            and str(getattr(args, "video_renderer", "none")) != "none",
-            video_renderer=(
-                str(getattr(args, "video_renderer", "none"))
-                if not bool(getattr(args, "no_video", False))
-                else "none"
-            ),
+            video_enabled=not args.no_video and args.video_renderer != "none",
+            video_renderer=args.video_renderer if not args.no_video else "none",
             append=args.append,
             fail_fast=args.fail_fast,
             progress_cb=_progress_cb_factory(bool(args.quiet)),

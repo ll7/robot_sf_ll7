@@ -13,8 +13,8 @@ from pathlib import Path
 
 def main():
     """Main dashboard function."""
-    # Default metrics file location (matches CI artifact path)
-    metrics_file = Path("results/ci_performance_metrics.json")
+    # Default metrics file location (now in tmp folder)
+    metrics_file = Path("tmp/ci_performance_metrics.json")
 
     if not metrics_file.exists():
         print("❌ No CI performance metrics found.")

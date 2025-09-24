@@ -64,24 +64,9 @@ jobs:
           sudo mv apt-fast /usr/local/bin/apt-fast
           sudo chmod +x /usr/local/bin/apt-fast
 
-      - name: Start CI performance monitoring
-        run: |
-          uv run python scripts/ci_monitoring.py start-job --job-id ${{ github.run_id }} --branch ${{ github.ref_name }}
-
       - name: System packages for headless
         run: |
-          START_TIME=$(date +%s)
           sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
-          END_TIME=$(date +%s)
-          DURATION=$((END_TIME - START_TIME))
-          echo "PACKAGE_INSTALL_DURATION=$DURATION" >> $GITHUB_ENV
-
-      - name: Record package installation metrics
-        run: |
-          uv run python scripts/ci_monitoring.py record-step \
-            --job-id ${{ github.run_id }} \
-            --step install_system_packages \
-            --duration ${{ env.PACKAGE_INSTALL_DURATION }}
 
       - name: Validate package installation
         run: |

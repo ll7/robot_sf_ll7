@@ -167,7 +167,7 @@ def main() -> int:
     parser.add_argument(
         "--metrics-file",
         type=Path,
-        default=Path("results/ci_metrics.json"),
+        default=Path("tmp/ci_metrics.json"),
         help="Path to metrics JSON file",
     )
     parser.add_argument(

@@ -265,8 +265,10 @@ def _generate_metrics_plot(episodes: List[dict], output_dir: str) -> VisualArtif
             status="generated",
         )
 
-    except Exception as e:
-        raise VisualizationError(f"Failed to generate metrics plot: {e}", "plot")
+    except (ValueError, KeyError, TypeError) as e:
+        raise VisualizationError(
+            f"Failed to generate metrics plot due to a data error: {e}", "plot"
+        )
 
 
 def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) -> VisualArtifact:
@@ -342,8 +344,10 @@ def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) ->
             status="generated",
         )
 
-    except Exception as e:
-        raise VisualizationError(f"Failed to generate scenario comparison plot: {e}", "plot")
+    except (ValueError, KeyError, TypeError) as e:
+        raise VisualizationError(
+            f"Failed to generate scenario comparison plot due to a data error: {e}", "plot"
+        )
 
 
 def generate_benchmark_videos(
@@ -542,7 +546,7 @@ def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int)
         # Convert frames to the format expected by moviepy (list of numpy arrays)
         clip = ImageSequenceClip(frames, fps=fps)
         clip.write_videofile(video_path, codec="libx264", audio=False, verbose=False, logger=None)
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         raise VisualizationError(f"Failed to encode video: {e}", "video")
 
 

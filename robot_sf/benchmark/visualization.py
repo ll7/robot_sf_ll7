@@ -534,26 +534,129 @@ def _episode_record_to_replay_episode(episode: dict):
 
 
 def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> List[np.ndarray]:
-    """
-    Generate frames from a replay episode for video creation.
-
-    This is a placeholder implementation. In a full implementation, this would
-    render frames using the simulation view system.
+    """Generate synthetic frames from a replay episode for video creation.
 
     Args:
         replay_episode: The ReplayEpisode object containing trajectory data
-        fps: Target frames per second for the video
+        fps: Target frames per second for the video (informational)
         max_frames: Maximum number of frames to generate
 
     Returns:
         List of numpy arrays representing video frames
     """
-    # TODO: Implement actual frame generation using simulation view rendering
-    # For now, return empty list to skip video generation gracefully
-    logger.warning(
-        "_generate_frames_from_replay is not yet implemented - skipping video generation"
-    )
-    return []
+    steps = list(getattr(replay_episode, "steps", []))
+    if not steps:
+        logger.warning("Replay episode %s has no steps", getattr(replay_episode, "episode_id", "?"))
+        return []
+
+    # Extract positions and calculate bounds
+    bounds = _calculate_trajectory_bounds(steps)
+    pixel_converter = _create_pixel_converter(bounds)
+
+    # Convert all positions to pixels
+    robot_pixels = [pixel_converter(step.x, step.y) for step in steps]
+    ped_pixels = [
+        [pixel_converter(px, py) for px, py in (step.ped_positions or [])] for step in steps
+    ]
+
+    # Generate frames
+    return _generate_frames_from_pixels(robot_pixels, ped_pixels, max_frames)
+
+
+def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
+    """Calculate the bounding box for all trajectory positions."""
+    positions: List[tuple[float, float]] = []
+    for step in steps:
+        positions.append((step.x, step.y))
+        if step.ped_positions:
+            positions.extend([(float(px), float(py)) for px, py in step.ped_positions])
+
+    if not positions:
+        positions.append((0.0, 0.0))
+
+    xs, ys = zip(*positions)
+    min_x, max_x = float(min(xs)), float(max(xs))
+    min_y, max_y = float(min(ys)), float(max(ys))
+
+    # Add padding
+    span_x = max(max_x - min_x, 1e-3)
+    span_y = max(max_y - min_y, 1e-3)
+    pad_x = span_x * 0.1
+    pad_y = span_y * 0.1
+
+    return min_x - pad_x, max_x + pad_x, min_y - pad_y, max_y + pad_y
+
+
+def _create_pixel_converter(bounds: tuple[float, float, float, float]):
+    """Create a function to convert world coordinates to pixel coordinates."""
+    min_x, max_x, min_y, max_y = bounds
+    span_x = max(max_x - min_x, 1e-3)
+    span_y = max(max_y - min_y, 1e-3)
+    height, width = 320, 320
+
+    def to_pixel(x: float, y: float) -> tuple[int, int]:
+        norm_x = (x - min_x) / span_x
+        norm_y = (y - min_y) / span_y
+        col = int(np.clip(norm_x * (width - 1), 0, width - 1))
+        row = int(np.clip((1.0 - norm_y) * (height - 1), 0, height - 1))
+        return row, col
+
+    return to_pixel
+
+
+def _generate_frames_from_pixels(
+    robot_pixels: List[tuple[int, int]], ped_pixels: List[List[tuple[int, int]]], max_frames: int
+) -> List[np.ndarray]:
+    """Generate video frames from pre-computed pixel positions."""
+    height, width = 320, 320
+    background = np.array([22, 26, 30], dtype=np.uint8)
+    trail_color = (72, 188, 110)
+    robot_color = (245, 228, 92)
+    ped_color = (214, 72, 72)
+
+    frames: List[np.ndarray] = []
+    limit = max_frames if max_frames and max_frames > 0 else None
+
+    for idx, (robot_row, robot_col) in enumerate(robot_pixels):
+        if limit is not None and len(frames) >= limit:
+            break
+
+        frame = np.empty((height, width, 3), dtype=np.uint8)
+        frame[...] = background
+
+        # Draw traversal trail up to the current timestep
+        for trail_row, trail_col in robot_pixels[: idx + 1]:
+            _draw_disk(frame, trail_row, trail_col, 2, trail_color)
+
+        # Draw current robot position
+        _draw_disk(frame, robot_row, robot_col, 4, robot_color)
+
+        # Draw pedestrian markers if available
+        for ped_row, ped_col in ped_pixels[idx]:
+            _draw_disk(frame, ped_row, ped_col, 2, ped_color)
+
+        # Progress bar for quick visual feedback
+        progress = int(((idx + 1) / len(robot_pixels)) * width)
+        frame[-4:, :progress] = robot_color
+
+        frames.append(frame)
+
+    return frames
+
+
+def _draw_disk(
+    frame: np.ndarray, row: int, col: int, radius: int, color: tuple[int, int, int]
+) -> None:
+    """Draw a filled disk on the frame at the specified position."""
+    height, width = frame.shape[:2]
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            if dx * dx + dy * dy > radius * radius:
+                continue
+            rr = row + dy
+            cc = col + dx
+            if 0 <= rr < height and 0 <= cc < width:
+                frame[rr, cc] = color
 
 
 def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int) -> None:

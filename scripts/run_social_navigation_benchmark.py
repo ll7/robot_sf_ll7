@@ -211,7 +211,7 @@ def validate_benchmark_results(results: Dict[str, Any]) -> Dict[str, Any]:
     missing_files = []
 
     for file in required_files:
-        if not Path(output_root) / file:
+        if not (Path(output_root) / file).exists():
             missing_files.append(file)
 
     validation_results["checks"]["required_outputs_present"] = len(missing_files) == 0

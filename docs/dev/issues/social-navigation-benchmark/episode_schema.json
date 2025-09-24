@@ -124,6 +124,48 @@
         },
         "notes": {
             "type": "string"
+        },
+        "video": {
+            "type": "object",
+            "description": "Optional per-episode video artifact metadata.",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "mp4"
+                    ]
+                },
+                "filesize_bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "frames": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "renderer": {
+                    "type": "string",
+                    "enum": [
+                        "synthetic",
+                        "sim-view",
+                        "none"
+                    ]
+                },
+                "notes": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "format",
+                "filesize_bytes",
+                "frames",
+                "renderer"
+            ],
+            "additionalProperties": true
         }
     },
     "additionalProperties": false

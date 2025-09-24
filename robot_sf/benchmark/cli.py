@@ -172,6 +172,13 @@ def _handle_run(args) -> int:
             horizon=args.horizon,
             dt=args.dt,
             record_forces=args.record_forces,
+            video_enabled=(not bool(getattr(args, "no_video", False)))
+            and str(getattr(args, "video_renderer", "none")) != "none",
+            video_renderer=(
+                str(getattr(args, "video_renderer", "none"))
+                if not bool(getattr(args, "no_video", False))
+                else "none"
+            ),
             append=args.append,
             fail_fast=args.fail_fast,
             progress_cb=_progress_cb_factory(bool(args.quiet)),
@@ -613,6 +620,23 @@ def _add_run_subparser(
     p.add_argument("--dt", type=float, default=0.1)
     p.add_argument("--record-forces", action="store_true", default=False)
     p.add_argument("--append", action="store_true", default=False, help="Append to existing JSONL")
+    # Video artifact controls (Episode Video Artifacts MVP)
+    p.add_argument(
+        "--no-video",
+        action="store_true",
+        default=False,
+        help="Disable per-episode video generation (overrides renderer selection)",
+    )
+    p.add_argument(
+        "--video-renderer",
+        type=str,
+        choices=["synthetic", "sim-view", "none"],
+        default="none",
+        help=(
+            "Frame source for per-episode MP4s. 'synthetic' uses a lightweight renderer;\n"
+            "'sim-view' (experimental) uses SimulationView when available; 'none' disables."
+        ),
+    )
     p.add_argument(
         "--algo",
         default="simple_policy",

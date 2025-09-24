@@ -174,12 +174,12 @@ Completed (2025-09-22):
 - [x] Integrated video generation in classic benchmark script producing per‑episode MP4 artifacts. (2025-09-22)
 
 Planned / Pending:
-- [ ] Add integration test: run a 1–2 episode micro batch and assert MP4 exists, >0 bytes, and frame count matches expectation.
+- [x] Add integration test: run a 1–2 episode micro batch and assert MP4 exists, >0 bytes, and frame count matches expectation. (2025-09-24) — tests: `tests/test_cli_run_video.py`, `tests/unit/test_runner_video.py` (skip when moviepy missing)
 - [ ] Performance sampling: record encode ms/frame & cumulative overhead; target <5% added wall time for default batch.
-- [ ] Add `--no-video` / config toggle to disable video generation for pure metric runs.
-- [x] Add renderer selection flag (`--video-renderer=synthetic|sim-view|none`) anticipating SimulationView path. (2025-09-24) — internal wiring stubbed; default remains synthetic.
+- [x] Add `--no-video` / config toggle to disable video generation for pure metric runs. (2025-09-24) — CLI flag implemented and wired
+- [x] Add renderer selection flag (`--video-renderer=synthetic|sim-view|none`) anticipating SimulationView path. (2025-09-24) — wired; default remains none unless requested
 - [ ] Optional SimulationView high‑fidelity renderer (deferred until post core benchmark freeze).
-- [ ] JSON Schema extension / manifest spec for video artifact entries (validate size >0, format=mp4).
+- [x] JSON Schema extension / manifest spec for video artifact entries (validate size >0, format=mp4). (2025-09-24)
 - [ ] Documentation: create `docs/dev/issues/video-artifacts/design.md` (rationale, capture method, perf notes) and link from `docs/README.md` & this TODO.
 - [ ] Benchmark figure regeneration script: add optional gallery sheet (contact-sheet style) of first frame per video.
 - [ ] Perf regression guard: add lightweight CI smoke that runs video generation for 1 episode (skipped on Windows if needed).

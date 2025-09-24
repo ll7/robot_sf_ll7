@@ -37,4 +37,5 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
+    "githubPullRequests.ignoreSubmodules": true,
 }

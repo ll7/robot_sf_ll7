@@ -305,6 +305,79 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     return policy_fn, metadata
 
 
+def _try_encode_synthetic_video(
+    robot_pos_traj: list[np.ndarray],
+    *,
+    episode_id: str,
+    scenario_id: str,
+    out_dir: Path,
+    fps: int = 10,
+) -> Optional[Dict[str, Any]]:
+    """Encode a very lightweight synthetic MP4 from robot positions.
+
+    - Draws a simple red dot for the robot position per frame on a black canvas.
+    - Uses moviepy ImageSequenceClip if available; returns None when unavailable.
+    """
+    try:
+        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
+    except Exception:
+        return None
+
+    import numpy as _np  # local alias to avoid confusion
+
+    N = len(robot_pos_traj)
+    if N == 0:
+        return None
+    H, W = 128, 128
+    # Determine bounds for simple normalization
+    xs = _np.array([p[0] for p in robot_pos_traj], dtype=float)
+    ys = _np.array([p[1] for p in robot_pos_traj], dtype=float)
+    min_x, max_x = float(xs.min()), float(xs.max())
+    min_y, max_y = float(ys.min()), float(ys.max())
+    # Pad 10%
+    pad_x = max(1e-6, 0.1 * (max_x - min_x))
+    pad_y = max(1e-6, 0.1 * (max_y - min_y))
+    min_x -= pad_x
+    max_x += pad_x
+    min_y -= pad_y
+    max_y += pad_y
+
+    def to_px(x: float, y: float) -> tuple[int, int]:
+        # Normalize to [0,1] then scale to pixels; y inverted for image coords
+        nx = 0.0 if max_x == min_x else (x - min_x) / (max_x - min_x)
+        ny = 0.0 if max_y == min_y else (y - min_y) / (max_y - min_y)
+        px = int(nx * (W - 1))
+        py = int((1.0 - ny) * (H - 1))
+        return px, py
+
+    frames: list[_np.ndarray] = []
+    for i in range(N):
+        img = _np.zeros((H, W, 3), dtype=_np.uint8)
+        x, y = robot_pos_traj[i]
+        px, py = to_px(float(x), float(y))
+        # Draw small 3x3 red square centered at (px,py)
+        x0, x1 = max(0, px - 1), min(W, px + 2)
+        y0, y1 = max(0, py - 1), min(H, py + 2)
+        img[y0:y1, x0:x1, :] = _np.array([220, 30, 30], dtype=_np.uint8)
+        frames.append(img)
+    mp4_path = out_dir / f"video_{episode_id}.mp4"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    clip = ImageSequenceClip(frames, fps=fps)  # type: ignore
+    # Keep args minimal for environment compatibility
+    clip.write_videofile(str(mp4_path), codec="libx264", fps=fps)
+    try:
+        size = mp4_path.stat().st_size
+    except Exception:
+        size = 0
+    return {
+        "path": str(mp4_path),
+        "format": "mp4",
+        "filesize_bytes": int(size),
+        "frames": int(N),
+        "renderer": "synthetic",
+    }
+
+
 def run_episode(
     scenario_params: Dict[str, Any],
     seed: int,
@@ -318,6 +391,10 @@ def run_episode(
     snqi_baseline: Dict[str, Dict[str, float]] | None = None,
     algo: str = "simple_policy",
     algo_config_path: Optional[str] = None,
+    # Video options (optional)
+    video_enabled: bool = False,
+    video_renderer: str = "none",
+    videos_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
@@ -416,7 +493,7 @@ def run_episode(
     # schema (episode.schema.v1.json) richer, but only emit the subset accepted
     # by the currently referenced test schema to keep tests green. Re‑introduce
     # version/identity once tests migrate to the v1 runtime schema.
-    record = {
+    record: Dict[str, Any] = {
         "episode_id": episode_id,
         "scenario_id": scenario_params.get("id", "unknown"),
         "seed": seed,
@@ -430,6 +507,21 @@ def run_episode(
             "end": datetime.now(timezone.utc).isoformat(),
         },
     }
+    # Optional per‑episode video artifact (synthetic only for now)
+    if video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None:
+        try:
+            vid = _try_encode_synthetic_video(
+                robot_pos_traj,
+                episode_id=episode_id,
+                scenario_id=record["scenario_id"],
+                out_dir=Path(videos_dir),
+                fps=10,
+            )
+            if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
+                record["video"] = vid
+        except Exception:
+            # Do not fail the batch on video problems
+            pass
     return record
 
 
@@ -508,6 +600,9 @@ def _run_job_worker(job: tuple[Dict[str, Any], int, Dict[str, Any]]) -> Dict[str
         snqi_baseline=params.get("snqi_baseline"),
         algo=str(params["algo"]),
         algo_config_path=params.get("algo_config_path"),
+        video_enabled=bool(params.get("video_enabled", False)),
+        video_renderer=str(params.get("video_renderer", "none")),
+        videos_dir=params.get("videos_dir"),
     )
 
 
@@ -612,6 +707,8 @@ def run_batch(
     record_forces: bool = True,
     snqi_weights: Dict[str, float] | None = None,
     snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    video_enabled: bool = False,
+    video_renderer: str = "none",
     append: bool = True,
     fail_fast: bool = False,
     progress_cb: Optional[
@@ -643,6 +740,7 @@ def run_batch(
 
     schema = load_schema(schema_path)
 
+    videos_dir = (out_path.parent / "videos").as_posix()
     fixed_params: Dict[str, Any] = {
         "horizon": horizon,
         "dt": dt,
@@ -651,6 +749,9 @@ def run_batch(
         "snqi_baseline": snqi_baseline,
         "algo": algo,
         "algo_config_path": algo_config_path,
+        "video_enabled": bool(video_enabled) and str(video_renderer) != "none",
+        "video_renderer": str(video_renderer),
+        "videos_dir": videos_dir,
     }
 
     # Resume support: filter jobs whose episode_id already exists in out_path.

@@ -11,7 +11,7 @@ It also defines the action and observation spaces for the robot.
 """
 
 from copy import deepcopy
-from typing import Callable
+from typing import Callable, Optional
 
 from loguru import logger
 
@@ -44,7 +44,7 @@ class RobotEnv(BaseEnv):
     def __init__(
         self,
         env_config: EnvSettings = EnvSettings(),
-        reward_func: Callable[[dict], float] = simple_reward,
+        reward_func: Optional[Callable[[dict], float]] = None,
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
@@ -85,9 +85,7 @@ class RobotEnv(BaseEnv):
             logger.warning(
                 "No reward_func provided to RobotEnv; falling back to simple_reward for safety."
             )
-            self.reward_func = simple_reward
-        else:
-            self.reward_func = reward_func
+        self.reward_func = reward_func or simple_reward
 
         # BaseEnv has already created self.simulator; avoid redundant initialization.
         # Initialize collision detectors and sensor data processors using existing simulator.

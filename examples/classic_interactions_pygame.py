@@ -190,7 +190,7 @@ def run_episode(
     last_info: dict[str, Any] = {}
     frames: list[Any] = [] if (record and MOVIEPY_AVAILABLE) else []
     # Performance: capture frames only if recording enabled & moviepy available (FR-025)
-    fast_demo_mode = bool(int((__import__("os").getenv("ROBOT_SF_FAST_DEMO", "0") or "0")))
+    fast_demo_mode = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     fast_step_cap = 8 if fast_demo_mode else None
     while not done:
         action, _ = policy.predict(obs, deterministic=True)

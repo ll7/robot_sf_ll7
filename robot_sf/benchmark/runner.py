@@ -985,42 +985,18 @@ def _run_batch_parallel(
     return wrote, failures
 
 
-def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional snapshot
+def _prepare_batch_setup(
     scenarios_or_path: List[Dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
-    *,
-    base_seed: int = 0,
-    repeats_override: int | None = None,
-    horizon: int = 100,
-    dt: float = 0.1,
-    record_forces: bool = True,
-    snqi_weights: Dict[str, float] | None = None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
-    video_enabled: bool = False,
-    video_renderer: str = "none",
-    append: bool = True,
-    fail_fast: bool = False,
-    progress_cb: Optional[
-        Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]
-    ] = None,
-    algo: str = "simple_policy",
-    algo_config_path: Optional[str] = None,
-    workers: int = 1,
-    resume: bool = True,
-) -> Dict[str, Any]:
-    """Run a batch of episodes and write JSONL records.
-
-    scenarios_or_path: either a list of scenario dicts or a YAML file path.
-    Returns a summary dict with counts and failures.
-    """
+    append: bool,
+) -> tuple[List[Dict[str, Any]], Path, Dict[str, Any]]:
+    """Prepare scenarios, output path, and schema for batch processing."""
     # Load scenarios
     if isinstance(scenarios_or_path, (str, Path)):
         scenarios = load_scenario_matrix(scenarios_or_path)
     else:
         scenarios = scenarios_or_path
-
-    jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
 
     # Prepare output
     out_path = Path(out_path)
@@ -1029,9 +1005,24 @@ def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional sn
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     schema = load_schema(schema_path)
+    return scenarios, out_path, schema
 
+
+def _setup_fixed_params(
+    out_path: Path,
+    horizon: int,
+    dt: float,
+    record_forces: bool,
+    snqi_weights: Dict[str, float] | None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None,
+    video_enabled: bool,
+    video_renderer: str,
+    algo: str,
+    algo_config_path: Optional[str],
+) -> Dict[str, Any]:
+    """Set up the fixed parameters dict for job execution."""
     videos_dir = (out_path.parent / "videos").as_posix()
-    fixed_params: Dict[str, Any] = {
+    return {
         "horizon": horizon,
         "dt": dt,
         "record_forces": record_forces,
@@ -1044,24 +1035,46 @@ def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional sn
         "videos_dir": videos_dir,
     }
 
-    # Resume support: filter jobs whose episode_id already exists in out_path.
-    if resume and out_path.exists():
-        # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
-        existing_ids = load_manifest(
-            out_path,
-            expected_identity_hash=_episode_identity_hash(),
-            expected_schema_version=EPISODE_SCHEMA_VERSION,
-        ) or index_existing(out_path)
-        if existing_ids:
-            filtered: List[tuple[Dict[str, Any], int]] = []
-            for sc, seed in jobs:
-                eid = compute_episode_id(sc, seed)
-                if eid not in existing_ids:
-                    filtered.append((sc, seed))
-            jobs = filtered
 
+def _filter_resume_jobs(
+    jobs: List[tuple[Dict[str, Any], int]],
+    out_path: Path,
+    resume: bool,
+) -> List[tuple[Dict[str, Any], int]]:
+    """Filter jobs based on resume logic, skipping existing episodes."""
+    if not resume or not out_path.exists():
+        return jobs
+
+    # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
+    existing_ids = load_manifest(
+        out_path,
+        expected_identity_hash=_episode_identity_hash(),
+        expected_schema_version=EPISODE_SCHEMA_VERSION,
+    ) or index_existing(out_path)
+
+    if not existing_ids:
+        return jobs
+
+    filtered: List[tuple[Dict[str, Any], int]] = []
+    for sc, seed in jobs:
+        eid = compute_episode_id(sc, seed)
+        if eid not in existing_ids:
+            filtered.append((sc, seed))
+    return filtered
+
+
+def _run_jobs(
+    jobs: List[tuple[Dict[str, Any], int]],
+    out_path: Path,
+    schema: Dict[str, Any],
+    fixed_params: Dict[str, Any],
+    workers: int,
+    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    fail_fast: bool,
+) -> tuple[int, List[Dict[str, Any]]]:
+    """Execute jobs using sequential or parallel processing."""
     if workers <= 1:
-        wrote, failures = _run_batch_sequential(
+        return _run_batch_sequential(
             jobs,
             out_path=out_path,
             schema=schema,
@@ -1070,7 +1083,7 @@ def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional sn
             fail_fast=fail_fast,
         )
     else:
-        wrote, failures = _run_batch_parallel(
+        return _run_batch_parallel(
             jobs,
             out_path=out_path,
             schema=schema,
@@ -1080,12 +1093,13 @@ def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional sn
             fail_fast=fail_fast,
         )
 
-    summary = {
-        "total_jobs": len(jobs),
-        "written": wrote,
-        "failures": failures,
-        "out_path": str(out_path),
-    }
+
+def _finalize_batch(
+    out_path: Path,
+    wrote: int,
+    resume: bool,
+) -> Dict[str, Any]:
+    """Finalize batch processing: save manifest and optional performance snapshot."""
     # Save/update manifest to speed up future resume if we wrote anything
     if resume and wrote > 0 and out_path.exists():
         # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
@@ -1095,6 +1109,7 @@ def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional sn
             identity_hash=_episode_identity_hash(),
             schema_version=EPISODE_SCHEMA_VERSION,
         )
+
     # Optional: write a small performance snapshot for video encoding if requested
     try:
         if os.getenv("ROBOT_SF_VIDEO_PERF_SNAPSHOT"):
@@ -1139,4 +1154,76 @@ def run_batch(  # noqa: C901 - orchestrates IO, workers, resume, and optional sn
     except Exception:
         # Best-effort; ignore snapshot errors
         pass
+
+    return {
+        "total_jobs": 0,  # Will be set by caller
+        "written": wrote,
+        "failures": [],  # Will be set by caller
+        "out_path": str(out_path),
+    }
+
+
+def run_batch(
+    scenarios_or_path: List[Dict[str, Any]] | str | Path,
+    out_path: str | Path,
+    schema_path: str | Path,
+    *,
+    base_seed: int = 0,
+    repeats_override: int | None = None,
+    horizon: int = 100,
+    dt: float = 0.1,
+    record_forces: bool = True,
+    snqi_weights: Dict[str, float] | None = None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    video_enabled: bool = False,
+    video_renderer: str = "none",
+    append: bool = True,
+    fail_fast: bool = False,
+    progress_cb: Optional[
+        Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]
+    ] = None,
+    algo: str = "simple_policy",
+    algo_config_path: Optional[str] = None,
+    workers: int = 1,
+    resume: bool = True,
+) -> Dict[str, Any]:
+    """Run a batch of episodes and write JSONL records.
+
+    scenarios_or_path: either a list of scenario dicts or a YAML file path.
+    Returns a summary dict with counts and failures.
+    """
+    # Prepare batch setup
+    scenarios, out_path, schema = _prepare_batch_setup(
+        scenarios_or_path, out_path, schema_path, append
+    )
+
+    # Expand jobs
+    jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
+
+    # Set up fixed parameters
+    fixed_params = _setup_fixed_params(
+        out_path,
+        horizon,
+        dt,
+        record_forces,
+        snqi_weights,
+        snqi_baseline,
+        video_enabled,
+        video_renderer,
+        algo,
+        algo_config_path,
+    )
+
+    # Filter jobs for resume
+    jobs = _filter_resume_jobs(jobs, out_path, resume)
+
+    # Run jobs
+    wrote, failures = _run_jobs(
+        jobs, out_path, schema, fixed_params, workers, progress_cb, fail_fast
+    )
+
+    # Finalize and return summary
+    summary = _finalize_batch(out_path, wrote, resume)
+    summary["total_jobs"] = len(jobs)
+    summary["failures"] = failures
     return summary

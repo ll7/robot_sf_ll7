@@ -1,15 +1,14 @@
 <!--
 Sync Impact Report
-Previous Version: 1.1.0 -> New Version: 1.2.0 (MINOR bump)
-Rationale: Added new Principle XII (Preferred Logging & Observability) establishing Loguru as the canonical logging facade and prohibiting ad-hoc print usage in library code. This is a forward-looking governance addition (material expansion) without modifying existing public runtime contracts.
+Previous Version: 1.2.0 -> New Version: 1.2.0 (PATCH bump)
+Rationale: Template synchronization - updated plan-template.md to reference correct constitution version (v1.2.0 instead of v2.1.1). No semantic changes to constitution content.
 Modified Principles:
- - (New) XII. Preferred Logging & Observability
- - (Clarification) XI reference to logging docstrings kept intact (no semantic change)
+ - (None)
 Added Sections:
- - XII. Preferred Logging & Observability
+ - (None)
 Removed Sections: None
 Templates Updated:
- - (None required) – existing templates do not contradict logging guidance
+ - ✅ plan-template.md: Updated constitution version reference from v2.1.1 to v1.2.0
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -160,4 +159,4 @@ Traceability Requirements:
 
 This Constitution supersedes ad‑hoc practices. Amendments require: (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected contracts (env, config, metrics, benchmark schema), (3) migration guidance or deprecation plan, (4) version/date update below. Pull Requests must assert compliance by referencing relevant sections. Any introduction of out‑of‑scope functionality must include justification aligning with Core Principles I–X or be rejected.
 
-**Version**: 1.2.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-22
+**Version**: 1.2.1 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-24

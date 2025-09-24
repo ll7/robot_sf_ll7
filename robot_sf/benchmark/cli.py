@@ -604,7 +604,7 @@ def _add_run_subparser(
 ) -> None:
     p = subparsers.add_parser(
         "run",
-        help="Run a batch of episodes from a scenario matrix and write JSONL",
+        help="Run a batch of episodes from a scenario matrix and write JSONL with real plots/videos",
     )
     p.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
     p.add_argument("--out", required=True, help="Path to write episode JSONL")
@@ -628,8 +628,9 @@ def _add_run_subparser(
         choices=["synthetic", "sim-view", "none"],
         default="none",
         help=(
-            "Frame source for per-episode MP4s. 'synthetic' uses a lightweight renderer;\n"
-            "'sim-view' (experimental) uses SimulationView when available; 'none' disables."
+            "Frame source for per-episode MP4 videos. 'synthetic' uses a lightweight renderer;\n"
+            "'sim-view' (experimental) uses SimulationView when available; 'none' disables.\n"
+            "Generates real simulation replays, not placeholders."
         ),
     )
     p.add_argument(
@@ -710,7 +711,7 @@ def _add_summary_subparser(
 ) -> None:
     p = subparsers.add_parser(
         "summary",
-        help="Generate simple histograms (min_distance, avg_speed) from episode JSONL",
+        help="Generate real statistical plots (PDF histograms, distributions) from episode JSONL",
     )
     p.add_argument("--in", dest="in_path", required=True, help="Input JSONL path")
     p.add_argument("--out-dir", required=True, help="Output directory for PNGs")

@@ -1,132 +1,229 @@
 """
-Integration tests for placeholder detection in benchmark outputs.
+Tests for visual artifact validation.
 
-These tests verify that the system can distinguish between real visualizations
-and placeholder/dummy outputs.
+These tests verify that the validate_visual_artifacts function correctly
+identifies real visualizations vs placeholders and malformed artifacts.
 """
 
-import tempfile
-from pathlib import Path
+from datetime import datetime
 
-import pytest
-
-
-def test_detect_placeholder_plots():
-    """Test detection of placeholder PDF plots vs real plots."""
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        plots_dir = Path(tmp_dir) / "plots"
-        plots_dir.mkdir()
-
-        # Create a real-looking plot file (with actual content)
-        real_plot = plots_dir / "real_metrics.pdf"
-        # In a real implementation, this would be a proper PDF with plot data
-        real_plot.write_bytes(b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n")
-
-        # Create an obvious placeholder file
-        placeholder_plot = plots_dir / "placeholder.pdf"
-        placeholder_plot.write_text("TODO: Implement real plots - this is a placeholder")
-
-        # When: Placeholder detection is run (will fail until implemented)
-        # results = detect_placeholders_in_directory(plots_dir)
-
-        # Then: Correctly identifies placeholders vs real files
-        # assert results['real_plots'] == ['real_metrics.pdf']
-        # assert results['placeholder_plots'] == ['placeholder.pdf']
-
-        # For now, expect detection function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import detect_placeholders_in_directory
-
-            detect_placeholders_in_directory(plots_dir)
+from robot_sf.benchmark.visualization import VisualArtifact, validate_visual_artifacts
 
 
-def test_detect_placeholder_videos():
-    """Test detection of placeholder MP4 videos vs real videos."""
+class TestValidateVisualArtifacts:
+    """Test suite for validate_visual_artifacts function."""
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        videos_dir = Path(tmp_dir) / "videos"
-        videos_dir.mkdir()
+    def test_empty_artifacts_list(self):
+        """Test validation of empty artifacts list."""
+        result = validate_visual_artifacts([])
 
-        # Create a real-looking video file (with actual MP4 header)
-        real_video = videos_dir / "real_scenario.mp4"
-        # MP4 files start with ftyp box
-        real_video.write_bytes(b"\x00\x00\x00\x20ftypmp41\x00\x00\x00\x00mp41mp42iso5dash")
+        assert result.passed is True
+        assert result.failed_artifacts == []
+        assert result.details == {"message": "No artifacts to validate"}
 
-        # Create an obvious placeholder file
-        placeholder_video = videos_dir / "placeholder.mp4"
-        placeholder_video.write_text("Dummy video placeholder - TODO: implement real rendering")
+    def test_valid_plot_artifact(self):
+        """Test validation of a properly generated plot artifact."""
+        artifact = VisualArtifact(
+            artifact_id="test_plot_001",
+            artifact_type="plot",
+            format="pdf",
+            filename="metrics_distribution.pdf",
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=102400,  # 100KB
+            status="generated",
+        )
 
-        # When: Placeholder detection is run (will fail until implemented)
-        # results = detect_placeholders_in_directory(videos_dir)
+        result = validate_visual_artifacts([artifact])
 
-        # Then: Correctly identifies placeholders vs real files
-        # assert results['real_videos'] == ['real_scenario.mp4']
-        # assert results['placeholder_videos'] == ['placeholder.mp4']
+        assert result.passed is True
+        assert result.failed_artifacts == []
+        assert result.details is not None
+        assert result.details["total_artifacts"] == 1
+        assert result.details["passed_count"] == 1
+        assert result.details["failed_count"] == 0
 
-        # For now, expect detection function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import detect_placeholders_in_directory
+    def test_valid_video_artifact(self):
+        """Test validation of a properly generated video artifact."""
+        artifact = VisualArtifact(
+            artifact_id="test_video_001",
+            artifact_type="video",
+            format="mp4",
+            filename="scenario_socialforce.mp4",
+            source_data="episode_12345",
+            generation_time=datetime.now(),
+            file_size=5242880,  # 5MB
+            status="generated",
+        )
 
-            detect_placeholders_in_directory(videos_dir)
+        result = validate_visual_artifacts([artifact])
 
+        assert result.passed is True
+        assert result.failed_artifacts == []
+        assert result.details is not None
+        assert result.details["total_artifacts"] == 1
 
-def test_placeholder_detection_comprehensive():
-    """Test comprehensive placeholder detection across mixed real/placeholder files."""
+    def test_failed_status_artifact(self):
+        """Test that artifacts with failed status are rejected."""
+        artifact = VisualArtifact(
+            artifact_id="failed_plot",
+            artifact_type="plot",
+            format="pdf",
+            filename="failed_metrics.pdf",
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=1024,
+            status="failed",
+            error_message="Plot generation failed",
+        )
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        output_dir = Path(tmp_dir) / "benchmark_output"
-        plots_dir = output_dir / "plots"
-        videos_dir = output_dir / "videos"
-        plots_dir.mkdir(parents=True)
-        videos_dir.mkdir(parents=True)
+        result = validate_visual_artifacts([artifact])
 
-        # Create mix of real and placeholder files
-        real_plot = plots_dir / "metrics_distribution.pdf"
-        real_plot.write_bytes(b"%PDF-1.4\n%Real PDF content")
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
+        assert result.failed_artifacts[0].artifact_id == "failed_plot"
+        assert result.details is not None
+        assert result.details["failed_count"] == 1
 
-        placeholder_plot = plots_dir / "placeholder_plot.pdf"
-        placeholder_plot.write_text("PLACEHOLDER: Real plots not implemented yet")
+    def test_zero_file_size_artifact(self):
+        """Test that artifacts with zero file size are rejected."""
+        artifact = VisualArtifact(
+            artifact_id="empty_plot",
+            artifact_type="plot",
+            format="pdf",
+            filename="empty_plot.pdf",
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=0,  # Empty file
+            status="generated",
+        )
 
-        real_video = videos_dir / "scenario_socialforce.mp4"
-        real_video.write_bytes(b"\x00\x00\x00\x20ftypmp41")
+        result = validate_visual_artifacts([artifact])
 
-        placeholder_video = videos_dir / "dummy_video.mp4"
-        placeholder_video.write_text("This is a dummy placeholder video")
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
+        assert result.failed_artifacts[0].artifact_id == "empty_plot"
 
-        # When: Comprehensive placeholder detection is run (will fail until implemented)
-        # results = detect_all_placeholders(output_dir)
+    def test_wrong_file_extension_plot(self):
+        """Test that plot artifacts with wrong extension are rejected."""
+        artifact = VisualArtifact(
+            artifact_id="wrong_ext_plot",
+            artifact_type="plot",
+            format="pdf",
+            filename="metrics_distribution.png",  # Wrong extension
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=102400,
+            status="generated",
+        )
 
-        # Then: Correctly categorizes all files
-        # assert len(results['real_artifacts']) == 2
-        # assert len(results['placeholder_artifacts']) == 2
-        # assert results['summary']['real_percentage'] == 50.0
+        result = validate_visual_artifacts([artifact])
 
-        # For now, expect detection function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import detect_all_placeholders
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
 
-            detect_all_placeholders(output_dir)
+    def test_wrong_file_extension_video(self):
+        """Test that video artifacts with wrong extension are rejected."""
+        artifact = VisualArtifact(
+            artifact_id="wrong_ext_video",
+            artifact_type="video",
+            format="mp4",
+            filename="scenario_socialforce.avi",  # Wrong extension
+            source_data="episode_12345",
+            generation_time=datetime.now(),
+            file_size=5242880,
+            status="generated",
+        )
 
+        result = validate_visual_artifacts([artifact])
 
-def test_placeholder_detection_empty_directory():
-    """Test placeholder detection handles empty directories gracefully."""
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        empty_dir = Path(tmp_dir) / "empty"
-        empty_dir.mkdir()
+    def test_placeholder_in_source_data(self):
+        """Test that artifacts with placeholder indicators in source_data are rejected."""
+        artifact = VisualArtifact(
+            artifact_id="placeholder_source",
+            artifact_type="plot",
+            format="pdf",
+            filename="metrics.pdf",
+            source_data="PLACEHOLDER: Real data not available",  # Contains placeholder
+            generation_time=datetime.now(),
+            file_size=102400,
+            status="generated",
+        )
 
-        # When: Detection run on empty directory
-        # results = detect_placeholders_in_directory(empty_dir)
+        result = validate_visual_artifacts([artifact])
 
-        # Then: Returns empty results without error
-        # assert results['real_plots'] == []
-        # assert results['placeholder_plots'] == []
-        # assert results['real_videos'] == []
-        # assert results['placeholder_videos'] == []
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
 
-        # For now, expect detection function to not exist
-        with pytest.raises((ImportError, NameError, AttributeError)):
-            from robot_sf.benchmark.visualization import detect_placeholders_in_directory
+    def test_placeholder_in_filename(self):
+        """Test that artifacts with placeholder indicators in filename are rejected."""
+        artifact = VisualArtifact(
+            artifact_id="placeholder_filename",
+            artifact_type="plot",
+            format="pdf",
+            filename="TODO_implement_real_plots.pdf",  # Contains TODO
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=102400,
+            status="generated",
+        )
 
-            detect_placeholders_in_directory(empty_dir)
+        result = validate_visual_artifacts([artifact])
+
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
+
+    def test_mixed_valid_invalid_artifacts(self):
+        """Test validation of a mix of valid and invalid artifacts."""
+        valid_artifact = VisualArtifact(
+            artifact_id="valid_plot",
+            artifact_type="plot",
+            format="pdf",
+            filename="valid_metrics.pdf",
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=102400,
+            status="generated",
+        )
+
+        invalid_artifact = VisualArtifact(
+            artifact_id="invalid_plot",
+            artifact_type="plot",
+            format="pdf",
+            filename="placeholder.pdf",  # Contains placeholder
+            source_data="benchmark_episodes.jsonl",
+            generation_time=datetime.now(),
+            file_size=102400,
+            status="generated",
+        )
+
+        result = validate_visual_artifacts([valid_artifact, invalid_artifact])
+
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1
+        assert result.failed_artifacts[0].artifact_id == "invalid_plot"
+        assert result.details is not None
+        assert result.details["total_artifacts"] == 2
+        assert result.details["passed_count"] == 1
+        assert result.details["failed_count"] == 1
+
+    def test_case_insensitive_placeholder_detection(self):
+        """Test that placeholder detection is case-insensitive."""
+        artifact = VisualArtifact(
+            artifact_id="case_insensitive",
+            artifact_type="video",
+            format="mp4",
+            filename="Placeholder_Video.mp4",  # Mixed case
+            source_data="episode_data",
+            generation_time=datetime.now(),
+            file_size=5242880,
+            status="generated",
+        )
+
+        result = validate_visual_artifacts([artifact])
+
+        assert result.passed is False
+        assert len(result.failed_artifacts) == 1

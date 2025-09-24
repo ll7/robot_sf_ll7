@@ -1,14 +1,8 @@
 
-# Implementation Plan: Fix Benchmark Placeholder Outputs
+# Implementation Plan: [FEATURE]
 
-**Branch**: `133-all-generated-plots` | **Date**: 2025-09-24 | **Spec**: /specs/133-all-generated-plots/spec.md
-**Input**: Feature specification from `/specs/133-all-ge**Phase Status**:
-- [x] Phase 0: Research complete (/plan command)
-- [x] Phase 1: Design complete (/plan command)
-- [x] Phase 2: Task planning complete (/plan command - describe approach only)
-- [x] Phase 3: Tasks generated (/tasks command)
-- [ ] Phase 4: Implementation complete
-- [ ] Phase 5: Validation passed-plots/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -37,45 +31,23 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-Fix benchmark placeholder outputs by implementing real visualization generation. Replace dummy plots and videos with actual statistical plots of metrics data and rendered simulation replays. Add validation to ensure outputs contain real data rather than placeholders. Integrate visualization generation into benchmark pipeline while maintaining backward compatibility.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
-**Language/Version**: Python 3.13  
-**Primary Dependencies**: Matplotlib, MoviePy, NumPy, Gymnasium, StableBaselines3  
-**Storage**: JSONL episode data, YAML scenario configs, PDF plots, MP4 videos  
-**Testing**: pytest, headless GUI tests  
-**Target Platform**: Linux/macOS with optional GPU support  
-**Project Type**: single (Python research framework)  
-**Performance Goals**: Benchmark execution < 5 minutes, video rendering < 30 seconds per scenario  
-**Constraints**: Must work headless (no display), reproducible outputs, vector PDF plots  
-**Scale/Scope**: 10-100 episodes per benchmark run, multiple baselines, statistical analysis
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [single/web/mobile - determines source structure]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-**Principle I (Reproducible Research Core)**: ✅ PASS - This feature improves reproducibility by ensuring benchmark outputs are real rather than placeholders, enabling proper analysis of social navigation research.
-
-**Principle II (Factory-Based Environment)**: ✅ PASS - Feature uses existing factory functions and doesn't change environment interfaces.
-
-**Principle III (Benchmark & Metrics First)**: ✅ PASS - Directly addresses benchmark output quality and metric visualization.
-
-**Principle IV (Unified Configuration)**: ✅ PASS - Uses existing config system, no changes needed.
-
-**Principle V (Minimal Baselines)**: ✅ PASS - Doesn't add new baselines, improves existing benchmark functionality.
-
-**Principle VI (Metrics Transparency)**: ✅ PASS - Ensures metrics are properly computed and visualized.
-
-**Principle VII (Backward Compatibility)**: ✅ PASS - No breaking changes to public APIs.
-
-**Principle VIII (Documentation as API)**: ✅ PASS - Feature improves documentation through better visual outputs.
-
-**Principle IX (Test Coverage)**: ✅ PASS - Will add tests for plot/video generation.
-
-**Principle X (Scope Discipline)**: ✅ PASS - Strictly within social navigation benchmark scope.
-
-**Principle XI (Internal Maintainability)**: ✅ PASS - Improves code quality by fixing placeholder implementations.
-
-**Principle XII (Logging & Observability)**: ✅ PASS - No changes to logging requirements.
+[Gates determined based on constitution file]
 
 ## Project Structure
 
@@ -189,26 +161,17 @@ ios/ or android/
 **Task Generation Strategy**:
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
-- Each contract function → implementation task [P]
-- Each data entity → validation task
-- Each user scenario → integration test task
-- Error handling and dependency checking tasks
+- Each contract → contract test task [P]
+- Each entity → model creation task [P] 
+- Each user story → integration test task
+- Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Contract tests before implementation
-- Dependency order: Core visualization functions before integration
-- Parallel execution: Independent plotting/video tasks can run concurrently [P]
-- Sequential for integration: Benchmark orchestrator changes depend on visualization functions
+- TDD order: Tests before implementation 
+- Dependency order: Models before services before UI
+- Mark [P] for parallel execution (independent files)
 
-**Estimated Output**: 15-20 numbered, ordered tasks in tasks.md
-
-**Key Task Categories**:
-1. **Core Implementation** [P]: `generate_benchmark_plots()`, `generate_benchmark_videos()`
-2. **Data Processing**: Episode parsing, metric extraction, trajectory handling
-3. **Integration**: Extend benchmark orchestrator, add validation
-4. **Error Handling**: Dependency checks, graceful failures, user feedback
-5. **Testing**: Contract tests, integration tests, validation tests
-6. **Documentation**: Update existing docs, add troubleshooting
+**Estimated Output**: 25-30 numbered, ordered tasks in tasks.md
 
 **IMPORTANT**: This phase is executed by the /tasks command, NOT by /plan
 
@@ -232,17 +195,17 @@ ios/ or android/
 *This checklist is updated during execution flow*
 
 **Phase Status**:
-- [x] Phase 0: Research complete (/plan command)
-- [x] Phase 1: Design complete (/plan command)
+- [ ] Phase 0: Research complete (/plan command)
+- [ ] Phase 1: Design complete (/plan command)
 - [ ] Phase 2: Task planning complete (/plan command - describe approach only)
 - [ ] Phase 3: Tasks generated (/tasks command)
 - [ ] Phase 4: Implementation complete
 - [ ] Phase 5: Validation passed
 
 **Gate Status**:
-- [x] Initial Constitution Check: PASS
-- [x] Post-Design Constitution Check: PASS
-- [x] All NEEDS CLARIFICATION resolved
+- [ ] Initial Constitution Check: PASS
+- [ ] Post-Design Constitution Check: PASS
+- [ ] All NEEDS CLARIFICATION resolved
 - [ ] Complexity deviations documented
 
 ---

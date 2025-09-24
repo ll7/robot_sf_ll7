@@ -71,7 +71,7 @@ validation = validate_visual_artifacts(plots + videos)
 uv add matplotlib
 
 # Check episode data
-uv run python -c "import json; print(json.load(open('episodes.jsonl')))"
+uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline()))"
 ```
 
 #### Videos Not Generating

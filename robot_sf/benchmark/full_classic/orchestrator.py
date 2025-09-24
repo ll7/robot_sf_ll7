@@ -25,6 +25,18 @@ from .precision import evaluate_precision
 from .replay import ReplayCapture  # T021 optional replay capture
 from .visuals import generate_visual_artifacts  # new visual artifact integration
 
+# Import new visualization functions for real plots/videos from episode data
+try:
+    from robot_sf.benchmark.visualization import (
+        generate_benchmark_plots,
+        generate_benchmark_videos,
+        validate_visual_artifacts,
+    )
+
+    _VISUALIZATION_AVAILABLE = True
+except ImportError:
+    _VISUALIZATION_AVAILABLE = False
+
 # -----------------------------
 # Manifest dataclass & helpers
 # -----------------------------
@@ -373,7 +385,7 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     return done_flag, jobs
 
 
-def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish phase)
+def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish phase)  # noqa: C901
     """Execute classic benchmark with adaptive precision loop.
 
     Refactored to reduce cyclomatic complexity (extracting helpers for setup, manifest
@@ -444,6 +456,38 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     # Visual artifacts (plots + videos) generation (post adaptive loop single pass)
     try:
         generate_visual_artifacts(root, cfg, groups, all_records)
+
+        # Also generate real visualizations using new visualization module
+        if _VISUALIZATION_AVAILABLE:
+            logger.info("Generating additional real visualizations from episode data")
+            try:
+                plots_dir = root / "plots"
+                videos_dir = root / "videos"
+                plots_dir.mkdir(exist_ok=True)
+                videos_dir.mkdir(exist_ok=True)
+
+                # Generate real plots from episode data
+                plot_artifacts = generate_benchmark_plots(all_records, str(plots_dir))
+                logger.info("Generated {} real plots", len(plot_artifacts))
+
+                # Generate real videos from episode data
+                video_artifacts = generate_benchmark_videos(all_records, str(videos_dir))
+                logger.info("Generated {} real videos", len(video_artifacts))
+
+                # Validate all generated artifacts
+                all_artifacts = plot_artifacts + video_artifacts
+                validation = validate_visual_artifacts(all_artifacts)
+                if validation.passed:
+                    logger.info("All real visualizations validated successfully")
+                else:
+                    logger.warning(
+                        "Some visualizations failed validation: {} failed artifacts",
+                        len(validation.failed_artifacts),
+                    )
+
+            except Exception as vis_exc:  # noqa: BLE001
+                logger.warning("Real visualization generation failed (non-fatal): {}", vis_exc)
+
     except Exception as exc:  # noqa: BLE001
         logger.warning("Visual artifact generation failed (non-fatal): {}", exc)
 

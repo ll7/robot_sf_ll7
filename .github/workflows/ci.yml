@@ -66,7 +66,7 @@ jobs:
 
       - name: Start CI performance monitoring
         run: |
-          uv run python scripts/ci_monitoring.py start-job --run-id ${{ github.run_id }} --branch ${{ github.ref_name }}
+          uv run python scripts/ci_monitoring.py start-job --job-id ${{ github.run_id }} --branch ${{ github.ref_name }}
 
       - name: System packages for headless
         run: |
@@ -79,7 +79,7 @@ jobs:
       - name: Record package installation metrics
         run: |
           uv run python scripts/ci_monitoring.py record-step \
-            --run-id ${{ github.run_id }} \
+            --job-id ${{ github.run_id }} \
             --step install_system_packages \
             --duration ${{ env.PACKAGE_INSTALL_DURATION }}
 
@@ -187,4 +187,4 @@ jobs:
       - name: Save CI performance metrics
         if: always()
         run: |
-          uv run python scripts/ci_monitoring.py end-job --run-id ${{ github.run_id }} --status ${{ job.status }}
+          uv run python scripts/ci_monitoring.py end-job --job-id ${{ github.run_id }} --status ${{ job.status }}

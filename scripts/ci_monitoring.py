@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 class CIPerformanceMonitor:
     """Monitor CI job performance metrics."""
 
-    def __init__(self, output_dir: str = "results/ci_metrics"):
+    def __init__(self, output_dir: str = "tmp/ci_metrics"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,6 @@
+auth.json
+config.toml
+internal_storage.json
+version.json
+log
+sessions

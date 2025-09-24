@@ -206,7 +206,6 @@ def _normalize_factory_inputs(
         else float(render_options.max_fps_override)
     )
     return render_options, recording_options, eff_record, eff_path, eff_fps
-    # Public factory functions follow.
 
 
 def make_robot_env(

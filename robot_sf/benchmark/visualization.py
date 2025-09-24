@@ -168,14 +168,24 @@ def _load_episodes(episodes_path: str) -> List[dict]:
     episodes = []
     try:
         with open(episodes_path, "r", encoding="utf-8") as f:
-            for line in f:
+            for i, line in enumerate(f, 1):
                 line = line.strip()
-                if line:
+                if not line:
+                    continue
+                try:
                     episodes.append(json.loads(line))
-    except (json.JSONDecodeError, IOError) as e:
+                except json.JSONDecodeError as e:
+                    raise VisualizationError(
+                        f"Failed to decode JSON on line {i} of {episodes_path}: {e}",
+                        "plot",
+                        {"episodes_path": episodes_path, "line": i},
+                    ) from e
+    except IOError as e:
         raise VisualizationError(
-            f"Failed to load episode data: {e}", "plot", {"episodes_path": episodes_path}
-        )
+            f"Failed to read episode file {episodes_path}: {e}",
+            "plot",
+            {"episodes_path": episodes_path},
+        ) from e
 
     if not episodes:
         raise VisualizationError("No episode data found", "plot", {"episodes_path": episodes_path})

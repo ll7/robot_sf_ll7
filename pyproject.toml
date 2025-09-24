@@ -219,6 +219,7 @@ markers = [
 [dependency-groups]
 dev = [
     "pylint>=3.3.4",
+    "pytest-xdist>=3.6.1",
 ]
 
 [project.scripts]

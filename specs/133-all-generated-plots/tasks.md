@@ -82,7 +82,7 @@
 
 ## Phase 3.4: Integration
 - [x] T017 Connect visualization functions to episode data parsing in robot_sf/benchmark/visualization.py
-- [ ] T018 Integrate with environment factory for video rendering in robot_sf/benchmark/visualization.py
+- [x] T018 Integrate with environment factory for video rendering in robot_sf/benchmark/visualization.py
 - [x] T019 Add error handling for missing dependencies in robot_sf/benchmark/visualization.py
 - [x] T020 Add logging for visualization generation progress in robot_sf/benchmark/visualization.py
 

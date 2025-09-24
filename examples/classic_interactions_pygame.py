@@ -551,11 +551,16 @@ def run_demo(
         env = make_robot_env(
             config=sim_cfg,
             reward_func=simple_reward,
-            scaling=int(20),
             debug=True,
             record_video=eff_record,
             video_path=str(OUTPUT_DIR) if eff_record else None,
         )
+        # Apply desired zoom after construction (do not pass unsupported legacy kwargs).
+        if getattr(env, "sim_ui", None):  # type: ignore[attr-defined]
+            try:
+                env.sim_ui.scaling = 20  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001 - best effort
+                pass
         logger.info(
             "Environment created (reward fallback active if custom reward not provided)."
         )  # (T022)

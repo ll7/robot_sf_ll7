@@ -446,7 +446,12 @@ class SimulationView:
                 self._frame_cap_warned = True
             return
 
-        frame_data = pygame.surfarray.array3d(self.screen).swapaxes(0, 1)
+        # Use a view for speed, then transpose to (H, W, C) and copy to detach from the Surface.
+        # pixels3d() avoids an immediate copy like array3d() does, improving per-frame performance.
+        surf_view = pygame.surfarray.pixels3d(self.screen)
+        frame_data = np.transpose(surf_view, (1, 0, 2)).copy()
+        # Ensure the surface is unlocked before returning (explicitly drop the view)
+        del surf_view
         self.frames.append(frame_data)
 
     @property

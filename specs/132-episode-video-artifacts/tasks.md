@@ -1,0 +1,58 @@
+# Tasks: Episode Video Artifacts MVP
+
+**Input**: Design documents from `/specs/132-episode-video-artifacts/`
+**Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
+
+## Phase 3.1: Setup
+- [ ] T001 Ensure optional dependency availability note: MoviePy is optional; tests must skip gracefully if missing.
+- [ ] T002 [P] Create schema contract file for video metadata (already drafted): `specs/132-episode-video-artifacts/contracts/video_manifest.schema.json` — review and align with repo schema conventions.
+- [ ] T003 [P] Add placeholder docs page for performance sample in `docs/dev/issues/video-artifacts/design.md` with headers only (to be filled later).
+
+## Phase 3.2: Tests First (TDD)
+- [ ] T004 [P] Contract test for video manifest fields in `tests/visuals/test_video_schema_validation.py` (extend existing test or add new) to validate: format='mp4', filesize_bytes>0, frames>=0, renderer in enum.
+- [ ] T005 [P] Integration test (micro-batch) in `tests/visuals/test_micro_batch_video.py` that runs 1–2 episodes and asserts: MP4 exists, size>0, frames == steps; skip if MoviePy/codec missing.
+- [ ] T006 [P] CLI flags test in `tests/benchmark_full/test_unit_video_selection.py`: verify `--no-video` disables artifacts and `--video-renderer=synthetic|sim-view|none` selects source deterministically.
+- [ ] T007 [P] Programmatic API test in `tests/visuals/test_video_flags_programmatic.py`: verify `video_enabled=False` yields no artifacts; `video_renderer='sim-view'` requests SimulationView path.
+- [ ] T008 [P] Performance budget test in `tests/visuals/test_video_performance_budget.py`: measure encode overhead; assert WARN when >5% by default and FAIL when `ROBOT_SF_PERF_ENFORCE=1` is set.
+
+## Phase 3.3: Core Implementation
+- [ ] T009 Implement CLI wiring for `--no-video` and `--video-renderer` in `robot_sf/benchmark/cli.py` (and config plumbing).
+- [ ] T010 Implement programmatic options: `video_enabled`, `video_renderer` through batch runner to recording/writer layer.
+- [ ] T011 Implement deterministic artifact naming and output dir `results/videos/` under run stem; integrate with resume checks.
+- [ ] T012 Implement manifest embedding in per-episode JSONL records with `video` object; ensure schema compat and validation.
+- [ ] T013 Implement synthetic renderer as default frame source; guard SimulationView path behind flag with safe fallback.
+- [ ] T014 Handle missing MoviePy/codec: structured Loguru warnings; skip video; do not fail batch.
+
+## Phase 3.4: Integration
+- [ ] T015 Update repository-wide episode JSON Schema to include optional `video` object fields aligned to contract; add CI validation hook.
+- [ ] T016 Wire performance sampling to produce a small measurement artifact and link from docs (record OS, Python, hardware summary).
+- [ ] T017 Ensure micro-batch video test runs in CI (mark skip on unsupported platforms); add to CI job include list if necessary.
+
+## Phase 3.5: Polish
+- [ ] T018 [P] Update docs: `docs/dev/issues/video-artifacts/design.md` with capture approach, fallbacks, performance notes, and link from `docs/README.md` and the master TODO.
+- [ ] T019 [P] Add logging context keys (seed, scenario_id, renderer) to video-related warnings for reproducibility.
+- [ ] T020 [P] Add figure gallery optional script placeholder (contact-sheet) under `scripts/` (deferred implementation).
+
+## Dependencies
+- T004–T008 (tests) before T009–T014 (implementation)
+- T009–T014 before T015–T017 (integration)
+- T015 before CI validation steps are effective
+- Docs (T018) after integration; polish tasks can run in parallel if file paths differ
+
+## Parallel Execution Examples
+```
+# Run tests in parallel (different files):
+Task: T004 Contract test for video manifest fields
+Task: T005 Integration micro-batch video test
+Task: T006 CLI flags test
+Task: T007 Programmatic API test
+Task: T008 Performance budget test
+```
+
+## Validation Checklist
+- [ ] Contract tests cover schema fields
+- [ ] Integration test asserts existence/size/frames
+- [ ] Flags tested in CLI and programmatic layers
+- [ ] Performance test enforces budget semantics
+- [ ] Manifest schema validated in CI
+- [ ] Docs updated and linked

@@ -1,62 +1,5 @@
 # Tasks: Fix Benchmark Placeholder Outputs
 
-**I## Ph## Pha## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
-**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
-- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
-- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
-- [x] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
-- [x] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
-**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
-- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
-- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
-- [x] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py
-- [ ] T008 [P] Integration test placeholder detection in tests/test_placeholder_detection.py: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
-**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [x] T004 [P] Contract test generate_benchmark_plots in tests/test_visualization_plots.py
-- [x] T005 [P] Contract test generate_benchmark_videos in tests/test_visualization_videos.py
-- [x] T006 [P] Contract test validate_visual_artifacts in tests/test_visualization_validation.py
-- [ ] T007 [P] Integration test benchmark with real visualizations in tests/test_benchmark_visualization_integration.py: Design documents from `/specs/133-all-generated-plots/`
-**Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
-
-## Execution Flow (main)
-```
-1. Load plan.md from feature directory
-   → If not found: ERROR "No implementation plan found"
-   → Extract: Python 3.13, Matplotlib, MoviePy, NumPy, Gymnasium, StableBaselines3
-2. Load optional design documents:
-   → data-model.md: Extract entities → model tasks
-   → contracts/: Each file → contract test task
-   → research.md: Extract decisions → setup tasks
-3. Generate tasks by category:
-   → Setup: project init, dependencies, linting
-   → Tests: contract tests, integration tests
-   → Core: models, services, CLI commands
-   → Integration: DB, middleware, logging
-   → Polish: unit tests, performance, docs
-4. Apply task rules:
-   → Different files = mark [P] for parallel
-   → Same file = sequential (no [P])
-   → Tests before implementation (TDD)
-5. Number tasks sequentially (T001, T002...)
-6. Generate dependency graph
-7. Create parallel execution examples
-8. Validate task completeness:
-   → All contracts have tests?
-   → All entities have models?
-   → All endpoints implemented?
-9. Return: SUCCESS (tasks ready for execution)
-```
-
-## Format: `[ID] [P?] Description`
-- **[P]**: Can run in parallel (different files, no dependencies)
-- Include exact file paths in descriptions
-
-## Path Conventions
-- **Single project**: `robot_sf/`, `tests/` at repository root
-- Paths shown below assume single project - adjust based on plan.md structure
-
 ## Phase 3.1: Setup
 - [x] T001 Create visualization module structure in robot_sf/benchmark/visualization.py
 - [x] T002 Add matplotlib and moviepy dependencies to pyproject.toml if not present
@@ -82,7 +25,7 @@
 
 ## Phase 3.4: Integration
 - [x] T017 Connect visualization functions to episode data parsing in robot_sf/benchmark/visualization.py
-- [x] T018 Integrate with environment factory for video rendering in robot_sf/benchmark/visualization.py
+- [x] T018 Integrate with environment factory for video rendering in robot_sf/benchmark/visualization.py (SCOPE: Animated placeholders implemented; full simulation replay deferred)
 - [x] T019 Add error handling for missing dependencies in robot_sf/benchmark/visualization.py
 - [x] T020 Add logging for visualization generation progress in robot_sf/benchmark/visualization.py
 

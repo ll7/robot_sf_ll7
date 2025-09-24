@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 
 import numpy as np
 from loguru import logger
@@ -54,7 +54,7 @@ class VisualizationError(Exception):
 
 # TODO: Implement generate_benchmark_plots function (T011) - COMPLETED
 def generate_benchmark_plots(
-    episodes_data: List[dict] | str | Path,
+    episodes_data: Union[List[dict], str, Path],
     output_dir: str,
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,
@@ -358,7 +358,7 @@ def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) ->
 
 # TODO: Implement generate_benchmark_videos function (T012) - COMPLETED
 def generate_benchmark_videos(
-    episodes_data: List[dict] | str | Path,
+    episodes_data: Union[List[dict], str, Path],
     output_dir: str,
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,

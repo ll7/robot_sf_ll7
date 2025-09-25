@@ -438,6 +438,34 @@ CI mapping to local tasks and CLI:
 
 Workflow location: `.github/workflows/ci.yml`.
 
+## CI Performance Monitoring
+The CI pipeline includes integrated performance monitoring for system package installation optimization:
+
+**Performance Targets**:
+- Package installation: < 73 seconds (50% reduction from 2min 26sec baseline)
+- Overall CI job completion within acceptable time limits
+
+**Monitoring Infrastructure**:
+- **CI Monitoring Script**: `scripts/ci_monitoring.py` - Tracks job and step timing
+- **Performance Metrics**: `scripts/ci-tests/performance_metrics.py` - Analyzes and reports metrics
+- **Package Validation**: `scripts/ci-tests/package_validation.py` - Validates package availability
+
+**CI Workflow Integration**:
+- Performance monitoring starts before package installation
+- Metrics recorded during package installation steps
+- Performance data saved as artifacts for analysis
+- Automatic validation against performance targets
+
+**Local Testing**:
+- Use `act` tool for local CI workflow testing: `act push --container-architecture linux/amd64 --job ci --verbose`
+- See `scripts/ci-tests/README.md` for comprehensive `act` usage guide
+- Performance metrics can be analyzed locally using the metrics scripts
+
+**Performance Breach Handling**:
+- Soft breaches (< 20s): Warning logged, CI continues
+- Hard breaches (≥ 60s): Test failure, CI stops
+- Override with `ROBOT_SF_PERF_RELAX=1` for known variance (temporary only)
+
 ## Validation scenarios and performance
 ### Validation scenarios (run after changes)
 ```bash

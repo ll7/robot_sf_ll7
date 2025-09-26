@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 
 from robot_sf.benchmark.schema_loader import load_schema
+from robot_sf.benchmark.schema_reference import SchemaReference
 
 
 def _time_schema_load(iterations: int = 10) -> float:
@@ -49,7 +50,10 @@ def test_schema_loading_performance_reasonable():
 
 def test_schema_caching_effectiveness():
     """Test that schema caching provides performance benefit."""
-    # First load (may not be cached)
+    # Clear cache to ensure clean state for measurement
+    SchemaReference.clear_cache()
+
+    # First load (will populate cache)
     first_time = _time_schema_load(iterations=1)
 
     # Subsequent loads (should be cached)

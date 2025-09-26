@@ -41,13 +41,13 @@
 - Paths shown below assume single project - adjust based on plan.md structure
 
 ## Phase 3.1: Setup
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize Python project with JSON Schema validation dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+- [X] T001 Create project structure per implementation plan
+- [X] T002 Initialize Python project with JSON Schema validation dependencies
+- [X] T003 [P] Configure linting and formatting tools
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T004 [P] Contract test for schema-loader-api.v1.json in tests/contract/test_schema_loader_api.py
+- [X] T004 [P] Contract test for schema-loader-api.v1.json in tests/contract/test_schema_loader_api.py
 - [ ] T005 [P] Contract test for git-hook-api.v1.json in tests/contract/test_git_hook_api.py
 - [ ] T006 [P] Integration test schema consolidation in tests/integration/test_schema_consolidation.py
 - [ ] T007 [P] Integration test runtime resolution in tests/integration/test_runtime_resolution.py

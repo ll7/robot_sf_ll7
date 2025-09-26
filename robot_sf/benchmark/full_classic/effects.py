@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List
 
 from loguru import logger
 
@@ -50,13 +49,13 @@ class EffectSizeEntry:  # matches data model
 @dataclass
 class EffectSizeReport:
     archetype: str
-    comparisons: List[EffectSizeEntry]
+    comparisons: list[EffectSizeEntry]
 
 
 def compute_effect_sizes(groups, cfg):  # T032
     by_arch = _group_by_archetype(groups)
     reference_density = getattr(cfg, "effect_size_reference_density", "low")
-    reports: List[EffectSizeReport] = []
+    reports: list[EffectSizeReport] = []
     for _, density_map in sorted(by_arch.items()):
         ref_group = density_map.get(reference_density)
         if not ref_group:
@@ -69,27 +68,27 @@ def compute_effect_sizes(groups, cfg):  # T032
     return reports
 
 
-def _group_by_archetype(groups) -> Dict[str, Dict[str, object]]:
-    result: Dict[str, Dict[str, object]] = {}
+def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
+    result: dict[str, dict[str, object]] = {}
     for g in groups:
         result.setdefault(g.archetype, {})[g.density] = g
     return result
 
 
 def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
-    comparisons: List[EffectSizeEntry] = []
+    comparisons: list[EffectSizeEntry] = []
     for density_key, group in sorted(density_map.items()):
         if density_key == reference_density:
             continue
         comparisons.extend(_rate_effect_sizes(ref_group, group, reference_density, density_key))
         comparisons.extend(
-            _continuous_effect_sizes(ref_group, group, reference_density, density_key)
+            _continuous_effect_sizes(ref_group, group, reference_density, density_key),
         )
     return comparisons
 
 
 def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
-    entries: List[EffectSizeEntry] = []
+    entries: list[EffectSizeEntry] = []
     for metric in RATE_METRICS:
         ref_metric = ref_group.metrics.get(metric)
         other_metric = other_group.metrics.get(metric)
@@ -108,13 +107,13 @@ def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
                 density_high=other_density,
                 diff=p_other - p_ref,
                 standardized=h,
-            )
+            ),
         )
     return entries
 
 
 def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density):
-    entries: List[EffectSizeEntry] = []
+    entries: list[EffectSizeEntry] = []
     for metric in CONT_METRICS:
         ref_metric = ref_group.metrics.get(metric)
         other_metric = other_group.metrics.get(metric)
@@ -131,7 +130,7 @@ def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density)
                 density_high=other_density,
                 diff=diff,
                 standardized=glass_delta,
-            )
+            ),
         )
     return entries
 
@@ -141,7 +140,8 @@ def _glass_delta(ref_metric, diff, n):
     if not ci or n <= 1:
         if not ci:
             logger.debug(
-                "No CI for metric {}; Glass Δ set 0", getattr(ref_metric, "name", "unknown")
+                "No CI for metric {}; Glass Δ set 0",
+                getattr(ref_metric, "name", "unknown"),
             )
         return 0.0
     half_width = (ci[1] - ci[0]) / 2.0

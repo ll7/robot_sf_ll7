@@ -10,7 +10,7 @@ import importlib
 import os
 
 
-def test_headless_dummy_driver_runs():  # noqa: D401
+def test_headless_dummy_driver_runs():
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     mod = importlib.import_module("examples.classic_interactions_pygame")
     if hasattr(mod, "DRY_RUN"):

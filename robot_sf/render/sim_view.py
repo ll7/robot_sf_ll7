@@ -2,7 +2,6 @@ import os
 import sys
 from dataclasses import dataclass, field
 from math import cos, sin
-from typing import List, Optional, Tuple, Union
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
@@ -24,7 +23,7 @@ try:
 except ImportError:
     MOVIEPY_AVAILABLE = False
     logger.warning(
-        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?"
+        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?",
     )
 
 ## Note: PYGAME_HIDE_SUPPORT_PROMPT is set before importing pygame above
@@ -83,7 +82,7 @@ def _empty_map_definition() -> MapDefinition:
 @dataclass
 class VisualizableAction:
     pose: RobotPose
-    action: Union[DifferentialDriveAction, BicycleAction, UnicycleAction]
+    action: DifferentialDriveAction | BicycleAction | UnicycleAction
     goal: Vec2D
 
 
@@ -97,7 +96,7 @@ class VisualizableSimState:
     timestep: int
     """The discrete timestep of the simulation."""
 
-    robot_action: Union[VisualizableAction, None]
+    robot_action: VisualizableAction | None
     """The action taken by the robot at this timestep."""
 
     robot_pose: RobotPose
@@ -115,13 +114,13 @@ class VisualizableSimState:
     ego_ped_pose: PedPose = None
     """The pose of the ego pedestrian at this timestep. Defaults to None."""
 
-    ego_ped_ray_vecs: Optional[np.ndarray] = None
+    ego_ped_ray_vecs: np.ndarray | None = None
     """The ray vectors associated with the ego pedestrian's sensors. Defaults to None."""
 
-    ego_ped_action: Union[VisualizableAction, None] = None
+    ego_ped_action: VisualizableAction | None = None
     """The action taken by the ego pedestrian at this timestep. Defaults to None."""
 
-    time_per_step_in_secs: Optional[float] = None
+    time_per_step_in_secs: float | None = None
     """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
 
     def __post_init__(self):
@@ -183,14 +182,14 @@ class SimulationView:
     goal_radius: float = 1.0
     # Provide a minimal valid default map definition (see _empty_map_definition)
     map_def: MapDefinition = field(default_factory=_empty_map_definition)
-    obstacles: List[Obstacle] = field(default_factory=list)
+    obstacles: list[Obstacle] = field(default_factory=list)
     caption: str = "RobotSF Simulation"
     focus_on_robot: bool = True
     focus_on_ego_ped: bool = False
     record_video: bool = False
-    video_path: Optional[str] = None
+    video_path: str | None = None
     video_fps: float = 10.0
-    frames: List[np.ndarray] = field(default_factory=list)
+    frames: list[np.ndarray] = field(default_factory=list)
     clock: pygame.time.Clock = field(init=False)
 
     # Add UI state fields
@@ -233,9 +232,10 @@ class SimulationView:
                         raise ValueError
                     self.max_frames = parsed
                     logger.debug(
-                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d", parsed
+                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d",
+                        parsed,
                     )
-                except Exception:  # noqa: BLE001
+                except Exception:
                     logger.warning(
                         "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '%s' (expected positive int or 'none'). Using default %s.",
                         env_cap,
@@ -247,7 +247,7 @@ class SimulationView:
 
         if self.record_video and not self.video_path:
             logger.warning(
-                "record_video=True but no video_path provided; frames will be buffered but no file will be written."
+                "record_video=True but no video_path provided; frames will be buffered but no file will be written.",
             )
 
         # Check if we're running in a headless environment
@@ -265,7 +265,8 @@ class SimulationView:
             # Create window for display
             self._use_display = True
             self.screen = pygame.display.set_mode(
-                (int(self.width), int(self.height)), pygame.RESIZABLE
+                (int(self.width), int(self.height)),
+                pygame.RESIZABLE,
             )
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
@@ -287,7 +288,7 @@ class SimulationView:
         if sdl_driver == "dummy":
             logger.debug(
                 "Headless environment detected: "
-                f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'"
+                f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'",
             )
             return True
 
@@ -297,7 +298,7 @@ class SimulationView:
             if is_headless:
                 logger.debug(
                     "Headless environment detected: "
-                    f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'"
+                    f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'",
                 )
             return is_headless
 
@@ -340,7 +341,7 @@ class SimulationView:
         """Handle the exit state."""
         pygame.quit()
         if self.is_abortion_requested:
-            exit()
+            sys.exit()
 
     def _prepare_frame(self, state: VisualizableSimState):
         """Prepare a new frame with the given state."""
@@ -458,7 +459,7 @@ class SimulationView:
     def _timestep_text_pos(self) -> Vec2D:
         return (16, 16)
 
-    def _scale_tuple(self, tup: Tuple[float, float]) -> Tuple[float, float]:
+    def _scale_tuple(self, tup: tuple[float, float]) -> tuple[float, float]:
         """scales a tuple of floats by the scaling factor and adds the offset."""
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
@@ -474,7 +475,7 @@ class SimulationView:
                 logger.warning(
                     "record_video=True but zero frames were captured; video file will not be written. "
                     "Likely causes: (1) render() was never called; (2) early exit before any frame finalized. "
-                    "Call render() each step (or enable debug mode) to populate frames."
+                    "Call render() each step (or enable debug mode) to populate frames.",
                 )
             else:
                 # Heuristic: sample up to first 5 frames; if all sums are zero, content may be blank
@@ -483,7 +484,7 @@ class SimulationView:
                     if sample and all(np.array(f).sum() == 0 for f in sample):
                         logger.warning(
                             "record_video=True but captured frames appear empty (all-zero pixel data). "
-                            "Ensure drawing code executed before frame capture; verify entities are rendered."
+                            "Ensure drawing code executed before frame capture; verify entities are rendered.",
                         )
                 except Exception:
                     pass
@@ -506,7 +507,7 @@ class SimulationView:
             self.frames = []
         elif self.record_video and self.frames and MOVIEPY_AVAILABLE and not self.video_path:
             logger.warning(
-                "record_video=True but video_path is None; cannot write video file. Skipping write."
+                "record_video=True but video_path is None; cannot write video file. Skipping write.",
             )
         elif self.record_video and self.frames and not MOVIEPY_AVAILABLE:
             logger.warning("MoviePy is not available. Cannot write video file.")
@@ -545,7 +546,9 @@ class SimulationView:
             pygame.K_h: lambda: setattr(self, "display_help", not self.display_help),
             # display robotinfo
             pygame.K_q: lambda: setattr(
-                self, "display_robot_info", (self.display_robot_info + 1) % 3
+                self,
+                "display_robot_info",
+                (self.display_robot_info + 1) % 3,
             ),
             # toggle text display (add this line)
             pygame.K_t: lambda: setattr(self, "display_text", not self.display_text),
@@ -910,7 +913,8 @@ class SimulationView:
 
         # Blit and return the rect to allow children to position additional help relative to this
         return self.screen.blit(
-            text_surface, (self.width - max_width - 10, self._timestep_text_pos[1])
+            text_surface,
+            (self.width - max_width - 10, self._timestep_text_pos[1]),
         )
 
     def _draw_grid(self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)):

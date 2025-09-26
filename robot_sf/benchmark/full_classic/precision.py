@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List
 
 RATE_TARGET_MAP = {
     "collision_rate": "collision_ci",
@@ -40,21 +39,21 @@ class ScenarioPrecisionStatus:
     archetype: str
     density: str
     episodes: int
-    metric_status: List[PrecisionEntry]
+    metric_status: list[PrecisionEntry]
     all_pass: bool
 
 
 @dataclass
 class StatisticalSufficiencyReport:
-    evaluations: List[ScenarioPrecisionStatus]
+    evaluations: list[ScenarioPrecisionStatus]
     final_pass: bool
     scaling_efficiency: dict  # placeholder, populated later (T041)
 
 
 def evaluate_precision(groups, cfg):  # T033
-    evaluations: List[ScenarioPrecisionStatus] = []
+    evaluations: list[ScenarioPrecisionStatus] = []
     for g in groups:
-        entries: List[PrecisionEntry] = []
+        entries: list[PrecisionEntry] = []
         for metric_name, attr_name in RATE_TARGET_MAP.items():
             metric_obj = g.metrics.get(metric_name)
             if not metric_obj or not metric_obj.mean_ci:
@@ -69,7 +68,7 @@ def evaluate_precision(groups, cfg):  # T033
                     half_width=half_width,
                     target=target,
                     passed=passed,
-                )
+                ),
             )
         all_pass = bool(entries) and all(e.passed for e in entries)
         evaluations.append(
@@ -80,7 +79,7 @@ def evaluate_precision(groups, cfg):  # T033
                 episodes=g.count,
                 metric_status=entries,
                 all_pass=all_pass,
-            )
+            ),
         )
     final_pass = bool(evaluations) and all(ev.all_pass for ev in evaluations)
     report = StatisticalSufficiencyReport(

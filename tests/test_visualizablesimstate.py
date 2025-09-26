@@ -40,7 +40,7 @@ class TestVisualizableSimState:
 
         # Check warning was logged
         mock_logger.warning.assert_called_once_with(
-            "time_per_step_in_secs is None, defaulting to 0.1s."
+            "time_per_step_in_secs is None, defaulting to 0.1s.",
         )
 
         # Check default value was set

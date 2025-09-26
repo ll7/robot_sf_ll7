@@ -23,7 +23,7 @@ def test_benchmark_with_visualization_integration():
             "scenario_params": {"algo": "socialforce"},
             "metrics": {"collisions": 0, "success": True, "snqi": 0.95},
             "trajectory_data": [[0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]],
-        }
+        },
     ]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -84,7 +84,7 @@ def test_benchmark_visualization_creates_output_structure():
             "scenario_id": "test_scenario",
             "metrics": {"collisions": 0, "success": True},
             "trajectory_data": [[0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]],
-        }
+        },
     ]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -103,7 +103,8 @@ def test_benchmark_visualization_creates_output_structure():
 
         plots = generate_benchmark_plots(episodes_data, str(output_dir / "plots"))
         videos = generate_benchmark_videos(
-            episodes_data, str(output_dir / "videos")
+            episodes_data,
+            str(output_dir / "videos"),
         )  # Then: Functions return artifact lists
         assert isinstance(plots, list)
         assert isinstance(videos, list)

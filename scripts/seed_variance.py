@@ -28,7 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -36,8 +36,9 @@ from robot_sf.benchmark.aggregate import _get_nested, read_jsonl
 
 
 def compute_seed_variance(
-    records: List[Dict[str, Any]], group_by: str
-) -> Dict[str, Dict[str, float | int]]:
+    records: list[dict[str, Any]],
+    group_by: str,
+) -> dict[str, dict[str, float | int]]:
     """Compute variability of SNQI across seeds for each group.
 
     For each group (derived from ``group_by`` dotted path), compute the mean SNQI
@@ -55,7 +56,7 @@ def compute_seed_variance(
     dict
         Mapping group → {"seeds": int, "snqi_mean": float, "snqi_std": float, "snqi_cv": float}.
     """
-    groups: Dict[str, Dict[int, List[float]]] = {}
+    groups: dict[str, dict[int, list[float]]] = {}
     for rec in records:
         g = _get_nested(rec, group_by, default=str(rec.get("scenario_id", "unknown")))
         seed = int(rec.get("seed", -1))
@@ -64,7 +65,7 @@ def compute_seed_variance(
             continue
         groups.setdefault(str(g), {}).setdefault(seed, []).append(float(snqi))
 
-    out: Dict[str, Dict[str, float | int]] = {}
+    out: dict[str, dict[str, float | int]] = {}
     for g, by_seed in groups.items():
         # Aggregate per-seed first, then compute variance across seed means
         seed_means = [float(np.mean(vals)) for vals in by_seed.values() if len(vals) > 0]

@@ -10,7 +10,8 @@ from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
 
 @pytest.mark.skipif(
-    not MOVIEPY_AVAILABLE, reason="MoviePy/ffmpeg not available for video recording"
+    not MOVIEPY_AVAILABLE,
+    reason="MoviePy/ffmpeg not available for video recording",
 )
 def test_load_states_and_record_video(delete_video: bool = True):
     """Test loading simulation states and recording them as video.
@@ -29,7 +30,8 @@ def test_load_states_and_record_video(delete_video: bool = True):
 
     try:
         load_states_and_record_video(
-            "test_pygame/recordings/2024-06-04_08-39-59.pkl", str(output_path)
+            "test_pygame/recordings/2024-06-04_08-39-59.pkl",
+            str(output_path),
         )
 
         assert output_path.exists(), "Video file was not created"

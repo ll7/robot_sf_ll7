@@ -120,7 +120,11 @@ def punish_action_reward(
 
     # Initialize reward with a discount based on the maximum simulation steps
     reward = simple_reward(
-        meta, max_episode_step_discount, ped_coll_penalty, obst_coll_penalty, reach_waypoint_reward
+        meta,
+        max_episode_step_discount,
+        ped_coll_penalty,
+        obst_coll_penalty,
+        reach_waypoint_reward,
     )
 
     # punish the robot taking a different action from the last action

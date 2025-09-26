@@ -6,11 +6,14 @@ functionality and the benchmark figure orchestrator.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from results.figures.fig_force_field import (
     generate_force_field_figure as _generate_force_field_figure,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def generate_force_field_figure(

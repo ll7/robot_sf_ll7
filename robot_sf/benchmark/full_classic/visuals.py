@@ -19,7 +19,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from loguru import logger
 
@@ -41,11 +41,11 @@ from .visual_constants import (
 from .visual_deps import moviepy_ready, simulation_view_ready
 
 try:  # Lazy import SimulationView
-    from robot_sf.render.sim_view import SimulationView  # type: ignore  # noqa: F401
+    from robot_sf.render.sim_view import SimulationView  # type: ignore
 
     _SIM_VIEW_CLS = SimulationView  # touch (lint silence)
     _SIM_VIEW_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except Exception:
     _SIM_VIEW_AVAILABLE = False
 
 
@@ -88,8 +88,8 @@ def _write_json(path: Path, obj: Any) -> None:
     tmp.replace(path)
 
 
-def _convert_plot_artifacts(raw_list) -> List[dict]:
-    out: List[dict] = []
+def _convert_plot_artifacts(raw_list) -> list[dict]:
+    out: list[dict] = []
     for a in raw_list:
         out.append(
             {
@@ -97,12 +97,12 @@ def _convert_plot_artifacts(raw_list) -> List[dict]:
                 "path_pdf": getattr(a, "path_pdf", ""),
                 "status": getattr(a, "status", "skipped"),
                 "note": getattr(a, "note", None),
-            }
+            },
         )
     return out
 
 
-def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[VideoArtifact]:
+def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[VideoArtifact]:
     if not _SIM_VIEW_AVAILABLE or not simulation_view_ready():
         return []
     if not bool(getattr(cfg, "capture_replay", False)):
@@ -110,7 +110,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
     fps = int(getattr(cfg, "video_fps", 10))
     smoke = bool(getattr(cfg, "smoke", False))
     max_frames = int(getattr(cfg, "sim_view_max_frames", 0)) or None
-    artifacts: List[VideoArtifact] = []
+    artifacts: list[VideoArtifact] = []
     moviepy_missing_all = True
     for rec in records:
         ep_id = rec.get("episode_id", "unknown")
@@ -127,19 +127,21 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
                     status="skipped",
                     renderer=RENDERER_SIM_VIEW,
                     note=NOTE_INSUFFICIENT_REPLAY,
-                )
+                ),
             )
             continue
         try:
             frame_iter = generate_frames(
-                ep, fps=fps, max_frames=(10 if smoke and max_frames is None else max_frames)
+                ep,
+                fps=fps,
+                max_frames=(10 if smoke and max_frames is None else max_frames),
             )
             enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:
                     mp4_path.unlink()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             artifacts.append(
                 VideoArtifact(
@@ -150,7 +152,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
                     status="failed",
                     renderer=RENDERER_SIM_VIEW,
                     note=f"render-error:{exc.__class__.__name__}",
-                )
+                ),
             )
             moviepy_missing_all = False
             continue
@@ -168,7 +170,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
                     status="skipped",
                     renderer=RENDERER_SIM_VIEW,
                     note=NOTE_MOVIEPY_MISSING,
-                )
+                ),
             )
             continue
         moviepy_missing_all = False
@@ -183,7 +185,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
                 note=enc.note,
                 encode_time_s=enc.encode_time_s,
                 peak_rss_mb=enc.peak_rss_mb,
-            )
+            ),
         )
     if moviepy_missing_all and not artifacts:
         # Signal to caller that SimulationView path attempted but moviepy missing
@@ -192,9 +194,9 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> List[Vi
     return artifacts
 
 
-def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> List[VideoArtifact]:
+def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> list[VideoArtifact]:
     raw = generate_fallback_videos(records, out_dir, cfg)
-    out: List[VideoArtifact] = []
+    out: list[VideoArtifact] = []
     for a in raw:
         out.append(
             VideoArtifact(
@@ -205,19 +207,22 @@ def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> List[VideoArtifac
                 status=getattr(a, "status", "skipped"),
                 renderer=RENDERER_SYNTHETIC,
                 note=getattr(a, "note", None),
-            )
+            ),
         )
     return out
 
 
-def _select_records(records, cfg) -> List[dict]:
+def _select_records(records, cfg) -> list[dict]:
     max_videos = int(getattr(cfg, "max_videos", 1))
     return records[: max_videos or 1]
 
 
 def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
-    cfg, records: List[dict], videos_dir: Path, replay_map: dict
-) -> List[VideoArtifact]:
+    cfg,
+    records: list[dict],
+    videos_dir: Path,
+    replay_map: dict,
+) -> list[VideoArtifact]:
     # --- Inner helpers (local to keep namespace clean) ------------------
     def _normalize_mode(raw) -> str:
         """Normalize renderer mode string.
@@ -234,7 +239,7 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
             m = "auto"
         return m
 
-    def _build_skipped(reason: str) -> List[VideoArtifact]:
+    def _build_skipped(reason: str) -> list[VideoArtifact]:
         """Return synthetic 'skipped' artifacts for each selected record.
 
         Used when videos are disabled (explicit flag) or smoke mode is active.
@@ -242,7 +247,7 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
         a stable artifact_id prefix. Renderer choice reflects availability so
         downstream logic can still distinguish sim-view capability.
         """
-        out: List[VideoArtifact] = []
+        out: list[VideoArtifact] = []
         for r in records:
             ep_id = r.get("episode_id", "unknown")
             sc_id = r.get("scenario_id", "unknown")
@@ -257,11 +262,11 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
                     status="skipped",
                     renderer=RENDERER_SIM_VIEW if _SIM_VIEW_AVAILABLE else RENDERER_SYNTHETIC,
                     note=reason,
-                )
+                ),
             )
         return out
 
-    def _build_forced_sim_view() -> List[VideoArtifact]:
+    def _build_forced_sim_view() -> list[VideoArtifact]:
         """Attempt sim-view encode path unconditionally.
 
         Returns successful artifacts if at least one encode succeeds; otherwise
@@ -282,7 +287,7 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
             and not moviepy_ready()
         ):
             note = NOTE_MOVIEPY_MISSING
-        out: List[VideoArtifact] = []
+        out: list[VideoArtifact] = []
         for r in records:
             ep_id = r.get("episode_id", "unknown")
             sc_id = r.get("scenario_id", "unknown")
@@ -296,11 +301,11 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
                     status="skipped",
                     renderer=RENDERER_SIM_VIEW,
                     note=note,
-                )
+                ),
             )
         return out
 
-    def _build_auto() -> List[VideoArtifact]:
+    def _build_auto() -> list[VideoArtifact]:
         """Adaptive path preferring sim-view then synthetic fallback.
 
         Tries sim-view first; on failure (no encodes) falls back to synthetic
@@ -331,7 +336,7 @@ def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
     return _build_auto()
 
 
-def _final_normalize_insufficient(cfg, records: List[dict], video_artifacts: List[VideoArtifact]):
+def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: list[VideoArtifact]):
     if not bool(getattr(cfg, "capture_replay", False)):
         return
     mode = str(getattr(cfg, "video_renderer", "auto")).strip().lower()
@@ -354,7 +359,7 @@ def _final_normalize_insufficient(cfg, records: List[dict], video_artifacts: Lis
 # ---------------------------------------------------------------------------
 
 
-def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa: C901
+def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
     plots_dir = root / "plots"
     videos_dir = root / "videos"
     reports_dir = root / "reports"
@@ -442,7 +447,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
         try:
             validated = validate_visual_manifests(reports_dir, contracts_dir)
             logger.info("Validated visual manifests: %s", validated)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Visual manifest validation failed: %s", exc)
             raise
 

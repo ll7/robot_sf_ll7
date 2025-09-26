@@ -10,7 +10,6 @@ Covers:
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import List
 
 import pytest
 from loguru import logger
@@ -24,7 +23,7 @@ from robot_sf.gym_env._factory_compat import (
 
 @contextmanager
 def capture_loguru(level: str = "WARNING"):
-    messages: List[str] = []
+    messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
         if msg.record["level"].name == level:

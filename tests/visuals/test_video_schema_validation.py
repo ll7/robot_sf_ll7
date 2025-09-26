@@ -28,7 +28,7 @@ def load_schema():  # pragma: no cover - trivial IO helper
     return json.loads(SCHEMA_PATH.read_text())
 
 
-def validate(instance):  # noqa: D401
+def validate(instance):
     """Validate instance against video schema."""
     schema = load_schema()
     jsonschema.validate(instance=instance, schema=schema)  # type: ignore
@@ -47,9 +47,9 @@ def test_valid_success_entry():
                     "renderer": "synthetic",
                     "status": "success",
                     "filename": "video_ep1.mp4",
-                }
-            ]
-        }
+                },
+            ],
+        },
     )
 
 

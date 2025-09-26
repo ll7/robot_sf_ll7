@@ -31,7 +31,7 @@ class TestFigureOrchestratorRequirements:
 
         with patch("robot_sf.benchmark.aggregate.read_jsonl") as mock_read:
             mock_read.return_value = [
-                {"metrics": {"success": True, "collisions": 0}, "scenario_id": "test"}
+                {"metrics": {"success": True, "collisions": 0}, "scenario_id": "test"},
             ]
 
             args = [
@@ -47,7 +47,7 @@ class TestFigureOrchestratorRequirements:
                 patch("scripts.generate_figures._generate_table") as mock_table,
                 patch("scripts.generate_figures._generate_pareto") as mock_pareto,
                 patch("scripts.generate_figures._write_meta") as mock_meta,
-                patch("sys.argv", ["script"] + args),
+                patch("sys.argv", ["script", *args]),
             ):
                 main()
 
@@ -107,7 +107,7 @@ class TestFigureOrchestratorRequirements:
             patch("scripts.generate_figures._generate_distributions"),
             patch("scripts.generate_figures._generate_table"),
             patch("scripts.generate_figures._write_meta"),
-            patch("sys.argv", ["script"] + args),
+            patch("sys.argv", ["script", *args]),
         ):
             mock_read.return_value = [{"metrics": {"success": True}, "scenario_id": "test"}]
 

@@ -157,7 +157,7 @@ def demonstrate_weight_recomputation():
                 # Fallback when running from within scripts directory
                 recompute_module = importlib.import_module("recompute_snqi_weights")
 
-            SNQIWeightRecomputer = getattr(recompute_module, "SNQIWeightRecomputer")
+            SNQIWeightRecomputer = recompute_module.SNQIWeightRecomputer
 
             recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
 
@@ -213,7 +213,7 @@ def demonstrate_weight_recomputation():
             print("   (Demo would use actual scripts here)")
             print("   Run the scripts directly for full functionality:")
             print(
-                f"   python scripts/recompute_snqi_weights.py --episodes {episodes_file} --baseline {baseline_file} --compare-strategies --output results.json"
+                f"   python scripts/recompute_snqi_weights.py --episodes {episodes_file} --baseline {baseline_file} --compare-strategies --output results.json",
             )
 
 

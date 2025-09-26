@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 
 
-def test_reward_integration_episode_present():  # noqa: D401
+def test_reward_integration_episode_present():
     mod = importlib.import_module("examples.classic_interactions_pygame")
     original_dry = getattr(mod, "DRY_RUN", None)
     mod.DRY_RUN = False  # type: ignore
@@ -28,4 +28,4 @@ def test_reward_integration_episode_present():  # noqa: D401
             mod.DRY_RUN = original_dry  # type: ignore
     assert episodes, (
         "Expected at least one episode (reward fallback integration) - TDD failing until implementation."
-    )  # noqa: E501
+    )

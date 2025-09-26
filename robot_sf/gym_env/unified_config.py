@@ -6,7 +6,7 @@ duplication and provides clear separation of concerns.
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
@@ -33,7 +33,7 @@ class BaseSimulationConfig:
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
-    render_scaling: Optional[int] = None
+    render_scaling: int | None = None
 
     def __post_init__(self):
         """Validate that all required fields are initialized."""
@@ -49,8 +49,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
     Extends base configuration with robot-specific settings.
     """
 
-    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
-        default_factory=DifferentialDriveSettings
+    robot_config: DifferentialDriveSettings | BicycleDriveSettings = field(
+        default_factory=DifferentialDriveSettings,
     )
     # Environment behavior flags
     use_image_obs: bool = field(default=False)
@@ -62,7 +62,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
         if not self.robot_config:
             raise ValueError("Robot configuration must be initialized!")
 
-    def robot_factory(self) -> Union[DifferentialDriveRobot, BicycleDriveRobot]:
+    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration."""
         if isinstance(self.robot_config, DifferentialDriveSettings):
             return DifferentialDriveRobot(self.robot_config)
@@ -88,7 +88,7 @@ class ImageRobotConfig(RobotSimulationConfig):
         super().__post_init__()
         if not self.image_config:
             raise ValueError(
-                "Image configuration must be initialized when using image observations!"
+                "Image configuration must be initialized when using image observations!",
             )
 
 

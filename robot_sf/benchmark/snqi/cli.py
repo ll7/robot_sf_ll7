@@ -10,8 +10,8 @@ import argparse
 import json
 import statistics
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List
 
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
@@ -27,7 +27,6 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         # Load baseline statistics
         baseline_stats_path = Path(args.baseline_stats)
         if not baseline_stats_path.exists():
-            print(f"ERROR: Baseline stats file not found: {baseline_stats_path}", file=sys.stderr)
             return 1
 
         with baseline_stats_path.open() as f:
@@ -35,7 +34,9 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
         # Recompute SNQI weights using baseline statistics
         weights = recompute_snqi_weights(
-            baseline_stats=baseline_stats, method=args.method, seed=args.seed
+            baseline_stats=baseline_stats,
+            method=args.method,
+            seed=args.seed,
         )
 
         # Save the recomputed weights
@@ -44,25 +45,18 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
         weights.save(output_path)
 
-        print("✅ SNQI weights recomputed successfully")
-        print(f"📊 Method: {args.method}")
-        print(f"🌱 Seed: {args.seed}")
-        print(f"💾 Saved to: {output_path}")
-
         # Print summary of computed weights
-        print("\\n📋 Weight Summary:")
-        for component, weight in weights.weights.items():
-            print(f"  {component}: {weight:.3f}")
+        for _component, _weight in weights.weights.items():
+            pass
 
         return 0
 
-    except Exception as e:
-        print(f"ERROR: Failed to recompute SNQI weights: {e}", file=sys.stderr)
+    except Exception:
         return 1
 
 
-def _load_episodes_jsonl(path: Path) -> List[dict]:
-    episodes: List[dict] = []
+def _load_episodes_jsonl(path: Path) -> list[dict]:
+    episodes: list[dict] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -75,7 +69,7 @@ def _load_episodes_jsonl(path: Path) -> List[dict]:
     return episodes
 
 
-def _extract_metric_values(episodes: Iterable[dict], metric: str) -> List[float]:
+def _extract_metric_values(episodes: Iterable[dict], metric: str) -> list[float]:
     vals = []
     for ep in episodes:
         metrics = ep.get("metrics", {})
@@ -88,7 +82,7 @@ def _extract_metric_values(episodes: Iterable[dict], metric: str) -> List[float]
     return vals
 
 
-def _compute_baseline_stats(episodes: List[dict]) -> Dict[str, Dict[str, float]]:
+def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]:
     """Compute median & p95 for metrics required in SNQI normalization.
 
     Metrics chosen align with those referenced in compute_snqi(): collisions, near_misses,
@@ -100,7 +94,7 @@ def _compute_baseline_stats(episodes: List[dict]) -> Dict[str, Dict[str, float]]
         "force_exceed_events",
         "jerk_mean",
     ]
-    stats: Dict[str, Dict[str, float]] = {}
+    stats: dict[str, dict[str, float]] = {}
     for name in metric_names:
         values = _extract_metric_values(episodes, name)
         if not values:
@@ -127,20 +121,17 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
     try:
         episodes_path = Path(args.episodes)
         if not episodes_path.exists():
-            print(f"ERROR: Episodes file not found: {episodes_path}", file=sys.stderr)
             return 1
 
         episodes = _load_episodes_jsonl(episodes_path)
         if not episodes:
-            print("ERROR: No valid episode records found (empty episodes file)", file=sys.stderr)
             return 1
 
         # Determine weights
-        weight_map: Dict[str, float]
+        weight_map: dict[str, float]
         if args.weights:
             weights_path = Path(args.weights)
             if not weights_path.exists():
-                print(f"ERROR: Weights file not found: {weights_path}", file=sys.stderr)
                 return 1
             weight_obj = SNQIWeights.from_file(weights_path)
             weight_map = dict(weight_obj.weights)
@@ -184,40 +175,37 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(result_payload, f, indent=2, sort_keys=True)
 
-        print("✅ SNQI ablation analysis completed")
-        print(f"🧪 Components analyzed: {len(target_components)}")
-        print(f"🌱 Seed (reserved): {args.seed}")
-        print(f"� Episodes: {episodes_path}")
-        print(f"💾 Results saved to: {output_path}")
-
-        print("\n📊 Component Impact Summary (mean SNQI drop when removed):")
         for comp in target_components:
-            delta = impacts.get(comp, 0.0)
-            print(f"  {comp}: {delta:.4f}")
+            impacts.get(comp, 0.0)
 
         return 0
-    except Exception as e:  # noqa: BLE001
-        print(f"ERROR: Failed to perform SNQI ablation analysis: {e}", file=sys.stderr)
+    except Exception:
         return 1
 
 
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser for SNQI CLI tools."""
     parser = argparse.ArgumentParser(
-        prog="robot_sf_snqi", description="SNQI weight management and analysis tools"
+        prog="robot_sf_snqi",
+        description="SNQI weight management and analysis tools",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Recompute weights subcommand
     recompute_parser = subparsers.add_parser(
-        "recompute", help="Recompute SNQI weights from baseline statistics"
+        "recompute",
+        help="Recompute SNQI weights from baseline statistics",
     )
     recompute_parser.add_argument(
-        "--baseline-stats", required=True, help="Path to baseline statistics JSON file"
+        "--baseline-stats",
+        required=True,
+        help="Path to baseline statistics JSON file",
     )
     recompute_parser.add_argument(
-        "--out", required=True, help="Output path for recomputed weights JSON file"
+        "--out",
+        required=True,
+        help="Output path for recomputed weights JSON file",
     )
     recompute_parser.add_argument(
         "--method",
@@ -234,14 +222,18 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Ablation analysis subcommand
     ablation_parser = subparsers.add_parser(
-        "ablation", help="Perform SNQI component ablation analysis"
+        "ablation",
+        help="Perform SNQI component ablation analysis",
     )
     ablation_parser.add_argument("--episodes", required=True, help="Path to episodes JSONL file")
     ablation_parser.add_argument(
-        "--summary-out", required=True, help="Output path for ablation results JSON"
+        "--summary-out",
+        required=True,
+        help="Output path for ablation results JSON",
     )
     ablation_parser.add_argument(
-        "--weights", help="Path to SNQI weights JSON file (optional, uses defaults if not provided)"
+        "--weights",
+        help="Path to SNQI weights JSON file (optional, uses defaults if not provided)",
     )
     ablation_parser.add_argument(
         "--components",
@@ -249,7 +241,10 @@ def create_parser() -> argparse.ArgumentParser:
         help="Specific SNQI components to analyze (default: all components)",
     )
     ablation_parser.add_argument(
-        "--seed", type=int, default=123, help="Random seed for reproducible analysis (default: 123)"
+        "--seed",
+        type=int,
+        default=123,
+        help="Random seed for reproducible analysis (default: 123)",
     )
 
     return parser
@@ -269,7 +264,6 @@ def main() -> int:
     elif args.command == "ablation":
         return cmd_ablation_analysis(args)
     else:
-        print(f"ERROR: Unknown command: {args.command}", file=sys.stderr)
         return 1
 
 

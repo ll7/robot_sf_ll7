@@ -27,7 +27,7 @@ def simulation_view_ready() -> bool:  # T030
     if not has_pygame():  # Quick fail path
         return False
     ready = False
-    try:  # noqa: SIM105
+    try:
         import pygame  # type: ignore
 
         from robot_sf.render.sim_view import SimulationView  # type: ignore
@@ -37,35 +37,35 @@ def simulation_view_ready() -> bool:  # T030
         width: int = getattr(view.screen, "get_width", lambda: 0)()  # type: ignore[arg-type]
         height: int = getattr(view.screen, "get_height", lambda: 0)()  # type: ignore[arg-type]
         ready = width > 0 and height > 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
     finally:  # Best effort cleanup (safe if pygame not fully init)
-        try:  # noqa: SIM105
+        try:
             pygame.display.quit()  # type: ignore[name-defined]
             pygame.quit()  # type: ignore[name-defined]
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     return ready
 
 
 @lru_cache(maxsize=1)
 def has_pygame() -> bool:
-    try:  # noqa: SIM105
+    try:
         import pygame  # type: ignore
 
         _ = pygame.time.get_ticks  # access attribute to avoid unused warning
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
     return True
 
 
 @lru_cache(maxsize=1)
 def has_moviepy() -> bool:
-    try:  # noqa: SIM105
+    try:
         import moviepy  # type: ignore
 
         _ = getattr(moviepy, "__version__", None)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
     return True
 
@@ -86,9 +86,9 @@ def moviepy_ready() -> bool:
 
 
 __all__ = [
-    "has_pygame",
-    "has_moviepy",
     "ffmpeg_in_path",
+    "has_moviepy",
+    "has_pygame",
     "moviepy_ready",
     "simulation_view_ready",
 ]

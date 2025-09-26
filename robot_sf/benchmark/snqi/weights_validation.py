@@ -19,11 +19,14 @@ with all values cast to float for downstream use.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Mapping
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from .compute import WEIGHT_NAMES
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +35,12 @@ logger = logging.getLogger(__name__)
 # We keep 'w_near' as the canonical key for now (to avoid breaking changes), but
 # accept 'w_near_misses' as an alias to match the metric name 'near_misses'.
 # If both are present, 'w_near' wins and the alias is ignored with a warning.
-_WEIGHT_ALIASES: Dict[str, str] = {
+_WEIGHT_ALIASES: dict[str, str] = {
     "w_near_misses": "w_near",
 }
 
 
-def _apply_weight_aliases(working: Dict[str, object]) -> None:
+def _apply_weight_aliases(working: dict[str, object]) -> None:
     """Normalize aliases in-place on a working mapping.
 
     Rules:
@@ -61,7 +64,7 @@ def _apply_weight_aliases(working: Dict[str, object]) -> None:
         try:
             alias_val = float(working[alias])  # type: ignore[arg-type]
             canon_val = float(working[canonical])  # type: ignore[arg-type]
-        except Exception:  # noqa: BLE001 - numeric validation will occur later
+        except Exception:
             logger.warning(
                 "Alias '%s' provided alongside '%s'; ignoring alias due to non-numeric values",
                 alias,
@@ -76,7 +79,7 @@ def _apply_weight_aliases(working: Dict[str, object]) -> None:
             )
 
 
-def validate_weights_mapping(raw: Mapping[str, object]) -> Dict[str, float]:
+def validate_weights_mapping(raw: Mapping[str, object]) -> dict[str, float]:
     """Validate and normalize an external weights mapping.
 
     Args:
@@ -88,21 +91,21 @@ def validate_weights_mapping(raw: Mapping[str, object]) -> Dict[str, float]:
     Raises:
         ValueError: If required keys missing or values invalid.
     """
-    working: Dict[str, object] = dict(raw)
+    working: dict[str, object] = dict(raw)
     _apply_weight_aliases(working)
 
     missing = [k for k in WEIGHT_NAMES if k not in working]
     if missing:
         raise ValueError(f"Missing weight keys: {missing}")
-    extraneous = [k for k in working.keys() if k not in WEIGHT_NAMES and k not in _WEIGHT_ALIASES]
+    extraneous = [k for k in working if k not in WEIGHT_NAMES and k not in _WEIGHT_ALIASES]
     if extraneous:
         logger.warning("Extraneous weight keys will be ignored: %s", extraneous)
-    validated: Dict[str, float] = {}
+    validated: dict[str, float] = {}
     for k in WEIGHT_NAMES:
         v = working[k]
         try:
             fv = float(v)  # type: ignore[arg-type]
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise ValueError(f"Non-numeric weight for {k}: {v}") from e
         # Accept zero as a valid weight to disable a term; reject negatives and non-finite.
         if not np.isfinite(fv) or fv < 0:

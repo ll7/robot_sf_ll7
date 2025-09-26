@@ -14,10 +14,13 @@ Return the matching records, optionally capped by max_count.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
-def _metric(rec: Dict[str, Any], name: str, default: float = 0.0) -> float:
+def _metric(rec: dict[str, Any], name: str, default: float = 0.0) -> float:
     m = rec.get("metrics") or {}
     v = m.get(name, default)
     try:
@@ -27,12 +30,12 @@ def _metric(rec: Dict[str, Any], name: str, default: float = 0.0) -> float:
 
 
 def is_failure(
-    rec: Dict[str, Any],
+    rec: dict[str, Any],
     *,
     collision_threshold: float = 1.0,
     comfort_threshold: float = 0.2,
     near_miss_threshold: float = 0.0,
-    snqi_below: Optional[float] = None,
+    snqi_below: float | None = None,
 ) -> bool:
     """Return True when record matches any failure criteria.
 
@@ -60,14 +63,14 @@ def is_failure(
 
 
 def extract_failures(
-    records: Iterable[Dict[str, Any]],
+    records: Iterable[dict[str, Any]],
     *,
     collision_threshold: float = 1.0,
     comfort_threshold: float = 0.2,
     near_miss_threshold: float = 0.0,
-    snqi_below: Optional[float] = None,
-    max_count: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    snqi_below: float | None = None,
+    max_count: int | None = None,
+) -> list[dict[str, Any]]:
     """Filter records and return those that match failure criteria.
 
     Parameters
@@ -86,7 +89,7 @@ def extract_failures(
     max_count : int | None
         Limit the number of returned failures (None = no limit).
     """
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for rec in records:
         if is_failure(
             rec,
@@ -101,4 +104,4 @@ def extract_failures(
     return out
 
 
-__all__ = ["is_failure", "extract_failures"]
+__all__ = ["extract_failures", "is_failure"]

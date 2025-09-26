@@ -28,7 +28,7 @@ def _make_synthetic_episodes(n: int = 6):
                     "force_exceed_events": float(rng.integers(0, 4)),
                     "jerk_mean": float(rng.uniform(0.0, 2.0)),
                 },
-            }
+            },
         )
     return episodes
 
@@ -46,7 +46,7 @@ def _baseline_from_episodes(episodes):
     }
     for ep in episodes:
         m = ep["metrics"]
-        for k in metrics.keys():
+        for k in metrics:
             metrics[k].append(m[k])
     baseline = {}
     for k, vals in metrics.items():

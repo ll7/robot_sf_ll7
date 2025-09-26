@@ -13,7 +13,7 @@ def test_all_notes_membership():
         vc.NOTE_MOVIEPY_MISSING,
         vc.NOTE_INSUFFICIENT_REPLAY,
     }
-    assert vc.ALL_NOTES == expected
+    assert expected == vc.ALL_NOTES
 
 
 def test_renderer_constants():

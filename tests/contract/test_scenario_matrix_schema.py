@@ -46,8 +46,8 @@ def test_scenario_matrix_minimal_valid_passes_when_ready():
                 "map": "basic",
                 "episodes": 1,
                 "seed": 123,
-            }
-        ]
+            },
+        ],
     }
     try:
         jsonschema.validate(instance=minimal, schema=schema)

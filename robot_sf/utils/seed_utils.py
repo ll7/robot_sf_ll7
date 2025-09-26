@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import random
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -22,11 +22,11 @@ class SeedReport:
     seed: int
     deterministic: bool
     has_torch: bool
-    torch_deterministic: Optional[bool] = None
-    torch_benchmark: Optional[bool] = None
-    notes: Optional[str] = None
+    torch_deterministic: bool | None = None
+    torch_benchmark: bool | None = None
+    notes: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -81,7 +81,7 @@ def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
     return report
 
 
-def get_seed_state_sample(n: int = 5) -> Dict[str, Any]:
+def get_seed_state_sample(n: int = 5) -> dict[str, Any]:
     """Return small sample sequences for quick sanity checks."""
     # Python random
     rand_seq = [random.random() for _ in range(n)]

@@ -14,7 +14,10 @@ renderer fidelity targets are finalized.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def generate_contact_sheet(_episodes_jsonl: Path, _output_path: Path) -> None:  # pragma: no cover
@@ -25,5 +28,5 @@ def generate_contact_sheet(_episodes_jsonl: Path, _output_path: Path) -> None:  
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(
         "Use `generate_contact_sheet` from application code once implemented; "
-        "no CLI entry point is available yet."
+        "no CLI entry point is available yet.",
     )

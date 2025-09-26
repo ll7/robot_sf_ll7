@@ -99,8 +99,12 @@ def _write_weights(path: Path, weights: dict):
 )
 @pytest.mark.parametrize("script_kind", ["optimization", "recompute"])
 def test_cli_external_initial_weights_validation(
-    tmp_path: Path, snqi_small_dataset, weights, expect_success, script_kind
-):  # noqa: D103
+    tmp_path: Path,
+    snqi_small_dataset,
+    weights,
+    expect_success,
+    script_kind,
+):
     episodes_path, baseline_path = snqi_small_dataset
     weights_file = tmp_path / "weights.json"
     _write_weights(weights_file, weights)

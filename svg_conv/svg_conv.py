@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-from typing import List
 
 from svgelements import SVG, Path, Point  # type: ignore[attr-defined]
 
@@ -18,11 +17,11 @@ only the borders of houses (brown). Feel free to modify this script to support
 your own use case."""
 
 
-def paths_of_svg(svg: SVG) -> List[Path]:
+def paths_of_svg(svg: SVG) -> list[Path]:
     return [e for e in svg.elements() if isinstance(e, Path)]
 
 
-def filter_paths_by_color(paths: List[Path], color: RgbColor) -> List[Path]:
+def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
     red, green, blue = color
     paths = [
         e for e in paths if e.fill.red == red and e.fill.green == green and e.fill.blue == blue
@@ -30,15 +29,15 @@ def filter_paths_by_color(paths: List[Path], color: RgbColor) -> List[Path]:
     return paths
 
 
-def points_of_paths(paths: List[Path]) -> List[List[Vec2D]]:
+def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
     all_lines = []
     for path in paths:
-        points: List[Point] = list(path.as_points())
+        points: list[Point] = list(path.as_points())
         all_lines.append([(p.x, p.y) for p in points])
     return all_lines
 
 
-def serialize_mapjson(poly_points: List[List[Vec2D]]) -> str:
+def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
     obstacles = poly_points
     all_points = [p for points in poly_points for p in points]
     x_margin = [min([x for x, _ in all_points]), max([x for x, _ in all_points])]
@@ -80,7 +79,7 @@ def main():
     ):
         convert_map(input_svg_file=sys.argv[1], output_json_file=sys.argv[2])
     else:
-        print(HELP_MSG)
+        pass
 
 
 if __name__ == "__main__":

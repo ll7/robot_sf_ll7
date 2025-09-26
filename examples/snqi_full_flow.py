@@ -55,7 +55,10 @@ def _ensure_weights(path: Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Full SNQI pipeline example")
     ap.add_argument(
-        "--episodes", type=Path, required=True, help="Episodes JSONL path (input or to create)"
+        "--episodes",
+        type=Path,
+        required=True,
+        help="Episodes JSONL path (input or to create)",
     )
     ap.add_argument(
         "--matrix",
@@ -64,7 +67,10 @@ def main() -> int:
         help="Scenario matrix YAML for batch run if episodes missing",
     )
     ap.add_argument(
-        "--baseline-json", type=Path, required=True, help="Output baseline stats JSON path"
+        "--baseline-json",
+        type=Path,
+        required=True,
+        help="Output baseline stats JSON path",
     )
     ap.add_argument("--weights-json", type=Path, required=True, help="SNQI weights JSON path")
     ap.add_argument("--horizon", type=int, default=100)
@@ -99,7 +105,7 @@ def main() -> int:
                 str(args.horizon),
                 "--dt",
                 str(args.dt),
-            ]
+            ],
         )
 
     # Step 2: Compute baseline stats (med/p95)
@@ -123,7 +129,7 @@ def main() -> int:
             str(args.horizon),
             "--dt",
             str(args.dt),
-        ]
+        ],
     )
 
     # Step 3: Ensure weights (user could alternatively run optimization and point here)
@@ -150,7 +156,7 @@ def main() -> int:
             str(args.weights_json),
             "--snqi-baseline",
             str(args.baseline_json),
-        ]
+        ],
     )
 
     print("[done] Full SNQI pipeline complete.")

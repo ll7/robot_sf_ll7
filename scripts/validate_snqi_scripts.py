@@ -5,6 +5,8 @@ This script provides a minimal test to ensure the weight recomputation
 and sensitivity analysis scripts are working correctly.
 """
 
+import sys
+
 from robot_sf.benchmark.snqi import compute_snqi
 
 
@@ -168,7 +170,7 @@ def validate_script_interfaces():
                 msg = str(e)
                 if "matplotlib" in msg or "seaborn" in msg or "pandas" in msg:
                     print(
-                        "⚠ snqi_sensitivity_analysis module: importable (visualization dependencies missing)"
+                        "⚠ snqi_sensitivity_analysis module: importable (visualization dependencies missing)",
                     )
                 else:
                     print(f"✗ snqi_sensitivity_analysis import failed: {e}")
@@ -216,4 +218,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

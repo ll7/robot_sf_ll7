@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -20,7 +23,7 @@ def _write_matrix(path: Path, repeats: int = 3) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": repeats,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -48,7 +51,7 @@ def test_cli_seed_variance(tmp_path: Path, capsys):
             "6",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc_run == 0, f"run failed: {cap.err}"
@@ -63,7 +66,7 @@ def test_cli_seed_variance(tmp_path: Path, capsys):
             str(out_json),
             "--group-by",
             "scenario_id",
-        ]
+        ],
     )
     cap2 = capsys.readouterr()
     assert rc == 0, f"seed-variance failed: {cap2.err}"

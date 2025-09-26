@@ -1,6 +1,5 @@
 # WARNING: don't move this script or else loading trained SB3 policies might not work
 
-from typing import List
 
 import numpy as np
 import torch as th
@@ -33,11 +32,17 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         self,
         observation_space: spaces.Dict,
         use_ray_conv: bool = True,
-        num_filters: List[int] = [64, 16, 16, 16],
-        kernel_sizes: List[int] = [3, 3, 3, 3],
-        dropout_rates: List[float] = [0.3, 0.3, 0.3, 0.3],
+        num_filters: list[int] | None = None,
+        kernel_sizes: list[int] | None = None,
+        dropout_rates: list[float] | None = None,
     ):
         # Extract the ray and drive state spaces from the observation space
+        if dropout_rates is None:
+            dropout_rates = [0.3, 0.3, 0.3, 0.3]
+        if kernel_sizes is None:
+            kernel_sizes = [3, 3, 3, 3]
+        if num_filters is None:
+            num_filters = [64, 16, 16, 16]
         rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
         drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
 
@@ -101,9 +106,11 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         if use_ray_conv:
             in_channels = [rays_space.shape[0]] + num_filters[:-1]
             out_channels = num_filters
-            args_of_blocks = zip(in_channels, out_channels, kernel_sizes, dropout_rates)
+            args_of_blocks = zip(
+                in_channels, out_channels, kernel_sizes, dropout_rates, strict=False
+            )
             layers = [layer for args in args_of_blocks for layer in conv_block(*args)] + [
-                nn.Flatten()
+                nn.Flatten(),
             ]
             self.ray_extractor = nn.Sequential(*layers)
         else:

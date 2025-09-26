@@ -6,7 +6,6 @@ Provides common functionality for all environments.
 import datetime
 import os
 import pickle
-from typing import List
 
 from gymnasium import Env
 from loguru import logger
@@ -25,8 +24,8 @@ class BaseEnv(Env):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
     ):
         super().__init__()
@@ -45,7 +44,7 @@ class BaseEnv(Env):
         self.debug = debug
 
         # Initialize the list to store recorded states
-        self.recorded_states: List[VisualizableSimState] = []
+        self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
@@ -92,7 +91,7 @@ class BaseEnv(Env):
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str = None):
+    def save_recording(self, filename: str | None = None):
         """
         save the recorded states to a file
         filname: str, must end with *.pkl

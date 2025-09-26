@@ -7,7 +7,7 @@ with caching and version validation.
 
 import logging
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .schema_reference import SchemaReference
 
@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Default schema reference for episode schemas
 DEFAULT_EPISODE_SCHEMA_REF = SchemaReference(
-    schema_path="benchmark/schemas/episode.schema.v1.json", version="v1"
+    schema_path="benchmark/schemas/episode.schema.v1.json",
+    version="v1",
 )
 
 
@@ -48,7 +49,7 @@ def _parse_schema_name(schema_name: str) -> tuple[str, str]:
     return schema_path, version
 
 
-def load_schema(schema_name: str, validate_integrity: bool = True) -> Dict[str, Any]:
+def load_schema(schema_name: str, validate_integrity: bool = True) -> dict[str, Any]:
     """
     Load a schema from the canonical location.
 
@@ -80,7 +81,7 @@ def load_schema(schema_name: str, validate_integrity: bool = True) -> Dict[str, 
     return schema.schema_data
 
 
-def get_schema_version(schema_name: Optional[str] = None) -> Dict[str, int]:
+def get_schema_version(schema_name: str | None = None) -> dict[str, int]:
     """
     Get the version of a schema.
 
@@ -108,7 +109,7 @@ def get_schema_version(schema_name: Optional[str] = None) -> Dict[str, int]:
         raise ValueError(f"Invalid version number in schema name: {schema_name}")
 
 
-def get_schema_version_string(schema_name: Optional[str] = None) -> str:
+def get_schema_version_string(schema_name: str | None = None) -> str:
     """
     Get the version of a schema as a formatted string.
 
@@ -128,7 +129,8 @@ def get_schema_version_string(schema_name: Optional[str] = None) -> str:
 
 
 def validate_episode_data(
-    episode_data: Dict[str, Any], schema_ref: Optional[SchemaReference] = None
+    episode_data: dict[str, Any],
+    schema_ref: SchemaReference | None = None,
 ) -> None:
     """
     Validate episode data against a schema.

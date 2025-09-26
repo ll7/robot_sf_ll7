@@ -7,14 +7,17 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Dict, Generator, Optional
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 @pytest.fixture(scope="session", autouse=True)
 def headless_pygame_environment() -> Generator[None, None, None]:
-    originals: Dict[str, Optional[str]] = {
+    originals: dict[str, str | None] = {
         "DISPLAY": os.environ.get("DISPLAY"),
         "SDL_VIDEODRIVER": os.environ.get("SDL_VIDEODRIVER"),
         "MPLBACKEND": os.environ.get("MPLBACKEND"),
@@ -28,7 +31,7 @@ def headless_pygame_environment() -> Generator[None, None, None]:
             "MPLBACKEND": "Agg",
             "SDL_AUDIODRIVER": "dummy",
             "PYGAME_HIDE_SUPPORT_PROMPT": "hide",
-        }
+        },
     )
     yield
     for k, v in originals.items():
@@ -109,13 +112,11 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # type: igno
     relax = os.environ.get(policy.relax_env_var) == "1"
     enforce = os.environ.get(getattr(policy, "enforce_env_var", "ROBOT_SF_PERF_ENFORCE")) == "1"
     terminalreporter.write_line(
-        (
-            "\n"
-            + format_report(records, policy)
-            + ("\n(relax mode active)" if relax else "")
-            + ("\n(enforce mode)" if enforce else "")
-            + "\n"
-        )
+        "\n"
+        + format_report(records, policy)
+        + ("\n(relax mode active)" if relax else "")
+        + ("\n(enforce mode)" if enforce else "")
+        + "\n",
     )
     if enforce and not relax:
         # Treat any soft or hard breach as failure. Hard breaches ideally already handled

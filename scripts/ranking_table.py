@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -35,8 +35,9 @@ from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
 
 
 def to_rank_rows(
-    aggregates: Dict[str, Dict[str, Dict[str, float]]], metric: str
-) -> List[Dict[str, Any]]:
+    aggregates: dict[str, dict[str, dict[str, float]]],
+    metric: str,
+) -> list[dict[str, Any]]:
     """Convert aggregate stats into a sorted ranking list of rows.
 
     Parameters
@@ -51,7 +52,7 @@ def to_rank_rows(
     list of dict
         Rows with keys: ``group``, ``{metric}_mean``, ``{metric}_median``, ``{metric}_p95``, ``rank``.
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for group, metrics in aggregates.items():
         m = metrics.get(metric)
         if not m:
@@ -62,7 +63,7 @@ def to_rank_rows(
                 f"{metric}_mean": m.get("mean"),
                 f"{metric}_median": m.get("median"),
                 f"{metric}_p95": m.get("p95"),
-            }
+            },
         )
     # Higher is better for SNQI; support reverse flag by caller if needed
     rows.sort(
@@ -77,7 +78,7 @@ def to_rank_rows(
     return rows
 
 
-def write_csv(rows: List[Dict[str, Any]], out_csv: str | Path) -> str:
+def write_csv(rows: list[dict[str, Any]], out_csv: str | Path) -> str:
     import csv
 
     if not rows:
@@ -95,7 +96,7 @@ def write_csv(rows: List[Dict[str, Any]], out_csv: str | Path) -> str:
     return str(out_csv)
 
 
-def write_markdown(rows: List[Dict[str, Any]], out_md: str | Path) -> str:
+def write_markdown(rows: list[dict[str, Any]], out_md: str | Path) -> str:
     if not rows:
         Path(out_md).parent.mkdir(parents=True, exist_ok=True)
         Path(out_md).write_text("| group | rank |\n|---|---|\n", encoding="utf-8")

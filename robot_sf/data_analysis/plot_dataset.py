@@ -19,7 +19,7 @@ from robot_sf.nav.map_config import MapDefinition
 def plot_all_npc_ped_positions(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
     map_def: MapDefinition = None,
 ):
     """
@@ -63,7 +63,9 @@ def plot_all_npc_ped_positions(
 
 
 def plot_all_npc_ped_velocities(
-    ped_actions: list, interactive: bool = False, unique_id: str = None
+    ped_actions: list,
+    interactive: bool = False,
+    unique_id: str | None = None,
 ):
     """
     Plot all NPC pedestrian velocities from the given list of actions.
@@ -100,7 +102,9 @@ def plot_all_npc_ped_velocities(
 
 
 def plot_ego_ped_acceleration(
-    ego_ped_acceleration: list, interactive: bool = False, unique_id: str = None
+    ego_ped_acceleration: list,
+    interactive: bool = False,
+    unique_id: str | None = None,
 ):
     """
     Plot the acceleration of the ego pedestrian.
@@ -126,7 +130,9 @@ def plot_ego_ped_acceleration(
 
 
 def plot_ego_ped_velocity(
-    ego_ped_acceleration: list, interactive: bool = False, unique_id: str = None
+    ego_ped_acceleration: list,
+    interactive: bool = False,
+    unique_id: str | None = None,
 ):
     """
     Plot the velocity of the ego pedestrian based on the acceleration.

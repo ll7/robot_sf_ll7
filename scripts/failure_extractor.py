@@ -31,14 +31,17 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from robot_sf.benchmark.aggregate import _get_nested, read_jsonl
 
 
 def pick_worst(
-    records: List[Dict[str, Any]], metric_path: str, top_k: int, reverse: bool
-) -> List[Tuple[float, Dict[str, Any]]]:
+    records: list[dict[str, Any]],
+    metric_path: str,
+    top_k: int,
+    reverse: bool,
+) -> list[tuple[float, dict[str, Any]]]:
     """Score and select the top-k worst episodes by a metric.
 
     Parameters
@@ -57,7 +60,7 @@ def pick_worst(
     list of (float, dict)
         A list of (score, episode_record) pairs, truncated to top_k.
     """
-    scored: List[Tuple[float, Dict[str, Any]]] = []
+    scored: list[tuple[float, dict[str, Any]]] = []
     for rec in records:
         v = _get_nested(rec, metric_path)
         if v is None:
@@ -78,7 +81,9 @@ def main():
     ap.add_argument("--episodes", required=True, help="Input episodes JSONL")
     ap.add_argument("--out", required=True, help="Output JSON path")
     ap.add_argument(
-        "--metric", default="metrics.snqi", help="Dotted path metric (default: metrics.snqi)"
+        "--metric",
+        default="metrics.snqi",
+        help="Dotted path metric (default: metrics.snqi)",
     )
     ap.add_argument(
         "--direction",
@@ -105,7 +110,7 @@ def main():
                 "seed": rec.get("seed"),
                 "algo": _get_nested(rec, "scenario_params.algo"),
                 "metrics": rec.get("metrics"),
-            }
+            },
         )
 
     out_path = Path(args.out)

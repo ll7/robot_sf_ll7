@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from results.figures.fig_force_field import generate_force_field_figure
@@ -47,7 +47,8 @@ def _git_sha_short(length: int = 7) -> str:
     try:
         sha = (
             subprocess.check_output(
-                ["git", "rev-parse", f"--short={length}", "HEAD"], stderr=subprocess.DEVNULL
+                ["git", "rev-parse", f"--short={length}", "HEAD"],
+                stderr=subprocess.DEVNULL,
             )
             .decode("utf-8")
             .strip()
@@ -69,7 +70,7 @@ def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
 def _write_meta(out_dir: Path, episodes: Path, args: argparse.Namespace) -> None:
     meta = {
         "episodes_path": str(episodes),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "git_sha": _git_sha_short(),
         "schema_version": _infer_schema_version(episodes) or SCHEMA_VERSION,
         "script_version": SCRIPT_VERSION,
@@ -109,7 +110,9 @@ def _infer_schema_version(episodes_path: Path) -> int | None:
 
 
 def _load_snqi_inputs(
-    weights_path: Path | None, weights_from: Path | None, baseline_path: Path | None
+    weights_path: Path | None,
+    weights_from: Path | None,
+    baseline_path: Path | None,
 ) -> tuple[dict | None, dict | None]:
     weights = None
     baseline = None
@@ -157,7 +160,7 @@ def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | Non
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Generate benchmark figures from episodes JSONL (and optional thumbnails)"
+        description="Generate benchmark figures from episodes JSONL (and optional thumbnails)",
     )
     ap.add_argument("--episodes", required=True, help="Episodes JSONL path")
     ap.add_argument(
@@ -212,7 +215,10 @@ def main() -> int:
     ap.add_argument("--dists-pdf", action="store_true", default=False)
     # Force-field figure
     ap.add_argument(
-        "--force-field", action="store_true", default=False, help="Generate force-field figure"
+        "--force-field",
+        action="store_true",
+        default=False,
+        help="Generate force-field figure",
     )
     ap.add_argument(
         "--ff-png",
@@ -287,7 +293,9 @@ def main() -> int:
 
     # SNQI injection (optional)
     snqi_weights, snqi_baseline = _load_snqi_inputs(
-        args.snqi_weights, args.snqi_weights_from, args.snqi_baseline
+        args.snqi_weights,
+        args.snqi_weights_from,
+        args.snqi_baseline,
     )
     _inject_snqi(records, snqi_weights, snqi_baseline)
 
@@ -335,7 +343,10 @@ def _generate_pareto(records, out_dir, args) -> None:
 def _generate_distributions(records, out_dir: Path, args) -> None:
     dmetrics = [m.strip() for m in str(args.dmetrics).split(",") if m.strip()]
     grouped = collect_grouped_values(
-        records, metrics=dmetrics, group_by=args.group_by, fallback_group_by=args.fallback_group_by
+        records,
+        metrics=dmetrics,
+        group_by=args.group_by,
+        fallback_group_by=args.fallback_group_by,
     )
     save_distributions(
         grouped,
@@ -369,7 +380,8 @@ def _generate_table(records, out_dir: Path, args) -> None:
     (out_dir / "baseline_table.md").write_text(format_markdown(rows, metric_cols), encoding="utf-8")
     if bool(getattr(args, "table_tex", False)):
         (out_dir / "baseline_table.tex").write_text(
-            format_latex_booktabs(rows, metric_cols), encoding="utf-8"
+            format_latex_booktabs(rows, metric_cols),
+            encoding="utf-8",
         )
 
 
@@ -409,7 +421,10 @@ def _maybe_force_field(out_dir: Path, args) -> None:
 
 
 def _summary_build_columns(
-    metrics: list[str], stats: list[str], include_ci: bool, ci_suffix: str
+    metrics: list[str],
+    stats: list[str],
+    include_ci: bool,
+    ci_suffix: str,
 ) -> list[str]:
     cols: list[str] = []
     for m in metrics:
@@ -424,10 +439,10 @@ def _summary_build_columns(
 
 def _summary_ci_pair(metric_dict: dict, stat: str) -> tuple[float | None, float | None]:
     ci = metric_dict.get(f"{stat}_ci")
-    if not (isinstance(ci, (list, tuple)) and len(ci) == 2):
+    if not (isinstance(ci, list | tuple) and len(ci) == 2):
         return None, None
     a, b = ci
-    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+    if not isinstance(a, int | float) or not isinstance(b, int | float):
         return None, None
     return float(a), float(b)
 
@@ -452,7 +467,7 @@ def _summary_extract_row(
         for st in stats:
             base = f"{m}_{st}"
             val = mm.get(st)
-            if isinstance(val, (int, float)):
+            if isinstance(val, int | float):
                 values[base] = float(val)
             if not include_ci:
                 continue
@@ -495,7 +510,7 @@ def _rows_from_summary(
                 include_ci,
                 ci_suffix,
                 missing,
-            )
+            ),
         )
     if include_ci and missing:
         import sys

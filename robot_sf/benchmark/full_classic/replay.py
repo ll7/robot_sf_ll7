@@ -21,7 +21,10 @@ consistency) remain out of scope.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 @dataclass(slots=True)
@@ -58,7 +61,7 @@ class ReplayEpisode:
 
     episode_id: str
     scenario_id: str
-    steps: List[ReplayStep] = field(default_factory=list)
+    steps: list[ReplayStep] = field(default_factory=list)
 
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self.steps)
@@ -78,7 +81,7 @@ class ReplayCapture:
 
     episode_id: str
     scenario_id: str
-    _steps: List[ReplayStep] = field(default_factory=list)
+    _steps: list[ReplayStep] = field(default_factory=list)
 
     def record(
         self,
@@ -99,12 +102,14 @@ class ReplayCapture:
                 speed=speed,
                 ped_positions=ped_positions,
                 action=action,
-            )
+            ),
         )
 
     def finalize(self) -> ReplayEpisode:
         return ReplayEpisode(
-            episode_id=self.episode_id, scenario_id=self.scenario_id, steps=list(self._steps)
+            episode_id=self.episode_id,
+            scenario_id=self.scenario_id,
+            steps=list(self._steps),
         )
 
 
@@ -120,7 +125,7 @@ def validate_replay_episode(ep: ReplayEpisode, min_length: int = 2) -> bool:
         return False
     prev_t = ep.steps[0].t
     for s in ep.steps:
-        if not all(isinstance(v, (int, float)) for v in (s.t, s.x, s.y, s.heading)):
+        if not all(isinstance(v, int | float) for v in (s.t, s.x, s.y, s.heading)):
             return False
         if s.t < prev_t:  # non‑monotonic
             return False
@@ -153,15 +158,15 @@ def build_replay_episode(
 
 
 __all__ = [
-    "ReplayStep",
-    "ReplayEpisode",
     "ReplayCapture",
-    "validate_replay_episode",
+    "ReplayEpisode",
+    "ReplayStep",
     "build_replay_episode",
+    "validate_replay_episode",
 ]
 
 
-def extract_replay_episodes(records: List[dict], min_length: int = 2):
+def extract_replay_episodes(records: list[dict], min_length: int = 2):
     """Extract replay episodes from raw episode records (T022 adapter).
 
     Returns mapping episode_id -> ReplayEpisode for those with a valid
@@ -181,13 +186,13 @@ def extract_replay_episodes(records: List[dict], min_length: int = 2):
             seq = []
             for tpl in steps_raw:
                 # Support legacy 4-tuple or enriched 6-tuple (t,x,y,h, ped_list, action_tuple)
-                if not isinstance(tpl, (list, tuple)) or len(tpl) < 4:
+                if not isinstance(tpl, list | tuple) or len(tpl) < 4:
                     raise ValueError
                 t, x, y, h = tpl[:4]
                 seq.append((float(t), float(x), float(y), float(h)))
             ped_seq = ped_raw if isinstance(ped_raw, list) else None
             action_seq = action_raw if isinstance(action_raw, list) else None
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         ep = build_replay_episode(ep_id, sc_id, seq, ped_seq=ped_seq, action_seq=action_seq)
         if validate_replay_episode(ep, min_length=min_length):

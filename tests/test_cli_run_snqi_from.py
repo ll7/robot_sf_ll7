@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -20,7 +23,7 @@ def _write_minimal_matrix(path: Path) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -60,9 +63,9 @@ def test_cli_run_with_snqi_weights_from(tmp_path: Path, capsys):
                     "w_force_exceed": 0.3,
                     "w_jerk": 0.1,
                     "w_curvature": 0.1,
-                }
-            }
-        }
+                },
+            },
+        },
     }
     report_path = tmp_path / "report.json"
     report_path.write_text(json.dumps(report), encoding="utf-8")
@@ -88,7 +91,7 @@ def test_cli_run_with_snqi_weights_from(tmp_path: Path, capsys):
             str(report_path),
             "--snqi-baseline",
             str(baseline_path),
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc == 0, f"CLI run failed: {cap.err}"

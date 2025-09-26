@@ -41,26 +41,26 @@
 - Paths assume repository root structure
 
 ## Phase 3.1: Setup
-- [ ] T001 Update pyproject.toml with expanded [tool.ruff.lint] configuration in pyproject.toml
+- [X] T001 Update pyproject.toml with expanded [tool.ruff.lint] configuration in pyproject.toml
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T002 [P] Contract test for linting behavior in tests/test_linting_contract.py
-- [ ] T003 [P] Integration test for CI linting performance in tests/test_ci_performance.py
+- [X] T002 [P] Contract test for linting behavior in tests/test_linting_contract.py
+- [X] T003 [P] Integration test for CI linting performance in tests/test_ci_performance.py
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [ ] T004 Validate new configuration on existing codebase using ruff check
-- [ ] T005 Apply auto-fixes with ruff check --fix
-- [ ] T006 Manually address remaining linting issues
+- [X] T004 Validate new configuration on existing codebase using ruff check
+- [X] T005 Apply auto-fixes with ruff check --fix
+- [X] T006 Manually address remaining linting issues
 
 ## Phase 3.4: Integration
-- [ ] T007 Verify CI pipeline runs linting within 60 seconds
-- [ ] T008 Confirm no new CI failures introduced
+- [X] T007 Verify CI pipeline runs linting within 60 seconds
+- [X] T008 Confirm no new CI failures introduced
 
 ## Phase 3.5: Polish
-- [ ] T009 [P] Update development guide with linting guidelines in docs/dev_guide.md
-- [ ] T010 [P] Add linting section to README.md in README.md
-- [ ] T011 Run validation scripts to ensure no regressions
+- [X] T009 [P] Update development guide with linting guidelines in docs/dev_guide.md
+- [X] T010 [P] Add linting section to README.md in README.md
+- [X] T011 Run validation scripts to ensure no regressions
 
 ## Dependencies
 - Setup (T001) before tests (T002-T003) and core (T004-T006)

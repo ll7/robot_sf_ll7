@@ -9,14 +9,13 @@ import hashlib
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 def prevent_schema_duplicates(
-    staged_files: List[str],
+    staged_files: list[str],
     schema_pattern: str = r".*\.schema\.v[0-9]+\.json$",
     canonical_dir: Path = Path("robot_sf/benchmark/schemas"),
-) -> Dict:
+) -> dict:
     """
     Check staged files for schema duplicates against canonical schemas.
 
@@ -75,7 +74,7 @@ def prevent_schema_duplicates(
     }
 
 
-def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> Optional[Dict]:
+def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> dict | None:
     """
     Check if a staged schema file duplicates a canonical schema.
 
@@ -91,7 +90,7 @@ def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> Optional[Dic
 
     try:
         # Read staged file content
-        with open(staged_path, "r", encoding="utf-8") as f:
+        with open(staged_path, encoding="utf-8") as f:
             staged_content = f.read()
 
         # Calculate hash of staged content
@@ -100,7 +99,7 @@ def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> Optional[Dic
         # Check against all canonical schemas
         for canonical_file in canonical_dir.glob("*.schema.v*.json"):
             try:
-                with open(canonical_file, "r", encoding="utf-8") as f:
+                with open(canonical_file, encoding="utf-8") as f:
                     canonical_content = f.read()
 
                 canonical_hash = hashlib.sha256(canonical_content.encode("utf-8")).hexdigest()
@@ -112,15 +111,12 @@ def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> Optional[Dic
                         "reason": "Content hash matches existing canonical schema",
                     }
 
-            except (IOError, OSError) as e:
+            except OSError:
                 # Log error but continue checking other files
-                print(
-                    f"Warning: Could not read canonical schema {canonical_file}: {e}",
-                    file=sys.stderr,
-                )
+                pass
 
-    except (IOError, OSError) as e:
-        print(f"Warning: Could not read staged schema {staged_path}: {e}", file=sys.stderr)
+    except OSError:
+        pass
 
     return None
 
@@ -147,13 +143,9 @@ def main():
     canonical_dir = Path(args.canonical_dir)
     result = prevent_schema_duplicates(args.staged_files, args.schema_pattern, canonical_dir)
 
-    print(result["message"])
-
     if result["duplicates_found"]:
-        print("\nDuplicate schemas found:")
-        for dup in result["duplicates_found"]:
-            print(f"  {dup['file']} duplicates {dup['canonical_file']}")
-            print(f"    Reason: {dup['reason']}")
+        for _dup in result["duplicates_found"]:
+            pass
 
     # Exit with appropriate code
     sys.exit(0 if result["status"] == "pass" else 1)

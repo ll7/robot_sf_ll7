@@ -99,7 +99,8 @@ def _run_minimal_benchmark(
 
 @pytest.mark.timeout(60)  # marker declared in pytest.ini options; enforcement done manually below
 def test_reproducibility_same_seed(
-    config_factory, perf_policy
+    config_factory,
+    perf_policy,
 ):  # T011-T016 T020-T023 T030-T032 + timeout requirement (policy integrated)
     """Accelerated reproducibility test.
 
@@ -120,7 +121,7 @@ def test_reproducibility_same_seed(
 
     def _timeout_handler(signum, frame):  # pragma: no cover - timeout path rarely triggered
         raise TimeoutError(
-            f"Reproducibility test exceeded hard timeout of {hard_timeout_sec}s (signal)."
+            f"Reproducibility test exceeded hard timeout of {hard_timeout_sec}s (signal).",
         )
 
     # Cross‑platform guard: Windows and some environments may not expose SIGALRM.
@@ -132,10 +133,10 @@ def test_reproducibility_same_seed(
             orig_handler = signal.getsignal(sigalrm)
             signal.signal(sigalrm, _timeout_handler)
             signal.alarm(hard_timeout_sec)
-        except Exception:  # noqa: BLE001 - best effort; skip alarm if any issue arises
+        except Exception:
             try:
                 signal.alarm(0)  # type: ignore[attr-defined]
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
     try:
@@ -145,7 +146,10 @@ def test_reproducibility_same_seed(
         alt_base = Path(config_factory().output_root) / "alt_base_root"
         alt_base.mkdir(parents=True, exist_ok=True)
         ids2, hash2 = _run_minimal_benchmark(
-            config_factory, seeds, run_label="b", base_root_override=alt_base
+            config_factory,
+            seeds,
+            run_label="b",
+            base_root_override=alt_base,
         )
     finally:
         # Best effort cleanup – only if SIGALRM existed
@@ -154,7 +158,7 @@ def test_reproducibility_same_seed(
                 signal.alarm(0)
                 if orig_handler is not None:
                     signal.signal(sigalrm, orig_handler)
-            except Exception:  # noqa: BLE001 - alarm cleanup should never fail test
+            except Exception:
                 pass
 
     elapsed = time.perf_counter() - start
@@ -186,7 +190,7 @@ def test_reproducibility_same_seed(
             "consider raising CI threshold (specs/123-reduce-runtime-of/spec.md)."
         )
         raise AssertionError(
-            f"Repro test exceeded time budget: {elapsed:.2f}s (limit {limit}s). {guidance}"
+            f"Repro test exceeded time budget: {elapsed:.2f}s (limit {limit}s). {guidance}",
         )
 
     # T022: assert absence of heavy artifact types (videos) across both run roots

@@ -3,7 +3,6 @@
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import List, Tuple
 
 import numpy as np
 from loguru import logger
@@ -118,7 +117,7 @@ class SvgMapConverter:
                     coordinates=np_coordinates,
                     label=path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label"),
                     id=path.attrib.get("id"),
-                )
+                ),
             )
 
         # Iterate over each 'rect' element
@@ -132,7 +131,7 @@ class SvgMapConverter:
                     float(rect.attrib.get("height")),
                     rect.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label"),
                     rect.attrib.get("id"),
-                )
+                ),
             )
 
         logger.info(f"Parsed {len(path_info)} paths in the SVG file")
@@ -147,14 +146,17 @@ class SvgMapConverter:
 
         if not np.array_equal(vertices[0], vertices[-1]):
             logger.warning(
-                f"Closing polygon: first and last vertices of obstacle <{path.id}> differ"
+                f"Closing polygon: first and last vertices of obstacle <{path.id}> differ",
             )
             vertices.append(vertices[0])
 
         return Obstacle(vertices)
 
     def _process_route_path(
-        self, path: SvgPath, spawn_zones: List[Rect], goal_zones: List[Rect]
+        self,
+        path: SvgPath,
+        spawn_zones: list[Rect],
+        goal_zones: list[Rect],
     ) -> GlobalRoute:
         """Process a path labeled as route (pedestrian or robot)."""
         vertices = list(path.coordinates)
@@ -162,7 +164,7 @@ class SvgMapConverter:
 
         # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create
         # minimal synthetic zones around first/last waypoint so downstream logic still works.
-        def _safe_zone(index: int, zones: List[Rect], waypoint, kind: str) -> Rect:  # noqa: D401
+        def _safe_zone(index: int, zones: list[Rect], waypoint, kind: str) -> Rect:
             if zones and 0 <= index < len(zones):
                 return zones[index]
             logger.warning(
@@ -191,9 +193,17 @@ class SvgMapConverter:
         return Zone(list(path.coordinates))
 
     def _process_rects(
-        self, width: float, height: float
-    ) -> Tuple[
-        List[Obstacle], List[Rect], List[Rect], List[Rect], List[Line2D], List[Rect], List[Rect]
+        self,
+        width: float,
+        height: float,
+    ) -> tuple[
+        list[Obstacle],
+        list[Rect],
+        list[Rect],
+        list[Rect],
+        list[Line2D],
+        list[Rect],
+        list[Rect],
     ]:
         """
         Process rectangle elements from the SVG file and create game objects.
@@ -224,19 +234,19 @@ class SvgMapConverter:
             Map bounds are automatically created for the edges of the map, additional bounds
             can be defined in the SVG file using the 'bound' label.
         """
-        obstacles: List[Obstacle] = []
-        robot_spawn_zones: List[Rect] = []
-        ped_spawn_zones: List[Rect] = []
-        robot_goal_zones: List[Rect] = []
-        bounds: List[Line2D] = [
+        obstacles: list[Obstacle] = []
+        robot_spawn_zones: list[Rect] = []
+        ped_spawn_zones: list[Rect] = []
+        robot_goal_zones: list[Rect] = []
+        bounds: list[Line2D] = [
             (0, width, 0, 0),  # bottom
             (0, width, height, height),  # top
             (0, 0, 0, height),  # left
             (width, width, 0, height),  # right
         ]
         logger.debug(f"Bounds: {bounds}")
-        ped_goal_zones: List[Rect] = []
-        ped_crowded_zones: List[Rect] = []
+        ped_goal_zones: list[Rect] = []
+        ped_crowded_zones: list[Rect] = []
 
         for rect in self.rect_info:
             if rect.label == "robot_spawn_zone":
@@ -293,17 +303,17 @@ class SvgMapConverter:
         ) = self._process_rects(width, height)
 
         # Initialize routes
-        robot_routes: List[GlobalRoute] = []
-        ped_routes: List[GlobalRoute] = []
+        robot_routes: list[GlobalRoute] = []
+        ped_routes: list[GlobalRoute] = []
 
         # Process paths
         path_processors = {
             "obstacle": lambda p: obstacles.append(self._process_obstacle_path(p)),
             "ped_route": lambda p: ped_routes.append(
-                self._process_route_path(p, ped_spawn_zones, ped_goal_zones)
+                self._process_route_path(p, ped_spawn_zones, ped_goal_zones),
             ),
             "robot_route": lambda p: robot_routes.append(
-                self._process_route_path(p, robot_spawn_zones, robot_goal_zones)
+                self._process_route_path(p, robot_spawn_zones, robot_goal_zones),
             ),
             "crowded_zone": lambda p: ped_crowded_zones.append(self._process_crowded_zone_path(p)),
         }
@@ -333,7 +343,7 @@ class SvgMapConverter:
         if not robot_routes:
             # Hard validation: we cannot produce robot start positions => downstream division by zero.
             raise ValueError(
-                "SVG map conversion produced zero robot routes. Ensure at least one 'robot_route_*_*' path label exists."
+                "SVG map conversion produced zero robot routes. Ensure at least one 'robot_route_*_*' path label exists.",
             )
 
         logger.debug("Creating MapDefinition object")
@@ -361,11 +371,11 @@ class SvgMapConverter:
             assert isinstance(self.map_definition, MapDefinition)
         except AssertionError:
             raise TypeError(
-                f"Map definition is not of type MapDefinition: {type(self.map_definition)}"
+                f"Map definition is not of type MapDefinition: {type(self.map_definition)}",
             )
         return self.map_definition
 
-    def __get_path_number(self, route: str) -> Tuple[int, int]:
+    def __get_path_number(self, route: str) -> tuple[int, int]:
         # routes have a label of the form 'ped_route_<spawn>_<goal>'
         numbers = re.findall(r"\d+", route)
         if numbers:
@@ -407,7 +417,7 @@ def convert_map(svg_file: str):
     except AssertionError:
         logger.error("Error converting SVG file: MapDefinition object not created.")
         logger.exception("Assertion failure during SVG conversion")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"Unexpected error converting SVG file: {e}")
         logger.exception("Unhandled exception in convert_map")
     return None
@@ -421,7 +431,7 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
         if md is None:
             raise ValueError(f"Failed to convert SVG file: {file_path}")
         return {file_path.stem: md}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         if strict:
             raise
         logger.warning("Skipping invalid SVG map: {f} ({err})", f=str(file_path), err=exc)
@@ -444,7 +454,9 @@ def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str,
 
 
 def load_svg_maps(
-    path: str, pattern: str = "*.svg", strict: bool = False
+    path: str,
+    pattern: str = "*.svg",
+    strict: bool = False,
 ) -> dict[str, MapDefinition]:
     """Load one or many SVG maps into a dict keyed by filename stem."""
     p = Path(path)

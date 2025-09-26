@@ -27,8 +27,9 @@ Clamping Implications:
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from datetime import datetime
-from typing import TYPE_CHECKING, Mapping
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.snqi.types import SNQIWeights
@@ -101,7 +102,9 @@ def compute_snqi(metrics: Metrics, weights: Weights, baseline_stats: BaselineSta
     near_norm = normalize_metric("near_misses", metrics.get("near_misses", 0.0), baseline_stats)
     comfort_exposure = float(metrics.get("comfort_exposure", 0.0))
     force_exceed_norm = normalize_metric(
-        "force_exceed_events", metrics.get("force_exceed_events", 0.0), baseline_stats
+        "force_exceed_events",
+        metrics.get("force_exceed_events", 0.0),
+        baseline_stats,
     )
     jerk_norm = normalize_metric("jerk_mean", metrics.get("jerk_mean", 0.0), baseline_stats)
 
@@ -118,7 +121,9 @@ def compute_snqi(metrics: Metrics, weights: Weights, baseline_stats: BaselineSta
 
 
 def recompute_snqi_weights(
-    baseline_stats: BaselineStats, method: str = "canonical", seed: int | None = None
+    baseline_stats: BaselineStats,
+    method: str = "canonical",
+    seed: int | None = None,
 ) -> SNQIWeights:
     """Recompute SNQI weights based on baseline statistics.
 
@@ -166,14 +171,14 @@ def recompute_snqi_weights(
     # Get git SHA for provenance
     try:
         result = run(
-            ["git", "rev-parse", "HEAD"],  # noqa: S607
+            ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             check=False,
             stderr=DEVNULL,
         )
         git_sha = result.stdout.strip()[:8] if result.returncode == 0 else "unknown"
-    except Exception:  # noqa: BLE001
+    except Exception:
         git_sha = "unknown"
 
     # Compute hash of baseline stats for reproducibility
@@ -245,9 +250,9 @@ def compute_snqi_ablation(
 
 
 __all__ = [
-    "compute_snqi",
-    "normalize_metric",
     "WEIGHT_NAMES",
-    "recompute_snqi_weights",
+    "compute_snqi",
     "compute_snqi_ablation",
+    "normalize_metric",
+    "recompute_snqi_weights",
 ]

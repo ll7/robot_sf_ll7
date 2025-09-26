@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -19,7 +22,7 @@ def _write_matrix(path: Path, repeats: int = 3) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": repeats,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -47,7 +50,7 @@ def test_cli_rank_md(tmp_path: Path, capsys):
             "6",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     capsys.readouterr()
     assert rc_run == 0
@@ -64,7 +67,7 @@ def test_cli_rank_md(tmp_path: Path, capsys):
             "collisions",
             "--format",
             "md",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc == 0, f"rank failed: {cap.err}"

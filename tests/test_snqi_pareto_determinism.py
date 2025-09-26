@@ -28,7 +28,7 @@ def _episodes(n: int = 10):
                     "force_exceed_events": float(rng.integers(0, 5)),
                     "jerk_mean": float(rng.uniform(0.0, 1.0)),
                 },
-            }
+            },
         )
     return eps
 
@@ -65,7 +65,7 @@ def test_pareto_sampling_deterministic():
     alts1 = res1.get("pareto_alternatives", [])
     alts2 = res2.get("pareto_alternatives", [])
     assert len(alts1) == len(alts2)
-    for a1, a2 in zip(alts1, alts2):
+    for a1, a2 in zip(alts1, alts2, strict=False):
         assert a1["weights"] == a2["weights"]
         # Floating metrics: allow tiny tolerance
         for k in ["discriminative_power", "stability", "mean_score"]:

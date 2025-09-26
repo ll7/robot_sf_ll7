@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 
 @dataclass(slots=True)
@@ -14,7 +13,7 @@ class MetricsBundle:
     from episode records, with optional validation and defaults.
     """
 
-    values: Dict[str, float]
+    values: dict[str, float]
 
     def get(self, name: str, default: float | None = None) -> float | None:
         """Get metric value by name with optional default."""
@@ -30,12 +29,12 @@ class MetricsBundle:
         """Check if metric is present."""
         return name in self.values
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         """Convert to plain dict for serialization."""
         return dict(self.values)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, float]) -> MetricsBundle:
+    def from_dict(cls, data: dict[str, float]) -> MetricsBundle:
         """Create from plain dict."""
         return cls(values=data)
 

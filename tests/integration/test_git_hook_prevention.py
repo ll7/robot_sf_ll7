@@ -26,7 +26,9 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
             subprocess.run(
-                ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=repo_path,
+                check=True,
             )
 
             # Create initial commit
@@ -42,7 +44,7 @@ class TestGitHookPreventionIntegration:
             schema_dir.mkdir()
             schema_file = schema_dir / "episode.schema.v1.json"
             schema_file.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}',
             )
 
             # Stage the schema file
@@ -56,7 +58,7 @@ class TestGitHookPreventionIntegration:
             # Now create a duplicate schema file
             duplicate_schema = Path("duplicate.schema.v1.json")
             duplicate_schema.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}',
             )
 
             # Stage the duplicate
@@ -69,7 +71,8 @@ class TestGitHookPreventionIntegration:
             ]
 
             result = prevent_schema_duplicates(
-                staged_files_with_duplicate, canonical_dir=schema_dir
+                staged_files_with_duplicate,
+                canonical_dir=schema_dir,
             )
             assert result["status"] == "fail"
             assert "duplicate" in result["message"].lower()
@@ -87,7 +90,9 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
             subprocess.run(
-                ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=repo_path,
+                check=True,
             )
 
             # Create initial commit
@@ -101,12 +106,12 @@ class TestGitHookPreventionIntegration:
 
             schema1 = schema_dir / "episode.schema.v1.json"
             schema1.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "title": "Episode"}'
+                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "title": "Episode"}',
             )
 
             schema2 = schema_dir / "pedestrian.schema.v1.json"
             schema2.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "title": "Pedestrian"}'
+                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "title": "Pedestrian"}',
             )
 
             # Stage both files
@@ -129,7 +134,9 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
             subprocess.run(
-                ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=repo_path,
+                check=True,
             )
 
             # Create initial commit
@@ -145,7 +152,7 @@ class TestGitHookPreventionIntegration:
             schema_dir.mkdir()
             canonical_schema = schema_dir / "episode.schema.v1.json"
             canonical_schema.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}',
             )
 
             # Commit the canonical schema
@@ -155,7 +162,7 @@ class TestGitHookPreventionIntegration:
             # Create a duplicate schema file with different name
             duplicate_schema = Path("copy.schema.v1.json")
             duplicate_schema.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}',
             )
 
             # Stage the duplicate
@@ -181,7 +188,9 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
             subprocess.run(
-                ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=repo_path,
+                check=True,
             )
 
             # Create initial commit
@@ -211,7 +220,8 @@ class TestGitHookPreventionIntegration:
 
             # Stage both files
             subprocess.run(
-                ["git", "add", "schema1.schema.v1.json", "schema2.schema.v1.json"], check=True
+                ["git", "add", "schema1.schema.v1.json", "schema2.schema.v1.json"],
+                check=True,
             )
 
             # Test that error message includes filenames

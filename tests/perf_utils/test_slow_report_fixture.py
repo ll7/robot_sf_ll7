@@ -18,7 +18,9 @@ from .reporting import SlowTestSample, generate_report
 
 def test_slow_report_includes_sample():  # basic functional check
     policy = PerformanceBudgetPolicy(
-        soft_threshold_seconds=0.05, hard_timeout_seconds=1.0, report_count=5
+        soft_threshold_seconds=0.05,
+        hard_timeout_seconds=1.0,
+        report_count=5,
     )
     # Sleep slightly above soft threshold to trigger soft breach classification
     start = time.perf_counter()

@@ -26,14 +26,12 @@ def _legacy_compute_snqi(metrics, weight_map, baseline_map):  # type: ignore[mis
         eps = 1e-6
         denom = (p95 - med) if (p95 - med) > eps else 1.0
         norm = (value - med) / denom
-        if norm < 0.0:
-            norm = 0.0
-        if norm > 1.0:
-            norm = 1.0
+        norm = max(norm, 0.0)
+        norm = min(norm, 1.0)
         return norm
 
     success = metrics.get("success", 0.0)
-    if isinstance(success, bool):  # noqa: SIM103 explicit clarity
+    if isinstance(success, bool):
         success = 1.0 if success else 0.0
 
     time_norm = metrics.get("time_to_goal_norm", 1.0)

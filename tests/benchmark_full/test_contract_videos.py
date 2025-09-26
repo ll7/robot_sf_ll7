@@ -17,7 +17,7 @@ def test_generate_videos_smoke_skip(temp_results_dir, synthetic_episode_record):
             episode_id="ep1",
             scenario_id="scenario_a",
             seed=1,
-        )
+        ),
     ]
 
     class _Cfg:

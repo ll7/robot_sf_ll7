@@ -29,7 +29,7 @@ def test_validate_visual_artifacts_contract():
             generation_time=datetime.now(),
             file_size=1000,
             status="generated",
-        )
+        ),
     ]
 
     # When: Function is called
@@ -113,7 +113,7 @@ def test_validate_visual_artifacts_detects_placeholders():
                 generation_time=datetime.now(),
                 file_size=fake_plot.stat().st_size,
                 status="generated",
-            )
+            ),
         ]
 
         # When: Function is called

@@ -69,6 +69,7 @@ def test_each_scenario_structure_and_files() -> None:
                 warnings.warn(
                     f"""Scenario {scenario["name"]} ped_density={density} is outside the recommended [{low}, {high}] range. This is allowed, but may reduce comparability with canonical benchmark results.""",
                     UserWarning,
+                    stacklevel=2,
                 )
         # groups usage rule
         groups_val = sim_cfg.get("groups", 0.0)

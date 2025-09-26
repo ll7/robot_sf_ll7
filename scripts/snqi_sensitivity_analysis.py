@@ -19,10 +19,10 @@ import json
 import logging
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from scipy.stats import rankdata, spearmanr
@@ -65,22 +65,22 @@ def _apply_log_level(level_name: str | None) -> None:
 class SNQISensitivityAnalyzer:
     """Comprehensive SNQI sensitivity analysis."""
 
-    def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
+    def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
         """Initialize analyzer with episode data and baseline statistics."""
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = list(WEIGHT_NAMES)
 
-    def _episode_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
+    def _episode_snqi(self, metrics: dict[str, float], weights: dict[str, float]) -> float:
         """Wrapper calling canonical compute_snqi with this instance's baseline statistics."""
         return compute_snqi(metrics, weights, self.baseline_stats)
 
     def weight_sweep_analysis(
         self,
-        base_weights: Dict[str, float],
-        weight_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
+        base_weights: dict[str, float],
+        weight_ranges: dict[str, tuple[float, float]] | None = None,
         n_points: int = 20,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Perform sweep analysis for each weight individually."""
         if weight_ranges is None:
             weight_ranges = {name: (0.1, 3.0) for name in self.weight_names}
@@ -136,10 +136,10 @@ class SNQISensitivityAnalyzer:
 
     def pairwise_weight_analysis(
         self,
-        base_weights: Dict[str, float],
-        weight_pairs: Optional[List[Tuple[str, str]]] = None,
+        base_weights: dict[str, float],
+        weight_pairs: list[tuple[str, str]] | None = None,
         n_points: int = 15,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Analyze sensitivity of weight pairs (2D analysis)."""
         if weight_pairs is None:
             # Analyze most important pairs
@@ -196,7 +196,7 @@ class SNQISensitivityAnalyzer:
 
         return results
 
-    def ablation_analysis(self, base_weights: Dict[str, float]) -> Dict[str, Any]:
+    def ablation_analysis(self, base_weights: dict[str, float]) -> dict[str, Any]:
         """Analyze effect of removing each weight component (ablation study)."""
         logger.info("Performing ablation analysis")
 
@@ -229,10 +229,7 @@ class SNQISensitivityAnalyzer:
             # Measure impact
             score_change = float(abs(np.mean(ablated_scores) - np.mean(base_scores)))
             ranking_change = 1.0 - spearmanr(base_ranking, ablated_ranking)[0]
-            if np.isnan(ranking_change):
-                ranking_change = 0.0
-            else:
-                ranking_change = float(ranking_change)
+            ranking_change = 0.0 if np.isnan(ranking_change) else float(ranking_change)
 
             variance_change = float(abs(np.std(ablated_scores) - np.std(base_scores)))
 
@@ -255,7 +252,7 @@ class SNQISensitivityAnalyzer:
 
         return results
 
-    def normalization_strategy_analysis(self, base_weights: Dict[str, float]) -> Dict[str, Any]:
+    def normalization_strategy_analysis(self, base_weights: dict[str, float]) -> dict[str, Any]:
         """Analyze impact of different normalization strategies (median vs p95)."""
         logger.info("Analyzing normalization strategy impact")
 
@@ -267,7 +264,7 @@ class SNQISensitivityAnalyzer:
 
         for ep in self.episodes:
             metrics = ep.get("metrics", {})
-            for metric_name in metric_values.keys():
+            for metric_name in metric_values:
                 value = metrics.get(metric_name)
                 if value is not None and not (isinstance(value, float) and np.isnan(value)):
                     metric_values[metric_name].append(float(value))
@@ -331,7 +328,7 @@ class SNQISensitivityAnalyzer:
 
         return results
 
-    def generate_visualizations(self, analysis_results: Dict[str, Any], output_dir: Path):
+    def generate_visualizations(self, analysis_results: dict[str, Any], output_dir: Path):
         """Generate visualization plots for sensitivity analysis."""
         if not MATPLOTLIB_AVAILABLE:
             logger.warning("Matplotlib not available, skipping visualizations")
@@ -361,7 +358,7 @@ class SNQISensitivityAnalyzer:
         if "normalization" in analysis_results:
             self._plot_normalization_analysis(analysis_results["normalization"], output_dir)
 
-    def _plot_weight_sweeps(self, sweep_data: Dict, output_dir: Path):
+    def _plot_weight_sweeps(self, sweep_data: dict, output_dir: Path):
         """Plot weight sweep sensitivity analysis."""
         fig, axes = plt.subplots(2, 4, figsize=(16, 8))
         axes = axes.flatten()
@@ -406,7 +403,7 @@ class SNQISensitivityAnalyzer:
         plt.savefig(output_dir / "weight_sweep_sensitivity.png", dpi=300, bbox_inches="tight")
         plt.close()
 
-    def _plot_pairwise_analysis(self, pairwise_data: Dict, output_dir: Path):
+    def _plot_pairwise_analysis(self, pairwise_data: dict, output_dir: Path):
         """Plot pairwise weight analysis heatmaps."""
         n_pairs = len(pairwise_data)
         _fig, axes = plt.subplots(2, n_pairs, figsize=(5 * n_pairs, 10))
@@ -425,7 +422,7 @@ class SNQISensitivityAnalyzer:
             # Stability surface
             im2 = axes[1, i].imshow(data["stability_surface"], cmap="plasma", aspect="auto")
             axes[1, i].set_title(
-                f"Ranking Stability: {data['weight1_name']} vs {data['weight2_name']}"
+                f"Ranking Stability: {data['weight1_name']} vs {data['weight2_name']}",
             )
             axes[1, i].set_xlabel(data["weight1_name"])
             axes[1, i].set_ylabel(data["weight2_name"])
@@ -435,7 +432,7 @@ class SNQISensitivityAnalyzer:
         plt.savefig(output_dir / "pairwise_analysis.png", dpi=300, bbox_inches="tight")
         plt.close()
 
-    def _plot_ablation_analysis(self, ablation_data: Dict, output_dir: Path):
+    def _plot_ablation_analysis(self, ablation_data: dict, output_dir: Path):
         """Plot ablation analysis results."""
         importance_ranking = ablation_data["importance_ranking"]
         weights = [item[0] for item in importance_ranking]
@@ -450,7 +447,7 @@ class SNQISensitivityAnalyzer:
         plt.grid(True, alpha=0.3)
 
         # Add value labels on bars
-        for bar, score in zip(bars, scores):
+        for bar, score in zip(bars, scores, strict=False):
             plt.text(
                 bar.get_x() + bar.get_width() / 2,
                 bar.get_height() + 0.001,
@@ -463,7 +460,7 @@ class SNQISensitivityAnalyzer:
         plt.savefig(output_dir / "ablation_analysis.png", dpi=300, bbox_inches="tight")
         plt.close()
 
-    def _plot_normalization_analysis(self, norm_data: Dict, output_dir: Path):
+    def _plot_normalization_analysis(self, norm_data: dict, output_dir: Path):
         """Plot normalization strategy comparison."""
         strategies = list(norm_data.keys())
         metrics = ["mean_snqi", "std_snqi", "score_range", "ranking_correlation"]
@@ -480,15 +477,17 @@ class SNQISensitivityAnalyzer:
 
         plt.tight_layout()
         plt.savefig(
-            output_dir / "normalization_strategy_comparison.png", dpi=300, bbox_inches="tight"
+            output_dir / "normalization_strategy_comparison.png",
+            dpi=300,
+            bbox_inches="tight",
         )
         plt.close()
 
 
-def load_episodes_data(file_path: Path) -> List[Dict]:
+def load_episodes_data(file_path: Path) -> list[dict]:
     """Load episode data from JSONL file."""
     episodes = []
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -500,17 +499,17 @@ def load_episodes_data(file_path: Path) -> List[Dict]:
     return episodes
 
 
-def load_baseline_stats(file_path: Path) -> Dict[str, Dict[str, float]]:
+def load_baseline_stats(file_path: Path) -> dict[str, dict[str, float]]:
     """Load baseline statistics from JSON file."""
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         stats = json.load(f)
     logger.info("Loaded baseline statistics from %s", file_path)
     return stats
 
 
-def load_weights(file_path: Path) -> Dict[str, float]:
+def load_weights(file_path: Path) -> dict[str, float]:
     """Load weights from JSON file."""
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         data = json.load(f)
 
     # Handle different formats (direct weights dict or nested structure)
@@ -528,17 +527,29 @@ def load_weights(file_path: Path) -> Dict[str, float]:
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SNQI Sensitivity Analysis")
     parser.add_argument(
-        "--episodes", type=Path, required=True, help="Path to episode data JSONL file"
+        "--episodes",
+        type=Path,
+        required=True,
+        help="Path to episode data JSONL file",
     )
     parser.add_argument(
-        "--baseline", type=Path, required=True, help="Path to baseline statistics JSON file"
+        "--baseline",
+        type=Path,
+        required=True,
+        help="Path to baseline statistics JSON file",
     )
     parser.add_argument("--weights", type=Path, required=True, help="Path to weights JSON file")
     parser.add_argument(
-        "--output", type=Path, required=True, help="Output directory for analysis results"
+        "--output",
+        type=Path,
+        required=True,
+        help="Output directory for analysis results",
     )
     parser.add_argument(
-        "--sweep-points", type=int, default=20, help="Number of points for weight sweep analysis"
+        "--sweep-points",
+        type=int,
+        default=20,
+        help="Number of points for weight sweep analysis",
     )
     parser.add_argument(
         "--pairwise-points",
@@ -547,7 +558,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Number of points per dimension for pairwise analysis",
     )
     parser.add_argument(
-        "--skip-visualizations", action="store_true", help="Skip generating visualization plots"
+        "--skip-visualizations",
+        action="store_true",
+        help="Skip generating visualization plots",
     )
     parser.add_argument(
         "--seed",
@@ -573,32 +586,32 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def _load_inputs(
     args: argparse.Namespace,
-) -> Tuple[List[Dict], Dict[str, Dict[str, float]], Dict[str, float]]:
+) -> tuple[list[dict], dict[str, dict[str, float]], dict[str, float]]:
     try:
         episodes = load_episodes_data(args.episodes)
         baseline_stats = load_baseline_stats(args.baseline)
         weights = load_weights(args.weights)
         return episodes, baseline_stats, weights
     except FileNotFoundError as e:
-        logger.error("File not found: %s", e)
+        logger.exception("File not found: %s", e)
         raise
     except Exception as e:
-        logger.error("Error loading data: %s", e)
+        logger.exception("Error loading data: %s", e)
         raise
 
 
-def _apply_seed_if_any(seed: Optional[int]) -> None:
+def _apply_seed_if_any(seed: int | None) -> None:
     if seed is not None:
         np.random.seed(seed)
 
 
 def _run_analyses(
     analyzer: SNQISensitivityAnalyzer,
-    weights: Dict[str, float],
+    weights: dict[str, float],
     sweep_points: int,
     pairwise_points: int,
-) -> Dict[str, Any]:
-    results: Dict[str, Any] = {}
+) -> dict[str, Any]:
+    results: dict[str, Any] = {}
     logger.info("Running weight sweep analysis")
     results["weight_sweep"] = analyzer.weight_sweep_analysis(weights, n_points=sweep_points)
 
@@ -617,7 +630,8 @@ def _git_commit() -> str:
     try:
         return (
             subprocess.check_output(
-                ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL,
             )
             .decode()
             .strip()
@@ -627,8 +641,11 @@ def _git_commit() -> str:
 
 
 def _build_metadata(
-    args: argparse.Namespace, start_iso: str, end_iso: str, runtime_seconds: float
-) -> Dict[str, Any]:
+    args: argparse.Namespace,
+    start_iso: str,
+    end_iso: str,
+    runtime_seconds: float,
+) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "generated_at": end_iso,
@@ -649,42 +666,42 @@ def _build_metadata(
     }
 
 
-def _validate_results(results: Dict[str, Any], validate: bool) -> Optional[int]:
+def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
     try:
         if validate:
             validate_snqi(results, "sensitivity", check_finite=True)
         else:
             assert_all_finite(results)
     except ValueError as e:
-        logger.error("Validation failed: %s", e)
+        logger.exception("Validation failed: %s", e)
         return EXIT_VALIDATION_ERROR
     return None
 
 
-def _write_results(results: Dict[str, Any], output_dir: Path) -> None:
+def _write_results(results: dict[str, Any], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
 
 def _build_summary(
-    results: Dict[str, Any],
+    results: dict[str, Any],
     total_episodes: int,
-    weights: Dict[str, float],
+    weights: dict[str, float],
     args: argparse.Namespace,
     runtime_seconds: float,
     start_iso: str,
     end_iso: str,
-    metadata: Dict[str, Any],
-) -> Dict[str, Any]:
-    summary: Dict[str, Any] = {
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
         "analysis_summary": {
             "total_episodes": total_episodes,
             "base_weights": weights,
             "most_sensitive_weights": [],
             "least_sensitive_weights": [],
             "normalization_impact": {},
-        }
+        },
     }
 
     # Extract key insights
@@ -699,7 +716,8 @@ def _build_summary(
         for strategy, data in norm_results.items():
             if strategy != base_strategy:
                 corr_change = abs(
-                    data["ranking_correlation"] - norm_results[base_strategy]["ranking_correlation"]
+                    data["ranking_correlation"]
+                    - norm_results[base_strategy]["ranking_correlation"],
                 )
                 summary["analysis_summary"]["normalization_impact"][strategy] = {
                     "ranking_correlation_change": corr_change,
@@ -723,17 +741,17 @@ def _build_summary(
     return summary
 
 
-def _write_summary(summary: Dict[str, Any], output_dir: Path) -> None:
+def _write_summary(summary: dict[str, Any], output_dir: Path) -> None:
     with open(output_dir / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
 
 def _handle_visualizations(
     analyzer: SNQISensitivityAnalyzer,
-    results: Dict[str, Any],
+    results: dict[str, Any],
     output_dir: Path,
     skip_visualizations: bool,
-) -> Optional[int]:
+) -> int | None:
     if skip_visualizations:
         return None
     try:
@@ -741,7 +759,7 @@ def _handle_visualizations(
         if not MATPLOTLIB_AVAILABLE:
             logger.error(
                 "Matplotlib is not installed but visualizations were requested. "
-                "Install optional deps (viz extra) or re-run with --skip-visualizations."
+                "Install optional deps (viz extra) or re-run with --skip-visualizations.",
             )
             # Return a distinct non-zero code while keeping JSON artifacts on disk
             return EXIT_OPTIONAL_DEPS_MISSING
@@ -751,7 +769,7 @@ def _handle_visualizations(
     return None
 
 
-def _print_summary(results: Dict[str, Any], total_episodes: int) -> None:
+def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
     logger.info("Sensitivity analysis completed.")
     print("\nSensitivity Analysis Summary:")
     print(f"Episodes analyzed: {total_episodes}")
@@ -774,7 +792,7 @@ def _print_summary(results: Dict[str, Any], total_episodes: int) -> None:
 
 def main() -> int:
     start_perf = perf_counter()
-    start_iso = datetime.now(timezone.utc).isoformat()
+    start_iso = datetime.now(UTC).isoformat()
 
     parser = _build_arg_parser()
     args = parser.parse_args()
@@ -791,7 +809,7 @@ def main() -> int:
     results = _run_analyses(analyzer, weights, args.sweep_points, args.pairwise_points)
 
     end_perf = perf_counter()
-    end_iso = datetime.now(timezone.utc).isoformat()
+    end_iso = datetime.now(UTC).isoformat()
     runtime_seconds = end_perf - start_perf
 
     metadata = _build_metadata(args, start_iso, end_iso, runtime_seconds)
@@ -816,7 +834,10 @@ def main() -> int:
     _write_summary(summary, args.output)
 
     viz_rc = _handle_visualizations(
-        analyzer, results, args.output, skip_visualizations=bool(args.skip_visualizations)
+        analyzer,
+        results,
+        args.output,
+        skip_visualizations=bool(args.skip_visualizations),
     )
     if viz_rc is not None:
         return viz_rc

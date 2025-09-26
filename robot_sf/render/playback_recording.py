@@ -18,7 +18,6 @@ Notes:
 
 import os
 import pickle
-from typing import List, Tuple
 
 import loguru
 
@@ -28,7 +27,7 @@ from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 logger = loguru.logger
 
 
-def load_states(filename: str) -> Tuple[List[VisualizableSimState], MapDefinition]:
+def load_states(filename: str) -> tuple[list[VisualizableSimState], MapDefinition]:
     """
     Load a list of states from a pickle file.
 
@@ -78,7 +77,7 @@ def load_states(filename: str) -> Tuple[List[VisualizableSimState], MapDefinitio
     return states, map_def
 
 
-def visualize_states(states: List[VisualizableSimState], map_def: MapDefinition):
+def visualize_states(states: list[VisualizableSimState], map_def: MapDefinition):
     """
     use the SimulationView to render a list of states
     on the recorded map defintion

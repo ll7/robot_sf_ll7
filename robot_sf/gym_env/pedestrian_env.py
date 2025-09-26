@@ -13,8 +13,8 @@ It also defines the action and observation spaces for the pedestrian.
 import datetime
 import os
 import pickle
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable, List, Optional
 
 import loguru
 from gymnasium import Env
@@ -49,7 +49,7 @@ class PedestrianEnv(Env):
 
     def __init__(
         self,
-        env_config: Optional[PedEnvSettings] = None,
+        env_config: PedEnvSettings | None = None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         robot_model=None,
         debug: bool = False,
@@ -78,7 +78,8 @@ class PedestrianEnv(Env):
 
         # Initialize spaces based on the environment configuration and map
         combined_action_space, combined_observation_space, orig_obs_space = init_ped_spaces(
-            env_config, self.map_def
+            env_config,
+            self.map_def,
         )
 
         # Assign the action and observation spaces
@@ -90,7 +91,7 @@ class PedestrianEnv(Env):
         self.debug = debug
 
         # Initialize the list to store recorded states
-        self.recorded_states: List[VisualizableSimState] = []
+        self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
@@ -103,7 +104,9 @@ class PedestrianEnv(Env):
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_ped_collision_and_sensors(
-            self.simulator, env_config, orig_obs_space
+            self.simulator,
+            env_config,
+            orig_obs_space,
         )
 
         # Setup initial state of the robot
@@ -305,7 +308,7 @@ class PedestrianEnv(Env):
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
 
-    def save_recording(self, filename: Optional[str] = None):
+    def save_recording(self, filename: str | None = None):
         """
         save the recorded states to a file
         filname: str, must end with *.pkl

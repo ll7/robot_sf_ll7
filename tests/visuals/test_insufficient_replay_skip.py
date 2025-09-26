@@ -10,7 +10,7 @@ collection time by a dynamic condition inside the test body.
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -19,6 +19,9 @@ from robot_sf.benchmark.full_classic.visual_constants import (
     RENDERER_SIM_VIEW,
 )
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class DummyCfg:
@@ -33,7 +36,7 @@ def test_insufficient_replay_skip(tmp_path: Path):
     # Skip dynamically if SimulationView truly unavailable
     try:
         importlib.import_module("robot_sf.render.sim_view")
-    except Exception:  # noqa: BLE001
+    except Exception:
         pytest.skip("SimulationView not importable; skip insufficient replay test")
 
     records = [
@@ -41,7 +44,7 @@ def test_insufficient_replay_skip(tmp_path: Path):
             "episode_id": "scA-1",
             "scenario_id": "scA",
             "replay_steps": [(0.0, 0.0, 0.0, 0.0)],  # only one step
-        }
+        },
     ]
     groups = []
     out = generate_visual_artifacts(tmp_path, DummyCfg, groups, records)

@@ -19,17 +19,20 @@ import json
 import math
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Sequence, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
 from robot_sf.benchmark.metrics import snqi as snqi_fn
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
 
-def read_jsonl(paths: Sequence[str | Path] | str | Path) -> List[Dict[str, Any]]:
-    if isinstance(paths, (str, Path)):
+
+def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]:
+    if isinstance(paths, str | Path):
         paths = [paths]
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
     for p in paths:
         p = Path(p)
         if not p.exists():
@@ -47,7 +50,7 @@ def read_jsonl(paths: Sequence[str | Path] | str | Path) -> List[Dict[str, Any]]
     return records
 
 
-def _get_nested(d: Dict[str, Any], path: str, default: Any = None) -> Any:
+def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -57,7 +60,7 @@ def _get_nested(d: Dict[str, Any], path: str, default: Any = None) -> Any:
     return cur
 
 
-def flatten_metrics(rec: Dict[str, Any]) -> Dict[str, Any]:
+def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     base = {
         "episode_id": rec.get("episode_id"),
         "scenario_id": rec.get("scenario_id"),
@@ -76,9 +79,9 @@ def flatten_metrics(rec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _ensure_snqi(
-    rec: Dict[str, Any],
-    weights: Dict[str, float] | None,
-    baseline: Dict[str, Dict[str, float]] | None,
+    rec: dict[str, Any],
+    weights: dict[str, float] | None,
+    baseline: dict[str, dict[str, float]] | None,
 ) -> None:
     if rec.get("metrics") is None:
         return
@@ -94,11 +97,11 @@ def _ensure_snqi(
 
 
 def write_episode_csv(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     out_csv: str | Path,
     *,
-    snqi_weights: Dict[str, float] | None = None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
 ) -> str:
     # Optionally compute SNQI per record if missing
     for rec in records:
@@ -124,31 +127,31 @@ def write_episode_csv(
     return out_csv
 
 
-def _numeric_items(d: Dict[str, Any]) -> Dict[str, float]:
-    out: Dict[str, float] = {}
+def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
     for k, v in d.items():
         if k in ("episode_id", "scenario_id", "seed"):
             continue
         if v is None:
             continue
-        if isinstance(v, (int, float)) and not (isinstance(v, float) and math.isnan(v)):
+        if isinstance(v, int | float) and not (isinstance(v, float) and math.isnan(v)):
             out[k] = float(v)
     return out
 
 
 def compute_aggregates(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     *,
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
-    snqi_weights: Dict[str, float] | None = None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
-) -> Dict[str, Dict[str, Dict[str, float]]]:
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
+) -> dict[str, dict[str, dict[str, float]]]:
     # Optionally compute SNQI per record if missing
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
 
-    groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
         g = _get_nested(rec, group_by)
         if g is None:
@@ -157,15 +160,15 @@ def compute_aggregates(
             g = "unknown"
         groups[str(g)].append(flatten_metrics(rec))
 
-    summary: Dict[str, Dict[str, Dict[str, float]]] = {}
+    summary: dict[str, dict[str, dict[str, float]]] = {}
     for g, rows in groups.items():
         # collect numeric columns
-        cols: Dict[str, List[float]] = defaultdict(list)
+        cols: dict[str, list[float]] = defaultdict(list)
         for row in rows:
             num = _numeric_items(row)
             for k, v in num.items():
                 cols[k].append(v)
-        agg: Dict[str, Dict[str, float]] = {}
+        agg: dict[str, dict[str, float]] = {}
         for k, vals in cols.items():
             arr = np.asarray(vals, dtype=float)
             agg[k] = {
@@ -225,12 +228,12 @@ def _bootstrap_ci(
 
 
 def _group_flattened(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     *,
     group_by: str,
     fallback_group_by: str,
-) -> Dict[str, List[Dict[str, Any]]]:
-    groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+) -> dict[str, list[dict[str, Any]]]:
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
         g = _get_nested(rec, group_by)
         if g is None:
@@ -242,8 +245,8 @@ def _group_flattened(
 
 
 def _attach_ci_for_group(
-    dst_group: Dict[str, Dict[str, Any]],
-    values_by_metric: Dict[str, List[float]],
+    dst_group: dict[str, dict[str, Any]],
+    values_by_metric: dict[str, list[float]],
     *,
     bootstrap_samples: int,
     bootstrap_confidence: float,
@@ -289,17 +292,17 @@ def _attach_ci_for_group(
 
 
 def compute_aggregates_with_ci(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     *,
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
-    snqi_weights: Dict[str, float] | None = None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
     return_ci: bool = True,
     bootstrap_samples: int = 1000,
     bootstrap_confidence: float = 0.95,
     bootstrap_seed: int | None = None,
-) -> Dict[str, Dict[str, Dict[str, Any]]]:
+) -> dict[str, dict[str, dict[str, Any]]]:
     """Compute grouped aggregates and optional bootstrap CIs.
 
     This preserves the original aggregate keys (mean, median, p95) and, when
@@ -316,17 +319,17 @@ def compute_aggregates_with_ci(
     )
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
-        return cast(Dict[str, Dict[str, Dict[str, Any]]], base)
+        return cast(dict[str, dict[str, dict[str, Any]]], base)
 
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
     groups = _group_flattened(records, group_by=group_by, fallback_group_by=fallback_group_by)
 
-    out: Dict[str, Dict[str, Dict[str, Any]]] = {k: dict(v) for k, v in base.items()}
+    out: dict[str, dict[str, dict[str, Any]]] = {k: dict(v) for k, v in base.items()}
     for g, rows in groups.items():
         # collect numeric columns per group
-        cols: Dict[str, List[float]] = defaultdict(list)
+        cols: dict[str, list[float]] = defaultdict(list)
         for row in rows:
             num = _numeric_items(row)
             for k, v in num.items():
@@ -342,9 +345,9 @@ def compute_aggregates_with_ci(
 
 
 __all__ = [
-    "read_jsonl",
-    "flatten_metrics",
-    "write_episode_csv",
     "compute_aggregates",
     "compute_aggregates_with_ci",
+    "flatten_metrics",
+    "read_jsonl",
+    "write_episode_csv",
 ]

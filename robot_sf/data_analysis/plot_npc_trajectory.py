@@ -29,7 +29,7 @@ def plot_single_splitted_traj(
     ped_positions_array: np.ndarray,
     ped_idx: int = 0,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
     map_def: MapDefinition = None,
 ):
     """
@@ -94,7 +94,7 @@ def plot_single_splitted_traj(
 def plot_all_splitted_traj(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
     map_def: MapDefinition = None,
 ):
     """
@@ -158,7 +158,9 @@ def plot_all_splitted_traj(
 
 
 def calculate_velocity(
-    x_vals: np.ndarray, y_vals: np.ndarray, time_interval: float = None
+    x_vals: np.ndarray,
+    y_vals: np.ndarray,
+    time_interval: float | None = None,
 ) -> np.ndarray:
     """Calculate the velocity of a pedestrian given their x and y positions."""
     global time_interval_warning_logged
@@ -179,7 +181,9 @@ def calculate_velocity(
     return velocities
 
 
-def calculate_acceleration(velocities: np.ndarray, time_interval: float = None) -> np.ndarray:
+def calculate_acceleration(
+    velocities: np.ndarray, time_interval: float | None = None
+) -> np.ndarray:
     """Calculate the acceleration of a pedestrian given their velocities."""
     # Calculate the differences between consecutive velocities
     global time_interval_warning_logged
@@ -201,7 +205,7 @@ def subplot_single_splitted_traj_acc(
     ped_positions_array: np.ndarray,
     ped_idx: int = 0,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
     map_def: MapDefinition = None,
 ):
     """
@@ -280,7 +284,9 @@ def subplot_single_splitted_traj_acc(
 
 
 def plot_acceleration_distribution(
-    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+    ped_positions_array: np.ndarray,
+    interactive: bool = False,
+    unique_id: str | None = None,
 ):
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
@@ -303,7 +309,8 @@ def plot_acceleration_distribution(
         for i, dist in enumerate(distances):
             if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
-                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                    x_vals[start_idx : i + 1],
+                    y_vals[start_idx : i + 1],
                 )
                 acceleration = calculate_acceleration(velocities)
                 all_accelerations.extend(acceleration)
@@ -342,7 +349,9 @@ def plot_acceleration_distribution(
 
 
 def plot_velocity_distribution(
-    ped_positions_array: np.ndarray, interactive: bool = False, unique_id: str = None
+    ped_positions_array: np.ndarray,
+    interactive: bool = False,
+    unique_id: str | None = None,
 ):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians.
@@ -365,7 +374,8 @@ def plot_velocity_distribution(
         for i, dist in enumerate(distances):
             if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
-                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                    x_vals[start_idx : i + 1],
+                    y_vals[start_idx : i + 1],
                 )
                 all_velocities.extend(velocities)
                 start_idx = i + 1
@@ -405,7 +415,7 @@ def subplot_velocity_distribution_with_ego_ped(
     ped_positions_array: np.ndarray,
     ego_positions: np.ndarray,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
 ):
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians
@@ -431,7 +441,8 @@ def subplot_velocity_distribution_with_ego_ped(
         for i, dist in enumerate(distances):
             if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
-                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                    x_vals[start_idx : i + 1],
+                    y_vals[start_idx : i + 1],
                 )
                 all_npc_velocities.extend(velocities)
                 start_idx = i + 1
@@ -479,7 +490,7 @@ def subplot_acceleration_distribution(
     ped_positions_array: np.ndarray,
     ego_positions: np.ndarray,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
 ):
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
@@ -505,7 +516,8 @@ def subplot_acceleration_distribution(
         for i, dist in enumerate(distances):
             if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
-                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                    x_vals[start_idx : i + 1],
+                    y_vals[start_idx : i + 1],
                 )
                 accelerations = calculate_acceleration(velocities)
                 all_npc_accelerations.extend(accelerations)
@@ -559,7 +571,7 @@ def subplot_acceleration_distribution(
 def velocity_colorcoded_with_positions(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
     map_def: MapDefinition = None,
 ):
     """
@@ -585,17 +597,20 @@ def velocity_colorcoded_with_positions(
         for i, dist in enumerate(distances):
             if dist > TRAJECTORY_DISCONTINUITY_THRESHOLD:
                 velocities = calculate_velocity(
-                    x_vals[start_idx : i + 1], y_vals[start_idx : i + 1]
+                    x_vals[start_idx : i + 1],
+                    y_vals[start_idx : i + 1],
                 )
                 all_npc_velocities.extend(velocities)
                 all_npc_positions.extend(
-                    zip(x_vals[start_idx + 1 : i + 1], y_vals[start_idx + 1 : i + 1])
+                    zip(x_vals[start_idx + 1 : i + 1], y_vals[start_idx + 1 : i + 1], strict=False),
                 )
                 start_idx = i + 1
 
         velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
         all_npc_velocities.extend(velocities)
-        all_npc_positions.extend(zip(x_vals[start_idx + 1 :], y_vals[start_idx + 1 :]))
+        all_npc_positions.extend(
+            zip(x_vals[start_idx + 1 :], y_vals[start_idx + 1 :], strict=False)
+        )
 
     max_velocity = max(all_npc_velocities)
     logger.info(f"Maximum Velocity: {max_velocity}")

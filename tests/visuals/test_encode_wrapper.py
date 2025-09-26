@@ -6,11 +6,14 @@ ImageSequenceClip. We simulate frames with small numpy arrays.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_sf.benchmark.full_classic import encode
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _frame_gen(n=3):
@@ -32,15 +35,15 @@ def test_encode_success_mocked(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(encode, "moviepy_ready", lambda: True)
 
     class _FakeClip:
-        def __init__(self, frames, fps):  # noqa: D401 - simple mock
+        def __init__(self, frames, fps):
             self._frames = frames
             self.fps = fps
 
-        def write_videofile(self, path, _codec, _fps, _audio, _preset, _logger):  # noqa: D401
+        def write_videofile(self, path, _codec, _fps, _audio, _preset, _logger):
             with open(path, "wb") as f:  # tiny file to simulate success
                 f.write(b"00")
 
-    def _factory(frames, fps):  # noqa: D401
+    def _factory(frames, fps):
         return _FakeClip(frames, fps)
 
     monkeypatch.setattr(encode, "ImageSequenceClip", _factory)

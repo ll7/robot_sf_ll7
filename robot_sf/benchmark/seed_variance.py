@@ -23,14 +23,17 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Any, Dict, List, Sequence, Set
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from robot_sf.benchmark.aggregate import flatten_metrics
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
-def _get_nested(d: Dict[str, Any], path: str, default: Any = None) -> Any:
+
+def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -40,22 +43,24 @@ def _get_nested(d: Dict[str, Any], path: str, default: Any = None) -> Any:
     return cur
 
 
-def _numeric_items(d: Dict[str, Any]) -> Dict[str, float]:
-    out: Dict[str, float] = {}
+def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
     for k, v in d.items():
         if k in ("episode_id", "scenario_id", "seed"):
             continue
         if v is None:
             continue
-        if isinstance(v, (int, float)) and not (isinstance(v, float) and math.isnan(v)):
+        if isinstance(v, int | float) and not (isinstance(v, float) and math.isnan(v)):
             out[k] = float(v)
     return out
 
 
 def _group_rows(
-    records: Sequence[Dict[str, Any]], group_by: str, fallback_group_by: str
-) -> Dict[str, List[Dict[str, Any]]]:
-    groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    records: Sequence[dict[str, Any]],
+    group_by: str,
+    fallback_group_by: str,
+) -> dict[str, list[dict[str, Any]]]:
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
         g = _get_nested(rec, group_by)
         if g is None:
@@ -67,18 +72,19 @@ def _group_rows(
 
 
 def _collect_metric_names(
-    groups: Dict[str, List[Dict[str, Any]]], metrics: Sequence[str] | None
-) -> Set[str]:
+    groups: dict[str, list[dict[str, Any]]],
+    metrics: Sequence[str] | None,
+) -> set[str]:
     if metrics is not None:
         return set(metrics)
-    names: Set[str] = set()
+    names: set[str] = set()
     for rows in groups.values():
         for row in rows:
             names.update(_numeric_items(row).keys())
     return names
 
 
-def _stats_for_vals(vals: List[float]) -> Dict[str, float]:
+def _stats_for_vals(vals: list[float]) -> dict[str, float]:
     if not vals:
         return {"mean": float("nan"), "std": float("nan"), "cv": float("nan"), "count": 0.0}
     arr = np.asarray(vals, dtype=float)
@@ -93,12 +99,12 @@ def _stats_for_vals(vals: List[float]) -> Dict[str, float]:
 
 
 def compute_seed_variance(
-    records: List[Dict[str, Any]] | Sequence[Dict[str, Any]],
+    records: list[dict[str, Any]] | Sequence[dict[str, Any]],
     *,
     group_by: str = "scenario_id",
     fallback_group_by: str = "scenario_id",
     metrics: Sequence[str] | None = None,
-) -> Dict[str, Dict[str, Dict[str, float]]]:
+) -> dict[str, dict[str, dict[str, float]]]:
     """Compute per-metric seed variability for groups.
 
     Returns mapping group -> metric -> stats(mean, std, cv, count).
@@ -106,9 +112,9 @@ def compute_seed_variance(
     groups = _group_rows(records, group_by, fallback_group_by)
     metric_names = _collect_metric_names(groups, metrics)
 
-    out: Dict[str, Dict[str, Dict[str, float]]] = {}
+    out: dict[str, dict[str, dict[str, float]]] = {}
     for g, rows in groups.items():
-        cols: Dict[str, List[float]] = {m: [] for m in metric_names}
+        cols: dict[str, list[float]] = {m: [] for m in metric_names}
         for row in rows:
             num = _numeric_items(row)
             for m in metric_names:

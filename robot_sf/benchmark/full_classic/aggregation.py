@@ -30,9 +30,12 @@ import math
 import random
 from dataclasses import dataclass
 from statistics import mean, median
-from typing import Dict, Iterable, List, Tuple
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 __all__ = [
     "AggregateMetric",
@@ -47,8 +50,8 @@ class AggregateMetric:  # mirrors spec (subset for current needs)
     mean: float
     median: float
     p95: float
-    mean_ci: Tuple[float, float] | None
-    median_ci: Tuple[float, float] | None
+    mean_ci: tuple[float, float] | None
+    median_ci: tuple[float, float] | None
 
 
 @dataclass
@@ -56,10 +59,10 @@ class AggregateMetricsGroup:
     archetype: str
     density: str
     count: int
-    metrics: Dict[str, AggregateMetric]
+    metrics: dict[str, AggregateMetric]
 
 
-def _percentile(sorted_vals: List[float], p: float) -> float:
+def _percentile(sorted_vals: list[float], p: float) -> float:
     if not sorted_vals:
         return math.nan
     if p <= 0:
@@ -77,8 +80,11 @@ def _percentile(sorted_vals: List[float], p: float) -> float:
 
 
 def _bootstrap_ci(
-    values: List[float], samples: int, conf: float, rng: random.Random
-) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    values: list[float],
+    samples: int,
+    conf: float,
+    rng: random.Random,
+) -> tuple[tuple[float, float], tuple[float, float]]:
     if not values:
         nan_pair = (math.nan, math.nan)
         return nan_pair, nan_pair
@@ -109,13 +115,19 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
     if not groups_raw:
         return []
     bootstrap_samples, conf, master_seed = _bootstrap_params(cfg)
-    result: List[AggregateMetricsGroup] = []
+    result: list[AggregateMetricsGroup] = []
     for (arch, dens), recs in sorted(groups_raw.items()):
         metric_values = _collect_metric_values(recs)
-        metric_objs: Dict[str, AggregateMetric] = {}
+        metric_objs: dict[str, AggregateMetric] = {}
         for metric_name, vals in metric_values.items():
             metric_objs[metric_name] = _aggregate_single_metric(
-                vals, arch, dens, metric_name, master_seed, bootstrap_samples, conf
+                vals,
+                arch,
+                dens,
+                metric_name,
+                master_seed,
+                bootstrap_samples,
+                conf,
             )
         result.append(
             AggregateMetricsGroup(
@@ -123,13 +135,13 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
                 density=dens,
                 count=len(recs),
                 metrics=metric_objs,
-            )
+            ),
         )
     return result
 
 
-def _group_records(records: Iterable[dict]) -> Dict[Tuple[str, str], List[dict]]:
-    groups: Dict[Tuple[str, str], List[dict]] = {}
+def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]:
+    groups: dict[tuple[str, str], list[dict]] = {}
     for rec in records:
         try:
             arch = rec["archetype"]
@@ -144,7 +156,7 @@ def _group_records(records: Iterable[dict]) -> Dict[Tuple[str, str], List[dict]]
     return groups
 
 
-def _bootstrap_params(cfg) -> Tuple[int, float, int]:
+def _bootstrap_params(cfg) -> tuple[int, float, int]:
     samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
     if getattr(cfg, "smoke", False):
         samples = min(samples, 300)
@@ -153,17 +165,17 @@ def _bootstrap_params(cfg) -> Tuple[int, float, int]:
     return samples, conf, seed
 
 
-def _collect_metric_values(recs: List[dict]) -> Dict[str, List[float]]:
-    vals: Dict[str, List[float]] = {}
+def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
+    vals: dict[str, list[float]] = {}
     for r in recs:
         for k, v in r.get("metrics", {}).items():
-            if isinstance(v, (int, float)):
+            if isinstance(v, int | float):
                 vals.setdefault(k, []).append(float(v))
     return vals
 
 
 def _aggregate_single_metric(
-    values: List[float],
+    values: list[float],
     arch: str,
     dens: str,
     metric_name: str,

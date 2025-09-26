@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import List, Union
+from typing import Union
 
 import gymnasium
 import numpy as np
@@ -49,7 +49,7 @@ class GymAdapterSettings:
 @dataclass
 class EvalSettings:
     num_episodes: int
-    ped_densities: List[float]
+    ped_densities: list[float]
     vehicle_config: VehicleConfig
     prf_config: PedRobotForceConfig
     gym_config: GymAdapterSettings
@@ -119,7 +119,7 @@ def prepare_model(model_path: str, env: gymnasium.Env) -> DriveModel:
 
 
 def evaluation_series(model_path: str, settings: EvalSettings):
-    all_metrics = dict()
+    all_metrics = {}
 
     for difficulty in range(len(settings.ped_densities)):
         env = prepare_env(settings, difficulty)
@@ -161,7 +161,10 @@ def main():
     )
 
     prf_config = PedRobotForceConfig(
-        is_active=True, robot_radius=1.0, activation_threshold=2.0, force_multiplier=10.0
+        is_active=True,
+        robot_radius=1.0,
+        activation_threshold=2.0,
+        force_multiplier=10.0,
     )
 
     settings = EvalSettings(

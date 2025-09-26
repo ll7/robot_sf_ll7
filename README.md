@@ -167,7 +167,13 @@ All tests should pass successfully. The test suite includes:
 #### Run Linter / Tests
 
 ```sh
+# Lint and format
+uv run ruff check --fix . && uv run ruff format .
+
+# Run tests
 pytest tests
+
+# Legacy linter (for comparison)
 pylint robot_sf
 ```
 

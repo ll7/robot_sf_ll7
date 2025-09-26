@@ -6,8 +6,7 @@ thumbnails and integrating with the figure orchestrator.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.scenario_thumbnails import (
     ThumbMeta,
@@ -18,6 +17,9 @@ from robot_sf.benchmark.scenario_thumbnails import (
 from robot_sf.benchmark.scenario_thumbnails import (
     save_scenario_thumbnails as _save_scenario_thumbnails,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def save_scenario_thumbnails(
@@ -44,7 +46,7 @@ def save_montage(
     *,
     out_png: str | Path,
     cols: int = 4,
-    out_pdf: Optional[str | Path] = None,
+    out_pdf: str | Path | None = None,
 ) -> None:
     """Save a montage of scenario thumbnails.
 
@@ -62,4 +64,4 @@ def save_montage(
     )
 
 
-__all__ = ["save_scenario_thumbnails", "save_montage", "ThumbMeta"]
+__all__ = ["ThumbMeta", "save_montage", "save_scenario_thumbnails"]

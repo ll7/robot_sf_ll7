@@ -30,7 +30,7 @@ def _write_minimal_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
                 "near_misses": {"med": 0, "p95": 2},
                 "force_exceed_events": {"med": 0, "p95": 1},
                 "jerk_mean": {"med": 0.1, "p95": 0.5},
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -46,8 +46,8 @@ def _write_minimal_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
                         "force_exceed_events": 0,
                         "jerk_mean": 0.1 + 0.05 * i,
                     },
-                }
-            )
+                },
+            ),
         )
     episodes.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return episodes, baseline
@@ -70,7 +70,8 @@ def _load_schema() -> dict:
 def test_snqi_outputs_conform_to_jsonschema(tmp_path: Path, cmd: str):
     episodes, baseline = _write_minimal_inputs(tmp_path)
     out = tmp_path / f"snqi_{cmd}.json"
-    base = BIN + [
+    base = [
+        *BIN,
         "snqi",
         cmd,
         "--episodes",

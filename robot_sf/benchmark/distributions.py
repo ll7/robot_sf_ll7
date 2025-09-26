@@ -11,9 +11,9 @@ CLI wiring is done in robot_sf.benchmark.cli (plot-distributions).
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,7 +38,7 @@ def collect_grouped_values(
     metrics: Sequence[str],
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
-) -> Dict[str, Dict[str, List[float]]]:
+) -> dict[str, dict[str, list[float]]]:
     """Collect values per metric per group.
 
     Returns dict[group][metric] -> List[float]
@@ -51,7 +51,7 @@ def collect_grouped_values(
             return None
         return float(v) if np.isfinite(v) else None
 
-    out: Dict[str, Dict[str, List[float]]] = {}
+    out: dict[str, dict[str, list[float]]] = {}
     for r in records:
         g = _get_dotted(r, group_by) or _get_dotted(r, fallback_group_by)
         if g is None:
@@ -63,7 +63,7 @@ def collect_grouped_values(
                 continue
             gm.setdefault(m, []).append(fv)
     # Prune empties with a dict comprehension per group
-    pruned: Dict[str, Dict[str, List[float]]] = {}
+    pruned: dict[str, dict[str, list[float]]] = {}
     for g, mvals in out.items():
         kept = {m: vals for m, vals in mvals.items() if vals}
         if kept:
@@ -73,8 +73,8 @@ def collect_grouped_values(
 
 @dataclass
 class DistPlotMeta:
-    wrote: List[str]
-    pdfs: List[str]
+    wrote: list[str]
+    pdfs: list[str]
 
 
 def _apply_rcparams() -> None:
@@ -129,7 +129,7 @@ def _compute_hist_ci(
 
 def _render_metric(
     ax,
-    grouped: Dict[str, Dict[str, List[float]]],
+    grouped: dict[str, dict[str, list[float]]],
     *,
     metric: str,
     bins: int,
@@ -181,15 +181,15 @@ def _render_metric(
                 )
 
 
-def _metrics_in_grouped(grouped: Dict[str, Dict[str, List[float]]]) -> list[str]:
+def _metrics_in_grouped(grouped: dict[str, dict[str, list[float]]]) -> list[str]:
     """Return sorted unique metric names present in grouped dict."""
-    return sorted({m for gv in grouped.values() for m in gv.keys()})
+    return sorted({m for gv in grouped.values() for m in gv})
 
 
 def _save_one_metric(
     out_dir: str,
     metric: str,
-    grouped: Dict[str, Dict[str, List[float]]],
+    grouped: dict[str, dict[str, list[float]]],
     *,
     bins: int,
     kde: bool,
@@ -251,7 +251,7 @@ def _save_one_metric(
 
 
 def save_distributions(
-    grouped: Dict[str, Dict[str, List[float]]],
+    grouped: dict[str, dict[str, list[float]]],
     out_dir: str | Path,
     *,
     bins: int = 30,
@@ -269,8 +269,8 @@ def save_distributions(
     _apply_rcparams()
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
-    wrote: List[str] = []
-    pdfs: List[str] = []
+    wrote: list[str] = []
+    pdfs: list[str] = []
     palette = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2", "#EECA3B"]
 
     for metric in _metrics_in_grouped(grouped):
@@ -295,7 +295,7 @@ def save_distributions(
 
 
 __all__ = [
+    "DistPlotMeta",
     "collect_grouped_values",
     "save_distributions",
-    "DistPlotMeta",
 ]

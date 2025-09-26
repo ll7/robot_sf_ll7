@@ -23,18 +23,22 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from robot_sf.nav.svg_map_parser import convert_map, load_svg_maps
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 DEFAULT_SINGLE = "maps/svg_maps/classic_bottleneck.svg"
 DEFAULT_DIR = "maps/svg_maps"
 
 
 def _summarize_map(
-    name: str, md
+    name: str,
+    md,
 ) -> None:  # md: MapDefinition (duck-typed here to avoid import churn)
     logger.info(
         "Map '{n}': robot_routes={rr} ped_routes={pr} robot_spawn={rs} robot_goal={rg} ped_spawn={ps} ped_goal={pg} obstacles={ob}",
@@ -58,7 +62,7 @@ def _validate_single(path: str) -> bool:
             return False
         _summarize_map(Path(path).stem, md)
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Strict validation failed for {p}: {e}", p=path, e=exc)
         return False
 
@@ -69,7 +73,7 @@ def _bulk_validate(directory: str, strict: bool) -> tuple[list[str], list[str]]:
     invalid: list[str] = []
     try:
         maps = load_svg_maps(directory, strict=False)  # always start lenient to inspect all
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Failed to list/load maps in directory {d}: {e}", d=directory, e=exc)
         return valid, [f"<dir_error>:{exc}"]
 
@@ -81,7 +85,7 @@ def _bulk_validate(directory: str, strict: bool) -> tuple[list[str], list[str]]:
             try:
                 _ = convert_map(str(svg_path))  # will raise if structurally invalid under strict
                 valid.append(name)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("Strict re-validation failed: {n} ({e})", n=name, e=exc)
                 invalid.append(name)
         else:
@@ -117,7 +121,10 @@ def _parse_args(argv: list[str]) -> _Options:
         add_help=True,
     )
     parser.add_argument(
-        "--single", metavar="FILE", help="Single SVG file to validate", default=None
+        "--single",
+        metavar="FILE",
+        help="Single SVG file to validate",
+        default=None,
     )
     parser.add_argument("--all", action="store_true", help="Validate all SVG maps in directory")
     parser.add_argument(

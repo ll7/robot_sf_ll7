@@ -42,7 +42,7 @@ class TestValidateSchemaIntegrity:
     def test_schema_missing_required_fields(self):
         """Test schema missing required fields."""
         incomplete_schema = {
-            "type": "object"
+            "type": "object",
             # Missing $schema
         }
 
@@ -97,7 +97,7 @@ class TestCheckSchemaCompleteness:
     def test_incomplete_schema_gets_low_score(self):
         """Test that an incomplete schema gets a low completeness score."""
         incomplete_schema = {
-            "type": "object"
+            "type": "object",
             # Missing title, description, properties, required, etc.
         }
 
@@ -219,8 +219,8 @@ class TestValidateSchemaReferences:
         """Test that invalid $ref types fail validation."""
         schema = {
             "properties": {
-                "name": {"$ref": 123}  # Should be string
-            }
+                "name": {"$ref": 123},  # Should be string
+            },
         }
 
         errors = validate_schema_references(schema)

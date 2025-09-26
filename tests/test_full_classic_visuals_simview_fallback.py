@@ -55,7 +55,7 @@ def test_simulation_view_empty_list_triggers_fallback(monkeypatch, tmp_path):
                 path_mp4=str(Path(out_dir) / f"{rec.get('episode_id')}.mp4"),
                 status="generated",
                 note="stub",
-            )
+            ),
         ]
 
     monkeypatch.setattr(visuals_mod, "_attempt_sim_view_videos", _no_videos)

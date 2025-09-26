@@ -39,7 +39,8 @@ def _time_once(fn):  # minimal inline timing to avoid importing heavy script
 
 
 @pytest.mark.skipif(
-    not BASELINE_PATH.exists(), reason="Baseline file missing; run baseline script first."
+    not BASELINE_PATH.exists(),
+    reason="Baseline file missing; run baseline script first.",
 )
 def test_factory_creation_mean_within_budget(monkeypatch):
     # Disable fast demo shortcut if present
@@ -73,11 +74,11 @@ def test_factory_creation_mean_within_budget(monkeypatch):
         base_robot * THRESHOLD < current_robot_mean <= base_robot * SOFT_THRESHOLD
     ):  # pragma: no cover
         print(
-            f"[PERF SOFT WARN] Robot env mean {current_robot_mean:.2f}ms within soft band (>+5% <=+8%) baseline {base_robot:.2f}ms"
+            f"[PERF SOFT WARN] Robot env mean {current_robot_mean:.2f}ms within soft band (>+5% <=+8%) baseline {base_robot:.2f}ms",
         )
     if (
         base_image * THRESHOLD < current_image_mean <= base_image * SOFT_THRESHOLD
     ):  # pragma: no cover
         print(
-            f"[PERF SOFT WARN] Image env mean {current_image_mean:.2f}ms within soft band (>+5% <=+8%) baseline {base_image:.2f}ms"
+            f"[PERF SOFT WARN] Image env mean {current_image_mean:.2f}ms within soft band (>+5% <=+8%) baseline {base_image:.2f}ms",
         )

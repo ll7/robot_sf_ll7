@@ -43,19 +43,22 @@ integration and serves as a stable import path for early experimentation.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 __all__ = ["bootstrap_stability"]
 
 
 def bootstrap_stability(
     _episodes: Iterable[dict],
-    _weights: Dict[str, float],
+    _weights: dict[str, float],
     *,
     _rng,  # numpy.random.Generator expected
     samples: int = 30,
     group_key: str | None = "algo",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return a placeholder bootstrap stability result.
 
     Parameters

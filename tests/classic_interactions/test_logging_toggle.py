@@ -17,7 +17,7 @@ import io
 import sys
 
 
-def test_logging_toggle_reduces_output():  # noqa: D401
+def test_logging_toggle_reduces_output():
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Force non-dry run
     original_dry = getattr(mod, "DRY_RUN", None)

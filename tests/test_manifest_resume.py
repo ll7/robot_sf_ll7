@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.manifest import load_manifest, manifest_path_for
 from robot_sf.benchmark.runner import run_batch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -21,7 +24,7 @@ def _scenarios(repeats: int = 2):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": repeats,
-        }
+        },
     ]
 
 

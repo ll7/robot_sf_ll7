@@ -69,7 +69,7 @@ def test_load_episodes_skips_malformed(tmp_path):
             "" + str(good1).replace("'", '"'),
             "" + str(good2).replace("'", '"'),
             "",  # empty line
-        ]
+        ],
     )
     p = tmp_path / "episodes.jsonl"
     p.write_text(content, encoding="utf-8")

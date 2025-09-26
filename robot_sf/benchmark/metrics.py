@@ -12,7 +12,7 @@ stable allows other components (runner, aggregation, CI) to proceed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -26,6 +26,9 @@ from robot_sf.benchmark.constants import (
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 @dataclass
@@ -53,11 +56,11 @@ class EpisodeData:
     dt: float
     reached_goal_step: int | None = None
     # Optional pre-sampled force field grid: dict with keys X,Y,Fx,Fy (2D arrays)
-    force_field_grid: Dict[str, np.ndarray] | None = None
+    force_field_grid: dict[str, np.ndarray] | None = None
 
 
 # --- Metric stub functions ---
-def success(data: EpisodeData, *, horizon: int) -> float:  # noqa: D401
+def success(data: EpisodeData, *, horizon: int) -> float:
     """Return 1 if goal reached before horizon with zero collisions else 0.
 
     Uses `reached_goal_step` if provided; if absent returns 0 (unknown / not reached).
@@ -159,12 +162,11 @@ def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
     if actual <= 1e-9:
         return 1.0
     ratio = shortest_path_len / actual if actual > 0 else 1.0
-    if ratio > 1.0:
-        ratio = 1.0
+    ratio = min(ratio, 1.0)
     return float(ratio)
 
 
-def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> Dict[str, float]:
+def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> dict[str, float]:
     """Compute quantiles of pedestrian force magnitudes.
 
     Returns NaN for each quantile if there are no pedestrians.
@@ -330,7 +332,7 @@ def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -
     tx = (x - x1) / (x2 - x1)
     ty = (y - y1) / (y2 - y1)
     return float(
-        (1 - tx) * (1 - ty) * q11 + tx * (1 - ty) * q21 + (1 - tx) * ty * q12 + tx * ty * q22
+        (1 - tx) * (1 - ty) * q11 + tx * (1 - ty) * q21 + (1 - tx) * ty * q12 + tx * ty * q22,
     )
 
 
@@ -374,9 +376,9 @@ def force_gradient_norm_mean(data: EpisodeData) -> float:
 
 
 def snqi(
-    metric_values: Dict[str, float],
-    weights: Dict[str, float],
-    baseline_stats: Dict[str, Dict[str, float]] | None = None,
+    metric_values: dict[str, float],
+    weights: dict[str, float],
+    baseline_stats: dict[str, dict[str, float]] | None = None,
     eps: float = 1e-6,
 ) -> float:
     """
@@ -465,7 +467,7 @@ def snqi(
 
 
 # --- Orchestrator ---
-METRIC_NAMES: List[str] = [
+METRIC_NAMES: list[str] = [
     "success",
     "time_to_goal_norm",
     "collisions",
@@ -487,8 +489,11 @@ METRIC_NAMES: List[str] = [
 
 
 def compute_all_metrics(
-    data: EpisodeData, *, horizon: int, shortest_path_len: float | None = None
-) -> Dict[str, float]:
+    data: EpisodeData,
+    *,
+    horizon: int,
+    shortest_path_len: float | None = None,
+) -> dict[str, float]:
     """
     Compute all defined social-navigation metrics for an episode and return them as a mapping.
 
@@ -513,7 +518,7 @@ def compute_all_metrics(
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
 
-    values: Dict[str, float] = {}
+    values: dict[str, float] = {}
     values["success"] = success(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
     values["collisions"] = collisions(data)
@@ -533,23 +538,23 @@ def compute_all_metrics(
 
 
 __all__ = [
-    "EpisodeData",
-    "compute_all_metrics",
     "METRIC_NAMES",
+    "EpisodeData",
+    "avg_speed",
+    "collisions",
+    "comfort_exposure",
+    "compute_all_metrics",
+    "curvature_mean",
+    "energy",
+    "force_exceed_events",
+    "force_gradient_norm_mean",
+    "force_quantiles",
+    "jerk_mean",
+    "min_distance",
+    "near_misses",
+    "path_efficiency",
+    "snqi",
     # individual metrics (exported for future direct testing)
     "success",
     "time_to_goal_norm",
-    "collisions",
-    "near_misses",
-    "min_distance",
-    "path_efficiency",
-    "force_quantiles",
-    "force_exceed_events",
-    "comfort_exposure",
-    "jerk_mean",
-    "curvature_mean",
-    "energy",
-    "force_gradient_norm_mean",
-    "avg_speed",
-    "snqi",
 ]

@@ -1,23 +1,21 @@
-from typing import Set
-
 import numpy as np
 
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 
 
-def intersect(s1: Set, s2: Set) -> Set:
+def intersect(s1: set, s2: set) -> set:
     return {e for e in s1 if e in s2}
 
 
-def contains_all(s: Set, comp: Set) -> bool:
+def contains_all(s: set, comp: set) -> bool:
     return len(intersect(s, comp)) >= len(comp)
 
 
-def contains_none(s: Set, comp: Set) -> bool:
+def contains_none(s: set, comp: set) -> bool:
     return len(intersect(s, comp)) == 0
 
 
-def set_except(s1: Set, s2: Set) -> Set:
+def set_except(s1: set, s2: set) -> set:
     return {e for e in s1 if e not in s2}
 
 
@@ -33,7 +31,7 @@ def init_groups():
             [3, 2, 0, 0, 10, 1],
             # standalone pedestrian
             [5, 6, 0, 0, 7, 5],
-        ]
+        ],
     )
     states = PedestrianStates(lambda: pysf_data)
     groups = PedestrianGroupings(states)

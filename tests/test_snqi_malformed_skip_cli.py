@@ -12,7 +12,7 @@ import pytest
 
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("script_kind", ["optimization", "recompute"])
-def test_snqi_cli_malformed_skip_count(tmp_path: Path, script_kind: str):  # noqa: D103
+def test_snqi_cli_malformed_skip_count(tmp_path: Path, script_kind: str):
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
     output_path = tmp_path / "out.json"
@@ -33,7 +33,7 @@ def test_snqi_cli_malformed_skip_count(tmp_path: Path, script_kind: str):  # noq
                     "force_exceed_events": 0,
                     "jerk_mean": 0.1,
                 },
-            }
+            },
         ),
         json.dumps(
             {
@@ -47,7 +47,7 @@ def test_snqi_cli_malformed_skip_count(tmp_path: Path, script_kind: str):  # noq
                     "force_exceed_events": 1,
                     "jerk_mean": 0.3,
                 },
-            }
+            },
         ),
     ]
     episodes_path.write_text("\n".join(lines), encoding="utf-8")

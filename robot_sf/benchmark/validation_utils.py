@@ -6,12 +6,12 @@ checking schema integrity, and performing advanced validation operations.
 """
 
 import json
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import jsonschema
 
 
-def validate_schema_integrity(schema: Dict[str, Any]) -> List[str]:
+def validate_schema_integrity(schema: dict[str, Any]) -> list[str]:
     """
     Validate that a schema is a well-formed JSON Schema.
 
@@ -67,12 +67,12 @@ def validate_schema_integrity(schema: Dict[str, Any]) -> List[str]:
     except jsonschema.ValidationError as e:
         errors.append(f"Schema validation error: {e.message}")
     except Exception as e:
-        errors.append(f"Schema validation failed: {str(e)}")
+        errors.append(f"Schema validation failed: {e!s}")
 
     return errors
 
 
-def validate_schema_compatibility(schema: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def validate_schema_compatibility(schema: dict[str, Any]) -> tuple[bool, list[str]]:
     """
     Validate schema compatibility with a specific JSON Schema draft.
 
@@ -88,10 +88,10 @@ def validate_schema_compatibility(schema: Dict[str, Any]) -> Tuple[bool, List[st
         errors = validate_schema_integrity(schema)
         return len(errors) == 0, errors
     except Exception as e:
-        return False, [f"Compatibility validation failed: {str(e)}"]
+        return False, [f"Compatibility validation failed: {e!s}"]
 
 
-def check_schema_completeness(schema: Dict[str, Any]) -> Dict[str, Any]:
+def check_schema_completeness(schema: dict[str, Any]) -> dict[str, Any]:
     """
     Check schema completeness and provide recommendations.
 
@@ -134,7 +134,7 @@ def check_schema_completeness(schema: Dict[str, Any]) -> Dict[str, Any]:
     # Check additionalProperties
     if "additionalProperties" not in schema:
         analysis["recommendations"].append(
-            "Consider setting 'additionalProperties' to control extra properties"
+            "Consider setting 'additionalProperties' to control extra properties",
         )
 
     # Calculate score
@@ -143,7 +143,7 @@ def check_schema_completeness(schema: Dict[str, Any]) -> Dict[str, Any]:
     return analysis
 
 
-def normalize_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """
     Normalize a schema for consistent representation.
 
@@ -168,7 +168,7 @@ def normalize_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
-def extract_schema_metadata(schema: Dict[str, Any]) -> Dict[str, Any]:
+def extract_schema_metadata(schema: dict[str, Any]) -> dict[str, Any]:
     """
     Extract metadata from a schema for analysis and reporting.
 
@@ -200,7 +200,7 @@ def extract_schema_metadata(schema: Dict[str, Any]) -> Dict[str, Any]:
     return metadata
 
 
-def validate_schema_references(schema: Dict[str, Any]) -> List[str]:
+def validate_schema_references(schema: dict[str, Any]) -> list[str]:
     """
     Validate that all $ref references in the schema are resolvable.
 

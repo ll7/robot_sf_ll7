@@ -31,7 +31,9 @@ def run_simulation():
     """
     env_config = EnvSettings(
         sim_config=SimulationSettings(
-            stack_steps=1, difficulty=0, ped_density_by_difficulty=[0.06]
+            stack_steps=1,
+            difficulty=0,
+            ped_density_by_difficulty=[0.06],
         ),
         robot_config=DifferentialDriveSettings(radius=1.0),
     )
@@ -340,7 +342,7 @@ def prepare_gym_spaces():
             -0.5,
             0.0,
             -3.14159265,
-        ]
+        ],
     )
 
     obs_high = np.array(
@@ -621,7 +623,7 @@ def prepare_gym_spaces():
             5.00000000e-01,
             1.07480231e03,
             3.14159265e00,
-        ]
+        ],
     )
 
     action_low = np.array([-2.0, -0.5])

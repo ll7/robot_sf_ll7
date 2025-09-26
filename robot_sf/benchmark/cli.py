@@ -11,7 +11,6 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import List
 
 from robot_sf.benchmark.ablation import compute_ablation_summary as _abl_summary
 from robot_sf.benchmark.ablation import compute_snqi_ablation as _abl_compute
@@ -49,7 +48,7 @@ DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schem
 def _handle_baseline(args) -> int:
     try:
         progress_cb = _progress_cb_factory(bool(args.quiet))
-        stats = run_and_compute_baseline(
+        run_and_compute_baseline(
             args.matrix,
             out_json=args.out,
             out_jsonl=args.jsonl,
@@ -66,10 +65,8 @@ def _handle_baseline(args) -> int:
             progress_cb=progress_cb,
         )
         # Print brief summary to stdout for convenience
-        print(json.dumps({"out": args.out, "keys": sorted(stats.keys())}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -85,15 +82,13 @@ def _handle_list_algorithms(_args) -> int:
             baseline_algos = list_baselines()
             algorithms.extend(baseline_algos)
         except ImportError:
-            print("Warning: Could not load baseline algorithms", file=sys.stderr)
+            pass
 
-        print("Available algorithms:")
-        for algo in algorithms:
-            print(f"  - {algo}")
+        for _algo in algorithms:
+            pass
 
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -102,10 +97,10 @@ def _load_snqi_inputs(args):
     snqi_baseline = None
     # Priority: explicit weights JSON
     if getattr(args, "snqi_weights", None):
-        with open(args.snqi_weights, "r", encoding="utf-8") as f:
+        with open(args.snqi_weights, encoding="utf-8") as f:
             snqi_weights = json.load(f)
     elif getattr(args, "snqi_weights_from", None):
-        with open(args.snqi_weights_from, "r", encoding="utf-8") as f:
+        with open(args.snqi_weights_from, encoding="utf-8") as f:
             report = json.load(f)
         if isinstance(report, dict):
             snqi_weights = (
@@ -116,7 +111,7 @@ def _load_snqi_inputs(args):
         if not isinstance(snqi_weights, dict):
             raise ValueError("No recommended weights found in report JSON")
     if getattr(args, "snqi_baseline", None):
-        with open(args.snqi_baseline, "r", encoding="utf-8") as f:
+        with open(args.snqi_baseline, encoding="utf-8") as f:
             snqi_baseline = json.load(f)
     return snqi_weights, snqi_baseline
 
@@ -149,7 +144,6 @@ def _progress_cb_factory(quiet: bool):
             msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
             if err:
                 msg += f" ({err})"
-            print(msg)
 
     return _cb
 
@@ -159,11 +153,10 @@ def _handle_run(args) -> int:
         # Optional: load SNQI weights/baseline for inline SNQI computation
         try:
             snqi_weights, snqi_baseline = _load_snqi_inputs(args)
-        except Exception as e:  # pragma: no cover - error path
-            print(f"Error loading SNQI inputs: {e}", file=sys.stderr)
+        except Exception:  # pragma: no cover - error path
             return 2
 
-        summary = run_batch(
+        run_batch(
             scenarios_or_path=args.matrix,
             out_path=args.out,
             schema_path=args.schema,
@@ -184,20 +177,16 @@ def _handle_run(args) -> int:
             workers=args.workers,
             resume=(not bool(getattr(args, "no_resume", False))),
         )
-        print(json.dumps(summary, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
 def _handle_summary(args) -> int:
     try:
-        outs = summarize_to_plots(args.in_path, args.out_dir)
-        print(json.dumps({"wrote": outs}, indent=2))
+        summarize_to_plots(args.in_path, args.out_dir)
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -207,10 +196,10 @@ def _handle_aggregate(args) -> int:
         snqi_weights = None
         snqi_baseline = None
         if getattr(args, "snqi_weights", None):
-            with open(args.snqi_weights, "r", encoding="utf-8") as f:
+            with open(args.snqi_weights, encoding="utf-8") as f:
                 snqi_weights = json.load(f)
         if getattr(args, "snqi_baseline", None):
-            with open(args.snqi_baseline, "r", encoding="utf-8") as f:
+            with open(args.snqi_baseline, encoding="utf-8") as f:
                 snqi_baseline = json.load(f)
 
         records = _agg_read_jsonl(args.in_path)
@@ -240,10 +229,8 @@ def _handle_aggregate(args) -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
-        print(json.dumps({"wrote": str(out_path)}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -252,10 +239,6 @@ def _handle_snqi_ablate(args) -> int:
         records = _agg_read_jsonl(args.in_path)
         snqi_weights, snqi_baseline = _load_snqi_inputs(args)
         if not isinstance(snqi_weights, dict) or not isinstance(snqi_baseline, dict):
-            print(
-                "error: --snqi-weights and --snqi-baseline are required for snqi-ablate",
-                file=sys.stderr,
-            )
             return 2
         rows = _abl_compute(
             records,
@@ -278,32 +261,16 @@ def _handle_snqi_ablate(args) -> int:
             content = json.dumps(_abl_to_json(rows), indent=2)
             out_path.write_text(content + "\n", encoding="utf-8")
         else:
-            print(
-                f"error: unknown format '{args.format}', expected one of: md,csv,json",
-                file=sys.stderr,
-            )
             return 2
         # Optional summary JSON for ablation (per-weight impact stats)
-        summary_written = None
         if getattr(args, "summary_out", None):
             summary_out = Path(args.summary_out)
             summary_out.parent.mkdir(parents=True, exist_ok=True)
             summary_payload = _abl_summary(rows)
             summary_out.write_text(json.dumps(summary_payload, indent=2) + "\n", encoding="utf-8")
-            summary_written = str(summary_out)
-        print(
-            json.dumps(
-                {
-                    "wrote": str(out_path),
-                    "rows": len(rows),
-                    **({"summary": summary_written} if summary_written else {}),
-                },
-                indent=2,
-            )
-        )
+            str(summary_out)
         return 0
-    except Exception as e:  # pragma: no cover - defensive
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - defensive
         return 2
 
 
@@ -324,10 +291,8 @@ def _handle_seed_variance(args) -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
-        print(json.dumps({"wrote": str(out_path)}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -353,10 +318,8 @@ def _handle_extract_failures(args) -> int:
             with out_path.open("w", encoding="utf-8") as f:
                 for rec in failures:
                     f.write(json.dumps(rec) + "\n")
-        print(json.dumps({"wrote": str(out_path), "count": len(failures)}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -384,10 +347,8 @@ def _handle_rank(args) -> int:
             # JSON fallback
             payload = [r.__dict__ for r in rows]
             out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -416,10 +377,8 @@ def _handle_table(args) -> int:
         else:
             payload = _tbl_to_json(rows)
             out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({"wrote": str(out_path), "rows": len(rows)}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -432,19 +391,17 @@ def _handle_debug_seeds(args) -> int:
             out_path = Path(args.out)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-            print(json.dumps({"wrote": str(out_path)}, indent=2))
         else:
-            print(json.dumps(payload, indent=2))
+            pass
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
 def _handle_plot_pareto(args) -> int:
     try:
         records = _agg_read_jsonl(args.in_path)
-        meta = _save_pareto_png(
+        _save_pareto_png(
             records,
             out_path=str(args.out),
             x_metric=str(args.x_metric),
@@ -457,10 +414,8 @@ def _handle_plot_pareto(args) -> int:
             title=str(args.title) if args.title is not None else None,
             out_pdf=(str(args.out_pdf) if getattr(args, "out_pdf", None) else None),
         )
-        print(json.dumps({"wrote": str(args.out), **meta}, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -474,7 +429,7 @@ def _handle_plot_distributions(args) -> int:
             group_by=str(args.group_by),
             fallback_group_by=str(args.fallback_group_by),
         )
-        meta = _dist_save(
+        _dist_save(
             grouped,
             out_dir=str(args.out_dir),
             bins=int(args.bins),
@@ -485,14 +440,8 @@ def _handle_plot_distributions(args) -> int:
             ci_confidence=float(getattr(args, "ci_confidence", 0.95)),
             ci_seed=(int(args.ci_seed) if getattr(args, "ci_seed", None) is not None else None),
         )
-        print(
-            json.dumps(
-                {"wrote": meta.wrote, **({"pdfs": meta.pdfs} if meta.pdfs else {})}, indent=2
-            )
-        )
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -521,10 +470,8 @@ def _handle_plot_scenarios(args) -> int:
             out_pdf = str(Path(args.out_dir) / "montage.pdf") if bool(args.pdf) else None
             meta = _thumb_montage(metas, out_png=out_png, cols=int(args.cols), out_pdf=out_pdf)
             payload.update({"montage": meta})
-        print(json.dumps(payload, indent=2))
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -532,12 +479,10 @@ def _handle_list_scenarios(args) -> int:
     try:
         scenarios = load_scenario_matrix(args.matrix)
         ids = [str(s.get("id", "unknown")) for s in scenarios]
-        print("Scenario IDs:")
-        for sid in ids:
-            print(f"  - {sid}")
+        for _sid in ids:
+            pass
         return 0
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -546,11 +491,9 @@ def _handle_validate_config(args) -> int:
         scenarios = load_scenario_matrix(args.matrix)
         errors = validate_scenario_list(scenarios)
         warnings = []
-        summary = {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
-        print(json.dumps(summary, indent=2))
+        {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
         return 0 if not errors else 2
-    except Exception as e:  # pragma: no cover - error path
-        print(f"Error: {e}", file=sys.stderr)
+    except Exception:  # pragma: no cover - error path
         return 2
 
 
@@ -848,7 +791,9 @@ def _add_extract_failures_subparser(
     )
     p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
     p.add_argument(
-        "--out", required=True, help="Output path (JSONL by default or JSON if --ids-only)"
+        "--out",
+        required=True,
+        help="Output path (JSONL by default or JSON if --ids-only)",
     )
     p.add_argument(
         "--collision-threshold",
@@ -1024,7 +969,10 @@ def _add_plot_distributions_subparser(
     p.add_argument("--ci", action="store_true", default=False, help="Overlay bootstrap CI bands")
     p.add_argument("--ci-samples", type=int, default=1000, help="Number of bootstrap samples")
     p.add_argument(
-        "--ci-confidence", type=float, default=0.95, help="Confidence level for CI (e.g., 0.95)"
+        "--ci-confidence",
+        type=float,
+        default=0.95,
+        help="Confidence level for CI (e.g., 0.95)",
     )
     p.add_argument("--ci-seed", type=int, default=123, help="Seed for bootstrap resampling")
     p.add_argument(
@@ -1056,7 +1004,8 @@ def _add_plot_scenarios_subparser(
 
 def _base_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="robot_sf_bench", description="Social Navigation Benchmark CLI"
+        prog="robot_sf_bench",
+        description="Social Navigation Benchmark CLI",
     )
     parser.add_argument(
         "--quiet",
@@ -1097,7 +1046,7 @@ def configure_logging(quiet: bool, level: str) -> None:
     _configure_logging(quiet, level)
 
 
-def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: C901
+def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)
     _add_run_subparser(subparsers)
@@ -1136,7 +1085,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         )
         p.add_argument("--grid-resolution", type=int, default=5)
         p.add_argument(
-            "--maxiter", type=int, default=30, help="Differential evolution max iterations"
+            "--maxiter",
+            type=int,
+            default=30,
+            help="Differential evolution max iterations",
         )
         p.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
         p.add_argument("--seed", type=int, default=None)
@@ -1162,7 +1114,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         )
         p.add_argument("--fail-on-missing-metric", action="store_true")
         p.add_argument(
-            "--sample", type=int, default=None, help="Deterministically sample N episodes"
+            "--sample",
+            type=int,
+            default=None,
+            help="Deterministically sample N episodes",
         )
         p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
         p.add_argument(
@@ -1178,7 +1133,9 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             help="Minimum improvement to reset early stopping",
         )
         p.add_argument(
-            "--ci-placeholder", action="store_true", help="Include CI placeholder scaffold"
+            "--ci-placeholder",
+            action="store_true",
+            help="Include CI placeholder scaffold",
         )
         p.add_argument(
             "--bootstrap-samples",
@@ -1231,7 +1188,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         )
         p.add_argument("--fail-on-missing-metric", action="store_true")
         p.add_argument(
-            "--sample", type=int, default=None, help="Deterministically sample N episodes"
+            "--sample",
+            type=int,
+            default=None,
+            help="Deterministically sample N episodes",
         )
         p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
         p.add_argument(
@@ -1264,7 +1224,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _OPT_MOD = None  # cache
     _RECOMP_MOD = None
 
-    def _load_script(rel: str, name: str):  # noqa: D401 - simple dynamic loader
+    def _load_script(rel: str, name: str):
         """Dynamically load a script module by relative path.
 
         Uses importlib spec APIs so module metadata (__spec__, __file__) is set.
@@ -1288,10 +1248,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         return mod
 
     def _get_opt_run(mod):  # type: ignore[no-untyped-def]
-        return getattr(mod, "run")
+        return mod.run
 
     def _get_recompute_run(mod):  # type: ignore[no-untyped-def]
-        return getattr(mod, "run")
+        return mod.run
 
     def _ensure_snqi_opt_defaults(args: argparse.Namespace) -> None:
         """Ensure optional flags expected by the optimize script exist on args.
@@ -1320,15 +1280,15 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         if _OPT_MOD is None:
             try:
                 _OPT_MOD = _load_script(
-                    "scripts/snqi_weight_optimization.py", "snqi_optimize_script"
+                    "scripts/snqi_weight_optimization.py",
+                    "snqi_optimize_script",
                 )
-            except Exception as e:  # pragma: no cover - load error
-                print(f"Error loading optimization script: {e}", file=sys.stderr)
+            except Exception:  # pragma: no cover - load error
                 traceback.print_exc()
                 return None
         return _get_opt_run(_OPT_MOD)
 
-    def _invoke_snqi_opt(args: argparse.Namespace) -> int:  # noqa: C901 - thin wrapper delegating to external script
+    def _invoke_snqi_opt(args: argparse.Namespace) -> int:
         _ensure_snqi_opt_defaults(args)
         if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
             return 0
@@ -1344,17 +1304,17 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         if _RECOMP_MOD is None:
             try:
                 _RECOMP_MOD = _load_script(
-                    "scripts/recompute_snqi_weights.py", "snqi_recompute_script"
+                    "scripts/recompute_snqi_weights.py",
+                    "snqi_recompute_script",
                 )
-            except Exception as e:  # pragma: no cover - load error
-                print(f"Error loading recompute script: {e}", file=sys.stderr)
+            except Exception:  # pragma: no cover - load error
                 traceback.print_exc()
                 return 2
         run_fn = _get_recompute_run(_RECOMP_MOD)
         return int(run_fn(args))  # type: ignore[no-any-return]
 
     # Public attribute (not underscored) to avoid protected-member lint warning.
-    parser.snqi_loader = {  # type: ignore[attr-defined]  # noqa: ANN001 - dynamic injection
+    parser.snqi_loader = {  # type: ignore[attr-defined]
         "invoke_optimize": _invoke_snqi_opt,
         "invoke_recompute": _invoke_snqi_recompute,
     }
@@ -1376,7 +1336,7 @@ def _configure_parser() -> argparse.ArgumentParser:
                     rewritten: list[str] = []
                     if (
                         args
-                        and isinstance(args, (list, tuple))
+                        and isinstance(args, list | tuple)
                         and args
                         and not str(args[0]).startswith("-")
                     ):
@@ -1413,7 +1373,7 @@ def _configure_parser() -> argparse.ArgumentParser:
                                     continue
                             filtered.append(rest[j])
                             j += 1
-                        rewritten = hoisted + [subcmd] + filtered
+                        rewritten = [*hoisted, subcmd, *filtered]
                         args = rewritten
                 except Exception:  # pragma: no cover - fallback safety
                     pass
@@ -1447,7 +1407,7 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def cli_main(argv: List[str] | None = None) -> int:
+def cli_main(argv: list[str] | None = None) -> int:
     parser = _configure_parser()
     args = parser.parse_args(argv)
     _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
@@ -1468,7 +1428,6 @@ def cli_main(argv: List[str] | None = None) -> int:
             return snqi_loader["invoke_optimize"](args)
         if args.snqi_cmd == "recompute":
             return snqi_loader["invoke_recompute"](args)
-        print("Specify a snqi subcommand (optimize|recompute)", file=sys.stderr)
         return 2
     handlers = {
         "baseline": _handle_baseline,
@@ -1499,4 +1458,4 @@ def main() -> None:  # pragma: no cover - thin wrapper
     raise SystemExit(cli_main())
 
 
-__all__ = ["cli_main", "main", "get_parser", "configure_logging"]
+__all__ = ["cli_main", "configure_logging", "get_parser", "main"]

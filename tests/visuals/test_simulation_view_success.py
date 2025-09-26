@@ -20,12 +20,15 @@ This stub ensures orchestration logic for success path is covered without heavy 
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.full_classic import visuals as visuals_mod
 from robot_sf.benchmark.full_classic.visual_constants import RENDERER_SIM_VIEW
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Cfg:
@@ -39,7 +42,7 @@ class Cfg:
 
 def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
     # Force SimulationView + moviepy readiness
-    visuals_mod._SIM_VIEW_AVAILABLE = True  # noqa: SLF001  # type: ignore[attr-defined]
+    visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
     monkeypatch.setattr(visuals_mod, "moviepy_ready", lambda: True)
 
@@ -53,7 +56,7 @@ def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
                 (0.1, 0.1, 0.0, 0.0),
                 (0.2, 0.2, 0.0, 0.0),
             ],
-        }
+        },
     ]
 
     # Build a stub success artifact (mirrors fields from VideoArtifact JSON output)
@@ -69,7 +72,7 @@ def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
         peak_rss_mb=42.0,
     )
 
-    def _stub_attempt(records, out_dir, cfg, replay_map):  # noqa: D401
+    def _stub_attempt(records, out_dir, cfg, replay_map):
         # Return list with our success artifact
         return [stub_artifact]
 

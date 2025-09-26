@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import List
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.plots import save_pareto_png
@@ -44,7 +43,7 @@ def _synthetic_records():
     ]
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default=None)
     ap.add_argument("--out", default="results/pareto_demo.png")

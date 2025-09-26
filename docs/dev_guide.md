@@ -86,14 +86,14 @@ Without this, pedestrian simulation will fail. The `fast-pysf/` directory contai
 ### Quick Start Commands
 ```bash
 # Lint+format
-uv run ruff check . && uv run ruff format .
+uv run ruff check --fix . && uv run ruff format .
 # Tests
 uv run pytest tests
 ```
 
 One‑liner quality gates (CLI):
 ```bash
-uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
+uv run ruff check --fix . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
 ```
 
 ### Environment factory pattern (CRITICAL)
@@ -422,7 +422,7 @@ All figures must be **reproducible from code** and directly **integratable into 
   - Run: `uv run <cmd>` for any Python command
   - Add deps: `uv add <package>` (or edit `pyproject.toml` and sync)
 - Lint/format: Ruff
-  - VS Code task "Ruff: Format and Fix" (keeps repo ruff‑clean; document exceptions with comments)
+  - VS Code task "Ruff: Format and Fix" (keeps repo ruff‑clean with expanded rule set including bug catchers, modernization, and performance checks; document exceptions with comments)
 - Tests: pytest
   - VS Code task "Run Tests" (default suite)
   - "Run Tests (Show All Warnings)" for diagnostics

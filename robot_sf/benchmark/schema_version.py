@@ -6,7 +6,6 @@ for schema evolution, compatibility checking, and version parsing.
 """
 
 import re
-from typing import Optional, Tuple
 
 
 class SchemaVersion:
@@ -21,7 +20,7 @@ class SchemaVersion:
     SEMVER_PATTERN = re.compile(
         r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
         r"(?:-(?P<prerelease>[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*))?"
-        r"(?:\+(?P<build>[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*))?$"
+        r"(?:\+(?P<build>[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*))?$",
     )
 
     def __init__(
@@ -29,8 +28,8 @@ class SchemaVersion:
         major: int,
         minor: int,
         patch: int,
-        prerelease: Optional[str] = None,
-        build: Optional[str] = None,
+        prerelease: str | None = None,
+        build: str | None = None,
     ):
         """
         Initialize SchemaVersion.
@@ -191,7 +190,7 @@ class SchemaVersion:
         return not self.is_prerelease
 
     @property
-    def tuple(self) -> Tuple[int, int, int]:
+    def tuple(self) -> tuple[int, int, int]:
         """Get version as a tuple (major, minor, patch)."""
         return (self.major, self.minor, self.patch)
 
@@ -216,5 +215,5 @@ class SchemaVersion:
             return self.next_patch()
         else:
             raise ValueError(
-                f"Invalid bump type: {bump_type}. Must be 'major', 'minor', or 'patch'"
+                f"Invalid bump type: {bump_type}. Must be 'major', 'minor', or 'patch'",
             )

@@ -7,7 +7,7 @@ SocialForce, PPO, Random, and future baselines.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Protocol, Union
+from typing import Any, Protocol
 
 
 class PlannerProtocol(Protocol):
@@ -21,7 +21,7 @@ class PlannerProtocol(Protocol):
     - Resource cleanup
     """
 
-    def __init__(self, config: Any, *, seed: Optional[int] = None) -> None:
+    def __init__(self, config: Any, *, seed: int | None = None) -> None:
         """Initialize the planner.
 
         Args:
@@ -29,7 +29,7 @@ class PlannerProtocol(Protocol):
             seed: Optional random seed for deterministic behavior.
         """
 
-    def step(self, obs: Union[Dict[str, Any], Any]) -> Dict[str, float]:
+    def step(self, obs: dict[str, Any] | Any) -> dict[str, float]:
         """Generate an action from an observation.
 
         Args:
@@ -40,7 +40,7 @@ class PlannerProtocol(Protocol):
             {"v": 1.0, "omega": 0.2}).
         """
 
-    def reset(self, *, seed: Optional[int] = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset internal planner state.
 
         Args:

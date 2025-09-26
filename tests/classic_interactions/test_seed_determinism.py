@@ -13,7 +13,7 @@ def _load():
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
-def test_seed_order_reproducible():  # noqa: D401
+def test_seed_order_reproducible():
     mod = _load()
     # Force non-dry execution
     if hasattr(mod, "DRY_RUN"):

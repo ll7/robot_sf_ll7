@@ -16,10 +16,12 @@ Design:
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 MANIFEST_FILES = {
     "plot_artifacts.json": "plot_artifacts.schema.json",
@@ -33,7 +35,7 @@ def _load_json(path: Path):  # type: ignore[no-untyped-def]
         return json.load(f)
 
 
-def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> List[str]:
+def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
     """Validate visual manifests against JSON Schemas if jsonschema available.
 
     Parameters
@@ -48,13 +50,13 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> List[str]:
     list[str]
         Filenames successfully validated. Empty if jsonschema not installed.
     """
-    try:  # noqa: SIM105
+    try:
         import jsonschema  # type: ignore
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.debug("jsonschema not installed; skipping visuals manifest validation")
         return []
 
-    validated: List[str] = []
+    validated: list[str] = []
     for manifest_name, schema_name in MANIFEST_FILES.items():
         manifest_path = base_dir / manifest_name
         if not manifest_path.exists():
@@ -70,11 +72,11 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> List[str]:
             validated.append(manifest_name)
         except jsonschema.ValidationError as exc:  # type: ignore[attr-defined]
             raise ValueError(
-                f"Validation failed for {manifest_name}: {exc.message} at path {'/'.join(str(p) for p in exc.path)}"
+                f"Validation failed for {manifest_name}: {exc.message} at path {'/'.join(str(p) for p in exc.path)}",
             ) from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise ValueError(
-                f"Error validating {manifest_name}: {exc.__class__.__name__}: {exc}"  # noqa: G004
+                f"Error validating {manifest_name}: {exc.__class__.__name__}: {exc}",
             ) from exc
     return validated
 

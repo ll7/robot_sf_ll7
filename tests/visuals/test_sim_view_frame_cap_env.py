@@ -20,7 +20,7 @@ def _basic_state(t: int) -> VisualizableSimState:
 
 
 @pytest.mark.parametrize("override, expected", [("5", 5), ("NONE", None), ("-1", None)])
-def test_env_override_max_frames(monkeypatch, override, expected):  # noqa: D401
+def test_env_override_max_frames(monkeypatch, override, expected):
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("ROBOT_SF_MAX_VIDEO_FRAMES", override)
 
@@ -43,7 +43,7 @@ def test_env_override_max_frames(monkeypatch, override, expected):  # noqa: D401
     view.exit_simulation()
 
 
-def test_env_override_invalid_ignored(monkeypatch):  # noqa: D401
+def test_env_override_invalid_ignored(monkeypatch):
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("ROBOT_SF_MAX_VIDEO_FRAMES", "not-an-int")
 

@@ -15,7 +15,7 @@ def _demo():
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
-def test_episode_summary_schema():  # noqa: D401
+def test_episode_summary_schema():
     mod = _demo()
     if hasattr(mod, "DRY_RUN"):
         original = mod.DRY_RUN

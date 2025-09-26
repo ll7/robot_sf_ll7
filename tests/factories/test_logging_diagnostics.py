@@ -9,7 +9,6 @@ Covers:
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import List
 
 from loguru import logger
 
@@ -23,7 +22,7 @@ from robot_sf.gym_env.environment_factory import (
 
 @contextmanager
 def capture_logs():
-    messages: List[str] = []
+    messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
         messages.append(f"{msg.record['level'].name}:{msg.record['message']}")

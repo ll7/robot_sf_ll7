@@ -26,7 +26,9 @@ class TestFusedSensorSpaceWithImage:
         """Create basic observation spaces for testing."""
         robot_obs = spaces.Box(low=np.array([0, -1]), high=np.array([5, 1]), dtype=np.float32)
         target_obs = spaces.Box(
-            low=np.array([0, -np.pi, -np.pi]), high=np.array([10, np.pi, np.pi]), dtype=np.float32
+            low=np.array([0, -np.pi, -np.pi]),
+            high=np.array([10, np.pi, np.pi]),
+            dtype=np.float32,
         )
         lidar_obs = spaces.Box(low=np.zeros(4), high=np.full(4, 10.0), dtype=np.float32)
         return robot_obs, target_obs, lidar_obs
@@ -37,12 +39,19 @@ class TestFusedSensorSpaceWithImage:
         timesteps = 3
 
         norm_space, orig_space = fused_sensor_space_with_image(
-            timesteps, robot_obs, target_obs, lidar_obs, image_obs=None
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=None,
         )
 
         # Should be identical to regular fused_sensor_space
         expected_norm, expected_orig = fused_sensor_space(
-            timesteps, robot_obs, target_obs, lidar_obs
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
         )
 
         assert norm_space.spaces.keys() == expected_norm.spaces.keys()
@@ -60,7 +69,11 @@ class TestFusedSensorSpaceWithImage:
         image_obs = image_sensor_space(image_settings)
 
         norm_space, orig_space = fused_sensor_space_with_image(
-            timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=image_obs,
         )
 
         # Should contain all three observation types
@@ -93,7 +106,11 @@ class TestFusedSensorSpaceWithImage:
             image_obs = image_sensor_space(image_settings)
 
             norm_space, orig_space = fused_sensor_space_with_image(
-                timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+                timesteps,
+                robot_obs,
+                target_obs,
+                lidar_obs,
+                image_obs=image_obs,
             )
 
             # Verify image space is preserved
@@ -123,12 +140,19 @@ class TestFusedSensorSpaceWithImage:
 
         # Get spaces with image
         norm_space_img, _orig_space_img = fused_sensor_space_with_image(
-            timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=image_obs,
         )
 
         # Get spaces without image for comparison
         norm_space_no_img, _orig_space_no_img = fused_sensor_space(
-            timesteps, robot_obs, target_obs, lidar_obs
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
         )
 
         # Drive state and LiDAR spaces should be identical
@@ -149,7 +173,11 @@ class TestFusedSensorSpaceWithImage:
 
         # Test without image
         norm_space, orig_space = fused_sensor_space_with_image(
-            timesteps, robot_obs, target_obs, lidar_obs, image_obs=None
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=None,
         )
 
         assert isinstance(norm_space, spaces.Dict)
@@ -160,7 +188,11 @@ class TestFusedSensorSpaceWithImage:
         image_obs = image_sensor_space(image_settings)
 
         norm_space, orig_space = fused_sensor_space_with_image(
-            timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=image_obs,
         )
 
         assert isinstance(norm_space, spaces.Dict)
@@ -175,7 +207,11 @@ class TestFusedSensorSpaceWithImage:
         # Test different timestep values
         for timesteps in [1, 2, 3, 5]:
             norm_space, _orig_space = fused_sensor_space_with_image(
-                timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+                timesteps,
+                robot_obs,
+                target_obs,
+                lidar_obs,
+                image_obs=image_obs,
             )
 
             # Drive state should be stacked according to timesteps
@@ -201,7 +237,11 @@ class TestFusedSensorSpaceWithImage:
         image_obs = image_sensor_space(image_settings)
 
         norm_space, _orig_space = fused_sensor_space_with_image(
-            1, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+            1,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=image_obs,
         )
 
         assert cast(spaces.Box, norm_space.spaces[OBS_DRIVE_STATE]).shape[0] == 1
@@ -230,21 +270,26 @@ class TestImageObservationSpaceIntegration:
             if config["grayscale"]:
                 if config["normalize"]:
                     mock_output = np.random.rand(config["height"], config["width"]).astype(
-                        np.float32
+                        np.float32,
                     )
                 else:
                     mock_output = np.random.randint(
-                        0, 256, (config["height"], config["width"]), dtype=np.uint8
+                        0,
+                        256,
+                        (config["height"], config["width"]),
+                        dtype=np.uint8,
                     )
+            elif config["normalize"]:
+                mock_output = np.random.rand(config["height"], config["width"], 3).astype(
+                    np.float32,
+                )
             else:
-                if config["normalize"]:
-                    mock_output = np.random.rand(config["height"], config["width"], 3).astype(
-                        np.float32
-                    )
-                else:
-                    mock_output = np.random.randint(
-                        0, 256, (config["height"], config["width"], 3), dtype=np.uint8
-                    )
+                mock_output = np.random.randint(
+                    0,
+                    256,
+                    (config["height"], config["width"], 3),
+                    dtype=np.uint8,
+                )
 
             # Verify the space contains the mock output
             assert space.contains(mock_output), (
@@ -277,7 +322,11 @@ class TestImageObservationSpaceIntegration:
         # Create fused space
         timesteps = 3
         norm_space, _orig_space = fused_sensor_space_with_image(
-            timesteps, robot_obs, target_obs, lidar_obs, image_obs=image_obs
+            timesteps,
+            robot_obs,
+            target_obs,
+            lidar_obs,
+            image_obs=image_obs,
         )
 
         # Create mock complete observation

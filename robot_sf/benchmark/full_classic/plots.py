@@ -5,14 +5,18 @@ Implemented across tasks T035 (basic), T036 (extended plots).
 
 from __future__ import annotations
 
+import contextlib
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 try:  # Matplotlib is an optional dependency (analysis extra). Fail gracefully if absent.
     import matplotlib.pyplot as plt  # type: ignore
-except Exception:  # noqa: BLE001
+except Exception:
     plt = None  # type: ignore
 
 
@@ -30,15 +34,13 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
         fig.clf()
         import matplotlib.pyplot as _plt  # type: ignore
 
-        try:
+        with contextlib.suppress(Exception):
             _plt.close(fig)
-        except Exception:  # noqa: BLE001
-            pass
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
-def _write_placeholder_text(path: Path, title: str, lines: List[str]):
+def _write_placeholder_text(path: Path, title: str, lines: list[str]):
     if plt is None:
         return False
     fig, ax = plt.subplots(figsize=(4, 3))
@@ -60,7 +62,7 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "distributions_basic.pdf"
     if plt is None:
         return _PlotArtifact("distribution", str(pdf_path), "skipped", note="matplotlib missing")
-    lines: List[str] = ["Distribution Summary (placeholder)"]
+    lines: list[str] = ["Distribution Summary (placeholder)"]
     for g in groups:
         # Include a minimal metric summary line
         col = g.metrics.get("collision_rate")
@@ -131,7 +133,10 @@ def _force_heatmap_placeholder(out_dir: Path) -> _PlotArtifact:
         ["No force data provided; skipped"],
     )
     return _PlotArtifact(
-        "force_heatmap", str(pdf_path), "generated" if generated else "skipped", note="placeholder"
+        "force_heatmap",
+        str(pdf_path),
+        "generated" if generated else "skipped",
+        note="placeholder",
     )
 
 
@@ -147,7 +152,7 @@ def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    artifacts: List[_PlotArtifact] = []
+    artifacts: list[_PlotArtifact] = []
     artifacts.append(_distribution_plot(groups, out_path))
     artifacts.append(_trajectory_plot(records, out_path))
     artifacts.append(_kde_plot_placeholder(groups, out_path))

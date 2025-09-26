@@ -1,5 +1,4 @@
 from math import atan2, dist
-from typing import Tuple, Union
 
 import numpy as np
 from gymnasium import spaces
@@ -44,8 +43,10 @@ def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
 
 
 def target_sensor_obs(
-    robot_pose: RobotPose, goal_pos: Vec2D, next_goal_pos: Union[Vec2D, None]
-) -> Tuple[float, float, float]:
+    robot_pose: RobotPose,
+    goal_pos: Vec2D,
+    next_goal_pos: Vec2D | None,
+) -> tuple[float, float, float]:
     """
     Calculate the observations for the target sensor.
 

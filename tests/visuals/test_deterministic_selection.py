@@ -5,9 +5,12 @@ We simulate records and ensure first N ordering preserved when videos disabled.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class DummyCfg:

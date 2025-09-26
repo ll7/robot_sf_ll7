@@ -2,7 +2,7 @@ import json
 import platform
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional, cast
+from typing import cast
 
 import numpy as np
 import psutil
@@ -20,13 +20,13 @@ class BenchmarkMetrics:
     steps_per_second: float
     avg_step_time_ms: float
     total_episodes: int
-    system_info: Dict
+    system_info: dict
     config_hash: str
-    observation_space_info: Dict
+    observation_space_info: dict
     used_random_actions: bool = False
-    env_info: Dict = field(default_factory=dict)
+    env_info: dict = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "steps_per_second": self.steps_per_second,
             "avg_step_time_ms": self.avg_step_time_ms,
@@ -40,7 +40,8 @@ class BenchmarkMetrics:
 
 
 def run_standardized_benchmark(
-    num_steps: int = 2_000, model_path: Optional[str] = "./model/run_043"
+    num_steps: int = 2_000,
+    model_path: str | None = "./model/run_043",
 ) -> BenchmarkMetrics:
     """Run a standardized simulation benchmark.
 
@@ -182,7 +183,7 @@ def save_benchmark_results(
                     {
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                         "metrics": results.to_dict(),
-                    }
+                    },
                 )
                 f.seek(0)
                 json.dump(data, f, indent=2)
@@ -195,7 +196,7 @@ def save_benchmark_results(
                         {
                             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                             "metrics": results.to_dict(),
-                        }
+                        },
                     ],
                     f,
                     indent=2,
@@ -208,7 +209,7 @@ def save_benchmark_results(
                     {
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                         "metrics": results.to_dict(),
-                    }
+                    },
                 ],
                 f,
                 indent=2,

@@ -12,11 +12,14 @@ Design goals:
 
 from __future__ import annotations
 
-from typing import Optional, Sequence, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pysocialforce as pysf
 from pysocialforce import forces as pf_forces
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class FastPysfWrapper:
@@ -41,7 +44,7 @@ class FastPysfWrapper:
         # keys: 'xs' (1D array), 'ys' (1D array), 'field' (H,W,2 array).
         self._force_grid_caches: dict[str, dict] = {}
 
-    def _ped_positions_and_velocities(self) -> Tuple[np.ndarray, np.ndarray]:
+    def _ped_positions_and_velocities(self) -> tuple[np.ndarray, np.ndarray]:
         """Return arrays (N,2) positions and velocities for all pedestrians."""
         pos = self.sim.peds.pos()
         vel = self.sim.peds.vel()
@@ -60,10 +63,7 @@ class FastPysfWrapper:
         goal = np.asarray(desired_goal, dtype=float).reshape(2)
         dir_vec = goal - p
         dist = np.linalg.norm(dir_vec)
-        if dist != 0:
-            dir_unit = dir_vec / dist
-        else:
-            dir_unit = np.zeros(2)
+        dir_unit = dir_vec / dist if dist != 0 else np.zeros(2)
 
         tau = float(self.sim.config.desired_force_config.relaxation_time)
         # Compute a robust max_speed without triggering numpy warnings
@@ -124,7 +124,7 @@ class FastPysfWrapper:
             try:
                 fx, fy = pf_forces.obstacle_force(line, ortho, p.astype(float), ped_radius)
                 total += np.array([fx, fy], dtype=float) * float(
-                    self.sim.config.obstacle_force_config.factor
+                    self.sim.config.obstacle_force_config.factor,
                 )
             except Exception:
                 # ignore obstacle errors
@@ -138,7 +138,8 @@ class FastPysfWrapper:
                 fn = getattr(pf_forces, name)
                 try:
                     return np.asarray(
-                        fn(p, robot_state, getattr(self.sim, "scene", None)), dtype=float
+                        fn(p, robot_state, getattr(self.sim, "scene", None)),
+                        dtype=float,
                     )
                 except Exception:
                     return np.zeros(2, dtype=float)
@@ -149,9 +150,9 @@ class FastPysfWrapper:
         self,
         point: Sequence[float],
         include_desired: bool = False,
-        desired_goal: Optional[Sequence[float]] = None,
+        desired_goal: Sequence[float] | None = None,
         include_robot: bool = False,
-        robot_state: Optional[dict] = None,
+        robot_state: dict | None = None,
     ) -> np.ndarray:
         """Compute the total force vector at an arbitrary 2D `point`.
 
@@ -185,7 +186,11 @@ class FastPysfWrapper:
         return forces.reshape(len(ys), len(xs), 2)
 
     def build_force_grid_cache(
-        self, xs: Sequence[float], ys: Sequence[float], name: str = "default", **kwargs
+        self,
+        xs: Sequence[float],
+        ys: Sequence[float],
+        name: str = "default",
+        **kwargs,
     ) -> None:
         """Precompute and store a sampled force grid under the given `name`.
 
@@ -204,7 +209,7 @@ class FastPysfWrapper:
         """
         if name not in self._force_grid_caches:
             raise ValueError(
-                f"No cached grid named {name!r}. Call build_force_grid_cache(..., name='{name}') first."
+                f"No cached grid named {name!r}. Call build_force_grid_cache(..., name='{name}') first.",
             )
 
         cache = self._force_grid_caches[name]
@@ -238,7 +243,7 @@ class FastPysfWrapper:
         bottom = Q12 * (1 - tx) + Q22 * tx
         return top * (1 - ty) + bottom * ty
 
-    def clear_force_grid_cache(self, name: Optional[str] = None) -> None:
+    def clear_force_grid_cache(self, name: str | None = None) -> None:
         """Clear a specific cache by `name` or all caches if `name` is None."""
         if name is None:
             self._force_grid_caches.clear()

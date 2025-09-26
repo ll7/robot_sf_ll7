@@ -22,7 +22,7 @@ def _make_scenarios(repeats: int) -> list[dict]:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": repeats,
-        }
+        },
     ]
 
 

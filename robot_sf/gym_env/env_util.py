@@ -3,7 +3,6 @@ env_util
 """
 
 from enum import Enum
-from typing import List, Union
 
 import numpy as np
 from gymnasium import spaces
@@ -25,7 +24,9 @@ class AgentType(Enum):
 
 
 def init_collision_and_sensors(
-    sim: Simulator, env_config: EnvSettings, orig_obs_space: spaces.Dict
+    sim: Simulator,
+    env_config: EnvSettings,
+    orig_obs_space: spaces.Dict,
 ):
     """
     Initialize collision detection and sensor fusion for the robots in the
@@ -66,7 +67,7 @@ def init_collision_and_sensors(
     ]
 
     # Initialize sensor fusion objects for each robot for sensor data handling
-    sensor_fusions: List[SensorFusion] = []
+    sensor_fusions: list[SensorFusion] = []
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
@@ -74,7 +75,9 @@ def init_collision_and_sensors(
 
         def target_sensor(r_id=r_id):
             return target_sensor_obs(
-                sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id]
+                sim.robots[r_id].pose,
+                sim.goal_pos[r_id],
+                sim.next_goal_pos[r_id],
             )
 
         def speed_sensor(r_id=r_id):
@@ -88,7 +91,7 @@ def init_collision_and_sensors(
                 target_sensor,
                 orig_obs_space,
                 sim_config.use_next_goal,
-            )
+            ),
         )
 
     return occupancies, sensor_fusions
@@ -119,7 +122,9 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
         the original observation space of the robot.
     """
     action_space, obs_space, orig_obs_space = create_spaces(
-        env_config, map_def, agent_type=AgentType.ROBOT
+        env_config,
+        map_def,
+        agent_type=AgentType.ROBOT,
     )
     # Return the action space, the extended observation space, and the original
     # observation space
@@ -127,7 +132,7 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
 
 
 def create_spaces(
-    env_config: Union[EnvSettings, PedEnvSettings],
+    env_config: EnvSettings | PedEnvSettings,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
 ):
@@ -177,10 +182,14 @@ def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
         the original observation space of the robot and the pedestrian.
     """
     action_space_robot, obs_space_robot, orig_obs_space_robot = create_spaces(
-        env_config, map_def, agent_type=AgentType.ROBOT
+        env_config,
+        map_def,
+        agent_type=AgentType.ROBOT,
     )
     action_space_ped, obs_space_ped, orig_obs_space_ped = create_spaces(
-        env_config, map_def, agent_type=AgentType.PEDESTRIAN
+        env_config,
+        map_def,
+        agent_type=AgentType.PEDESTRIAN,
     )
 
     # As a list [robot, pedestrian]
@@ -192,7 +201,9 @@ def init_ped_spaces(env_config: PedEnvSettings, map_def: MapDefinition):
 
 
 def init_ped_collision_and_sensors(
-    sim: PedSimulator, env_config: PedEnvSettings, orig_obs_space: List[spaces.Dict]
+    sim: PedSimulator,
+    env_config: PedEnvSettings,
+    orig_obs_space: list[spaces.Dict],
 ):
     """
     Initialize collision detection and sensor fusion for the robot and the pedestrian in the
@@ -217,8 +228,8 @@ def init_ped_collision_and_sensors(
     lidar_config = env_config.lidar_config
     ego_ped_config = env_config.ego_ped_config
 
-    occupancies: List[Union[ContinuousOccupancy, EgoPedContinuousOccupancy]] = []
-    sensor_fusions: List[SensorFusion] = []
+    occupancies: list[ContinuousOccupancy | EgoPedContinuousOccupancy] = []
+    sensor_fusions: list[SensorFusion] = []
 
     # Initialize a occupancy object for the robot for collision detection
     occupancies.append(
@@ -233,7 +244,7 @@ def init_ped_collision_and_sensors(
             robot_config.radius,
             sim_config.ped_radius,
             sim_config.goal_radius,
-        )
+        ),
     )
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
@@ -254,7 +265,7 @@ def init_ped_collision_and_sensors(
             target_sensor,
             orig_obs_space[0],
             sim_config.use_next_goal,
-        )
+        ),
     )
 
     # Initalize occupancy and sensor fusion for the ego pedestrian
@@ -271,7 +282,7 @@ def init_ped_collision_and_sensors(
             sim_config.goal_radius,
             lambda: sim.robot_pos[0],
             robot_config.radius,
-        )
+        ),
     )
 
     def ray_sensor_ego_ped():
@@ -279,7 +290,9 @@ def init_ped_collision_and_sensors(
 
     def target_sensor_ego_ped():
         return target_sensor_obs(
-            sim.ego_ped.pose, sim.ego_ped_goal_pos, None
+            sim.ego_ped.pose,
+            sim.ego_ped_goal_pos,
+            None,
         )  # TODO: What next goal to choose?
 
     def speed_sensor_ego_ped():
@@ -292,7 +305,7 @@ def init_ped_collision_and_sensors(
             target_sensor_ego_ped,
             orig_obs_space[1],
             False,
-        )
+        ),
     )  # Ego pedestrian does not have a next goal
 
     # Format: [robot, ego_pedestrian]
@@ -300,7 +313,7 @@ def init_ped_collision_and_sensors(
 
 
 def create_spaces_with_image(
-    env_config: Union[EnvSettings, PedEnvSettings, RobotEnvSettings],
+    env_config: EnvSettings | PedEnvSettings | RobotEnvSettings,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
 ):
@@ -330,7 +343,7 @@ def create_spaces_with_image(
             agent = env_config.pedestrian_factory()
         else:
             raise ValueError(
-                "Pedestrian agent type requires an env_config with pedestrian_factory method"
+                "Pedestrian agent type requires an env_config with pedestrian_factory method",
             )
     else:
         raise ValueError(f"Unsupported agent type: {agent_type}")
@@ -354,7 +367,8 @@ def create_spaces_with_image(
             agent.observation_space,
             target_sensor_space(map_def.max_target_dist),
             lidar_sensor_space(
-                env_config.lidar_config.num_rays, env_config.lidar_config.max_scan_dist
+                env_config.lidar_config.num_rays,
+                env_config.lidar_config.max_scan_dist,
             ),
             image_obs_space,
         )
@@ -364,7 +378,8 @@ def create_spaces_with_image(
             agent.observation_space,
             target_sensor_space(map_def.max_target_dist),
             lidar_sensor_space(
-                env_config.lidar_config.num_rays, env_config.lidar_config.max_scan_dist
+                env_config.lidar_config.num_rays,
+                env_config.lidar_config.max_scan_dist,
             ),
         )
 
@@ -373,7 +388,7 @@ def create_spaces_with_image(
 
 def init_collision_and_sensors_with_image(
     sim: Simulator,
-    env_config: Union[EnvSettings, RobotEnvSettings],
+    env_config: EnvSettings | RobotEnvSettings,
     orig_obs_space: spaces.Dict,
     sim_view=None,
 ):
@@ -426,7 +441,9 @@ def init_collision_and_sensors_with_image(
 
         def target_sensor(r_id=r_id):
             return target_sensor_obs(
-                sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id]
+                sim.robots[r_id].pose,
+                sim.goal_pos[r_id],
+                sim.next_goal_pos[r_id],
             )
 
         def speed_sensor(r_id=r_id):
@@ -488,5 +505,6 @@ def prepare_pedestrian_actions(simulator) -> np.ndarray:
     ped_actions = zip(
         simulator.pysf_sim.peds.pos(),
         simulator.pysf_sim.peds.pos() + simulator.pysf_sim.peds.vel(),
+        strict=False,
     )
     return np.array([[pos, vel] for pos, vel in ped_actions])

@@ -12,13 +12,14 @@ will fail due to missing output file—expected during TDD phase.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 from pathlib import Path
 
 import pytest
 
 
-def test_recording_creates_mp4_when_enabled():  # noqa: D401
+def test_recording_creates_mp4_when_enabled():
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Skip if moviepy not available
     if not getattr(mod, "MOVIEPY_AVAILABLE", False):  # type: ignore[attr-defined]
@@ -34,10 +35,8 @@ def test_recording_creates_mp4_when_enabled():  # noqa: D401
     if tmp_out.exists():
         # Clean stale artifacts
         for p in tmp_out.glob("*.mp4"):
-            try:
+            with contextlib.suppress(Exception):
                 p.unlink()
-            except Exception:  # noqa: BLE001
-                pass
     mod.OUTPUT_DIR = tmp_out  # type: ignore
 
     try:
@@ -59,7 +58,5 @@ def test_recording_creates_mp4_when_enabled():  # noqa: D401
 
     # Cleanup: remove generated mp4 artifacts to keep workspace clean.
     for f in mp4_files:
-        try:
+        with contextlib.suppress(Exception):
             f.unlink()
-        except Exception:  # noqa: BLE001
-            pass

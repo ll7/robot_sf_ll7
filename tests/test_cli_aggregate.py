@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -20,7 +23,7 @@ def _write_matrix(path: Path, repeats: int = 3) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": repeats,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -49,7 +52,7 @@ def test_cli_aggregate_without_ci(tmp_path: Path, capsys):
             "6",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc_run == 0, f"run failed: {cap.err}"
@@ -69,7 +72,7 @@ def test_cli_aggregate_without_ci(tmp_path: Path, capsys):
     stats = data["agg-smoke"][any_metric]
     assert all(k in stats for k in ("mean", "median", "p95"))
     # CI keys should not be present when bootstrap_samples=0 (default)
-    assert not any(k.endswith("_ci") for k in stats.keys())
+    assert not any(k.endswith("_ci") for k in stats)
 
 
 def test_cli_aggregate_with_ci_and_seed(tmp_path: Path, capsys):
@@ -92,7 +95,7 @@ def test_cli_aggregate_with_ci_and_seed(tmp_path: Path, capsys):
             "6",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc_run == 0, f"run failed: {cap.err}"

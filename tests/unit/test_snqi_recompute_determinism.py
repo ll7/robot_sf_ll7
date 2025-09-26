@@ -45,17 +45,21 @@ def test_recompute_different_seeds_vary():
     }
 
     weights_seed_1 = recompute_snqi_weights(
-        baseline_stats=baseline_stats, method="optimized", seed=1
+        baseline_stats=baseline_stats,
+        method="optimized",
+        seed=1,
     )
     weights_seed_2 = recompute_snqi_weights(
-        baseline_stats=baseline_stats, method="optimized", seed=2
+        baseline_stats=baseline_stats,
+        method="optimized",
+        seed=2,
     )
 
     # For optimized method, different seeds might produce different results
     # (depends on implementation, but at least structure should be consistent)
     assert set(weights_seed_1.weights.keys()) == set(weights_seed_2.weights.keys())
     assert weights_seed_1.bootstrap_params.get("seed") != weights_seed_2.bootstrap_params.get(
-        "seed"
+        "seed",
     )
 
 
@@ -150,13 +154,17 @@ def test_recompute_with_baseline_stats_influence():
     }
 
     weights_high = recompute_snqi_weights(
-        baseline_stats=high_collision_stats, method="optimized", seed=42
+        baseline_stats=high_collision_stats,
+        method="optimized",
+        seed=42,
     )
     weights_low = recompute_snqi_weights(
-        baseline_stats=low_collision_stats, method="optimized", seed=42
+        baseline_stats=low_collision_stats,
+        method="optimized",
+        seed=42,
     )
 
     # Both should have valid weights structure
     assert set(weights_high.weights.keys()) == set(weights_low.weights.keys())
-    assert all(isinstance(w, (int, float)) for w in weights_high.weights.values())
-    assert all(isinstance(w, (int, float)) for w in weights_low.weights.values())
+    assert all(isinstance(w, int | float) for w in weights_high.weights.values())
+    assert all(isinstance(w, int | float) for w in weights_low.weights.values())

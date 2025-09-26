@@ -19,7 +19,7 @@ def plot_kde_on_map(
     ped_positions_array: np.ndarray,
     bandwidth: float = 1.0,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
     map_def: MapDefinition = None,
 ):
     """
@@ -56,7 +56,11 @@ def plot_kde_on_map(
     fig, ax = plt.subplots(figsize=(10, 8))
 
     im = ax.imshow(
-        density, extent=(x_min, x_max, y_min, y_max), origin="lower", cmap="viridis", aspect="auto"
+        density,
+        extent=(x_min, x_max, y_min, y_max),
+        origin="lower",
+        cmap="viridis",
+        aspect="auto",
     )
     fig.colorbar(im, ax=ax, label="Density")
     ax.set_xlabel("X Position")
@@ -107,7 +111,7 @@ def plot_kde_in_x_y(
     ego_data: np.ndarray,
     bandwidth: float = 0.1,
     interactive: bool = False,
-    unique_id: str = None,
+    unique_id: str | None = None,
 ):
     """
     Plot the Kernel Density Estimation of npc and ego positions in X and Y axes.
@@ -142,7 +146,10 @@ def plot_kde_in_x_y(
     # Plot npc data x density
     axes[0].plot(x_grid_npc, density_npc_x, label="Npc Data Density (X Position)")
     axes[0].plot(
-        x_grid_ego, density_ego_x, label="Ego Pedestrian Density (X Position)", linestyle="--"
+        x_grid_ego,
+        density_ego_x,
+        label="Ego Pedestrian Density (X Position)",
+        linestyle="--",
     )
     axes[0].set_title("Npc Data and Ego Pedestrian Density (X Position)")
     axes[0].set_xlabel("X Position")

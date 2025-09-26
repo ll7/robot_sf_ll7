@@ -80,7 +80,9 @@ def test_generate_benchmark_plots_with_filters():
 
         # When: Function called with filters
         artifacts = generate_benchmark_plots(
-            episodes_path, output_dir, scenario_filter="scenario_a"
+            episodes_path,
+            output_dir,
+            scenario_filter="scenario_a",
         )
 
         # Then: Only filtered scenarios included

@@ -6,10 +6,13 @@ Runs a single tiny episode and validates JSON record against schema.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.runner import run_episode, validate_and_write
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 

@@ -25,7 +25,6 @@ See also: :mod:`robot_sf.gym_env.environment_factory` for detailed precedence na
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional
 
 
 @dataclass(slots=True)
@@ -46,7 +45,7 @@ class RenderOptions:
     """
 
     enable_overlay: bool = False
-    max_fps_override: Optional[int] = None
+    max_fps_override: int | None = None
     ped_velocity_scale: float = 1.0
     headless_ok: bool = True
 
@@ -83,10 +82,10 @@ class RecordingOptions:
     """
 
     record: bool = False
-    video_path: Optional[str] = None
-    max_frames: Optional[int] = None
+    video_path: str | None = None
+    max_frames: int | None = None
     codec: str = "libx264"
-    bitrate: Optional[str] = None
+    bitrate: str | None = None
 
     def validate(self) -> None:
         """Validate invariants.
@@ -99,9 +98,8 @@ class RecordingOptions:
         * codec must be a non-empty string when recording.
         * bitrate, if provided, must be a non-empty string.
         """
-        if self.record and self.video_path:
-            if not self.video_path.lower().endswith(".mp4"):
-                raise ValueError("video_path must end with .mp4")
+        if self.record and self.video_path and not self.video_path.lower().endswith(".mp4"):
+            raise ValueError("video_path must end with .mp4")
         if self.max_frames is not None and self.max_frames <= 0:
             raise ValueError("max_frames must be > 0")
         if self.record and not self.codec:
@@ -111,8 +109,11 @@ class RecordingOptions:
 
     @classmethod
     def from_bool_and_path(
-        cls, record_video: bool, video_path: Optional[str], existing: Optional["RecordingOptions"]
-    ) -> "RecordingOptions":
+        cls,
+        record_video: bool,
+        video_path: str | None,
+        existing: RecordingOptions | None,
+    ) -> RecordingOptions:
         """Create or normalize a RecordingOptions instance from convenience flags.
 
         If an existing options object is provided it is returned unchanged

@@ -23,11 +23,11 @@ import logging
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import product
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Dict, Iterable, Iterator, List
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from scipy.optimize import differential_evolution
@@ -43,6 +43,9 @@ from robot_sf.benchmark.snqi.schema import assert_all_finite, validate_snqi
 from robot_sf.benchmark.snqi.weights_validation import (
     validate_weights_mapping as _validate_weights_mapping,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Iterator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -63,15 +66,19 @@ try:  # pragma: no cover - optional dependency
     from tqdm import tqdm
 
     def _progress(
-        iterable: Iterable, desc: str | None = None, total: int | None = None
+        iterable: Iterable,
+        desc: str | None = None,
+        total: int | None = None,
     ) -> Iterator:  # type: ignore[name-defined]
         return tqdm(iterable, desc=desc, total=total)  # type: ignore[no-any-return]
 
     _TQDM_AVAILABLE = True
-except Exception:  # noqa: BLE001 - pragma: no cover
+except Exception:
 
     def _progress(
-        iterable: Iterable, desc: str | None = None, total: int | None = None
+        iterable: Iterable,
+        desc: str | None = None,
+        total: int | None = None,
     ) -> Iterator:  # type: ignore[unused-argument]
         # Fallback: ignore progress parameters when tqdm unavailable
         return iter(iterable)
@@ -83,11 +90,11 @@ except Exception:  # noqa: BLE001 - pragma: no cover
 class OptimizationResult:
     """Container for weight optimization results."""
 
-    weights: Dict[str, float]
+    weights: dict[str, float]
     objective_value: float
     ranking_stability: float
-    convergence_info: Dict[str, Any]
-    objective_components: Dict[str, float] | None = None
+    convergence_info: dict[str, Any]
+    objective_components: dict[str, float] | None = None
 
 
 class SNQIWeightOptimizer:
@@ -101,14 +108,17 @@ class SNQIWeightOptimizer:
         Mapping metric -> {"med": float, "p95": float} for normalization.
     """
 
-    def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
+    def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = list(WEIGHT_NAMES)
 
     def _maybe_simplex(
-        self, weights: Dict[str, float], simplex: bool, total: float = 10.0
-    ) -> Dict[str, float]:
+        self,
+        weights: dict[str, float],
+        simplex: bool,
+        total: float = 10.0,
+    ) -> dict[str, float]:
         if not simplex:
             return weights
         s = sum(weights.values())
@@ -116,20 +126,20 @@ class SNQIWeightOptimizer:
             return weights
         return {k: (v / s) * total for k, v in weights.items()}
 
-    def _episode_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
+    def _episode_snqi(self, metrics: dict[str, float], weights: dict[str, float]) -> float:
         return compute_snqi(metrics, weights, self.baseline_stats)
 
-    def compute_ranking_stability(self, weights: Dict[str, float]) -> float:
+    def compute_ranking_stability(self, weights: dict[str, float]) -> float:
         if len(self.episodes) < 2:
             return 1.0
-        algo_groups: Dict[str, list] = {}
+        algo_groups: dict[str, list] = {}
         for ep in self.episodes:
             algo = ep.get("scenario_params", {}).get("algo", ep.get("scenario_id", "default"))
             algo_groups.setdefault(algo, []).append(ep)
         if len(algo_groups) < 2:
             scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
             return float(1.0 / (1.0 + float(np.var(scores))))
-        group_rankings: Dict[str, List[int]] = {}
+        group_rankings: dict[str, list[int]] = {}
         for group_name, group_eps in algo_groups.items():
             scores = [
                 (self._episode_snqi(ep.get("metrics", {}), weights), i)
@@ -144,13 +154,13 @@ class SNQIWeightOptimizer:
             try:
                 corr, _ = spearmanr(group_rankings[group_names[0]], group_rankings[group_names[1]])
                 return abs(corr) if not np.isnan(corr) else 0.5
-            except Exception:  # noqa: BLE001
+            except Exception:
                 return 0.5
         return 0.8
 
     def objective_function(self, weight_vector: np.ndarray, *, simplex: bool = False) -> float:
         """Heuristic objective (negative for minimizer)."""
-        weights = dict(zip(self.weight_names, weight_vector))
+        weights = dict(zip(self.weight_names, weight_vector, strict=False))
         if simplex:
             weights = self._maybe_simplex(weights, True)
         stability = self.compute_ranking_stability(weights)
@@ -193,7 +203,7 @@ class SNQIWeightOptimizer:
         else:
             combos_iter = product(grid_points, repeat=n)
         best_obj = float("inf")
-        best_weights: Dict[str, float] | None = None
+        best_weights: dict[str, float] | None = None
         best_stability = 0.0
         evaluations = 0
         iterator: Iterable = combos_iter
@@ -201,7 +211,7 @@ class SNQIWeightOptimizer:
             materialized = list(combos_iter) if not isinstance(combos_iter, list) else combos_iter
             iterator = _progress(materialized, desc="grid", total=len(materialized))
         for combo in iterator:
-            weights = {k: float(v) for k, v in zip(self.weight_names, combo)}
+            weights = {k: float(v) for k, v in zip(self.weight_names, combo, strict=False)}
             obj = self.objective_function(np.array(list(weights.values())), simplex=simplex)
             if obj < best_obj:
                 best_obj = obj
@@ -258,7 +268,7 @@ class SNQIWeightOptimizer:
         best_positive_obj: float | None = None
         stagnant_iters = 0
 
-        def _callback(xk: np.ndarray, _convergence: float) -> bool:  # noqa: D401
+        def _callback(xk: np.ndarray, _convergence: float) -> bool:
             nonlocal best_positive_obj, stagnant_iters
             current_positive = -self.objective_function(xk, simplex=simplex)
             improved = (
@@ -290,7 +300,7 @@ class SNQIWeightOptimizer:
         maxiter: int,
     ) -> OptimizationResult:
         """Convert SciPy result object into `OptimizationResult` (pure helper)."""
-        weights = dict(zip(self.weight_names, result.x))
+        weights = dict(zip(self.weight_names, result.x, strict=False))
         if simplex:
             weights = self._maybe_simplex(weights, True)
         stability = self.compute_ranking_stability(weights)
@@ -351,7 +361,7 @@ class SNQIWeightOptimizer:
         simplex: bool,
         early_stop_patience: int,
         early_stop_min_delta: float,
-    ) -> OptimizationResult:  # noqa: C901 - acceptable internal complexity
+    ) -> OptimizationResult:
         bounds = [(0.1, 3.0)] * len(self.weight_names)
         callback, pbar = self._build_de_callback(
             maxiter=maxiter,
@@ -397,8 +407,10 @@ class SNQIWeightOptimizer:
         return result
 
     def sensitivity_analysis(
-        self, weights: Dict[str, float], show_progress: bool = False
-    ) -> Dict[str, Dict[str, float]]:
+        self,
+        weights: dict[str, float],
+        show_progress: bool = False,
+    ) -> dict[str, dict[str, float]]:
         """Compute simple local one-at-a-time sensitivity metrics.
 
         Perturbs each weight ±10% (clamped to domain) and measures change in
@@ -406,7 +418,7 @@ class SNQIWeightOptimizer:
         """
         base_scores = [self._episode_snqi(ep.get("metrics", {}), weights) for ep in self.episodes]
         base_mean = float(np.mean(base_scores)) if base_scores else 0.0
-        results: Dict[str, Dict[str, float]] = {}
+        results: dict[str, dict[str, float]] = {}
         iterator = weights.items()
         if show_progress:
             iterator = _progress(list(weights.items()), desc="sensitivity")  # type: ignore[assignment]
@@ -428,8 +440,8 @@ class SNQIWeightOptimizer:
         return results
 
 
-def _load_initial_weights(path: Path) -> Dict[str, float]:
-    with open(path, "r", encoding="utf-8") as f:
+def _load_initial_weights(path: Path) -> dict[str, float]:
+    with open(path, encoding="utf-8") as f:
         raw = json.load(f)
     if not isinstance(raw, dict):  # pragma: no cover - defensive
         raise ValueError("Initial weights file must be a JSON object")
@@ -437,11 +449,11 @@ def _load_initial_weights(path: Path) -> Dict[str, float]:
 
 
 # ---------------------------- I/O helpers ---------------------------- #
-def load_episodes_data(path: Path) -> tuple[List[Dict[str, Any]], int]:
+def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
     """Load episodes from JSONL file returning (episodes, skipped_malformed)."""
-    episodes: List[Dict[str, Any]] = []
+    episodes: list[dict[str, Any]] = []
     skipped = 0
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             raw = line.strip()
             if not raw:
@@ -460,8 +472,8 @@ def load_episodes_data(path: Path) -> tuple[List[Dict[str, Any]], int]:
     return episodes, skipped
 
 
-def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
-    with open(path, "r", encoding="utf-8") as f:
+def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):  # basic validation
         raise ValueError("Baseline stats file must contain a JSON object")
@@ -477,7 +489,7 @@ def _load_inputs(
     return episodes, baseline_stats, skipped
 
 
-def _select_best(results: Dict[str, Any], method: str) -> None:
+def _select_best(results: dict[str, Any], method: str) -> None:
     if method == "both":
         best_method = "grid_search"
         if "differential_evolution" in results and results["differential_evolution"][
@@ -495,7 +507,7 @@ def _select_best(results: Dict[str, Any], method: str) -> None:
 
 
 def _augment_metadata(
-    results: Dict[str, Any],
+    results: dict[str, Any],
     args: argparse.Namespace,
     start_iso: str,
     start_perf: float,
@@ -507,16 +519,17 @@ def _augment_metadata(
         try:
             return (
                 subprocess.check_output(
-                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    stderr=subprocess.DEVNULL,
                 )
                 .decode()
                 .strip()
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             return "UNKNOWN"
 
     end_perf = perf_counter()
-    end_iso = datetime.now(timezone.utc).isoformat()
+    end_iso = datetime.now(UTC).isoformat()
     runtime_seconds = end_perf - start_perf
     results_meta = {
         "schema_version": 1,
@@ -549,9 +562,7 @@ def _augment_metadata(
         "ranking_stability": recommended.get("ranking_stability"),
         "weights": recommended.get("weights"),
         "objective_components": recommended.get("objective_components"),
-        "available_methods": [
-            k for k in results.keys() if k in ("grid_search", "differential_evolution")
-        ],
+        "available_methods": [k for k in results if k in ("grid_search", "differential_evolution")],
         "seed": args.seed,
         "has_sensitivity": bool(results.get("sensitivity_analysis")),
         "runtime_seconds": runtime_seconds,
@@ -612,12 +623,12 @@ def _detect_missing_baseline_metrics(
                     "name": metric,
                     "episode_count_with_metric": count,
                     "example_episode_ids": episodes_with_metric,
-                }
+                },
             )
     return {"total_missing": len(results), "metrics": results}
 
 
-def _print_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
+def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
     recommended = results["recommended"]
     print("\nOptimization Summary:")
     print(f"Method: {recommended['method_used']}")
@@ -630,7 +641,9 @@ def _print_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
         print("\nSensitivity Analysis (top 3 most sensitive weights):")
         sensitivity = results["sensitivity_analysis"]
         sorted_weights = sorted(
-            sensitivity.items(), key=lambda x: x[1]["score_sensitivity"], reverse=True
+            sensitivity.items(),
+            key=lambda x: x[1]["score_sensitivity"],
+            reverse=True,
         )
         for weight_name, sens_data in sorted_weights[:3]:
             print(f"  {weight_name}: score_sensitivity={sens_data['score_sensitivity']:.4f}")
@@ -639,13 +652,13 @@ def _print_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
 # ----------------------------- Main runner --------------------------- #
 def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decomposition
     start_perf = perf_counter()
-    start_iso = datetime.now(timezone.utc).isoformat()
+    start_iso = datetime.now(UTC).isoformat()
     phase_start = start_perf
     phase_timings: dict[str, float] = {}
     try:
         episodes, baseline_stats, skipped_lines = _load_inputs(args)
-    except Exception as e:  # noqa: BLE001
-        logger.error("Failed loading inputs: %s", e)
+    except Exception as e:
+        logger.exception("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
     phase_timings["load_inputs"] = perf_counter() - phase_start
     if not episodes:
@@ -669,7 +682,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     # Warn on small dataset sizes which can reduce reliability of statistics and CIs
     try:
         threshold = int(getattr(args, "small_dataset_threshold", 20))
-    except Exception:  # noqa: BLE001 - defensive
+    except Exception:
         threshold = 20
     if used_episode_count < threshold:
         logger.warning(
@@ -678,15 +691,15 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             threshold,
         )
     optimizer = SNQIWeightOptimizer(episodes, baseline_stats)
-    initial_weights: Dict[str, float] | None = None
+    initial_weights: dict[str, float] | None = None
     if args.initial_weights_file is not None:
         try:
             initial_weights = _load_initial_weights(args.initial_weights_file)
             logger.info("Loaded initial weights from %s", args.initial_weights_file)
-        except Exception as e:  # noqa: BLE001
-            logger.error("Failed loading initial weights: %s", e)
+        except Exception as e:
+            logger.exception("Failed loading initial weights: %s", e)
             return EXIT_INPUT_ERROR
-    results: Dict[str, Any] = {}
+    results: dict[str, Any] = {}
     if args.method in ["grid", "both"]:
         phase_start = perf_counter()
         grid_result = optimizer.grid_search_optimization(
@@ -706,7 +719,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     if args.method in ["evolution", "both"]:
         phase_start = perf_counter()
         evolution_result = optimizer.differential_evolution_optimization(
-            args.maxiter, seed=args.seed, show_progress=args.progress, simplex=args.simplex
+            args.maxiter,
+            seed=args.seed,
+            show_progress=args.progress,
+            simplex=args.simplex,
         )
         phase_timings["differential_evolution"] = perf_counter() - phase_start
         results["differential_evolution"] = {
@@ -723,13 +739,16 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         phase_start = perf_counter()
         recommended_weights = results["recommended"]["weights"]
         results["sensitivity_analysis"] = optimizer.sensitivity_analysis(
-            recommended_weights, show_progress=args.progress
+            recommended_weights,
+            show_progress=args.progress,
         )
         phase_timings["sensitivity_analysis"] = perf_counter() - phase_start
     # Detect baseline missing metrics (episodes contain metric but baseline lacks med/p95)
     phase_start = perf_counter()
     missing_info = _detect_missing_baseline_metrics(
-        episodes, baseline_stats, args.missing_metric_max_list
+        episodes,
+        baseline_stats,
+        args.missing_metric_max_list,
     )
     results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
     if missing_info["total_missing"]:
@@ -759,7 +778,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
             rec_weights = results.get("recommended", {}).get("weights")
             if rec_weights:
                 episode_scores = [
-                    optimizer._episode_snqi(ep.get("metrics", {}), rec_weights)  # noqa: SLF001
+                    optimizer._episode_snqi(ep.get("metrics", {}), rec_weights)
                     for ep in optimizer.episodes
                 ]
                 episode_scores = [s for s in episode_scores if np.isfinite(s)]
@@ -783,7 +802,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
                         "confidence_level": float(getattr(args, "bootstrap_confidence", 0.95)),
                     }
             phase_timings["bootstrap"] = perf_counter() - phase_start
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Bootstrap computation failed: %s", e)
     if args.ci_placeholder:
         # Confidence interval scaffold referencing planned bootstrap integration
@@ -810,7 +829,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
         else:
             assert_all_finite(results)
     except ValueError as e:
-        logger.error("Validation failed: %s", e)
+        logger.exception("Validation failed: %s", e)
         return EXIT_VALIDATION_ERROR
     phase_timings["validation"] = perf_counter() - phase_start
     phase_start = perf_counter()
@@ -832,7 +851,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
     return EXIT_SUCCESS
 
 
-def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Optimize SNQI weights")
     parser.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
     parser.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
@@ -845,7 +864,10 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--grid-resolution", type=int, default=5, help="Grid resolution per weight")
     parser.add_argument(
-        "--maxiter", type=int, default=30, help="Differential evolution max iterations"
+        "--maxiter",
+        type=int,
+        default=30,
+        help="Differential evolution max iterations",
     )
     parser.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
@@ -936,7 +958,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: List[str] | None = None) -> int:  # pragma: no cover
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))
     return run(args)

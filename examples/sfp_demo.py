@@ -36,10 +36,10 @@ import argparse
 import math
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 # Try to import required packages, fall back to mock mode if missing
-try:  # noqa: I001 - dynamic import grouping inside try block acceptable here
+try:
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -73,7 +73,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Try to import Social Force planner, fall back to mock if dependencies missing
-try:  # noqa: I001 - dynamic import grouping inside try block acceptable here
+try:
     from robot_sf.baselines import get_baseline
     from robot_sf.baselines.social_force import Observation, SFPlannerConfig
 
@@ -118,7 +118,7 @@ except ImportError as e:
                 self.config = config
             self.seed = seed
 
-        def step(self, obs) -> Dict[str, float]:
+        def step(self, obs) -> dict[str, float]:
             """Mock implementation that demonstrates basic Social Force behavior."""
             robot_pos = obs.robot["position"]
             goal_pos = obs.robot["goal"]
@@ -211,7 +211,7 @@ if "MockSocialForcePlanner" not in globals():
             self.config = config
             self.seed = seed
 
-        def step(self, obs) -> Dict[str, float]:  # noqa: D401
+        def step(self, obs) -> dict[str, float]:
             # Trivial straight-line goal seeker with zero avoidance
             goal = obs.robot["goal"]
             pos = obs.robot["position"]
@@ -223,7 +223,8 @@ if "MockSocialForcePlanner" not in globals():
             else:
                 ux, uy = 0.0, 0.0
             speed = min(
-                getattr(self.config, "desired_speed", 1.0), getattr(self.config, "v_max", 1.0)
+                getattr(self.config, "desired_speed", 1.0),
+                getattr(self.config, "v_max", 1.0),
             )
             if getattr(self.config, "action_space", "velocity") == "unicycle":
                 return {"v": 0.0 if dist < 1e-3 else min(speed, dist), "omega": 0.0}
@@ -236,7 +237,7 @@ if "MockSocialForcePlanner" not in globals():
         def configure(self, new_config):
             pass
 
-        def close(self):  # noqa: D401
+        def close(self):
             pass
 
 
@@ -271,7 +272,7 @@ class SFPDemo:
             print("    This demo shows the interface and basic planning concepts")
             print("    For full Social Force simulation, install: numba, fast-pysf submodule")
 
-    def run_scenario(self, scenario_name: str, max_steps: int = 200) -> Dict[str, Any]:
+    def run_scenario(self, scenario_name: str, max_steps: int = 200) -> dict[str, Any]:
         """Run a specific scenario and return results.
 
         Args:
@@ -299,14 +300,18 @@ class SFPDemo:
         else:
             raise ValueError(f"Unknown scenario: {scenario_name}")
 
-    def _run_basic_scenario(self, max_steps: int) -> Dict[str, Any]:
+    def _run_basic_scenario(self, max_steps: int) -> dict[str, Any]:
         """Basic goal navigation without obstacles."""
         print("📍 Basic Goal Navigation")
         print("Robot starts at (0,0) and navigates to (10,0) with no obstacles")
 
         # Configuration
         config = SFPlannerConfig(
-            action_space="velocity", v_max=2.0, desired_speed=1.5, noise_std=0.0, safety_clamp=True
+            action_space="velocity",
+            v_max=2.0,
+            desired_speed=1.5,
+            noise_std=0.0,
+            safety_clamp=True,
         )
 
         planner = self.SocialForcePlanner(config, seed=42)
@@ -327,7 +332,7 @@ class SFPDemo:
             scenario_name="Basic Navigation",
         )
 
-    def _run_single_pedestrian_scenario(self, max_steps: int) -> Dict[str, Any]:
+    def _run_single_pedestrian_scenario(self, max_steps: int) -> dict[str, Any]:
         """Navigation around a single pedestrian."""
         print("🚶 Single Pedestrian Avoidance")
         print("Robot navigates around a stationary pedestrian directly in its path")
@@ -363,7 +368,7 @@ class SFPDemo:
             scenario_name="Single Pedestrian Avoidance",
         )
 
-    def _run_multiple_pedestrians_scenario(self, max_steps: int) -> Dict[str, Any]:
+    def _run_multiple_pedestrians_scenario(self, max_steps: int) -> dict[str, Any]:
         """Navigation through multiple pedestrians."""
         print("👥 Multiple Pedestrian Navigation")
         print("Robot navigates through a crowd of pedestrians")
@@ -406,7 +411,7 @@ class SFPDemo:
             scenario_name="Multiple Pedestrian Navigation",
         )
 
-    def _run_crossing_scenario(self, max_steps: int) -> Dict[str, Any]:
+    def _run_crossing_scenario(self, max_steps: int) -> dict[str, Any]:
         """Pedestrians crossing robot's path."""
         print("↔️ Crossing Pedestrians")
         print("Robot navigates while pedestrians cross its path")
@@ -447,7 +452,7 @@ class SFPDemo:
             dynamic_agents=True,
         )
 
-    def _run_corridor_scenario(self, max_steps: int) -> Dict[str, Any]:
+    def _run_corridor_scenario(self, max_steps: int) -> dict[str, Any]:
         """Navigation through a narrow corridor."""
         print("🏢 Corridor Navigation")
         print("Robot navigates through a narrow corridor with walls")
@@ -494,7 +499,7 @@ class SFPDemo:
             scenario_name="Corridor Navigation",
         )
 
-    def _run_unicycle_demo(self, max_steps: int) -> Dict[str, Any]:
+    def _run_unicycle_demo(self, max_steps: int) -> dict[str, Any]:
         """Demonstration of unicycle action space."""
         print("🤖 Unicycle Control Demo")
         print("Robot uses unicycle controls (v, omega) instead of velocity (vx, vy)")
@@ -535,16 +540,16 @@ class SFPDemo:
     def _simulate_scenario(  # noqa: C901 - demo function prioritizes clarity over complexity budget
         self,
         planner,
-        robot_pos: List[float],
-        robot_vel: List[float],
-        goal_pos: List[float],
-        agents: List[Dict],
-        obstacles: List[Dict],
+        robot_pos: list[float],
+        robot_vel: list[float],
+        goal_pos: list[float],
+        agents: list[dict],
+        obstacles: list[dict],
         max_steps: int,
         scenario_name: str,
         dynamic_agents: bool = False,
         unicycle_mode: bool = False,
-    ) -> Dict[str, Any]:  # noqa: C901 - complexity acceptable for demo
+    ) -> dict[str, Any]:
         """Run the simulation for a scenario."""
 
         trajectory = []
@@ -585,7 +590,7 @@ class SFPDemo:
             def _to_list(x):
                 if hasattr(x, "tolist"):
                     return x.tolist()
-                if isinstance(x, (list, tuple)):
+                if isinstance(x, list | tuple):
                     return list(x)
                 return [x]
 
@@ -649,7 +654,7 @@ class SFPDemo:
 
             # Check if goal reached
             goal_distance = math.sqrt(
-                (robot_pos[0] - goal_pos[0]) ** 2 + (robot_pos[1] - goal_pos[1]) ** 2
+                (robot_pos[0] - goal_pos[0]) ** 2 + (robot_pos[1] - goal_pos[1]) ** 2,
             )
             if goal_distance < goal_tolerance:
                 print(f"✅ Goal reached in {step} steps ({step * self.dt:.1f}s)")
@@ -663,7 +668,7 @@ class SFPDemo:
 
         else:
             goal_distance = math.sqrt(
-                (robot_pos[0] - goal_pos[0]) ** 2 + (robot_pos[1] - goal_pos[1]) ** 2
+                (robot_pos[0] - goal_pos[0]) ** 2 + (robot_pos[1] - goal_pos[1]) ** 2,
             )
             print(f"⏰ Simulation timeout after {max_steps} steps")
             print(f"   Final distance to goal: {goal_distance:.2f}m")
@@ -776,8 +781,11 @@ class SFPDemo:
                 )
 
     def _calculate_metrics(
-        self, trajectory: List[Dict], goal_pos: np.ndarray, goal_tolerance: float
-    ) -> Dict[str, float]:
+        self,
+        trajectory: list[dict],
+        goal_pos: np.ndarray,
+        goal_tolerance: float,
+    ) -> dict[str, float]:
         """Calculate performance metrics for the trajectory."""
         if not trajectory:
             return {}
@@ -836,7 +844,7 @@ class SFPDemo:
             "num_steps": len(trajectory),
         }
 
-    def print_results(self, results: Dict[str, Any]):
+    def print_results(self, results: dict[str, Any]):
         """Print scenario results in a formatted way."""
         print(f"\n📊 Results for {results['scenario']}:")
         print("-" * 40)
@@ -930,7 +938,7 @@ class SFPDemo:
             eff_str = f"{metrics.get('path_efficiency', 0):.2f}x"
 
             print(
-                f"{result['scenario']:<15} {success:<8} {time_str:<6} {path_str:<6} {eff_str:<10}"
+                f"{result['scenario']:<15} {success:<8} {time_str:<6} {path_str:<6} {eff_str:<10}",
             )
 
     def close(self):
@@ -961,7 +969,9 @@ def main():
     parser.add_argument("--visualize", action="store_true", help="Show real-time visualization")
     parser.add_argument("--steps", type=int, default=200, help="Maximum simulation steps")
     parser.add_argument(
-        "--mock", action="store_true", help="Force mock mode (no full dependencies)"
+        "--mock",
+        action="store_true",
+        help="Force mock mode (no full dependencies)",
     )
 
     args = parser.parse_args()

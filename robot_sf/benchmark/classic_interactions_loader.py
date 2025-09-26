@@ -16,9 +16,12 @@ components; higher-level scripts (examples) compose these utilities.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Sequence
+from typing import TYPE_CHECKING
 
 import yaml  # type: ignore
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def load_classic_matrix(path: str) -> list[dict]:
@@ -45,7 +48,7 @@ def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
     raise ValueError(f"Scenario '{name}' not found. Available: {available}")
 
 
-def iter_episode_seeds(scenario: dict) -> List[int]:
+def iter_episode_seeds(scenario: dict) -> list[int]:
     seeds = scenario.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError(f"Scenario '{scenario.get('name')}' missing non-empty seeds list")
@@ -54,7 +57,7 @@ def iter_episode_seeds(scenario: dict) -> List[int]:
 
 
 __all__ = [
+    "iter_episode_seeds",
     "load_classic_matrix",
     "select_scenario",
-    "iter_episode_seeds",
 ]

@@ -59,7 +59,9 @@ def demo_factory_pattern():
         custom_config.peds_have_obstacle_forces = True
 
         custom_env = EnvironmentFactory.create_robot_env(
-            config=custom_config, debug=False, recording_enabled=True
+            config=custom_config,
+            debug=False,
+            recording_enabled=True,
         )
         print(f"✅ Created {type(custom_env).__name__} with custom config")
         print(f"   Pedestrian obstacle forces: {custom_env.config.peds_have_obstacle_forces}")
@@ -79,7 +81,7 @@ def demo_factory_pattern():
         print(f"✅ RobotSimulationConfig - use_image_obs: {base_config.use_image_obs}")
         print(f"✅ ImageRobotConfig - use_image_obs: {image_config.use_image_obs}")
         print(
-            f"✅ PedestrianSimulationConfig has ego_ped_config: {hasattr(ped_config, 'ego_ped_config')}"
+            f"✅ PedestrianSimulationConfig has ego_ped_config: {hasattr(ped_config, 'ego_ped_config')}",
         )
         print(f"✅ MultiRobotConfig - num_robots: {multi_config.num_robots}")
     except Exception as e:

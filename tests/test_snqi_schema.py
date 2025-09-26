@@ -72,6 +72,6 @@ def test_non_finite_detection():
 def test_assert_all_finite_list_nested():
     good = {"a": [1.0, 2.0, {"b": 3.0}]}
     assert_all_finite(good)  # Should not raise
-    bad = {"a": [1.0, float("inf")]}  # noqa: RUF001
+    bad = {"a": [1.0, float("inf")]}
     with pytest.raises(ValueError):
         assert_all_finite(bad)

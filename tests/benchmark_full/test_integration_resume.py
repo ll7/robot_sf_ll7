@@ -131,13 +131,13 @@ def test_resume_skips_existing(config_factory, perf_policy):
         soft = 5.0 if ci else 2.0
         if elapsed > soft:
             print(
-                "[WARN] Resume test elapsed {:.2f}s exceeded soft limit {:.2f}s. "
-                "Check for unintended workload increase.".format(elapsed, soft)
+                f"[WARN] Resume test elapsed {elapsed:.2f}s exceeded soft limit {soft:.2f}s. "
+                "Check for unintended workload increase.",
             )
     finally:
         try:
             signal.alarm(0)
             if "prev" in locals() and prev is not None:
                 signal.signal(signal.SIGALRM, prev)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass

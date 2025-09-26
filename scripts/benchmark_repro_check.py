@@ -7,6 +7,7 @@ aggregation, and figure regeneration with different seeds.
 """
 
 import json
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -66,7 +67,7 @@ def run_benchmark_pipeline(work_dir: Path, seed: int = 123):
 
         episode_gen_time = time.time() - start_time
         print(
-            f"  Generated {run_results.get('total_episodes', 0)} episodes in {episode_gen_time:.1f}s"
+            f"  Generated {run_results.get('total_episodes', 0)} episodes in {episode_gen_time:.1f}s",
         )
 
     except Exception as e:
@@ -145,7 +146,7 @@ def compare_reproducibility(results1, results2, tolerance=0.05):
     # Check episode counts match
     if results1["episodes_count"] != results2["episodes_count"]:
         print(
-            f"❌ Episode count mismatch: {results1['episodes_count']} vs {results2['episodes_count']}"
+            f"❌ Episode count mismatch: {results1['episodes_count']} vs {results2['episodes_count']}",
         )
         return False
 
@@ -183,10 +184,10 @@ def compare_reproducibility(results1, results2, tolerance=0.05):
             if val1 is None or val2 is None:
                 continue
 
-            if isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
+            if isinstance(val1, int | float) and isinstance(val2, int | float):
                 if abs(val1 - val2) > tolerance:
                     print(
-                        f"❌ {group_name}.{metric}: {val1} vs {val2} (diff: {abs(val1 - val2):.4f})"
+                        f"❌ {group_name}.{metric}: {val1} vs {val2} (diff: {abs(val1 - val2):.4f})",
                     )
                     reproducible = False
                 else:
@@ -230,10 +231,10 @@ def main():
         # Performance summary
         print("\n=== Performance Summary ===")
         print(
-            f"Run 1: {results1['episodes_count']} episodes in {results1['episode_gen_time']:.1f}s"
+            f"Run 1: {results1['episodes_count']} episodes in {results1['episode_gen_time']:.1f}s",
         )
         print(
-            f"Run 2: {results2['episodes_count']} episodes in {results2['episode_gen_time']:.1f}s"
+            f"Run 2: {results2['episodes_count']} episodes in {results2['episode_gen_time']:.1f}s",
         )
         print(f"Aggregation time: {results1['aggregate_time']:.1f}s avg")
 
@@ -264,4 +265,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

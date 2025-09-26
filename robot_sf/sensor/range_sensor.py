@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from math import cos, sin
-from typing import List, Optional, Tuple
 
 import numba
 import numpy as np
@@ -139,7 +138,7 @@ class LidarScannerSettings:
     max_scan_dist: float = 10.0
     visual_angle_portion: float = 1.0
     num_rays: int = 272
-    scan_noise: List[float] = field(default_factory=lambda: [0.005, 0.002])
+    scan_noise: list[float] = field(default_factory=lambda: [0.005, 0.002])
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
@@ -231,7 +230,10 @@ def raycast_pedestrians(
 
 @numba.njit(fastmath=True)
 def raycast_obstacles(
-    out_ranges: np.ndarray, scanner_pos: Vec2D, obstacles: np.ndarray, ray_angles: np.ndarray
+    out_ranges: np.ndarray,
+    scanner_pos: Vec2D,
+    obstacles: np.ndarray,
+    ray_angles: np.ndarray,
 ):
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
@@ -252,7 +254,7 @@ def raycast(
     ped_pos: np.ndarray,
     ped_radius: float,
     ray_angles: np.ndarray,
-    enemy_pos: Optional[np.ndarray] = None,
+    enemy_pos: np.ndarray | None = None,
     enemy_radius: float = 0.0,
 ) -> np.ndarray:
     """Cast rays in the directions of all given angles outgoing from
@@ -266,7 +268,12 @@ def raycast(
     # As Pedestrian detect the Robot
     if enemy_pos is not None:
         raycast_pedestrians(
-            out_ranges, scanner_pos, max_scan_range, enemy_pos, enemy_radius, ray_angles
+            out_ranges,
+            scanner_pos,
+            max_scan_range,
+            enemy_pos,
+            enemy_radius,
+            ray_angles,
         )
     # TODO: add raycast for other robots
     return out_ranges
@@ -285,8 +292,10 @@ def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_sca
 
 
 def lidar_ray_scan(
-    pose: RobotPose, occ: ContinuousOccupancy, settings: LidarScannerSettings
-) -> Tuple[np.ndarray, np.ndarray]:
+    pose: RobotPose,
+    occ: ContinuousOccupancy,
+    settings: LidarScannerSettings,
+) -> tuple[np.ndarray, np.ndarray]:
     """Representing a simulated radial LiDAR scanner operating
     in a 2D plane on a continuous occupancy with explicit objects.
 

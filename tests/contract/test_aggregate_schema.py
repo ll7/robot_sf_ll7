@@ -32,7 +32,7 @@ def _load_schema() -> dict:
 def test_aggregate_summary_invalid_sample_fails():
     schema = _load_schema()
     invalid = {
-        "groups": {"A": {"metrics": {"collisions": {"mean": 0}}}}
+        "groups": {"A": {"metrics": {"collisions": {"mean": 0}}}},
     }  # missing version, shape mismatch
     with pytest.raises(Exception):
         jsonschema.validate(instance=invalid, schema=schema)

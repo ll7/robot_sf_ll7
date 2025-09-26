@@ -29,7 +29,7 @@ def test_snqi_minimal_grid(tmp_path):
             "123",
             "--validate",
             "--ci-placeholder",
-        ]
+        ],
     )
     code = run(args)
     assert code == 0

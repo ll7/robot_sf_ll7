@@ -126,7 +126,7 @@ class TestSchemaConsolidationIntegration:
         assert canonical_path.exists(), f"Canonical schema file not found at {canonical_path}"
 
         # Verify it's valid JSON
-        with open(canonical_path, "r", encoding="utf-8") as f:
+        with open(canonical_path, encoding="utf-8") as f:
             schema_data = json.load(f)
 
         assert isinstance(schema_data, dict)

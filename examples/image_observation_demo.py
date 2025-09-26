@@ -73,7 +73,7 @@ def main():
             if "image" in obs:
                 image_obs = obs["image"]
                 print(
-                    f"  Image shape: {image_obs.shape}, range: [{image_obs.min():.3f}, {image_obs.max():.3f}]"
+                    f"  Image shape: {image_obs.shape}, range: [{image_obs.min():.3f}, {image_obs.max():.3f}]",
                 )
 
             if terminated or truncated:

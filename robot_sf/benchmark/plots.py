@@ -6,15 +6,18 @@ Create Pareto scatter plots to visualize trade-offs between two metrics.
 from __future__ import annotations
 
 import os
-from typing import Dict, Iterable, List, Tuple
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-Record = Dict[str, object]
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+Record = dict[str, object]
 
 
-def _get_dotted(d: Dict[str, object], path: str, default=None):
+def _get_dotted(d: dict[str, object], path: str, default=None):
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:
@@ -28,8 +31,8 @@ def _group_values(
     group_by: str,
     fallback_group_by: str,
     metric: str,
-) -> Dict[str, List[float]]:
-    out: Dict[str, List[float]] = {}
+) -> dict[str, list[float]]:
+    out: dict[str, list[float]] = {}
     for r in records:
         g = _get_dotted(r, group_by)
         if g is None:
@@ -52,7 +55,7 @@ def compute_pareto_points(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
     agg: str = "mean",
-) -> Tuple[List[Tuple[float, float]], List[str]]:
+) -> tuple[list[tuple[float, float]], list[str]]:
     """Compute per-group points (x, y) using agg over metric values.
 
     Returns
@@ -61,10 +64,10 @@ def compute_pareto_points(
     """
     gx = _group_values(records, group_by, fallback_group_by, x_metric)
     gy = _group_values(records, group_by, fallback_group_by, y_metric)
-    labels: List[str] = []
-    points: List[Tuple[float, float]] = []
+    labels: list[str] = []
+    points: list[tuple[float, float]] = []
 
-    def reducer(vals: List[float]) -> float:
+    def reducer(vals: list[float]) -> float:
         if agg == "median":
             return float(np.median(vals))
         return float(np.mean(vals))
@@ -79,7 +82,10 @@ def compute_pareto_points(
 
 
 def _dominates(
-    a: Tuple[float, float], b: Tuple[float, float], x_higher_better: bool, y_higher_better: bool
+    a: tuple[float, float],
+    b: tuple[float, float],
+    x_higher_better: bool,
+    y_higher_better: bool,
 ) -> bool:
     ax, ay = a
     bx, by = b
@@ -92,10 +98,10 @@ def _dominates(
 
 
 def pareto_front_indices(
-    points: List[Tuple[float, float]],
+    points: list[tuple[float, float]],
     x_higher_better: bool = False,
     y_higher_better: bool = False,
-) -> List[int]:
+) -> list[int]:
     """Return indices of non-dominated points using simple O(n^2) check."""
     n = len(points)
     idxs = []
@@ -124,7 +130,7 @@ def save_pareto_png(
     y_higher_better: bool = False,
     title: str | None = None,
     out_pdf: str | None = None,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """Render and save a Pareto scatter with non-dominated points highlighted.
 
     When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
@@ -139,7 +145,12 @@ def save_pareto_png(
         # Fallback: keep defaults if helper not available
         pass
     points, labels = compute_pareto_points(
-        records, x_metric, y_metric, group_by, fallback_group_by, agg
+        records,
+        x_metric,
+        y_metric,
+        group_by,
+        fallback_group_by,
+        agg,
     )
     if not points:
         raise ValueError("No points available for Pareto plot (check metrics and grouping).")
@@ -147,7 +158,9 @@ def save_pareto_png(
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
     front = pareto_front_indices(
-        points, x_higher_better=x_higher_better, y_higher_better=y_higher_better
+        points,
+        x_higher_better=x_higher_better,
+        y_higher_better=y_higher_better,
     )
 
     plt.figure(figsize=(6, 4))
@@ -174,7 +187,7 @@ def save_pareto_png(
     plt.close()
 
     front_labels = [labels[i] for i in front]
-    payload: Dict[str, object] = {
+    payload: dict[str, object] = {
         "count": len(points),
         "front_size": len(front),
         "front_labels": front_labels,

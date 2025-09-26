@@ -19,7 +19,7 @@ def _param_names(func):
     return [p.name for p in inspect.signature(func).parameters.values()]
 
 
-def test_make_robot_env_signature_explicit():  # noqa: D401
+def test_make_robot_env_signature_explicit():
     params = _param_names(make_robot_env)
     assert "config" in params
     assert "reward_func" in params
@@ -38,17 +38,17 @@ def test_make_robot_env_signature_explicit():  # noqa: D401
     _ = [p.kind for p in inspect.signature(make_robot_env).parameters.values()]
 
 
-def test_make_image_robot_env_signature_explicit():  # noqa: D401
+def test_make_image_robot_env_signature_explicit():
     params = _param_names(make_image_robot_env)
     assert "config" in params
     assert "debug" in params
 
 
-def test_make_pedestrian_env_signature_explicit():  # noqa: D401
+def test_make_pedestrian_env_signature_explicit():
     params = _param_names(make_pedestrian_env)
     assert "config" in params and "robot_model" in params
 
 
-def test_make_multi_robot_env_signature_explicit():  # noqa: D401
+def test_make_multi_robot_env_signature_explicit():
     params = _param_names(make_multi_robot_env)
     assert "num_robots" in params and "config" in params

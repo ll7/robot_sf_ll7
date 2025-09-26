@@ -28,14 +28,18 @@ Implementation notes:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import statistics as stats
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
     from robot_sf.gym_env.environment_factory import (
@@ -49,28 +53,22 @@ except Exception as e:  # pragma: no cover - baseline script bootstrap
 
 @runtime_checkable
 class _EnvLike(Protocol):  # minimal protocol to appease static checks
-    def reset(self) -> Any:  # noqa: D401 - concise
-        ...
+    def reset(self) -> Any: ...
 
-    def close(self) -> None:  # noqa: D401 - concise
-        ...
+    def close(self) -> None: ...
 
 
-def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> Dict[str, float]:
-    times: List[float] = []
+def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, float]:
+    times: list[float] = []
     for _ in range(iterations):
         start = time.perf_counter()
         env = fn()
         # Minimal interaction to ensure full construction side effects executed
-        try:
+        with contextlib.suppress(Exception):
             env.reset()
-        except Exception:  # noqa: BLE001 - broad to avoid aborting timing
-            pass
         # Best effort close to free resources
-        try:
+        with contextlib.suppress(Exception):
             env.close()
-        except Exception:  # noqa: BLE001
-            pass
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         times.append(elapsed_ms)
     if not times:
@@ -83,7 +81,7 @@ def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> Dict[str, flo
     }
 
 
-def _percentile(values: List[float], p: float) -> float:
+def _percentile(values: list[float], p: float) -> float:
     if not values:
         return 0.0
     values_sorted = sorted(values)
@@ -113,12 +111,14 @@ def main() -> None:
 
     logger.info("Timing make_robot_env iterations={}", iterations)
     results["make_robot_env"] = _time_creation(
-        lambda: make_robot_env(config=RobotSimulationConfig(), debug=False), iterations
+        lambda: make_robot_env(config=RobotSimulationConfig(), debug=False),
+        iterations,
     )
 
     logger.info("Timing make_image_robot_env iterations={}", iterations)
     results["make_image_robot_env"] = _time_creation(
-        lambda: make_image_robot_env(config=ImageRobotConfig(), debug=False), iterations
+        lambda: make_image_robot_env(config=ImageRobotConfig(), debug=False),
+        iterations,
     )
 
     # Pedestrian env requires a robot_model; skip unless trivial to supply (future enhancement)
@@ -127,7 +127,7 @@ def main() -> None:
     out_path: Path = args.output
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "iterations": iterations,
         "results": results,
         "notes": "Creation timing only; excludes step performance.",

@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import numba
 import numpy as np
@@ -261,7 +261,7 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
         The radius of the opposing agent.
     """
 
-    get_enemy_coords: Optional[Callable[[], Vec2D]] = None
+    get_enemy_coords: Callable[[], Vec2D] | None = None
     enemy_radius: float = 1.0
 
     @property

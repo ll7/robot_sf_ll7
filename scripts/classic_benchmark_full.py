@@ -67,11 +67,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     # Execution controls
     parser.add_argument("--workers", type=int, default=2, help="Parallel worker processes")
     parser.add_argument(
-        "--seed", type=int, default=123, help="Master seed for deterministic planning"
+        "--seed",
+        type=int,
+        default=123,
+        help="Master seed for deterministic planning",
     )
     parser.add_argument("--algo", default="ppo", help="Algorithm label for manifest/records")
     parser.add_argument(
-        "--initial-episodes", type=int, default=2, help="Initial per-scenario episode count"
+        "--initial-episodes",
+        type=int,
+        default=2,
+        help="Initial per-scenario episode count",
     )
     parser.add_argument(
         "--max-episodes",
@@ -80,7 +86,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Maximum per-scenario episodes (0=unbounded until precision)",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=2, help="Episodes to add per adaptive sampling iteration"
+        "--batch-size",
+        type=int,
+        default=2,
+        help="Episodes to add per adaptive sampling iteration",
     )
     parser.add_argument(
         "--horizon",
@@ -89,7 +98,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Optional horizon override for all episodes (0 means default)",
     )
     parser.add_argument(
-        "--smoke", action="store_true", help="Smoke mode (fast placeholders, minimal output)"
+        "--smoke",
+        action="store_true",
+        help="Smoke mode (fast placeholders, minimal output)",
     )
     # Precision thresholds (half-width targets)
     parser.add_argument(

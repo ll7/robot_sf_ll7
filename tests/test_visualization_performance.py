@@ -97,7 +97,9 @@ class TestVisualizationPerformance:
         # This is acceptable for performance testing
 
     def test_generate_benchmark_plots_with_filters_performance(
-        self, sample_episodes_file, tmp_path
+        self,
+        sample_episodes_file,
+        tmp_path,
     ):
         """Test that filtered plot generation is also performant."""
         output_dir = tmp_path / "output"

@@ -11,10 +11,10 @@ def make_simple_sim():
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
             [1.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
-        ]
+        ],
     )
     obstacles = [
-        (2.5, 2.5, -1.0, 1.0)  # vertical line near x=2.5 from y=-1 to y=1
+        (2.5, 2.5, -1.0, 1.0),  # vertical line near x=2.5 from y=-1 to y=1
     ]
     sim = Simulator(state=state, obstacles=obstacles)
     return sim

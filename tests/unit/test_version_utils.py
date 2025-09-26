@@ -119,7 +119,7 @@ class TestDetectBreakingChanges:
                     "type": "object",
                     "properties": {"host": {"type": "string"}, "port": {"type": "integer"}},
                     "required": ["host", "port"],
-                }
+                },
             },
         }
 
@@ -130,7 +130,7 @@ class TestDetectBreakingChanges:
                     "type": "object",
                     "properties": {"host": {"type": "string"}},
                     "required": ["host"],
-                }
+                },
             },
         }
 

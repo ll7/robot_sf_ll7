@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 import numpy as np
 from loguru import logger
@@ -32,7 +32,7 @@ class VisualArtifact:
     generation_time: datetime
     file_size: int
     status: Literal["generated", "failed", "placeholder"]
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -40,25 +40,25 @@ class ValidationResult:
     """Result of validating visual artifacts."""
 
     passed: bool
-    failed_artifacts: List[VisualArtifact]
-    details: Optional[dict] = None
+    failed_artifacts: list[VisualArtifact]
+    details: dict | None = None
 
 
 class VisualizationError(Exception):
     """Raised when visualization generation fails."""
 
-    def __init__(self, message: str, artifact_type: str, details: Optional[dict] = None):
+    def __init__(self, message: str, artifact_type: str, details: dict | None = None):
         super().__init__(message)
         self.artifact_type = artifact_type
         self.details = details or {}
 
 
 def generate_benchmark_plots_from_data(
-    episodes: List[dict],
+    episodes: list[dict],
     output_dir: str,
-    scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None,
-) -> List[VisualArtifact]:
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
+) -> list[VisualArtifact]:
     """
     Generate PDF plots by analyzing benchmark episodes from data.
 
@@ -116,7 +116,7 @@ def generate_benchmark_plots_from_data(
                 file_size=0,
                 status="failed",
                 error_message=str(e),
-            )
+            ),
         )
 
     # Generate scenario comparison plot
@@ -138,18 +138,18 @@ def generate_benchmark_plots_from_data(
                 file_size=0,
                 status="failed",
                 error_message=str(e),
-            )
+            ),
         )
 
     return artifacts
 
 
 def generate_benchmark_plots_from_file(
-    episodes_path: Union[str, Path],
+    episodes_path: str | Path,
     output_dir: str,
-    scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None,
-) -> List[VisualArtifact]:
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
+) -> list[VisualArtifact]:
     """
     Generate PDF plots by analyzing benchmark episodes from a file.
 
@@ -171,16 +171,19 @@ def generate_benchmark_plots_from_file(
 
     episodes = _load_episodes(str(episodes_path))
     return generate_benchmark_plots_from_data(
-        episodes, output_dir, scenario_filter, baseline_filter
+        episodes,
+        output_dir,
+        scenario_filter,
+        baseline_filter,
     )
 
 
 def generate_benchmark_plots(
-    episodes_data: Union[List[dict], str, Path],
+    episodes_data: list[dict] | str | Path,
     output_dir: str,
-    scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None,
-) -> List[VisualArtifact]:
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
+) -> list[VisualArtifact]:
     """
     Generate PDF plots by analyzing benchmark episodes.
 
@@ -198,13 +201,19 @@ def generate_benchmark_plots(
         FileNotFoundError: If episodes_path doesn't exist (when path provided)
     """
     # Handle backward compatibility: if episodes_data is a path, load it
-    if isinstance(episodes_data, (str, Path)):
+    if isinstance(episodes_data, str | Path):
         return generate_benchmark_plots_from_file(
-            episodes_data, output_dir, scenario_filter, baseline_filter
+            episodes_data,
+            output_dir,
+            scenario_filter,
+            baseline_filter,
         )
     else:
         return generate_benchmark_plots_from_data(
-            episodes_data, output_dir, scenario_filter, baseline_filter
+            episodes_data,
+            output_dir,
+            scenario_filter,
+            baseline_filter,
         )
 
 
@@ -213,16 +222,16 @@ def _check_matplotlib_available() -> None:
     _check_dependencies(["matplotlib"])
 
     # Set non-interactive backend
-    import matplotlib
+    import matplotlib as mpl
 
-    matplotlib.use("Agg")
+    mpl.use("Agg")
 
 
-def _load_episodes(episodes_path: str) -> List[dict]:
+def _load_episodes(episodes_path: str) -> list[dict]:
     """Load episodes from JSONL file."""
     episodes = []
     try:
-        with open(episodes_path, "r", encoding="utf-8") as f:
+        with open(episodes_path, encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
@@ -235,7 +244,7 @@ def _load_episodes(episodes_path: str) -> List[dict]:
                         "plot",
                         {"episodes_path": episodes_path, "line": i},
                     ) from e
-    except IOError as e:
+    except OSError as e:
         raise VisualizationError(
             f"Failed to read episode file {episodes_path}: {e}",
             "plot",
@@ -248,8 +257,10 @@ def _load_episodes(episodes_path: str) -> List[dict]:
 
 
 def _filter_episodes(
-    episodes: List[dict], scenario_filter: Optional[str], baseline_filter: Optional[str]
-) -> List[dict]:
+    episodes: list[dict],
+    scenario_filter: str | None,
+    baseline_filter: str | None,
+) -> list[dict]:
     """Filter episodes based on scenario and baseline filters."""
     filtered_episodes = episodes
 
@@ -273,7 +284,7 @@ def _filter_episodes(
     return filtered_episodes
 
 
-def _generate_metrics_plot(episodes: List[dict], output_dir: str) -> VisualArtifact:
+def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
     """Generate metrics distribution plot and return artifact."""
     import matplotlib.pyplot as plt
 
@@ -335,11 +346,12 @@ def _generate_metrics_plot(episodes: List[dict], output_dir: str) -> VisualArtif
 
     except (ValueError, KeyError, TypeError) as e:
         raise VisualizationError(
-            f"Failed to generate metrics plot due to a data error: {e}", "plot"
+            f"Failed to generate metrics plot due to a data error: {e}",
+            "plot",
         )
 
 
-def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) -> VisualArtifact:
+def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
     """Generate scenario comparison plot and return artifact."""
     import matplotlib.pyplot as plt
 
@@ -414,18 +426,19 @@ def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) ->
 
     except (ValueError, KeyError, TypeError) as e:
         raise VisualizationError(
-            f"Failed to generate scenario comparison plot due to a data error: {e}", "plot"
+            f"Failed to generate scenario comparison plot due to a data error: {e}",
+            "plot",
         )
 
 
 def generate_benchmark_videos_from_data(
-    episodes: List[dict],
+    episodes: list[dict],
     output_dir: str,
-    scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None,
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
     fps: int = 30,
     max_duration: float = 10.0,
-) -> List[VisualArtifact]:
+) -> list[VisualArtifact]:
     """
     Generate MP4 videos by replaying benchmark episodes from data.
 
@@ -461,7 +474,7 @@ def generate_benchmark_videos_from_data(
         logger.warning(
             "No episodes with replay data found for video generation. "
             "Video generation requires replay capture to be enabled during benchmark execution "
-            "(set capture_replay=True in benchmark configuration)."
+            "(set capture_replay=True in benchmark configuration).",
         )
         return []
 
@@ -533,13 +546,13 @@ def generate_benchmark_videos_from_data(
 
 
 def generate_benchmark_videos_from_file(
-    episodes_path: Union[str, Path],
+    episodes_path: str | Path,
     output_dir: str,
-    scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None,
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
     fps: int = 30,
     max_duration: float = 10.0,
-) -> List[VisualArtifact]:
+) -> list[VisualArtifact]:
     """
     Generate MP4 videos by replaying benchmark episodes from a file.
 
@@ -563,18 +576,23 @@ def generate_benchmark_videos_from_file(
 
     episodes = _load_episodes(str(episodes_path))
     return generate_benchmark_videos_from_data(
-        episodes, output_dir, scenario_filter, baseline_filter, fps, max_duration
+        episodes,
+        output_dir,
+        scenario_filter,
+        baseline_filter,
+        fps,
+        max_duration,
     )
 
 
 def generate_benchmark_videos(
-    episodes_data: Union[List[dict], str, Path],
+    episodes_data: list[dict] | str | Path,
     output_dir: str,
-    scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None,
+    scenario_filter: str | None = None,
+    baseline_filter: str | None = None,
     fps: int = 30,
     max_duration: float = 10.0,
-) -> List[VisualArtifact]:
+) -> list[VisualArtifact]:
     """
     Generate MP4 videos by replaying benchmark episodes.
 
@@ -594,13 +612,23 @@ def generate_benchmark_videos(
         FileNotFoundError: If episodes_path doesn't exist (when path provided)
     """
     # Handle backward compatibility: if episodes_data is a path, load it
-    if isinstance(episodes_data, (str, Path)):
+    if isinstance(episodes_data, str | Path):
         return generate_benchmark_videos_from_file(
-            episodes_data, output_dir, scenario_filter, baseline_filter, fps, max_duration
+            episodes_data,
+            output_dir,
+            scenario_filter,
+            baseline_filter,
+            fps,
+            max_duration,
         )
     else:
         return generate_benchmark_videos_from_data(
-            episodes_data, output_dir, scenario_filter, baseline_filter, fps, max_duration
+            episodes_data,
+            output_dir,
+            scenario_filter,
+            baseline_filter,
+            fps,
+            max_duration,
         )
 
 
@@ -649,7 +677,7 @@ def _episode_record_to_replay_episode(episode: dict):
     return replay_episode
 
 
-def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> List[np.ndarray]:
+def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> list[np.ndarray]:
     """Generate synthetic frames from a replay episode for video creation.
 
     Args:
@@ -681,7 +709,7 @@ def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> L
 
 def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
     """Calculate the bounding box for all trajectory positions."""
-    positions: List[tuple[float, float]] = []
+    positions: list[tuple[float, float]] = []
     for step in steps:
         positions.append((step.x, step.y))
         if step.ped_positions:
@@ -690,7 +718,7 @@ def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
     if not positions:
         positions.append((0.0, 0.0))
 
-    xs, ys = zip(*positions)
+    xs, ys = zip(*positions, strict=False)
     min_x, max_x = float(min(xs)), float(max(xs))
     min_y, max_y = float(min(ys)), float(max(ys))
 
@@ -721,8 +749,10 @@ def _create_pixel_converter(bounds: tuple[float, float, float, float]):
 
 
 def _generate_frames_from_pixels(
-    robot_pixels: List[tuple[int, int]], ped_pixels: List[List[tuple[int, int]]], max_frames: int
-) -> List[np.ndarray]:
+    robot_pixels: list[tuple[int, int]],
+    ped_pixels: list[list[tuple[int, int]]],
+    max_frames: int,
+) -> list[np.ndarray]:
     """Generate video frames from pre-computed pixel positions."""
     height, width = 320, 320
     background = np.array([22, 26, 30], dtype=np.uint8)
@@ -730,7 +760,7 @@ def _generate_frames_from_pixels(
     robot_color = (245, 228, 92)
     ped_color = (214, 72, 72)
 
-    frames: List[np.ndarray] = []
+    frames: list[np.ndarray] = []
     limit = max_frames if max_frames and max_frames > 0 else None
 
     for idx, (robot_row, robot_col) in enumerate(robot_pixels):
@@ -764,7 +794,11 @@ def _generate_frames_from_pixels(
 
 
 def _draw_disk(
-    frame: np.ndarray, row: int, col: int, radius: int, color: tuple[int, int, int]
+    frame: np.ndarray,
+    row: int,
+    col: int,
+    radius: int,
+    color: tuple[int, int, int],
 ) -> None:
     """Draw a filled disk on the frame at the specified position."""
     height, width = frame.shape[:2]
@@ -778,7 +812,7 @@ def _draw_disk(
                 frame[rr, cc] = color
 
 
-def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int) -> None:
+def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int) -> None:
     """Encode a list of frames to an MP4 video file, optimized for memory usage."""
     if not frames:
         raise VisualizationError("No frames to encode", "video")
@@ -790,8 +824,7 @@ def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int)
 
         # Use a generator to avoid loading all frames into memory at once
         def frame_generator():
-            for frame in frames:
-                yield frame
+            yield from frames
 
         # Create a temporary audio file path (even though audio=False, moviepy expects it)
         with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as temp_audio:
@@ -810,7 +843,7 @@ def _encode_frames_to_video(frames: List[np.ndarray], video_path: str, fps: int)
         raise VisualizationError(f"Failed to encode video: {e}", "video")
 
 
-def validate_visual_artifacts(artifacts: List[VisualArtifact]) -> ValidationResult:
+def validate_visual_artifacts(artifacts: list[VisualArtifact]) -> ValidationResult:
     """
     Validate that visual artifacts contain real data.
 
@@ -822,7 +855,9 @@ def validate_visual_artifacts(artifacts: List[VisualArtifact]) -> ValidationResu
     """
     if not artifacts:
         return ValidationResult(
-            passed=True, failed_artifacts=[], details={"message": "No artifacts to validate"}
+            passed=True,
+            failed_artifacts=[],
+            details={"message": "No artifacts to validate"},
         )
 
     failed_artifacts = []
@@ -866,7 +901,7 @@ def validate_visual_artifacts(artifacts: List[VisualArtifact]) -> ValidationResu
     return ValidationResult(passed=passed, failed_artifacts=failed_artifacts, details=details)
 
 
-def _check_dependencies(required_deps: List[str]) -> None:
+def _check_dependencies(required_deps: list[str]) -> None:
     """Check that required packages are available for visualization generation.
 
     Args:

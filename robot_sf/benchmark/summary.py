@@ -8,17 +8,20 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import TYPE_CHECKING, Any
 
-import matplotlib
+import matplotlib as mpl
 
 # Use headless backend for CI/non-GUI
-matplotlib.use("Agg", force=True)
-import matplotlib.pyplot as plt  # noqa: E402
+mpl.use("Agg", force=True)
+import matplotlib.pyplot as plt
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 
-def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[Dict[str, Any]]:
-    if isinstance(paths, (str, Path)):
+def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str, Any]]:
+    if isinstance(paths, str | Path):
         paths = [paths]
     for p in paths:
         p = Path(p)
@@ -35,7 +38,7 @@ def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[Dict[str
                     continue
 
 
-def _get_nested(d: Dict[str, Any], path: str, default: Any = None) -> Any:
+def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -55,15 +58,15 @@ def _safe_number(x: Any) -> float | None:
         return None
 
 
-def collect_values(records: Iterable[Dict[str, Any]]) -> Tuple[List[float], List[float]]:
+def collect_values(records: Iterable[dict[str, Any]]) -> tuple[list[float], list[float]]:
     """Collect min_distance and avg_speed from episode records.
 
     Falls back to computing avg speed from robot_vel if present under
     record["trajectory"]["robot_vel"] as a list of [vx, vy]. If not available,
     the avg_speed entry may be missing.
     """
-    mins: List[float] = []
-    speeds: List[float] = []
+    mins: list[float] = []
+    speeds: list[float] = []
     for rec in records:
         md = _get_nested(rec, "metrics.min_distance")
         mdv = _safe_number(md)
@@ -77,7 +80,7 @@ def collect_values(records: Iterable[Dict[str, Any]]) -> Tuple[List[float], List
             # Optional fallback: derive from trajectory if available
             traj = rec.get("trajectory") or {}
             rv = traj.get("robot_vel")
-            if isinstance(rv, list) and rv and isinstance(rv[0], (list, tuple)):
+            if isinstance(rv, list) and rv and isinstance(rv[0], list | tuple):
                 try:
                     import numpy as np
 
@@ -96,8 +99,8 @@ def plot_histograms(
     out_dir: str | Path,
     *,
     bins: int = 30,
-) -> List[str]:
-    out_paths: List[str] = []
+) -> list[str]:
+    out_paths: list[str] = []
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
@@ -127,7 +130,7 @@ def plot_histograms(
     return out_paths
 
 
-def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | Path) -> List[str]:
+def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | Path) -> list[str]:
     mins, speeds = collect_values(_iter_records(paths))
     return plot_histograms(mins, speeds, out_dir)
 

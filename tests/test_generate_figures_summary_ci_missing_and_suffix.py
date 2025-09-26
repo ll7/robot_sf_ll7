@@ -9,7 +9,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
@@ -42,10 +45,14 @@ def test_missing_ci_warning(tmp_path: Path):
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(json.dumps(summary), encoding="utf-8")
     out_dir = tmp_path / "figs_missing"
-    cmd = _base_cmd(episodes, out_dir) + ["--table-summary", str(summary_path)]
+    cmd = [*_base_cmd(episodes, out_dir), "--table-summary", str(summary_path)]
     # Capture stderr for warning
     proc = subprocess.run(
-        cmd, env={**os.environ, "MPLBACKEND": "Agg"}, capture_output=True, text=True, check=True
+        cmd,
+        env={**os.environ, "MPLBACKEND": "Agg"},
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert "Missing CI arrays" in proc.stderr
     md = (out_dir / "baseline_table.md").read_text(encoding="utf-8")
@@ -60,7 +67,8 @@ def test_custom_ci_suffix(tmp_path: Path):
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(json.dumps(summary), encoding="utf-8")
     out_dir = tmp_path / "figs_suffix"
-    cmd = _base_cmd(episodes, out_dir) + [
+    cmd = [
+        *_base_cmd(episodes, out_dir),
         "--table-summary",
         str(summary_path),
         "--ci-column-suffix",

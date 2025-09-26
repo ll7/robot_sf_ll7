@@ -21,7 +21,9 @@ def test_convenience_boolean_creates_recording_options(tmp_path):
 def test_explicit_options_override_boolean(tmp_path):
     rec = RecordingOptions(record=False)
     env = make_robot_env(
-        record_video=True, recording_options=rec, video_path=str(tmp_path / "a.mp4")
+        record_video=True,
+        recording_options=rec,
+        video_path=str(tmp_path / "a.mp4"),
     )
     # Current precedence logic flips RecordingOptions.record to True when record_video=True
     assert getattr(env, "sim_ui", None) is not None

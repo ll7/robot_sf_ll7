@@ -6,7 +6,7 @@ interfaces and shared functionality for all simulation environments.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from gymnasium import Env, spaces
 
@@ -31,8 +31,8 @@ class BaseSimulationEnv(Env, ABC):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -44,7 +44,7 @@ class BaseSimulationEnv(Env, ABC):
         self.video_fps = video_fps
 
         # Common state
-        self.recorded_states: List[VisualizableSimState] = []
+        self.recorded_states: list[VisualizableSimState] = []
         self.sim_ui = None
         self.map_def = None
 
@@ -57,17 +57,17 @@ class BaseSimulationEnv(Env, ABC):
         pass
 
     @abstractmethod
-    def _create_spaces(self) -> Tuple[spaces.Space, spaces.Space]:
+    def _create_spaces(self) -> tuple[spaces.Space, spaces.Space]:
         """Create action and observation spaces."""
         pass
 
     @abstractmethod
-    def step(self, action: Any) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
+    def step(self, action: Any) -> tuple[Any, float, bool, bool, dict[str, Any]]:
         """Execute one environment step."""
         pass
 
     @abstractmethod
-    def reset(self, **kwargs) -> Tuple[Any, Dict[str, Any]]:
+    def reset(self, **kwargs) -> tuple[Any, dict[str, Any]]:
         """Reset the environment."""
         pass
 
@@ -81,7 +81,7 @@ class BaseSimulationEnv(Env, ABC):
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str = None) -> None:
+    def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to file."""
         from robot_sf.gym_env.base_env import BaseEnv
 
@@ -149,7 +149,8 @@ class MultiAgentEnv(BaseSimulationEnv, ABC):
 
     @abstractmethod
     def _step_agents(
-        self, actions: List[Any]
-    ) -> Tuple[List[Any], List[float], List[bool], List[Dict]]:
+        self,
+        actions: list[Any],
+    ) -> tuple[list[Any], list[float], list[bool], list[dict]]:
         """Execute step for all agents."""
         pass

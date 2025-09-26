@@ -46,7 +46,9 @@ class TestCIWorkflowContract:
         start_time = time.time()
 
         # Simulate package installation (this will take > 73 seconds currently)
-        result = subprocess.run(["sudo", "apt-get", "update"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["sudo", "apt-get", "update"], capture_output=True, text=True, check=False
+        )
 
         result = subprocess.run(
             [
@@ -61,6 +63,7 @@ class TestCIWorkflowContract:
             ],
             capture_output=True,
             text=True,
+            check=False,
         )
 
         end_time = time.time()
@@ -80,7 +83,7 @@ class TestCIWorkflowContract:
         }
 
         for package, command in required_commands.items():
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
             # Note: Some commands may not work in CI environment
             # This test validates the contract expectation
             assert result.returncode == 0, f"Package {package} not properly installed"
@@ -111,9 +114,9 @@ class TestCIWorkflowContract:
             pytest.fail("pygame not available for headless testing")
 
         try:
-            import matplotlib
+            import matplotlib as mpl
 
-            matplotlib.use("Agg")
+            mpl.use("Agg")
             import matplotlib.pyplot as plt
 
             plt.figure()

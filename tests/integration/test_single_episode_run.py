@@ -85,7 +85,10 @@ def test_single_episode_with_metrics():
 
     try:
         episode_data = run_episode(
-            scenario_params=scenario_params, seed=123, horizon=50, algo="random"
+            scenario_params=scenario_params,
+            seed=123,
+            horizon=50,
+            algo="random",
         )
 
         # Check metrics structure
@@ -102,7 +105,7 @@ def test_single_episode_with_metrics():
 
         for metric in expected_metrics:
             assert metric in metrics
-            assert isinstance(metrics[metric], (int, float))
+            assert isinstance(metrics[metric], int | float)
 
     except Exception as e:
         pytest.skip(f"Episode runner not fully implemented: {e}")

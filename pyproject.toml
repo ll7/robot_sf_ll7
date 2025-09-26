@@ -157,18 +157,91 @@ indent-width = 4
 target-version = "py312"
 
 [tool.ruff.lint]
-# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
-# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
-# McCabe complexity (`C901`) by default.
-select = ["E4", "E7", "E9", "F", "W", "C901", "I001"]
-ignore = []
+select = [
+  # you already have:
+  "E4","E7","E9","F","W","C901","I001",
+
+  # **Bug catchers & safety**
+  "B",      # flake8-bugbear: common footguns (B006/B008/B904 are gold)
+  "BLE",    # no bare/overbroad except
+  "TRY",    # try/except anti-patterns (tryceratops)
+  "A",      # no shadowing of builtins
+  "ARG",    # unused args in public APIs
+  "S",      # Bandit security checks (safe subset, see per-file ignores)
+
+  # **Modernization & simplification**
+  "UP",     # pyupgrade: keep code current
+  "SIM",    # flake8-simplify: prune needless branches/loops
+  "C4",     # flake8-comprehensions: cleaner comps/gens
+  "ICN",    # canonical import aliases (np, pd, plt, etc.)
+
+  # **Performance & correctness nits**
+  "PERF",   # perflint: avoid tiny perf traps (informational)
+  "PL",     # selected pylint-derived rules (see ignores below)
+
+  # **Time handling**
+  "DTZ",    # timezone-aware datetime usage
+
+  # **Logging / prints / commented code**
+  "G",      # logging format string correctness
+  "T20",    # discourage print() outside scripts/tests
+  "ERA",    # eradicate commented-out code
+
+  # **Style that doesn't fight your formatter**
+  "COM",    # trailing commas where helpful
+  "ISC",    # implicit string concat gotchas
+
+  # **Housekeeping**
+  "RUF",    # Ruff's own rules (e.g., unused `noqa`)
+  "PGH",    # blanket noqa / useless noqa hygiene
+  "TCH",    # move typing-only imports under TYPE_CHECKING
+  "TID",    # tidy imports (relative vs absolute)
+  "N",      # pep8-naming
+]
+
+ignore = [
+  # Pylint-derived "opinionated" refactors that often fire in scientific code:
+  "PLR0911","PLR0912","PLR0913","PLR0915", # many returns/branches/args
+  "PLR2004", # magic values in comparisons (okay in tests/configs)
+  "S", # Security checks not critical in research code
+  
+  # Research code leniencies - these rules are too noisy for scientific computing:
+  "PGH003", # Use specific rule codes when ignoring type issues (too pedantic)
+  "DTZ005", # datetime.now() without tz (common in research scripts)
+  "ERA001", # Commented-out code (sometimes intentional in research)
+  "ARG001", "ARG005", # Unused function arguments (common in test mocks)
+  "PERF401", # List comprehensions vs loops (micro-optimization)
+  "RUF005", # Consider iterable unpacking (style preference)
+  "TRY300", # Move statement to else block (sometimes less readable)
+  "BLE001", # Do not catch blind exception (sometimes necessary in research)
+  "B017", # Assert blind exception (okay in schema validation tests)
+  "N806", # Variable in function should be lowercase (math conventions use uppercase)
+  "C417", # Unnecessary map() usage (sometimes clearer than comprehensions)
+  "UP038", # Use X | Y in isinstance (Python 3.10+ syntax, but codebase supports 3.10)
+  "PLC0206", # Extracting value without .items() (sometimes clearer)
+  "TRY003", # Avoid specifying long messages outside the exception class (too pedantic)
+  "SIM105", # Use contextlib.suppress instead of try-except-pass (sometimes less clear)
+  "RUF034", # Useless if-else condition (sometimes intentional for clarity)
+  "T201", # print found (allowed in scripts/examples as per per-file-ignores)
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: allow asserts, prints, some magic values & security test scaffolding
+"tests/**/*" = ["S101","T201","PLR2004"]
+# One-off scripts / notebooks exports: allow prints
+"scripts/**/*" = ["T201"]
+# Examples and docs: allow prints and other leniencies
+"examples/**/*" = ["T201"]
+"docs/**/*" = ["T201"]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
 
 # Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+# dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.

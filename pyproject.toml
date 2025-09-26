@@ -249,6 +249,8 @@ ignore = [
 # Examples and docs: allow prints and other leniencies
 "examples/**/*" = ["T201"]
 "docs/**/*" = ["T201"]
+# CLI tools: allow prints to stdout
+"robot_sf/benchmark/cli.py" = ["T201"]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]

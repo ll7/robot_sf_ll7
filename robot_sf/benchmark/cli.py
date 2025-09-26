@@ -84,8 +84,8 @@ def _handle_list_algorithms(_args) -> int:
         except ImportError:
             pass
 
-        for _algo in algorithms:
-            pass
+        for algo in algorithms:
+            print(algo)
 
         return 0
     except Exception:  # pragma: no cover - error path
@@ -470,6 +470,7 @@ def _handle_plot_scenarios(args) -> int:
             out_pdf = str(Path(args.out_dir) / "montage.pdf") if bool(args.pdf) else None
             meta = _thumb_montage(metas, out_png=out_png, cols=int(args.cols), out_pdf=out_pdf)
             payload.update({"montage": meta})
+        print(json.dumps(payload))
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -479,8 +480,8 @@ def _handle_list_scenarios(args) -> int:
     try:
         scenarios = load_scenario_matrix(args.matrix)
         ids = [str(s.get("id", "unknown")) for s in scenarios]
-        for _sid in ids:
-            pass
+        for sid in ids:
+            print(sid)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -491,7 +492,8 @@ def _handle_validate_config(args) -> int:
         scenarios = load_scenario_matrix(args.matrix)
         errors = validate_scenario_list(scenarios)
         warnings = []
-        {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
+        report = {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
+        print(json.dumps(report))
         return 0 if not errors else 2
     except Exception:  # pragma: no cover - error path
         return 2
@@ -1067,7 +1069,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         help="SNQI weight tooling (optimize / recompute)",
         description="Social Navigation Quality Index tooling: optimize or recompute weights.",
     )
-    snqi_sub = snqi_parser.add_subparsers(dest="snqi_cmd")
+    snqi_sub = snqi_parser.add_subparsers(dest="snqi_cmd", required=True)
 
     # We replicate the script arguments (kept minimal & aligned with parse_args in scripts) to avoid code duplication.
     # Dynamic loading is used so we don't need to refactor the existing scripts immediately.

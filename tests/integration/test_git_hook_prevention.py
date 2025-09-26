@@ -9,8 +9,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
-
 
 class TestGitHookPreventionIntegration:
     """Integration tests for git hook duplicate prevention functionality."""
@@ -36,40 +34,51 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "add", "README.md"], cwd=repo_path, check=True)
             subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, check=True)
 
-            # Create a schema file
-            schema_dir = repo_path / "schemas"
-            schema_dir.mkdir()
-            schema_file = schema_dir / "episode.schema.v1.json"
-            schema_file.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
-            )
+            # Change to the repo directory for the test
+            original_cwd = Path.cwd()
+            import os
 
-            # Stage the schema file
-            subprocess.run(
-                ["git", "add", "schemas/episode.schema.v1.json"], cwd=repo_path, check=True
-            )
+            os.chdir(repo_path)
 
-            # Test that prevent_schema_duplicates works with staged files
-            staged_files = ["schemas/episode.schema.v1.json"]
-            prevent_schema_duplicates(staged_files)  # Should not raise
+            try:
+                # Create a schema file
+                schema_dir = Path("schemas")
+                schema_dir.mkdir()
+                schema_file = schema_dir / "episode.schema.v1.json"
+                schema_file.write_text(
+                    '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                )
 
-            # Now create a duplicate schema file
-            duplicate_schema = repo_path / "duplicate.schema.v1.json"
-            duplicate_schema.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
-            )
+                # Stage the schema file
+                subprocess.run(["git", "add", "schemas/episode.schema.v1.json"], check=True)
 
-            # Stage the duplicate
-            subprocess.run(["git", "add", "duplicate.schema.v1.json"], cwd=repo_path, check=True)
+                # Test that prevent_schema_duplicates works with staged files
+                staged_files = ["schemas/episode.schema.v1.json"]
+                result = prevent_schema_duplicates(staged_files, canonical_dir=schema_dir)
+                assert result["status"] == "pass"  # Should pass since it's in canonical dir
 
-            # Test that prevent_schema_duplicates detects the duplicate
-            staged_files_with_duplicate = [
-                "schemas/episode.schema.v1.json",
-                "duplicate.schema.v1.json",
-            ]
+                # Now create a duplicate schema file
+                duplicate_schema = Path("duplicate.schema.v1.json")
+                duplicate_schema.write_text(
+                    '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                )
 
-            with pytest.raises(ValueError, match="Duplicate schema content detected"):
-                prevent_schema_duplicates(staged_files_with_duplicate)
+                # Stage the duplicate
+                subprocess.run(["git", "add", "duplicate.schema.v1.json"], check=True)
+
+                # Test that prevent_schema_duplicates detects the duplicate
+                staged_files_with_duplicate = [
+                    "schemas/episode.schema.v1.json",
+                    "duplicate.schema.v1.json",
+                ]
+
+                result = prevent_schema_duplicates(
+                    staged_files_with_duplicate, canonical_dir=schema_dir
+                )
+                assert result["status"] == "fail"
+                assert "duplicate" in result["message"].lower()
+            finally:
+                os.chdir(original_cwd)
 
     def test_git_hook_allows_different_schemas(self):
         """Test that git hooks allow committing different schema files."""
@@ -134,28 +143,42 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "add", "README.md"], cwd=repo_path, check=True)
             subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, check=True)
 
-            # Create schema files with same content but different names
-            schema_dir = repo_path / "schemas"
-            schema_dir.mkdir()
+            # Change to the repo directory for the test
+            original_cwd = Path.cwd()
+            import os
 
-            schema1 = schema_dir / "episode.schema.v1.json"
-            schema1.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
-            )
+            os.chdir(repo_path)
 
-            schema2 = schema_dir / "copy.schema.v1.json"
-            schema2.write_text(
-                '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
-            )
+            try:
+                # Create canonical schema
+                schema_dir = Path("schemas")
+                schema_dir.mkdir()
+                canonical_schema = schema_dir / "episode.schema.v1.json"
+                canonical_schema.write_text(
+                    '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                )
 
-            # Stage both files
-            subprocess.run(["git", "add", "schemas/"], cwd=repo_path, check=True)
+                # Commit the canonical schema
+                subprocess.run(["git", "add", "schemas/"], check=True)
+                subprocess.run(["git", "commit", "-m", "Add canonical schema"], check=True)
 
-            # Test that prevent_schema_duplicates detects content duplicates
-            staged_files = ["schemas/episode.schema.v1.json", "schemas/copy.schema.v1.json"]
+                # Create a duplicate schema file with different name
+                duplicate_schema = Path("copy.schema.v1.json")
+                duplicate_schema.write_text(
+                    '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
+                )
 
-            with pytest.raises(ValueError, match="Duplicate schema content detected"):
-                prevent_schema_duplicates(staged_files)
+                # Stage the duplicate
+                subprocess.run(["git", "add", "copy.schema.v1.json"], check=True)
+
+                # Test that prevent_schema_duplicates detects content duplicates
+                staged_files = ["copy.schema.v1.json"]
+
+                result = prevent_schema_duplicates(staged_files, canonical_dir=schema_dir)
+                assert result["status"] == "fail"
+                assert "duplicate" in result["message"].lower()
+            finally:
+                os.chdir(original_cwd)
 
     def test_git_hook_provides_helpful_error_messages(self):
         """Test that git hooks provide helpful error messages for duplicates."""
@@ -178,25 +201,43 @@ class TestGitHookPreventionIntegration:
             subprocess.run(["git", "add", "README.md"], cwd=repo_path, check=True)
             subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, check=True)
 
-            # Create duplicate schema files
-            schema1 = repo_path / "schema1.json"
-            schema1.write_text('{"type": "object"}')
+            # Change to the repo directory for the test
+            original_cwd = Path.cwd()
+            import os
 
-            schema2 = repo_path / "schema2.json"
-            schema2.write_text('{"type": "object"}')
+            os.chdir(repo_path)
 
-            # Stage both files
-            subprocess.run(
-                ["git", "add", "schema1.json", "schema2.json"], cwd=repo_path, check=True
-            )
+            try:
+                # Create canonical schema directory and file
+                canonical_dir = Path("robot_sf/benchmark/schemas")
+                canonical_dir.mkdir(parents=True)
+                canonical_schema = canonical_dir / "test.schema.v1.json"
+                canonical_schema.write_text('{"type": "object", "canonical": true}')
 
-            # Test that error message includes filenames
-            staged_files = ["schema1.json", "schema2.json"]
+                # Commit the canonical schema
+                subprocess.run(["git", "add", "robot_sf/"], check=True)
+                subprocess.run(["git", "commit", "-m", "Add canonical schema"], check=True)
 
-            with pytest.raises(ValueError) as exc_info:
-                prevent_schema_duplicates(staged_files)
+                # Create duplicate schema files (one matching canonical, one different)
+                schema1 = Path("schema1.schema.v1.json")
+                schema1.write_text('{"type": "object", "canonical": true}')  # duplicate
 
-            error_msg = str(exc_info.value)
-            assert "schema1.json" in error_msg
-            assert "schema2.json" in error_msg
-            assert "Duplicate schema content detected" in error_msg
+                schema2 = Path("schema2.schema.v1.json")
+                schema2.write_text('{"type": "object", "canonical": true}')  # duplicate
+
+                # Stage both files
+                subprocess.run(
+                    ["git", "add", "schema1.schema.v1.json", "schema2.schema.v1.json"], check=True
+                )
+
+                # Test that error message includes filenames
+                staged_files = ["schema1.schema.v1.json", "schema2.schema.v1.json"]
+
+                result = prevent_schema_duplicates(staged_files, canonical_dir=canonical_dir)
+                assert result["status"] == "fail"
+                assert len(result["duplicates_found"]) == 2
+                duplicate_files = [dup["file"] for dup in result["duplicates_found"]]
+                assert "schema1.schema.v1.json" in duplicate_files
+                assert "schema2.schema.v1.json" in duplicate_files
+            finally:
+                os.chdir(original_cwd)

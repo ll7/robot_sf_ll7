@@ -18,7 +18,9 @@ from typing import Dict, List, Optional
 
 
 def prevent_schema_duplicates(
-    staged_files: List[str], schema_pattern: str = r".*\.schema\.v[0-9]+\.json$"
+    staged_files: List[str],
+    schema_pattern: str = r".*\.schema\.v[0-9]+\.json$",
+    canonical_dir: Optional[Path] = None,
 ) -> Dict:
     """
     Check staged files for schema duplicates against canonical schemas.
@@ -41,7 +43,8 @@ def prevent_schema_duplicates(
         }
 
     # Get canonical schema directory
-    canonical_dir = Path("robot_sf/benchmark/schemas")
+    if canonical_dir is None:
+        canonical_dir = Path("robot_sf/benchmark/schemas")
 
     if not canonical_dir.exists():
         return {
@@ -54,6 +57,10 @@ def prevent_schema_duplicates(
 
     for staged_file in schema_files:
         staged_path = Path(staged_file)
+
+        # Skip files that are already in the canonical directory
+        if staged_path.parent == canonical_dir:
+            continue
 
         # Check if this file would duplicate a canonical schema
         duplicate_info = _check_for_duplicate(staged_path, canonical_dir)
@@ -136,10 +143,16 @@ def main():
         default=r".*\.schema\.v[0-9]+\.json$",
         help="Regex pattern for schema files",
     )
+    parser.add_argument(
+        "--canonical-dir",
+        default=None,
+        help="Directory containing canonical schemas",
+    )
 
     args = parser.parse_args()
 
-    result = prevent_schema_duplicates(args.staged_files, args.schema_pattern)
+    canonical_dir = Path(args.canonical_dir) if args.canonical_dir else None
+    result = prevent_schema_duplicates(args.staged_files, args.schema_pattern, canonical_dir)
 
     print(result["message"])
 

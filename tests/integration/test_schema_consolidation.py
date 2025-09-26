@@ -23,7 +23,7 @@ class TestSchemaConsolidationIntegration:
         from robot_sf.benchmark.schema_loader import load_schema
 
         # Load schema from canonical location
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         # Verify it's a valid JSON schema
         assert isinstance(schema, dict)
@@ -36,7 +36,7 @@ class TestSchemaConsolidationIntegration:
         """Test that schema defines required episode fields."""
         from robot_sf.benchmark.schema_loader import load_schema
 
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         # Check required fields are defined
         assert "required" in schema
@@ -52,7 +52,7 @@ class TestSchemaConsolidationIntegration:
 
         from robot_sf.benchmark.schema_loader import load_schema
 
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         # Create valid episode data
         valid_episode = {
@@ -72,7 +72,7 @@ class TestSchemaConsolidationIntegration:
 
         from robot_sf.benchmark.schema_loader import load_schema
 
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         # Create invalid episode data (missing required field)
         invalid_episode = {
@@ -89,14 +89,14 @@ class TestSchemaConsolidationIntegration:
 
     def test_schema_version_can_be_extracted(self):
         """Test that schema version can be extracted (FR-007)."""
-        from robot_sf.benchmark.schema_loader import get_schema_version
+        from robot_sf.benchmark.schema_loader import get_schema_version_string
 
-        version = get_schema_version()
+        version = get_schema_version_string()
 
         # Version should be a string
         assert isinstance(version, str)
-        # Should be "v1" for this schema (current implementation)
-        assert version == "v1"
+        # Should be "1.0.0" for this schema (current implementation)
+        assert version == "1.0.0"
 
     def test_backward_compatibility_maintained(self):
         """Test that backward compatibility is maintained (FR-003)."""
@@ -104,7 +104,7 @@ class TestSchemaConsolidationIntegration:
 
         from robot_sf.benchmark.schema_loader import load_schema
 
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         # Test with old episode format (minimal required fields)
         old_format_episode = {
@@ -137,9 +137,9 @@ class TestSchemaConsolidationIntegration:
         from robot_sf.benchmark.schema_loader import load_schema
 
         # Load schema multiple times
-        schema1 = load_schema()
-        schema2 = load_schema()
-        schema3 = load_schema()
+        schema1 = load_schema("episode.schema.v1.json")
+        schema2 = load_schema("episode.schema.v1.json")
+        schema3 = load_schema("episode.schema.v1.json")
 
         # All should be identical
         assert schema1 == schema2 == schema3
@@ -151,7 +151,7 @@ class TestSchemaConsolidationIntegration:
         """Test that all schema properties are properly defined."""
         from robot_sf.benchmark.schema_loader import load_schema
 
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         assert "properties" in schema
         properties = schema["properties"]

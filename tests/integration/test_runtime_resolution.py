@@ -17,7 +17,7 @@ class TestRuntimeResolutionIntegration:
         from robot_sf.benchmark.schema_loader import load_schema
 
         # This should load from robot_sf/benchmark/schemas/episode.schema.v1.json
-        schema = load_schema()
+        schema = load_schema("episode.schema.v1.json")
 
         # Verify it's a valid schema structure
         assert isinstance(schema, dict)
@@ -29,20 +29,21 @@ class TestRuntimeResolutionIntegration:
         """Test that schema loading caches the instance to avoid repeated file I/O."""
         from robot_sf.benchmark.schema_loader import load_schema
 
-        # Load schema multiple times
-        schema1 = load_schema()
-        schema2 = load_schema()
-        schema3 = load_schema()
+        # Load the same schema multiple times
+        schema1 = load_schema("episode.schema.v1.json")
+        schema2 = load_schema("episode.schema.v1.json")
+        schema3 = load_schema("episode.schema.v1.json")
 
-        # Should return the same cached instance
-        assert schema1 is schema2 is schema3
+        # They should be the same object (cached)
+        assert schema1 is schema2
+        assert schema2 is schema3
 
     def test_runtime_resolution_preserves_schema_integrity(self):
         """Test that runtime loading preserves the original schema content."""
         from robot_sf.benchmark.schema_loader import load_schema
 
         # Load schema through runtime resolution
-        loaded_schema = load_schema()
+        loaded_schema = load_schema("episode.schema.v1.json")
 
         # Load schema directly from file for comparison
         schema_path = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
@@ -57,7 +58,7 @@ class TestRuntimeResolutionIntegration:
         from robot_sf.benchmark.schema_loader import load_schema
 
         # The schema should be loaded from the correct canonical path
-        load_schema()
+        load_schema("episode.schema.v1.json")
 
         # Verify the path exists and is absolute
         schema_path = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")

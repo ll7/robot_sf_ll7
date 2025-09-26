@@ -65,9 +65,9 @@
 - [X] T017 Schema validation utilities in robot_sf/benchmark/validation_utils.py
 
 ## Phase 3.4: Integration
-- [ ] T018 Remove duplicate schema file from specs/120-social-navigation-benchmark-plan/contracts/
-- [ ] T019 Update existing contract tests to use new schema loader
-- [ ] T020 Integrate git hook with pre-commit configuration
+- [X] T018 Remove duplicate schema file from specs/120-social-navigation-benchmark-plan/contracts/
+- [X] T019 Update existing contract tests to use new schema loader
+- [X] T020 Integrate git hook with pre-commit configuration
 - [ ] T021 Add schema caching to schema loader
 
 ## Phase 3.5: Polish

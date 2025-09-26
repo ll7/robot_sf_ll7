@@ -107,7 +107,11 @@ class DynamicsExtractor(BaseFeaturesExtractor):
             in_channels = [rays_space.shape[0]] + num_filters[:-1]
             out_channels = num_filters
             args_of_blocks = zip(
-                in_channels, out_channels, kernel_sizes, dropout_rates, strict=False
+                in_channels,
+                out_channels,
+                kernel_sizes,
+                dropout_rates,
+                strict=False,
             )
             layers = [layer for args in args_of_blocks for layer in conv_block(*args)] + [
                 nn.Flatten(),

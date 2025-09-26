@@ -127,7 +127,7 @@ def validate_replay_episode(ep: ReplayEpisode, min_length: int = 2) -> bool:
     for s in ep.steps:
         if not all(isinstance(v, int | float) for v in (s.t, s.x, s.y, s.heading)):
             return False
-        if s.t < prev_t:  # non‑monotonic
+        if s.t < prev_t:  # non-monotonic
             return False
         prev_t = s.t
     return True

@@ -180,10 +180,7 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         obstacles: list[tuple[float, float, float, float]] = []
         groups: list[int] = [-1]
         metadata = {**params, "n_agents": n, "area": AREA_WIDTH * AREA_HEIGHT, "seed": seed}
-        if pysf is None:
-            simulator = None  # pragma: no cover
-        else:
-            simulator = pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
+        simulator = None if pysf is None else pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
         return GeneratedScenario(
             simulator=simulator,
             state=state,

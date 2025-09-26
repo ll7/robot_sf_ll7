@@ -73,8 +73,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
         key = f"force_{qk}"
         base[key] = fq.get(qk)
     # Remainder metrics (flat numbers)
-    for k, v in metrics.items():
-        base[k] = v
+    base.update(metrics)
     return base
 
 

@@ -124,7 +124,7 @@ def test_reproducibility_same_seed(
             f"Reproducibility test exceeded hard timeout of {hard_timeout_sec}s (signal).",
         )
 
-    # Cross‑platform guard: Windows and some environments may not expose SIGALRM.
+    # Cross-platform guard: Windows and some environments may not expose SIGALRM.
     # We gracefully skip the alarm setup if unavailable (the @pytest.mark.timeout provides a fallback).
     sigalrm = getattr(signal, "SIGALRM", None)
     orig_handler = None
@@ -152,7 +152,7 @@ def test_reproducibility_same_seed(
             base_root_override=alt_base,
         )
     finally:
-        # Best effort cleanup – only if SIGALRM existed
+        # Best effort cleanup - only if SIGALRM existed
         if sigalrm is not None:
             try:
                 signal.alarm(0)

@@ -28,7 +28,9 @@ class DriveQualityCallback(BaseCallback):
     @property
     def score(self) -> float:
         steps_per_threshold = zip(
-            self.completion_thresholds, self.steps_to_reach_threshold, strict=False
+            self.completion_thresholds,
+            self.steps_to_reach_threshold,
+            strict=False,
         )
         reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
         threshold_scores = sum(

@@ -134,7 +134,9 @@ class FollowRouteBehavior:
         """
         self.navigators = {}
         for (gid, route), sec_id in zip(
-            self.route_assignments.items(), self.initial_sections, strict=False
+            self.route_assignments.items(),
+            self.initial_sections,
+            strict=False,
         ):
             group_pos = self.groups.group_centroid(gid)
             self.navigators[gid] = RouteNavigator(

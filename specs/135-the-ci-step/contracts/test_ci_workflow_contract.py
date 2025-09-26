@@ -47,7 +47,10 @@ class TestCIWorkflowContract:
 
         # Simulate package installation (this will take > 73 seconds currently)
         result = subprocess.run(
-            ["sudo", "apt-get", "update"], capture_output=True, text=True, check=False
+            ["sudo", "apt-get", "update"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
         result = subprocess.run(

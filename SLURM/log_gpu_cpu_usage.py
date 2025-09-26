@@ -37,7 +37,9 @@ class LogResourceUsageCallback(BaseCallback):
 
 
 def training(
-    n_envs: int = os.cpu_count(), ped_densities: list[float] | None = None, difficulty: int = 2
+    n_envs: int = os.cpu_count(),
+    ped_densities: list[float] | None = None,
+    difficulty: int = 2,
 ):
     """Train a robot in robot_sf.
     Args:

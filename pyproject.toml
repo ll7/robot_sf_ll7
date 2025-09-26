@@ -171,7 +171,6 @@ select = [
 
   # **Modernization & simplification**
   "UP",     # pyupgrade: keep code current
-  "SIM",    # flake8-simplify: prune needless branches/loops
   "C4",     # flake8-comprehensions: cleaner comps/gens
   "ICN",    # canonical import aliases (np, pd, plt, etc.)
 
@@ -196,35 +195,50 @@ select = [
   "PGH",    # blanket noqa / useless noqa hygiene
   "TCH",    # move typing-only imports under TYPE_CHECKING
   "TID",    # tidy imports (relative vs absolute)
-  "N",      # pep8-naming
 ]
 
 ignore = [
-  # Pylint-derived "opinionated" refactors that often fire in scientific code:
-  "PLR0911","PLR0912","PLR0913","PLR0915", # many returns/branches/args
-  "PLR2004", # magic values in comparisons (okay in tests/configs)
-  "S", # Security checks not critical in research code
-  
-  # Research code leniencies - these rules are too noisy for scientific computing:
-  "PGH003", # Use specific rule codes when ignoring type issues (too pedantic)
-  "DTZ005", # datetime.now() without tz (common in research scripts)
-  "ERA001", # Commented-out code (sometimes intentional in research)
-  "ARG001", "ARG005", # Unused function arguments (common in test mocks)
-  "PERF401", # List comprehensions vs loops (micro-optimization)
-  "RUF005", # Consider iterable unpacking (style preference)
-  "TRY300", # Move statement to else block (sometimes less readable)
-  "BLE001", # Do not catch blind exception (sometimes necessary in research)
-  "B017", # Assert blind exception (okay in schema validation tests)
-  "N806", # Variable in function should be lowercase (math conventions use uppercase)
-  "C417", # Unnecessary map() usage (sometimes clearer than comprehensions)
-  "UP038", # Use X | Y in isinstance (Python 3.10+ syntax, but codebase supports 3.10)
-  "PLC0206", # Extracting value without .items() (sometimes clearer)
-  "TRY003", # Avoid specifying long messages outside the exception class (too pedantic)
-  "SIM105", # Use contextlib.suppress instead of try-except-pass (sometimes less clear)
-  "RUF034", # Useless if-else condition (sometimes intentional for clarity)
-  "T201", # print found (allowed in scripts/examples as per per-file-ignores)
-  "RUF002",
-  "RUF003",
+    # Research/scientific computing patterns that are acceptable
+    "PLR0911",  # Too many return statements
+    "PLR0912",  # Too many branches
+    "PLR0913",  # Too many arguments
+    "PLR0915",  # Too many statements
+    "PLR2004",  # Magic value comparison
+    "S",        # Bandit security issues (too noisy for research code)
+    "PGH003",   # Use specific rule codes when ignoring instead of categories
+    "DTZ005",   # datetime.datetime.now() called without a 'tz' argument
+    "ERA001",   # Found commented-out code
+    "ARG001",   # Unused function argument
+    "ARG005",   # Unused lambda argument
+    "PERF401",  # Use a list comprehension to collect items
+    "TRY004",   # Prefer `TypeError` exception for invalid type
+    "B904",     # Within an `except` clause, raise exceptions with `raise ... from err`
+    "PLW2901",  # `for` loop variable `line` overwritten by assignment target
+    "TRY301",   # Abstract `raise` to an inner function
+    "TRY401",   # Redundant exception object included in `logging.exception` call
+    "ICN001",   # `matplotlib.pyplot` should be imported as `plt`
+    "N803",     # Argument name should be lowercase
+    "A005",     # Module `types` shadows a Python standard-library module
+    "A001",     # Variable `id` is shadowing a Python builtin
+    "G004",     # Logging statement uses f-string
+    "B008",     # Do not perform function call in argument defaults
+    "B023",     # Function definition does not bind loop variable
+    "ISC003",   # Explicitly concatenated string should be implicitly concatenated
+    "UP007",    # Use `X | Y` for type annotations
+    "B007",     # Loop control variable not used within loop body
+    "PLW0603",  # Using the global statement to update is discouraged
+    "ARG002",   # Unused method argument
+    "RUF012",   # Mutable class attributes should be annotated with `typing.ClassVar`
+    "RUF001",   # String contains ambiguous `‑` (NON-BREAKING HYPHEN)
+    "RUF002",   # String contains ambiguous characters (EN DASH, EM DASH)
+    "RUF003",   
+    "TRY300",   # Consider moving this statement to an `else` block
+    "BLE001",   # Do not catch blind exception: `Exception`
+    "TRY003",   # Avoid specifying long messages outside the exception class
+    "N806",     # Variable `X` in function should be lowercase (too noisy for math code)
+    "B017",     # Do not assert blind exception: `Exception`
+    "PLC0206",  # Extracting value from dictionary without calling `.items()`
+    "RUF005",   # Consider iterable unpacking instead of concatenation
 ]
 
 [tool.ruff.lint.per-file-ignores]

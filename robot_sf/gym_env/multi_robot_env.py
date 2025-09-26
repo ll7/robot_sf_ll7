@@ -99,7 +99,7 @@ class MultiRobotEnv(VectorEnv):
         rewards = [self.reward_func(meta) for meta in metas]
 
         for i, (sim, state, term) in enumerate(
-            zip(self.simulators, self.states, terms, strict=False)
+            zip(self.simulators, self.states, terms, strict=False),
         ):
             if term:
                 sim.reset_state()

@@ -1,10 +1,4 @@
-"""Baseline algorithms for the Social Navigation Benchmark.
-
-This module provides baseline implementations of navigation algorithms
-that can be used for comparison in the benchmark system.
-"""
-
-from typing import Dict, Type
+"""Baseline navigation algorithms for benchmarking."""
 
 
 def _get_social_force_planner():

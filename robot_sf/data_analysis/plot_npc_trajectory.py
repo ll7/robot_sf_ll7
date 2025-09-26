@@ -182,7 +182,8 @@ def calculate_velocity(
 
 
 def calculate_acceleration(
-    velocities: np.ndarray, time_interval: float | None = None
+    velocities: np.ndarray,
+    time_interval: float | None = None,
 ) -> np.ndarray:
     """Calculate the acceleration of a pedestrian given their velocities."""
     # Calculate the differences between consecutive velocities
@@ -609,7 +610,7 @@ def velocity_colorcoded_with_positions(
         velocities = calculate_velocity(x_vals[start_idx:], y_vals[start_idx:])
         all_npc_velocities.extend(velocities)
         all_npc_positions.extend(
-            zip(x_vals[start_idx + 1 :], y_vals[start_idx + 1 :], strict=False)
+            zip(x_vals[start_idx + 1 :], y_vals[start_idx + 1 :], strict=False),
         )
 
     max_velocity = max(all_npc_velocities)

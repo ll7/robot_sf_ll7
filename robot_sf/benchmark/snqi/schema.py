@@ -89,7 +89,7 @@ def _validate_metadata(meta: Mapping[str, Any]) -> None:
 
 
 def _validate_optimization(obj: Mapping[str, Any]) -> None:
-    # Required top‑level keys (besides _metadata)
+    # Required top-level keys (besides _metadata)
     required = ["recommended"]
     for key in required:
         if key not in obj:

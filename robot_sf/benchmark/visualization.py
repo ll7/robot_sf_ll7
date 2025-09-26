@@ -733,17 +733,19 @@ def _generate_frames_from_pixels(
     frames: List[np.ndarray] = []
     limit = max_frames if max_frames and max_frames > 0 else None
 
-    trail_canvas = np.full((height, width, 3), background, dtype=np.uint8)
-
     for idx, (robot_row, robot_col) in enumerate(robot_pixels):
         if limit is not None and len(frames) >= limit:
             break
 
-        # Draw the new trail segment on the trail canvas
-        _draw_disk(trail_canvas, robot_row, robot_col, 2, trail_color)
+        # Create fresh frame with background
+        frame = np.full((height, width, 3), background, dtype=np.uint8)
 
-        # Start with the current state of the trail
-        frame = trail_canvas.copy()
+        # Draw trail up to current position (efficiently, only drawing what's needed)
+        trail_length = min(idx + 1, 50)  # Limit trail length to prevent excessive drawing
+        start_idx = max(0, idx - trail_length + 1)
+        for trail_idx in range(start_idx, idx + 1):
+            trail_row, trail_col = robot_pixels[trail_idx]
+            _draw_disk(frame, trail_row, trail_col, 2, trail_color)
 
         # Draw current robot position
         _draw_disk(frame, robot_row, robot_col, 4, robot_color)

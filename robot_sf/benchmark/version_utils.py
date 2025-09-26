@@ -163,21 +163,21 @@ def _has_additions(old_schema: Dict[str, Any], new_schema: Dict[str, Any]) -> bo
         True if additions were detected
     """
     # Check for new optional properties
-    old_properties = set(old_schema.get("properties", {}))
-    new_properties = set(new_schema.get("properties", {}))
-    new_props = new_properties - old_properties
+    old_property_names = set(old_schema.get("properties", {}))
+    new_property_names = set(new_schema.get("properties", {}))
+    added_property_names = new_property_names - old_property_names
 
-    if new_props:
+    if added_property_names:
         return True
 
     # Check for new enum values in existing properties
-    old_props = old_schema.get("properties", {})
-    new_props = new_schema.get("properties", {})
+    old_props_dict = old_schema.get("properties", {})
+    new_props_dict = new_schema.get("properties", {})
 
-    for prop_name in old_properties:
-        if prop_name in new_props:
-            old_enum = set(old_props[prop_name].get("enum", []))
-            new_enum = set(new_props[prop_name].get("enum", []))
+    for prop_name in old_property_names:
+        if prop_name in new_props_dict:
+            old_enum = set(old_props_dict[prop_name].get("enum", []))
+            new_enum = set(new_props_dict[prop_name].get("enum", []))
             if new_enum - old_enum:  # New enum values added
                 return True
 

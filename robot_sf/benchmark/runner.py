@@ -208,8 +208,19 @@ def _stack_or_zero(
     stack_fn: Callable[[Sequence[np.ndarray]], np.ndarray],
     empty_shape: tuple[int, ...],
 ) -> np.ndarray:
-    """Stack recorded trajectory data or return an empty array of known shape."""
-    return stack_fn(traj) if traj else np.zeros(empty_shape)
+    """Stack recorded trajectory data or return a zero-length array of known shape.
+
+    Note: To avoid unnecessary memory allocation, `empty_shape` should have zero in the first dimension.
+    """
+    if traj:
+        return stack_fn(traj)
+    else:
+        # Ensure empty_shape[0] == 0 for lazy evaluation
+        assert empty_shape[0] == 0, (
+            "empty_shape should have zero in the first dimension for lazy evaluation"
+        )
+        # Return a zero-length array with the correct shape and dtype
+        return np.empty(empty_shape)
 
 
 def _build_episode_data(

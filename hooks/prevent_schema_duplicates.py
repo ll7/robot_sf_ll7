@@ -1,10 +1,5 @@
 """
-Git hook to prevent schema    if not schema_files:
-        return {
-            "status": "pass",
-            "duplicates_found": [],
-            "message": "No schema files found in staged changes - no duplicates detected"
-        }duplication.
+Git hook to prevent schema duplication.
 
 This hook scans staged files for schema files that would duplicate
 existing canonical schemas, preventing commits that introduce duplication.

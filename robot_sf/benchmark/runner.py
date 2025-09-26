@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 import yaml
@@ -200,6 +202,27 @@ def _prepare_robot_points(
     return rs, rg
 
 
+def _stack_or_zero(
+    traj: list[np.ndarray],
+    *,
+    stack_fn: Callable[[Sequence[np.ndarray]], np.ndarray],
+    empty_shape: tuple[int, ...],
+) -> np.ndarray:
+    """Stack recorded trajectory data or return a zero-length array of known shape.
+
+    Note: To avoid unnecessary memory allocation, `empty_shape` should have zero in the first dimension.
+    """
+    if traj:
+        return stack_fn(traj)
+    else:
+        # Ensure empty_shape[0] == 0 for lazy evaluation
+        assert empty_shape[0] == 0, (
+            "empty_shape should have zero in the first dimension for lazy evaluation"
+        )
+        # Return a zero-length array with the correct shape and dtype
+        return np.empty(empty_shape)
+
+
 def _build_episode_data(
     robot_pos_traj: list[np.ndarray],
     robot_vel_traj: list[np.ndarray],
@@ -210,12 +233,18 @@ def _build_episode_data(
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
+    robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
+    robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))
+    robot_acc = _stack_or_zero(robot_acc_traj, stack_fn=np.vstack, empty_shape=(0, 2))
+    peds_pos = _stack_or_zero(peds_pos_traj, stack_fn=np.stack, empty_shape=(0, 0, 2))
+    ped_forces = _stack_or_zero(ped_forces_traj, stack_fn=np.stack, empty_shape=(0, 0, 2))
+
     return EpisodeData(
-        robot_pos=np.vstack(robot_pos_traj),
-        robot_vel=np.vstack(robot_vel_traj),
-        robot_acc=np.vstack(robot_acc_traj),
-        peds_pos=(np.stack(peds_pos_traj) if peds_pos_traj else np.zeros((0, 0, 2))),
-        ped_forces=(np.stack(ped_forces_traj) if ped_forces_traj else np.zeros((0, 0, 2))),
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+        robot_acc=robot_acc,
+        peds_pos=peds_pos,
+        ped_forces=ped_forces,
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
@@ -305,6 +334,416 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     return policy_fn, metadata
 
 
+def _append_video_skip_note(record: Dict[str, Any], note: str) -> None:
+    existing = record.get("notes")
+    if existing:
+        record["notes"] = f"{existing}; {note}"
+    else:
+        record["notes"] = note
+
+
+def _emit_video_skip(
+    *,
+    record: Dict[str, Any],
+    episode_id: str,
+    scenario_id: str,
+    seed: Optional[int],
+    renderer: str,
+    reason: str,
+    steps: Optional[int],
+    error: Optional[str] = None,
+) -> None:
+    context = {
+        "episode_id": episode_id,
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "renderer": renderer,
+        "reason": reason,
+        "steps": steps if steps is not None else -1,
+    }
+    if error:
+        context["error"] = error
+    try:
+        from loguru import logger  # type: ignore
+
+        logger.warning(
+            (
+                "Video skipped: reason={reason} episode_id={episode_id} "
+                "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"  # noqa: E501
+            ),
+            **context,
+        )
+    except Exception:  # pragma: no cover - logging optional
+        pass
+
+    note_parts = [f"video skipped ({renderer}): {reason}"]
+    if steps is not None:
+        note_parts.append(f"steps={steps}")
+    if error:
+        note_parts.append(f"error={error}")
+    _append_video_skip_note(record, " ".join(note_parts))
+
+
+def _try_encode_synthetic_video(
+    robot_pos_traj: list[np.ndarray],
+    *,
+    episode_id: str,
+    scenario_id: str,
+    out_dir: Path,
+    fps: int = 10,
+    seed: Optional[int] = None,
+) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Encode a very lightweight synthetic MP4 from robot positions.
+
+    - Draws a simple red dot for the robot position per frame on a black canvas.
+    - Uses moviepy ImageSequenceClip if available; returns None when unavailable.
+    """
+    try:
+        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
+    except Exception:
+        _skip_info = {
+            "reason": "moviepy-missing",
+            "renderer": "synthetic",
+            "steps": len(robot_pos_traj),
+        }
+        return None, _skip_info
+    # Successfully imported moviepy; proceed with encoding attempt
+
+    import numpy as _np  # local alias to avoid confusion
+
+    N = len(robot_pos_traj)
+    if N == 0:
+        _skip_info = {
+            "reason": "no-frames",
+            "renderer": "synthetic",
+            "steps": 0,
+        }
+        return None, _skip_info
+    H, W = 128, 128
+    # Determine bounds for simple normalization
+    xs = _np.array([p[0] for p in robot_pos_traj], dtype=float)
+    ys = _np.array([p[1] for p in robot_pos_traj], dtype=float)
+    min_x, max_x = float(xs.min()), float(xs.max())
+    min_y, max_y = float(ys.min()), float(ys.max())
+    # Pad 10%
+    pad_x = max(1e-6, 0.1 * (max_x - min_x))
+    pad_y = max(1e-6, 0.1 * (max_y - min_y))
+    min_x -= pad_x
+    max_x += pad_x
+    min_y -= pad_y
+    max_y += pad_y
+
+    def to_px(x: float, y: float) -> tuple[int, int]:
+        # Normalize to [0,1] then scale to pixels; y inverted for image coords
+        nx = 0.0 if max_x == min_x else (x - min_x) / (max_x - min_x)
+        ny = 0.0 if max_y == min_y else (y - min_y) / (max_y - min_y)
+        px = int(nx * (W - 1))
+        py = int((1.0 - ny) * (H - 1))
+        return px, py
+
+    frames: list[_np.ndarray] = []
+    for i in range(N):
+        img = _np.zeros((H, W, 3), dtype=_np.uint8)
+        x, y = robot_pos_traj[i]
+        px, py = to_px(float(x), float(y))
+        # Draw small 3x3 red square centered at (px,py)
+        x0, x1 = max(0, px - 1), min(W, px + 2)
+        y0, y1 = max(0, py - 1), min(H, py + 2)
+        img[y0:y1, x0:x1, :] = _np.array([220, 30, 30], dtype=_np.uint8)
+        frames.append(img)
+    mp4_path = out_dir / f"video_{episode_id}.mp4"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _skip_info = {
+            "reason": "unwritable-path",
+            "renderer": "synthetic",
+            "steps": N,
+            "error": str(exc),
+        }
+        return None, _skip_info
+    clip = ImageSequenceClip(frames, fps=fps)  # type: ignore
+    try:
+        # Keep args minimal for environment compatibility
+        clip.write_videofile(str(mp4_path), codec="libx264", fps=fps)
+    except OSError as exc:
+        _skip_info = {
+            "reason": "write-failed",
+            "renderer": "synthetic",
+            "steps": N,
+            "error": str(exc),
+        }
+        return None, _skip_info
+    except Exception as exc:  # pragma: no cover - defensive logging
+        _skip_info = {
+            "reason": "encode-failed",
+            "renderer": "synthetic",
+            "steps": N,
+            "error": str(exc),
+        }
+        return None, _skip_info
+    finally:
+        try:
+            clip.close()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - close best effort
+            pass
+    try:
+        size = mp4_path.stat().st_size
+    except Exception:
+        size = 0
+    return {
+        "status": "success",
+        "path": str(mp4_path),
+        "format": "mp4",
+        "filesize_bytes": int(size),
+        "frames": int(N),
+        "renderer": "synthetic",
+    }, None
+
+
+def _annotate_and_check_video_perf(
+    record: Dict[str, Any],
+    vid: Dict[str, Any],
+    perf_start: float,
+    enc_start: float,
+    enc_end: float,
+) -> None:
+    """Annotate manifest with encode timing and enforce optional budgets.
+
+    Adds keys: encode_seconds, overhead_ratio.
+    Budget env vars:
+      - ROBOT_SF_VIDEO_OVERHEAD_SOFT (default 0.10)
+      - ROBOT_SF_VIDEO_OVERHEAD_HARD (default 0.50)
+      - ROBOT_SF_PERF_ENFORCE (any non-empty to enforce)
+    """
+    encode_seconds = float(max(0.0, enc_end - enc_start))
+    total_elapsed = float(max(1e-9, enc_end - perf_start))
+    overhead_ratio = float(encode_seconds / total_elapsed)
+    vid["encode_seconds"] = encode_seconds
+    vid["overhead_ratio"] = overhead_ratio
+    record["video"] = vid
+
+    soft = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.10"))
+    hard = float(os.getenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.50"))
+    enforce = bool(os.getenv("ROBOT_SF_PERF_ENFORCE"))
+    if overhead_ratio > hard:
+        if enforce:
+            raise RuntimeError(
+                f"video overhead hard breach: ratio={overhead_ratio:.3f} > {hard:.3f}"
+            )
+        else:
+            try:
+                from loguru import logger  # type: ignore
+
+                logger.warning(
+                    (
+                        "Video overhead hard breach but continue: "
+                        "ratio={ratio:.3f} > {hard:.3f} episode_id={episode_id} "
+                        "scenario_id={scenario_id} seed={seed} renderer={renderer}"
+                    ),
+                    ratio=overhead_ratio,
+                    hard=hard,
+                    episode_id=record.get("episode_id"),
+                    scenario_id=record.get("scenario_id"),
+                    seed=record.get("seed"),
+                    renderer=vid.get("renderer"),
+                )
+            except Exception:  # pragma: no cover - logging optional
+                pass
+    elif overhead_ratio > soft:
+        if enforce:
+            raise RuntimeError(
+                f"video overhead soft breach: ratio={overhead_ratio:.3f} > {soft:.3f}"
+            )
+        else:
+            try:
+                from loguru import logger  # type: ignore
+
+                logger.warning(
+                    (
+                        "Video overhead soft breach: "
+                        "ratio={ratio:.3f} > {soft:.3f} episode_id={episode_id} "
+                        "scenario_id={scenario_id} seed={seed} renderer={renderer}"
+                    ),
+                    ratio=overhead_ratio,
+                    soft=soft,
+                    episode_id=record.get("episode_id"),
+                    scenario_id=record.get("scenario_id"),
+                    seed=record.get("seed"),
+                    renderer=vid.get("renderer"),
+                )
+            except Exception:  # pragma: no cover - logging optional
+                pass
+
+
+def _maybe_encode_video(
+    *,
+    record: Dict[str, Any],
+    robot_pos_traj: List[np.ndarray],
+    videos_dir: Optional[str],
+    video_enabled: bool,
+    video_renderer: str,
+    perf_start: float,
+) -> None:
+    """Best-effort video encoding wrapper with perf annotation and budget checks.
+
+    Swallows all exceptions to keep batch robust.
+    """
+    if not (video_enabled and str(video_renderer) == "synthetic" and videos_dir is not None):
+        return
+    episode_id = record["episode_id"]
+    scenario_id = record["scenario_id"]
+    try:
+        enc_t0 = time.perf_counter()
+        vid, skip_info = _try_encode_synthetic_video(
+            robot_pos_traj,
+            episode_id=episode_id,
+            scenario_id=scenario_id,
+            out_dir=Path(videos_dir),
+            fps=10,
+            seed=record.get("seed"),
+        )
+        enc_t1 = time.perf_counter()
+        if vid is not None and int(vid.get("filesize_bytes", 0)) > 0:
+            _annotate_and_check_video_perf(record, vid, perf_start, enc_t0, enc_t1)
+        else:
+            reason_payload = skip_info or {
+                "reason": "encoder-empty",
+                "renderer": str(video_renderer),
+                "steps": len(robot_pos_traj),
+            }
+            _emit_video_skip(
+                record=record,
+                episode_id=episode_id,
+                scenario_id=scenario_id,
+                seed=record.get("seed"),
+                renderer=str(reason_payload.get("renderer", video_renderer)),
+                reason=str(reason_payload.get("reason", "unknown")),
+                steps=reason_payload.get("steps"),
+                error=reason_payload.get("error"),
+            )
+    except RuntimeError:
+        # Budget enforcement: bubble up to runner to record a failure
+        raise
+    except Exception:  # pragma: no cover - defensive path
+        pass
+
+
+def _simulate_episode_with_policy(
+    scenario_params: Dict[str, Any],
+    seed: int,
+    robot_policy: Callable[[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float], np.ndarray],
+    horizon: int,
+    dt: float,
+    robot_start: Sequence[float] | None,
+    robot_goal: Sequence[float] | None,
+    record_forces: bool,
+) -> tuple[
+    List[np.ndarray],
+    List[np.ndarray],
+    List[np.ndarray],
+    List[np.ndarray],
+    List[np.ndarray],
+    np.ndarray,
+    int | None,
+]:
+    gen = generate_scenario(scenario_params, seed=seed)
+    sim = gen.simulator
+    if sim is None:
+        raise RuntimeError("pysocialforce not available; cannot run episode")
+    wrapper = FastPysfWrapper(sim)
+
+    # Determine robot start/goal: defaults if absent
+    robot_start_arr, robot_goal_arr = _prepare_robot_points(robot_start, robot_goal)
+    robot_pos = robot_start_arr.copy()
+    robot_vel = np.zeros(2)
+
+    robot_pos_traj: List[np.ndarray] = []
+    robot_vel_traj: List[np.ndarray] = []
+    robot_acc_traj: List[np.ndarray] = []
+    peds_pos_traj: List[np.ndarray] = []
+    ped_forces_traj: List[np.ndarray] = []
+
+    reached_goal_step: int | None = None
+    goal_radius = 0.3
+    last_vel = robot_vel.copy()
+
+    def _step_robot(
+        curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
+        new_pos = curr_pos + new_vel * dt
+        acc_vec = (new_vel - curr_vel) / dt
+        return new_pos, new_vel, acc_vec
+
+    for t in range(horizon):
+        ped_pos = sim.peds.pos().copy()
+        peds_pos_traj.append(ped_pos)
+
+        robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
+        last_vel = robot_vel.copy()
+
+        if record_forces:
+            forces = np.zeros_like(ped_pos, dtype=float)
+            for i, p in enumerate(ped_pos):
+                forces[i] = wrapper.get_forces_at(p)
+            ped_forces_traj.append(forces)
+        else:
+            ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
+
+        robot_pos_traj.append(robot_pos.copy())
+        robot_vel_traj.append(robot_vel.copy())
+        robot_acc_traj.append(acc.copy())
+
+        if reached_goal_step is None and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius:
+            reached_goal_step = t
+            break
+        sim.step()
+
+    return (
+        robot_pos_traj,
+        robot_vel_traj,
+        robot_acc_traj,
+        peds_pos_traj,
+        ped_forces_traj,
+        np.asarray(robot_goal_arr, dtype=float),
+        reached_goal_step,
+    )
+
+
+def _compute_metrics(
+    ep: EpisodeData,
+    horizon: int,
+    snqi_weights: Dict[str, float] | None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None,
+) -> Dict[str, Any]:
+    metrics_raw = compute_all_metrics(ep, horizon=horizon)
+    return _post_process_metrics(
+        metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
+    )
+
+
+def _build_episode_record(
+    scenario_params: Dict[str, Any],
+    seed: int,
+    metrics: Dict[str, Any],
+    algo_metadata: Dict[str, Any],
+    ts_start: str,
+) -> Dict[str, Any]:
+    episode_id = compute_episode_id(scenario_params, seed)
+    return {
+        "episode_id": episode_id,
+        "scenario_id": scenario_params.get("id", "unknown"),
+        "seed": seed,
+        "scenario_params": scenario_params,
+        "metrics": metrics,
+        "algorithm_metadata": algo_metadata,
+        "config_hash": _config_hash(scenario_params),
+        "git_hash": _git_hash_fallback(),
+        "timestamps": {"start": ts_start, "end": ts_start},
+    }
+
+
 def run_episode(
     scenario_params: Dict[str, Any],
     seed: int,
@@ -318,118 +757,72 @@ def run_episode(
     snqi_baseline: Dict[str, Dict[str, float]] | None = None,
     algo: str = "simple_policy",
     algo_config_path: Optional[str] = None,
+    # Video options (optional)
+    video_enabled: bool = False,
+    video_renderer: str = "none",
+    videos_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
     The robot can use different algorithms based on the 'algo' parameter.
     """
+    # Wall-clock start time for timestamps and perf accounting
+    perf_start = time.perf_counter()
+    ts_start = datetime.now(timezone.utc).isoformat()
     # Create robot policy based on algorithm
     robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
 
-    gen = generate_scenario(scenario_params, seed=seed)
-    sim = gen.simulator
-    if sim is None:
-        raise RuntimeError("pysocialforce not available; cannot run episode")
-    wrapper = FastPysfWrapper(sim)
-
-    # Determine robot start/goal: default start left boundary mid-height, goal right boundary mid-height
-    robot_start_arr, robot_goal_arr = _prepare_robot_points(robot_start, robot_goal)
-
-    robot_pos = robot_start_arr.copy()
-    robot_vel = np.zeros(2)
-
-    # Buffers
-    robot_pos_traj: List[np.ndarray] = []
-    robot_vel_traj: List[np.ndarray] = []
-    robot_acc_traj: List[np.ndarray] = []
-    peds_pos_traj: List[np.ndarray] = []
-    ped_forces_traj: List[np.ndarray] = []
-
-    reached_goal_step: int | None = None
-    goal_radius = 0.3
-
-    last_vel = robot_vel.copy()
-
-    def _step_robot(
-        curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
-        new_pos = curr_pos + new_vel * dt
-        acc_vec = (new_vel - curr_vel) / dt
-        return new_pos, new_vel, acc_vec
-
-    for t in range(horizon):
-        # Capture pedestrian positions directly via pysocialforce API
-        ped_pos = sim.peds.pos().copy()
-        peds_pos_traj.append(ped_pos)
-
-        # Policy (now algorithm-based)
-        robot_pos, robot_vel, acc = _step_robot(robot_pos, last_vel, ped_pos)
-        last_vel = robot_vel.copy()
-
-        # Force sampling per pedestrian if requested
-        if record_forces:
-            # Use float dtype to avoid truncating small forces to zero when assigning
-            # float vectors returned by FastPysfWrapper.get_forces_at(...).
-            # Using zeros_like(ped_pos) without dtype may default to integers depending
-            # on the simulator's internal array dtype, causing silent casts to 0.
-            forces = np.zeros_like(ped_pos, dtype=float)
-            for i, p in enumerate(ped_pos):
-                forces[i] = wrapper.get_forces_at(p)
-            ped_forces_traj.append(forces)
-        else:
-            ped_forces_traj.append(np.zeros_like(ped_pos, dtype=float))
-
-        robot_pos_traj.append(robot_pos.copy())
-        robot_vel_traj.append(robot_vel.copy())
-        robot_acc_traj.append(acc.copy())
-
-        # Goal check
-        if reached_goal_step is None and np.linalg.norm(robot_goal_arr - robot_pos) < goal_radius:
-            reached_goal_step = t
-            break
-
-        # Advance pedestrian simulation one step
-        sim.step()
-
-    ep: EpisodeData = _build_episode_data(
+    # Simulate episode
+    trajectories = _simulate_episode_with_policy(
+        scenario_params,
+        seed,
+        robot_policy,
+        horizon,
+        dt,
+        robot_start,
+        robot_goal,
+        record_forces,
+    )
+    (
         robot_pos_traj,
         robot_vel_traj,
         robot_acc_traj,
         peds_pos_traj,
         ped_forces_traj,
-        np.asarray(robot_goal_arr, dtype=float),
+        robot_goal_arr,
+        reached_goal_step,
+    ) = trajectories
+
+    # Build episode data
+    ep = _build_episode_data(
+        robot_pos_traj,
+        robot_vel_traj,
+        robot_acc_traj,
+        peds_pos_traj,
+        ped_forces_traj,
+        robot_goal_arr,
         dt,
         reached_goal_step,
     )
 
-    metrics_raw = compute_all_metrics(ep, horizon=horizon)
-    metrics = _post_process_metrics(
-        metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
+    # Compute metrics
+    metrics = _compute_metrics(ep, horizon, snqi_weights, snqi_baseline)
+
+    # Build record
+    record = _build_episode_record(scenario_params, seed, metrics, algo_metadata, ts_start)
+
+    # Handle video
+    _maybe_encode_video(
+        record=record,
+        robot_pos_traj=robot_pos_traj,
+        videos_dir=videos_dir,
+        video_enabled=video_enabled,
+        video_renderer=video_renderer,
+        perf_start=perf_start,
     )
 
-    # Build record per schema
-    # Deterministic episode id consistent with resume filtering logic
-    episode_id = compute_episode_id(scenario_params, seed)
-    # NOTE: Legacy test schema (docs/dev/issues/social-navigation-benchmark/episode_schema.json)
-    # does not yet allow 'version' or 'identity' fields. We keep the internal
-    # schema (episode.schema.v1.json) richer, but only emit the subset accepted
-    # by the currently referenced test schema to keep tests green. Re‑introduce
-    # version/identity once tests migrate to the v1 runtime schema.
-    record = {
-        "episode_id": episode_id,
-        "scenario_id": scenario_params.get("id", "unknown"),
-        "seed": seed,
-        "scenario_params": scenario_params,
-        "metrics": metrics,
-        "algorithm_metadata": algo_metadata,
-        "config_hash": _config_hash(scenario_params),
-        "git_hash": _git_hash_fallback(),
-        "timestamps": {
-            "start": datetime.now(timezone.utc).isoformat(),
-            "end": datetime.now(timezone.utc).isoformat(),
-        },
-    }
+    # Update end time
+    record["timestamps"]["end"] = datetime.now(timezone.utc).isoformat()
     return record
 
 
@@ -508,6 +901,9 @@ def _run_job_worker(job: tuple[Dict[str, Any], int, Dict[str, Any]]) -> Dict[str
         snqi_baseline=params.get("snqi_baseline"),
         algo=str(params["algo"]),
         algo_config_path=params.get("algo_config_path"),
+        video_enabled=bool(params.get("video_enabled", False)),
+        video_renderer=str(params.get("video_renderer", "none")),
+        videos_dir=params.get("videos_dir"),
     )
 
 
@@ -600,6 +996,184 @@ def _run_batch_parallel(
     return wrote, failures
 
 
+def _prepare_batch_setup(
+    scenarios_or_path: List[Dict[str, Any]] | str | Path,
+    out_path: str | Path,
+    schema_path: str | Path,
+    append: bool,
+) -> tuple[List[Dict[str, Any]], Path, Dict[str, Any]]:
+    """Prepare scenarios, output path, and schema for batch processing."""
+    # Load scenarios
+    if isinstance(scenarios_or_path, (str, Path)):
+        scenarios = load_scenario_matrix(scenarios_or_path)
+    else:
+        scenarios = scenarios_or_path
+
+    # Prepare output
+    out_path = Path(out_path)
+    if not append and out_path.exists():
+        out_path.unlink()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    schema = load_schema(schema_path)
+    return scenarios, out_path, schema
+
+
+def _setup_fixed_params(
+    out_path: Path,
+    horizon: int,
+    dt: float,
+    record_forces: bool,
+    snqi_weights: Dict[str, float] | None,
+    snqi_baseline: Dict[str, Dict[str, float]] | None,
+    video_enabled: bool,
+    video_renderer: str,
+    algo: str,
+    algo_config_path: Optional[str],
+) -> Dict[str, Any]:
+    """Set up the fixed parameters dict for job execution."""
+    videos_dir = (out_path.parent / "videos").as_posix()
+    return {
+        "horizon": horizon,
+        "dt": dt,
+        "record_forces": record_forces,
+        "snqi_weights": snqi_weights,
+        "snqi_baseline": snqi_baseline,
+        "algo": algo,
+        "algo_config_path": algo_config_path,
+        "video_enabled": bool(video_enabled) and str(video_renderer) != "none",
+        "video_renderer": str(video_renderer),
+        "videos_dir": videos_dir,
+    }
+
+
+def _filter_resume_jobs(
+    jobs: List[tuple[Dict[str, Any], int]],
+    out_path: Path,
+    resume: bool,
+) -> List[tuple[Dict[str, Any], int]]:
+    """Filter jobs based on resume logic, skipping existing episodes."""
+    if not resume or not out_path.exists():
+        return jobs
+
+    # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
+    existing_ids = load_manifest(
+        out_path,
+        expected_identity_hash=_episode_identity_hash(),
+        expected_schema_version=EPISODE_SCHEMA_VERSION,
+    ) or index_existing(out_path)
+
+    if not existing_ids:
+        return jobs
+
+    filtered: List[tuple[Dict[str, Any], int]] = []
+    for sc, seed in jobs:
+        eid = compute_episode_id(sc, seed)
+        if eid not in existing_ids:
+            filtered.append((sc, seed))
+    return filtered
+
+
+def _run_jobs(
+    jobs: List[tuple[Dict[str, Any], int]],
+    out_path: Path,
+    schema: Dict[str, Any],
+    fixed_params: Dict[str, Any],
+    workers: int,
+    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    fail_fast: bool,
+) -> tuple[int, List[Dict[str, Any]]]:
+    """Execute jobs using sequential or parallel processing."""
+    if workers <= 1:
+        return _run_batch_sequential(
+            jobs,
+            out_path=out_path,
+            schema=schema,
+            fixed_params=fixed_params,
+            progress_cb=progress_cb,
+            fail_fast=fail_fast,
+        )
+    else:
+        return _run_batch_parallel(
+            jobs,
+            out_path=out_path,
+            schema=schema,
+            fixed_params=fixed_params,
+            workers=workers,
+            progress_cb=progress_cb,
+            fail_fast=fail_fast,
+        )
+
+
+def _finalize_batch(
+    out_path: Path,
+    wrote: int,
+    resume: bool,
+) -> Dict[str, Any]:
+    """Finalize batch processing: save manifest and optional performance snapshot."""
+    # Save/update manifest to speed up future resume if we wrote anything
+    if resume and wrote > 0 and out_path.exists():
+        # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
+        save_manifest(
+            out_path,
+            index_existing(out_path),
+            identity_hash=_episode_identity_hash(),
+            schema_version=EPISODE_SCHEMA_VERSION,
+        )
+
+    # Optional: write a small performance snapshot for video encoding if requested
+    try:
+        if os.getenv("ROBOT_SF_VIDEO_PERF_SNAPSHOT"):
+            import platform
+
+            vids: list[dict] = []
+            try:
+                with out_path.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        rec = json.loads(line)
+                        v = rec.get("video") if isinstance(rec, dict) else None
+                        if isinstance(v, dict):
+                            vids.append(v)
+            except FileNotFoundError:
+                vids = []
+            total_frames = sum(int(v.get("frames", 0)) for v in vids)
+            total_encode = sum(float(v.get("encode_seconds", 0.0)) for v in vids)
+            overheads = [float(v.get("overhead_ratio", 0.0)) for v in vids if "overhead_ratio" in v]
+            snap = {
+                "episodes": len(vids),
+                "total_frames": int(total_frames),
+                "total_encode_seconds": float(total_encode),
+                "encode_ms_per_frame": (1000.0 * total_encode / total_frames)
+                if total_frames > 0
+                else None,
+                "mean_overhead_ratio": (
+                    float(sum(overheads) / len(overheads)) if overheads else None
+                ),
+                "environment": {
+                    "os": platform.platform(),
+                    "python": platform.python_version(),
+                    "processor": platform.processor(),
+                },
+            }
+            perf_path = out_path.parent / "videos" / "perf_snapshot.json"
+            perf_path.parent.mkdir(parents=True, exist_ok=True)
+            with perf_path.open("w", encoding="utf-8") as f:
+                json.dump(snap, f, indent=2)
+    except Exception:
+        # Best-effort; ignore snapshot errors
+        pass
+
+    return {
+        "total_jobs": 0,  # Will be set by caller
+        "written": wrote,
+        "failures": [],  # Will be set by caller
+        "out_path": str(out_path),
+    }
+
+
 def run_batch(
     scenarios_or_path: List[Dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -612,6 +1186,8 @@ def run_batch(
     record_forces: bool = True,
     snqi_weights: Dict[str, float] | None = None,
     snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    video_enabled: bool = False,
+    video_renderer: str = "none",
     append: bool = True,
     fail_fast: bool = False,
     progress_cb: Optional[
@@ -627,81 +1203,38 @@ def run_batch(
     scenarios_or_path: either a list of scenario dicts or a YAML file path.
     Returns a summary dict with counts and failures.
     """
-    # Load scenarios
-    if isinstance(scenarios_or_path, (str, Path)):
-        scenarios = load_scenario_matrix(scenarios_or_path)
-    else:
-        scenarios = scenarios_or_path
+    # Prepare batch setup
+    scenarios, out_path, schema = _prepare_batch_setup(
+        scenarios_or_path, out_path, schema_path, append
+    )
 
+    # Expand jobs
     jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
 
-    # Prepare output
-    out_path = Path(out_path)
-    if not append and out_path.exists():
-        out_path.unlink()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Set up fixed parameters
+    fixed_params = _setup_fixed_params(
+        out_path,
+        horizon,
+        dt,
+        record_forces,
+        snqi_weights,
+        snqi_baseline,
+        video_enabled,
+        video_renderer,
+        algo,
+        algo_config_path,
+    )
 
-    schema = load_schema(schema_path)
+    # Filter jobs for resume
+    jobs = _filter_resume_jobs(jobs, out_path, resume)
 
-    fixed_params: Dict[str, Any] = {
-        "horizon": horizon,
-        "dt": dt,
-        "record_forces": record_forces,
-        "snqi_weights": snqi_weights,
-        "snqi_baseline": snqi_baseline,
-        "algo": algo,
-        "algo_config_path": algo_config_path,
-    }
+    # Run jobs
+    wrote, failures = _run_jobs(
+        jobs, out_path, schema, fixed_params, workers, progress_cb, fail_fast
+    )
 
-    # Resume support: filter jobs whose episode_id already exists in out_path.
-    if resume and out_path.exists():
-        # Try fast-path via manifest; fall back to scanning JSONL if stale/missing
-        existing_ids = load_manifest(
-            out_path,
-            expected_identity_hash=_episode_identity_hash(),
-            expected_schema_version=EPISODE_SCHEMA_VERSION,
-        ) or index_existing(out_path)
-        if existing_ids:
-            filtered: List[tuple[Dict[str, Any], int]] = []
-            for sc, seed in jobs:
-                eid = compute_episode_id(sc, seed)
-                if eid not in existing_ids:
-                    filtered.append((sc, seed))
-            jobs = filtered
-
-    if workers <= 1:
-        wrote, failures = _run_batch_sequential(
-            jobs,
-            out_path=out_path,
-            schema=schema,
-            fixed_params=fixed_params,
-            progress_cb=progress_cb,
-            fail_fast=fail_fast,
-        )
-    else:
-        wrote, failures = _run_batch_parallel(
-            jobs,
-            out_path=out_path,
-            schema=schema,
-            fixed_params=fixed_params,
-            workers=workers,
-            progress_cb=progress_cb,
-            fail_fast=fail_fast,
-        )
-
-    summary = {
-        "total_jobs": len(jobs),
-        "written": wrote,
-        "failures": failures,
-        "out_path": str(out_path),
-    }
-    # Save/update manifest to speed up future resume if we wrote anything
-    if resume and wrote > 0 and out_path.exists():
-        # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
-        save_manifest(
-            out_path,
-            index_existing(out_path),
-            identity_hash=_episode_identity_hash(),
-            schema_version=EPISODE_SCHEMA_VERSION,
-        )
+    # Finalize and return summary
+    summary = _finalize_batch(out_path, wrote, resume)
+    summary["total_jobs"] = len(jobs)
+    summary["failures"] = failures
     return summary

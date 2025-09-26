@@ -82,6 +82,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
  - **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [`benchmark_full_classic.md`](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/`).
  - **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [`benchmark_visuals.md`](./benchmark_visuals.md)
+ - **Episode Video Artifacts (MVP)** – Design notes and links: [`docs/dev/issues/video-artifacts/design.md`](./dev/issues/video-artifacts/design.md)
  - [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
    - [Random baseline](./dev/baselines/random.md) — how to use and configure
  - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
@@ -252,7 +253,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 ## 📖 Documentation Highlights
 
 ### 🆕 Latest Updates
-**Benchmark Visual Artifacts (Plots + Videos Manifests)**: The Full Classic Interaction Benchmark now emits deterministic plot PDFs and representative (synthetic placeholder, SimulationView-ready) episode video artifacts with machine-readable manifests (`plot_artifacts.json`, `video_artifacts.json`, `performance_visuals.json`). See feature quickstart: `specs/126-title-integrate-plots/quickstart.md`.
+**Benchmark Visual Artifacts (Real Plots + Videos)**: The Full Classic Interaction Benchmark now emits real statistical PDF plots and simulation replay MP4 videos with machine-readable manifests. See updated documentation: [`benchmark_visuals.md`](./benchmark_visuals.md).
 - **Environment Refactoring Complete**: New unified architecture deployed
 - **Migration Tools Available**: Automated migration script for updating code
 - **Factory Pattern**: Clean, consistent environment creation interface

@@ -1,9 +1,29 @@
 # Benchmark Visual Artifacts
 
-> Documentation for feature branch `127-enhance-benchmark-visual` – unified generation of plot & video artifacts for the *Full Classic Benchmark* with SimulationView rendering, synthetic fallback, schema validation, and performance instrumentation.
+> **UPDATED**: As of feature `133-all-generated-plots`, benchmark outputs now generate **real statistical plots and simulation videos** instead of placeholders. The visualization system produces actual data-driven PDFs and MP4s from episode metrics and trajectories.
+
+> Previous documentation for feature branch `127-enhance-benchmark-visual` – unified generation of plot & video artifacts for the *Full Classic Benchmark* with SimulationView rendering, synthetic fallback, schema validation, and performance instrumentation.
 
 ## Table of Contents
-- [Goals](#goals)
+- [Table of Contents](#table-of-contents)
+- [Real Visualization Generation (Feature 133)](#real-visualization-generation-feature-133)
+  - [Plot Generation](#plot-generation)
+  - [Video Generation](#video-generation)
+  - [Validation](#validation)
+  - [Integration](#integration)
+  - [Performance](#performance)
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+    - [Plots Not Generating](#plots-not-generating)
+    - [Videos Not Generating](#videos-not-generating)
+    - [Validation Failures](#validation-failures)
+    - [Performance Issues](#performance-issues)
+  - [Error Messages](#error-messages)
+    - ["Missing visualization dependencies"](#missing-visualization-dependencies)
+    - ["No episode data found"](#no-episode-data-found)
+    - ["Failed to load episode data"](#failed-to-load-episode-data)
+  - [Getting Help](#getting-help)
+- [Legacy Documentation (Feature 127)](#legacy-documentation-feature-127)
 - [Lifecycle Overview](#lifecycle-overview)
 - [Renderer Selection Flow](#renderer-selection-flow)
 - [Replay Data Requirements](#replay-data-requirements)
@@ -15,13 +35,142 @@
 - [Memory Sampling](#memory-sampling)
 - [Extending / Future Work](#extending--future-work)
 
-## Goals
-- Provide SimulationView videos when possible (FR-001 / FR-014 / FR-015).
-- Preserve deterministic manifests for reproducibility (ordering & stable IDs).
-- Gracefully degrade to synthetic gradient videos when dependencies missing (FR-002).
-- Surface explicit notes for all skip/failure modes (FR-013).
-- Instrument performance (plots_time_s, videos_time_s, render vs encode split) (FR-005 / FR-009–FR-011).
-- Optional JSON Schema validation in dev/test to catch contract drift early (FR-006).
+## Real Visualization Generation (Feature 133)
+
+As of feature `133-all-generated-plots`, the benchmark system now generates **real visualizations** instead of placeholder outputs:
+
+### Plot Generation
+- **Function**: `robot_sf.benchmark.visualization.generate_benchmark_plots()`
+- **Output**: Statistical PDF plots showing actual metric distributions from episode data
+- **Types**: Metrics distribution plots, scenario comparison plots
+- **Format**: Vector PDFs for publication-quality figures
+- **Data Source**: Episode metrics (collisions, success rates, SNQI scores, etc.)
+
+### Video Generation  
+- **Function**: `robot_sf.benchmark.visualization.generate_benchmark_videos()`
+- **Output**: MP4 videos replaying actual simulation episodes
+- **Content**: Robot navigation trajectories with pedestrian interactions
+- **Fallback**: Placeholder videos when trajectory data unavailable
+- **Data Source**: Episode trajectory data (robot/pedestrian positions over time)
+
+### Validation
+- **Function**: `robot_sf.benchmark.visualization.validate_visual_artifacts()`
+- **Purpose**: Ensures generated artifacts contain real data, not placeholders
+- **Checks**: File existence, non-zero size, content validation
+
+### Integration
+The visualization functions are automatically called during benchmark execution:
+```python
+# In benchmark orchestrator
+plots = generate_benchmark_plots(episodes_path, output_dir)
+videos = generate_benchmark_videos(episodes_path, output_dir)  
+validation = validate_visual_artifacts(plots + videos)
+```
+
+### Performance
+- Plot generation: < 30 seconds for typical benchmark sizes
+- Video generation: < 60 seconds per scenario
+- Memory usage: Scales with episode count and trajectory length
+
+## Troubleshooting
+
+### Common Issues
+
+#### Plots Not Generating
+**Symptoms**: No PDF files created, or empty/placeholder PDFs
+**Causes**:
+- Missing matplotlib: `pip install matplotlib`
+- Invalid episode data: Check JSONL format and metric fields
+- Permission issues: Ensure output directory is writable
+
+**Solutions**:
+```bash
+# Install dependencies
+uv add matplotlib
+
+# Check episode data
+uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline()))"
+```
+
+#### Videos Not Generating
+**Symptoms**: No MP4 files created, or placeholder videos
+**Causes**:
+- Missing moviepy: `pip install moviepy`
+- No trajectory data: Episodes lack position/time data
+- Environment issues: Factory functions unavailable
+
+**Solutions**:
+```bash
+# Install dependencies  
+uv add moviepy
+
+# Check trajectory data
+uv run python -c "
+import json
+ep = json.loads(open('episodes.jsonl').readline())
+print('Trajectory data:', 'trajectory_data' in ep)
+"
+```
+
+#### Validation Failures
+**Symptoms**: `validate_visual_artifacts()` returns failed artifacts
+**Causes**:
+- Files corrupted during generation
+- Insufficient disk space
+- Permission issues during file creation
+
+**Solutions**:
+```python
+from robot_sf.benchmark.visualization import validate_visual_artifacts
+
+result = validate_visual_artifacts(artifacts)
+for failed in result.failed_artifacts:
+    print(f"Failed: {failed.filename} - {failed.error_message}")
+```
+
+#### Performance Issues
+**Symptoms**: Generation takes longer than expected
+**Causes**:
+- Large episode datasets
+- Complex trajectory data
+- Insufficient memory
+
+**Solutions**:
+- Use filters to reduce data: `scenario_filter="scenario1"`
+- Increase memory limits
+- Run on more powerful hardware
+
+### Error Messages
+
+#### "Missing visualization dependencies"
+```
+VisualizationError: Missing visualization dependencies: matplotlib
+```
+**Solution**: Install missing packages with `uv add matplotlib moviepy`
+
+#### "No episode data found"
+```
+VisualizationError: No episode data found
+```
+**Solution**: Check that episodes file exists and contains valid JSONL data
+
+#### "Failed to load episode data"
+```
+VisualizationError: Failed to load episode data: [Errno 2] No such file
+```
+**Solution**: Verify episodes file path and permissions
+
+### Getting Help
+
+If issues persist:
+1. Check the logs for detailed error messages
+2. Verify all dependencies are installed: `uv sync`
+3. Test with minimal data: single episode, no filters
+4. Report issues with episode data samples and error traces
+
+---
+
+## Legacy Documentation (Feature 127)
 
 ## Lifecycle Overview
 ```

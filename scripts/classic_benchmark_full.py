@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 
 try:
     from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark  # type: ignore
@@ -51,27 +52,35 @@ class BenchmarkCLIConfig:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    # Generate timestamp for default output directory
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    default_output = f"tmp/results/full_classic_run_{timestamp}"
+
     parser = argparse.ArgumentParser(description="Full Classic Interaction Benchmark")
-    # Required core paths
-    parser.add_argument("--scenarios", required=True, help="Scenario matrix YAML path")
-    parser.add_argument("--output", required=True, help="Benchmark output root directory")
+    # Core paths (now optional with suggested defaults)
+    parser.add_argument(
+        "--scenarios",
+        default="configs/scenarios/classic_interactions.yaml",
+        help="Scenario matrix YAML path",
+    )
+    parser.add_argument("--output", default=default_output, help="Benchmark output root directory")
     # Execution controls
     parser.add_argument("--workers", type=int, default=2, help="Parallel worker processes")
     parser.add_argument(
         "--seed", type=int, default=123, help="Master seed for deterministic planning"
     )
-    parser.add_argument("--algo", default="unknown", help="Algorithm label for manifest/records")
+    parser.add_argument("--algo", default="ppo", help="Algorithm label for manifest/records")
     parser.add_argument(
-        "--initial-episodes", type=int, default=1, help="Initial per-scenario episode count"
+        "--initial-episodes", type=int, default=2, help="Initial per-scenario episode count"
     )
     parser.add_argument(
         "--max-episodes",
         type=int,
-        default=0,
+        default=4,
         help="Maximum per-scenario episodes (0=unbounded until precision)",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=1, help="Episodes to add per adaptive sampling iteration"
+        "--batch-size", type=int, default=2, help="Episodes to add per adaptive sampling iteration"
     )
     parser.add_argument(
         "--horizon",

@@ -53,17 +53,17 @@ class VisualizationError(Exception):
         self.details = details or {}
 
 
-def generate_benchmark_plots(
-    episodes_data: Union[List[dict], str, Path],
+def generate_benchmark_plots_from_data(
+    episodes: List[dict],
     output_dir: str,
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,
 ) -> List[VisualArtifact]:
     """
-    Generate PDF plots by analyzing benchmark episodes.
+    Generate PDF plots by analyzing benchmark episodes from data.
 
     Args:
-        episodes_data: List of episode dictionaries from benchmark execution, or path (str | Path) to JSONL file
+        episodes: List of episode dictionaries from benchmark execution
         output_dir: Directory to save generated PDF plots
         scenario_filter: Optional scenario ID to filter plots
         baseline_filter: Optional baseline name to filter plots
@@ -73,17 +73,8 @@ def generate_benchmark_plots(
 
     Raises:
         VisualizationError: If plot generation fails
-        FileNotFoundError: If episodes_path doesn't exist (when path provided)
     """
     _check_matplotlib_available()
-
-    # Handle backward compatibility: if episodes_data is a path, load it
-    if isinstance(episodes_data, (str, Path)):
-        if not os.path.exists(episodes_data):
-            raise FileNotFoundError(f"Episodes file not found: {episodes_data}")
-        episodes = _load_episodes(str(episodes_data))
-    else:
-        episodes = episodes_data
 
     if not episodes:
         raise VisualizationError(
@@ -151,6 +142,70 @@ def generate_benchmark_plots(
         )
 
     return artifacts
+
+
+def generate_benchmark_plots_from_file(
+    episodes_path: Union[str, Path],
+    output_dir: str,
+    scenario_filter: Optional[str] = None,
+    baseline_filter: Optional[str] = None,
+) -> List[VisualArtifact]:
+    """
+    Generate PDF plots by analyzing benchmark episodes from a file.
+
+    Args:
+        episodes_path: Path to JSONL file containing episode data
+        output_dir: Directory to save generated PDF plots
+        scenario_filter: Optional scenario ID to filter plots
+        baseline_filter: Optional baseline name to filter plots
+
+    Returns:
+        List of generated VisualArtifact objects with metadata
+
+    Raises:
+        VisualizationError: If plot generation fails
+        FileNotFoundError: If episodes_path doesn't exist
+    """
+    if not os.path.exists(episodes_path):
+        raise FileNotFoundError(f"Episodes file not found: {episodes_path}")
+
+    episodes = _load_episodes(str(episodes_path))
+    return generate_benchmark_plots_from_data(
+        episodes, output_dir, scenario_filter, baseline_filter
+    )
+
+
+def generate_benchmark_plots(
+    episodes_data: Union[List[dict], str, Path],
+    output_dir: str,
+    scenario_filter: Optional[str] = None,
+    baseline_filter: Optional[str] = None,
+) -> List[VisualArtifact]:
+    """
+    Generate PDF plots by analyzing benchmark episodes.
+
+    Args:
+        episodes_data: List of episode dictionaries from benchmark execution, or path (str | Path) to JSONL file
+        output_dir: Directory to save generated PDF plots
+        scenario_filter: Optional scenario ID to filter plots
+        baseline_filter: Optional baseline name to filter plots
+
+    Returns:
+        List of generated VisualArtifact objects with metadata
+
+    Raises:
+        VisualizationError: If plot generation fails
+        FileNotFoundError: If episodes_path doesn't exist (when path provided)
+    """
+    # Handle backward compatibility: if episodes_data is a path, load it
+    if isinstance(episodes_data, (str, Path)):
+        return generate_benchmark_plots_from_file(
+            episodes_data, output_dir, scenario_filter, baseline_filter
+        )
+    else:
+        return generate_benchmark_plots_from_data(
+            episodes_data, output_dir, scenario_filter, baseline_filter
+        )
 
 
 def _check_matplotlib_available() -> None:
@@ -363,8 +418,8 @@ def _generate_scenario_comparison_plot(episodes: List[dict], output_dir: str) ->
         )
 
 
-def generate_benchmark_videos(
-    episodes_data: Union[List[dict], str, Path],
+def generate_benchmark_videos_from_data(
+    episodes: List[dict],
     output_dir: str,
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,
@@ -372,10 +427,10 @@ def generate_benchmark_videos(
     max_duration: float = 10.0,
 ) -> List[VisualArtifact]:
     """
-    Generate MP4 videos by replaying benchmark episodes.
+    Generate MP4 videos by replaying benchmark episodes from data.
 
     Args:
-        episodes_data: List of episode dictionaries from benchmark execution, or path (str | Path) to JSONL file
+        episodes: List of episode dictionaries from benchmark execution
         output_dir: Directory to save generated MP4 videos
         scenario_filter: Optional scenario ID to filter videos
         baseline_filter: Optional baseline name to filter videos
@@ -387,19 +442,8 @@ def generate_benchmark_videos(
 
     Raises:
         VisualizationError: If video rendering fails
-        FileNotFoundError: If episodes_path doesn't exist (when path provided)
     """
     _check_moviepy_available()
-
-    # Handle backward compatibility: if episodes_data is a path, load it
-    if isinstance(episodes_data, (str, Path)):
-        if not os.path.exists(episodes_data):
-            raise FileNotFoundError(f"Episodes file not found: {episodes_data}")
-        episodes_path = str(episodes_data)
-        episodes = _load_episodes(episodes_path)
-    else:
-        episodes_path = "episodes_data"
-        episodes = episodes_data
 
     if not episodes:
         raise VisualizationError(
@@ -463,7 +507,7 @@ def generate_benchmark_videos(
                 artifact_type="video",
                 format="mp4",
                 filename=video_filename,
-                source_data=f"Episode {episode['episode_id']} replay from {episodes_path}{filter_str}",
+                source_data=f"Episode {episode['episode_id']} replay from episodes_data{filter_str}",
                 generation_time=generation_time,
                 file_size=file_size,
                 status="generated",
@@ -486,6 +530,78 @@ def generate_benchmark_videos(
             artifacts.append(artifact)
 
     return artifacts
+
+
+def generate_benchmark_videos_from_file(
+    episodes_path: Union[str, Path],
+    output_dir: str,
+    scenario_filter: Optional[str] = None,
+    baseline_filter: Optional[str] = None,
+    fps: int = 30,
+    max_duration: float = 10.0,
+) -> List[VisualArtifact]:
+    """
+    Generate MP4 videos by replaying benchmark episodes from a file.
+
+    Args:
+        episodes_path: Path to JSONL file containing episode data
+        output_dir: Directory to save generated MP4 videos
+        scenario_filter: Optional scenario ID to filter videos
+        baseline_filter: Optional baseline name to filter videos
+        fps: Frames per second for video rendering
+        max_duration: Maximum video duration in seconds
+
+    Returns:
+        List of generated VisualArtifact objects with metadata
+
+    Raises:
+        VisualizationError: If video rendering fails
+        FileNotFoundError: If episodes_path doesn't exist
+    """
+    if not os.path.exists(episodes_path):
+        raise FileNotFoundError(f"Episodes file not found: {episodes_path}")
+
+    episodes = _load_episodes(str(episodes_path))
+    return generate_benchmark_videos_from_data(
+        episodes, output_dir, scenario_filter, baseline_filter, fps, max_duration
+    )
+
+
+def generate_benchmark_videos(
+    episodes_data: Union[List[dict], str, Path],
+    output_dir: str,
+    scenario_filter: Optional[str] = None,
+    baseline_filter: Optional[str] = None,
+    fps: int = 30,
+    max_duration: float = 10.0,
+) -> List[VisualArtifact]:
+    """
+    Generate MP4 videos by replaying benchmark episodes.
+
+    Args:
+        episodes_data: List of episode dictionaries from benchmark execution, or path (str | Path) to JSONL file
+        output_dir: Directory to save generated MP4 videos
+        scenario_filter: Optional scenario ID to filter videos
+        baseline_filter: Optional baseline name to filter videos
+        fps: Frames per second for video rendering
+        max_duration: Maximum video duration in seconds
+
+    Returns:
+        List of generated VisualArtifact objects with metadata
+
+    Raises:
+        VisualizationError: If video rendering fails
+        FileNotFoundError: If episodes_path doesn't exist (when path provided)
+    """
+    # Handle backward compatibility: if episodes_data is a path, load it
+    if isinstance(episodes_data, (str, Path)):
+        return generate_benchmark_videos_from_file(
+            episodes_data, output_dir, scenario_filter, baseline_filter, fps, max_duration
+        )
+    else:
+        return generate_benchmark_videos_from_data(
+            episodes_data, output_dir, scenario_filter, baseline_filter, fps, max_duration
+        )
 
 
 def _check_moviepy_available() -> None:

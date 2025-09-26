@@ -36,6 +36,7 @@ from loguru import logger
 try:
     from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
     from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
+    from robot_sf.benchmark.cli import DEFAULT_SCHEMA_PATH
     from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
     from scripts.classic_benchmark_full import BenchmarkCLIConfig
 except ImportError as e:
@@ -97,7 +98,7 @@ def compute_baseline_stats(
         run_and_compute_baseline(
             scenarios_or_path=scenario_matrix,
             out_json=output_path,
-            schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",
+            schema_path=DEFAULT_SCHEMA_PATH,
             workers=2,
         )
         logger.info(f"Baseline stats computed and saved to {output_path}")

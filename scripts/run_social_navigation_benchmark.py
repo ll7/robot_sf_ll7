@@ -160,9 +160,9 @@ def aggregate_all_results(
         return {"success": False, "error": str(e)}
 
 
-def generate_visualizations(aggregates_file: str, output_root: str) -> Dict[str, Any]:
-    """Generate visualization plots and figures using CLI commands."""
-    logger.info("Generating visualization plots and figures using CLI commands")
+def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> Dict[str, Any]:
+    """Log manual visualization steps using CLI commands."""
+    logger.info("Logging manual visualization steps using CLI commands")
 
     try:
         # For now, skip automatic figure generation as the API is not straightforward
@@ -180,7 +180,7 @@ def generate_visualizations(aggregates_file: str, output_root: str) -> Dict[str,
         }
 
     except Exception as e:
-        logger.error(f"Failed to generate visualizations: {e}")
+        logger.error(f"Failed to log visualization steps: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -293,7 +293,7 @@ def main() -> int:
     # Generate visualizations
     aggregates_file = aggregation_result["aggregates_file"]
     visuals_dir = output_root / "visualizations"
-    visuals_result = generate_visualizations(aggregates_file, str(visuals_dir))
+    visuals_result = log_manual_visualization_steps(aggregates_file, str(visuals_dir))
 
     # Validate results
     validation_data = {

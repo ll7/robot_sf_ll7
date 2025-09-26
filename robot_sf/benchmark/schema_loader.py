@@ -6,6 +6,7 @@ with caching and version validation.
 """
 
 import logging
+import re
 from typing import Any, Dict, Optional
 
 from .schema_reference import SchemaReference
@@ -18,12 +19,13 @@ DEFAULT_EPISODE_SCHEMA_REF = SchemaReference(
 )
 
 
-def load_schema(schema_ref: Optional[SchemaReference] = None) -> Dict[str, Any]:
+def load_schema(schema_name: str, validate_integrity: bool = True) -> Dict[str, Any]:
     """
     Load a schema from the canonical location.
 
     Args:
-        schema_ref: SchemaReference to load. If None, loads the default episode schema.
+        schema_name: Schema filename (e.g., 'episode.schema.v1.json')
+        validate_integrity: Whether to validate schema is well-formed JSON Schema
 
     Returns:
         Loaded schema data as a dictionary
@@ -32,32 +34,85 @@ def load_schema(schema_ref: Optional[SchemaReference] = None) -> Dict[str, Any]:
         FileNotFoundError: If schema file doesn't exist
         ValueError: If schema cannot be loaded or validated
     """
-    if schema_ref is None:
-        schema_ref = DEFAULT_EPISODE_SCHEMA_REF
+    # Validate schema name format
+    if not re.match(r"^[a-zA-Z0-9_.-]+\.schema\.v[0-9]+\.json$", schema_name):
+        raise ValueError(f"Invalid schema name format: {schema_name}")
+
+    # Extract version from filename (e.g., "episode.schema.v1.json" -> "v1")
+    version_match = re.search(r"\.schema\.v(\d+)\.json$", schema_name)
+    if not version_match:
+        raise ValueError(f"Cannot extract version from schema name: {schema_name}")
+    version = f"v{version_match.group(1)}"
+
+    # Construct canonical path
+    schema_path = f"benchmark/schemas/{schema_name}"
+
+    # Create schema reference
+    schema_ref = SchemaReference(schema_path=schema_path, version=version)
 
     schema = schema_ref.load_schema()
+
+    if validate_integrity:
+        # Basic validation that it's a dict with expected structure
+        if not isinstance(schema.schema_data, dict):
+            raise ValueError(f"Schema is not a valid JSON object: {schema_name}")
+        if "$schema" not in schema.schema_data:
+            raise ValueError(f"Schema missing $schema field: {schema_name}")
+
     return schema.schema_data
 
 
-def get_schema_version(schema_ref: Optional[SchemaReference] = None) -> str:
+def get_schema_version(schema_name: Optional[str] = None) -> Dict[str, int]:
     """
     Get the version of a schema.
 
     Args:
-        schema_ref: SchemaReference to check. If None, checks the default episode schema.
+        schema_name: Schema filename (e.g., 'episode.schema.v1.json').
+                    If None, uses the default episode schema.
 
     Returns:
-        Schema version string
+        Dict with 'major', 'minor', 'patch' version numbers
 
     Raises:
         FileNotFoundError: If schema file doesn't exist
-        ValueError: If schema cannot be loaded or validated
+        ValueError: If schema cannot be loaded or version cannot be parsed
     """
-    if schema_ref is None:
-        schema_ref = DEFAULT_EPISODE_SCHEMA_REF
+    if schema_name is None:
+        schema_name = "episode.schema.v1.json"
 
-    schema = schema_ref.load_schema()
-    return schema.version
+    # Validate schema name format
+    if not re.match(r"^[a-zA-Z0-9_.-]+\.schema\.v[0-9]+\.json$", schema_name):
+        raise ValueError(f"Invalid schema name format: {schema_name}")
+
+    # Extract version from filename (e.g., "episode.schema.v1.json" -> 1)
+    version_match = re.search(r"\.schema\.v(\d+)\.json$", schema_name)
+    if not version_match:
+        raise ValueError(f"Cannot extract version from schema name: {schema_name}")
+
+    try:
+        major = int(version_match.group(1))
+        return {"major": major, "minor": 0, "patch": 0}
+    except ValueError:
+        raise ValueError(f"Invalid version number in schema name: {schema_name}")
+
+
+def get_schema_version_string(schema_name: Optional[str] = None) -> str:
+    """
+    Get the version of a schema as a formatted string.
+
+    Args:
+        schema_name: Schema filename (e.g., 'episode.schema.v1.json').
+                    If None, uses the default episode schema.
+
+    Returns:
+        Version string in X.Y.Z format
+
+    Raises:
+        FileNotFoundError: If schema file doesn't exist
+        ValueError: If schema cannot be loaded or version cannot be parsed
+    """
+    version_dict = get_schema_version(schema_name)
+    return f"{version_dict['major']}.{version_dict['minor']}.{version_dict['patch']}"
 
 
 def validate_episode_data(

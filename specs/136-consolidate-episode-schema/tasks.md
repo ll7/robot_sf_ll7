@@ -1,6 +1,6 @@
 # Tasks: Consolidate Episode Schema Definitions
 
-**Input**: Design documents from `/specs/136-consolidate-episode-schema/`
+**Input**: De- [X] T015 prevent_schema_duplicates function in hooks/prevent_schema_duplicates.pyign documents from `/specs/136-consolidate-episode-schema/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
 ## Execution Flow (main)
@@ -48,21 +48,21 @@
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
 - [X] T004 [P] Contract test for schema-loader-api.v1.json in tests/contract/test_schema_loader_api.py
-- [ ] T005 [P] Contract test for git-hook-api.v1.json in tests/contract/test_git_hook_api.py
-- [ ] T006 [P] Integration test schema consolidation in tests/integration/test_schema_consolidation.py
-- [ ] T007 [P] Integration test runtime resolution in tests/integration/test_runtime_resolution.py
-- [ ] T008 [P] Integration test git hook prevention in tests/integration/test_git_hook_prevention.py
-- [ ] T009 [P] Integration test version detection in tests/integration/test_version_detection.py
+- [X] T005 [P] Contract test for git-hook-api.v1.json in tests/contract/test_git_hook_api.py
+- [X] T006 [P] Integration test schema consolidation in tests/integration/test_schema_consolidation.py
+- [X] T007 [P] Integration test runtime resolution in tests/integration/test_runtime_resolution.py
+- [X] T008 [P] Integration test git hook prevention in tests/integration/test_git_hook_prevention.py
+- [X] T009 [P] Integration test version detection in tests/integration/test_version_detection.py
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [ ] T010 [P] EpisodeSchema entity in robot_sf/benchmark/schemas/episode_schema.py
-- [ ] T011 [P] SchemaReference entity in robot_sf/benchmark/schema_reference.py
-- [ ] T012 [P] SchemaVersion entity in robot_sf/benchmark/schema_version.py
-- [ ] T013 load_schema function in robot_sf/benchmark/schema_loader.py
-- [ ] T014 get_schema_version function in robot_sf/benchmark/schema_loader.py
+- [X] T010 [P] EpisodeSchema entity in robot_sf/benchmark/schemas/episode_schema.py
+- [X] T011 [P] SchemaReference entity in robot_sf/benchmark/schema_reference.py
+- [X] T012 [P] SchemaVersion entity in robot_sf/benchmark/schema_version.py
+- [X] T013 load_schema function in robot_sf/benchmark/schema_loader.py
+- [X] T014 get_schema_version function in robot_sf/benchmark/schema_loader.py
 - [ ] T015 prevent_schema_duplicates function in hooks/prevent-schema-duplicates.py
-- [ ] T016 Semantic versioning utilities in robot_sf/benchmark/version_utils.py
-- [ ] T017 Schema validation utilities in robot_sf/benchmark/validation_utils.py
+- [X] T016 Semantic versioning utilities in robot_sf/benchmark/version_utils.py
+- [X] T017 Schema validation utilities in robot_sf/benchmark/validation_utils.py
 
 ## Phase 3.4: Integration
 - [ ] T018 Remove duplicate schema file from specs/120-social-navigation-benchmark-plan/contracts/

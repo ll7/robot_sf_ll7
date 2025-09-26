@@ -11,7 +11,15 @@ Contract Requirements:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
+
+# Add hooks directory to Python path for testing
+hooks_dir = Path(__file__).parent.parent.parent / "hooks"
+if str(hooks_dir) not in sys.path:
+    sys.path.insert(0, str(hooks_dir))
 
 
 class TestGitHookAPIContract:

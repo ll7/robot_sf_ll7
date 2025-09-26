@@ -14,11 +14,16 @@ class TestVersionDetectionIntegration:
         from robot_sf.benchmark.schema_loader import get_schema_version
 
         # Get the version from the canonical schema
-        version = get_schema_version()
+        version_dict = get_schema_version()
 
-        # Should be a string following semantic versioning
-        assert isinstance(version, str)
-        assert len(version) > 0
+        # Should be a dict with version components
+        assert isinstance(version_dict, dict)
+        assert "major" in version_dict
+        assert "minor" in version_dict
+        assert "patch" in version_dict
+
+        # Format as string for validation
+        version = f"{version_dict['major']}.{version_dict['minor']}.{version_dict['patch']}"
 
         # Should match X.Y.Z format
         import re
@@ -27,18 +32,13 @@ class TestVersionDetectionIntegration:
 
     def test_version_detection_matches_schema_content(self):
         """Test that detected version matches what's embedded in schema content."""
-        from robot_sf.benchmark.schema_loader import get_schema_version, load_schema
+        from robot_sf.benchmark.schema_loader import load_schema
 
-        schema = load_schema()
-        version = get_schema_version()
+        schema = load_schema("episode.schema.v1.json")
 
         # The version should be extractable from the schema content
-        # This could be from title, $id, or other fields
-        assert (
-            version in str(schema)
-            or version in schema.get("title", "")
-            or version in schema.get("$id", "")
-        )
+        # Check if version appears in title or other metadata
+        assert "v1" in schema.get("title", "")
 
     def test_version_detection_consistent_across_calls(self):
         """Test that version detection is consistent across multiple calls."""
@@ -56,10 +56,10 @@ class TestVersionDetectionIntegration:
         """Test that version detection supports schema evolution patterns."""
         from robot_sf.benchmark.schema_loader import get_schema_version
 
-        version = get_schema_version()
+        version_dict = get_schema_version()
 
         # Parse version components
-        major, minor, patch = map(int, version.split("."))
+        major, minor, patch = version_dict["major"], version_dict["minor"], version_dict["patch"]
 
         # Version should follow semantic versioning rules
         assert major >= 0
@@ -73,13 +73,16 @@ class TestVersionDetectionIntegration:
         """Test that version detection provides meaningful, incrementing versions."""
         from robot_sf.benchmark.schema_loader import get_schema_version
 
-        version = get_schema_version()
+        version_dict = get_schema_version()
+
+        # Format as string for comparison
+        version = f"{version_dict['major']}.{version_dict['minor']}.{version_dict['patch']}"
 
         # Version should not be 0.0.0 (which would indicate unversioned)
         assert version != "0.0.0"
 
         # Should be a reasonable version for a stable schema
-        major, minor, patch = map(int, version.split("."))
+        major, minor = version_dict["major"], version_dict["minor"]
         assert major >= 1 or (major == 0 and minor > 0)  # Either stable (1+) or development (0.x+)
 
     def test_version_detection_integrates_with_validation(self):
@@ -88,15 +91,16 @@ class TestVersionDetectionIntegration:
 
         from robot_sf.benchmark.schema_loader import get_schema_version, load_schema
 
-        schema = load_schema()
-        version = get_schema_version()
+        schema = load_schema("episode.schema.v1.json")
+        version_dict = get_schema_version("episode.schema.v1.json")
 
         # Create a valid episode according to the schema
         valid_episode = {
-            "episode_id": f"test-episode-{version}",
-            "scenario_id": f"test-scenario-{version}",
+            "version": "v1",
+            "episode_id": f"test-episode-{version_dict['major']}.{version_dict['minor']}.{version_dict['patch']}",
+            "scenario_id": f"test-scenario-{version_dict['major']}.{version_dict['minor']}.{version_dict['patch']}",
             "seed": 42,
-            "metrics": {"total_reward": 100.5, "steps": 50, "success": True},
+            "metrics": {"total_reward": 100.5, "steps": 50, "success": 1},
         }
 
         # Should validate successfully
@@ -106,10 +110,10 @@ class TestVersionDetectionIntegration:
         """Test that version detection supports backward compatibility checks."""
         from robot_sf.benchmark.schema_loader import get_schema_version
 
-        version = get_schema_version()
+        version_dict = get_schema_version()
 
         # Parse version to check compatibility
-        major, minor, patch = map(int, version.split("."))
+        major, minor, patch = version_dict["major"], version_dict["minor"], version_dict["patch"]
 
         # For backward compatibility, we should be able to determine
         # if a given version is compatible with the current schema

@@ -5,6 +5,14 @@
 **Status**: Draft  
 **Input**: User description: "Phase 1 - Critical Fixes (High Priority): Fix datetime.UTC imports for Python version compatibility Address missing required arguments in factory functions Fix invalid type assignments that could cause runtime errors Phase 2 - Type Annotations (Medium Priority): Update return type annotations for environment factories Fix parameter defaults in data analysis functions Resolve Gym space type issues Phase 3 - Import Resolution (Low Priority): Add conditional imports for optional dependencies Fix dynamic import type issues Resolve test utility type problems Phase 4 - Code Quality (Ongoing): Add missing type annotations Improve generic type usage Enhance type safety in utility functions"
 
+## Clarifications
+### Session 2025-09-26
+- Q: What Python versions are supported for datetime.UTC compatibility? → A: Python 3.11 and later (latest stable features)
+- Q: Are breaking changes to public APIs allowed when fixing type issues? → A: No breaking changes allowed - maintain backward compatibility
+- Q: What type checker is being used for validation? → A: uvx ty (mypy-based, used in uv toolchain)
+- Q: How should optional dependencies be handled in Phase 3? → A: Keep them optional with conditional imports
+- Q: What is the target type coverage percentage after all fixes are complete? → A: 80%
+
 ## Execution Flow (main)
 ```
 1. Parse user description from Input
@@ -64,25 +72,28 @@ As a developer working on the robot_sf codebase, I want to resolve type checking
 4. **Given** utility functions lack type annotations, **When** I enhance type safety in Phase 4, **Then** the codebase has comprehensive type coverage and better IDE support
 
 ### Edge Cases
-- What happens when fixing type issues requires changes to public APIs?
+- Type fixes must be implemented without breaking public APIs (backward compatibility required)
 - How does the system handle optional dependencies that are not installed?
 - What if some type fixes conflict with existing code patterns?
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
-- **FR-001**: System MUST fix datetime.UTC imports to ensure Python version compatibility across supported Python versions
+- **FR-001**: System MUST fix datetime.UTC imports to ensure Python version compatibility across Python 3.11 and later
 - **FR-002**: System MUST address missing required arguments in factory functions to prevent runtime errors
 - **FR-003**: System MUST fix invalid type assignments that could cause runtime type errors
 - **FR-004**: System MUST update return type annotations for environment factories to provide accurate type information
 - **FR-005**: System MUST fix parameter defaults in data analysis functions to match expected types
 - **FR-006**: System MUST resolve Gym space type issues for proper reinforcement learning integration
-- **FR-007**: System MUST add conditional imports for optional dependencies to handle missing packages gracefully
+- **FR-007**: System MUST add conditional imports for optional dependencies to handle missing packages gracefully while keeping them optional
 - **FR-008**: System MUST fix dynamic import type issues to ensure type safety in import operations
 - **FR-009**: System MUST resolve test utility type problems to maintain reliable testing infrastructure
 - **FR-010**: System MUST add missing type annotations throughout the codebase for better type checking coverage
 - **FR-011**: System MUST improve generic type usage to leverage Python's type system effectively
 - **FR-012**: System MUST enhance type safety in utility functions to prevent type-related bugs
+- **FR-013**: System MUST maintain backward compatibility and avoid breaking changes to public APIs
+- **FR-014**: System MUST ensure type fixes are validated using uvx ty type checker
+- **FR-015**: System MUST achieve at least 80% type coverage after all fixes are complete
 
 ### Key Entities *(include if feature involves data)*
 - **Type Annotation**: Represents type information for variables, functions, and classes

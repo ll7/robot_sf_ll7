@@ -1,6 +1,6 @@
 # Tasks: Consolidate Episode Schema Definitions
 
-**Input**: De- [X] T015 prevent_schema_duplicates function in hooks/prevent_schema_duplicates.pyign documents from `/specs/136-consolidate-episode-schema/`
+**Input**: Design documents from `/specs/136-consolidate-episode-schema/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
 ## Execution Flow (main)
@@ -113,5 +113,4 @@ Task: "Integration test version detection in tests/integration/test_version_dete
 - Each endpoint → implementation task (not parallel if shared files)
 - Each user story → integration test marked [P]
 - Different files = can be parallel [P]
-- Same file = sequential (no [P])</content>
-<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/tasks.md
+- Same file = sequential (no [P])

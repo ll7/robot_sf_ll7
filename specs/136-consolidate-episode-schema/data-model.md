@@ -95,5 +95,4 @@ EpisodeSchema ────contains───► SchemaVersion
 ### SchemaVersion Constraints
 - Must follow X.Y.Z format where X, Y, Z are non-negative integers
 - Major version 0 indicates unstable API
-- Version changes must reflect actual compatibility impact</content>
-<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/data-model.md
+- Version changes must reflect actual compatibility impact

@@ -78,7 +78,6 @@ def validate_schema_compatibility(schema: Dict[str, Any]) -> Tuple[bool, List[st
 
     Args:
         schema: The schema to validate
-        meta_schema_url: URL of the meta-schema to validate against
 
     Returns:
         Tuple of (is_valid, error_messages)

@@ -153,5 +153,4 @@ if __name__ == "__main__":
 Save as `validate_schema_consolidation.py` and run with:
 ```bash
 uv run python validate_schema_consolidation.py
-```</content>
-<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/quickstart.md
+```

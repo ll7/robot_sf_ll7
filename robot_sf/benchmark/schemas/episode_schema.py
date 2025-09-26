@@ -8,8 +8,11 @@ for schema validation and metadata extraction.
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import jsonschema
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +96,6 @@ class EpisodeSchema:
             title = self._schema_data.get("title", "")
             id_field = self._schema_data.get("$id", "")
 
-            # Look for version patterns in title/$id
-            import re
-
             version_match = re.search(r"v(\d+)", title) or re.search(r"v(\d+)", id_field)
             if version_match:
                 self._version = f"v{version_match.group(1)}"
@@ -159,7 +159,6 @@ class EpisodeSchema:
         Raises:
             ValueError: If data doesn't conform to schema
         """
-        import jsonschema
 
         try:
             jsonschema.validate(instance=episode_data, schema=self._schema_data)

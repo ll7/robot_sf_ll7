@@ -109,5 +109,4 @@
 **Risk Mitigation**:
 - Backward compatibility maintained during transition
 - Clear error messages for missing schemas
-- Automated testing prevents regressions</content>
-<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/research.md
+- Automated testing prevents regressions

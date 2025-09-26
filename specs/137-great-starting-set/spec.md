@@ -3,7 +3,7 @@
 **Feature Branch**: `137-great-starting-set`  
 **Created**: September 26, 2025  
 **Status**: Draft  
-**Input**: User description: "Great starting set! For a research-heavy ROS2/CARLA codebase, I'd layer in a few high-signal rule families that catch real bugs, modernize syntax, and keep imports/exception handling tidy—without turning your CI into a nag.
+**Input**: User description: "I'd layer in a few high-signal rule families that catch real bugs, modernize syntax, and keep imports/exception handling tidy—without turning your CI into a nag.
 
 Here's a curated, battle-tested expansion:
 
@@ -53,9 +53,10 @@ select = [
 
 # Tame the noisy ones and carve out test & script latitude
 ignore = [
-  # Pylint-derived "opinionated" refactors that often fire in scientific/ROS code:
+  # Pylint-derived "opinionated" refactors that often fire in scientific code:
   "PLR0911","PLR0912","PLR0913","PLR0915", # many returns/branches/args
   "PLR2004", # magic values in comparisons (okay in tests/configs)
+  "S", # Security checks not critical in research code
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -63,6 +64,9 @@ ignore = [
 "tests/**/*" = ["S101","T201","PLR2004"]
 # One-off scripts / notebooks exports: allow prints
 "scripts/**/*" = ["T201"]
+# Examples and docs: allow prints and other leniencies
+"examples/**/*" = ["T201"]
+"docs/**/*" = ["T201"]
 
 Why these:
 	•	B / BLE / TRY: catch real bugs like mutable defaults, bare excepts, and sketchy try/except flows (e.g., TRY300/TRY203).  
@@ -79,6 +83,15 @@ Tips:
 	•	Let Ruff auto-fix what it can (ruff check --fix). You can restrict fixability if desired (e.g., only E,F,UP,SIM,C4).  
 	•	Keep docstrings & annotations optional at first. If you want stricter APIs later, consider ANN (annotations) and a minimal D1xx docstring baseline in public modules.  
 	•	If you prefer the "strict by default" style, one viable approach is select = ["ALL"] and then ignore what you truly dislike—useful to benefit from new rules over time. (Communities do this; just be deliberate with ignores.)"
+
+## Clarifications
+
+### Session 2025-09-26
+- Q: What specific performance targets should the linting configuration maintain to avoid "turning CI into a nag"? → A: CI linting must complete in under 60 seconds
+- Q: How should conflicts between new rules and existing code be resolved? → A: When possible, fix with ruff check --fix. When not, exclude conflicting rules from select list
+- Q: Are there any specific rules or rule families that should be excluded due to the research/scientific nature of the codebase? → A: Exclude S for security checks in non-production research
+- Q: What constitutes "excessive noise" in CI - any specific thresholds or examples? → A: Any increase in CI failures
+- Q: Should the configuration include any additional per-file-ignores for other directories (e.g., examples/, docs/)? → A: A or even more folders
 
 ## Execution Flow (main)
 ```
@@ -130,7 +143,7 @@ When creating this spec from a user prompt:
 ## User Scenarios & Testing *(mandatory)*
 
 ### Primary User Story
-As a developer working on a research-heavy ROS2/CARLA codebase, I want to expand the Ruff linting rules in pyproject.toml to catch more bugs, modernize syntax, and improve code quality without making the CI overly noisy or naggy.
+I want to expand the Ruff linting rules in pyproject.toml to catch more bugs, modernize syntax, and improve code quality without making the CI overly noisy or naggy.
 
 ### Acceptance Scenarios
 1. **Given** the current pyproject.toml has basic Ruff rules, **When** I apply the expanded rule set, **Then** the linter catches additional bugs like mutable defaults and bare excepts while allowing necessary flexibility in tests and scripts.
@@ -138,16 +151,16 @@ As a developer working on a research-heavy ROS2/CARLA codebase, I want to expand
 3. **Given** code with potential security issues, **When** linting, **Then** it flags unsafe subprocess usage but allows test scaffolding.
 
 ### Edge Cases
-- What happens when new rules conflict with existing code patterns?
-- How does the system handle rules that might be too strict for scientific computing code?
+- What happens when new rules conflict with existing code patterns? When possible, fix with ruff check --fix. When not, exclude conflicting rules from select list.
+- How does the system handle rules that might be too strict for scientific computing code? Exclude security checks (S) as not critical in research code.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 - **FR-001**: System MUST update the [tool.ruff.lint] select list to include the specified rule families (B, BLE, TRY, A, ARG, S, UP, SIM, C4, PTH, ICN, PERF, PL, DTZ, G, T20, ERA, COM, ISC, RUF, PGH, TCH, TID, N)
-- **FR-002**: System MUST set ignore rules to exclude noisy pylint-derived rules (PLR0911, PLR0912, PLR0913, PLR0915, PLR2004)
-- **FR-003**: System MUST configure per-file-ignores to allow specific rules in tests (S101, T201, PLR2004) and scripts (T201)
-- **FR-004**: The linting configuration MUST maintain CI performance without excessive noise
+- **FR-002**: System MUST set ignore rules to exclude noisy pylint-derived rules (PLR0911, PLR0912, PLR0913, PLR0915, PLR2004) and security checks (S)
+- **FR-003**: System MUST configure per-file-ignores to allow specific rules in tests (S101, T201, PLR2004), scripts (T201), examples (T201), and docs (T201)
+- **FR-004**: The linting configuration MUST ensure CI linting completes in under 60 seconds without excessive noise (defined as any increase in CI failures)
 - **FR-005**: The rules MUST be suitable for research-heavy codebases with scientific computing patterns
 
 ### Key Entities *(include if feature involves data)*

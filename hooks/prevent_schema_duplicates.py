@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 def prevent_schema_duplicates(
     staged_files: List[str],
     schema_pattern: str = r".*\.schema\.v[0-9]+\.json$",
-    canonical_dir: Optional[Path] = None,
+    canonical_dir: Path = Path("robot_sf/benchmark/schemas"),
 ) -> Dict:
     """
     Check staged files for schema duplicates against canonical schemas.
@@ -23,6 +23,7 @@ def prevent_schema_duplicates(
     Args:
         staged_files: List of file paths staged for commit
         schema_pattern: Regex pattern to identify schema files
+        canonical_dir: Directory containing canonical schemas
 
     Returns:
         Dict with status, duplicates_found, and message
@@ -38,9 +39,6 @@ def prevent_schema_duplicates(
         }
 
     # Get canonical schema directory
-    if canonical_dir is None:
-        canonical_dir = Path("robot_sf/benchmark/schemas")
-
     if not canonical_dir.exists():
         return {
             "status": "fail",
@@ -140,13 +138,13 @@ def main():
     )
     parser.add_argument(
         "--canonical-dir",
-        default=None,
+        default="robot_sf/benchmark/schemas",
         help="Directory containing canonical schemas",
     )
 
     args = parser.parse_args()
 
-    canonical_dir = Path(args.canonical_dir) if args.canonical_dir else None
+    canonical_dir = Path(args.canonical_dir)
     result = prevent_schema_duplicates(args.staged_files, args.schema_pattern, canonical_dir)
 
     print(result["message"])

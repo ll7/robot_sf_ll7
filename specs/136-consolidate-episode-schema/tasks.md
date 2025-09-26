@@ -71,13 +71,13 @@
 - [X] T021 Add schema caching to schema loader
 
 ## Phase 3.5: Polish
-- [ ] T022 [P] Unit tests for schema validation in tests/unit/test_schema_validation.py
-- [ ] T023 [P] Unit tests for version utilities in tests/unit/test_version_utils.py
-- [ ] T024 Performance tests for schema loading (<100ms)
-- [ ] T025 [P] Update docs/dev_guide.md with canonical schema location
-- [ ] T026 [P] Update docs/benchmark.md with schema consolidation details
-- [ ] T027 Remove duplication in schema loading code
-- [ ] T028 Run quickstart.md validation scenarios
+- [X] T022 [P] Unit tests for schema validation in tests/unit/test_schema_validation.py
+- [X] T023 [P] Unit tests for version utilities in tests/unit/test_version_utils.py
+- [X] T024 Performance tests for schema loading (<100ms)
+- [X] T025 [P] Update docs/dev_guide.md with canonical schema location
+- [X] T026 [P] Update docs/benchmark.md with schema consolidation details
+- [X] T027 Remove duplication in schema loading code
+- [X] T028 Run quickstart.md validation scenarios
 
 ## Dependencies
 - Tests (T004-T009) before implementation (T010-T017)

@@ -19,6 +19,35 @@ DEFAULT_EPISODE_SCHEMA_REF = SchemaReference(
 )
 
 
+def _parse_schema_name(schema_name: str) -> tuple[str, str]:
+    """
+    Parse schema name and extract version.
+
+    Args:
+        schema_name: Schema filename (e.g., 'episode.schema.v1.json')
+
+    Returns:
+        Tuple of (schema_path, version_string)
+
+    Raises:
+        ValueError: If schema name format is invalid
+    """
+    # Validate schema name format
+    if not re.match(r"^[a-zA-Z0-9_.-]+\.schema\.v[0-9]+\.json$", schema_name):
+        raise ValueError(f"Invalid schema name format: {schema_name}")
+
+    # Extract version from filename (e.g., "episode.schema.v1.json" -> "v1")
+    version_match = re.search(r"\.schema\.v(\d+)\.json$", schema_name)
+    if not version_match:
+        raise ValueError(f"Cannot extract version from schema name: {schema_name}")
+    version = f"v{version_match.group(1)}"
+
+    # Construct canonical path
+    schema_path = f"benchmark/schemas/{schema_name}"
+
+    return schema_path, version
+
+
 def load_schema(schema_name: str, validate_integrity: bool = True) -> Dict[str, Any]:
     """
     Load a schema from the canonical location.
@@ -34,18 +63,7 @@ def load_schema(schema_name: str, validate_integrity: bool = True) -> Dict[str, 
         FileNotFoundError: If schema file doesn't exist
         ValueError: If schema cannot be loaded or validated
     """
-    # Validate schema name format
-    if not re.match(r"^[a-zA-Z0-9_.-]+\.schema\.v[0-9]+\.json$", schema_name):
-        raise ValueError(f"Invalid schema name format: {schema_name}")
-
-    # Extract version from filename (e.g., "episode.schema.v1.json" -> "v1")
-    version_match = re.search(r"\.schema\.v(\d+)\.json$", schema_name)
-    if not version_match:
-        raise ValueError(f"Cannot extract version from schema name: {schema_name}")
-    version = f"v{version_match.group(1)}"
-
-    # Construct canonical path
-    schema_path = f"benchmark/schemas/{schema_name}"
+    schema_path, version = _parse_schema_name(schema_name)
 
     # Create schema reference
     schema_ref = SchemaReference(schema_path=schema_path, version=version)
@@ -80,17 +98,11 @@ def get_schema_version(schema_name: Optional[str] = None) -> Dict[str, int]:
     if schema_name is None:
         schema_name = "episode.schema.v1.json"
 
-    # Validate schema name format
-    if not re.match(r"^[a-zA-Z0-9_.-]+\.schema\.v[0-9]+\.json$", schema_name):
-        raise ValueError(f"Invalid schema name format: {schema_name}")
+    _, version = _parse_schema_name(schema_name)
 
-    # Extract version from filename (e.g., "episode.schema.v1.json" -> 1)
-    version_match = re.search(r"\.schema\.v(\d+)\.json$", schema_name)
-    if not version_match:
-        raise ValueError(f"Cannot extract version from schema name: {schema_name}")
-
+    # Extract major version number from version string (e.g., "v1" -> 1)
     try:
-        major = int(version_match.group(1))
+        major = int(version[1:])  # Remove 'v' prefix
         return {"major": major, "minor": 0, "patch": 0}
     except ValueError:
         raise ValueError(f"Invalid version number in schema name: {schema_name}")

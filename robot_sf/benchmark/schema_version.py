@@ -19,9 +19,9 @@ class SchemaVersion:
 
     # Regex pattern for semantic versioning
     SEMVER_PATTERN = re.compile(
-        r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
-        r"(?:-(?P<prerelease>[a-zA-Z0-9.-]+))?"
-        r"(?:\+(?P<build>[a-zA-Z0-9.-]+))?$"
+        r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
+        r"(?:-(?P<prerelease>[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*))?"
+        r"(?:\+(?P<build>[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*))?$"
     )
 
     def __init__(
@@ -60,7 +60,7 @@ class SchemaVersion:
         Parse a version string into a SchemaVersion instance.
 
         Args:
-            version_string: Version string (e.g., "1.2.3", "v2.0.0-alpha.1")
+            version_string: Version string (e.g., "1.2.3", "2.0.0-alpha.1")
 
         Returns:
             Parsed SchemaVersion instance
@@ -91,7 +91,7 @@ class SchemaVersion:
 
     def __str__(self) -> str:
         """String representation of the version."""
-        version = f"v{self.major}.{self.minor}.{self.patch}"
+        version = f"{self.major}.{self.minor}.{self.patch}"
         if self.prerelease:
             version += f"-{self.prerelease}"
         if self.build:

@@ -84,5 +84,4 @@
             }
         }
     }
-}</content>
-<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/contracts/schema-loader-api.v1.json
+}

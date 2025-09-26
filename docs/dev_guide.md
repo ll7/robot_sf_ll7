@@ -119,6 +119,14 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 - **`fast-pysf/`**: Git submodule providing optimized SocialForce pedestrian simulation
 - **`docs/`**: Documentation, design notes, and development guides
 
+### Schema Management
+**Canonical schema location**: `robot_sf/benchmark/schemas/`
+- Episode schemas: `episode.schema.v1.json` (single source of truth)
+- Runtime resolution: Use `robot_sf.benchmark.schema_loader.load_schema()` for schema loading
+- Schema validation: Automatic validation against JSON Schema draft 2020-12
+- Version management: Semantic versioning with breaking change detection
+- Git hooks: Prevent duplicate schema files from being committed
+
 ### Data flow and integration
 - **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
 - **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis

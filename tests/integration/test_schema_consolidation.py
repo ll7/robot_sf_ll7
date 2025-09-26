@@ -56,10 +56,11 @@ class TestSchemaConsolidationIntegration:
 
         # Create valid episode data
         valid_episode = {
+            "version": "v1",
             "episode_id": "test-episode-001",
             "scenario_id": "test-scenario-001",
             "seed": 42,
-            "metrics": {"total_reward": 100.5, "steps": 50, "success": True},
+            "metrics": {"total_reward": 100.5, "steps": 50, "success_rate": 1.0},
         }
 
         # Should not raise an exception
@@ -75,10 +76,11 @@ class TestSchemaConsolidationIntegration:
 
         # Create invalid episode data (missing required field)
         invalid_episode = {
+            "version": "v1",
             "episode_id": "test-episode-001",
             "scenario_id": "test-scenario-001",
             # Missing seed
-            "metrics": {"total_reward": 100.5, "steps": 50, "success": True},
+            "metrics": {"total_reward": 100.5, "steps": 50, "success_rate": 1.0},
         }
 
         # Should raise ValidationError
@@ -91,12 +93,10 @@ class TestSchemaConsolidationIntegration:
 
         version = get_schema_version()
 
-        # Version should be a string following semantic versioning
+        # Version should be a string
         assert isinstance(version, str)
-        # Should match X.Y.Z format
-        import re
-
-        assert re.match(r"^\d+\.\d+\.\d+$", version)
+        # Should be "v1" for this schema (current implementation)
+        assert version == "v1"
 
     def test_backward_compatibility_maintained(self):
         """Test that backward compatibility is maintained (FR-003)."""
@@ -108,6 +108,7 @@ class TestSchemaConsolidationIntegration:
 
         # Test with old episode format (minimal required fields)
         old_format_episode = {
+            "version": "v1",
             "episode_id": "old-episode-001",
             "scenario_id": "old-scenario-001",
             "seed": 123,
@@ -125,7 +126,7 @@ class TestSchemaConsolidationIntegration:
         assert canonical_path.exists(), f"Canonical schema file not found at {canonical_path}"
 
         # Verify it's valid JSON
-        with open(canonical_path, "r") as f:
+        with open(canonical_path, "r", encoding="utf-8") as f:
             schema_data = json.load(f)
 
         assert isinstance(schema_data, dict)

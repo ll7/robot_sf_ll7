@@ -61,7 +61,8 @@ def test_schema_caching_effectiveness():
 
     # Cached loads should be significantly faster
     # Allow some variance but expect at least 2x speedup
-    speedup_ratio = first_time / cached_time if cached_time > 0 else float("inf")
+    epsilon = 1e-6
+    speedup_ratio = first_time / max(cached_time, epsilon)
 
     assert speedup_ratio > 2.0, (
         f"Schema caching not effective: {speedup_ratio:.1f}x speedup "

@@ -1,0 +1,88 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/robot-sf/contracts/schema-loader.v1.json",
+    "title": "Schema Loader API Contract (v1)",
+    "description": "Contract for runtime schema loading functionality",
+    "type": "object",
+    "properties": {
+        "load_schema": {
+            "type": "object",
+            "properties": {
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "schema_name": {
+                            "type": "string",
+                            "description": "Schema filename without path (e.g., 'episode.schema.v1.json')",
+                            "pattern": "^[a-zA-Z0-9_.-]+\\.schema\\.v[0-9]+\\.json$"
+                        },
+                        "validate_integrity": {
+                            "type": "boolean",
+                            "description": "Whether to validate schema is well-formed JSON Schema",
+                            "default": true
+                        }
+                    },
+                    "required": [
+                        "schema_name"
+                    ]
+                },
+                "returns": {
+                    "type": "object",
+                    "description": "Loaded and validated JSON schema object",
+                    "additionalProperties": true
+                },
+                "raises": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "FileNotFoundError",
+                            "JSONDecodeError",
+                            "SchemaValidationError"
+                        ]
+                    }
+                }
+            }
+        },
+        "get_schema_version": {
+            "type": "object",
+            "properties": {
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "schema_name": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9_.-]+\\.schema\\.v[0-9]+\\.json$"
+                        }
+                    },
+                    "required": [
+                        "schema_name"
+                    ]
+                },
+                "returns": {
+                    "type": "object",
+                    "properties": {
+                        "major": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "minor": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "patch": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    },
+                    "required": [
+                        "major",
+                        "minor",
+                        "patch"
+                    ]
+                }
+            }
+        }
+    }
+}</content>
+<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/contracts/schema-loader-api.v1.json

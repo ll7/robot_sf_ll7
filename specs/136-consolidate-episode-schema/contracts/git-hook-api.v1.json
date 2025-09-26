@@ -1,0 +1,86 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/robot-sf/contracts/git-hook.v1.json",
+    "title": "Git Hook API Contract (v1)",
+    "description": "Contract for git hooks that prevent schema duplication",
+    "type": "object",
+    "properties": {
+        "prevent_schema_duplicates": {
+            "type": "object",
+            "properties": {
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "staged_files": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "List of files staged for commit"
+                        },
+                        "schema_pattern": {
+                            "type": "string",
+                            "description": "Regex pattern to identify schema files",
+                            "default": ".*\\.schema\\.v[0-9]+\\.json$"
+                        }
+                    },
+                    "required": [
+                        "staged_files"
+                    ]
+                },
+                "returns": {
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "enum": [
+                                "pass",
+                                "fail"
+                            ]
+                        },
+                        "duplicates_found": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "file": {
+                                        "type": "string"
+                                    },
+                                    "canonical_file": {
+                                        "type": "string"
+                                    },
+                                    "reason": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "file",
+                                    "canonical_file",
+                                    "reason"
+                                ]
+                            }
+                        },
+                        "message": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "status"
+                    ]
+                },
+                "exit_codes": {
+                    "type": "object",
+                    "properties": {
+                        "0": {
+                            "const": "pass - no duplicates found"
+                        },
+                        "1": {
+                            "const": "fail - duplicates detected, commit blocked"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}</content>
+<parameter name="filePath">/Users/lennart/git/robot_sf_ll7/specs/136-consolidate-episode-schema/contracts/git-hook-api.v1.json

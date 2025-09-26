@@ -144,6 +144,8 @@ def validate_episode_data(
     if schema_ref is None:
         schema_ref = DEFAULT_EPISODE_SCHEMA_REF
 
+    # Ensure schema is loaded before validation
+    schema_ref.load_schema()
     schema_ref.validate_episode_data(episode_data)
 
 

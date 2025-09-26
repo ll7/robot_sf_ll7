@@ -60,7 +60,7 @@
 - [X] T012 [P] SchemaVersion entity in robot_sf/benchmark/schema_version.py
 - [X] T013 load_schema function in robot_sf/benchmark/schema_loader.py
 - [X] T014 get_schema_version function in robot_sf/benchmark/schema_loader.py
-- [ ] T015 prevent_schema_duplicates function in hooks/prevent-schema-duplicates.py
+- [X] T015 prevent_schema_duplicates function in hooks/prevent-schema-duplicates.py
 - [X] T016 Semantic versioning utilities in robot_sf/benchmark/version_utils.py
 - [X] T017 Schema validation utilities in robot_sf/benchmark/validation_utils.py
 
@@ -68,7 +68,7 @@
 - [X] T018 Remove duplicate schema file from specs/120-social-navigation-benchmark-plan/contracts/
 - [X] T019 Update existing contract tests to use new schema loader
 - [X] T020 Integrate git hook with pre-commit configuration
-- [ ] T021 Add schema caching to schema loader
+- [X] T021 Add schema caching to schema loader
 
 ## Phase 3.5: Polish
 - [ ] T022 [P] Unit tests for schema validation in tests/unit/test_schema_validation.py

@@ -44,7 +44,7 @@ from robot_sf.benchmark.runner import run_batch
 
 SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
 SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
-DEFAULT_OUT = Path("results/classic_interactions/episodes.jsonl")
+DEFAULT_OUT = Path("tmp/results/classic_interactions/episodes.jsonl")
 
 
 def _load_json(path: str | None) -> dict[str, Any] | None:

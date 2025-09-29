@@ -31,7 +31,7 @@ class MockVisualizableSimState:
     timestep: int
     robot_pose: MockPose
     pedestrian_positions: list[list[float]]
-    ego_ped_pose: MockPose = None  # type: ignore
+    ego_ped_pose: MockPose | None = None
 
 
 @dataclass

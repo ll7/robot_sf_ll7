@@ -64,7 +64,14 @@ def _handle_baseline(args) -> int:
             resume=(not bool(getattr(args, "no_resume", False))),
             progress_cb=progress_cb,
         )
-        # Print brief summary to stdout for convenience
+        # Inform the user where outputs were written (INFO-level; suppressed with --quiet)
+        try:
+            logging.info("Baseline stats written to %s", args.out)
+            if getattr(args, "jsonl", None):
+                logging.info("Intermediate episodes JSONL written to %s", args.jsonl)
+        except Exception:
+            # Defensive: do not let logging interfere with success path
+            pass
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -125,6 +132,7 @@ def _progress_cb_factory(quiet: bool):
 
             pbar = tqdm(total=0, unit="ep", disable=False)
         except Exception:
+            logging.debug("tqdm import failed or pbar unavailable", exc_info=True)
             pbar = None
 
     def _cb(i, total, sc, seed, ok, err):
@@ -139,7 +147,7 @@ def _progress_cb_factory(quiet: bool):
                 pbar.update(1)
                 pbar.set_description(f"{sid} seed={seed} {status}")
             except Exception:
-                pass
+                logging.debug("Progress bar set_description/update failed", exc_info=True)
         else:
             msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
             if err:
@@ -177,6 +185,10 @@ def _handle_run(args) -> int:
             workers=args.workers,
             resume=(not bool(getattr(args, "no_resume", False))),
         )
+        try:
+            logging.info("Episodes written to %s", args.out)
+        except Exception:
+            logging.debug("Logging 'Episodes written' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -185,6 +197,10 @@ def _handle_run(args) -> int:
 def _handle_summary(args) -> int:
     try:
         summarize_to_plots(args.in_path, args.out_dir)
+        try:
+            logging.info("Summary plots written to %s", args.out_dir)
+        except Exception:
+            logging.debug("Logging 'Summary plots written' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -229,6 +245,10 @@ def _handle_aggregate(args) -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
+        try:
+            logging.info("Aggregated summary written to %s", out_path)
+        except Exception:
+            logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -269,6 +289,12 @@ def _handle_snqi_ablate(args) -> int:
             summary_payload = _abl_summary(rows)
             summary_out.write_text(json.dumps(summary_payload, indent=2) + "\n", encoding="utf-8")
             str(summary_out)
+        try:
+            logging.info("Ablation results written to %s", out_path)
+            if getattr(args, "summary_out", None):
+                logging.info("Ablation summary written to %s", summary_out)
+        except Exception:
+            logging.debug("Logging 'Ablation results' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - defensive
         return 2
@@ -291,6 +317,10 @@ def _handle_seed_variance(args) -> int:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
+        try:
+            logging.info("Seed-variance summary written to %s", out_path)
+        except Exception:
+            logging.debug("Logging 'Seed-variance summary' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -318,6 +348,10 @@ def _handle_extract_failures(args) -> int:
             with out_path.open("w", encoding="utf-8") as f:
                 for rec in failures:
                     f.write(json.dumps(rec) + "\n")
+        try:
+            logging.info("Wrote failures to %s", out_path)
+        except Exception:
+            logging.debug("Logging 'Wrote failures' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -347,6 +381,10 @@ def _handle_rank(args) -> int:
             # JSON fallback
             payload = [r.__dict__ for r in rows]
             out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        try:
+            logging.info("Ranking output written to %s", out_path)
+        except Exception:
+            logging.debug("Logging 'Ranking output' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -377,6 +415,10 @@ def _handle_table(args) -> int:
         else:
             payload = _tbl_to_json(rows)
             out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        try:
+            logging.info("Table output written to %s", out_path)
+        except Exception:
+            logging.debug("Logging 'Table output' failed", exc_info=True)
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -392,7 +434,8 @@ def _handle_debug_seeds(args) -> int:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         else:
-            pass
+            # For interactive use, print the debug payload to stdout (machine-friendly)
+            print(json.dumps(payload))
         return 0
     except Exception:  # pragma: no cover - error path
         return 2
@@ -1420,7 +1463,7 @@ def cli_main(argv: list[str] | None = None) -> int:
 
             _mp.set_start_method("spawn", force=False)
         except Exception:
-            pass
+            logging.debug("Failed to set multiprocessing start method to spawn", exc_info=True)
 
     # Access dynamic loaders if present
     snqi_loader = getattr(parser, "snqi_loader", {})  # type: ignore[no-any-explicit]

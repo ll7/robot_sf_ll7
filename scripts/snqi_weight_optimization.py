@@ -24,7 +24,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import (
-    UTC,  # type: ignore[attr-defined]
+    UTC,
     datetime,
 )
 from itertools import product

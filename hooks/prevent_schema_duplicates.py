@@ -146,8 +146,19 @@ def main():
     result = prevent_schema_duplicates(args.staged_files, args.schema_pattern, canonical_dir)
 
     if result["duplicates_found"]:
-        for _dup in result["duplicates_found"]:
-            pass
+        # Log each duplicate entry so the committer sees what to fix
+        for dup in result["duplicates_found"]:
+            file = dup.get("file")
+            canonical = dup.get("canonical_file")
+            reason = dup.get("reason")
+            logging.error(
+                "Duplicate schema detected: %s\n  canonical: %s\n  reason: %s",
+                file,
+                canonical,
+                reason,
+            )
+        # Also log a short summary
+        logging.error("Found %d duplicate schema file(s).", len(result["duplicates_found"]))
 
     # Exit with appropriate code
     sys.exit(0 if result["status"] == "pass" else 1)

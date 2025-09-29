@@ -366,6 +366,32 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
     for d in (plots_dir, videos_dir, reports_dir):
         d.mkdir(parents=True, exist_ok=True)
 
+    # Fast-path: in smoke mode we skip heavy plotting/encoding to keep
+    # benchmark smoke tests fast and stable (avoids matplotlib/moviepy
+    # initialization overhead).
+    if bool(getattr(cfg, "smoke", False)):
+        perf_meta = {
+            "plots_time_s": 0.0,
+            "videos_time_s": 0.0,
+            "first_video_time_s": None,
+            "first_video_render_time_s": None,
+            "first_video_peak_rss_mb": None,
+            "plots_over_budget": False,
+            "video_over_budget": False,
+            "memory_over_budget": False,
+            "plots_runtime_sec": 0.0,
+            "videos_runtime_sec": 0.0,
+            "first_video_encode_time_s": None,
+        }
+        _write_json(reports_dir / "plot_artifacts.json", [])
+        _write_json(reports_dir / "video_artifacts.json", [])
+        _write_json(reports_dir / "performance_visuals.json", perf_meta)
+        logger.info(
+            "Visual artifacts skipped for smoke mode: plots=0 videos=0 (smoke=%s)",
+            True,
+        )
+        return {"plots": [], "videos": [], "performance": perf_meta}
+
     # Plots
     t0 = time.perf_counter()
     raw_plots = generate_plots(groups, records, plots_dir, cfg)

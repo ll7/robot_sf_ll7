@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from typing import cast as _cast
 
 from loguru import logger
 
@@ -132,18 +133,28 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             )
             continue
         try:
-            frame_iter = generate_frames(
-                ep,
-                fps=fps,
-                max_frames=(10 if smoke and max_frames is None else max_frames),
-            )
+            # Prefer calling with keywords; if the monkeypatched generate_frames
+            # doesn't accept keywords, fall back to a positional call.
+            try:
+                frame_iter = generate_frames(
+                    ep,
+                    fps=fps,
+                    max_frames=(10 if smoke and max_frames is None else max_frames),
+                )
+            except TypeError:
+                # Some tests provide a fake with signature (ep, fps, max_frames).
+                max_frames_arg = 10 if smoke and max_frames is None else max_frames
+                frame_iter = _cast(Any, generate_frames).__call__(ep, fps, max_frames_arg)
+
             enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
         except (RuntimeError, OSError, ValueError) as exc:
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:
                     mp4_path.unlink()
-            except OSError as exc:
-                logger.debug("Failed to unlink small mp4 during sim-view error cleanup: %s", exc)
+            except OSError as unlink_exc:
+                logger.debug(
+                    "Failed to unlink small mp4 during sim-view error cleanup: %s", unlink_exc
+                )
             artifacts.append(
                 VideoArtifact(
                     artifact_id=f"video_{ep_id}",

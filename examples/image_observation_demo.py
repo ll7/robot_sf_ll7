@@ -39,17 +39,22 @@ def main():
 
     print("Environment created successfully!")
     print(f"Action space: {env.action_space}")
-    print(f"Observation space keys: {list(env.observation_space.spaces.keys())}")
+    obs_space = getattr(env, "observation_space", None)
+    from typing import Any, cast
 
-    if "image" in env.observation_space.spaces:
-        image_space = env.observation_space.spaces["image"]
-        print(f"Image observation space: {image_space}")
-        print(f"Image shape: {image_space.shape}")
-        print(f"Image dtype: {image_space.dtype}")
+    if obs_space is not None and hasattr(obs_space, "spaces"):
+        spaces = cast(Any, obs_space).spaces
+        print(f"Observation space keys: {list(spaces.keys())}")
+
+        if "image" in spaces:
+            image_space = spaces["image"]
+            print(f"Image observation space: {image_space}")
+            print(f"Image shape: {image_space.shape}")
+            print(f"Image dtype: {image_space.dtype}")
 
     try:
         # Reset the environment to get initial observation
-        obs, info = env.reset()
+        obs, _ = env.reset()
         print(f"Initial observation keys: {list(obs.keys())}")
 
         # Check if image observation is present
@@ -62,7 +67,7 @@ def main():
         # Take a few random actions to see if the environment works
         for step in range(5):
             action = env.action_space.sample()
-            obs, reward, terminated, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, _ = env.step(action)
 
             print(f"Step {step + 1}:")
             print(f"  Action: {action}")
@@ -78,7 +83,7 @@ def main():
 
             if terminated or truncated:
                 print("Episode finished, resetting...")
-                obs, info = env.reset()
+                obs, _ = env.reset()
                 break
 
     except Exception as e:

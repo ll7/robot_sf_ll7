@@ -441,10 +441,23 @@ def _summary_build_columns(
 
 
 def _summary_ci_pair(metric_dict: dict, stat: str) -> tuple[float | None, float | None]:
+    """Return (low, high) if a valid CI exists, otherwise (None, None).
+
+    Defensive: the input may come from JSON or be None. Only accept a
+    sequence (list/tuple) of length 2 whose elements are numeric.
+    """
     ci = metric_dict.get(f"{stat}_ci")
-    if not (isinstance(ci, list | tuple) and len(ci) == 2):
+    # Accept only real sequences of length 2
+    try:
+        from collections.abc import Sequence
+
+        is_seq = isinstance(ci, Sequence)
+    except Exception:
+        is_seq = False
+
+    if not is_seq or ci is None or len(ci) != 2:
         return None, None
-    a, b = ci
+    a, b = ci  # type: ignore[misc]
     if not isinstance(a, int | float) or not isinstance(b, int | float):
         return None, None
     return float(a), float(b)

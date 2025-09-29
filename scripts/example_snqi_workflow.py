@@ -151,13 +151,18 @@ def demonstrate_weight_recomputation():
             import importlib
 
             try:
-                # Preferred when running from project root
+                # Preferred when running as package
                 recompute_module = importlib.import_module("scripts.recompute_snqi_weights")
             except ModuleNotFoundError:
                 # Fallback when running from within scripts directory
                 recompute_module = importlib.import_module("recompute_snqi_weights")
 
-            SNQIWeightRecomputer = recompute_module.SNQIWeightRecomputer
+            # Guard attribute lookup to satisfy static checkers
+            SNQIWeightRecomputer = getattr(recompute_module, "SNQIWeightRecomputer", None)
+            if SNQIWeightRecomputer is None:
+                raise AttributeError(
+                    "SNQIWeightRecomputer not found in recompute_snqi_weights module",
+                )
 
             recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
 

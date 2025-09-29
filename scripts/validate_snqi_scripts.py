@@ -94,7 +94,20 @@ def test_weight_computation():
         # Ensure imports are resolved relative to this file, not CWD
         scripts_dir = Path(__file__).resolve().parent
         sys.path.insert(0, str(scripts_dir))
-        from recompute_snqi_weights import SNQIWeightRecomputer
+        try:
+            # Prefer package-qualified import when available
+            import importlib
+
+            try:
+                recompute_mod = importlib.import_module("scripts.recompute_snqi_weights")
+            except ModuleNotFoundError:
+                recompute_mod = importlib.import_module("recompute_snqi_weights")
+            SNQIWeightRecomputer = getattr(recompute_mod, "SNQIWeightRecomputer", None)
+            if SNQIWeightRecomputer is None:
+                raise ImportError("SNQIWeightRecomputer not found in recompute_snqi_weights")
+        except Exception as e:
+            print(f"✗ Could not import recompute_snqi_weights: {e}")
+            return False
 
         recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
 

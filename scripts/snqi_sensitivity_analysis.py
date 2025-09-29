@@ -45,7 +45,8 @@ try:
     import seaborn as sns
 
     MATPLOTLIB_AVAILABLE = True
-except ImportError:
+except Exception:  # ImportError or type-checker unresolved-import
+    # During static analysis seaborn may be unavailable; fall back gracefully.
     MATPLOTLIB_AVAILABLE = False
 
 # Note: pandas is optional for advanced analysis; not required for core flow

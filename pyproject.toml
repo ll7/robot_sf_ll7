@@ -239,6 +239,7 @@ ignore = [
     "B017",     # Do not assert blind exception: `Exception`
     "PLC0206",  # Extracting value from dictionary without calling `.items()`
     "RUF005",   # Consider iterable unpacking instead of concatenation
+    "COM812",  # Missing trailing comma in a multi-line collection
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -321,8 +322,8 @@ pysocialforce = { path = "fast-pysf", editable = true }
 
 [tool.ty.src]
 exclude = [
-    "/tests",
-    "/test_pygame",
+    "tests",
+    "test_pygame",
     "fast-pysf"
 ]
 

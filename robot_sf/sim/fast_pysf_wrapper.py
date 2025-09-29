@@ -74,8 +74,8 @@ class FastPysfWrapper:
                 finite = np.isfinite(speeds) & (speeds > 0)
                 if np.any(finite):
                     max_speed = float(speeds[finite].mean())
-        except Exception:
-            # Fall back to default 1.0 if anything goes wrong
+        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+            # Fall back to default 1.0 if anything goes wrong in numeric ops
             max_speed = 1.0
         v_des = dir_unit * max_speed
         f_des = (v_des - np.zeros(2)) / tau
@@ -104,7 +104,7 @@ class FastPysfWrapper:
                     float(gamma),
                 )
                 total += np.array([f_x, f_y], dtype=float) * float(factor)
-            except Exception:
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
                 d = p - other_pos
                 r = np.linalg.norm(d)
                 if r > 1e-6:
@@ -126,7 +126,7 @@ class FastPysfWrapper:
                 total += np.array([fx, fy], dtype=float) * float(
                     self.sim.config.obstacle_force_config.factor,
                 )
-            except Exception:
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
                 # ignore obstacle errors
                 pass
         return total
@@ -141,7 +141,7 @@ class FastPysfWrapper:
                         fn(p, robot_state, getattr(self.sim, "scene", None)),
                         dtype=float,
                     )
-                except Exception:
+                except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
                     return np.zeros(2, dtype=float)
         return np.zeros(2, dtype=float)
 

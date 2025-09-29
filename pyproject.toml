@@ -243,14 +243,17 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests: allow asserts, prints, some magic values & security test scaffolding
-"tests/**/*" = ["S101","T201","PLR2004"]
+"tests/**/*" = ["S101","T201","PLR2004","BLE001"]
 # One-off scripts / notebooks exports: allow prints
-"scripts/**/*" = ["T201"]
+"scripts/**/*" = ["T201","BLE001"]
 # Examples and docs: allow prints and other leniencies
-"examples/**/*" = ["T201"]
-"docs/**/*" = ["T201"]
+"examples/**/*" = ["T201","BLE001"]
+"docs/**/*" = ["T201","BLE001"]
 # CLI tools: allow prints to stdout
 "robot_sf/benchmark/cli.py" = ["T201"]
+"robot_sf/benchmark/**/*" = ["BLE001"]
+"robot_sf/benchmark/full_classic/visuals.py" = ["C901"]
+"robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]

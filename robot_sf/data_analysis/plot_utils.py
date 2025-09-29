@@ -55,7 +55,7 @@ def save_plot(filename, title=None, interactive=False):
     try:
         plt.savefig(validated_path)
         logger.info(f"Plot saved to: {os.path.abspath(validated_path)}")
-    except Exception as e:
+    except (OSError, ValueError, TypeError) as e:
         logger.error(f"Error saving plot to {validated_path}: {e}")
 
     # Show the plot if interactive

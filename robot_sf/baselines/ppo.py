@@ -32,7 +32,7 @@ import numpy as np
 
 try:  # Lazy import; not required for type-check only
     from stable_baselines3 import PPO
-except Exception:  # pragma: no cover - envs without SB3 installed
+except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
 from robot_sf.baselines.social_force import Observation
@@ -102,8 +102,8 @@ class PPOPlanner:
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
-        except Exception:
-            # Defer to fallback
+        except (RuntimeError, ValueError, OSError):
+            # Defer to fallback on typical load/pickle errors
             self._model = None
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -132,8 +132,8 @@ class PPOPlanner:
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
             return self._action_vec_to_dict(action_vec, obs)
-        except Exception:
-            # Fallback for robustness
+        except (RuntimeError, ValueError, OSError):
+            # Fallback for robustness on common prediction errors
             if self.config.fallback_to_goal:
                 return self._fallback_action(obs)
             raise

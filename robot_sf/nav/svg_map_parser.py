@@ -417,7 +417,7 @@ def convert_map(svg_file: str):
     except AssertionError:
         logger.error("Error converting SVG file: MapDefinition object not created.")
         logger.exception("Assertion failure during SVG conversion")
-    except Exception as e:
+    except (OSError, RuntimeError, TypeError) as e:
         logger.error(f"Unexpected error converting SVG file: {e}")
         logger.exception("Unhandled exception in convert_map")
     return None
@@ -431,7 +431,7 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
         if md is None:
             raise ValueError(f"Failed to convert SVG file: {file_path}")
         return {file_path.stem: md}
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
         if strict:
             raise
         logger.warning("Skipping invalid SVG map: {f} ({err})", f=str(file_path), err=exc)

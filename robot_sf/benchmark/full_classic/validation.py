@@ -52,7 +52,7 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
     """
     try:
         import jsonschema  # type: ignore
-    except Exception:
+    except ImportError:
         logger.debug("jsonschema not installed; skipping visuals manifest validation")
         return []
 

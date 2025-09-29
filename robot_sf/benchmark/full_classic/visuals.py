@@ -218,7 +218,7 @@ def _select_records(records, cfg) -> list[dict]:
     return records[: max_videos or 1]
 
 
-def _build_video_artifacts(  # noqa: C901 - explicit branching for clarity
+def _build_video_artifacts(
     cfg,
     records: list[dict],
     videos_dir: Path,

@@ -35,7 +35,7 @@ def _import_torch():
         import torch  # type: ignore
 
         return torch
-    except Exception:  # pragma: no cover - optional dependency
+    except ImportError:  # pragma: no cover - optional dependency
         return None
 
 
@@ -72,7 +72,11 @@ def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
                 torch.backends.cudnn.benchmark = bool(not deterministic)
                 report.torch_deterministic = bool(deterministic)
                 report.torch_benchmark = bool(torch.backends.cudnn.benchmark)
-        except Exception as exc:  # pragma: no cover - rare platforms
+        except (
+            RuntimeError,
+            AttributeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - rare platforms
             report.notes = f"torch seed partially applied: {exc}"
 
     # Matplotlib headless safety for plotting in tests/CI

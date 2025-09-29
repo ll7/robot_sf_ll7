@@ -494,7 +494,7 @@ def _try_encode_synthetic_video(
             "error": str(exc),
         }
         return None, _skip_info
-    except (RuntimeError, ValueError, OSError) as exc:
+    except (RuntimeError, ValueError) as exc:
         _skip_info = {
             "reason": "encode-failed",
             "renderer": "synthetic",
@@ -961,7 +961,7 @@ def _run_batch_sequential(
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, True, None)
-                except Exception:  # pragma: no cover - progress best-effort  # noqa: BLE001
+                except Exception:  # pragma: no cover - progress best-effort
                     pass
         except Exception as e:  # pragma: no cover - error path
             failures.append(
@@ -970,7 +970,7 @@ def _run_batch_sequential(
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, False, repr(e))
-                except Exception:  # pragma: no cover  # noqa: BLE001
+                except Exception:  # pragma: no cover
                     pass
             if fail_fast:
                 raise

@@ -26,9 +26,9 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
     def fake_module_from_spec(spec):  # type: ignore[no-untyped-def]
         mod = types.SimpleNamespace()
         # mimic minimal module attrs the loader might expect
-        setattr(mod, "__spec__", spec)
-        setattr(mod, "__file__", getattr(spec, "origin", None))
-        setattr(mod, "run", lambda _args: 0)
+        mod.__spec__ = spec
+        mod.__file__ = getattr(spec, "origin", None)
+        mod.run = lambda _args: 0
         return mod
 
     class _DummyLoader:  # minimal loader; exec_module is a no-op
@@ -46,12 +46,15 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
 
     monkeypatch.setattr(importlib_util, "module_from_spec", fake_module_from_spec, raising=True)
     monkeypatch.setattr(
-        importlib_util, "spec_from_file_location", fake_spec_from_file_location, raising=True
+        importlib_util,
+        "spec_from_file_location",
+        fake_spec_from_file_location,
+        raising=True,
     )
 
     # Build a parser (attaches dynamic loader with its own cache variables)
-    parser = bench_cli._configure_parser()  # noqa: SLF001  # type: ignore[attr-defined]
-    loader = getattr(parser, "snqi_loader")
+    parser = bench_cli._configure_parser()  # type: ignore[attr-defined]
+    loader = parser.snqi_loader
 
     # Simulate sys.modules cache anomalies: None placeholders for target module names
     monkeypatch.setitem(sys.modules, "snqi_optimize_script", None)

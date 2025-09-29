@@ -18,7 +18,7 @@ def test_cli_plot_scenarios_png_and_pdf(tmp_path: Path, capsys):
             "--montage",
             "--cols",
             "2",
-        ]
+        ],
     )
     out = capsys.readouterr().out
     assert rc == 0, f"plot-scenarios failed: {out}"

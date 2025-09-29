@@ -68,27 +68,27 @@ class TestSocialForcePlanner:
     def test_reset_functionality(self, planner):
         """Test that reset clears internal state."""
         # Setup some internal state
-        planner._last_position = np.array([1.0, 2.0])  # noqa: SLF001
-        planner._robot_state = {"dummy": "state"}  # noqa: SLF001
+        planner._last_position = np.array([1.0, 2.0])
+        planner._robot_state = {"dummy": "state"}
 
         # Reset and check state is cleared (same seed preserved)
         planner.reset()
-        assert planner._last_position is None  # noqa: SLF001
-        assert planner._robot_state is None  # noqa: SLF001
+        assert planner._last_position is None
+        assert planner._robot_state is None
 
         # Capture a short RNG sequence with initial seed (42 from fixture)
-        seq_before = [planner._rng.randint(1000) for _ in range(5)]  # noqa: SLF001
+        seq_before = [planner._rng.randint(1000) for _ in range(5)]
 
         # Reset with a different seed and capture a new sequence
         planner.reset(seed=100)
-        seq_after_diff_seed = [planner._rng.randint(1000) for _ in range(5)]  # noqa: SLF001
+        seq_after_diff_seed = [planner._rng.randint(1000) for _ in range(5)]
         assert seq_before != seq_after_diff_seed, (
             "RNG sequence should differ after reseeding with a different seed"
         )
 
         # Reset back to original seed and ensure sequence reproducibility
         planner.reset(seed=42)
-        seq_after_same_seed = [planner._rng.randint(1000) for _ in range(5)]  # noqa: SLF001
+        seq_after_same_seed = [planner._rng.randint(1000) for _ in range(5)]
         assert seq_before == seq_after_same_seed, (
             "RNG sequence should match when reseeded with the original seed"
         )
@@ -137,7 +137,7 @@ class TestSocialForcePlanner:
                     "position": [0.5, 0.0],  # Directly in path to goal
                     "velocity": [0.0, 0.0],
                     "radius": 0.3,
-                }
+                },
             ],
             obstacles=[],
         )
@@ -241,7 +241,7 @@ class TestSocialForcePlanner:
                 "radius": 0.3,
             },
             agents=[
-                {"position": [0.01, 0.0], "velocity": [0.0, 0.0], "radius": 0.3}  # Very close
+                {"position": [0.01, 0.0], "velocity": [0.0, 0.0], "radius": 0.3},  # Very close
             ],
         )
 
@@ -272,7 +272,7 @@ class TestSocialForcePlanner:
 
         # Actions should be different due to noise
         vx_values = [a["vx"] for a in actions]
-        assert len(set([round(vx, 6) for vx in vx_values])) > 1  # Should have variation
+        assert len({round(vx, 6) for vx in vx_values}) > 1  # Should have variation
 
     def test_metadata_generation(self, planner):
         """Test that metadata contains expected information."""
@@ -290,13 +290,13 @@ class TestSocialForcePlanner:
     def test_close_cleanup(self, planner: SocialForcePlanner):
         """Test that close cleans up resources."""
         # Setup some internal state
-        planner._sim = "dummy_sim"  # noqa: SLF001
-        planner._wrapper = "dummy_wrapper"  # noqa: SLF001
+        planner._sim = "dummy_sim"  # type: ignore[assignment]
+        planner._wrapper = "dummy_wrapper"  # type: ignore[assignment]
 
         planner.close()
 
-        assert planner._sim is None  # noqa: SLF001
-        assert planner._wrapper is None  # noqa: SLF001
+        assert planner._sim is None
+        assert planner._wrapper is None
 
 
 class TestObservation:

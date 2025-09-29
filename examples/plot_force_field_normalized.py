@@ -17,7 +17,7 @@ def make_demo_sim():
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
             [0.0, 1.0, 0.0, 0.0, 5.0, 1.0, 1.0],
-        ]
+        ],
     )
     obstacles = [
         (2.5, 2.5, -1.0, 2.0),
@@ -37,7 +37,7 @@ def main():
             "xtick.labelsize": 8,
             "ytick.labelsize": 8,
             "legend.fontsize": 8,
-        }
+        },
     )
     sim = make_demo_sim()
     wrapper = FastPysfWrapper(sim)

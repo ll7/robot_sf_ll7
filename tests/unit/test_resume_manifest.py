@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_jsonl(tmp: Path, lines: list[dict]):
@@ -77,7 +80,9 @@ def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
     sidecar.write_text(json.dumps(data))
     assert (
         load_manifest(
-            out, expected_identity_hash="h1", expected_schema_version=EPISODE_SCHEMA_VERSION
+            out,
+            expected_identity_hash="h1",
+            expected_schema_version=EPISODE_SCHEMA_VERSION,
         )
         is None
     )

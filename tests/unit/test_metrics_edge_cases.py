@@ -111,7 +111,7 @@ def test_force_exceed_events_and_comfort_exposure():
         [
             [F_THRESH - eps, F_THRESH + eps],
             [F_THRESH, F_THRESH + 1e-3],
-        ]
+        ],
     )
     # Convert magnitudes to 2D vectors (place along x-axis)
     ped_forces = np.zeros((T, K, 2), dtype=float)

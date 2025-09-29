@@ -10,7 +10,7 @@ import pytest
 from robot_sf.gym_env.environment_factory import make_robot_env
 
 
-def test_render_error_message_contains_guidance():  # noqa: D401
+def test_render_error_message_contains_guidance():
     env = make_robot_env(debug=False)
     try:
         with pytest.raises(RuntimeError) as excinfo:

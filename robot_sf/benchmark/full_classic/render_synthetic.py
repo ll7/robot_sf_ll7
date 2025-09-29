@@ -22,13 +22,15 @@ artifacts. No additional processing is performed.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, List
+from typing import TYPE_CHECKING, Any
 
 from . import videos as _legacy_videos
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
-def generate_fallback_videos(records: List[dict[str, Any]], out_dir: Path, cfg):  # T032
+
+def generate_fallback_videos(records: list[dict[str, Any]], out_dir: Path, cfg):  # T032
     """Delegate to legacy synthetic video generator.
 
     Parameters

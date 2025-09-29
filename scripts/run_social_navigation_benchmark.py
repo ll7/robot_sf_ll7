@@ -28,7 +28,7 @@ import datetime
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from loguru import logger
 
@@ -51,7 +51,9 @@ def get_project_root() -> Path:
 
 
 def create_baseline_configs(
-    algo: str, output_root: str, scenario_matrix: str
+    algo: str,
+    output_root: str,
+    scenario_matrix: str,
 ) -> BenchmarkCLIConfig:
     """Create configuration for a specific baseline algorithm."""
     return BenchmarkCLIConfig(
@@ -72,7 +74,7 @@ def create_baseline_configs(
     )
 
 
-def run_baseline_benchmark(algo: str, scenario_matrix: str, output_root: str) -> Dict[str, Any]:
+def run_baseline_benchmark(algo: str, scenario_matrix: str, output_root: str) -> dict[str, Any]:
     """Run benchmark for a specific baseline algorithm."""
     logger.info(f"Running benchmark for algorithm: {algo}")
 
@@ -88,8 +90,10 @@ def run_baseline_benchmark(algo: str, scenario_matrix: str, output_root: str) ->
 
 
 def compute_baseline_stats(
-    episodes_path: str, output_path: str, scenario_matrix: str
-) -> Dict[str, Any]:
+    episodes_path: str,
+    output_path: str,
+    scenario_matrix: str,
+) -> dict[str, Any]:
     """Compute baseline statistics for SNQI normalization."""
     logger.info("Computing baseline statistics for SNQI normalization")
 
@@ -109,8 +113,9 @@ def compute_baseline_stats(
 
 
 def aggregate_all_results(
-    baseline_results: List[Dict[str, Any]], output_root: str
-) -> Dict[str, Any]:
+    baseline_results: list[dict[str, Any]],
+    output_root: str,
+) -> dict[str, Any]:
     """Aggregate results from all baseline algorithms."""
     logger.info("Aggregating results from all baselines")
 
@@ -160,7 +165,7 @@ def aggregate_all_results(
         return {"success": False, "error": str(e)}
 
 
-def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> Dict[str, Any]:
+def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> dict[str, Any]:
     """Log manual visualization steps using CLI commands."""
     logger.info("Logging manual visualization steps using CLI commands")
 
@@ -170,7 +175,7 @@ def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> Di
         logger.info("Visualization generation skipped. Manual CLI commands available:")
         logger.info(f"  robot_sf_bench plot-pareto --in {aggregates_file} --out-dir {output_root}")
         logger.info(
-            f"  robot_sf_bench plot-distributions --in {aggregates_file} --out-dir {output_root}"
+            f"  robot_sf_bench plot-distributions --in {aggregates_file} --out-dir {output_root}",
         )
 
         return {
@@ -184,7 +189,7 @@ def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> Di
         return {"success": False, "error": str(e)}
 
 
-def validate_benchmark_results(results: Dict[str, Any]) -> Dict[str, Any]:
+def validate_benchmark_results(results: dict[str, Any]) -> dict[str, Any]:
     """Validate benchmark results against success criteria."""
     logger.info("Validating benchmark results")
 
@@ -275,11 +280,13 @@ def main() -> int:
 
     if episodes_file.exists():
         baseline_result = compute_baseline_stats(
-            str(episodes_file), str(baseline_stats_file), str(scenario_matrix)
+            str(episodes_file),
+            str(baseline_stats_file),
+            str(scenario_matrix),
         )
         if not baseline_result["success"]:
             logger.warning(
-                "Baseline statistics computation failed, continuing without SNQI normalization"
+                "Baseline statistics computation failed, continuing without SNQI normalization",
             )
     else:
         logger.warning("No episodes file found for baseline statistics")

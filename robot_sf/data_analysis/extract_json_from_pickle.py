@@ -12,7 +12,6 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from loguru import logger
@@ -41,7 +40,7 @@ from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 
 
-def save_to_json(filename_pkl: str, filename_json: str = None):
+def save_to_json(filename_pkl: str, filename_json: str | None = None):
     """
     Save simulation states from a pickle recording file to a JSON file.
 
@@ -121,13 +120,13 @@ def convert_to_serializable(obj):
             for key, value in obj.__dict__.items()
             if key in keys_action
         }
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list | tuple):
         return [convert_to_serializable(item) for item in obj]
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, np.float32):
         return float(obj)
-    elif isinstance(obj, (int, float, str, bool)) or obj is None:
+    elif isinstance(obj, int | float | str | bool) or obj is None:
         return obj
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable!")
@@ -155,7 +154,7 @@ def convert_map_def_to_serializable(obj):
             for key, value in obj.__dict__.items()
             if key == "obstacles"
         }
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list | tuple):
         return [convert_map_def_to_serializable(item) for item in obj]
     elif isinstance(obj, Obstacle):
         return {
@@ -176,7 +175,7 @@ def extract_key_from_json(filename: str, key: str) -> list:
     Returns:
         list: A list of values corresponding to the key in each JSON object.
     """
-    with open(filename, "r", encoding="utf-8") as file:
+    with open(filename, encoding="utf-8") as file:
         data = json.load(file)
 
     return [item[key] for item in data["states"]]
@@ -213,7 +212,7 @@ def extract_map_def_from_json(filename: str) -> MapDefinition:
         This does not recreate a valid map definition!
         Only the obstacles are extracted, which are needed for plotting.
     """
-    with open(filename, "r", encoding="utf-8") as file:
+    with open(filename, encoding="utf-8") as file:
         json_data = json.load(file)
 
     obstacles = []
@@ -270,7 +269,7 @@ def extract_timestamp(filename: str) -> str:
 
 def plot_all_data_json(
     filename: str,
-    unique_id: Optional[str] = None,
+    unique_id: str | None = None,
     interactive: bool = True,
 ):
     """
@@ -301,18 +300,27 @@ def plot_all_data_json(
     ego_positions = np.array([item[0] for item in extract_key_from_json(filename, "ego_ped_pose")])
 
     plot_all_npc_ped_positions(
-        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+        ped_positions_array,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
     plot_all_npc_ped_velocities(ped_actions, interactive=interactive, unique_id=unique_id)
     plot_ego_ped_acceleration(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
     plot_ego_ped_velocity(ego_ped_acceleration, interactive=interactive, unique_id=unique_id)
 
     plot_kde_on_map(
-        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+        ped_positions_array,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
 
     plot_kde_in_x_y(
-        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array,
+        ego_positions,
+        interactive=interactive,
+        unique_id=unique_id,
     )
 
     # Choose id between 0 and ped_positions_array.shape[1] - 1
@@ -327,7 +335,10 @@ def plot_all_data_json(
     )
 
     plot_all_splitted_traj(
-        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+        ped_positions_array,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
 
     subplot_single_splitted_traj_acc(
@@ -339,19 +350,30 @@ def plot_all_data_json(
     )
 
     plot_acceleration_distribution(
-        ped_positions_array, interactive=interactive, unique_id=unique_id
+        ped_positions_array,
+        interactive=interactive,
+        unique_id=unique_id,
     )
 
     plot_velocity_distribution(ped_positions_array, interactive=interactive, unique_id=unique_id)
 
     subplot_velocity_distribution_with_ego_ped(
-        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array,
+        ego_positions,
+        interactive=interactive,
+        unique_id=unique_id,
     )
     subplot_acceleration_distribution(
-        ped_positions_array, ego_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array,
+        ego_positions,
+        interactive=interactive,
+        unique_id=unique_id,
     )
     velocity_colorcoded_with_positions(
-        ped_positions_array, interactive=interactive, unique_id=unique_id, map_def=map_def
+        ped_positions_array,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
 
 
@@ -386,7 +408,9 @@ if __name__ == "__main__":
     # Example usage
     from pathlib import Path
 
-    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
+    from robot_sf.data_analysis.extract_json_from_pickle import (
+        extract_timestamp,  # type: ignore[attr-defined]
+    )
 
     # Ensure the plots directory exists
     PLOTS_DIR = "robot_sf/data_analysis/plots"

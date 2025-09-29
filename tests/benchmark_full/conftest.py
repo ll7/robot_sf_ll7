@@ -8,9 +8,12 @@ from __future__ import annotations
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @dataclass
@@ -39,7 +42,7 @@ def temp_results_dir() -> Iterator[Path]:
 
 
 @pytest.fixture()
-def config_factory(temp_results_dir: Path):  # noqa: D401 - simple factory
+def config_factory(temp_results_dir: Path):
     """Return factory producing BenchmarkConfig test doubles."""
 
     def _factory(**overrides):

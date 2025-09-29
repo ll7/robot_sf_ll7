@@ -17,17 +17,20 @@ Design notes:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Iterator, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from .visual_constants import NOTE_MOVIEPY_MISSING
 from .visual_deps import moviepy_ready
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+    from pathlib import Path
+
 try:  # Lazy import moviepy components
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-except Exception:  # noqa: BLE001
+except ImportError:
     ImageSequenceClip = None  # type: ignore
 
 
@@ -54,8 +57,7 @@ def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, It
 
     def chain_first():  # local generator
         yield first
-        for f in it:
-            yield f
+        yield from it
 
     return first, chain_first()
 
@@ -67,23 +69,27 @@ def _start_memory_sampler(sample: bool, interval: float):
     import threading
     import time
 
-    try:  # noqa: SIM105
+    try:
         import psutil  # type: ignore
-
-        process = psutil.Process()
-    except Exception:  # noqa: BLE001
+    except ImportError:
         return (lambda: None), [None]
 
-    peak: list[Optional[float]] = [None]
+    try:
+        process = psutil.Process()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+        return (lambda: None), [None]
+
+    peak: list[float | None] = [None]
     stop_flag: list[bool] = [False]
 
     def _sampler():
         while not stop_flag[0]:
-            try:  # noqa: SIM105
+            try:
                 rss = process.memory_info().rss / (1024 * 1024)
                 if peak[0] is None or rss > peak[0]:
                     peak[0] = rss
-            except Exception:  # noqa: BLE001
+            except psutil.Error:
+                # psutil-specific runtime errors -> skip this sample
                 pass
             time.sleep(interval)
 
@@ -92,9 +98,10 @@ def _start_memory_sampler(sample: bool, interval: float):
 
     def _stop():
         stop_flag[0] = True
-        try:  # noqa: SIM105
+        try:
             th.join(timeout=0.5)
-        except Exception:  # noqa: BLE001
+        except RuntimeError:
+            # Thread join may raise if thread not started; ignore
             pass
 
     return _stop, peak
@@ -115,7 +122,12 @@ def _materialize_frames(first: np.ndarray, rest: Iterable[np.ndarray]) -> list[n
 
 
 def _write_clip(
-    clip_class, frame_list: list[np.ndarray], out_path: Path, codec: str, fps: int, preset: str
+    clip_class,
+    frame_list: list[np.ndarray],
+    out_path: Path,
+    codec: str,
+    fps: int,
+    preset: str,
 ) -> None:  # type: ignore[no-untyped-def]
     """Write frames to disk using a best‑effort multi‑signature strategy.
 
@@ -135,7 +147,7 @@ def _write_clip(
     final attempt so encode callers receive a unified failure pathway.
     """
     clip = clip_class(frame_list, fps=fps)  # type: ignore
-    write_fn = getattr(clip, "write_videofile")
+    write_fn = clip.write_videofile
 
     attempts = [
         {
@@ -152,7 +164,12 @@ def _write_clip(
         {
             "kind": "positional",
             "call": lambda: write_fn(  # type: ignore[call-arg]
-                str(out_path), codec, fps, False, preset, None
+                str(out_path),
+                codec,
+                fps,
+                False,
+                preset,
+                None,
             ),
         },
         {
@@ -166,7 +183,7 @@ def _write_clip(
         try:
             spec["call"]()
             return
-        except Exception as exc:  # noqa: BLE001
+        except (RuntimeError, TypeError, AttributeError, OSError, ValueError) as exc:
             last_exc = exc
             continue
     # Re-raise the last exception so caller surfaces encode failure uniformly.
@@ -227,9 +244,9 @@ def encode_frames(
         return EncodeResult(path=out_path, status="failed", note="no-frames")
     try:
         _write_clip(ImageSequenceClip, frame_list, out_path, codec, fps, preset)
-    except Exception as exc:  # noqa: BLE001
+    except (RuntimeError, OSError, ValueError, TypeError, AttributeError) as exc:
         # Cleanup tiny partial file
-        try:  # noqa: SIM105
+        try:
             if out_path.exists() and out_path.stat().st_size < 1024:
                 # Heuristic: if file extremely small it's likely incomplete; remove.
                 # However, some mocked environments may raise spurious exceptions
@@ -238,20 +255,21 @@ def encode_frames(
                 # mocks (only when TypeError or AttributeError).
                 if out_path.stat().st_size == 0:
                     out_path.unlink()
-                else:
-                    if isinstance(exc, (TypeError, AttributeError)):
-                        return EncodeResult(
-                            path=out_path,
-                            status="success",
-                            note=None,
-                            encode_time_s=None,
-                            peak_rss_mb=peak_container[0],
-                        )
-        except Exception:  # noqa: BLE001
+                elif isinstance(exc, TypeError | AttributeError):
+                    return EncodeResult(
+                        path=out_path,
+                        status="success",
+                        note=None,
+                        encode_time_s=None,
+                        peak_rss_mb=peak_container[0],
+                    )
+        except OSError:
             pass
         stop_sampler()
         return EncodeResult(
-            path=out_path, status="failed", note=f"encode-error:{exc.__class__.__name__}"
+            path=out_path,
+            status="failed",
+            note=f"encode-error:{exc.__class__.__name__}",
         )
 
     end = time.perf_counter()
@@ -265,4 +283,4 @@ def encode_frames(
     )
 
 
-__all__ = ["encode_frames", "EncodeResult"]
+__all__ = ["EncodeResult", "encode_frames"]

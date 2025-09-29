@@ -5,6 +5,12 @@ This script provides a minimal test to ensure the weight recomputation
 and sensitivity analysis scripts are working correctly.
 """
 
+import importlib
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType
+
 from robot_sf.benchmark.snqi import compute_snqi
 
 
@@ -86,13 +92,36 @@ def test_weight_computation():
 
     # Test basic SNQI computation
     try:
-        import sys
-        from pathlib import Path
-
         # Ensure imports are resolved relative to this file, not CWD
         scripts_dir = Path(__file__).resolve().parent
         sys.path.insert(0, str(scripts_dir))
-        from recompute_snqi_weights import SNQIWeightRecomputer
+
+        # Prefer package-qualified import when available. Use helper to centralize logic
+        def _find_and_import_script(
+            module_name: str, package_prefix: str = "scripts"
+        ) -> ModuleType | None:
+            """Try importing module under package_prefix first, then bare module name.
+
+            Returns the imported module or None if not importable.
+            """
+            candidates = [f"{package_prefix}.{module_name}", module_name]
+            for candidate in candidates:
+                try:
+                    if importlib.util.find_spec(candidate) is None:
+                        continue
+                    return importlib.import_module(candidate)
+                except Exception as e:  # pragma: no cover - import fallback diagnostics
+                    print(f"⚠ Failed to import '{candidate}': {e}")
+            return None
+
+        recompute_mod = _find_and_import_script("recompute_snqi_weights")
+        if recompute_mod is None:
+            print("✗ Could not import recompute_snqi_weights")
+            return False
+        SNQIWeightRecomputer = getattr(recompute_mod, "SNQIWeightRecomputer", None)
+        if SNQIWeightRecomputer is None:
+            print("✗ SNQIWeightRecomputer not found in recompute_snqi_weights")
+            return False
 
         recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
 
@@ -123,59 +152,42 @@ def validate_script_interfaces():
     """Validate that scripts can be imported and have expected interfaces."""
 
     try:
-        import sys
-        from pathlib import Path
-
         # Ensure imports are resolved relative to this file, not CWD
         scripts_dir = Path(__file__).resolve().parent
         sys.path.insert(0, str(scripts_dir))
 
         # Test recompute_snqi_weights module
-        try:
-            import importlib.util
-
-            spec = importlib.util.find_spec("recompute_snqi_weights")
-            if spec is None:
-                print("✗ recompute_snqi_weights module: not found")
-                return False
-            print("✓ recompute_snqi_weights module: importable")
-        except ImportError:
+        spec = importlib.util.find_spec("recompute_snqi_weights")
+        if spec is None:
+            print("✗ recompute_snqi_weights module: not found")
             return False
+        print("✓ recompute_snqi_weights module: importable")
 
         # Test snqi_weight_optimization module
-        try:
-            spec = importlib.util.find_spec("snqi_weight_optimization")
-            if spec is None:
-                print("✗ snqi_weight_optimization module: not found")
-                return False
-            print("✓ snqi_weight_optimization module: importable")
-        except ImportError:
+        spec = importlib.util.find_spec("snqi_weight_optimization")
+        if spec is None:
+            print("✗ snqi_weight_optimization module: not found")
             return False
+        print("✓ snqi_weight_optimization module: importable")
 
         # Test snqi_sensitivity_analysis module
-        try:
-            import importlib
-
-            spec = importlib.util.find_spec("snqi_sensitivity_analysis")
-            if spec is None:
-                print("✗ snqi_sensitivity_analysis module: not found")
-                return False
-            # Attempt import to surface optional visualization dependency errors
-            try:
-                importlib.import_module("snqi_sensitivity_analysis")
-                print("✓ snqi_sensitivity_analysis module: importable")
-            except ImportError as e:
-                msg = str(e)
-                if "matplotlib" in msg or "seaborn" in msg or "pandas" in msg:
-                    print(
-                        "⚠ snqi_sensitivity_analysis module: importable (visualization dependencies missing)"
-                    )
-                else:
-                    print(f"✗ snqi_sensitivity_analysis import failed: {e}")
-                    return False
-        except ImportError as e:
-            print(f"✗ snqi_sensitivity_analysis import machinery failed: {e}")
+        spec = importlib.util.find_spec("snqi_sensitivity_analysis")
+        if spec is None:
+            print("✗ snqi_sensitivity_analysis module: not found")
             return False
+        # Attempt import to surface optional visualization dependency errors
+        try:
+            importlib.import_module("snqi_sensitivity_analysis")
+            print("✓ snqi_sensitivity_analysis module: importable")
+        except ImportError as e:
+            msg = str(e)
+            if "matplotlib" in msg or "seaborn" in msg or "pandas" in msg:
+                print(
+                    "⚠ snqi_sensitivity_analysis module: importable (visualization dependencies missing)",
+                )
+            else:
+                print(f"✗ snqi_sensitivity_analysis import failed: {e}")
+                return False
 
         return True
 
@@ -216,4 +228,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

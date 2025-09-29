@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from math import ceil, cos, pi, sin
 from random import sample, uniform
-from typing import List, Tuple, Union
 
 from loguru import logger
 from pysocialforce import Simulator as PySFSimulator
@@ -11,6 +10,7 @@ from pysocialforce.forces import ObstacleForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 from robot_sf.nav.occupancy import is_circle_line_intersection
@@ -48,14 +48,14 @@ class Simulator:
 
     config: SimulationSettings
     map_def: MapDefinition
-    robots: List[Robot]
+    robots: list[Robot]
     goal_proximity_threshold: float
     random_start_pos: bool
-    robot_navs: List[RouteNavigator] = field(init=False)
+    robot_navs: list[RouteNavigator] = field(init=False)
     pysf_sim: PySFSimulator = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
     groups: PedestrianGroupings = field(init=False)
-    peds_behaviors: List[PedestrianBehavior] = field(init=False)
+    peds_behaviors: list[PedestrianBehavior] = field(init=False)
     peds_have_obstacle_forces: bool
 
     def __post_init__(self):
@@ -77,11 +77,11 @@ class Simulator:
             logger.warning(
                 "The peds_have_obstacle_forces attribute is not set. "
                 "This may lead to unexpected behavior."
-                "Setting it to False by default."
+                "Setting it to False by default.",
             )
             self.peds_have_obstacle_forces = False
 
-        def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> List[PySFForce]:
+        def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> list[PySFForce]:
             """
             Creates and configures the forces to be applied in the simulation,
             excluding obstacle forces and adding pedestrian-robot interaction forces
@@ -97,7 +97,7 @@ class Simulator:
                 for robot in self.robots:
                     self.config.prf_config.robot_radius = robot.config.radius
                     forces.append(
-                        PedRobotForce(self.config.prf_config, sim.peds, lambda: robot.pos)
+                        PedRobotForce(self.config.prf_config, sim.peds, lambda: robot.pos),
                     )
             return forces
 
@@ -119,28 +119,28 @@ class Simulator:
             behavior.reset()
 
     @property
-    def goal_pos(self) -> List[Vec2D]:
+    def goal_pos(self) -> list[Vec2D]:
         """
         Returns the current goal positions for all robot navigators.
         """
         return [n.current_waypoint for n in self.robot_navs]
 
     @property
-    def next_goal_pos(self) -> List[Union[Vec2D, None]]:
+    def next_goal_pos(self) -> list[Vec2D | None]:
         """
         Returns the next goal positions for all robot navigators.
         """
         return [n.next_waypoint for n in self.robot_navs]
 
     @property
-    def robot_poses(self) -> List[RobotPose]:
+    def robot_poses(self) -> list[RobotPose]:
         """
         Returns the current poses of all robots.
         """
         return [r.pose for r in self.robots]
 
     @property
-    def robot_pos(self) -> List[Vec2D]:
+    def robot_pos(self) -> list[Vec2D]:
         """
         Returns the current positions of all robots.
         """
@@ -159,7 +159,7 @@ class Simulator:
         Assigns new routes and resets robot positions if collision occurs
         or a robot has reached its final goal.
         """
-        for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs)):
+        for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
@@ -167,7 +167,7 @@ class Simulator:
                 nav.new_route(waypoints[1:])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
-    def step_once(self, actions: List[RobotAction]):
+    def step_once(self, actions: list[RobotAction]):
         """
         Performs a single simulation step by updating pedestrian behaviors,
         computing and applying forces, updating pedestrian positions,
@@ -178,18 +178,18 @@ class Simulator:
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
-        for robot, nav, action in zip(self.robots, self.robot_navs, actions):
+        for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
 
 
 def init_simulators(
-    env_config: EnvSettings,
+    env_config: EnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
     num_robots: int = 1,
     random_start_pos: bool = True,
     peds_have_obstacle_forces: bool = False,
-) -> List[Simulator]:
+) -> list[Simulator]:
     """
     Initialize simulators for the robot environment.
 
@@ -216,7 +216,7 @@ def init_simulators(
         raise ValueError(
             "Cannot initialize simulators: map definition provides zero robot start positions "
             "(no robot routes detected). Ensure the map JSON/SVG conversion produced robot_routes "
-            "and that spawn/goal zones plus routes are present."
+            "and that spawn/goal zones plus routes are present.",
         )
 
     num_sims = ceil(num_robots / map_def.num_start_pos)
@@ -225,7 +225,7 @@ def init_simulators(
     goal_proximity = env_config.robot_config.radius + env_config.sim_config.goal_radius
 
     # Initialize an empty list to hold the simulators
-    sims: List[Simulator] = []
+    sims: list[Simulator] = []
 
     # Create the required number of simulators
     for i in range(num_sims):
@@ -278,7 +278,7 @@ class PedSimulator(Simulator):
         return self.robots[0].pos
 
     def reset_state(self):
-        for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs)):
+        for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
             if collision or is_at_final_goal:
@@ -290,21 +290,24 @@ class PedSimulator(Simulator):
         ped_spawn = self.get_proximity_point(robot_spawn, 10, 15)
         self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
-    def step_once(self, actions: List[RobotAction], ego_ped_actions: List[UnicycleAction]):
+    def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]):
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
-        for robot, nav, action in zip(self.robots, self.robot_navs, actions):
+        for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
 
         self.ego_ped.apply_action(ego_ped_actions[0], self.config.time_per_step_in_secs)
 
     def get_proximity_point(
-        self, fixed_point: Tuple[float, float], lower_bound: float, upper_bound: float
-    ) -> Tuple[float, float]:
+        self,
+        fixed_point: tuple[float, float],
+        lower_bound: float,
+        upper_bound: float,
+    ) -> tuple[float, float]:
         """
         Calculate a point in the proximity of another point with specified distance bounds.
 
@@ -351,7 +354,7 @@ def init_ped_simulators(
     map_def: MapDefinition,
     random_start_pos: bool = False,
     peds_have_obstacle_forces: bool = False,
-) -> List[PedSimulator]:
+) -> list[PedSimulator]:
     """
     Initialize simulators for the pedestrian environment.
 

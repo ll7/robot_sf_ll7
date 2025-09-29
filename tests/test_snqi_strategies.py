@@ -37,7 +37,7 @@ def _synthetic_episodes_fixture():
                     "force_exceed_events": float(rng.integers(0, 6)),
                     "jerk_mean": float(rng.uniform(0.0, 1.5)),
                 },
-            }
+            },
         )
     return episodes
 
@@ -77,7 +77,7 @@ def test_recompute_strategies_structure(strategy, synthetic_episodes, baseline_s
     missing = set(WEIGHT_NAMES) - set(weights.keys())
     assert not missing, f"Strategy {strategy} missing weight keys: {missing}"
     for name, value in weights.items():
-        assert isinstance(value, (int, float)), f"Weight {name} not numeric"
+        assert isinstance(value, int | float), f"Weight {name} not numeric"
         assert 0.0 <= float(value) <= 3.5, f"Weight {name} out of expected range: {value}"
 
     # Statistics structure (overall block)

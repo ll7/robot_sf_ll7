@@ -17,7 +17,7 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 class _Cfg:
-    def __init__(self, tmp_path: Path, video_renderer: str, capture_replay: bool = True):  # noqa: D401
+    def __init__(self, tmp_path: Path, video_renderer: str, capture_replay: bool = True):
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
         self.initial_episodes = 1

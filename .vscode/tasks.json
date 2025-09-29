@@ -27,7 +27,7 @@
 		{
 			"label": "Install Dependencies",
 			"type": "shell",
-			"command": "uv sync",
+			"command": "uv sync  --all-extras",
 			"problemMatcher": [],
 			"group": "build"
 		},

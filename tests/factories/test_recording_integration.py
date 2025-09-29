@@ -13,7 +13,9 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 def test_recording_creates_simulation_view(tmp_path):
     vid_path = tmp_path / "episode.mp4"
     env = make_robot_env(
-        config=RobotSimulationConfig(), record_video=True, video_path=str(vid_path)
+        config=RobotSimulationConfig(),
+        record_video=True,
+        video_path=str(vid_path),
     )
     # No stepping required; presence of sim_ui indicates recording path configured
     assert getattr(env, "sim_ui", None) is not None

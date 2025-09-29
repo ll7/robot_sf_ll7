@@ -20,12 +20,16 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from datetime import datetime, timezone
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
@@ -34,8 +38,11 @@ from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
 
-def _load_baseline_planner(algo: str, algo_config_path: Optional[str], seed: int):
+
+def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
     """Load and construct a baseline planner from the registry.
 
     Returns (planner, ObservationCls, config_dict).
@@ -99,7 +106,9 @@ def _git_hash_fallback() -> str:
 
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
         return out.decode().strip()
-    except Exception:  # pragma: no cover
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
+        # Best-effort fallback when git is unavailable or fails; retain behavior
+        logger.debug("_git_hash_fallback failed: %s", exc)
         return "unknown"
 
 
@@ -108,7 +117,7 @@ def _config_hash(obj: Any) -> str:
     return hashlib.sha256(data).hexdigest()[:16]
 
 
-def compute_episode_id(scenario_params: Dict[str, Any], seed: int) -> str:  # legacy wrapper
+def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:  # legacy wrapper
     """Backward-compatible wrapper returning deterministic episode id.
 
     Uses new `make_episode_id` (sha256-based) while preserving previous readable
@@ -134,19 +143,19 @@ def _episode_identity_hash() -> str:
         import inspect
 
         src = inspect.getsource(compute_episode_id)
-    except Exception:
+    except (OSError, TypeError):
         # Fallback to function name when source isn't available (e.g., pyc only)
         src = compute_episode_id.__name__
     return hashlib.sha256(src.encode()).hexdigest()[:12]
 
 
-def index_existing(out_path: Path) -> Set[str]:
+def index_existing(out_path: Path) -> set[str]:
     """Scan an existing JSONL file and return the set of episode_ids found.
 
     Tolerates malformed lines and missing keys; logs are not emitted here to keep
     the function side-effect free (caller may log if desired).
     """
-    ids: Set[str] = set()
+    ids: set[str] = set()
     try:
         with out_path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -158,22 +167,24 @@ def index_existing(out_path: Path) -> Set[str]:
                     eid = rec.get("episode_id")
                     if isinstance(eid, str):
                         ids.add(eid)
-                except Exception:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     # Ignore malformed JSON lines
                     continue
     except FileNotFoundError:
         return set()
+    except OSError as exc:
+        logger.debug(
+            "index_existing unexpected error reading %s: %s", out_path, exc
+        )  # pragma: no cover
+        return set()
     return ids
 
 
-def load_scenario_matrix(path: str | Path) -> List[Dict[str, Any]]:
+def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     with Path(path).open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
     # Allow either YAML stream of docs or a single list
-    if len(docs) == 1 and isinstance(docs[0], list):
-        scenarios = docs[0]
-    else:
-        scenarios = docs
+    scenarios = docs[0] if len(docs) == 1 and isinstance(docs[0], list) else docs
     return [dict(s) for s in scenarios]
 
 
@@ -189,7 +200,8 @@ def _simple_robot_policy(robot_pos: np.ndarray, goal: np.ndarray, speed: float =
 
 
 def _prepare_robot_points(
-    robot_start: Sequence[float] | None, robot_goal: Sequence[float] | None
+    robot_start: Sequence[float] | None,
+    robot_goal: Sequence[float] | None,
 ) -> tuple[np.ndarray, np.ndarray]:
     if robot_start is None:
         rs = np.array([0.3, 3.0], dtype=float)
@@ -251,7 +263,7 @@ def _build_episode_data(
     )
 
 
-def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):  # noqa: C901
+def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  # noqa: C901
     """Create a robot policy function based on the specified algorithm."""
 
     def _simple_policy_adapter():
@@ -261,7 +273,7 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
             robot_goal: np.ndarray,
             _ped_positions: np.ndarray,
             _dt: float,
-        ) -> np.ndarray:  # noqa: E501
+        ) -> np.ndarray:
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
         return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
@@ -278,11 +290,11 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
         return vel
 
     def _action_to_velocity(
-        action: Dict[str, float],
+        action: dict[str, float],
         robot_pos: np.ndarray,
         robot_vel: np.ndarray,
         robot_goal: np.ndarray,
-    ) -> np.ndarray:  # noqa: E501
+    ) -> np.ndarray:
         if "vx" in action and "vy" in action:
             return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
         if "v" in action and "omega" in action:
@@ -321,6 +333,10 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
             # Safe fallback: zero action in current space
             # Prefer preserving action-space contract when possible
             action = {"vx": 0.0, "vy": 0.0}
+        except (RuntimeError, TypeError, ValueError) as exc:
+            # Any unexpected planner errors -> fallback but log for diagnostics
+            logger.warning("Planner step failed unexpectedly: %s", exc)
+            action = {"vx": 0.0, "vy": 0.0}
 
         # Convert action to velocity (handle both action spaces)
         return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)
@@ -334,7 +350,7 @@ def _create_robot_policy(algo: str, algo_config_path: Optional[str], seed: int):
     return policy_fn, metadata
 
 
-def _append_video_skip_note(record: Dict[str, Any], note: str) -> None:
+def _append_video_skip_note(record: dict[str, Any], note: str) -> None:
     existing = record.get("notes")
     if existing:
         record["notes"] = f"{existing}; {note}"
@@ -344,14 +360,14 @@ def _append_video_skip_note(record: Dict[str, Any], note: str) -> None:
 
 def _emit_video_skip(
     *,
-    record: Dict[str, Any],
+    record: dict[str, Any],
     episode_id: str,
     scenario_id: str,
-    seed: Optional[int],
+    seed: int | None,
     renderer: str,
     reason: str,
-    steps: Optional[int],
-    error: Optional[str] = None,
+    steps: int | None,
+    error: str | None = None,
 ) -> None:
     context = {
         "episode_id": episode_id,
@@ -365,16 +381,20 @@ def _emit_video_skip(
         context["error"] = error
     try:
         from loguru import logger  # type: ignore
-
-        logger.warning(
-            (
-                "Video skipped: reason={reason} episode_id={episode_id} "
-                "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"  # noqa: E501
-            ),
-            **context,
-        )
-    except Exception:  # pragma: no cover - logging optional
-        pass
+    except ImportError:
+        logger = None  # type: ignore
+    if logger is not None:
+        try:
+            logger.warning(
+                (
+                    "Video skipped: reason={reason} episode_id={episode_id} "
+                    "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
+                ),
+                **context,
+            )
+        except (AttributeError, TypeError):
+            # Logging failure -> ignore
+            pass
 
     note_parts = [f"video skipped ({renderer}): {reason}"]
     if steps is not None:
@@ -391,8 +411,8 @@ def _try_encode_synthetic_video(
     scenario_id: str,
     out_dir: Path,
     fps: int = 10,
-    seed: Optional[int] = None,
-) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    seed: int | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Encode a very lightweight synthetic MP4 from robot positions.
 
     - Draws a simple red dot for the robot position per frame on a black canvas.
@@ -400,7 +420,7 @@ def _try_encode_synthetic_video(
     """
     try:
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         _skip_info = {
             "reason": "moviepy-missing",
             "renderer": "synthetic",
@@ -474,7 +494,7 @@ def _try_encode_synthetic_video(
             "error": str(exc),
         }
         return None, _skip_info
-    except Exception as exc:  # pragma: no cover - defensive logging
+    except (RuntimeError, ValueError) as exc:
         _skip_info = {
             "reason": "encode-failed",
             "renderer": "synthetic",
@@ -485,11 +505,11 @@ def _try_encode_synthetic_video(
     finally:
         try:
             clip.close()  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - close best effort
+        except (AttributeError, OSError):  # pragma: no cover - close best effort
             pass
     try:
         size = mp4_path.stat().st_size
-    except Exception:
+    except (OSError, FileNotFoundError):
         size = 0
     return {
         "status": "success",
@@ -502,8 +522,8 @@ def _try_encode_synthetic_video(
 
 
 def _annotate_and_check_video_perf(
-    record: Dict[str, Any],
-    vid: Dict[str, Any],
+    record: dict[str, Any],
+    vid: dict[str, Any],
     perf_start: float,
     enc_start: float,
     enc_end: float,
@@ -529,7 +549,7 @@ def _annotate_and_check_video_perf(
     if overhead_ratio > hard:
         if enforce:
             raise RuntimeError(
-                f"video overhead hard breach: ratio={overhead_ratio:.3f} > {hard:.3f}"
+                f"video overhead hard breach: ratio={overhead_ratio:.3f} > {hard:.3f}",
             )
         else:
             try:
@@ -553,7 +573,7 @@ def _annotate_and_check_video_perf(
     elif overhead_ratio > soft:
         if enforce:
             raise RuntimeError(
-                f"video overhead soft breach: ratio={overhead_ratio:.3f} > {soft:.3f}"
+                f"video overhead soft breach: ratio={overhead_ratio:.3f} > {soft:.3f}",
             )
         else:
             try:
@@ -578,9 +598,9 @@ def _annotate_and_check_video_perf(
 
 def _maybe_encode_video(
     *,
-    record: Dict[str, Any],
-    robot_pos_traj: List[np.ndarray],
-    videos_dir: Optional[str],
+    record: dict[str, Any],
+    robot_pos_traj: list[np.ndarray],
+    videos_dir: str | None,
     video_enabled: bool,
     video_renderer: str,
     perf_start: float,
@@ -625,12 +645,12 @@ def _maybe_encode_video(
     except RuntimeError:
         # Budget enforcement: bubble up to runner to record a failure
         raise
-    except Exception:  # pragma: no cover - defensive path
+    except (TypeError, ValueError, OSError):  # pragma: no cover - defensive path
         pass
 
 
 def _simulate_episode_with_policy(
-    scenario_params: Dict[str, Any],
+    scenario_params: dict[str, Any],
     seed: int,
     robot_policy: Callable[[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float], np.ndarray],
     horizon: int,
@@ -639,11 +659,11 @@ def _simulate_episode_with_policy(
     robot_goal: Sequence[float] | None,
     record_forces: bool,
 ) -> tuple[
-    List[np.ndarray],
-    List[np.ndarray],
-    List[np.ndarray],
-    List[np.ndarray],
-    List[np.ndarray],
+    list[np.ndarray],
+    list[np.ndarray],
+    list[np.ndarray],
+    list[np.ndarray],
+    list[np.ndarray],
     np.ndarray,
     int | None,
 ]:
@@ -658,18 +678,20 @@ def _simulate_episode_with_policy(
     robot_pos = robot_start_arr.copy()
     robot_vel = np.zeros(2)
 
-    robot_pos_traj: List[np.ndarray] = []
-    robot_vel_traj: List[np.ndarray] = []
-    robot_acc_traj: List[np.ndarray] = []
-    peds_pos_traj: List[np.ndarray] = []
-    ped_forces_traj: List[np.ndarray] = []
+    robot_pos_traj: list[np.ndarray] = []
+    robot_vel_traj: list[np.ndarray] = []
+    robot_acc_traj: list[np.ndarray] = []
+    peds_pos_traj: list[np.ndarray] = []
+    ped_forces_traj: list[np.ndarray] = []
 
     reached_goal_step: int | None = None
     goal_radius = 0.3
     last_vel = robot_vel.copy()
 
     def _step_robot(
-        curr_pos: np.ndarray, curr_vel: np.ndarray, ped_positions: np.ndarray
+        curr_pos: np.ndarray,
+        curr_vel: np.ndarray,
+        ped_positions: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
         new_pos = curr_pos + new_vel * dt
@@ -714,22 +736,24 @@ def _simulate_episode_with_policy(
 def _compute_metrics(
     ep: EpisodeData,
     horizon: int,
-    snqi_weights: Dict[str, float] | None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None,
-) -> Dict[str, Any]:
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+) -> dict[str, Any]:
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
     return _post_process_metrics(
-        metrics_raw, snqi_weights=snqi_weights, snqi_baseline=snqi_baseline
+        metrics_raw,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
     )
 
 
 def _build_episode_record(
-    scenario_params: Dict[str, Any],
+    scenario_params: dict[str, Any],
     seed: int,
-    metrics: Dict[str, Any],
-    algo_metadata: Dict[str, Any],
+    metrics: dict[str, Any],
+    algo_metadata: dict[str, Any],
     ts_start: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     episode_id = compute_episode_id(scenario_params, seed)
     return {
         "episode_id": episode_id,
@@ -745,7 +769,7 @@ def _build_episode_record(
 
 
 def run_episode(
-    scenario_params: Dict[str, Any],
+    scenario_params: dict[str, Any],
     seed: int,
     *,
     horizon: int = 100,
@@ -753,22 +777,22 @@ def run_episode(
     robot_start: Sequence[float] | None = None,
     robot_goal: Sequence[float] | None = None,
     record_forces: bool = True,
-    snqi_weights: Dict[str, float] | None = None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
     algo: str = "simple_policy",
-    algo_config_path: Optional[str] = None,
+    algo_config_path: str | None = None,
     # Video options (optional)
     video_enabled: bool = False,
     video_renderer: str = "none",
-    videos_dir: Optional[str] = None,
-) -> Dict[str, Any]:
+    videos_dir: str | None = None,
+) -> dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
     The robot can use different algorithms based on the 'algo' parameter.
     """
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
-    ts_start = datetime.now(timezone.utc).isoformat()
+    ts_start = datetime.now(UTC).isoformat()
     # Create robot policy based on algorithm
     robot_policy, algo_metadata = _create_robot_policy(algo, algo_config_path, seed)
 
@@ -822,12 +846,14 @@ def run_episode(
     )
 
     # Update end time
-    record["timestamps"]["end"] = datetime.now(timezone.utc).isoformat()
+    record["timestamps"]["end"] = datetime.now(UTC).isoformat()
     return record
 
 
 def validate_and_write(
-    record: Dict[str, Any], schema_path: str | Path, out_path: str | Path
+    record: dict[str, Any],
+    schema_path: str | Path,
+    out_path: str | Path,
 ) -> None:
     schema = load_schema(schema_path)
     validate_episode(record, schema)
@@ -839,19 +865,19 @@ def validate_and_write(
 
 __all__ = [
     "load_scenario_matrix",
-    "run_episode",
     "run_batch",
+    "run_episode",
     "validate_and_write",
 ]
 
 
 def _post_process_metrics(
-    metrics_raw: Dict[str, Any],
+    metrics_raw: dict[str, Any],
     *,
-    snqi_weights: Dict[str, float] | None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None,
-) -> Dict[str, Any]:
-    metrics: Dict[str, Any] = {k: v for k, v in metrics_raw.items()}
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+) -> dict[str, Any]:
+    metrics: dict[str, Any] = dict(metrics_raw.items())
     metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
     fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
     if fq:
@@ -874,9 +900,11 @@ def _post_process_metrics(
 
 
 def _expand_jobs(
-    scenarios: List[Dict[str, Any]], base_seed: int = 0, repeats_override: int | None = None
-) -> List[tuple[Dict[str, Any], int]]:
-    jobs: List[tuple[Dict[str, Any], int]] = []
+    scenarios: list[dict[str, Any]],
+    base_seed: int = 0,
+    repeats_override: int | None = None,
+) -> list[tuple[dict[str, Any], int]]:
+    jobs: list[tuple[dict[str, Any], int]] = []
     for sc in scenarios:
         reps = int(sc.get("repeats", 1)) if repeats_override is None else int(repeats_override)
         for r in range(reps):
@@ -884,7 +912,7 @@ def _expand_jobs(
     return jobs
 
 
-def _run_job_worker(job: tuple[Dict[str, Any], int, Dict[str, Any]]) -> Dict[str, Any]:
+def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
     """Top-level worker function to run a single episode.
 
     Accepts a tuple of (scenario_dict, seed, fixed_params_dict) and returns a record dict.
@@ -907,23 +935,23 @@ def _run_job_worker(job: tuple[Dict[str, Any], int, Dict[str, Any]]) -> Dict[str
     )
 
 
-def _write_validated_record(out_path: Path, schema: Dict[str, Any], rec: Dict[str, Any]) -> None:
+def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[str, Any]) -> None:
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
 
 
 def _run_batch_sequential(
-    jobs: List[tuple[Dict[str, Any], int]],
+    jobs: list[tuple[dict[str, Any], int]],
     *,
     out_path: Path,
-    schema: Dict[str, Any],
-    fixed_params: Dict[str, Any],
-    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    schema: dict[str, Any],
+    fixed_params: dict[str, Any],
+    progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
-) -> tuple[int, List[Dict[str, Any]]]:
+) -> tuple[int, list[dict[str, Any]]]:
     wrote = 0
-    failures: List[Dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
     total = len(jobs)
     for idx, (sc, seed) in enumerate(jobs, start=1):
         try:
@@ -937,7 +965,7 @@ def _run_batch_sequential(
                     pass
         except Exception as e:  # pragma: no cover - error path
             failures.append(
-                {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)}
+                {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)},
             )
             if progress_cb is not None:
                 try:
@@ -950,21 +978,21 @@ def _run_batch_sequential(
 
 
 def _run_batch_parallel(
-    jobs: List[tuple[Dict[str, Any], int]],
+    jobs: list[tuple[dict[str, Any], int]],
     *,
     out_path: Path,
-    schema: Dict[str, Any],
-    fixed_params: Dict[str, Any],
+    schema: dict[str, Any],
+    fixed_params: dict[str, Any],
     workers: int,
-    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
-) -> tuple[int, List[Dict[str, Any]]]:
+) -> tuple[int, list[dict[str, Any]]]:
     wrote = 0
-    failures: List[Dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
     total = len(jobs)
     # Submit all jobs
     with ProcessPoolExecutor(max_workers=int(workers)) as ex:
-        future_to_job: Dict[Any, tuple[int, Dict[str, Any], int]] = {}
+        future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
         for idx, (sc, seed) in enumerate(jobs, start=1):
             fut = ex.submit(_run_job_worker, (sc, seed, fixed_params))
             future_to_job[fut] = (idx, sc, seed)
@@ -981,7 +1009,7 @@ def _run_batch_parallel(
                         pass
             except Exception as e:  # pragma: no cover
                 failures.append(
-                    {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)}
+                    {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)},
                 )
                 if progress_cb is not None:
                     try:
@@ -997,17 +1025,21 @@ def _run_batch_parallel(
 
 
 def _prepare_batch_setup(
-    scenarios_or_path: List[Dict[str, Any]] | str | Path,
+    scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
     append: bool,
-) -> tuple[List[Dict[str, Any]], Path, Dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], Path, dict[str, Any]]:
     """Prepare scenarios, output path, and schema for batch processing."""
     # Load scenarios
-    if isinstance(scenarios_or_path, (str, Path)):
-        scenarios = load_scenario_matrix(scenarios_or_path)
+    from typing import cast
+
+    scenarios_is_path = isinstance(scenarios_or_path, str | Path)
+    if scenarios_is_path:
+        scenarios = load_scenario_matrix(cast(str | Path, scenarios_or_path))
     else:
-        scenarios = scenarios_or_path
+        # scenarios_or_path is already list[dict[str, Any]]
+        scenarios = cast(list[dict[str, Any]], scenarios_or_path)
 
     # Prepare output
     out_path = Path(out_path)
@@ -1024,13 +1056,13 @@ def _setup_fixed_params(
     horizon: int,
     dt: float,
     record_forces: bool,
-    snqi_weights: Dict[str, float] | None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None,
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
     video_enabled: bool,
     video_renderer: str,
     algo: str,
-    algo_config_path: Optional[str],
-) -> Dict[str, Any]:
+    algo_config_path: str | None,
+) -> dict[str, Any]:
     """Set up the fixed parameters dict for job execution."""
     videos_dir = (out_path.parent / "videos").as_posix()
     return {
@@ -1048,10 +1080,10 @@ def _setup_fixed_params(
 
 
 def _filter_resume_jobs(
-    jobs: List[tuple[Dict[str, Any], int]],
+    jobs: list[tuple[dict[str, Any], int]],
     out_path: Path,
     resume: bool,
-) -> List[tuple[Dict[str, Any], int]]:
+) -> list[tuple[dict[str, Any], int]]:
     """Filter jobs based on resume logic, skipping existing episodes."""
     if not resume or not out_path.exists():
         return jobs
@@ -1066,7 +1098,7 @@ def _filter_resume_jobs(
     if not existing_ids:
         return jobs
 
-    filtered: List[tuple[Dict[str, Any], int]] = []
+    filtered: list[tuple[dict[str, Any], int]] = []
     for sc, seed in jobs:
         eid = compute_episode_id(sc, seed)
         if eid not in existing_ids:
@@ -1075,14 +1107,14 @@ def _filter_resume_jobs(
 
 
 def _run_jobs(
-    jobs: List[tuple[Dict[str, Any], int]],
+    jobs: list[tuple[dict[str, Any], int]],
     out_path: Path,
-    schema: Dict[str, Any],
-    fixed_params: Dict[str, Any],
+    schema: dict[str, Any],
+    fixed_params: dict[str, Any],
     workers: int,
-    progress_cb: Optional[Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]],
+    progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
-) -> tuple[int, List[Dict[str, Any]]]:
+) -> tuple[int, list[dict[str, Any]]]:
     """Execute jobs using sequential or parallel processing."""
     if workers <= 1:
         return _run_batch_sequential(
@@ -1109,7 +1141,7 @@ def _finalize_batch(
     out_path: Path,
     wrote: int,
     resume: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Finalize batch processing: save manifest and optional performance snapshot."""
     # Save/update manifest to speed up future resume if we wrote anything
     if resume and wrote > 0 and out_path.exists():
@@ -1175,7 +1207,7 @@ def _finalize_batch(
 
 
 def run_batch(
-    scenarios_or_path: List[Dict[str, Any]] | str | Path,
+    scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
     *,
@@ -1184,20 +1216,18 @@ def run_batch(
     horizon: int = 100,
     dt: float = 0.1,
     record_forces: bool = True,
-    snqi_weights: Dict[str, float] | None = None,
-    snqi_baseline: Dict[str, Dict[str, float]] | None = None,
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
     video_enabled: bool = False,
     video_renderer: str = "none",
     append: bool = True,
     fail_fast: bool = False,
-    progress_cb: Optional[
-        Callable[[int, int, Dict[str, Any], int, bool, Optional[str]], None]
-    ] = None,
+    progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None = None,
     algo: str = "simple_policy",
-    algo_config_path: Optional[str] = None,
+    algo_config_path: str | None = None,
     workers: int = 1,
     resume: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
     scenarios_or_path: either a list of scenario dicts or a YAML file path.
@@ -1205,7 +1235,10 @@ def run_batch(
     """
     # Prepare batch setup
     scenarios, out_path, schema = _prepare_batch_setup(
-        scenarios_or_path, out_path, schema_path, append
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        append,
     )
 
     # Expand jobs
@@ -1230,7 +1263,13 @@ def run_batch(
 
     # Run jobs
     wrote, failures = _run_jobs(
-        jobs, out_path, schema, fixed_params, workers, progress_cb, fail_fast
+        jobs,
+        out_path,
+        schema,
+        fixed_params,
+        workers,
+        progress_cb,
+        fail_fast,
     )
 
     # Finalize and return summary

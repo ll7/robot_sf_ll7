@@ -13,7 +13,7 @@ from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 
 
 @pytest.mark.parametrize("cap", [3, 5])
-def test_frame_cap_enforced(cap, monkeypatch):  # noqa: D401
+def test_frame_cap_enforced(cap, monkeypatch):
     # Force headless
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
 

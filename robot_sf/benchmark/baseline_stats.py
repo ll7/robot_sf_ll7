@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.runner import run_batch
 
-DEFAULT_METRICS: List[str] = [
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+DEFAULT_METRICS: list[str] = [
     "time_to_goal_norm",
     "collisions",
     "near_misses",
@@ -30,22 +33,23 @@ DEFAULT_METRICS: List[str] = [
 ]
 
 
-def _extract_metric_values(records: List[Dict[str, Any]], key: str) -> List[float]:
-    vals: List[float] = []
+def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[float]:
+    vals: list[float] = []
     for rec in records:
         m = rec.get("metrics") or {}
         v = m.get(key)
-        if isinstance(v, (int, float)):
+        if isinstance(v, int | float):
             vals.append(float(v))
     return vals
 
 
 def compute_baseline_stats_from_records(
-    records: List[Dict[str, Any]], metrics: Iterable[str] | None = None
-) -> Dict[str, Dict[str, float]]:
+    records: list[dict[str, Any]],
+    metrics: Iterable[str] | None = None,
+) -> dict[str, dict[str, float]]:
     if metrics is None:
         metrics = tuple(DEFAULT_METRICS)
-    stats: Dict[str, Dict[str, float]] = {}
+    stats: dict[str, dict[str, float]] = {}
     for key in metrics:
         vals = _extract_metric_values(records, key)
         if len(vals) == 0:
@@ -60,7 +64,7 @@ def compute_baseline_stats_from_records(
 
 
 def run_and_compute_baseline(
-    scenarios_or_path: List[Dict[str, Any]] | str | Path,
+    scenarios_or_path: list[dict[str, Any]] | str | Path,
     *,
     out_json: str | Path,
     out_jsonl: str | Path | None = None,
@@ -72,11 +76,11 @@ def run_and_compute_baseline(
     record_forces: bool = False,
     metrics: Iterable[str] | None = None,
     algo: str = "simple_policy",
-    algo_config_path: Optional[str] = None,
+    algo_config_path: str | None = None,
     workers: int = 1,
     resume: bool = True,
     progress_cb=None,
-) -> Dict[str, Dict[str, float]]:
+) -> dict[str, dict[str, float]]:
     # Optionally run batch to collect JSONL
     tmp_jsonl: str | None = None
     if out_jsonl is not None:
@@ -94,7 +98,7 @@ def run_and_compute_baseline(
         horizon=horizon,
         dt=dt,
         record_forces=record_forces,
-        append=True if resume else False,
+        append=bool(resume),
         fail_fast=False,
         progress_cb=progress_cb,
         algo=algo,
@@ -114,7 +118,7 @@ def run_and_compute_baseline(
 
 
 __all__ = [
+    "DEFAULT_METRICS",
     "compute_baseline_stats_from_records",
     "run_and_compute_baseline",
-    "DEFAULT_METRICS",
 ]

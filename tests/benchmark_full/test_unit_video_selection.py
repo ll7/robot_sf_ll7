@@ -22,7 +22,7 @@ def test_video_selection_smoke_skip():
                 "episode_id": f"ep{i}",
                 "scenario_id": "scenario_a",
                 "seed": i,
-            }
+            },
         )
     artifacts = generate_videos(records, out_dir="/tmp/videos_test", cfg=_Cfg())
     # Expect first 2 episodes only due to max_videos=2; all skipped with note

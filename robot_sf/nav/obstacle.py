@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import List
 
 import numpy as np
 
@@ -27,8 +26,8 @@ class Obstacle:
         Validates and processes the vertices to create the lines and vertices_np attributes.
     """
 
-    vertices: List[Vec2D]
-    lines: List[Line2D] = field(init=False)
+    vertices: list[Vec2D]
+    lines: list[Line2D] = field(init=False)
     vertices_np: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -53,8 +52,9 @@ class Obstacle:
         self.vertices_np = np.array(self.vertices)
 
         # Create edges from vertices
-        edges = list(zip(self.vertices[:-1], self.vertices[1:])) + [
-            (self.vertices[-1], self.vertices[0])
+        edges = [
+            *list(zip(self.vertices[:-1], self.vertices[1:], strict=False)),
+            (self.vertices[-1], self.vertices[0]),
         ]
 
         # Remove fake lines that are just points
@@ -65,7 +65,7 @@ class Obstacle:
         self.lines = lines
 
         if not self.vertices:
-            print("WARNING: obstacle is just a single point that cannot collide!")
+            pass
 
 
 def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
@@ -89,5 +89,5 @@ def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
             (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y),
             (svg_rectangle.x + svg_rectangle.width, svg_rectangle.y + svg_rectangle.height),
             (svg_rectangle.x, svg_rectangle.y + svg_rectangle.height),
-        ]
+        ],
     )

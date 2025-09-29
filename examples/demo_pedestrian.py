@@ -22,7 +22,8 @@ def make_env(map_name: str, robot_model: str):
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
-            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+            difficulty=difficulty,
+            ped_density_by_difficulty=ped_densities,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )

@@ -86,7 +86,7 @@ def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
     return data
 
 
-def test_snqi_optimization_schema_snapshot(tmp_path: Path):  # noqa: D103
+def test_snqi_optimization_schema_snapshot(tmp_path: Path):
     episodes, baseline = _make_dataset(tmp_path)
     out_file = tmp_path / "out.json"
     data = _run_script(episodes, baseline, out_file)
@@ -114,5 +114,6 @@ def test_snqi_optimization_schema_snapshot(tmp_path: Path):  # noqa: D103
 
     # Ensure baseline_missing_metric_count present even if zero
     assert summary.get("baseline_missing_metric_count", 0) == meta.get(
-        "baseline_missing_metric_count", 0
+        "baseline_missing_metric_count",
+        0,
     )

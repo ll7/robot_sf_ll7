@@ -13,10 +13,13 @@ Programmatic contract
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 
-def _get_nested(d: Dict[str, Any], dotted: str) -> Any:
+def _get_nested(d: dict[str, Any], dotted: str) -> Any:
     cur: Any = d
     for part in dotted.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -26,12 +29,12 @@ def _get_nested(d: Dict[str, Any], dotted: str) -> Any:
     return cur
 
 
-def _to_float(x: Any) -> Optional[float]:
+def _to_float(x: Any) -> float | None:
     try:
         if x is None:
             return None
         return float(x)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
@@ -43,21 +46,21 @@ class RankingRow:
 
 
 def compute_ranking(
-    records: Iterable[Dict[str, Any]],
+    records: Iterable[dict[str, Any]],
     *,
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
     metric: str = "collisions",
     ascending: bool = True,
-    top: Optional[int] = None,
-) -> List[RankingRow]:
+    top: int | None = None,
+) -> list[RankingRow]:
     """Compute ranking by mean of metrics.<metric> per group.
 
     - Missing/non-numeric metric values are ignored.
     - Groups with no valid values are omitted.
     - Sorting is ascending by default (smaller-is-better). Use ascending=False for higher-is-better metrics.
     """
-    by_group: Dict[str, List[float]] = {}
+    by_group: dict[str, list[float]] = {}
     for rec in records:
         gid = _get_nested(rec, group_by)
         if gid is None:
@@ -69,7 +72,7 @@ def compute_ranking(
             continue
         by_group.setdefault(str(gid), []).append(val)
 
-    rows: List[RankingRow] = []
+    rows: list[RankingRow] = []
     for gid, vals in by_group.items():
         if not vals:
             continue
@@ -99,4 +102,4 @@ def format_csv(rows: Sequence[RankingRow], metric: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["RankingRow", "compute_ranking", "format_markdown", "format_csv"]
+__all__ = ["RankingRow", "compute_ranking", "format_csv", "format_markdown"]

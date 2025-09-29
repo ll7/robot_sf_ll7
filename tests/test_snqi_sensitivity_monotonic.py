@@ -7,6 +7,8 @@ regression guard for objective consistency.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 
 from robot_sf.benchmark.snqi.compute import compute_snqi
@@ -28,7 +30,7 @@ def _synthetic_eps(num: int = 12):
                     "force_exceed_events": float(rng.integers(0, 3)),
                     "jerk_mean": float(rng.uniform(0.0, 0.8)),
                 },
-            }
+            },
         )
     return episodes
 
@@ -46,7 +48,7 @@ def _baseline(episodes):
     return stats
 
 
-def test_collision_weight_monotonicity():  # noqa: D103
+def test_collision_weight_monotonicity():
     eps = _synthetic_eps()
     base = _baseline(eps)
 
@@ -69,7 +71,7 @@ def test_collision_weight_monotonicity():  # noqa: D103
         means.append(float(np.mean(scores)))
 
     # Monotonic non-increasing (allow tiny numerical noise tolerance)
-    for earlier, later in zip(means, means[1:]):
+    for earlier, later in itertools.pairwise(means):
         assert later <= earlier + 1e-9, (
             f"Mean score increased with higher collision weight: {means}"
         )

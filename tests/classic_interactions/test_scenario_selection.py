@@ -18,7 +18,7 @@ def _mod():
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
-def test_valid_scenario_selection():  # noqa: D401
+def test_valid_scenario_selection():
     mod = _mod()
     # Identify first scenario name via loader directly
     from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix
@@ -39,7 +39,7 @@ def test_valid_scenario_selection():  # noqa: D401
     assert episodes, "Expected episodes for valid scenario (TDD failing until implementation)."
 
 
-def test_invalid_scenario_name_lists_available():  # noqa: D401
+def test_invalid_scenario_name_lists_available():
     mod = _mod()
     original_name = mod.SCENARIO_NAME
     original_dry = mod.DRY_RUN

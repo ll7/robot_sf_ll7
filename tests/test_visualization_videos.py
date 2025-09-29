@@ -31,7 +31,7 @@ def test_generate_benchmark_videos_contract():
                 [(0.7, 1.0)],
             ],
             "replay_actions": [[0.1, 0.0], [0.05, 0.02], [0.0, 0.0]],
-        }
+        },
     ]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -70,7 +70,7 @@ def test_generate_benchmark_videos_with_custom_settings():
                 [0.5, 0.3, 0.2, 0.1],
                 [1.0, 0.8, 0.6, 0.2],
             ],
-        }
+        },
     ]
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -102,7 +102,7 @@ def test_generate_benchmark_videos_missing_trajectory():
             "scenario_id": "classic_001",
             "metrics": {"collisions": 0, "success": True},
             # No trajectory_data field
-        }
+        },
     ]
 
     with tempfile.TemporaryDirectory() as tmp_dir:

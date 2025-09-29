@@ -7,10 +7,14 @@ with breach classification and guidance suggestions.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import TYPE_CHECKING
 
 from .guidance import default_guidance, format_guidance_lines
-from .policy import PerformanceBudgetPolicy
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from .policy import PerformanceBudgetPolicy
 
 
 @dataclass(slots=True)
@@ -36,11 +40,12 @@ class SlowTestRecord:
 
 
 def generate_report(
-    samples: Iterable[SlowTestSample], policy: PerformanceBudgetPolicy
+    samples: Iterable[SlowTestSample],
+    policy: PerformanceBudgetPolicy,
 ) -> list[SlowTestRecord]:
     ordered = sorted(samples, key=lambda s: s.duration_seconds, reverse=True)
     top = ordered[: policy.report_count]
-    records: List[SlowTestRecord] = []
+    records: list[SlowTestRecord] = []
     for s in top:
         breach = policy.classify(s.duration_seconds)
         guidance = default_guidance(s.duration_seconds, breach)
@@ -50,14 +55,14 @@ def generate_report(
                 duration_seconds=s.duration_seconds,
                 breach_type=breach,
                 guidance=guidance,
-            )
+            ),
         )
     return records
 
 
 def format_report(records: Iterable[SlowTestRecord], policy: PerformanceBudgetPolicy) -> str:
     lines = [
-        f"Slow Test Report (soft<{policy.soft_threshold_seconds:.0f}s hard={policy.hard_timeout_seconds:.0f}s, top {policy.report_count})"
+        f"Slow Test Report (soft<{policy.soft_threshold_seconds:.0f}s hard={policy.hard_timeout_seconds:.0f}s, top {policy.report_count})",
     ]
     for idx, r in enumerate(records, 1):
         prefix = f"{idx}) "

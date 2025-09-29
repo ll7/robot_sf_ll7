@@ -27,7 +27,7 @@ def _records():
                 "archetype": "crossing",
                 "density": "low",
                 "metrics": {"time_to_goal": 10 + (i % 5)},
-            }
+            },
         )
     return base
 

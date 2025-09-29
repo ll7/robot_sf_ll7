@@ -44,7 +44,7 @@ overhead (FR‑017). Rendering classes for image observations are imported lazil
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -54,14 +54,14 @@ try:  # pragma: no cover - import errors would surface in tests
 
     # Intentionally do NOT import robot_env_with_image here to avoid heavy first-call cost.
     RobotEnvWithImage = None  # type: ignore
-except Exception:  # noqa: BLE001
+except (ImportError, ModuleNotFoundError):
     # Defer errors until factory invocation (lazy fallback)
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
 
 from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
-from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
+from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -69,22 +69,27 @@ from robot_sf.gym_env.unified_config import (
     RobotSimulationConfig,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
+
 
 class EnvironmentFactory:
     """Internal helpers to construct concrete environments (not exported)."""
 
     @staticmethod
     def create_robot_env(
-        config: Optional[RobotSimulationConfig] = None,
+        config: RobotSimulationConfig | None = None,
         *,
         use_image_obs: bool,
         peds_have_obstacle_forces: bool,
-        reward_func: Optional[Callable],
+        reward_func: Callable | None,
         debug: bool,
         recording_enabled: bool,
         record_video: bool,
-        video_path: Optional[str],
-        video_fps: Optional[float],
+        video_path: str | None,
+        video_fps: float | None,
     ) -> SingleAgentEnv:
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
@@ -92,7 +97,7 @@ class EnvironmentFactory:
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
         if use_image_obs:
             from robot_sf.gym_env.robot_env_with_image import (  # type: ignore
-                RobotEnvWithImage as EnvCls,  # noqa: F401
+                RobotEnvWithImage as EnvCls,
             )
         else:
             EnvCls = RobotEnv  # type: ignore[assignment]
@@ -107,37 +112,41 @@ class EnvironmentFactory:
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )
+        )  # type: ignore[return-value]
 
     @staticmethod
     def create_pedestrian_env(
-        config: Optional[PedestrianSimulationConfig] = None,
-        *,
         robot_model,
-        reward_func: Optional[Callable],
-        debug: bool,
-        recording_enabled: bool,
-        peds_have_obstacle_forces: bool,
+        config: PedestrianSimulationConfig | None = None,
+        reward_func: Callable[[dict], float] | None = None,
+        debug: bool = False,
+        recording_enabled: bool = False,
+        peds_have_obstacle_forces: bool = False,
     ) -> SingleAgentEnv:
         if config is None:
             config = PedestrianSimulationConfig()
         from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 
+        # Allow None to be passed through from ergonomic factories and
+        # fall back to the canonical internal simple_ped_reward.
+        if reward_func is None:
+            reward_func = simple_ped_reward
+
         return PedestrianEnv(
-            env_config=config,
+            env_config=config,  # type: ignore[arg-type]
             robot_model=robot_model,
             reward_func=reward_func,
             debug=debug,
             recording_enabled=recording_enabled,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )
+        )  # type: ignore[return-value]
 
     @staticmethod
     def create_multi_robot_env(
-        config: Optional[MultiRobotConfig] = None,
+        config: MultiRobotConfig | None = None,
         *,
         num_robots: int,
-        reward_func: Optional[Callable],
+        reward_func: Callable | None,
         debug: bool,
     ) -> MultiAgentEnv:
         if config is None:
@@ -147,11 +156,14 @@ class EnvironmentFactory:
         from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
 
         return MultiRobotEnv(
-            env_config=config, reward_func=reward_func, debug=debug, num_robots=num_robots
-        )
+            env_config=config,
+            reward_func=reward_func,
+            debug=debug,
+            num_robots=num_robots,
+        )  # type: ignore[return-value]
 
 
-def _apply_render(mapped: dict[str, Any], render: Optional[RenderOptions]):
+def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
     if "render_options.max_fps_override" in mapped:
         ro = render or RenderOptions()
         ro.max_fps_override = mapped.pop("render_options.max_fps_override")
@@ -159,7 +171,7 @@ def _apply_render(mapped: dict[str, Any], render: Optional[RenderOptions]):
     return render
 
 
-def _apply_recording(mapped: dict[str, Any], rec: Optional[RecordingOptions]):
+def _apply_recording(mapped: dict[str, Any], rec: RecordingOptions | None):
     keys = ("recording_options.record", "recording_options.video_path")
     if any(k in mapped for k in keys):
         out = rec or RecordingOptions()
@@ -174,10 +186,10 @@ def _apply_recording(mapped: dict[str, Any], rec: Optional[RecordingOptions]):
 def _normalize_factory_inputs(
     *,
     record_video: bool,
-    video_path: Optional[str],
-    video_fps: Optional[float],
-    render_options: Optional[RenderOptions],
-    recording_options: Optional[RecordingOptions],
+    video_path: str | None,
+    video_fps: float | None,
+    render_options: RenderOptions | None,
+    recording_options: RecordingOptions | None,
 ):
     """Normalize convenience flags into structured option objects.
 
@@ -195,7 +207,7 @@ def _normalize_factory_inputs(
         render_options.max_fps_override = int(video_fps)
     if recording_options and record_video and not recording_options.record:
         logger.warning(
-            "record_video=True but RecordingOptions.record is False; enabling recording (boolean convenience precedence)."
+            "record_video=True but RecordingOptions.record is False; enabling recording (boolean convenience precedence).",
         )
         recording_options.record = True
     eff_record = record_video if recording_options is None else recording_options.record
@@ -209,18 +221,18 @@ def _normalize_factory_inputs(
 
 
 def make_robot_env(
-    config: Optional[RobotSimulationConfig] = None,
+    config: RobotSimulationConfig | None = None,
     *,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     peds_have_obstacle_forces: bool = False,
-    reward_func: Optional[Callable] = None,
+    reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
-    video_path: Optional[str] = None,
-    video_fps: Optional[float] = None,
-    render_options: Optional[RenderOptions] = None,
-    recording_options: Optional[RecordingOptions] = None,
+    video_path: str | None = None,
+    video_fps: float | None = None,
+    render_options: RenderOptions | None = None,
+    recording_options: RecordingOptions | None = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a standard robot environment (non-image observations).
@@ -303,23 +315,23 @@ def make_robot_env(
         video_path=eff_video_path,
         video_fps=eff_video_fps,
     )
-    setattr(env, "applied_seed", seed)
+    env.applied_seed = seed
     return env
 
 
 def make_image_robot_env(
-    config: Optional[ImageRobotConfig] = None,
+    config: ImageRobotConfig | None = None,
     *,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     peds_have_obstacle_forces: bool = False,
-    reward_func: Optional[Callable] = None,
+    reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     record_video: bool = False,
-    video_path: Optional[str] = None,
-    video_fps: Optional[float] = None,
-    render_options: Optional[RenderOptions] = None,
-    recording_options: Optional[RecordingOptions] = None,
+    video_path: str | None = None,
+    video_fps: float | None = None,
+    render_options: RenderOptions | None = None,
+    recording_options: RecordingOptions | None = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
@@ -360,24 +372,24 @@ def make_image_robot_env(
         video_path=eff_video_path,
         video_fps=eff_video_fps,
     )
-    setattr(env, "applied_seed", seed)
+    env.applied_seed = seed
     return env
 
 
 def make_pedestrian_env(
-    config: Optional[PedestrianSimulationConfig] = None,
+    config: PedestrianSimulationConfig | None = None,
     *,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     robot_model=None,
-    reward_func: Optional[Callable] = None,
+    reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
     peds_have_obstacle_forces: bool = False,
     record_video: bool = False,
-    video_path: Optional[str] = None,
-    video_fps: Optional[float] = None,
-    render_options: Optional[RenderOptions] = None,
-    recording_options: Optional[RecordingOptions] = None,
+    video_path: str | None = None,
+    video_fps: float | None = None,
+    render_options: RenderOptions | None = None,
+    recording_options: RecordingOptions | None = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a pedestrian (adversarial) environment.
@@ -449,11 +461,11 @@ def make_pedestrian_env(
         recording_enabled=recording_enabled,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
     )
-    setattr(env, "applied_seed", seed)
+    env.applied_seed = seed
     return env
 
 
-def _apply_global_seed(seed: Optional[int]) -> None:
+def _apply_global_seed(seed: int | None) -> None:
     """Apply a deterministic seed to common RNG sources.
 
     Positioned at end of module to keep import block contiguous (PEP8). Seeds Python's
@@ -467,10 +479,11 @@ def _apply_global_seed(seed: Optional[int]) -> None:
 
     _random.seed(seed)
     try:  # NumPy optional
-        import numpy as _np  # type: ignore
+        import numpy as np  # type: ignore
 
-        _np.random.seed(seed)
-    except Exception:  # noqa: BLE001
+        np.random.seed(seed)
+    except (ImportError, ModuleNotFoundError):
+        # NumPy not available; skip seeding it
         pass
     try:  # PyTorch optional
         import torch as _torch  # type: ignore
@@ -479,7 +492,8 @@ def _apply_global_seed(seed: Optional[int]) -> None:
             _torch.manual_seed(seed)
         if hasattr(_torch, "cuda") and hasattr(_torch.cuda, "manual_seed_all"):
             _torch.cuda.manual_seed_all(seed)
-    except Exception:  # noqa: BLE001
+    except (ImportError, ModuleNotFoundError):
+        # Torch not available; skip seeding it
         pass
     _os.environ["PYTHONHASHSEED"] = str(seed)
 
@@ -487,8 +501,8 @@ def _apply_global_seed(seed: Optional[int]) -> None:
 def make_multi_robot_env(
     num_robots: int = 2,
     *,
-    config: Optional[MultiRobotConfig] = None,
-    reward_func: Optional[Callable] = None,
+    config: MultiRobotConfig | None = None,
+    reward_func: Callable | None = None,
     debug: bool = False,
 ) -> MultiAgentEnv:
     """Create a multi-robot environment."""
@@ -503,5 +517,5 @@ def make_multi_robot_env(
 def _make_multi_robot_env_future(*_args, **_kwargs):  # pragma: no cover
     """Future ergonomic multi-robot factory placeholder (T013)."""
     raise NotImplementedError(
-        "Future multi-robot ergonomic factory not yet implemented; see task T013."
+        "Future multi-robot ergonomic factory not yet implemented; see task T013.",
     )

@@ -7,7 +7,7 @@ of schemas from canonical locations with caching to improve performance.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
 
@@ -23,7 +23,7 @@ class SchemaReference:
     """
 
     # Global cache for loaded schemas
-    _schema_cache: Dict[str, EpisodeSchema] = {}
+    _schema_cache: dict[str, EpisodeSchema] = {}
 
     def __init__(self, schema_path: str, version: str):
         """
@@ -43,7 +43,7 @@ class SchemaReference:
 
         self.schema_path = schema_path
         self.version = version
-        self._loaded_schema: Optional[EpisodeSchema] = None
+        self._loaded_schema: EpisodeSchema | None = None
         self._cache_key = f"{schema_path}:{version}"
 
     @classmethod
@@ -80,7 +80,7 @@ class SchemaReference:
             if schema.version != self.version:
                 raise ValueError(
                     f"Schema version mismatch: expected {self.version}, "
-                    f"got {schema.version} in {full_path}"
+                    f"got {schema.version} in {full_path}",
                 )
 
             # Cache the loaded schema
@@ -90,7 +90,7 @@ class SchemaReference:
             return schema
 
         except Exception as e:
-            logger.error("Failed to load schema from %s: %s", full_path, e)
+            logger.exception("Failed to load schema from %s: %s", full_path, e)
             raise
 
     def _resolve_schema_path(self) -> Path:
@@ -114,13 +114,13 @@ class SchemaReference:
         if not full_path.exists():
             raise FileNotFoundError(
                 f"Schema file not found: {full_path} "
-                f"(resolved from package root + '{self.schema_path}')"
+                f"(resolved from package root + '{self.schema_path}')",
             )
 
         return full_path
 
     @property
-    def loaded_schema(self) -> Optional[EpisodeSchema]:
+    def loaded_schema(self) -> EpisodeSchema | None:
         """Get the currently loaded schema, or None if not loaded."""
         return self._loaded_schema
 
@@ -129,7 +129,7 @@ class SchemaReference:
         """Check if the schema has been loaded."""
         return self._loaded_schema is not None
 
-    def validate_episode_data(self, episode_data: Dict[str, Any]) -> None:
+    def validate_episode_data(self, episode_data: dict[str, Any]) -> None:
         """
         Validate episode data against the loaded schema.
 
@@ -145,7 +145,7 @@ class SchemaReference:
 
         self._loaded_schema.validate_episode_data(episode_data)
 
-    def get_schema_property(self, property_name: str) -> Dict[str, Any]:
+    def get_schema_property(self, property_name: str) -> dict[str, Any]:
         """
         Get a property definition from the loaded schema.
 

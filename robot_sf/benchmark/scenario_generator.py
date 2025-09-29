@@ -37,13 +37,13 @@ Notes:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 
 try:  # Optional heavy import delayed until needed
     import pysocialforce as pysf
-except Exception:  # pragma: no cover - allow import failure during docs builds
+except ImportError:  # pragma: no cover - allow import failure during docs builds
     pysf = None  # type: ignore
 
 
@@ -57,12 +57,12 @@ _DENSITY_COUNTS = {"low": 10, "med": 25, "high": 40}
 class GeneratedScenario:
     simulator: Any
     state: np.ndarray
-    obstacles: List[Tuple[float, float, float, float]]
-    groups: List[int]
-    metadata: Dict[str, Any]
+    obstacles: list[tuple[float, float, float, float]]
+    groups: list[int]
+    metadata: dict[str, Any]
 
 
-def _select_counts(params: Dict[str, Any]) -> int:
+def _select_counts(params: dict[str, Any]) -> int:
     density = params.get("density", "med")
     return int(_DENSITY_COUNTS.get(density, _DENSITY_COUNTS["med"]))
 
@@ -75,7 +75,7 @@ def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
     return np.stack([xs, ys], axis=1)
 
 
-def _build_obstacles(kind: str) -> List[Tuple[float, float, float, float]]:
+def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
     if kind == "open":
         return []
     if kind == "bottleneck":
@@ -131,7 +131,7 @@ def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
     return goals
 
 
-def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> List[int]:
+def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[int]:
     if fraction <= 0:
         return [-1] * n
     num_grouped = int(round(n * fraction))
@@ -153,7 +153,7 @@ def _speed_variation(speed_var: str) -> float:
     return 0.2 if speed_var == "low" else 0.5
 
 
-def generate_scenario(params: Dict[str, Any], seed: int) -> GeneratedScenario:
+def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
     """Generate a deterministic scenario.
 
     Parameters
@@ -177,13 +177,10 @@ def generate_scenario(params: Dict[str, Any], seed: int) -> GeneratedScenario:
         state[:, 0:2] = pos
         state[:, 4:6] = goals
         state[:, 6] = 1.0
-        obstacles: List[Tuple[float, float, float, float]] = []
-        groups: List[int] = [-1]
+        obstacles: list[tuple[float, float, float, float]] = []
+        groups: list[int] = [-1]
         metadata = {**params, "n_agents": n, "area": AREA_WIDTH * AREA_HEIGHT, "seed": seed}
-        if pysf is None:
-            simulator = None  # pragma: no cover
-        else:
-            simulator = pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
+        simulator = None if pysf is None else pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
         return GeneratedScenario(
             simulator=simulator,
             state=state,
@@ -237,4 +234,4 @@ def generate_scenario(params: Dict[str, Any], seed: int) -> GeneratedScenario:
     )
 
 
-__all__ = ["generate_scenario", "GeneratedScenario"]
+__all__ = ["GeneratedScenario", "generate_scenario"]

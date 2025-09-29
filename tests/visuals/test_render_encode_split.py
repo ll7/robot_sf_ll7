@@ -54,8 +54,8 @@ def test_performance_manifest_has_render_encode_keys(tmp_path):
     # Types (null allowed)
     rtime = data["first_video_render_time_s"]
     etime = data["first_video_encode_time_s"]
-    assert (rtime is None) or isinstance(rtime, (int, float)), rtime
-    assert (etime is None) or isinstance(etime, (int, float)), etime
+    assert (rtime is None) or isinstance(rtime, int | float), rtime
+    assert (etime is None) or isinstance(etime, int | float), etime
     # If render time present, encode time must also be present and non-null
     if rtime is not None:
         assert etime is not None and etime >= 0, (rtime, etime)

@@ -83,7 +83,7 @@ def test_snqi_weight_recompute_cli_with_normalization(tmp_path: Path):
 
     for field in ["schema_version", "generated_at", "runtime_seconds", "start_time", "end_time"]:
         assert field in meta
-    assert isinstance(meta["runtime_seconds"], (int, float)) and meta["runtime_seconds"] >= 0
+    assert isinstance(meta["runtime_seconds"], int | float) and meta["runtime_seconds"] >= 0
 
     # Normalization comparison block
     norm = data.get("normalization_comparison")

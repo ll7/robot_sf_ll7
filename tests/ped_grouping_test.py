@@ -1,23 +1,21 @@
-from typing import Set
-
 import numpy as np
 
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 
 
-def intersect(s1: Set, s2: Set) -> Set:
+def intersect(s1: set, s2: set) -> set:
     return {e for e in s1 if e in s2}
 
 
-def contains_all(s: Set, comp: Set) -> bool:
+def contains_all(s: set, comp: set) -> bool:
     return len(intersect(s, comp)) >= len(comp)
 
 
-def contains_none(s: Set, comp: Set) -> bool:
+def contains_none(s: set, comp: set) -> bool:
     return len(intersect(s, comp)) == 0
 
 
-def set_except(s1: Set, s2: Set) -> Set:
+def set_except(s1: set, s2: set) -> set:
     return {e for e in s1 if e not in s2}
 
 
@@ -33,7 +31,7 @@ def init_groups():
             [3, 2, 0, 0, 10, 1],
             # standalone pedestrian
             [5, 6, 0, 0, 7, 5],
-        ]
+        ],
     )
     states = PedestrianStates(lambda: pysf_data)
     groups = PedestrianGroupings(states)
@@ -44,14 +42,14 @@ def init_groups():
 
 def test_can_create_group_from_unassigned_pedestrians():
     ped_ids = {0, 1, 2}
-    groups = PedestrianGroupings(None)
+    groups = PedestrianGroupings(None)  # type: ignore
     gid = groups.new_group(ped_ids)
     assert groups.groups[gid] == ped_ids
 
 
 def test_can_create_group_from_assigned_pedestrians():
     ped_ids = {0, 1, 2}
-    groups = PedestrianGroupings(None)
+    groups = PedestrianGroupings(None)  # type: ignore
     old_gid = groups.new_group(ped_ids)
     new_gid = groups.new_group(ped_ids)
     assert groups.groups[old_gid] == set()

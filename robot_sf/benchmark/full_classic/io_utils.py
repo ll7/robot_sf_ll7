@@ -19,11 +19,11 @@ def _ensure_parent(path: Path) -> None:
 
 
 def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
-    if isinstance(obj, (str, int, float, bool)) or obj is None:
+    if isinstance(obj, str | int | float | bool) or obj is None:
         return obj
     if isinstance(obj, dict):
         return {k: _serialize_obj(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple, set)):
+    if isinstance(obj, list | tuple | set):
         return [_serialize_obj(v) for v in obj]
     if hasattr(obj, "__dict__"):
         items = obj.__dict__.items()

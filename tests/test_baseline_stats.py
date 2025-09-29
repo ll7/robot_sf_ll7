@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.baseline_stats import (
     compute_baseline_stats_from_records,
     run_and_compute_baseline,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -34,7 +37,8 @@ def test_compute_baseline_stats_from_records(tmp_path: Path):
             f.write(json.dumps(r) + "\n")
     loaded = read_jsonl(p)
     stats = compute_baseline_stats_from_records(
-        loaded, metrics=("time_to_goal_norm", "collisions", "energy")
+        loaded,
+        metrics=("time_to_goal_norm", "collisions", "energy"),
     )
     assert set(stats.keys()) == {"time_to_goal_norm", "collisions", "energy"}
     assert stats["time_to_goal_norm"]["med"] == 0.6
@@ -53,7 +57,7 @@ ess_min_matrix = [
         "goal_topology": "point",
         "robot_context": "embedded",
         "repeats": 2,
-    }
+    },
 ]
 
 

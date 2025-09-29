@@ -5,12 +5,12 @@ This module provides utilities for detecting breaking changes between schema ver
 determining appropriate version bumps, and comparing schema structures.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from robot_sf.benchmark.schema_version import SchemaVersion
 
 
-def detect_breaking_changes(old_schema: Dict[str, Any], new_schema: Dict[str, Any]) -> List[str]:
+def detect_breaking_changes(old_schema: dict[str, Any], new_schema: dict[str, Any]) -> list[str]:
     """
     Detect breaking changes between two schema versions.
 
@@ -66,8 +66,9 @@ def detect_breaking_changes(old_schema: Dict[str, Any], new_schema: Dict[str, An
 
 
 def _detect_property_type_change(
-    old_prop: Dict[str, Any], new_prop: Dict[str, Any]
-) -> Optional[str]:
+    old_prop: dict[str, Any],
+    new_prop: dict[str, Any],
+) -> str | None:
     """
     Detect if a property type change is breaking.
 
@@ -105,7 +106,7 @@ def _detect_property_type_change(
     return None
 
 
-def _detect_enum_change(old_prop: Dict[str, Any], new_prop: Dict[str, Any]) -> Optional[str]:
+def _detect_enum_change(old_prop: dict[str, Any], new_prop: dict[str, Any]) -> str | None:
     """
     Detect if enum constraints became more restrictive.
 
@@ -127,7 +128,7 @@ def _detect_enum_change(old_prop: Dict[str, Any], new_prop: Dict[str, Any]) -> O
     return None
 
 
-def determine_version_bump(old_schema: Dict[str, Any], new_schema: Dict[str, Any]) -> str:
+def determine_version_bump(old_schema: dict[str, Any], new_schema: dict[str, Any]) -> str:
     """
     Determine what type of version bump is needed based on schema changes.
 
@@ -151,7 +152,7 @@ def determine_version_bump(old_schema: Dict[str, Any], new_schema: Dict[str, Any
     return "patch"
 
 
-def _has_additions(old_schema: Dict[str, Any], new_schema: Dict[str, Any]) -> bool:
+def _has_additions(old_schema: dict[str, Any], new_schema: dict[str, Any]) -> bool:
     """
     Check if the new schema has additions compared to the old schema.
 
@@ -206,7 +207,7 @@ def compare_schema_versions(version1: str, version2: str) -> int:
         return 0
 
 
-def get_latest_version(versions: List[str]) -> str:
+def get_latest_version(versions: list[str]) -> str:
     """
     Get the latest version from a list of version strings.
 

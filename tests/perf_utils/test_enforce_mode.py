@@ -33,7 +33,7 @@ def test_enforce_mode_escalates():
         import time
         def test_sleep_short():
             time.sleep(0.05)
-        """
+        """,
         ),
         encoding="utf-8",
     )
@@ -58,5 +58,5 @@ def test_enforce_mode_escalates():
     finally:
         try:
             test_file.unlink(missing_ok=True)  # type: ignore[arg-type]
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass

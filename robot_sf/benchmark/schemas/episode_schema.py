@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import jsonschema
 
@@ -38,8 +38,8 @@ class EpisodeSchema:
             ValueError: If schema is not a valid JSON Schema
         """
         self.schema_path = schema_path
-        self._schema_data: Optional[Dict[str, Any]] = None
-        self._version: Optional[str] = None
+        self._schema_data: dict[str, Any] | None = None
+        self._version: str | None = None
 
         # Load and validate schema on initialization
         self._load_schema()
@@ -50,7 +50,7 @@ class EpisodeSchema:
             raise FileNotFoundError(f"Schema file not found: {self.schema_path}")
 
         try:
-            with open(self.schema_path, "r", encoding="utf-8") as f:
+            with open(self.schema_path, encoding="utf-8") as f:
                 self._schema_data = json.load(f)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in schema file {self.schema_path}: {e}")
@@ -103,7 +103,7 @@ class EpisodeSchema:
                 self._version = "unknown"
 
     @property
-    def schema_data(self) -> Dict[str, Any]:
+    def schema_data(self) -> dict[str, Any]:
         """Get the raw schema data."""
         if self._schema_data is None:
             raise RuntimeError("Schema not loaded")
@@ -127,11 +127,11 @@ class EpisodeSchema:
         return self._schema_data["$id"]
 
     @property
-    def required_properties(self) -> List[str]:
+    def required_properties(self) -> list[str]:
         """Get the list of required properties."""
         return self._schema_data["required"]
 
-    def get_property_schema(self, property_name: str) -> Dict[str, Any]:
+    def get_property_schema(self, property_name: str) -> dict[str, Any]:
         """
         Get the schema definition for a specific property.
 
@@ -149,7 +149,7 @@ class EpisodeSchema:
             raise KeyError(f"Property '{property_name}' not defined in schema")
         return properties[property_name]
 
-    def validate_episode_data(self, episode_data: Dict[str, Any]) -> None:
+    def validate_episode_data(self, episode_data: dict[str, Any]) -> None:
         """
         Validate episode data against this schema.
 

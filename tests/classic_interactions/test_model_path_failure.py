@@ -26,7 +26,7 @@ def _demo_module():
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
-def test_model_path_missing_provides_actionable_message():  # noqa: D401
+def test_model_path_missing_provides_actionable_message():
     mod = _demo_module()
     # Patch constants: ensure DRY_RUN disabled and model path points to definitely-missing file.
     original_dry = getattr(mod, "DRY_RUN", None)
@@ -34,7 +34,7 @@ def test_model_path_missing_provides_actionable_message():  # noqa: D401
     mod.DRY_RUN = False  # type: ignore
     # Use a deeply nested, improbable path to avoid accidental existence from fixtures or prior artifacts.
     missing_path = Path(
-        "model/__definitely_missing_do_not_create__/__this_model_file_does_not_exist__.zip"
+        "model/__definitely_missing_do_not_create__/__this_model_file_does_not_exist__.zip",
     )
     assert not missing_path.exists(), (
         "Test invariant violated: missing model path unexpectedly exists (choose a different sentinel)."

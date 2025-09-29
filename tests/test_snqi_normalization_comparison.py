@@ -29,7 +29,7 @@ def _episodes():
                     "force_exceed_events": float(rng.integers(0, 6)),
                     "jerk_mean": float(rng.uniform(0.0, 1.2)),
                 },
-            }
+            },
         )
     return episodes
 
@@ -55,7 +55,7 @@ def test_normalization_comparison_correlations_range():
 
     assert "median_p95" in comparison, "Base normalization strategy missing"
     # Should have at least one alternate strategy
-    assert any(k != "median_p95" for k in comparison.keys())
+    assert any(k != "median_p95" for k in comparison)
 
     for name, data in comparison.items():
         assert "correlation_with_base" in data

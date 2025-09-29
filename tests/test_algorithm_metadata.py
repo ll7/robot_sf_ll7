@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.runner import run_batch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -20,7 +23,7 @@ def test_algorithm_metadata_present(tmp_path: Path):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
     out_jsonl = tmp_path / "episodes.jsonl"
     summary = run_batch(

@@ -25,8 +25,9 @@ If validation fails a ValueError is raised with a concise explanation.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 EXPECTED_SCHEMA_VERSION = 1
 
@@ -44,7 +45,7 @@ def _expect_keys(d: Mapping[str, Any], specs: Iterable[_FieldSpec], ctx: str) ->
 
 
 def _is_number(x: Any) -> bool:
-    return isinstance(x, (int, float)) and not isinstance(x, bool)
+    return isinstance(x, int | float) and not isinstance(x, bool)
 
 
 def assert_all_finite(obj: Any, path: str = "$") -> None:
@@ -61,7 +62,7 @@ def assert_all_finite(obj: Any, path: str = "$") -> None:
     if isinstance(obj, Mapping):
         for k, v in obj.items():
             assert_all_finite(v, f"{path}.{k}")
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list | tuple):
         for i, v in enumerate(obj):
             assert_all_finite(v, f"{path}[{i}]")
 
@@ -81,14 +82,14 @@ def _validate_metadata(meta: Mapping[str, Any]) -> None:
     version = meta.get("schema_version")
     if version != EXPECTED_SCHEMA_VERSION:
         raise ValueError(
-            f"Unsupported schema_version {version}; expected {EXPECTED_SCHEMA_VERSION}"
+            f"Unsupported schema_version {version}; expected {EXPECTED_SCHEMA_VERSION}",
         )
     if not isinstance(meta.get("provenance"), Mapping):  # minimal structural check
         raise ValueError("_metadata.provenance must be a mapping")
 
 
 def _validate_optimization(obj: Mapping[str, Any]) -> None:
-    # Required top‑level keys (besides _metadata)
+    # Required top-level keys (besides _metadata)
     required = ["recommended"]
     for key in required:
         if key not in obj:
@@ -152,4 +153,4 @@ def validate_snqi(obj: Mapping[str, Any], kind: str, *, check_finite: bool = Tru
         assert_all_finite(obj)
 
 
-__all__ = ["validate_snqi", "assert_all_finite", "EXPECTED_SCHEMA_VERSION"]
+__all__ = ["EXPECTED_SCHEMA_VERSION", "assert_all_finite", "validate_snqi"]

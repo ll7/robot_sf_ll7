@@ -28,7 +28,7 @@ def test_snqi_drift_minimal(tmp_path):
             "--seed",
             "123",
             "--validate",
-        ]
+        ],
     )
     code = run(args)
     assert code == 0

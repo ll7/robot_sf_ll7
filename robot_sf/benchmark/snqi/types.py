@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -22,9 +22,9 @@ class SNQIWeights:
     baseline_stats_path: str
     baseline_stats_hash: str
     normalization_strategy: str
-    bootstrap_params: Dict[str, Any] = field(default_factory=dict)
+    bootstrap_params: dict[str, Any] = field(default_factory=dict)
     components: list[str] = field(default_factory=list)
-    weights: Dict[str, float] = field(default_factory=dict)
+    weights: dict[str, float] = field(default_factory=dict)
 
     def get_weight(self, component: str, default: float = 0.0) -> float:
         """Get weight for a component with default."""
@@ -34,7 +34,7 @@ class SNQIWeights:
         """Check if component has a weight defined."""
         return component in self.weights
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dict for serialization."""
         return {
             "weights_version": self.weights_version,
@@ -49,7 +49,7 @@ class SNQIWeights:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> SNQIWeights:
+    def from_dict(cls, data: dict[str, Any]) -> SNQIWeights:
         """Create from dict (e.g., loaded from JSON)."""
         return cls(
             weights_version=data["weights_version"],

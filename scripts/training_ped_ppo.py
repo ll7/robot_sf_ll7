@@ -30,7 +30,8 @@ def training(svg_map_path: str):
         env_config = PedEnvSettings(
             map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
             sim_config=SimulationSettings(
-                difficulty=difficulty, ped_density_by_difficulty=ped_densities
+                difficulty=difficulty,
+                ped_density_by_difficulty=ped_densities,
             ),
             robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
         )
@@ -38,9 +39,12 @@ def training(svg_map_path: str):
 
     env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
-    policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
+    policy_kwargs = {"features_extractor_class": DynamicsExtractor}
     model = PPO(
-        "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+        "MultiInputPolicy",
+        env,
+        tensorboard_log="./logs/ppo_logs/",
+        policy_kwargs=policy_kwargs,
     )
     save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")
     collect_metrics_callback = AdversialPedestrianMetricsCallback(n_envs)

@@ -2,7 +2,7 @@
 Extended robot environment with image-based observation space support.
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from robot_sf.gym_env.env_config import RobotEnvSettings
 from robot_sf.gym_env.env_util import (
@@ -29,8 +29,8 @@ class RobotEnvWithImage(RobotEnv):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: Optional[str] = None,
-        video_fps: Optional[float] = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
     ):
         """
@@ -65,12 +65,16 @@ class RobotEnvWithImage(RobotEnv):
 
         # Override spaces initialization to include image observations
         self.action_space, self.observation_space, orig_obs_space = create_spaces_with_image(
-            env_config, self.map_def
+            env_config,
+            self.map_def,
         )
 
         # Override sensor initialization to include image sensors
         occupancies, sensors = init_collision_and_sensors_with_image(
-            self.simulator, env_config, orig_obs_space, sim_view=getattr(self, "sim_ui", None)
+            self.simulator,
+            env_config,
+            orig_obs_space,
+            sim_view=getattr(self, "sim_ui", None),
         )
 
         # Setup initial state of the robot with the new sensor fusion

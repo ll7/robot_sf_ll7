@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Tuple
 
 from robot_sf.util.types import Vec2D, Zone
 
@@ -43,6 +42,6 @@ class SvgRectangle:
 class SvgPath:
     """Represents a path in an SVG file (sequence of 2D waypoints)."""
 
-    coordinates: Tuple[Vec2D, ...]
+    coordinates: tuple[Vec2D, ...]
     label: str
     id: str

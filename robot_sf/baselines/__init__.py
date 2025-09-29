@@ -1,10 +1,4 @@
-"""Baseline algorithms for the Social Navigation Benchmark.
-
-This module provides baseline implementations of navigation algorithms
-that can be used for comparison in the benchmark system.
-"""
-
-from typing import Dict, Type
+"""Baseline navigation algorithms for benchmarking."""
 
 
 def _get_social_force_planner():
@@ -29,7 +23,7 @@ def _get_random_planner():
 
 
 # Registry of available baseline algorithms
-BASELINES: Dict[str, Type] = {
+BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
     "baseline_sf": _get_social_force_planner,  # Backward compatibility
     "ppo": _get_ppo_planner,
@@ -37,7 +31,7 @@ BASELINES: Dict[str, Type] = {
 }
 
 
-def get_baseline(name: str) -> Type:
+def get_baseline(name: str) -> type:
     """Get a baseline algorithm class by name.
 
     Args:

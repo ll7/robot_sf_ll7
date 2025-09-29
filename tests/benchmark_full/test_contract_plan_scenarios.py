@@ -24,7 +24,7 @@ def test_plan_scenarios_seed_count(config_factory):  # uses test double Benchmar
             "map_path": "maps/svg_maps/simple_crossing.svg",
             "params": {},
             "max_episode_steps": 200,
-        }
+        },
     ]
     rng = random.Random(cfg.master_seed)
     scenarios = plan_scenarios(raw, cfg, rng=rng)

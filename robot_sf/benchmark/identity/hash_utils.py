@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 def canonical_dumps(obj: Any) -> str:
@@ -36,7 +39,9 @@ def stable_hash(obj: Any, *, algo: str = "sha256") -> str:
 
 
 def episode_identity_components(
-    scenario_params: Mapping[str, Any], seed: int, extra: Mapping[str, Any] | None = None
+    scenario_params: Mapping[str, Any],
+    seed: int,
+    extra: Mapping[str, Any] | None = None,
 ) -> dict:
     """Collect canonical identity components for an episode.
 
@@ -71,7 +76,7 @@ def make_episode_id(scenario_params: Mapping[str, Any], seed: int, prefix: str =
 
 __all__ = [
     "canonical_dumps",
-    "stable_hash",
     "episode_identity_components",
     "make_episode_id",
+    "stable_hash",
 ]

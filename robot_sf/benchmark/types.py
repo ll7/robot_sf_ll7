@@ -12,8 +12,14 @@ Serialization: writing to JSONL will typically convert instances to
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 @dataclass(slots=True)
@@ -32,9 +38,9 @@ class ScenarioSpec:
     seed: int
     notes: str | None = None
     algo_config_path: str | None = None
-    meta: Dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:  # stable conversion
+    def to_dict(self) -> dict[str, Any]:  # stable conversion
         return asdict(self)
 
 
@@ -46,12 +52,12 @@ class MetricsBundle:
     validation or access helpers (e.g., enforcing presence of required keys).
     """
 
-    values: Dict[str, float]
+    values: dict[str, float]
 
     def get(self, name: str, default: float | None = None) -> float | None:
         return self.values.get(name, default)
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         return dict(self.values)
 
 
@@ -70,12 +76,12 @@ class EpisodeRecord:
     metrics: MetricsBundle
     algo: str | None = None
     horizon: int | None = None
-    timing: Dict[str, float] | None = None
-    tags: List[str] | None = None
-    identity: Dict[str, Any] | None = None
-    raw: Dict[str, Any] | None = None
+    timing: dict[str, float] | None = None
+    tags: list[str] | None = None
+    identity: dict[str, Any] | None = None
+    raw: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         # flatten metrics bundle for JSON writing
         d["metrics"] = self.metrics.to_dict()
@@ -88,9 +94,9 @@ class SNQIWeights:
 
     version: str
     weights: Mapping[str, float]
-    meta: Dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"version": self.version, "weights": dict(self.weights), "meta": self.meta or {}}
 
 
@@ -99,16 +105,16 @@ class ResumeManifest:
     """Resume manifest describing completed episode ids (Phase 3.6/3.3 link)."""
 
     version: str
-    episodes: List[str]
-    meta: Dict[str, Any] | None = None
+    episodes: list[str]
+    meta: dict[str, Any] | None = None
     generated_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-        .astimezone(timezone.utc)
+        default_factory=lambda: datetime.now(UTC)
+        .astimezone(UTC)
         .replace(microsecond=0)
-        .isoformat()
+        .isoformat(),
     )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "episodes": list(self.episodes),
@@ -118,9 +124,9 @@ class ResumeManifest:
 
 
 __all__ = [
-    "ScenarioSpec",
     "EpisodeRecord",
     "MetricsBundle",
-    "SNQIWeights",
     "ResumeManifest",
+    "SNQIWeights",
+    "ScenarioSpec",
 ]

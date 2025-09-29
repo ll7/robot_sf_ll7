@@ -32,7 +32,7 @@ def test_wilson_zero_collision_upper_bound_nonzero():
                 "archetype": "crossing",
                 "density": "low",
                 "metrics": {"collision_rate": 0.0, "success_rate": 1.0},
-            }
+            },
         )
     groups = aggregate_metrics(records, _Cfg())
     assert groups, "Expected a single aggregate group"

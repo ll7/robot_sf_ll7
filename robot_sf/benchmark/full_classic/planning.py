@@ -9,7 +9,6 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
 
 import yaml  # type: ignore
 
@@ -20,7 +19,7 @@ def _parse_yaml_file(p: Path) -> dict:
     try:
         with p.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise ValueError(f"Failed to parse YAML: {exc}") from exc
 
 
@@ -58,8 +57,8 @@ class ScenarioDescriptor:  # duplicated light form; real version will live centr
     archetype: str
     density: str
     map_path: str
-    params: Dict[str, object]
-    planned_seeds: List[int]
+    params: dict[str, object]
+    planned_seeds: list[int]
     max_episode_steps: int
     hash_fragment: str
 
@@ -147,7 +146,8 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
     seen_ids: set[str] = set()
     for index, sc in enumerate(raw):
         name, archetype, density, max_steps, map_file, params_source = _normalise_raw_scenario(
-            index, sc
+            index,
+            sc,
         )
 
         # Map path validation (relative resolution)
@@ -158,12 +158,11 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
         # For early contract tests we allow non-existent map files (synthetic inputs)
         # Full integration later will validate via environment factory. Only raise if
         # parent 'svg_maps' directory exists (indicating mis-typed filename) but file missing.
-        if not map_path.exists():
-            if (
-                map_path.parent.name == "svg_maps" and map_path.parent.exists()
-            ):  # likely real file expected
-                raise ValueError(f"Map file not found for scenario '{name}': {map_path}")
-        # Seed planning – deterministic unique seeds per scenario
+        if not map_path.exists() and (
+            map_path.parent.name == "svg_maps" and map_path.parent.exists()
+        ):  # likely real file expected
+            raise ValueError(f"Map file not found for scenario '{name}': {map_path}")
+        # Seed planning - deterministic unique seeds per scenario
         planned_seeds = _plan_unique_seeds(rng, int(cfg.initial_episodes))
 
         # Hash fragment: stable SHA1 over JSON canonical representation of key fields
@@ -197,7 +196,7 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
                 planned_seeds=planned_seeds,
                 max_episode_steps=max_steps,
                 hash_fragment=hash_fragment,
-            )
+            ),
         )
 
     return scenarios
@@ -228,6 +227,6 @@ def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg) -> list[Episod
                     archetype=sc.archetype,
                     density=sc.density,
                     horizon=horizon,
-                )
+                ),
             )
     return jobs

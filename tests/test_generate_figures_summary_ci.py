@@ -10,7 +10,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_generate_table_from_summary_with_ci(tmp_path: Path):

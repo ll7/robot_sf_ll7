@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Set
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -24,6 +24,9 @@ from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
 from .precision import evaluate_precision
 from .replay import ReplayCapture  # T021 optional replay capture
 from .visuals import generate_visual_artifacts  # new visual artifact integration
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 # Import new visualization functions for real plots/videos from episode data
 try:
@@ -44,7 +47,7 @@ except ImportError:
 
 
 @dataclass
-class BenchmarkManifest:  # noqa: D401 - simple container for benchmark run metadata
+class BenchmarkManifest:
     output_root: Path
     git_hash: str
     scenario_matrix_hash: str
@@ -78,8 +81,12 @@ def _compute_git_hash(root: Path) -> str:
                     git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
             else:
                 git_hash = content[:12]
-    except Exception:  # noqa: BLE001
-        pass
+    except OSError as exc:
+        # Filesystem access errors -> return unknown but log for diagnostics
+        logger.debug("_compute_git_hash fs access error: %s", exc)
+    except (RuntimeError, TypeError):  # pragma: no cover - defensive
+        # Unexpected but plausible runtime/type errors -> log at debug and continue
+        logger.debug("_compute_git_hash unexpected error")
     return git_hash
 
 
@@ -95,7 +102,10 @@ def _prepare_output_dirs(cfg):
 
 
 def _init_manifest(
-    root: Path, episodes_path: Path, cfg, scenario_matrix_hash: str
+    root: Path,
+    episodes_path: Path,
+    cfg,
+    scenario_matrix_hash: str,
 ) -> BenchmarkManifest:
     return BenchmarkManifest(
         output_root=root,
@@ -132,7 +142,8 @@ def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
     _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
     _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
     _write_json(
-        root / "reports" / "statistical_sufficiency.json", _serialize_precision(precision_report)
+        root / "reports" / "statistical_sufficiency.json",
+        _serialize_precision(precision_report),
     )
 
 
@@ -146,8 +157,8 @@ def _episode_id_from_job(job) -> str:
     return f"{job.scenario_id}-{job.seed}"
 
 
-def _scan_existing_episode_ids(path: Path) -> Set[str]:
-    ids: Set[str] = set()
+def _scan_existing_episode_ids(path: Path) -> set[str]:
+    ids: set[str] = set()
     if not path.exists():
         return ids
     try:
@@ -170,7 +181,7 @@ def _scan_existing_episode_ids(path: Path) -> Set[str]:
     return ids
 
 
-def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execution
+def _make_episode_record(job, cfg) -> dict[str, Any]:  # minimal synthetic execution
     """Produce a placeholder EpisodeRecord structure matching contract fixtures.
 
     Real implementation (post T026) will execute simulation & compute metrics. For now
@@ -179,7 +190,7 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
     """
     episode_id = _episode_id_from_job(job)
     now = time.time()
-    record: Dict[str, Any] = {
+    record: dict[str, Any] = {
         "episode_id": episode_id,
         "scenario_id": job.scenario_id,
         "seed": job.seed,
@@ -235,8 +246,8 @@ def _make_episode_record(job, cfg) -> Dict[str, Any]:  # minimal synthetic execu
     return record
 
 
-def _partition_jobs(existing_ids: Set[str], job_iter: Iterable[object]) -> tuple[List[object], int]:
-    run_list: List[object] = []
+def _partition_jobs(existing_ids: set[str], job_iter: Iterable[object]) -> tuple[list[object], int]:
+    run_list: list[object] = []
     skip_count = 0
     for jb in job_iter:
         if _episode_id_from_job(jb) in existing_ids:
@@ -247,7 +258,11 @@ def _partition_jobs(existing_ids: Set[str], job_iter: Iterable[object]) -> tuple
 
 
 def _execute_seq(
-    job_list: List[object], existing_ids: Set[str], episodes_path: Path, cfg, manifest
+    job_list: list[object],
+    existing_ids: set[str],
+    episodes_path: Path,
+    cfg,
+    manifest,
 ) -> Iterator[dict]:
     for jb in job_list:
         start = time.time()
@@ -262,7 +277,7 @@ def _execute_seq(
 
 
 def _worker_job_wrapper(job, algo):  # top-level for pickling on spawn
-    class _TempCfg:  # noqa: D401
+    class _TempCfg:
         def __init__(self, a):
             self.algo = a
 
@@ -273,11 +288,16 @@ def _worker_job_wrapper(job, algo):  # top-level for pickling on spawn
 
 
 def _execute_parallel(
-    job_list: List[object], existing_ids: Set[str], episodes_path: Path, cfg, manifest, workers: int
+    job_list: list[object],
+    existing_ids: set[str],
+    episodes_path: Path,
+    cfg,
+    manifest,
+    workers: int,
 ) -> Iterator[dict]:
     logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
     algo = getattr(cfg, "algo", "unknown")
-    results_map: Dict[str, dict] = {}
+    results_map: dict[str, dict] = {}
     with ProcessPoolExecutor(max_workers=workers) as ex:
         future_map = {ex.submit(_worker_job_wrapper, j, algo): j for j in job_list}
         for fut in as_completed(future_map):
@@ -303,7 +323,7 @@ def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  
       - Parent process performs file appends (avoids concurrent writes).
       - Update manifest counters: executed_jobs, skipped_jobs.
     """
-    episodes_path = Path(getattr(manifest, "episodes_path"))
+    episodes_path = Path(manifest.episodes_path)
     existing_ids = _scan_existing_episode_ids(episodes_path)
     logger.debug("Found {} existing episode records (resume)", len(existing_ids))
     to_run, skipped = _partition_jobs(existing_ids, list(jobs))
@@ -329,16 +349,16 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     needed (placeholder logic) to avoid blocking on full seeding strategy.
     """
     # Touch manifest to avoid unused param lint (future: record iteration stats)
-    _ = manifest  # noqa: F841
+    _ = manifest
     # Gather counts
-    per_scenario: Dict[str, int] = {}
+    per_scenario: dict[str, int] = {}
     for r in current_records:
         sid = r.get("scenario_id")
         if sid is not None:
             per_scenario[sid] = per_scenario.get(sid, 0) + 1
 
     # Identify scenarios needing more episodes
-    needs: List[object] = []
+    needs: list[object] = []
     max_eps = int(getattr(cfg, "max_episodes", 0) or 0)
     batch_size = int(getattr(cfg, "batch_size", 1) or 1)
     for sc in scenarios:
@@ -356,7 +376,7 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     to_create = min(batch_size, remaining)
 
     # Derive seeds: reuse planned_seeds then extend with increasing integers
-    seeds: List[int] = list(getattr(target_sc, "planned_seeds", []))
+    seeds: list[int] = list(getattr(target_sc, "planned_seeds", []))
     # Ensure enough seeds
     while len(seeds) < existing + to_create:
         seeds.append(len(seeds))  # deterministic extension
@@ -420,7 +440,9 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
         scaling = _update_scaling_efficiency(manifest, cfg)
         try:  # attach for downstream JSON serialization if model allows attribute
             precision_report.scaling_efficiency = scaling  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
+        except (AttributeError, TypeError):
+            # precision_report may be a plain dict or a lightweight namespace; ignore
+            # absence of attribute or wrong type but do not swallow unrelated errors.
             pass
         _write_iteration_artifacts(root, groups, effects, precision_report)
 
@@ -434,7 +456,10 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
 
         # Additional sampling
         done_flag, new_jobs = adaptive_sampling_iteration(
-            all_records, cfg, scenarios_list, manifest
+            all_records,
+            cfg,
+            scenarios_list,
+            manifest,
         )
         if not new_jobs:
             if done_flag:
@@ -459,7 +484,9 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
         generate_visual_artifacts(root, cfg, groups, all_records)
 
         # Also generate real visualizations using new visualization module
-        if _VISUALIZATION_AVAILABLE:
+        # Skip generating heavy real visualizations when running in smoke mode
+        # (smoke mode intentionally keeps runtime small for tests).
+        if _VISUALIZATION_AVAILABLE and not getattr(cfg, "smoke", False):
             logger.info("Generating additional real visualizations from episode data")
             try:
                 plots_dir = root / "plots"
@@ -501,7 +528,7 @@ def _write_json(path: Path, obj):  # helper
         with tmp.open("w", encoding="utf-8") as f:
             json.dump(obj, f, indent=2, sort_keys=True)
         tmp.replace(path)
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, TypeError) as exc:
         logger.warning("Failed writing JSON artifact {}: {}", path, exc)
 
 
@@ -523,7 +550,7 @@ def _serialize_groups(groups):
                     }
                     for k, m in g.metrics.items()
                 },
-            }
+            },
         )
     return out
 
@@ -544,7 +571,7 @@ def _serialize_effects(effects):
                     }
                     for c in rep.comparisons
                 ],
-            }
+            },
         )
     return out
 

@@ -12,7 +12,8 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("moviepy") is None, reason="moviepy/ffmpeg not available"
+    importlib.util.find_spec("moviepy") is None,
+    reason="moviepy/ffmpeg not available",
 )
 def test_cli_run_with_synthetic_video(tmp_path: Path, capsys):
     # Minimal scenario matrix YAML (single episode)
@@ -28,7 +29,7 @@ def test_cli_run_with_synthetic_video(tmp_path: Path, capsys):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -54,7 +55,7 @@ def test_cli_run_with_synthetic_video(tmp_path: Path, capsys):
             "0.1",
             "--video-renderer",
             "synthetic",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc == 0, f"CLI run failed: {cap.err}"

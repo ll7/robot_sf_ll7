@@ -19,7 +19,6 @@ The `pedestrian_factory` method creates a pedestrian instance based on the confi
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import (
@@ -43,7 +42,7 @@ class BaseEnvSettings:
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
-    render_scaling: Optional[int] = None
+    render_scaling: int | None = None
 
     def __post_init__(self):
         """
@@ -59,8 +58,8 @@ class RobotEnvSettings(BaseEnvSettings):
     """Robot-specific environment settings."""
 
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
-    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
-        default_factory=DifferentialDriveSettings
+    robot_config: DifferentialDriveSettings | BicycleDriveSettings = field(
+        default_factory=DifferentialDriveSettings,
     )
     # Image observation settings
     image_config: ImageSensorSettings = field(default_factory=ImageSensorSettings)
@@ -79,7 +78,7 @@ class RobotEnvSettings(BaseEnvSettings):
         ):
             raise ValueError("Please make sure all properties are initialized!")
 
-    def robot_factory(self) -> Union[DifferentialDriveRobot, BicycleDriveRobot]:
+    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """
         Factory method to create a robot instance based on the type of robot
         configuration provided.
@@ -102,8 +101,8 @@ class EnvSettings:
 
     sim_config: SimulationSettings = field(default_factory=SimulationSettings)
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
-    robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings] = field(
-        default_factory=DifferentialDriveSettings
+    robot_config: DifferentialDriveSettings | BicycleDriveSettings = field(
+        default_factory=DifferentialDriveSettings,
     )
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
 
@@ -120,7 +119,7 @@ class EnvSettings:
         ):
             raise ValueError("Please make sure all properties are initialized!")
 
-    def robot_factory(self) -> Union[DifferentialDriveRobot, BicycleDriveRobot]:
+    def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """
         Factory method to create a robot instance based on the type of robot
         configuration provided.
@@ -187,15 +186,15 @@ try:
     # These can be used as drop-in replacements for gradual migration
     __all__ = [
         "BaseEnvSettings",
-        "RobotEnvSettings",
-        "EnvSettings",
-        "PedEnvSettings",
         # New unified config classes for forward compatibility
         "BaseSimulationConfig",
+        "EnvSettings",
         "EnvSettingsNew",
-        "RobotEnvSettingsNew",
+        "PedEnvSettings",
         "PedEnvSettingsNew",
+        "RobotEnvSettings",
+        "RobotEnvSettingsNew",
     ]
 except ImportError:
     # If unified_config is not available, just export the original classes
-    __all__ = ["BaseEnvSettings", "RobotEnvSettings", "EnvSettings", "PedEnvSettings"]
+    __all__ = ["BaseEnvSettings", "EnvSettings", "PedEnvSettings", "RobotEnvSettings"]

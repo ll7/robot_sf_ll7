@@ -11,7 +11,7 @@ def test_single_robot_env_reward_fallback():
     env = make_robot_env(reward_func=None)
     # Internally we should have substituted a callable reward (simple_reward)
     # Access concrete attribute (RobotEnv defines reward_func)
-    assert hasattr(env, "reward_func") and callable(getattr(env, "reward_func"))
+    assert hasattr(env, "reward_func") and callable(env.reward_func)
     env.reset()
     action = env.action_space.sample()
     _obs, _rew, _term, _trunc, _info = env.step(action)

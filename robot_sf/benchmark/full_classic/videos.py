@@ -18,18 +18,19 @@ import random
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING
 
-import numpy as np  # type: ignore
+if TYPE_CHECKING:
+    import numpy as np
 
 try:  # Optional dependencies
     import matplotlib.pyplot as plt  # type: ignore
-except Exception:  # noqa: BLE001
+except ImportError:
     plt = None  # type: ignore
 
 try:  # moviepy for encoding
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-except Exception:  # noqa: BLE001
+except ImportError:
     ImageSequenceClip = None  # type: ignore
 
 
@@ -56,7 +57,7 @@ class _VideoArtifact:
         return self.filename or ""
 
 
-def _canvas_to_rgb_simple(fig) -> "np.ndarray":  # type: ignore[name-defined]
+def _canvas_to_rgb_simple(fig) -> np.ndarray:  # type: ignore[name-defined]
     """Return RGB array from figure using the simplest, backend-agnostic path.
 
     We intentionally avoid complex HiDPI / ARGB logic here; on macOS the default
@@ -89,7 +90,7 @@ def _canvas_to_rgb_simple(fig) -> "np.ndarray":  # type: ignore[name-defined]
     return png_arr
 
 
-def _render_episode_frames(seed: int, N: int) -> tuple[list, List[float], List[float]]:
+def _render_episode_frames(seed: int, N: int) -> tuple[list, list[float], list[float]]:
     """Generate synthetic (x,y) path coordinates for episode rendering."""
     xs = [math.cos((seed + i) * 0.15) for i in range(N)]
     ys = [math.sin((seed + i) * 0.15) for i in range(N)]
@@ -170,7 +171,7 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
         # (Tests can assert presence of skip note separately later if needed.)
         pass
 
-    artifacts: List[_VideoArtifact] = []
+    artifacts: list[_VideoArtifact] = []
     for rec in selected:
         episode_id = rec.get("episode_id", "unknown")
         scenario_id = rec.get("scenario_id", "unknown")
@@ -219,7 +220,7 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
                     memory_peak_mb=0.0,
                 )
             )
-        except Exception as e:  # noqa: BLE001
+        except (RuntimeError, OSError, ValueError) as e:
             artifacts.append(
                 _VideoArtifact(
                     artifact_id=f"video_{episode_id}",
@@ -228,7 +229,7 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
                     filename=str(mp4_path),
                     renderer="synthetic",
                     status="error",
-                    note=f"render failed: {e.__class__.__name__}",
+                    note=f"render failed: {e.__class__.__name__}: {e}",
                     encode_time_s=None,
                     memory_peak_mb=None,
                 )
@@ -236,10 +237,10 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
     return artifacts
 
 
-def artifacts_to_manifest(artifacts: List[_VideoArtifact]):
+def artifacts_to_manifest(artifacts: list[_VideoArtifact]):
     """Convert internal artifacts list to manifest dict for JSON dumping."""
     return {
         "artifacts": [
             {k: v for k, v in asdict(a).items() if k not in {"artifact_id"}} for a in artifacts
-        ]
+        ],
     }

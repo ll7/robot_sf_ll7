@@ -35,14 +35,14 @@ import contextlib
 import os
 import time
 from pathlib import Path
-from typing import Any, Iterable, List, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import numpy as np  # type: ignore
 from loguru import logger
 
 try:
     from stable_baselines3 import PPO  # type: ignore
-except Exception as exc:  # noqa: BLE001
+except Exception as exc:
     PPO = None  # type: ignore
     _PPO_IMPORT_ERROR = exc
 else:
@@ -61,6 +61,9 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 # ---------------------------------------------------------------------------
 # CONFIG CONSTANTS (edit these to adjust behavior)
@@ -111,7 +114,7 @@ else:
 def _validate_constants() -> None:  # (FR-019)
     if not SCENARIO_MATRIX_PATH.exists():
         raise FileNotFoundError(
-            f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant."
+            f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant.",
         )
     # MODEL_PATH validated lazily (allows dry_run to pass even if missing when not executing episodes)
     if ENABLE_RECORDING and not OUTPUT_DIR.exists():
@@ -133,19 +136,21 @@ def _load_policy(path: str):  # (FR-004, FR-007 guidance)
     cache_map = getattr(_load_policy, "_cache_map", None)
     if cache_map is None:
         cache_map = {}
-        setattr(_load_policy, "_cache_map", cache_map)
+    # Suppress static attribute resolution by casting the function to Any and
+    # store cache on the function __dict__ to avoid protected-member access lint.
+    cast(Any, _load_policy).__dict__["_cache_map"] = cache_map
     if abs_path in cache_map:
         return cache_map[abs_path]
     if PPO is None:
         raise RuntimeError(
-            "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this demo."
+            "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this demo.",
         )
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(
             f"Model file not found: {path}\n"  # explicit newline
             "Download or place the pre-trained PPO model at this path. "
-            "See docs/dev/issues/classic-interactions-ppo/ for guidance."
+            "See docs/dev/issues/classic-interactions-ppo/ for guidance.",
         )
     model = PPO.load(path)
     cache_map[abs_path] = model
@@ -181,7 +186,11 @@ def _placeholder_frame_shape(env) -> tuple[int, int, int]:
 
 
 def _maybe_record(
-    frames: list[Any], scenario_name: str, seed: int, episode_index: int, out_dir: Path
+    frames: list[Any],
+    scenario_name: str,
+    seed: int,
+    episode_index: int,
+    out_dir: Path,
 ) -> bool:
     if not frames:
         return False
@@ -194,7 +203,7 @@ def _maybe_record(
         # Some moviepy versions differ in signature; use minimal args
         clip.write_videofile(str(out_dir / video_name), codec="libx264", fps=10)
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(f"[recording skipped] error: {exc}")
         return False
 
@@ -207,12 +216,12 @@ def run_episode(
     scenario_name: str,
     seed: int,
     episode_index: int,
-) -> EpisodeSummary:  # noqa: D401
+) -> EpisodeSummary:
     obs, _ = env.reset(seed=seed)
     done = False
     step = 0
     last_info: dict[str, Any] = {}
-    frames: list[Any] = [] if (record and MOVIEPY_AVAILABLE) else []
+    frames: list[Any] | None = [] if record else None
     # Performance: capture frames only if recording enabled & moviepy available (FR-025)
     fast_demo_mode = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     fast_step_cap = 8 if fast_demo_mode else None
@@ -233,9 +242,8 @@ def run_episode(
             if hasattr(env, "sim_ui") and getattr(env.sim_ui, "frames", None):  # type: ignore[attr-defined]
                 # Defer using env-managed frames after loop; no per-step copy
                 pass
-            else:
-                if step % 5 == 0:  # light sampling to limit memory (future FR-023 could refine)
-                    frames.append(np.zeros(_placeholder_frame_shape(env), dtype=np.uint8))
+            elif step % 5 == 0:  # light sampling to limit memory (future FR-023 could refine)
+                frames.append(np.zeros(_placeholder_frame_shape(env), dtype=np.uint8))
 
         # Fast demo early break to keep performance smoke test under threshold
         if fast_step_cap is not None and step >= fast_step_cap:
@@ -251,7 +259,7 @@ def run_episode(
         if MOVIEPY_AVAILABLE:
             # If env stored frames, prefer them
             if hasattr(env, "sim_ui") and getattr(env.sim_ui, "frames", None):  # type: ignore[attr-defined]
-                frames = getattr(env.sim_ui, "frames")  # type: ignore[assignment]
+                frames = env.sim_ui.frames  # type: ignore[assignment]
             recorded_flag = _maybe_record(frames, scenario_name, seed, episode_index, out_dir)
         else:
             logger.warning("[recording skipped] moviepy/ffmpeg not available")
@@ -282,7 +290,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
     if not (record and MOVIEPY_AVAILABLE):  # nothing to do
         return
 
-    has_sim_ui = hasattr(env, "sim_ui") and getattr(env, "sim_ui") is not None  # type: ignore[attr-defined]
+    has_sim_ui = hasattr(env, "sim_ui") and env.sim_ui is not None  # type: ignore[attr-defined]
     env_frames = []
     if has_sim_ui:
         env_frames = getattr(env.sim_ui, "frames", [])  # type: ignore[attr-defined]
@@ -293,7 +301,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
         logger.warning(
             "[recording warning] Recording enabled but zero frames were captured. "
             "Likely causes: (1) Environment created without debug=True or record_video=True so no SimulationView present; "
-            "(2) You never called env.render() inside the episode loop. Remediation: create env with debug=True or record_video and call env.render() each step."
+            "(2) You never called env.render() inside the episode loop. Remediation: create env with debug=True or record_video and call env.render() each step.",
         )
         return
 
@@ -302,7 +310,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
 
         def frame_sum(frame_obj):
             # Prefer ndarray.sum if present, else construct array
-            if hasattr(frame_obj, "sum") and callable(getattr(frame_obj, "sum")):
+            if hasattr(frame_obj, "sum") and callable(frame_obj.sum):
                 try:
                     return frame_obj.sum()  # type: ignore[no-any-return]
                 except Exception:  # pragma: no cover - defensive inner
@@ -312,7 +320,7 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
         if candidate_frames and all(frame_sum(f) == 0 for f in candidate_frames):
             logger.warning(
                 "[recording warning] All captured frames appear empty (sum=0). Videos will look black. "
-                "Ensure the rendering path draws entities before frame capture and avoid placeholder arrays."
+                "Ensure the rendering path draws entities before frame capture and avoid placeholder arrays.",
             )
     except Exception:  # pragma: no cover - defensive outer
         pass
@@ -346,7 +354,7 @@ def _format_summary_table(rows: Iterable[EpisodeSummary]) -> str:
 # --- Helper extraction to reduce run_demo complexity (addresses Ruff C901) ---
 def _compute_fast_mode_and_cap(max_episodes: int) -> tuple[bool, int]:
     in_pytest = "PYTEST_CURRENT_TEST" in os.environ
-    fast_env_flag = bool(int((os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0")))
+    fast_env_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     fast_mode = in_pytest or fast_env_flag
     if fast_mode and max_episodes > 1:
         max_episodes = 1
@@ -373,22 +381,22 @@ def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str,
 
 def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
     logger.debug(
-        f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}"
+        f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}",
     )
 
 
 def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-any]
-    explicit_fast_flag = bool(int((os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0")))
+    explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     if fast_mode and eff_max <= 1:
         # Only fall back to stub if user explicitly requested fast demo; otherwise enforce model presence.
         if not MODEL_PATH.exists() and not explicit_fast_flag:
             raise FileNotFoundError(
-                f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy."
+                f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy.",
             )
         if explicit_fast_flag:
 
             class _StubPolicy:  # pragma: no cover - trivial
-                def predict(self, _obs, **_kwargs):  # noqa: D401
+                def predict(self, _obs, **_kwargs):
                     return np.zeros(2, dtype=float), None
 
             logger.info("FAST DEMO: Using stub policy (ROBOT_SF_FAST_DEMO=1)")
@@ -396,7 +404,7 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
     # Real model load path (non-fast or explicit model present)
     if not MODEL_PATH.exists():  # Surface actionable error for tests (model_path_failure)
         raise FileNotFoundError(
-            f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy."
+            f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy.",
         )
     model_start = time.time()
     model = _load_policy(str(MODEL_PATH))
@@ -451,14 +459,14 @@ def _run_episodes(
     eff_max: int,
     eff_record: bool,
 ) -> list[EpisodeSummary]:
-    results: List[EpisodeSummary] = []
+    results: list[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error
         stack.callback(env.close)
         for ep_index, seed in enumerate(seeds):
             if ep_index >= eff_max:
                 break
             logger.info(
-                f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{eff_max})"
+                f"Running scenario={scenario.get('name')} seed={seed} ({ep_index + 1}/{eff_max})",
             )
             summary = run_episode(
                 env=env,
@@ -472,7 +480,7 @@ def _run_episodes(
             results.append(summary)
         if eff_record:
             frames_ref = []
-            if hasattr(env, "sim_ui") and getattr(env, "sim_ui") is not None:  # type: ignore[attr-defined]
+            if hasattr(env, "sim_ui") and env.sim_ui is not None:  # type: ignore[attr-defined]
                 frames_ref = getattr(env.sim_ui, "frames", [])  # type: ignore[attr-defined]
             _warn_if_no_frames(env, eff_record, frames_ref)
     return results
@@ -482,7 +490,7 @@ def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[ov
     if record and not getattr(env, "sim_ui", None):  # user expects video but debug disabled
         logger.warning(
             "Recording enabled but environment created with debug=False: no real frames will be captured. "
-            "Recreate with debug=True to enable visualization and non-empty video frames."
+            "Recreate with debug=True to enable visualization and non-empty video frames.",
         )
 
 
@@ -499,7 +507,7 @@ def run_demo(
     max_episodes: int | None = None,
     enable_recording: bool | None = None,
     sweep: bool | None = None,
-) -> List[EpisodeSummary]:
+) -> list[EpisodeSummary]:
     """Execute the PPO visualization demo.
 
     Parameters
@@ -541,12 +549,12 @@ def run_demo(
         logger.debug(
             "Dry run OK. Scenarios="
             + "; ".join(dry_msgs)
-            + f" model_exists={MODEL_PATH.exists()} sweep={len(scenarios) > 1}"
+            + f" model_exists={MODEL_PATH.exists()} sweep={len(scenarios) > 1}",
         )
         return []
 
     model = _load_or_stub_model(fast_mode=fast_mode, eff_max=eff_max)
-    all_results: List[EpisodeSummary] = []
+    all_results: list[EpisodeSummary] = []
     for scenario in scenarios:
         map_file = scenario.get("map_file")
         sim_cfg = _create_demo_env(fast_mode=fast_mode)
@@ -566,7 +574,7 @@ def run_demo(
                         "Scenario map '{mf}' has zero start positions (no robot routes); using default map pool instead.",
                         mf=map_file,
                     )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "Failed to load scenario map '{mf}' ({err}); falling back to default map pool.",
                     mf=map_file,
@@ -574,7 +582,7 @@ def run_demo(
                 )
         # Prefer config-driven render scaling to avoid factory API changes.
         try:
-            setattr(sim_cfg, "render_scaling", 20)  # supported by both legacy and unified configs
+            sim_cfg.render_scaling = 20  # supported by both legacy and unified configs
         except Exception:
             pass
         env = make_robot_env(
@@ -585,7 +593,7 @@ def run_demo(
             video_path=str(OUTPUT_DIR) if eff_record else None,
         )
         logger.info(
-            "Environment created (reward fallback active if custom reward not provided)."
+            "Environment created (reward fallback active if custom reward not provided).",
         )  # (T022)
         _warn_if_recording_without_ui(env, eff_record)
         seeds = list(iter_episode_seeds(scenario))

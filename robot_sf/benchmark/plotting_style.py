@@ -14,9 +14,12 @@ Optionally pass overrides to tweak specific rcParams per figure.
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import TYPE_CHECKING
 
 import matplotlib as mpl
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 DEFAULT_RCPARAMS: dict[str, object] = {
     "savefig.bbox": "tight",
@@ -43,4 +46,4 @@ def apply_latex_style(overrides: Mapping[str, object] | None = None) -> None:
     mpl.rcParams.update(params)
 
 
-__all__ = ["apply_latex_style", "DEFAULT_RCPARAMS"]
+__all__ = ["DEFAULT_RCPARAMS", "apply_latex_style"]

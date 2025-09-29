@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Tuple
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 LEGACY_PERMISSIVE_ENV = "ROBOT_SF_FACTORY_LEGACY"
 
@@ -78,8 +81,9 @@ def iter_deprecation_entries() -> Iterable[DeprecationEntry]:
 
 
 def apply_legacy_kwargs(
-    kwargs: Dict[str, Any], strict: bool = True
-) -> Tuple[Dict[str, Any], list[str]]:
+    kwargs: dict[str, Any],
+    strict: bool = True,
+) -> tuple[dict[str, Any], list[str]]:
     """Normalize legacy kwargs into new structure.
 
     Parameters
@@ -126,7 +130,7 @@ def apply_legacy_kwargs(
             continue
         if effective_strict:
             raise UnknownLegacyParameterError(
-                f"Unknown parameter '{key}'. Set {LEGACY_PERMISSIVE_ENV}=1 to ignore or update to supported signature."
+                f"Unknown parameter '{key}'. Set {LEGACY_PERMISSIVE_ENV}=1 to ignore or update to supported signature.",
             )
         msg = f"Unknown parameter '{key}' ignored (permissive mode)"
         logger.warning(msg)
@@ -137,9 +141,9 @@ def apply_legacy_kwargs(
 
 
 __all__ = [
+    "LEGACY_PERMISSIVE_ENV",
     "DeprecationEntry",
+    "UnknownLegacyParameterError",
     "apply_legacy_kwargs",
     "iter_deprecation_entries",
-    "UnknownLegacyParameterError",
-    "LEGACY_PERMISSIVE_ENV",
 ]

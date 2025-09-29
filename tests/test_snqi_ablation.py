@@ -43,7 +43,10 @@ def test_compute_snqi_ablation_rank_shifts():
     weights = {"w_success": 2.0, "w_time": 1.0, "w_collisions": 2.0}
     baseline = {"collisions": {"med": 0.0, "p95": 2.0}}
     rows = compute_snqi_ablation(
-        records, weights=weights, baseline=baseline, group_by="scenario_params.algo"
+        records,
+        weights=weights,
+        baseline=baseline,
+        group_by="scenario_params.algo",
     )
     # Expect two groups
     assert len(rows) == 2

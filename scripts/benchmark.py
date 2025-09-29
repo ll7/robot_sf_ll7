@@ -36,7 +36,7 @@ def benchmark():
         if done:
             episode += 1
             print(
-                f"end of episode {episode}, total rewards {ep_rewards:.3f}, remaining steps {total_steps - step}"
+                f"end of episode {episode}, total rewards {ep_rewards:.3f}, remaining steps {total_steps - step}",
             )
             ep_rewards = 0
             obs, _info = env.reset()

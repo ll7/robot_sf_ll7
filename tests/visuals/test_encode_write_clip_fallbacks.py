@@ -10,32 +10,32 @@ from robot_sf.benchmark.full_classic import encode as encode_mod
 
 
 class _BaseClip:
-    def __init__(self, frames, fps=10):  # noqa: D401
+    def __init__(self, frames, fps=10):
         self.frames = frames
         self.fps = fps
 
 
 class KeywordClip(_BaseClip):
-    def write_videofile(self, path, *, fps, codec, audio, preset, logger):  # noqa: D401
+    def write_videofile(self, path, *, fps, codec, audio, preset, logger):
         _ = (fps, codec, audio, preset, logger)
         Path(path).write_bytes(b"kw")
 
 
 class PositionalClip(_BaseClip):
-    def write_videofile(self, path, codec, fps, audio, preset, logger):  # noqa: D401
+    def write_videofile(self, path, codec, fps, audio, preset, logger):
         _ = (codec, fps, audio, preset, logger)
         Path(path).write_bytes(b"pos")
 
 
 class MinimalClip(_BaseClip):
-    def write_videofile(self, path):  # noqa: D401
+    def write_videofile(self, path):
         Path(path).write_bytes(b"min")
 
 
 class AlwaysFailClip(_BaseClip):
     calls = 0
 
-    def write_videofile(self, *args, **kwargs):  # noqa: D401
+    def write_videofile(self, *args, **kwargs):
         _ = (args, kwargs)
         self.__class__.calls += 1
         raise RuntimeError("boom")
@@ -54,7 +54,12 @@ def test_write_clip_fallback_success(monkeypatch, tmp_path, clip_cls, expected_b
     frames = [np.zeros((2, 2, 3), dtype=np.uint8) for _ in range(2)]
     out = tmp_path / "out.mp4"
     res = encode_mod.encode_frames(
-        frames, out, fps=5, codec="libx264", preset="ultrafast", sample_memory=False
+        frames,
+        out,
+        fps=5,
+        codec="libx264",
+        preset="ultrafast",
+        sample_memory=False,
     )
     assert res.status == "success"
     assert out.read_bytes() == expected_bytes

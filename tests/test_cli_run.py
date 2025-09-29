@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -22,7 +25,7 @@ def test_cli_run_subcommand(tmp_path: Path, capsys):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 2,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -46,7 +49,7 @@ def test_cli_run_subcommand(tmp_path: Path, capsys):
             "6",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc == 0, f"CLI run failed: {cap.err}"

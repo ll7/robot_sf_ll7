@@ -11,10 +11,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import numpy as np
 import pytest
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 BIN = ["uv", "run", "robot_sf_bench"]
@@ -30,8 +33,8 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
                 "near_misses": {"med": 0, "p95": 2},
                 "force_exceed_events": {"med": 0, "p95": 1},
                 "jerk_mean": {"med": 0.1, "p95": 0.5},
-            }
-        )
+            },
+        ),
     )
     lines: list[str] = []
     for i in range(n):
@@ -45,8 +48,8 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
                         "force_exceed_events": 0,
                         "jerk_mean": 0.1 + 0.05 * i,
                     },
-                }
-            )
+                },
+            ),
         )
     episodes.write_text("\n".join(lines) + "\n")
     return episodes, baseline

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -22,7 +25,7 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
     # Write YAML list
     import yaml  # type: ignore
@@ -53,7 +56,7 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
             "8",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     # Capture output (for sanity, not strictly required)
     captured = capsys.readouterr()

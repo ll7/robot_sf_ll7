@@ -48,10 +48,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Optional, Set
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -77,9 +80,9 @@ def manifest_path_for(out_path: Path) -> Path:
 def _validate_manifest_data(
     data: dict,
     out_path: Path,
-    expected_identity_hash: Optional[str],
+    expected_identity_hash: str | None,
     expected_schema_version: str,
-) -> Optional[Set[str]]:
+) -> set[str] | None:
     """Return set of ids if manifest data passes all validation checks else None."""
     stat = data.get("stat")
     if not isinstance(stat, dict):
@@ -104,9 +107,9 @@ def _validate_manifest_data(
 
 def load_manifest(
     out_path: Path,
-    expected_identity_hash: Optional[str] = None,
+    expected_identity_hash: str | None = None,
     expected_schema_version: str = EPISODE_SCHEMA_VERSION,
-) -> Optional[Set[str]]:
+) -> set[str] | None:
     """Return cached episode_ids if sidecar matches current file, else None.
 
     Validation criteria (v2):
@@ -123,7 +126,7 @@ def load_manifest(
     try:
         with sidecar.open("r", encoding="utf-8") as f:
             data = json.load(f)
-    except Exception:
+    except (json.JSONDecodeError, OSError, ValueError):
         return None
 
     if not isinstance(data, dict):
@@ -134,7 +137,7 @@ def load_manifest(
 def save_manifest(
     out_path: Path,
     episode_ids: Iterable[str],
-    identity_hash: Optional[str] = None,
+    identity_hash: str | None = None,
     schema_version: str = EPISODE_SCHEMA_VERSION,
 ) -> None:
     """Write or update the manifest to reflect the current on-disk state.

@@ -30,10 +30,13 @@ import json
 import logging
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -82,13 +85,13 @@ class SNQIWeightRecomputer:
         Mapping of metric -> {"med": float, "p95": float} used for normalization.
     """
 
-    def __init__(self, episodes_data: List[Dict], baseline_stats: Dict[str, Dict[str, float]]):
+    def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = WEIGHT_NAMES
         self.simplex = False  # toggled externally
 
-    def _maybe_simplex(self, weights: Dict[str, float], total: float = 10.0) -> Dict[str, float]:
+    def _maybe_simplex(self, weights: dict[str, float], total: float = 10.0) -> dict[str, float]:
         if not self.simplex:
             return weights
         s = sum(weights.values())
@@ -96,11 +99,11 @@ class SNQIWeightRecomputer:
             return weights
         return {k: (v / s) * total for k, v in weights.items()}
 
-    def _episode_snqi(self, metrics: Dict[str, float], weights: Dict[str, float]) -> float:
+    def _episode_snqi(self, metrics: dict[str, float], weights: dict[str, float]) -> float:
         """Wrapper calling shared compute_snqi keeping backward compatibility."""
         return compute_snqi(metrics, weights, self.baseline_stats)
 
-    def default_weights(self) -> Dict[str, float]:
+    def default_weights(self) -> dict[str, float]:
         """Return default weight configuration."""
         return {
             "w_success": 2.0,
@@ -112,11 +115,11 @@ class SNQIWeightRecomputer:
             "w_jerk": 0.5,
         }
 
-    def balanced_weights(self) -> Dict[str, float]:
+    def balanced_weights(self) -> dict[str, float]:
         """Return balanced weight configuration."""
         return {name: 1.0 for name in self.weight_names}
 
-    def safety_focused_weights(self) -> Dict[str, float]:
+    def safety_focused_weights(self) -> dict[str, float]:
         """Return safety-focused weight configuration."""
         return {
             "w_success": 1.5,
@@ -128,7 +131,7 @@ class SNQIWeightRecomputer:
             "w_jerk": 1.0,
         }
 
-    def efficiency_focused_weights(self) -> Dict[str, float]:
+    def efficiency_focused_weights(self) -> dict[str, float]:
         """Return efficiency-focused weight configuration."""
         return {
             "w_success": 2.5,
@@ -140,7 +143,7 @@ class SNQIWeightRecomputer:
             "w_jerk": 1.5,
         }
 
-    def compute_weight_statistics(self, weights: Dict[str, float]) -> Dict[str, Any]:
+    def compute_weight_statistics(self, weights: dict[str, float]) -> dict[str, Any]:
         """Compute descriptive statistics for a weight configuration.
 
         Returns overall distributional stats and per-algorithm aggregates
@@ -179,7 +182,9 @@ class SNQIWeightRecomputer:
         return stats
 
     def rank_correlation_analysis(
-        self, weights1: Dict[str, float], weights2: Dict[str, float]
+        self,
+        weights1: dict[str, float],
+        weights2: dict[str, float],
     ) -> float:
         """Compute Spearman rank correlation between two weight configurations.
 
@@ -197,7 +202,7 @@ class SNQIWeightRecomputer:
         corr, _ = spearmanr(ranking1, ranking2)
         return corr if not np.isnan(corr) else 1.0
 
-    def pareto_frontier_weights(self, n_samples: int = 600) -> List[Dict[str, Any]]:
+    def pareto_frontier_weights(self, n_samples: int = 600) -> list[dict[str, Any]]:
         """Approximate a Pareto frontier by random sampling.
 
         Samples `n_samples` random weight vectors (uniform per weight), computes
@@ -222,7 +227,7 @@ class SNQIWeightRecomputer:
                     "discriminative_power": discriminative_power,
                     "stability": stability,
                     "mean_score": float(np.mean(scores)),
-                }
+                },
             )
         pareto: list[dict[str, Any]] = []
         for i, sample in enumerate(samples):
@@ -246,7 +251,7 @@ class SNQIWeightRecomputer:
         logger.info("Found %d Pareto-optimal configurations", len(pareto))
         return pareto[:10]
 
-    def recompute_with_strategy(self, strategy: str) -> Dict[str, Any]:
+    def recompute_with_strategy(self, strategy: str) -> dict[str, Any]:
         """Run a single strategy pipeline returning weights + stats.
 
         Falls back to default weights if Pareto sampling produces no candidates.
@@ -290,7 +295,7 @@ class SNQIWeightRecomputer:
 
         return result
 
-    def compare_normalization_strategies(self, base_weights: Dict[str, float]) -> Dict[str, Any]:
+    def compare_normalization_strategies(self, base_weights: dict[str, float]) -> dict[str, Any]:
         """Compare alternative percentile-based normalization strategies.
 
         Generates median/p90 and interquartile (p25/p75) baselines for metrics
@@ -307,7 +312,7 @@ class SNQIWeightRecomputer:
 
         for ep in self.episodes:
             metrics = ep.get("metrics", {})
-            for metric_name in metric_values.keys():
+            for metric_name in metric_values:
                 value = metrics.get(metric_name)
                 if value is not None and not (isinstance(value, float) and np.isnan(value)):
                     metric_values[metric_name].append(float(value))
@@ -366,11 +371,11 @@ class SNQIWeightRecomputer:
         return results
 
 
-def load_episodes_data(path: Path) -> tuple[List[Dict[str, Any]], int]:
+def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
     """Load episodes returning (episodes, skipped_malformed_lines)."""
     episodes: list[dict[str, Any]] = []
     skipped = 0
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             raw = line.strip()
             if not raw:
@@ -389,8 +394,8 @@ def load_episodes_data(path: Path) -> tuple[List[Dict[str, Any]], int]:
     return episodes, skipped
 
 
-def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
-    with open(path, "r", encoding="utf-8") as f:
+def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
         raise ValueError("Baseline stats must be a JSON object")
@@ -398,18 +403,19 @@ def load_baseline_stats(path: Path) -> Dict[str, Dict[str, float]]:
 
 
 def _compute_strategy_set(
-    recomputer: SNQIWeightRecomputer, strategies: list[str]
-) -> Dict[str, Any]:
+    recomputer: SNQIWeightRecomputer,
+    strategies: list[str],
+) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for name in strategies:
         try:
             out[name] = recomputer.recompute_with_strategy(name)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("Strategy %s failed: %s", name, e)
     return out
 
 
-def _select_recommended(strategy_results: Dict[str, Any]) -> tuple[str, Dict[str, float]]:
+def _select_recommended(strategy_results: dict[str, Any]) -> tuple[str, dict[str, float]]:
     best_name: str | None = None
     best_score = -float("inf")
     for name, data in strategy_results.items():
@@ -426,7 +432,7 @@ def _select_recommended(strategy_results: Dict[str, Any]) -> tuple[str, Dict[str
 
 
 def _augment_metadata(
-    results: Dict[str, Any],
+    results: dict[str, Any],
     args: argparse.Namespace,
     start_iso: str,
     start_perf: float,
@@ -438,16 +444,17 @@ def _augment_metadata(
         try:
             return (
                 subprocess.check_output(
-                    ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    stderr=subprocess.DEVNULL,
                 )
                 .decode()
                 .strip()
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             return "UNKNOWN"
 
     end_perf = perf_counter()
-    end_iso = datetime.now(timezone.utc).isoformat()
+    end_iso = datetime.now(UTC).isoformat()
     runtime = end_perf - start_perf
     meta: dict[str, Any] = {
         "schema_version": 1,
@@ -476,7 +483,7 @@ def _augment_metadata(
     # summary filled later after recommended weights known
 
 
-def _finalize_summary(results: Dict[str, Any], args: argparse.Namespace) -> None:
+def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
     if args.compare_strategies:
         method_descriptor = results.get("recommended_strategy")
     else:
@@ -493,13 +500,13 @@ def _finalize_summary(results: Dict[str, Any], args: argparse.Namespace) -> None
         "start_time": meta.get("start_time"),
         "end_time": meta.get("end_time"),
         "baseline_missing_metric_count": results.get("_metadata", {}).get(
-            "baseline_missing_metric_count"
+            "baseline_missing_metric_count",
         ),
         "skipped_malformed_lines": 0,  # populated later
     }
 
 
-def _print_summary(results: Dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
+def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
     lines: list[str] = []
     lines.append("Weight Recomputation Summary:")
     lines.append(f"Episodes analyzed: {episodes_count}")
@@ -507,7 +514,9 @@ def _print_summary(results: Dict[str, Any], args: argparse.Namespace, episodes_c
         lines.append(f"Recommended strategy: {results.get('recommended_strategy')}")
         if "strategy_correlations" in results:
             sorted_corrs = sorted(
-                results["strategy_correlations"].items(), key=lambda x: x[1], reverse=True
+                results["strategy_correlations"].items(),
+                key=lambda x: x[1],
+                reverse=True,
             )
             lines.append("Strategy correlations (top 3):")
             for pair, corr in sorted_corrs[:3]:
@@ -531,10 +540,16 @@ def _print_summary(results: Dict[str, Any], args: argparse.Namespace, episodes_c
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SNQI Weight Recomputation")
     parser.add_argument(
-        "--episodes", type=Path, required=True, help="Path to episode data JSONL file"
+        "--episodes",
+        type=Path,
+        required=True,
+        help="Path to episode data JSONL file",
     )
     parser.add_argument(
-        "--baseline", type=Path, required=True, help="Path to baseline statistics JSON file"
+        "--baseline",
+        type=Path,
+        required=True,
+        help="Path to baseline statistics JSON file",
     )
     parser.add_argument(
         "--strategy",
@@ -543,13 +558,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Weight recomputation strategy",
     )
     parser.add_argument(
-        "--output", type=Path, required=True, help="Output path for recomputed weights JSON"
+        "--output",
+        type=Path,
+        required=True,
+        help="Output path for recomputed weights JSON",
     )
     parser.add_argument(
-        "--compare-normalization", action="store_true", help="Compare normalization strategies"
+        "--compare-normalization",
+        action="store_true",
+        help="Compare normalization strategies",
     )
     parser.add_argument(
-        "--compare-strategies", action="store_true", help="Compare all available strategies"
+        "--compare-strategies",
+        action="store_true",
+        help="Compare all available strategies",
     )
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
     parser.add_argument("--validate", action="store_true", help="Validate JSON output structure")
@@ -650,21 +672,21 @@ def _detect_missing_baseline_metrics(
                     "name": metric,
                     "episode_count_with_metric": count,
                     "example_episode_ids": episodes_with_metric,
-                }
+                },
             )
     return {"total_missing": len(results), "metrics": results}
 
 
 def run(args: argparse.Namespace) -> int:  # noqa: C901
     start_perf = perf_counter()
-    start_iso = datetime.now(timezone.utc).isoformat()
+    start_iso = datetime.now(UTC).isoformat()
     phase_start = start_perf
     phase_timings: dict[str, float] = {}
     try:
         episodes, skipped_lines = load_episodes_data(args.episodes)
         baseline = load_baseline_stats(args.baseline)
-    except Exception as e:  # noqa: BLE001
-        logger.error("Failed loading inputs: %s", e)
+    except Exception as e:
+        logger.exception("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
     phase_timings["load_inputs"] = perf_counter() - phase_start
     if not episodes:
@@ -686,7 +708,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     # Warn on small dataset sizes which can make statistics unstable
     try:
         threshold = int(getattr(args, "small_dataset_threshold", 20))
-    except Exception:  # noqa: BLE001 - defensive
+    except Exception:
         threshold = 20
     if used_episode_count < threshold:
         logger.warning(
@@ -697,10 +719,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
         recomputer.simplex = bool(args.simplex)
-        external_weights: Dict[str, float] | None = None
+        external_weights: dict[str, float] | None = None
         if args.external_weights_file is not None:
             try:
-                with open(args.external_weights_file, "r", encoding="utf-8") as f:
+                with open(args.external_weights_file, encoding="utf-8") as f:
                     raw = json.load(f)
                 if not isinstance(raw, dict):  # pragma: no cover - defensive
                     raise ValueError("External weights file must be a JSON object")
@@ -710,10 +732,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                     if s > 0:
                         external_weights = {k: (v / s) * 10.0 for k, v in external_weights.items()}
                 logger.info("Loaded external weights from %s", args.external_weights_file)
-            except Exception as e:  # noqa: BLE001
-                logger.error("Failed loading external weights: %s", e)
+            except Exception as e:
+                logger.exception("Failed loading external weights: %s", e)
                 return EXIT_INPUT_ERROR
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         if args.compare_strategies:
             phase_start = perf_counter()
             all_strategies = [
@@ -733,9 +755,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 for n2 in names[i + 1 :]:
                     try:
                         correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
-                            strategy_results[n1]["weights"], strategy_results[n2]["weights"]
+                            strategy_results[n1]["weights"],
+                            strategy_results[n2]["weights"],
                         )
-                    except Exception as e:  # noqa: BLE001
+                    except Exception as e:
                         logger.debug("Correlation %s vs %s failed: %s", n1, n2, e)
             results["strategy_correlations"] = correlations
             phase_timings["strategy_correlations"] = perf_counter() - phase_start
@@ -751,7 +774,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
         if args.compare_normalization:
             phase_start = perf_counter()
             results["normalization_comparison"] = recomputer.compare_normalization_strategies(
-                results["recommended_weights"]
+                results["recommended_weights"],
             )
             phase_timings["normalization_comparison"] = perf_counter() - phase_start
         # Bootstrap confidence intervals (optional)
@@ -761,7 +784,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 bs_rng = np.random.default_rng(args.seed if args.seed is not None else 1234)
                 rec_w = results.get("recommended_weights") or {}
                 episode_scores = [
-                    recomputer._episode_snqi(ep.get("metrics", {}), rec_w)  # noqa: SLF001
+                    recomputer._episode_snqi(ep.get("metrics", {}), rec_w)
                     for ep in recomputer.episodes
                 ]
                 episode_scores = [s for s in episode_scores if np.isfinite(s)]
@@ -785,12 +808,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                         "confidence_level": float(getattr(args, "bootstrap_confidence", 0.95)),
                     }
                 phase_timings["bootstrap"] = perf_counter() - phase_start
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning("Bootstrap computation failed: %s", e)
         # Baseline missing metric diagnostics
         phase_start = perf_counter()
         missing_info = _detect_missing_baseline_metrics(
-            episodes, baseline, args.missing_metric_max_list
+            episodes,
+            baseline,
+            args.missing_metric_max_list,
         )
         results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
         if missing_info["total_missing"]:
@@ -810,7 +835,8 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
                 "weights": external_weights,
                 "statistics": ext_stats,
                 "correlation_with_recommended": recomputer.rank_correlation_analysis(
-                    results["recommended_weights"], external_weights
+                    results["recommended_weights"],
+                    external_weights,
                 ),
             }
             phase_timings["external_weights_eval"] = perf_counter() - phase_start
@@ -841,7 +867,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             else:
                 assert_all_finite(results)
         except ValueError as e:
-            logger.error("Validation failed: %s", e)
+            logger.exception("Validation failed: %s", e)
             return EXIT_VALIDATION_ERROR
         phase_timings["validation"] = perf_counter() - phase_start
         phase_start = perf_counter()
@@ -857,7 +883,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
             logger.info("\n%s", "\n".join(timing_lines))
         _print_summary(results, args, len(episodes))
         return EXIT_SUCCESS
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("Unexpected runtime failure: %s", e)
         return EXIT_RUNTIME_ERROR
 

@@ -79,7 +79,7 @@ def test_snqi_weight_optimization_cli(tmp_path: Path):
         "--validate",
     ]
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=Path.cwd())
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=Path.cwd(), check=False)
     assert proc.returncode == 0, proc.stderr or proc.stdout
     assert output_path.exists(), "Expected output JSON file not created"
 
@@ -95,7 +95,7 @@ def test_snqi_weight_optimization_cli(tmp_path: Path):
 
     for field in ["schema_version", "generated_at", "runtime_seconds", "start_time", "end_time"]:
         assert field in meta
-    assert isinstance(meta["runtime_seconds"], (int, float)) and meta["runtime_seconds"] >= 0
+    assert isinstance(meta["runtime_seconds"], int | float) and meta["runtime_seconds"] >= 0
 
     for field in ["method", "weights", "runtime_seconds"]:
         assert field in summary

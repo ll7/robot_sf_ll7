@@ -26,13 +26,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
+from loguru import logger
 
 try:  # Lazy import; not required for type-check only
     from stable_baselines3 import PPO
-except Exception:  # pragma: no cover - envs without SB3 installed
+except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
 from robot_sf.baselines.social_force import Observation
@@ -72,7 +73,10 @@ class PPOPlanner:
     EPS: float = 1e-9
 
     def __init__(
-        self, config: Union[PPOPlannerConfig, Dict[str, Any]], *, seed: Optional[int] = None
+        self,
+        config: PPOPlannerConfig | dict[str, Any],
+        *,
+        seed: int | None = None,
     ):
         self.config = self._parse_config(config)
         self._seed = seed
@@ -80,7 +84,7 @@ class PPOPlanner:
         self._load_model()
 
     # --- Lifecycle -----------------------------------------------------
-    def _parse_config(self, cfg: Union[PPOPlannerConfig, Dict[str, Any]]) -> PPOPlannerConfig:
+    def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
         if isinstance(cfg, PPOPlannerConfig):
             return cfg
         if isinstance(cfg, dict):
@@ -99,11 +103,11 @@ class PPOPlanner:
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
-        except Exception:
-            # Defer to fallback
+        except (RuntimeError, ValueError, OSError):
+            # Defer to fallback on typical load/pickle errors
             self._model = None
 
-    def reset(self, *, seed: Optional[int] = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         # No RNN state; just update seed and keep model
         if seed is not None:
             self._seed = seed
@@ -111,14 +115,14 @@ class PPOPlanner:
     def close(self) -> None:
         self._model = None
 
-    def configure(self, config: Union[PPOPlannerConfig, Dict[str, Any]]) -> None:
+    def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
         """Update the planner's configuration."""
         self.config = self._parse_config(config)
         # Need to reload the model if model_path changed
         self._load_model()
 
     # --- API -----------------------------------------------------------
-    def step(self, obs: Union[Observation, Dict[str, Any]]) -> Dict[str, float]:
+    def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -129,14 +133,14 @@ class PPOPlanner:
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
             return self._action_vec_to_dict(action_vec, obs)
-        except Exception:
-            # Fallback for robustness
+        except (RuntimeError, ValueError, OSError):
+            # Fallback for robustness on common prediction errors
             if self.config.fallback_to_goal:
                 return self._fallback_action(obs)
             raise
 
     # --- Helpers -------------------------------------------------------
-    def _predict_action(self, obs: Observation) -> Optional[np.ndarray]:
+    def _predict_action(self, obs: Observation) -> np.ndarray | None:
         if self._model is None:
             return None
 
@@ -146,9 +150,19 @@ class PPOPlanner:
             model_obs_in = model_obs  # SB3 accepts 1D for single obs
         else:
             model_obs_in = model_obs
-        act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
-        act = np.asarray(act, dtype=float).squeeze()
-        return act
+        try:
+            act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
+            act = np.asarray(act, dtype=float).squeeze()
+            return act
+        except (
+            RuntimeError,
+            ValueError,
+            OSError,
+            IndexError,
+        ) as exc:  # predict-time errors we can recover from
+            # Log at debug level for diagnostics; fall back to goal if enabled
+            logger.debug("PPO model prediction failed: %s", exc, exc_info=True)
+            return None
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
         if self.config.obs_mode == "image":
@@ -165,7 +179,7 @@ class PPOPlanner:
         rg = np.asarray(obs.robot["goal"], dtype=float)
         rel_goal = rg - rp
         # Nearest-K pedestrian relative positions
-        ped_rel: List[np.ndarray] = []
+        ped_rel: list[np.ndarray] = []
         for a in obs.agents:
             ap = np.asarray(a.get("position", [0.0, 0.0]), dtype=float)
             ped_rel.append(ap - rp)
@@ -183,7 +197,7 @@ class PPOPlanner:
         vec = np.concatenate([rel_goal, rv, ped_flat]).astype(float)
         return vec
 
-    def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> Dict[str, float]:
+    def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0
@@ -202,7 +216,7 @@ class PPOPlanner:
             vy *= scale
         return {"vx": vx, "vy": vy}
 
-    def _fallback_action(self, obs: Observation) -> Dict[str, float]:
+    def _fallback_action(self, obs: Observation) -> dict[str, float]:
         rp = np.asarray(obs.robot["position"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
         vec = rg - rp
@@ -220,7 +234,7 @@ class PPOPlanner:
         }
 
     # --- Metadata ------------------------------------------------------
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata
         cfg["model_path"] = str(Path(self.config.model_path))

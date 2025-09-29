@@ -31,7 +31,7 @@ def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
             "10",
             "--bootstrap-confidence",
             "0.9",
-        ]
+        ],
     )
     text = out.read_text(encoding="utf-8")
     # Sanity: output JSON decodes and has summary

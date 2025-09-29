@@ -18,8 +18,9 @@ Assumptions
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any
 
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi
 
@@ -35,9 +36,11 @@ def _get_nested(d: Mapping[str, Any], dotted: str, default: Any | None = None) -
 
 
 def _group_by(
-    records: Iterable[Mapping[str, Any]], group_by: str, fallback: str
-) -> Dict[str, List[Mapping[str, Any]]]:
-    groups: Dict[str, List[Mapping[str, Any]]] = {}
+    records: Iterable[Mapping[str, Any]],
+    group_by: str,
+    fallback: str,
+) -> dict[str, list[Mapping[str, Any]]]:
+    groups: dict[str, list[Mapping[str, Any]]] = {}
     for rec in records:
         gid = _get_nested(rec, group_by)
         if gid is None:
@@ -66,11 +69,11 @@ def _compute_group_means(
     baseline: Mapping[str, Mapping[str, float]],
     group_by: str,
     fallback_group_by: str,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     groups = _group_by(records, group_by, fallback_group_by)
-    means: Dict[str, float] = {}
+    means: dict[str, float] = {}
     for gid, rows in groups.items():
-        vals: List[float] = []
+        vals: list[float] = []
         for rec in rows:
             try:
                 vals.append(_episode_snqi(rec, weights, baseline))
@@ -82,8 +85,9 @@ def _compute_group_means(
 
 
 def _ranking_from_means(
-    means: Mapping[str, float], ascending: bool = False
-) -> List[Tuple[str, float, int]]:
+    means: Mapping[str, float],
+    ascending: bool = False,
+) -> list[tuple[str, float, int]]:
     # We treat higher SNQI as better -> descending by default; ascending flag kept for symmetry.
     items = [(g, float(m), 0) for g, m in means.items()]
     items.sort(key=lambda t: t[1], reverse=not ascending)
@@ -96,7 +100,7 @@ class AblationRow:
     group: str
     base_rank: int
     base_mean: float
-    deltas: Dict[str, float]  # weight_name -> rank_shift (ablate_rank - base_rank)
+    deltas: dict[str, float]  # weight_name -> rank_shift (ablate_rank - base_rank)
 
 
 def compute_snqi_ablation(
@@ -107,7 +111,7 @@ def compute_snqi_ablation(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
     top: int | None = None,
-) -> List[AblationRow]:
+) -> list[AblationRow]:
     """Compute per-group rank shifts for one-at-a-time SNQI ablations.
 
     Returns a list of AblationRow with base mean SNQI, base rank, and per-weight
@@ -115,10 +119,10 @@ def compute_snqi_ablation(
     """
     base_means = _compute_group_means(records, weights, baseline, group_by, fallback_group_by)
     base_ranked = _ranking_from_means(base_means, ascending=False)
-    base_positions: Dict[str, int] = {g: i + 1 for i, (g, _m, _c) in enumerate(base_ranked)}
+    base_positions: dict[str, int] = {g: i + 1 for i, (g, _m, _c) in enumerate(base_ranked)}
 
     # Initialize rows for all groups seen in base ranking
-    rows_by_group: Dict[str, AblationRow] = {
+    rows_by_group: dict[str, AblationRow] = {
         g: AblationRow(group=g, base_rank=base_positions[g], base_mean=base_means[g], deltas={})
         for g in base_positions
     }
@@ -127,10 +131,14 @@ def compute_snqi_ablation(
         # Skip components absent in provided weights to avoid surprising zeros
         if wname not in weights:
             continue
-        ablated_weights: Dict[str, float] = dict(weights)
+        ablated_weights: dict[str, float] = dict(weights)
         ablated_weights[wname] = 0.0
         means = _compute_group_means(
-            records, ablated_weights, baseline, group_by, fallback_group_by
+            records,
+            ablated_weights,
+            baseline,
+            group_by,
+            fallback_group_by,
         )
         ranked = _ranking_from_means(means, ascending=False)
         pos = {g: i + 1 for i, (g, _m, _c) in enumerate(ranked)}
@@ -146,10 +154,10 @@ def compute_snqi_ablation(
 
 
 def format_markdown(rows: Sequence[AblationRow]) -> str:
-    headers = ["Rank", "Group", "base_mean"] + list(WEIGHT_NAMES)
+    headers = ["Rank", "Group", "base_mean", *list(WEIGHT_NAMES)]
     # Only include weights that appear in any row
     used_weights = [w for w in WEIGHT_NAMES if any(w in r.deltas for r in rows)]
-    headers = ["Rank", "Group", "base_mean"] + used_weights
+    headers = ["Rank", "Group", "base_mean", *used_weights]
     lines = [
         "| " + " | ".join(headers) + " |",
         "|" + "|".join(["---:", "---", ":---:"] + [":---:"] * len(used_weights)) + "|",
@@ -176,8 +184,8 @@ def format_csv(rows: Sequence[AblationRow]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def to_json(rows: Sequence[AblationRow]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+def to_json(rows: Sequence[AblationRow]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     for r in rows:
         item = {
             "group": r.group,
@@ -189,17 +197,17 @@ def to_json(rows: Sequence[AblationRow]) -> List[Dict[str, Any]]:
     return out
 
 
-def compute_ablation_summary(rows: Sequence[AblationRow]) -> Dict[str, Dict[str, float]]:
+def compute_ablation_summary(rows: Sequence[AblationRow]) -> dict[str, dict[str, float]]:
     """Compute per-weight summary statistics from ablation rows.
 
     Returns mapping weight_name -> {changed, mean_abs, max_abs, pos, neg, mean}.
     All values except counts are floats; counts are returned as floats for JSON uniformity.
     """
     # Gather all weight names that appear in any row
-    weight_names = sorted({w for r in rows for w in r.deltas.keys()})
-    summary: Dict[str, Dict[str, float]] = {}
+    weight_names = sorted({w for r in rows for w in r.deltas})
+    summary: dict[str, dict[str, float]] = {}
     for w in weight_names:
-        vals: List[float] = []
+        vals: list[float] = []
         pos = 0
         neg = 0
         for r in rows:
@@ -234,9 +242,9 @@ def compute_ablation_summary(rows: Sequence[AblationRow]) -> Dict[str, Dict[str,
 
 __all__ = [
     "AblationRow",
-    "compute_snqi_ablation",
     "compute_ablation_summary",
-    "format_markdown",
+    "compute_snqi_ablation",
     "format_csv",
+    "format_markdown",
     "to_json",
 ]

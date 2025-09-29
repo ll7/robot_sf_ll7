@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 
 import pytest
 
@@ -11,7 +10,12 @@ try:
 except ImportError:  # pragma: no cover - loguru is a core dependency
     logger = None  # type: ignore[assignment]
 
+from typing import TYPE_CHECKING
+
 from robot_sf.benchmark.runner import run_batch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -28,7 +32,7 @@ def _write_minimal_matrix(path: Path) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
     import yaml  # type: ignore
 

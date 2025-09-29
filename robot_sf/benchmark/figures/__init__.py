@@ -8,8 +8,8 @@ from robot_sf.benchmark.figures.force_field import generate_force_field_figure
 from robot_sf.benchmark.figures.thumbnails import ThumbMeta, save_montage, save_scenario_thumbnails
 
 __all__ = [
-    "generate_force_field_figure",
-    "save_scenario_thumbnails",
-    "save_montage",
     "ThumbMeta",
+    "generate_force_field_figure",
+    "save_montage",
+    "save_scenario_thumbnails",
 ]

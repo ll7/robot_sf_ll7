@@ -33,7 +33,7 @@ def _assert_fast_pysf_initialized() -> None:
             "Expected directory: 'fast-pysf/pysocialforce'.\n"
             "Fix by running: \n"
             "  git submodule update --init --recursive\n\n"
-            "If this was intentional (e.g., lightweight docs build), avoid importing 'robot_sf.sim' modules."
+            "If this was intentional (e.g., lightweight docs build), avoid importing 'robot_sf.sim' modules.",
         )
 
 

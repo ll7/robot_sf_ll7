@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.runner import run_batch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -19,7 +22,7 @@ def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 3,
-        }
+        },
     ]
     out_file = tmp_path / "episodes.jsonl"
 

@@ -12,7 +12,7 @@ def prepare_zones():
     zone_topright = ((10, 0), (10, 10), (0, 10))
     zones = [zone_topleft, zone_botleft, zone_botright, zone_topright]
     zones_rev = [(z[2], z[1], z[0]) for z in zones]
-    return list(zip(zones, zones_rev))
+    return list(zip(zones, zones_rev, strict=False))
 
 
 def test_must_not_spawn_outside_of_topleft_zone():
@@ -21,8 +21,8 @@ def test_must_not_spawn_outside_of_topleft_zone():
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
     points_rev = [sample_zone(zone_rev, 1)[0] for i in range(1000)]
 
-    assert all(map(lambda p: is_within_zone(p), points))
-    assert all(map(lambda p: is_within_zone(p), points_rev))
+    assert all(is_within_zone(p) for p in points)
+    assert all(is_within_zone(p) for p in points_rev)
 
 
 def test_must_not_spawn_outside_of_botleft_zone():
@@ -31,8 +31,8 @@ def test_must_not_spawn_outside_of_botleft_zone():
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
     points_rev = [sample_zone(zone_rev, 1)[0] for i in range(1000)]
 
-    assert all(map(lambda p: is_within_zone(p), points))
-    assert all(map(lambda p: is_within_zone(p), points_rev))
+    assert all(is_within_zone(p) for p in points)
+    assert all(is_within_zone(p) for p in points_rev)
 
 
 def test_must_not_spawn_outside_of_botright_zone():
@@ -41,8 +41,8 @@ def test_must_not_spawn_outside_of_botright_zone():
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
     points_rev = [sample_zone(zone_rev, 1)[0] for i in range(1000)]
 
-    assert all(map(lambda p: is_within_zone(p), points))
-    assert all(map(lambda p: is_within_zone(p), points_rev))
+    assert all(is_within_zone(p) for p in points)
+    assert all(is_within_zone(p) for p in points_rev)
 
 
 def test_must_not_spawn_outside_of_topright_zone():
@@ -51,5 +51,5 @@ def test_must_not_spawn_outside_of_topright_zone():
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
     points_rev = [sample_zone(zone_rev, 1)[0] for i in range(1000)]
 
-    assert all(map(lambda p: is_within_zone(p), points))
-    assert all(map(lambda p: is_within_zone(p), points_rev))
+    assert all(is_within_zone(p) for p in points)
+    assert all(is_within_zone(p) for p in points_rev)

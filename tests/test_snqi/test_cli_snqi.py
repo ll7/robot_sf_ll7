@@ -17,9 +17,12 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 BIN = ["uv", "run", "robot_sf_bench"]  # rely on project script entry via uv
 
@@ -40,7 +43,8 @@ def snqi_inputs(tmp_path: Path):
 
 
 def _run_cmd(
-    args: list[str], env_extra: dict[str, str] | None = None
+    args: list[str],
+    env_extra: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["ROBOT_SF_SNQI_LIGHT_TEST"] = "1"  # ensure fast path
@@ -51,8 +55,8 @@ def _run_cmd(
 
 def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
     cp = _run_cmd(
-        BIN
-        + [
+        [
+            *BIN,
             "snqi",
             "optimize",
             "--episodes",
@@ -61,15 +65,15 @@ def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
             str(snqi_inputs["baseline"]),
             "--output",
             str(snqi_inputs["output"]),
-        ]
+        ],
     )
     assert cp.returncode == 0, cp.stderr
 
 
 def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
     cp = _run_cmd(
-        BIN
-        + [
+        [
+            *BIN,
             "snqi",
             "recompute",
             "--episodes",
@@ -78,13 +82,13 @@ def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
             str(snqi_inputs["baseline"]),
             "--output",
             str(snqi_inputs["output"]),
-        ]
+        ],
     )
     assert cp.returncode == 0, cp.stderr
 
 
 def test_snqi_missing_subcommand():
-    cp = _run_cmd(BIN + ["snqi"])  # no subcommand
+    cp = _run_cmd([*BIN, "snqi"])  # no subcommand
     # Argparse prints help and we expect non-zero exit (2 from our dispatcher)
     assert cp.returncode == 2, cp.stderr
     assert "optimize" in cp.stderr or "recompute" in (cp.stdout + cp.stderr)

@@ -47,7 +47,7 @@ class TestRuntimeResolutionIntegration:
 
         # Load schema directly from file for comparison
         schema_path = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
-        with open(schema_path, "r", encoding="utf-8") as f:
+        with open(schema_path, encoding="utf-8") as f:
             direct_schema = json.load(f)
 
         # They should be identical

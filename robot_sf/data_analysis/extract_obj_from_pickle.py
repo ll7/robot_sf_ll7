@@ -6,7 +6,6 @@ Key Features:
 """
 
 import os
-from typing import List
 
 import numpy as np
 from loguru import logger
@@ -31,7 +30,7 @@ from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableSimState
 
 
-def extract_ped_positions(sim_states: List[VisualizableSimState]) -> np.ndarray:
+def extract_ped_positions(sim_states: list[VisualizableSimState]) -> np.ndarray:
     """
     Extract pedestrian positions from a list of simulation states.
 
@@ -67,7 +66,7 @@ def extract_ped_positions(sim_states: List[VisualizableSimState]) -> np.ndarray:
     return ped_positions
 
 
-def extract_ped_actions(sim_states: List[VisualizableSimState]) -> List[List]:
+def extract_ped_actions(sim_states: list[VisualizableSimState]) -> list[list]:
     """
     Extract pedestrian actions from a list of simulation states.
 
@@ -91,7 +90,7 @@ def extract_ped_actions(sim_states: List[VisualizableSimState]) -> List[List]:
     return ped_actions
 
 
-def extract_ego_ped_acceleration(sim_states: List[VisualizableSimState]) -> List[float]:
+def extract_ego_ped_acceleration(sim_states: list[VisualizableSimState]) -> list[float]:
     """
     Extract ego pedestrian acceleration from a list of simulation states.
 
@@ -117,9 +116,9 @@ def extract_ego_ped_acceleration(sim_states: List[VisualizableSimState]) -> List
 
 
 def plot_all_data_pkl(
-    sim_states: List[VisualizableSimState],
-    map_def: MapDefinition = None,
-    unique_id: str = None,
+    sim_states: list[VisualizableSimState],
+    map_def: MapDefinition | None = None,
+    unique_id: str | None = None,
     interactive: bool = True,
 ):
     """
@@ -137,7 +136,10 @@ def plot_all_data_pkl(
     # Extract and plot pedestrian positions
     ped_positions = extract_ped_positions(sim_states)
     plot_all_npc_ped_positions(
-        ped_positions, interactive=interactive, unique_id=unique_id, map_def=map_def
+        ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
+        map_def=map_def,
     )
 
     # Extract and plot pedestrian velocities
@@ -183,11 +185,15 @@ def plot_all_data_pkl(
     )
 
     plot_velocity_distribution(
-        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
     )
 
     plot_acceleration_distribution(
-        ped_positions_array=ped_positions, interactive=interactive, unique_id=unique_id
+        ped_positions_array=ped_positions,
+        interactive=interactive,
+        unique_id=unique_id,
     )
 
     # Extract and plot NPC velocity distribution with positions

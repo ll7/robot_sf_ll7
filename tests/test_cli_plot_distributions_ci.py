@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -19,7 +22,7 @@ def _write_matrix(path: Path, repeats: int = 4) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": repeats,
-        }
+        },
     ]
     import yaml  # type: ignore
 
@@ -52,7 +55,7 @@ def test_cli_plot_distributions_ci(tmp_path: Path, capsys):
             "8",
             "--dt",
             "0.1",
-        ]
+        ],
     )
     capsys.readouterr()
     assert rc_run == 0
@@ -78,7 +81,7 @@ def test_cli_plot_distributions_ci(tmp_path: Path, capsys):
             "--ci-seed",
             "123",
             "--out-pdf",
-        ]
+        ],
     )
     cap = capsys.readouterr()
     assert rc_plot == 0, f"plot-distributions --ci failed: {cap.err}"

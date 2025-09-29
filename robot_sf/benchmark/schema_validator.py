@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 try:
     import jsonschema
@@ -19,13 +19,13 @@ except ImportError as e:  # pragma: no cover
     raise RuntimeError("jsonschema package required for benchmark schema validation") from e
 
 
-def load_schema(path: str | Path) -> Dict[str, Any]:
+def load_schema(path: str | Path) -> dict[str, Any]:
     path = Path(path)
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def validate_episode(record: Dict[str, Any], schema: Dict[str, Any]) -> None:
+def validate_episode(record: dict[str, Any], schema: dict[str, Any]) -> None:
     """Validate a single episode record.
 
     Raises jsonschema.ValidationError if invalid.

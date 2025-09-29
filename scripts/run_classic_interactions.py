@@ -36,7 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from loguru import logger
 
@@ -47,7 +47,7 @@ SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.j
 DEFAULT_OUT = Path("results/classic_interactions/episodes.jsonl")
 
 
-def _load_json(path: str | None) -> Dict[str, Any] | None:
+def _load_json(path: str | None) -> dict[str, Any] | None:
     if not path:
         return None
     p = Path(path)
@@ -61,16 +61,24 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run classic interaction scenarios")
     parser.add_argument("--algo", default="simple_policy", help="Baseline algorithm name")
     parser.add_argument(
-        "--algo-config", dest="algo_config", default=None, help="Algo YAML config path"
+        "--algo-config",
+        dest="algo_config",
+        default=None,
+        help="Algo YAML config path",
     )
     parser.add_argument(
-        "--output", dest="output", default=str(DEFAULT_OUT), help="Output JSONL path"
+        "--output",
+        dest="output",
+        default=str(DEFAULT_OUT),
+        help="Output JSONL path",
     )
     parser.add_argument("--workers", type=int, default=1, help="Parallel workers")
     parser.add_argument("--horizon", type=int, default=100, help="Episode horizon")
     parser.add_argument("--dt", type=float, default=0.1, help="Simulation timestep")
     parser.add_argument(
-        "--no-resume", action="store_true", help="Disable resume (re-run all episodes)"
+        "--no-resume",
+        action="store_true",
+        help="Disable resume (re-run all episodes)",
     )
     parser.add_argument("--fail-fast", action="store_true", help="Abort on first episode failure")
     parser.add_argument("--record-forces", dest="record_forces", action="store_true", default=True)
@@ -81,10 +89,16 @@ def parse_args() -> argparse.Namespace:
         help="Do not record social forces",
     )
     parser.add_argument(
-        "--snqi-weights", dest="snqi_weights", default=None, help="Path to SNQI weights JSON"
+        "--snqi-weights",
+        dest="snqi_weights",
+        default=None,
+        help="Path to SNQI weights JSON",
     )
     parser.add_argument(
-        "--snqi-baseline", dest="snqi_baseline", default=None, help="Path to SNQI baseline JSON"
+        "--snqi-baseline",
+        dest="snqi_baseline",
+        default=None,
+        help="Path to SNQI baseline JSON",
     )
     return parser.parse_args()
 

@@ -30,10 +30,13 @@ import json
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 
 LINE_RE = re.compile(
-    r"^(?P<seconds>\d+(?:\.\d+)?)s\s+(?P<phase>call|setup|teardown)\s+(?P<nodeid>.+)$"
+    r"^(?P<seconds>\d+(?:\.\d+)?)s\s+(?P<phase>call|setup|teardown)\s+(?P<nodeid>.+)$",
 )
 
 
@@ -49,9 +52,8 @@ def parse(lines: list[str]) -> list[dict[str, object]]:
             continue
         secs = float(m.group("seconds"))
         nodeid = m.group("nodeid").strip()
-        if secs > durations[nodeid]:
-            durations[nodeid] = secs
-    timestamp = datetime.now(timezone.utc).isoformat()
+        durations[nodeid] = max(durations[nodeid], secs)
+    timestamp = datetime.now(UTC).isoformat()
     return [
         {"test_identifier": k, "duration_seconds": v, "timestamp": timestamp}
         for k, v in sorted(durations.items(), key=lambda kv: kv[1], reverse=True)
@@ -61,12 +63,13 @@ def parse(lines: list[str]) -> list[dict[str, object]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Parse pytest --durations output to JSON")
     parser.add_argument(
-        "--input", help="Optional path to a file containing pytest output; otherwise read stdin"
+        "--input",
+        help="Optional path to a file containing pytest output; otherwise read stdin",
     )
     args = parser.parse_args()
 
     if args.input:
-        with open(args.input, "r", encoding="utf-8") as fh:
+        with open(args.input, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
     else:
         lines = sys.stdin.read().splitlines()

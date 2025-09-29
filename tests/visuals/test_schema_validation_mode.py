@@ -6,12 +6,15 @@ Sets ROBOT_SF_VALIDATE_VISUALS=1 and monkeypatches validation to raise after man
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from robot_sf.benchmark.full_classic import visuals as visuals_mod
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Cfg:
@@ -26,7 +29,7 @@ def test_schema_validation_mode_raises(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ROBOT_SF_VALIDATE_VISUALS", "1")
 
     # Force validation to raise
-    def fake_validate(*_a, **_k):  # noqa: D401
+    def fake_validate(*_a, **_k):
         raise RuntimeError("forced-error")
 
     # Patch the imported symbol inside visuals module

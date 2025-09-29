@@ -74,8 +74,8 @@ class TestPlannerInterfaceCompliance:
         assert "vy" in action, f"{algo} velocity action missing 'vy' key"
 
         # Verify action values are numeric
-        assert isinstance(action["vx"], (int, float)), f"{algo} vx must be numeric"
-        assert isinstance(action["vy"], (int, float)), f"{algo} vy must be numeric"
+        assert isinstance(action["vx"], int | float), f"{algo} vx must be numeric"
+        assert isinstance(action["vy"], int | float), f"{algo} vy must be numeric"
 
         # Verify values are finite
         assert np.isfinite(action["vx"]), f"{algo} vx must be finite"
@@ -106,8 +106,8 @@ class TestPlannerInterfaceCompliance:
         assert "omega" in action, f"{algo} unicycle action missing 'omega' key"
 
         # Verify action values are numeric
-        assert isinstance(action["v"], (int, float)), f"{algo} v must be numeric"
-        assert isinstance(action["omega"], (int, float)), f"{algo} omega must be numeric"
+        assert isinstance(action["v"], int | float), f"{algo} v must be numeric"
+        assert isinstance(action["omega"], int | float), f"{algo} omega must be numeric"
 
         # Verify values are finite
         assert np.isfinite(action["v"]), f"{algo} v must be finite"
@@ -170,10 +170,13 @@ class TestPlannerInterfaceCompliance:
         planner.close()
 
     @pytest.mark.parametrize(
-        "algo", ["social_force", "random"]
+        "algo",
+        ["social_force", "random"],
     )  # Skip PPO due to model requirements
     def test_deterministic_behavior_with_seed(
-        self, algo: str, sample_observation: Observation
+        self,
+        algo: str,
+        sample_observation: Observation,
     ) -> None:
         """Test that planners produce deterministic results when seeded."""
         if algo == "social_force":

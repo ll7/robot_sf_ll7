@@ -29,7 +29,7 @@ def test_run_batch_with_synthetic_video(tmp_path: Path):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
 
     out_jsonl = tmp_path / "episodes.jsonl"
@@ -87,7 +87,7 @@ def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.Monke
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
 
     out_jsonl = tmp_path / "episodes_zero.jsonl"
@@ -136,7 +136,7 @@ def test_metrics_match_with_and_without_video(tmp_path: Path):
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 1,
-        }
+        },
     ]
 
     no_video_path = tmp_path / "episodes_no_video.jsonl"

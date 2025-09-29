@@ -11,22 +11,25 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
-import PIL.Image as Image  # pillow
+from PIL import Image  # pillow
 
 from robot_sf.benchmark.plotting_style import apply_latex_style
 from robot_sf.benchmark.scenario_generator import AREA_HEIGHT, AREA_WIDTH, generate_scenario
 from robot_sf.utils.seed_utils import set_global_seed
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
 
 @dataclass
 class ThumbMeta:
     scenario_id: str
     png: str
-    pdf: Optional[str]
+    pdf: str | None
 
 
 def _latex_rcparams():
@@ -39,7 +42,7 @@ def _latex_rcparams():
             "legend.fontsize": 8,
             "xtick.labelsize": 8,
             "ytick.labelsize": 8,
-        }
+        },
     )
 
 
@@ -51,12 +54,12 @@ def _scenario_seed(base_seed: int, scenario_id: str) -> int:
     return (base_seed + int(h, 16)) % (2**31 - 1)
 
 
-def _draw_obstacles(ax, obstacles: Sequence[Tuple[float, float, float, float]]):
+def _draw_obstacles(ax, obstacles: Sequence[tuple[float, float, float, float]]):
     for x1, y1, x2, y2 in obstacles:
         ax.plot([x1, x2], [y1, y2], color="#444", lw=1.2, alpha=0.9)
 
 
-def _draw_agents(ax, pos: np.ndarray, goals: Optional[np.ndarray] = None):
+def _draw_agents(ax, pos: np.ndarray, goals: np.ndarray | None = None):
     if pos.size == 0:
         return
     ax.scatter(pos[:, 0], pos[:, 1], s=10, c="#1f77b4", alpha=0.7, edgecolors="none")
@@ -80,11 +83,11 @@ def _extract_goals_from_state(state: np.ndarray) -> np.ndarray:
 
 
 def render_scenario_thumbnail(
-    params: Dict[str, object],
+    params: dict[str, object],
     seed: int,
     out_png: str | Path,
-    out_pdf: Optional[str | Path] = None,
-    figsize: Tuple[float, float] = (3.2, 2.0),
+    out_pdf: str | Path | None = None,
+    figsize: tuple[float, float] = (3.2, 2.0),
 ) -> ThumbMeta:
     """Render a single scenario thumbnail to disk.
 
@@ -100,7 +103,7 @@ def render_scenario_thumbnail(
 
     out_png = Path(out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
-    out_pdf_path: Optional[Path] = Path(out_pdf) if out_pdf else None
+    out_pdf_path: Path | None = Path(out_pdf) if out_pdf else None
 
     fig, ax = plt.subplots(figsize=figsize, dpi=150)
     ax.set_xlim(0, AREA_WIDTH)
@@ -126,7 +129,7 @@ def render_scenario_thumbnail(
     ax.set_title(" · ".join(title_bits))
 
     fig.savefig(out_png, dpi=300)
-    pdf_path_str: Optional[str] = None
+    pdf_path_str: str | None = None
     if out_pdf_path is not None:
         fig.savefig(out_pdf_path)
         pdf_path_str = str(out_pdf_path)
@@ -136,15 +139,15 @@ def render_scenario_thumbnail(
 
 
 def save_scenario_thumbnails(
-    scenarios: Iterable[Dict[str, object]],
+    scenarios: Iterable[dict[str, object]],
     out_dir: str | Path,
     base_seed: int = 0,
     out_pdf: bool = False,
-    figsize: Tuple[float, float] = (3.2, 2.0),
-) -> List[ThumbMeta]:
+    figsize: tuple[float, float] = (3.2, 2.0),
+) -> list[ThumbMeta]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    metas: List[ThumbMeta] = []
+    metas: list[ThumbMeta] = []
     for sc in scenarios:
         sid = str(sc.get("id", "scenario"))
         seed = _scenario_seed(base_seed, sid)
@@ -159,9 +162,9 @@ def save_montage(
     metas: Sequence[ThumbMeta],
     out_png: str | Path,
     cols: int = 3,
-    out_pdf: Optional[str | Path] = None,
+    out_pdf: str | Path | None = None,
     pad: float = 0.2,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Compose a simple montage grid from already-rendered thumbnails.
 
     Loads PNGs from metas to avoid re-rendering. Returns dict of written paths.
@@ -188,8 +191,8 @@ def save_montage(
     out_png.parent.mkdir(parents=True, exist_ok=True)
     montage.save(out_png)
 
-    out_pdf_path: Optional[Path] = Path(out_pdf) if out_pdf else None
-    pdf_path_str: Optional[str] = None
+    out_pdf_path: Path | None = Path(out_pdf) if out_pdf else None
+    pdf_path_str: str | None = None
     if out_pdf_path is not None:
         # Save via matplotlib to get vectorized PDF wrapper
         _latex_rcparams()
@@ -211,6 +214,6 @@ def save_montage(
 __all__ = [
     "ThumbMeta",
     "render_scenario_thumbnail",
-    "save_scenario_thumbnails",
     "save_montage",
+    "save_scenario_thumbnails",
 ]

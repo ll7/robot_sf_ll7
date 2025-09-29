@@ -20,7 +20,6 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
 
 
 @dataclass
@@ -29,27 +28,24 @@ class Sample:
     duration_seconds: float
 
 
-def load_any(path: Path) -> List[Sample]:
+def load_any(path: Path) -> list[Sample]:
     raw = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(raw, dict) and "samples" in raw:
-        data = raw["samples"]
-    else:
-        data = raw
-    out: List[Sample] = []
+    data = raw["samples"] if isinstance(raw, dict) and "samples" in raw else raw
+    out: list[Sample] = []
     for entry in data:
         try:
             out.append(
                 Sample(
                     test_identifier=entry["test_identifier"],
                     duration_seconds=float(entry["duration_seconds"]),
-                )
+                ),
             )
         except KeyError:
             continue
     return out
 
 
-def index_by(samples: List[Sample]) -> Dict[str, float]:
+def index_by(samples: list[Sample]) -> dict[str, float]:
     return {s.test_identifier: s.duration_seconds for s in samples}
 
 

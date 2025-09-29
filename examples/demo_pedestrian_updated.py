@@ -25,14 +25,18 @@ def make_env_new(map_name: str, robot_model_path: str):
     config = PedestrianSimulationConfig(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
-            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+            difficulty=difficulty,
+            ped_density_by_difficulty=ped_densities,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
 
     # Use factory pattern for cleaner creation
     return make_pedestrian_env(
-        config=config, robot_model=robot_model, debug=True, recording_enabled=False
+        config=config,
+        robot_model=robot_model,
+        debug=True,
+        recording_enabled=False,
     )
 
 
@@ -49,7 +53,8 @@ def make_env_old(map_name: str, robot_model_path: str):
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
-            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+            difficulty=difficulty,
+            ped_density_by_difficulty=ped_densities,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )

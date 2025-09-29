@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 - needed at runtime for pytest tmp_path fixture
 
 import pytest
 
@@ -35,8 +35,8 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
                 "near_misses": {"med": 0, "p95": 2},
                 "force_exceed_events": {"med": 0, "p95": 1},
                 "jerk_mean": {"med": 0.1, "p95": 0.5},
-            }
-        )
+            },
+        ),
     )
     lines: list[str] = []
     for i in range(n):
@@ -50,8 +50,8 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
                         "force_exceed_events": 0,
                         "jerk_mean": 0.1 + 0.05 * i,
                     },
-                }
-            )
+                },
+            ),
         )
     episodes.write_text("\n".join(lines) + "\n")
     return episodes, baseline
@@ -68,7 +68,8 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 def test_bootstrap_block_present(tmp_path: Path, cmd: str):
     episodes, baseline = _write_synthetic_inputs(tmp_path)
     out = tmp_path / f"out_{cmd}.json"
-    base = BIN + [
+    base = [
+        *BIN,
         "snqi",
         cmd,
         "--episodes",

@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from math import dist
-from typing import List, Tuple
 
 from robot_sf.util.types import Rect, Vec2D
 
@@ -39,7 +38,7 @@ class GlobalRoute:
 
     spawn_id: int
     goal_id: int
-    waypoints: List[Vec2D]
+    waypoints: list[Vec2D]
     spawn_zone: Rect
     goal_zone: Rect
 
@@ -57,17 +56,21 @@ class GlobalRoute:
             raise ValueError(f"Route {self.spawn_id} -> {self.goal_id} contains no waypoints!")
 
     @property
-    def sections(self) -> List[Tuple[Vec2D, Vec2D]]:
+    def sections(self) -> list[tuple[Vec2D, Vec2D]]:
         """
         Returns the sections of the route as a list of tuples, where each tuple
         contains two Vec2D objects
         representing the start and end points of the section.
         """
 
-        return [] if len(self.waypoints) < 2 else list(zip(self.waypoints[:-1], self.waypoints[1:]))
+        return (
+            []
+            if len(self.waypoints) < 2
+            else list(zip(self.waypoints[:-1], self.waypoints[1:], strict=False))
+        )
 
     @property
-    def section_lengths(self) -> List[float]:
+    def section_lengths(self) -> list[float]:
         """
         Returns the lengths of the sections as a list of floats.
         """
@@ -75,7 +78,7 @@ class GlobalRoute:
         return [dist(p1, p2) for p1, p2 in self.sections]
 
     @property
-    def section_offsets(self) -> List[float]:
+    def section_offsets(self) -> list[float]:
         """
         Returns the offsets of the sections as a list of floats.
         """

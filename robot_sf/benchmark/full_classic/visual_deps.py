@@ -27,7 +27,7 @@ def simulation_view_ready() -> bool:  # T030
     if not has_pygame():  # Quick fail path
         return False
     ready = False
-    try:  # noqa: SIM105
+    try:
         import pygame  # type: ignore
 
         from robot_sf.render.sim_view import SimulationView  # type: ignore
@@ -37,35 +37,53 @@ def simulation_view_ready() -> bool:  # T030
         width: int = getattr(view.screen, "get_width", lambda: 0)()  # type: ignore[arg-type]
         height: int = getattr(view.screen, "get_height", lambda: 0)()  # type: ignore[arg-type]
         ready = width > 0 and height > 0
-    except Exception:  # noqa: BLE001
+    except (ImportError, OSError):
+        return False
+    except Exception as exc:  # pragma: no cover - defensive
+        # Unexpected failure during lightweight sim view probe -> treat as not ready
+        # but log at debug level for diagnostics.
+        try:
+            from loguru import logger
+
+            logger.debug("simulation_view_ready probe failed: %s", exc)
+        except (ImportError, ModuleNotFoundError):
+            # If logger import fails, silently ignore to remain graceful
+            pass
         return False
     finally:  # Best effort cleanup (safe if pygame not fully init)
-        try:  # noqa: SIM105
+        try:
             pygame.display.quit()  # type: ignore[name-defined]
             pygame.quit()  # type: ignore[name-defined]
-        except Exception:  # noqa: BLE001
+        except (OSError, AttributeError):
+            # Best-effort cleanup may fail if pygame partially initialized
             pass
     return ready
 
 
 @lru_cache(maxsize=1)
 def has_pygame() -> bool:
-    try:  # noqa: SIM105
+    try:
         import pygame  # type: ignore
 
         _ = pygame.time.get_ticks  # access attribute to avoid unused warning
-    except Exception:  # noqa: BLE001
+    except ImportError:
+        return False
+    except (AttributeError, OSError):  # pragma: no cover - defensive
+        # Non-import errors (e.g., attributes missing) -> treat as not present
         return False
     return True
 
 
 @lru_cache(maxsize=1)
 def has_moviepy() -> bool:
-    try:  # noqa: SIM105
+    try:
         import moviepy  # type: ignore
 
         _ = getattr(moviepy, "__version__", None)
-    except Exception:  # noqa: BLE001
+    except ImportError:
+        return False
+    except (AttributeError, OSError):  # pragma: no cover - defensive
+        # Any other import issue treat as not available
         return False
     return True
 
@@ -86,9 +104,9 @@ def moviepy_ready() -> bool:
 
 
 __all__ = [
-    "has_pygame",
-    "has_moviepy",
     "ffmpeg_in_path",
+    "has_moviepy",
+    "has_pygame",
     "moviepy_ready",
     "simulation_view_ready",
 ]

@@ -64,8 +64,8 @@ class TestSocialForceIntegration:
             # Verify action format
             assert "vx" in action
             assert "vy" in action
-            assert isinstance(action["vx"], (int, float))
-            assert isinstance(action["vy"], (float, int))
+            assert isinstance(action["vx"], int | float)
+            assert isinstance(action["vy"], float | int)
 
             # Update robot state (simple integration)
             robot_vel = [action["vx"], action["vy"]]
@@ -78,7 +78,7 @@ class TestSocialForceIntegration:
                     "position": robot_pos.copy(),
                     "velocity": robot_vel.copy(),
                     "action": action.copy(),
-                }
+                },
             )
 
             # Check if goal reached
@@ -125,7 +125,7 @@ class TestSocialForceIntegration:
         max_distance_to_ped = 0.0
         min_distance_to_ped = float("inf")
 
-        for step in range(100):
+        for _step in range(100):
             obs = Observation(
                 dt=0.1,
                 robot={
@@ -175,7 +175,11 @@ class TestSocialForceIntegration:
     def test_unicycle_action_space_scenario(self):
         """Test planner works with unicycle action space."""
         config = SFPlannerConfig(
-            action_space="unicycle", v_max=1.0, omega_max=1.0, desired_speed=0.8, noise_std=0.0
+            action_space="unicycle",
+            v_max=1.0,
+            omega_max=1.0,
+            desired_speed=0.8,
+            noise_std=0.0,
         )
 
         planner = SocialForcePlanner(config, seed=42)
@@ -186,7 +190,7 @@ class TestSocialForceIntegration:
 
         actions_taken = []
 
-        for step in range(50):
+        for _step in range(50):
             obs = Observation(
                 dt=0.1,
                 robot={

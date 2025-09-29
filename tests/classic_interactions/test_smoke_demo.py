@@ -18,7 +18,7 @@ def _import_demo_module():
     return mod
 
 
-def test_smoke_run_demo_produces_episode_summaries():  # noqa: D401
+def test_smoke_run_demo_produces_episode_summaries():
     mod = _import_demo_module()
     # Force non-dry run by temporarily patching DRY_RUN constant if present
     if hasattr(mod, "DRY_RUN"):

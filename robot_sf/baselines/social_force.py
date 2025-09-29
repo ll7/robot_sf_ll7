@@ -15,7 +15,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from math import atan2
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pysocialforce as pysf
@@ -28,6 +28,9 @@ from pysocialforce.config import (
 from pysocialforce.config import SocialForceConfig as PySFSocialForceConfig
 
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 @dataclass
@@ -77,22 +80,22 @@ class SFPlannerConfig:
 @dataclass
 class Observation:
     dt: float
-    robot: Dict[str, Any]
-    agents: List[Dict[str, Any]]
-    obstacles: List[Any] = field(default_factory=list)
+    robot: dict[str, Any]
+    agents: list[dict[str, Any]]
+    obstacles: list[Any] = field(default_factory=list)
 
 
 class BasePolicy:
-    def __init__(self, config: Any, *, seed: Optional[int] = None):
+    def __init__(self, config: Any, *, seed: int | None = None):
         raise NotImplementedError
 
-    def reset(self, *, seed: Optional[int] = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         raise NotImplementedError
 
     def configure(self, config: Any) -> None:
         raise NotImplementedError
 
-    def step(self, obs: Any) -> Dict[str, float]:
+    def step(self, obs: Any) -> dict[str, float]:
         raise NotImplementedError
 
     def close(self) -> None:
@@ -106,36 +109,42 @@ class SocialForcePlanner(BasePolicy):
     class _RNGCompat:
         """Expose randint() and normal() using numpy's Generator."""
 
-        def __init__(self, seed: Optional[int]):
+        def __init__(self, seed: int | None):
             self._gen = np.random.default_rng(seed)
 
         def randint(
-            self, low: int, high: Optional[int] = None, size: Optional[int | tuple[int, ...]] = None
+            self,
+            low: int,
+            high: int | None = None,
+            size: int | tuple[int, ...] | None = None,
         ):
             return self._gen.integers(low, high=high, size=size)
 
         def normal(
-            self, loc: float = 0.0, scale: float = 1.0, size: Optional[int | tuple[int, ...]] = None
+            self,
+            loc: float = 0.0,
+            scale: float = 1.0,
+            size: int | tuple[int, ...] | None = None,
         ):
             return self._gen.normal(loc, scale, size)
 
-    def __init__(self, config: Union[Dict, SFPlannerConfig], *, seed: Optional[int] = None):
+    def __init__(self, config: dict | SFPlannerConfig, *, seed: int | None = None):
         self.config = self._parse_config(config)
         self._rng = self._RNGCompat(seed)
-        self._sim: Optional[Any] = None
-        self._wrapper: Optional[FastPysfWrapper] = None
-        self._last_position: Optional[np.ndarray] = None
-        self._last_velocity: Optional[np.ndarray] = None
-        self._robot_state: Optional[Dict[str, Any]] = None
+        self._sim: Any | None = None
+        self._wrapper: FastPysfWrapper | None = None
+        self._last_position: np.ndarray | None = None
+        self._last_velocity: np.ndarray | None = None
+        self._robot_state: dict[str, Any] | None = None
 
-    def _parse_config(self, config: Union[Dict, SFPlannerConfig]) -> SFPlannerConfig:
+    def _parse_config(self, config: dict | SFPlannerConfig) -> SFPlannerConfig:
         if isinstance(config, dict):
             return SFPlannerConfig(**config)
         if isinstance(config, SFPlannerConfig):
             return config
         raise TypeError(f"Invalid config type: {type(config)}")
 
-    def reset(self, *, seed: Optional[int] = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         if seed is not None:
             self._rng = self._RNGCompat(seed)
         self._sim = None
@@ -144,10 +153,10 @@ class SocialForcePlanner(BasePolicy):
         self._last_velocity = None
         self._robot_state = None
 
-    def configure(self, config: Union[Dict, SFPlannerConfig]) -> None:
+    def configure(self, config: dict | SFPlannerConfig) -> None:
         self.config = self._parse_config(config)
 
-    def step(self, obs: Union[Observation, Dict]) -> Dict[str, float]:
+    def step(self, obs: Observation | dict) -> dict[str, float]:
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -186,7 +195,8 @@ class SocialForcePlanner(BasePolicy):
         if n_agents > 0:
             positions = np.asarray([a["position"] for a in agent_states], dtype=float)
             velocities = np.asarray(
-                [a.get("velocity", [0.0, 0.0]) for a in agent_states], dtype=float
+                [a.get("velocity", [0.0, 0.0]) for a in agent_states],
+                dtype=float,
             )
             goals = np.asarray([a.get("goal", [0.0, 0.0]) for a in agent_states], dtype=float)
             state_array = np.column_stack([positions, velocities, goals])
@@ -195,7 +205,7 @@ class SocialForcePlanner(BasePolicy):
 
         cfg = self._create_pysf_config()
 
-        obstacles: Optional[Sequence] = getattr(obs, "obstacles", None)
+        obstacles: Sequence | None = getattr(obs, "obstacles", None)
         if obstacles is not None and len(obstacles) == 0:
             obstacles = None
 
@@ -233,7 +243,10 @@ class SocialForcePlanner(BasePolicy):
         )
 
     def _compute_total_force(
-        self, robot_pos: np.ndarray, robot_goal: np.ndarray, robot_vel: np.ndarray
+        self,
+        robot_pos: np.ndarray,
+        robot_goal: np.ndarray,
+        robot_vel: np.ndarray,
     ) -> np.ndarray:
         """Compute total acceleration-like force (desired + interactions).
 
@@ -266,7 +279,10 @@ class SocialForcePlanner(BasePolicy):
         total = desired + interactions
         # Replace any NaNs/Infs defensively
         total = np.nan_to_num(
-            total, nan=0.0, posinf=self.config.max_force, neginf=-self.config.max_force
+            total,
+            nan=0.0,
+            posinf=self.config.max_force,
+            neginf=-self.config.max_force,
         )
         if self.config.clip_force:
             m = float(np.linalg.norm(total))
@@ -274,7 +290,8 @@ class SocialForcePlanner(BasePolicy):
                 total = total / (m + self.EPSILON) * self.config.max_force
         if self.config.noise_std > 0:
             total = total + np.asarray(
-                self._rng.normal(0.0, self.config.noise_std, size=2), dtype=float
+                self._rng.normal(0.0, self.config.noise_std, size=2),
+                dtype=float,
             )
         return total
 
@@ -285,7 +302,7 @@ class SocialForcePlanner(BasePolicy):
         robot_vel: np.ndarray,
         robot_goal: np.ndarray,
         dt: float,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         if self.config.action_space == "velocity":
             return self._force_to_velocity_action(force, robot_vel)
         if self.config.action_space == "unicycle":
@@ -293,8 +310,10 @@ class SocialForcePlanner(BasePolicy):
         raise ValueError(f"Unknown action space: {self.config.action_space}")
 
     def _force_to_velocity_action(
-        self, force: np.ndarray, robot_vel: np.ndarray
-    ) -> Dict[str, float]:
+        self,
+        force: np.ndarray,
+        robot_vel: np.ndarray,
+    ) -> dict[str, float]:
         desired_vel = robot_vel + force * self.config.tau
         if self.config.safety_clamp:
             speed = float(np.linalg.norm(desired_vel))
@@ -309,7 +328,7 @@ class SocialForcePlanner(BasePolicy):
         robot_vel: np.ndarray,
         robot_goal: np.ndarray,
         dt: float,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         mag = float(np.linalg.norm(force))
         if mag < 1e-6:
             return {"v": 0.0, "omega": 0.0}
@@ -344,7 +363,7 @@ class SocialForcePlanner(BasePolicy):
         self._sim = None
         self._wrapper = None
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         config_dict = asdict(self.config)
         config_hash = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[
             :16
@@ -352,4 +371,4 @@ class SocialForcePlanner(BasePolicy):
         return {"algorithm": "social_force", "config": config_dict, "config_hash": config_hash}
 
 
-__all__ = ["SocialForcePlanner", "SFPlannerConfig", "Observation"]
+__all__ = ["Observation", "SFPlannerConfig", "SocialForcePlanner"]

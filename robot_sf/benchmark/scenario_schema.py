@@ -15,7 +15,10 @@ and may include a "details" field with structured info.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 try:
     from jsonschema import Draft7Validator
@@ -25,7 +28,7 @@ except Exception as e:  # pragma: no cover - jsonschema is project dependency
 SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json")
 
 
-def load_scenario_schema() -> Dict[str, Any]:
+def load_scenario_schema() -> dict[str, Any]:
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         import json
 
@@ -33,7 +36,7 @@ def load_scenario_schema() -> Dict[str, Any]:
 
 
 def _json_pointer(path_elems: Iterable[Any]) -> str:
-    parts: List[str] = []
+    parts: list[str] = []
     for p in path_elems:
         if isinstance(p, int):
             parts.append(str(p))
@@ -42,7 +45,7 @@ def _json_pointer(path_elems: Iterable[Any]) -> str:
     return "/" + "/".join(parts) if parts else ""  # RFC6901 pointer-ish
 
 
-def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Validate a list of scenario dicts against the JSON Schema.
 
     Returns a list of error dicts; empty when valid. Also checks for duplicate
@@ -52,7 +55,7 @@ def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, An
     item_schema = schema.get("items", {})
     validator = Draft7Validator(item_schema)
 
-    errors: List[Dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
 
     # Per-item schema validation (keep index alignment for better messages)
     for i, s in enumerate(scenarios):
@@ -64,7 +67,7 @@ def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, An
                     "id": s.get("id"),
                     "error": err.message,
                     "path": path,
-                }
+                },
             )
 
         # Defensive repeat check for clearer message
@@ -77,7 +80,7 @@ def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, An
                             "id": s.get("id"),
                             "error": "repeats must be >= 1",
                             "path": "/repeats",
-                        }
+                        },
                     )
             except Exception:
                 errors.append(
@@ -86,11 +89,11 @@ def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, An
                         "id": s.get("id"),
                         "error": "repeats must be an integer",
                         "path": "/repeats",
-                    }
+                    },
                 )
 
     # Duplicate id check across the list
-    seen: Dict[str, int] = {}
+    seen: dict[str, int] = {}
     for i, s in enumerate(scenarios):
         sid = s.get("id")
         if isinstance(sid, str):
@@ -102,7 +105,7 @@ def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, An
                         "error": "duplicate id",
                         "path": "/id",
                         "details": {"first_index": seen[sid]},
-                    }
+                    },
                 )
             else:
                 seen[sid] = i
@@ -110,4 +113,4 @@ def validate_scenario_list(scenarios: List[Dict[str, Any]]) -> List[Dict[str, An
     return errors
 
 
-__all__ = ["load_scenario_schema", "validate_scenario_list", "SCHEMA_FILE"]
+__all__ = ["SCHEMA_FILE", "load_scenario_schema", "validate_scenario_list"]

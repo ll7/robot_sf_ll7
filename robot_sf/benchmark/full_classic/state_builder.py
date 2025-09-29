@@ -13,9 +13,12 @@ guards with hasattr checks).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generator, Iterable
+from typing import TYPE_CHECKING
 
-from .replay import ReplayEpisode
+if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable
+
+    from .replay import ReplayEpisode
 
 
 @dataclass(slots=True)

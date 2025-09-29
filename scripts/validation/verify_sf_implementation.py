@@ -45,7 +45,7 @@ def test_registry_system():
 
     try:
         # Check registry structure
-        with open("robot_sf/baselines/__init__.py", "r", encoding="utf-8") as f:
+        with open("robot_sf/baselines/__init__.py", encoding="utf-8") as f:
             content = f.read()
 
         required_components = ["BASELINES", "get_baseline", "list_baselines", "baseline_sf"]
@@ -69,7 +69,7 @@ def test_cli_integration():
 
     try:
         # Check CLI modifications
-        with open("robot_sf/benchmark/cli.py", "r", encoding="utf-8") as f:
+        with open("robot_sf/benchmark/cli.py", encoding="utf-8") as f:
             cli_content = f.read()
 
         # Check for algorithm support
@@ -81,7 +81,7 @@ def test_cli_integration():
                 return False
 
         # Check runner modifications
-        with open("robot_sf/benchmark/runner.py", "r", encoding="utf-8") as f:
+        with open("robot_sf/benchmark/runner.py", encoding="utf-8") as f:
             runner_content = f.read()
 
         runner_requirements = ["_create_robot_policy", "algo:"]
@@ -96,7 +96,7 @@ def test_cli_integration():
         hook_patterns = ["def algorithm_", "class Algorithm", "algo:"]
         if not any(p in runner_content for p in hook_patterns):
             print(
-                "❌ Missing runner feature: algorithm hook (def algorithm_/class Algorithm/algo:)"
+                "❌ Missing runner feature: algorithm hook (def algorithm_/class Algorithm/algo:)",
             )
             return False
 
@@ -116,7 +116,7 @@ def test_configuration_files():
         import yaml
 
         # Test default config
-        with open("configs/baselines/social_force_default.yaml", "r", encoding="utf-8") as f:
+        with open("configs/baselines/social_force_default.yaml", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         required_params = ["v_max", "desired_speed", "action_space", "A", "B"]

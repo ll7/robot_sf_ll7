@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -27,20 +27,24 @@ class RandomPlannerConfig:
 @dataclass
 class Observation:
     dt: float
-    robot: Dict[str, Any]
-    agents: list[Dict[str, Any]]
+    robot: dict[str, Any]
+    agents: list[dict[str, Any]]
     obstacles: list[Any]
 
 
 class RandomPlanner:
     def __init__(
-        self, config: Union[Dict[str, Any], RandomPlannerConfig], *, seed: Optional[int] = None
+        self,
+        config: dict[str, Any] | RandomPlannerConfig,
+        *,
+        seed: int | None = None,
     ):
         self.config = self._parse_config(config)
         self._rng = np.random.default_rng(seed)
 
     def _parse_config(
-        self, config: Union[Dict[str, Any], RandomPlannerConfig]
+        self,
+        config: dict[str, Any] | RandomPlannerConfig,
     ) -> RandomPlannerConfig:
         if isinstance(config, dict):
             return RandomPlannerConfig(**config)
@@ -48,14 +52,14 @@ class RandomPlanner:
             return config
         raise TypeError(f"Invalid config type: {type(config)}")
 
-    def reset(self, *, seed: Optional[int] = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         if seed is not None:
             self._rng = np.random.default_rng(seed)
 
-    def configure(self, config: Union[Dict[str, Any], RandomPlannerConfig]) -> None:
+    def configure(self, config: dict[str, Any] | RandomPlannerConfig) -> None:
         self.config = self._parse_config(config)
 
-    def step(self, obs: Union[Observation, Dict[str, Any]]) -> Dict[str, float]:
+    def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         # Support dict-style Observation
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
@@ -94,10 +98,10 @@ class RandomPlanner:
     def close(self) -> None:  # For API symmetry
         pass
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         cfg = asdict(self.config)
         cfg_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
         return {"algorithm": "random", "config": cfg, "config_hash": cfg_hash}
 
 
-__all__ = ["RandomPlanner", "RandomPlannerConfig", "Observation"]
+__all__ = ["Observation", "RandomPlanner", "RandomPlannerConfig"]

@@ -18,17 +18,25 @@ Future extensions (not in T031 scope):
 
 from __future__ import annotations
 
-from typing import Generator
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .replay import ReplayEpisode
 from .state_builder import iter_states  # T037
 from .visual_deps import has_pygame, simulation_view_ready
 
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from .replay import ReplayEpisode
+
 try:  # lightweight import gate
     from robot_sf.render.sim_view import SimulationView  # type: ignore
-except Exception as e:  # noqa: BLE001
+except ImportError as e:
+    SimulationView = None  # type: ignore
+    _SIM_VIEW_IMPORT_ERROR = e
+except Exception as e:  # pragma: no cover - defensive
+    # Keep prior behavior for unexpected import-time errors: record and continue.
     SimulationView = None  # type: ignore
     _SIM_VIEW_IMPORT_ERROR = e
 else:  # pragma: no cover - trivial branch
@@ -38,12 +46,15 @@ else:  # pragma: no cover - trivial branch
 def _assert_ready() -> None:
     if not has_pygame() or SimulationView is None or not simulation_view_ready():  # type: ignore
         raise RuntimeError(
-            "SimulationView not available (pygame or probe failed); caller should fallback"
+            "SimulationView not available (pygame or probe failed); caller should fallback",
         )
 
 
 def generate_frames(
-    episode: ReplayEpisode, *, fps: int = 10, max_frames: int | None = None
+    episode: ReplayEpisode,
+    *,
+    fps: int = 10,
+    max_frames: int | None = None,
 ) -> Generator[np.ndarray, None, None]:
     """Yield RGB frames for the given replay episode.
 
@@ -79,7 +90,8 @@ def generate_frames(
                     import pygame  # type: ignore
 
                     if hasattr(_sim_view, "screen") and isinstance(
-                        _sim_view.screen, pygame.Surface
+                        _sim_view.screen,
+                        pygame.Surface,
                     ):  # type: ignore[attr-defined]
                         surf = _sim_view.screen  # type: ignore[attr-defined]
                         # Ensure consistent size (H,W) = (surface.get_height(), surface.get_width())
@@ -88,18 +100,29 @@ def generate_frames(
                         frame_h, frame_w = frame.shape[:2]
                         if arr.shape[0] == frame_h and arr.shape[1] == frame_w:
                             frame = arr
-            except Exception:  # noqa: BLE001
+            except (AttributeError, RuntimeError, ImportError):
                 # Ignore and keep synthetic frame
                 pass
+            except Exception as exc:  # pragma: no cover - defensive
+                # Log if possible, otherwise ignore. Limit the scope of what we catch
+                # when trying to import the logger to avoid swallowing unrelated errors.
+                try:
+                    from loguru import logger
+
+                    logger.debug("generate_frames render capture failed: %s", exc)
+                except ImportError:
+                    # No logger available; ignore
+                    pass
             produced += 1
             yield frame
             if max_frames is not None and produced >= max_frames:
                 break
     finally:  # T041A cleanup
-        try:  # noqa: SIM105
+        try:
             if hasattr(_sim_view, "exit_simulation"):
                 _sim_view.exit_simulation()  # type: ignore[call-arg]
-        except Exception:  # noqa: BLE001
+        except (AttributeError, OSError, RuntimeError):
+            # Best-effort cleanup; ignore known failures
             pass
 
 

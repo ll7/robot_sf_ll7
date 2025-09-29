@@ -7,9 +7,12 @@ report collisions > 0 for this episode.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.runner import run_batch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_collision_sanity(tmp_path: Path):
@@ -19,7 +22,7 @@ def test_collision_sanity(tmp_path: Path):
     # Run a single episode with a short horizon (10 steps is more than enough)
     summary = run_batch(
         scenarios_or_path=[
-            {"id": "C00_collision_sanity", "preset": "collision_sanity", "repeats": 1}
+            {"id": "C00_collision_sanity", "preset": "collision_sanity", "repeats": 1},
         ],
         out_path=str(out_path),
         schema_path="docs/dev/issues/social-navigation-benchmark/episode_schema.json",

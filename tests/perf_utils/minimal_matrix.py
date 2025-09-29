@@ -6,7 +6,10 @@ reducing execution time to a few episodes.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 MINIMAL_MATRIX_YAML = """# Minimal scenario matrix for performance-sensitive tests
 # Satisfies planning validation requirements while keeping workload tiny.

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.cli import cli_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_episodes(path: Path) -> None:
@@ -52,7 +55,7 @@ def test_cli_snqi_ablate_md(tmp_path: Path, capsys):
             str(b_path),
             "--format",
             "md",
-        ]
+        ],
     )
     capsys.readouterr()
     assert rc == 0

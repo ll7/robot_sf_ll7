@@ -5,11 +5,14 @@ Forces SimulationView unavailable and ensures auto mode produces synthetic video
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.full_classic import visuals as visuals_mod
 from robot_sf.benchmark.full_classic.visual_constants import RENDERER_SYNTHETIC
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Cfg:
@@ -22,7 +25,7 @@ class Cfg:
 
 def test_synthetic_fallback_when_sim_view_unavailable(tmp_path: Path):
     # Force SimulationView unavailable
-    visuals_mod._SIM_VIEW_AVAILABLE = False  # noqa: SLF001  # type: ignore[attr-defined]
+    visuals_mod._SIM_VIEW_AVAILABLE = False  # type: ignore[attr-defined]
     records = [
         {"episode_id": "ep1", "scenario_id": "sc1"},
     ]

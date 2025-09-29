@@ -6,7 +6,7 @@ with NOTE_MOVIEPY_MISSING when forced sim-view.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.full_classic import visuals as visuals_mod
 from robot_sf.benchmark.full_classic.visual_constants import (
@@ -14,6 +14,9 @@ from robot_sf.benchmark.full_classic.visual_constants import (
     RENDERER_SIM_VIEW,
 )
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Cfg:
@@ -26,7 +29,7 @@ class Cfg:
 
 def test_moviepy_missing_sim_view_forced(tmp_path: Path, monkeypatch):
     # Pretend SimulationView available
-    visuals_mod._SIM_VIEW_AVAILABLE = True  # noqa: SLF001  # type: ignore[attr-defined]
+    visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
     # Force moviepy missing
     monkeypatch.setattr(visuals_mod, "moviepy_ready", lambda: False)
@@ -41,7 +44,7 @@ def test_moviepy_missing_sim_view_forced(tmp_path: Path, monkeypatch):
                 (0.0, 0.0, 0.0, 0.0),
                 (0.1, 0.1, 0.0, 0.0),
             ],
-        }
+        },
     ]
     groups: list = []
     out = generate_visual_artifacts(tmp_path, Cfg, groups, records)

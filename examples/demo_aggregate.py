@@ -30,7 +30,7 @@ def _write_demo_matrix(path: Path) -> None:
             "goal_topology": "point",
             "robot_context": "embedded",
             "repeats": 3,
-        }
+        },
     ]
     import yaml  # type: ignore
 

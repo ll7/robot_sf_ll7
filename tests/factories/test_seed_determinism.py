@@ -24,7 +24,7 @@ def _extract_numeric(obs):
     """
     if isinstance(obs, dict) and "drive_state" in obs:
         return np.asarray(obs["drive_state"], dtype=float)
-    if isinstance(obs, (list, tuple)):
+    if isinstance(obs, list | tuple):
         for item in obs:
             if isinstance(item, dict) and "drive_state" in item:
                 return np.asarray(item["drive_state"], dtype=float)

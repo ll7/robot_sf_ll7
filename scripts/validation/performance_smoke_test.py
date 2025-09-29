@@ -116,7 +116,7 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-def main() -> int:  # noqa: C901 - simplicity preferred over splitting tiny script
+def main() -> int:
     """Run performance smoke tests with soft/hard threshold evaluation."""
     print("Social Navigation Benchmark - Performance Smoke Test")
     print("=" * 60)
@@ -191,7 +191,7 @@ def main() -> int:  # noqa: C901 - simplicity preferred over splitting tiny scri
     print(f"Environment creation: {creation_status} ({creation_time:.2f}s)")
     print(
         "Reset throughput: "
-        f"{reset_status} ({resets_per_sec:.2f} resets/sec, {perf_metrics['ms_per_reset']:.2f} ms/reset)"
+        f"{reset_status} ({resets_per_sec:.2f} resets/sec, {perf_metrics['ms_per_reset']:.2f} ms/reset)",
     )
 
     hard_fail = not creation_hard_ok or not reset_hard_ok
@@ -213,4 +213,4 @@ def main() -> int:  # noqa: C901 - simplicity preferred over splitting tiny scri
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

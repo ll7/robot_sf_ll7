@@ -6,12 +6,15 @@ Monkeypatch time.perf_counter to inflate plots or video durations to trigger ove
 from __future__ import annotations
 
 import time as _time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from robot_sf.benchmark.full_classic import visuals as visuals_mod
 from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Cfg:
@@ -32,13 +35,13 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
                 (0.0, 0.0, 0.0, 0.0),
                 (0.1, 0.1, 0.0, 0.0),
             ],
-        }
+        },
     ]
     groups: list = []
 
     # Monkeypatch build to simulate long encode time & over-budget plots
     class FakeVideoArtifact:
-        def __init__(self):  # noqa: D401
+        def __init__(self):
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -49,7 +52,7 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
             self.encode_time_s = 6.2  # >5 threshold
             self.peak_rss_mb = 30.0
 
-    def fake_build(_cfg, _recs, _vdir, _rmap):  # noqa: D401, ARG001
+    def fake_build(_cfg, _recs, _vdir, _rmap):
         return [FakeVideoArtifact()]
 
     monkeypatch.setattr(visuals_mod, "_build_video_artifacts", fake_build)
@@ -74,7 +77,7 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
     # Monkeypatch encoding to inject a synthetic success with high peak memory
     class FakeVideoArtifact:
-        def __init__(self):  # noqa: D401
+        def __init__(self):
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -85,7 +88,7 @@ def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
             self.encode_time_s = 0.1
             self.peak_rss_mb = peak
 
-    def fake_build_video(_cfg, _records, _videos_dir, _replay_map):  # noqa: D401, ARG001
+    def fake_build_video(_cfg, _records, _videos_dir, _replay_map):
         return [FakeVideoArtifact()]
 
     monkeypatch.setattr(visuals_mod, "_build_video_artifacts", fake_build_video)

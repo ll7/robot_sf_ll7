@@ -221,7 +221,7 @@ def run_episode(
     done = False
     step = 0
     last_info: dict[str, Any] = {}
-    frames: list[Any] | None = [] if (record and MOVIEPY_AVAILABLE) else None
+    frames: list[Any] | None = [] if record else None
     # Performance: capture frames only if recording enabled & moviepy available (FR-025)
     fast_demo_mode = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     fast_step_cap = 8 if fast_demo_mode else None

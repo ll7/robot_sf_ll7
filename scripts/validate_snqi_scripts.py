@@ -6,6 +6,10 @@ and sensitivity analysis scripts are working correctly.
 """
 
 import sys
+import importlib
+import importlib.util
+from types import ModuleType
+from pathlib import Path
 
 from robot_sf.benchmark.snqi import compute_snqi
 
@@ -94,19 +98,29 @@ def test_weight_computation():
         # Ensure imports are resolved relative to this file, not CWD
         scripts_dir = Path(__file__).resolve().parent
         sys.path.insert(0, str(scripts_dir))
-        try:
-            # Prefer package-qualified import when available
-            import importlib
+        # Prefer package-qualified import when available. Use helper to centralize logic
+        def _find_and_import_script(module_name: str, package_prefix: str = "scripts") -> ModuleType | None:
+            """Try importing module under package_prefix first, then bare module name.
 
-            try:
-                recompute_mod = importlib.import_module("scripts.recompute_snqi_weights")
-            except ModuleNotFoundError:
-                recompute_mod = importlib.import_module("recompute_snqi_weights")
-            SNQIWeightRecomputer = getattr(recompute_mod, "SNQIWeightRecomputer", None)
-            if SNQIWeightRecomputer is None:
-                raise ImportError("SNQIWeightRecomputer not found in recompute_snqi_weights")
-        except Exception as e:
-            print(f"✗ Could not import recompute_snqi_weights: {e}")
+            Returns the imported module or None if not importable.
+            """
+            candidates = [f"{package_prefix}.{module_name}", module_name]
+            for candidate in candidates:
+                try:
+                    if importlib.util.find_spec(candidate) is None:
+                        continue
+                    return importlib.import_module(candidate)
+                except Exception as e:  # pragma: no cover - import fallback diagnostics
+                    print(f"⚠ Failed to import '{candidate}': {e}")
+            return None
+
+        recompute_mod = _find_and_import_script("recompute_snqi_weights")
+        if recompute_mod is None:
+            print("✗ Could not import recompute_snqi_weights")
+            return False
+        SNQIWeightRecomputer = getattr(recompute_mod, "SNQIWeightRecomputer", None)
+        if SNQIWeightRecomputer is None:
+            print("✗ SNQIWeightRecomputer not found in recompute_snqi_weights")
             return False
 
         recomputer = SNQIWeightRecomputer(episodes, baseline_stats)

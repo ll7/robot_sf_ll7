@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from collections.abc import Sequence
 from datetime import (
     UTC,  # type: ignore[attr-defined]
     datetime,
@@ -441,19 +442,9 @@ def _summary_build_columns(
 
 
 def _summary_ci_pair(metric_dict: dict, stat: str) -> tuple[float | None, float | None]:
-    """Return (low, high) if a valid CI exists, otherwise (None, None).
-
-    Defensive: the input may come from JSON or be None. Only accept a
-    sequence (list/tuple) of length 2 whose elements are numeric.
-    """
+    """Return (low, high) if a valid CI exists, otherwise (None, None)."""
     ci = metric_dict.get(f"{stat}_ci")
-    # Accept only real sequences of length 2
-    try:
-        from collections.abc import Sequence
-
-        is_seq = isinstance(ci, Sequence)
-    except Exception:
-        is_seq = False
+    is_seq = isinstance(ci, Sequence)
 
     if not is_seq or ci is None or len(ci) != 2:
         return None, None

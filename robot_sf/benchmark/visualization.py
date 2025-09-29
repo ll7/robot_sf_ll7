@@ -328,6 +328,13 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         plot_path = Path(output_dir) / plot_filename
         plt.savefig(plot_path, format="pdf", bbox_inches="tight")
         plt.close()
+        # Ensure figures are fully released and memory returned to OS where possible
+        try:
+            import gc
+
+            gc.collect()
+        except Exception:
+            pass
 
         # Create artifact
         generation_time = datetime.now()
@@ -408,6 +415,13 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
         plot_path = Path(output_dir) / plot_filename
         plt.savefig(plot_path, format="pdf", bbox_inches="tight")
         plt.close()
+        # Ensure figures are fully released and memory returned to OS where possible
+        try:
+            import gc
+
+            gc.collect()
+        except Exception:
+            pass
 
         # Create artifact
         generation_time = datetime.now()

@@ -17,12 +17,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import TYPE_CHECKING
+from pathlib import Path  # noqa: TC003 - needed at runtime for pytest tmp_path fixture
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 BIN = ["uv", "run", "robot_sf_bench"]
 

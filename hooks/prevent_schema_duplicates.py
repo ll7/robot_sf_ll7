@@ -6,9 +6,12 @@ existing canonical schemas, preventing commits that introduce duplication.
 """
 
 import hashlib
+import logging
 import re
 import sys
 from pathlib import Path
+
+logging.basicConfig(level=logging.WARNING)
 
 
 def prevent_schema_duplicates(
@@ -111,12 +114,11 @@ def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> dict | None:
                         "reason": "Content hash matches existing canonical schema",
                     }
 
-            except OSError:
-                # Log error but continue checking other files
-                pass
+            except OSError as exc:
+                logging.warning("Failed to read canonical schema %s: %s", canonical_file, exc)
 
-    except OSError:
-        pass
+    except OSError as exc:
+        logging.warning("Failed to read staged schema %s: %s", staged_path, exc)
 
     return None
 

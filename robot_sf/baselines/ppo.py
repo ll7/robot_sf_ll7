@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 try:  # Lazy import; not required for type-check only
     from stable_baselines3 import PPO
@@ -149,9 +150,19 @@ class PPOPlanner:
             model_obs_in = model_obs  # SB3 accepts 1D for single obs
         else:
             model_obs_in = model_obs
-        act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
-        act = np.asarray(act, dtype=float).squeeze()
-        return act
+        try:
+            act, _ = self._model.predict(model_obs_in, deterministic=self.config.deterministic)
+            act = np.asarray(act, dtype=float).squeeze()
+            return act
+        except (
+            RuntimeError,
+            ValueError,
+            OSError,
+            IndexError,
+        ) as exc:  # predict-time errors we can recover from
+            # Log at debug level for diagnostics; fall back to goal if enabled
+            logger.debug("PPO model prediction failed: %s", exc, exc_info=True)
+            return None
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
         if self.config.obs_mode == "image":

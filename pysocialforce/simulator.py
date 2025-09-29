@@ -154,8 +154,8 @@ class Simulator_v2:
 
 class Simulator:
     def __init__(self, state: np.ndarray,
-                 groups: List[List[int]] = None,
-                 obstacles: List[Line2D] = None,
+                 groups: List[List[int]] | None = None,
+                 obstacles: List[Line2D] | None = None,
                  config: SimulatorConfig = SimulatorConfig(),
                  make_forces: Callable[[Simulator, SimulatorConfig], List[forces.Force]] = make_forces,
                  on_step: Callable[[int, SimState], None] = lambda t, s: None):

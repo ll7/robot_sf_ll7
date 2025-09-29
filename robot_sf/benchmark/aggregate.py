@@ -31,9 +31,11 @@ if TYPE_CHECKING:
 
 def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]:
     if isinstance(paths, str | Path):
-        paths = [paths]
+        path_list = [paths]
+    else:
+        path_list = list(paths)  # type: ignore[arg-type]
     records: list[dict[str, Any]] = []
-    for p in paths:
+    for p in path_list:
         p = Path(p)
         if not p.exists():
             continue

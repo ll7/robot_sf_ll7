@@ -61,6 +61,7 @@ except Exception:
 
 from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
+from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import (
     ImageRobotConfig,
     MultiRobotConfig,
@@ -111,30 +112,34 @@ class EnvironmentFactory:
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )
+        )  # type: ignore[return-value]
 
     @staticmethod
     def create_pedestrian_env(
-        config: PedestrianSimulationConfig | None = None,
-        *,
         robot_model,
-        reward_func: Callable | None,
-        debug: bool,
-        recording_enabled: bool,
-        peds_have_obstacle_forces: bool,
+        config: PedestrianSimulationConfig | None = None,
+        reward_func: Callable[[dict], float] | None = None,
+        debug: bool = False,
+        recording_enabled: bool = False,
+        peds_have_obstacle_forces: bool = False,
     ) -> SingleAgentEnv:
         if config is None:
             config = PedestrianSimulationConfig()
         from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 
+        # Allow None to be passed through from ergonomic factories and
+        # fall back to the canonical internal simple_ped_reward.
+        if reward_func is None:
+            reward_func = simple_ped_reward
+
         return PedestrianEnv(
-            env_config=config,
+            env_config=config,  # type: ignore[arg-type]
             robot_model=robot_model,
             reward_func=reward_func,
             debug=debug,
             recording_enabled=recording_enabled,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )
+        )  # type: ignore[return-value]
 
     @staticmethod
     def create_multi_robot_env(
@@ -155,7 +160,7 @@ class EnvironmentFactory:
             reward_func=reward_func,
             debug=debug,
             num_robots=num_robots,
-        )
+        )  # type: ignore[return-value]
 
 
 def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):

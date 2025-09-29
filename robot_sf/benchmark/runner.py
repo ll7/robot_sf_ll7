@@ -20,7 +20,10 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -1013,10 +1016,14 @@ def _prepare_batch_setup(
 ) -> tuple[list[dict[str, Any]], Path, dict[str, Any]]:
     """Prepare scenarios, output path, and schema for batch processing."""
     # Load scenarios
-    if isinstance(scenarios_or_path, str | Path):
-        scenarios = load_scenario_matrix(scenarios_or_path)
+    from typing import cast
+
+    scenarios_is_path = isinstance(scenarios_or_path, str | Path)
+    if scenarios_is_path:
+        scenarios = load_scenario_matrix(cast(str | Path, scenarios_or_path))
     else:
-        scenarios = scenarios_or_path
+        # scenarios_or_path is already list[dict[str, Any]]
+        scenarios = cast(list[dict[str, Any]], scenarios_or_path)
 
     # Prepare output
     out_path = Path(out_path)

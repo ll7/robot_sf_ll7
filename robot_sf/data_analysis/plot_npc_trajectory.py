@@ -30,7 +30,7 @@ def plot_single_splitted_traj(
     ped_idx: int = 0,
     interactive: bool = False,
     unique_id: str | None = None,
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot from position_array from a single pedestrian id the multiple trajectories.
@@ -95,7 +95,7 @@ def plot_all_splitted_traj(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot from position_array all npc pedestrian trajectories.
@@ -207,7 +207,7 @@ def subplot_single_splitted_traj_acc(
     ped_idx: int = 0,
     interactive: bool = False,
     unique_id: str | None = None,
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
@@ -573,7 +573,7 @@ def velocity_colorcoded_with_positions(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot the positions of NPC pedestrians color-coded by their velocities.

@@ -19,7 +19,10 @@ import json
 import logging
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -42,7 +45,8 @@ try:
     import seaborn as sns
 
     MATPLOTLIB_AVAILABLE = True
-except ImportError:
+except Exception:  # ImportError or type-checker unresolved-import
+    # During static analysis seaborn may be unavailable; fall back gracefully.
     MATPLOTLIB_AVAILABLE = False
 
 # Note: pandas is optional for advanced analysis; not required for core flow

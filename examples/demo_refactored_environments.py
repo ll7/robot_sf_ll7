@@ -14,7 +14,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from robot_sf.gym_env.environment_factory import (
-    EnvironmentFactory,
     make_image_robot_env,
     make_robot_env,
 )
@@ -37,7 +36,15 @@ def demo_factory_pattern():
         robot_env = make_robot_env(debug=False)
         print(f"✅ Created {type(robot_env).__name__}")
         print(f"   Action space: {robot_env.action_space}")
-        print(f"   Observation space keys: {robot_env.observation_space.spaces.keys()}")
+        obs_space = getattr(robot_env, "observation_space", None)
+        if obs_space is not None and hasattr(obs_space, "spaces"):
+            # mypy/ty: observation_space may be an env Space with .spaces attribute
+            from typing import Any, cast
+
+            spaces_dict = cast(Any, obs_space).spaces
+            print(f"   Observation space keys: {list(spaces_dict.keys())}")
+        else:
+            print(f"   Observation space: {obs_space}")
         robot_env.exit()
     except Exception as e:
         print(f"❌ Failed to create robot environment: {e}")
@@ -47,7 +54,11 @@ def demo_factory_pattern():
     try:
         image_robot_env = make_image_robot_env(debug=False)
         print(f"✅ Created {type(image_robot_env).__name__}")
-        print(f"   Has image observations: {'image' in image_robot_env.observation_space.spaces}")
+        if hasattr(image_robot_env.observation_space, "spaces"):
+            spaces_dict = image_robot_env.observation_space.spaces  # type: ignore[attr-defined]
+            print(f"   Has image observations: {'image' in spaces_dict}")  # type: ignore[operator]
+        else:
+            print("   Has image observations: False")
         image_robot_env.exit()
     except Exception as e:
         print(f"❌ Failed to create image robot environment: {e}")
@@ -58,13 +69,14 @@ def demo_factory_pattern():
         custom_config = RobotSimulationConfig()
         custom_config.peds_have_obstacle_forces = True
 
-        custom_env = EnvironmentFactory.create_robot_env(
+        custom_env = make_robot_env(
             config=custom_config,
             debug=False,
             recording_enabled=True,
         )
         print(f"✅ Created {type(custom_env).__name__} with custom config")
-        print(f"   Pedestrian obstacle forces: {custom_env.config.peds_have_obstacle_forces}")
+        peds_forces = getattr(custom_env.config, "peds_have_obstacle_forces", None)
+        print(f"   Pedestrian obstacle forces: {peds_forces}")
         print(f"   Recording enabled: {custom_env.recording_enabled}")
         custom_env.exit()
     except Exception as e:

@@ -18,7 +18,11 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from datetime import UTC, datetime
+from collections.abc import Sequence
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
 
 from results.figures.fig_force_field import generate_force_field_figure
@@ -438,10 +442,13 @@ def _summary_build_columns(
 
 
 def _summary_ci_pair(metric_dict: dict, stat: str) -> tuple[float | None, float | None]:
+    """Return (low, high) if a valid CI exists, otherwise (None, None)."""
     ci = metric_dict.get(f"{stat}_ci")
-    if not (isinstance(ci, list | tuple) and len(ci) == 2):
+    is_seq = isinstance(ci, Sequence)
+
+    if not is_seq or ci is None or len(ci) != 2:
         return None, None
-    a, b = ci
+    a, b = ci  # type: ignore[misc]
     if not isinstance(a, int | float) or not isinstance(b, int | float):
         return None, None
     return float(a), float(b)

@@ -239,6 +239,7 @@ ignore = [
     "B017",     # Do not assert blind exception: `Exception`
     "PLC0206",  # Extracting value from dictionary without calling `.items()`
     "RUF005",   # Consider iterable unpacking instead of concatenation
+    "COM812",  # Missing trailing comma in a multi-line collection
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -318,3 +319,13 @@ robot_sf_bench = "robot_sf.benchmark.cli:main"
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }
+
+[tool.ty.src]
+exclude = [
+    "tests",
+    "test_pygame",
+    "fast-pysf"
+]
+
+[tool.ty.environment]
+python = "./.venv"

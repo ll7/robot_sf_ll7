@@ -11,7 +11,6 @@ from stable_baselines3 import PPO
 
 # New factory pattern imports
 from robot_sf.gym_env.environment_factory import (
-    EnvironmentFactory,
     make_image_robot_env,
     make_robot_env,
 )
@@ -105,7 +104,8 @@ def test_image_robot_env():
     env = make_image_robot_env(debug=False)
     assert env is not None
     assert hasattr(env, "config")
-    assert env.config.use_image_obs
+    # For image environments, config should be ImageRobotConfig with use_image_obs=True
+    assert env.config.use_image_obs  # type: ignore[attr-defined]
 
     # Should have image observations in observation space
     obs_space = cast(spaces.Dict, env.observation_space)
@@ -182,13 +182,13 @@ def test_ego_ped_env_legacy():
 def test_environment_factory_methods():
     """Test the EnvironmentFactory class directly."""
     # Test robot environment creation
-    robot_env = EnvironmentFactory.create_robot_env(debug=False)
+    robot_env = make_robot_env(debug=False)
     assert robot_env is not None
     assert hasattr(robot_env, "config")
     robot_env.exit()
 
     # Test image robot environment creation
-    image_env = EnvironmentFactory.create_robot_env(use_image_obs=True, debug=False)
+    image_env = make_image_robot_env(debug=False)
     assert image_env is not None
     assert hasattr(image_env, "config")
     image_env.exit()

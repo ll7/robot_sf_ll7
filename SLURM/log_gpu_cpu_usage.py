@@ -3,7 +3,7 @@
 import os
 import sys
 
-import GPUtil
+import GPUtil  # type: ignore[import]
 import psutil
 from loguru import logger
 from stable_baselines3 import PPO
@@ -37,10 +37,12 @@ class LogResourceUsageCallback(BaseCallback):
 
 
 def training(
-    n_envs: int = os.cpu_count(),
+    n_envs: int | None = None,
     ped_densities: list[float] | None = None,
     difficulty: int = 2,
 ):
+    if n_envs is None:
+        n_envs = os.cpu_count() or 1
     """Train a robot in robot_sf.
     Args:
         n_envs: Number of environments to run in parallel.

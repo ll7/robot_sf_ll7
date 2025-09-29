@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 from loguru import logger
@@ -203,14 +203,14 @@ def generate_benchmark_plots(
     # Handle backward compatibility: if episodes_data is a path, load it
     if isinstance(episodes_data, str | Path):
         return generate_benchmark_plots_from_file(
-            episodes_data,
+            cast(str | Path, episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
         )
     else:
         return generate_benchmark_plots_from_data(
-            episodes_data,
+            cast(list[dict], episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -614,7 +614,7 @@ def generate_benchmark_videos(
     # Handle backward compatibility: if episodes_data is a path, load it
     if isinstance(episodes_data, str | Path):
         return generate_benchmark_videos_from_file(
-            episodes_data,
+            cast(str | Path, episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -623,7 +623,7 @@ def generate_benchmark_videos(
         )
     else:
         return generate_benchmark_videos_from_data(
-            episodes_data,
+            cast(list[dict], episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,

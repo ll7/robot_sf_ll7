@@ -290,8 +290,8 @@ class TestSocialForcePlanner:
     def test_close_cleanup(self, planner: SocialForcePlanner):
         """Test that close cleans up resources."""
         # Setup some internal state
-        planner._sim = "dummy_sim"
-        planner._wrapper = "dummy_wrapper"
+        planner._sim = "dummy_sim"  # type: ignore[assignment]
+        planner._wrapper = "dummy_wrapper"  # type: ignore[assignment]
 
         planner.close()
 

@@ -113,15 +113,15 @@ class TestGitHookAPIContract:
 
         # Contract: staged_files is required
         with pytest.raises(TypeError):
-            prevent_schema_duplicates()
+            prevent_schema_duplicates()  # type: ignore
 
         # Contract: staged_files must be iterable
         with pytest.raises((TypeError, AttributeError)):
-            prevent_schema_duplicates(None)
+            prevent_schema_duplicates(None)  # type: ignore
 
         # Contract: staged_files should be list of strings
         with pytest.raises((TypeError, AttributeError)):
-            prevent_schema_duplicates([123, 456])
+            prevent_schema_duplicates([123, 456])  # type: ignore
 
     def test_prevent_schema_duplicates_empty_staged_files_contract(self):
         """Test behavior with empty staged files list."""
@@ -149,7 +149,7 @@ class TestGitHookAPIContract:
 
         # Invalid patterns should raise appropriate errors
         with pytest.raises((TypeError, ValueError)):
-            prevent_schema_duplicates(staged_files, schema_pattern=123)
+            prevent_schema_duplicates(staged_files, schema_pattern=123)  # type: ignore
 
         with pytest.raises((TypeError, ValueError)):
-            prevent_schema_duplicates(staged_files, schema_pattern=None)
+            prevent_schema_duplicates(staged_files, schema_pattern=None)  # type: ignore

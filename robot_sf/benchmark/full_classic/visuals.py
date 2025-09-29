@@ -366,6 +366,65 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
     for d in (plots_dir, videos_dir, reports_dir):
         d.mkdir(parents=True, exist_ok=True)
 
+    # Fast-path: in smoke mode we avoid heavy encoding work but still emit
+    # lightweight placeholder manifests so downstream tooling and tests can
+    # observe per-episode degradation notes (e.g. 'matplotlib missing' or
+    # 'smoke mode'). This keeps smoke tests fast while preserving expected
+    # artifact metadata.
+    if bool(getattr(cfg, "smoke", False)):
+        # Generate lightweight plots (these will be marked 'skipped' when
+        # matplotlib is not available) and video placeholders (skipped with
+        # NOTE_SMOKE_MODE). Times are zeroed to indicate the fast-path.
+        t0 = time.perf_counter()
+        raw_plots = generate_plots(groups, records, plots_dir, cfg)
+        t1 = time.perf_counter()
+        plot_artifacts = _convert_plot_artifacts(raw_plots)
+
+        selected_records = _select_records(records, cfg)
+        replay_map: dict = {}
+        video_artifacts = _build_video_artifacts(cfg, selected_records, videos_dir, replay_map)
+
+        perf_meta = {
+            "plots_time_s": round(t1 - t0, 4),
+            "videos_time_s": 0.0,
+            "first_video_time_s": None,
+            "first_video_render_time_s": None,
+            "first_video_peak_rss_mb": None,
+            "plots_over_budget": False,
+            "video_over_budget": False,
+            "memory_over_budget": False,
+            "plots_runtime_sec": round(t1 - t0, 4),
+            "videos_runtime_sec": 0.0,
+            "first_video_encode_time_s": None,
+        }
+
+        _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)
+        _write_json(
+            reports_dir / "video_artifacts.json",
+            [
+                {
+                    "artifact_id": a.artifact_id,
+                    "scenario_id": a.scenario_id,
+                    "episode_id": a.episode_id,
+                    "path_mp4": a.path_mp4,
+                    "status": a.status,
+                    "renderer": a.renderer,
+                    "note": a.note,
+                    "encode_time_s": a.encode_time_s,
+                    "peak_rss_mb": a.peak_rss_mb,
+                }
+                for a in video_artifacts
+            ],
+        )
+        _write_json(reports_dir / "performance_visuals.json", perf_meta)
+        logger.info(
+            "Visual artifacts (smoke fast-path): plots=%d videos=%d (smoke=%s)",
+            len(plot_artifacts),
+            len(video_artifacts),
+            True,
+        )
+        return {"plots": plot_artifacts, "videos": video_artifacts, "performance": perf_meta}
+
     # Plots
     t0 = time.perf_counter()
     raw_plots = generate_plots(groups, records, plots_dir, cfg)

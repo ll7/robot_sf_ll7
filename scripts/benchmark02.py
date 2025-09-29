@@ -123,13 +123,18 @@ def run_standardized_benchmark(
     logger.info("Benchmark run complete. env closed. return metrics")
 
     # System info
+    # Some psutil installations/platforms may not expose cpu_freq; guard the attribute
+    if hasattr(psutil, "cpu_freq"):
+        cpu_freq_obj = psutil.cpu_freq()
+    else:
+        cpu_freq_obj = None
     system_info = {
         "platform": platform.platform(),
         "processor": platform.processor(),
         "python_version": platform.python_version(),
         "cpu_count": psutil.cpu_count(),
         "memory_gb": psutil.virtual_memory().total / (1024**3),
-        "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+        "cpu_freq": cpu_freq_obj._asdict() if cpu_freq_obj is not None else None,
     }
 
     # Environment info

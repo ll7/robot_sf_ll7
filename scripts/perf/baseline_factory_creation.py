@@ -1,29 +1,4 @@
-"""Baseline environment factory creation timing script.
-
-Purpose: Capture current (pre-refactor) performance metrics for make_robot_env,
-make_image_robot_env, make_pedestrian_env (if model available) to enforce FR-017
-(< +5% creation time regression) after ergonomics changes.
-
-Usage (example):
-    uv run python scripts/perf/baseline_factory_creation.py --iterations 30 \
-        --output results/factory_perf_baseline.json
-
-Outputs JSON with structure:
-{
-  "timestamp": "...",
-  "iterations": 30,
-  "results": {
-      "make_robot_env": {"mean_ms": ..., "p95_ms": ..., "std_ms": ...},
-      ...
-  },
-  "notes": "Creation timing only; excludes step performance."
-}
-
-Implementation notes:
-- Uses time.perf_counter for high-resolution timing.
-- Discards first creation as potential warm-up (import side effects) but still reports raw list.
-- Avoids any video recording or debug rendering (debug=False) for neutral baseline.
-"""
+"""Baseline environment factory creation timing script"""
 
 from __future__ import annotations
 
@@ -32,7 +7,10 @@ import contextlib
 import json
 import statistics as stats
 import time
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 

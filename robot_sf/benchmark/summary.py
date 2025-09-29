@@ -22,8 +22,10 @@ if TYPE_CHECKING:
 
 def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str, Any]]:
     if isinstance(paths, str | Path):
-        paths = [paths]
-    for p in paths:
+        path_list = [paths]
+    else:
+        path_list = list(paths)  # type: ignore[arg-type]
+    for p in path_list:
         p = Path(p)
         if not p.exists():
             continue

@@ -11,7 +11,6 @@ This guide consolidates user‑facing documentation that was previously split ac
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
   - [Clamping and Outliers](#clamping-and-outliers)
 - [Installation (uv)](#installation-uv)
-  - [Headless mode (minimal deps)](#headless-mode-minimal-deps)
 - [Quick Start](#quick-start)
 - [Core Scripts \& Typical Tasks](#core-scripts--typical-tasks)
 - [CLI Arguments (Key Flags)](#cli-arguments-key-flags)
@@ -183,6 +182,11 @@ Add extras later without re-syncing everything:
 ```bash
 uv sync --extra progress
 uv sync --extra viz
+```
+
+Synchronize all extras at once:
+```bash
+uv sync --all-extras
 ```
 
 ### Headless mode (minimal deps)

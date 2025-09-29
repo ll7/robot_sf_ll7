@@ -8,8 +8,9 @@ from multiprocessing.pool import ThreadPool
 
 import numpy as np
 from gymnasium import spaces
-from gymnasium.vector import VectorEnv
+from loguru import logger
 
+from robot_sf.gym_env.abstract_envs import MultiAgentEnv
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import init_collision_and_sensors, init_spaces
 from robot_sf.gym_env.reward import simple_reward
@@ -19,7 +20,7 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.simulator import init_simulators
 
 
-class MultiRobotEnv(VectorEnv):
+class MultiRobotEnv(MultiAgentEnv):
     """Representing a Gymnasium environment for training
     multiple self-driving robots with reinforcement learning"""
 
@@ -40,9 +41,23 @@ class MultiRobotEnv(VectorEnv):
         else:
             resolved_num_robots = num_robots or 1
 
+        # Initialize pools as None early so destructor/cleanup paths don't fail
+        # if they are referenced before full initialization.
+        self.sim_worker_pool: ThreadPool | None = None
+        self.obs_worker_pool: ThreadPool | None = None
+
         map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
-        super().__init__(resolved_num_robots, observation_space, action_space)
+
+        # Keep a reference to the per-agent spaces for later composition
+        self.single_action_space = action_space
+        self.single_observation_space = observation_space
+
+        # Initialize abstract multi-agent base with config and agent count.
+        # `MultiAgentEnv` will forward the config to BaseSimulationEnv.
+        super().__init__(env_config, resolved_num_robots, debug=debug)
+
+        # Combined action space for all robots (vectorized)
         self.action_space = spaces.Box(
             low=np.array([self.single_action_space.low for _ in range(resolved_num_robots)]),
             high=np.array([self.single_action_space.high for _ in range(resolved_num_robots)]),
@@ -72,7 +87,6 @@ class MultiRobotEnv(VectorEnv):
                 for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors, strict=False)
             ]
             self.states.extend(states)
-
         self.sim_worker_pool = ThreadPool(len(self.simulators))
         self.obs_worker_pool = ThreadPool(resolved_num_robots)
 
@@ -127,5 +141,55 @@ class MultiRobotEnv(VectorEnv):
         pass
 
     def close_extras(self, **kwargs):
-        self.sim_worker_pool.close()
-        self.obs_worker_pool.close()
+        if getattr(self, "sim_worker_pool", None) is not None:
+            try:
+                self.sim_worker_pool.close()
+            except Exception as e:
+                logger.warning("Failed to close sim_worker_pool: {}", e)
+        if getattr(self, "obs_worker_pool", None) is not None:
+            try:
+                self.obs_worker_pool.close()
+            except Exception as e:
+                logger.warning("Failed to close obs_worker_pool: {}", e)
+
+    # --- Abstract base compatibility -------------------------------------------------
+    def _setup_environment(self) -> None:
+        """Minimal environment setup hook called by BaseSimulationEnv.__init__.
+
+        We intentionally keep this lightweight because the full simulator
+        and per-agent states are initialized later in the concrete
+        constructor. This satisfies the abstract contract.
+        """
+        # no-op: actual simulator initialization happens in __init__ below
+        return None
+
+    def _create_spaces(self) -> tuple[spaces.Space, spaces.Space]:
+        """Return per-agent action and observation spaces.
+
+        The factory path computes these before calling the base ctor; if
+        they are not yet available, compute them on-demand from the
+        environment config.
+        """
+        try:
+            return self.single_action_space, self.single_observation_space
+        except AttributeError:
+            # Fallback: compute from env_config
+            map_def = self.env_config.map_pool.map_defs["uni_campus_big"]
+            action_space, observation_space, _ = init_spaces(self.env_config, map_def)
+            return action_space, observation_space
+
+    def _setup_agents(self) -> None:
+        """Hook to initialise agents; already done in __init__, so keep no-op.
+
+        Implemented to satisfy abstract base requirements.
+        """
+        return None
+
+    def _step_agents(self, actions: list) -> tuple[list, list[float], list[bool], list[dict]]:
+        """Execute a multi-agent step and return the standard tuple.
+
+        This delegates to the environment's `step` implementation to avoid
+        duplicating logic.
+        """
+        obs, rewards, terms, metas = self.step(actions)
+        return obs, rewards, terms, metas

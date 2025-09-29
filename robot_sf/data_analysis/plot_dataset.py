@@ -20,7 +20,7 @@ def plot_all_npc_ped_positions(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot all NPC pedestrian positions from the given position array.

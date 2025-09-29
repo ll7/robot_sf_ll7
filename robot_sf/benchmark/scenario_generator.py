@@ -43,7 +43,7 @@ import numpy as np
 
 try:  # Optional heavy import delayed until needed
     import pysocialforce as pysf
-except Exception:  # pragma: no cover - allow import failure during docs builds
+except ImportError:  # pragma: no cover - allow import failure during docs builds
     pysf = None  # type: ignore
 
 

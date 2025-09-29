@@ -233,7 +233,6 @@ ignore = [
     "RUF002",   # String contains ambiguous characters (EN DASH, EM DASH)
     "RUF003",   
     "TRY300",   # Consider moving this statement to an `else` block
-    "BLE001",   # Do not catch blind exception: `Exception`
     "TRY003",   # Avoid specifying long messages outside the exception class
     "N806",     # Variable `X` in function should be lowercase (too noisy for math code)
     "B017",     # Do not assert blind exception: `Exception`

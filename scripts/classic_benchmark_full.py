@@ -17,7 +17,7 @@ from datetime import datetime
 
 try:
     from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark  # type: ignore
-except Exception:  # pragma: no cover - during early scaffolding
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - during early scaffolding
 
     def run_full_benchmark(cfg):  # fallback placeholder
         raise NotImplementedError("Full benchmark not yet implemented. Follow tasks T022+.")

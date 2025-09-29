@@ -247,7 +247,7 @@ def curvature_mean(data: EpisodeData) -> float:
     # Validate dt
     try:
         dt = float(data.dt)
-    except Exception:
+    except (TypeError, ValueError):
         return 0.0
     if not np.isfinite(dt) or dt <= 0.0:
         return 0.0

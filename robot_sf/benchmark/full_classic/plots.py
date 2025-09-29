@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 try:  # Matplotlib is an optional dependency (analysis extra). Fail gracefully if absent.
     import matplotlib.pyplot as plt  # type: ignore
-except Exception:
+except ImportError:
     plt = None  # type: ignore
 
 
@@ -34,10 +34,18 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
         fig.clf()
         import matplotlib.pyplot as _plt  # type: ignore
 
+        # matplotlib close may raise on some backends; suppress non-fatal errors
         with contextlib.suppress(Exception):
             _plt.close(fig)
-    except Exception:
-        pass
+    except (RuntimeError, AttributeError, ValueError) as exc:  # pragma: no cover - defensive
+        # Log at debug for visibility without changing behavior
+        try:
+            from loguru import logger
+
+            logger.debug("_safe_fig_close failed: %s", exc)
+        except ImportError:
+            # If logger import fails we still want to silently ignore close failures
+            pass
 
 
 def _write_placeholder_text(path: Path, title: str, lines: list[str]):
@@ -53,8 +61,21 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         fig.savefig(path, bbox_inches="tight")
-    finally:
+    except OSError:
+        # Filesystem/write errors -> report failure by closing and returning False
         _safe_fig_close(fig)
+        return False
+    finally:
+        # Always attempt to close the figure; log on unexpected failures.
+        try:
+            _safe_fig_close(fig)
+        except (RuntimeError, AttributeError, OSError) as exc:  # pragma: no cover - defensive
+            try:
+                from loguru import logger
+
+                logger.debug("_write_placeholder_text close failed: %s", exc)
+            except ImportError:
+                pass
     return True
 
 

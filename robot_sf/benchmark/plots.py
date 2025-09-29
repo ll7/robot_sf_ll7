@@ -40,11 +40,11 @@ def _group_values(
         val = _get_dotted(r, f"metrics.{metric}")
         if g is None or val is None:
             continue
-        try:
-            fv = float(val)  # type: ignore[arg-type]
-        except Exception:
-            continue
-        out.setdefault(str(g), []).append(fv)
+            try:
+                fv = float(val)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                continue
+            out.setdefault(str(g), []).append(fv)
     return out
 
 
@@ -138,12 +138,15 @@ def save_pareto_png(
     os.environ.setdefault("MPLBACKEND", "Agg")
     # Style/rcParams for consistent figure exports
     try:
-        from robot_sf.benchmark.plotting_style import apply_latex_style
-
-        apply_latex_style()
-    except Exception:
-        # Fallback: keep defaults if helper not available
-        pass
+        from robot_sf.benchmark.plotting_style import apply_latex_style as _apply_latex_style
+    except ImportError:
+        _apply_latex_style = None
+    if _apply_latex_style is not None:
+        try:
+            _apply_latex_style()
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            # Fallback: keep defaults if helper misbehaves
+            pass
     points, labels = compute_pareto_points(
         records,
         x_metric,

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
@@ -105,7 +106,9 @@ def _git_hash_fallback() -> str:
 
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
         return out.decode().strip()
-    except Exception:  # pragma: no cover
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
+        # Best-effort fallback when git is unavailable or fails; retain behavior
+        logger.debug("_git_hash_fallback failed: %s", exc)
         return "unknown"
 
 
@@ -140,7 +143,7 @@ def _episode_identity_hash() -> str:
         import inspect
 
         src = inspect.getsource(compute_episode_id)
-    except Exception:
+    except (OSError, TypeError):
         # Fallback to function name when source isn't available (e.g., pyc only)
         src = compute_episode_id.__name__
     return hashlib.sha256(src.encode()).hexdigest()[:12]
@@ -164,10 +167,15 @@ def index_existing(out_path: Path) -> set[str]:
                     eid = rec.get("episode_id")
                     if isinstance(eid, str):
                         ids.add(eid)
-                except Exception:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     # Ignore malformed JSON lines
                     continue
     except FileNotFoundError:
+        return set()
+    except OSError as exc:
+        logger.debug(
+            "index_existing unexpected error reading %s: %s", out_path, exc
+        )  # pragma: no cover
         return set()
     return ids
 
@@ -325,6 +333,10 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             # Safe fallback: zero action in current space
             # Prefer preserving action-space contract when possible
             action = {"vx": 0.0, "vy": 0.0}
+        except (RuntimeError, TypeError, ValueError) as exc:
+            # Any unexpected planner errors -> fallback but log for diagnostics
+            logger.warning("Planner step failed unexpectedly: %s", exc)
+            action = {"vx": 0.0, "vy": 0.0}
 
         # Convert action to velocity (handle both action spaces)
         return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)
@@ -369,16 +381,20 @@ def _emit_video_skip(
         context["error"] = error
     try:
         from loguru import logger  # type: ignore
-
-        logger.warning(
-            (
-                "Video skipped: reason={reason} episode_id={episode_id} "
-                "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
-            ),
-            **context,
-        )
-    except Exception:  # pragma: no cover - logging optional
-        pass
+    except ImportError:
+        logger = None  # type: ignore
+    if logger is not None:
+        try:
+            logger.warning(
+                (
+                    "Video skipped: reason={reason} episode_id={episode_id} "
+                    "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
+                ),
+                **context,
+            )
+        except (AttributeError, TypeError):
+            # Logging failure -> ignore
+            pass
 
     note_parts = [f"video skipped ({renderer}): {reason}"]
     if steps is not None:
@@ -404,7 +420,7 @@ def _try_encode_synthetic_video(
     """
     try:
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         _skip_info = {
             "reason": "moviepy-missing",
             "renderer": "synthetic",
@@ -478,7 +494,7 @@ def _try_encode_synthetic_video(
             "error": str(exc),
         }
         return None, _skip_info
-    except Exception as exc:  # pragma: no cover - defensive logging
+    except (RuntimeError, ValueError, OSError) as exc:
         _skip_info = {
             "reason": "encode-failed",
             "renderer": "synthetic",
@@ -489,11 +505,11 @@ def _try_encode_synthetic_video(
     finally:
         try:
             clip.close()  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - close best effort
+        except (AttributeError, OSError):  # pragma: no cover - close best effort
             pass
     try:
         size = mp4_path.stat().st_size
-    except Exception:
+    except (OSError, FileNotFoundError):
         size = 0
     return {
         "status": "success",
@@ -629,7 +645,7 @@ def _maybe_encode_video(
     except RuntimeError:
         # Budget enforcement: bubble up to runner to record a failure
         raise
-    except Exception:  # pragma: no cover - defensive path
+    except (TypeError, ValueError, OSError):  # pragma: no cover - defensive path
         pass
 
 
@@ -945,7 +961,7 @@ def _run_batch_sequential(
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, True, None)
-                except Exception:  # pragma: no cover - progress best-effort
+                except Exception:  # pragma: no cover - progress best-effort  # noqa: BLE001
                     pass
         except Exception as e:  # pragma: no cover - error path
             failures.append(
@@ -954,7 +970,7 @@ def _run_batch_sequential(
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, False, repr(e))
-                except Exception:  # pragma: no cover
+                except Exception:  # pragma: no cover  # noqa: BLE001
                     pass
             if fail_fast:
                 raise

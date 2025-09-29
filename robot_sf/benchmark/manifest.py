@@ -126,7 +126,7 @@ def load_manifest(
     try:
         with sidecar.open("r", encoding="utf-8") as f:
             data = json.load(f)
-    except Exception:
+    except (json.JSONDecodeError, OSError, ValueError):
         return None
 
     if not isinstance(data, dict):

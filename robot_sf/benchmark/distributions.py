@@ -47,7 +47,7 @@ def collect_grouped_values(
     def _to_float(x: object | None) -> float | None:
         try:
             v = float(x)  # type: ignore[arg-type]
-        except Exception:
+        except (TypeError, ValueError):
             return None
         return float(v) if np.isfinite(v) else None
 
@@ -89,8 +89,11 @@ def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
         xs = np.linspace(data.min(), data.max(), 200)
         ys = kde(xs)
         ax.plot(xs, ys * (len(data) * (xs[1] - xs[0])), color=color, alpha=0.8, linewidth=1.0)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         # scipy optional; silently skip KDE if unavailable
+        pass
+    except (TypeError, ValueError):
+        # Invalid data shape or values -> skip KDE
         pass
 
 

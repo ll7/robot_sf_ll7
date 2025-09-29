@@ -25,12 +25,12 @@ if TYPE_CHECKING:
 
 try:  # Optional dependencies
     import matplotlib.pyplot as plt  # type: ignore
-except Exception:
+except ImportError:
     plt = None  # type: ignore
 
 try:  # moviepy for encoding
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-except Exception:
+except ImportError:
     ImageSequenceClip = None  # type: ignore
 
 
@@ -218,9 +218,9 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
                     note="synthetic annotated path",
                     encode_time_s=encode_time,
                     memory_peak_mb=0.0,
-                ),
+                )
             )
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             artifacts.append(
                 _VideoArtifact(
                     artifact_id=f"video_{episode_id}",
@@ -229,10 +229,10 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
                     filename=str(mp4_path),
                     renderer="synthetic",
                     status="error",
-                    note=f"render failed: {e.__class__.__name__}",
+                    note=f"render failed: {e.__class__.__name__}: {e}",
                     encode_time_s=None,
                     memory_peak_mb=None,
-                ),
+                )
             )
     return artifacts
 

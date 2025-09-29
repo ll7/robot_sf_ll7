@@ -144,12 +144,14 @@ class MultiRobotEnv(MultiAgentEnv):
         if getattr(self, "sim_worker_pool", None) is not None:
             try:
                 self.sim_worker_pool.close()
-            except Exception as e:
+            except (AttributeError, OSError, RuntimeError) as e:
+                # Best-effort close; log common failure modes but avoid
+                # silencing unrelated exceptions.
                 logger.warning("Failed to close sim_worker_pool: {}", e)
         if getattr(self, "obs_worker_pool", None) is not None:
             try:
                 self.obs_worker_pool.close()
-            except Exception as e:
+            except (AttributeError, OSError, RuntimeError) as e:
                 logger.warning("Failed to close obs_worker_pool: {}", e)
 
     # --- Abstract base compatibility -------------------------------------------------

@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 try:  # Lazy import moviepy components
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-except Exception:
+except ImportError:
     ImageSequenceClip = None  # type: ignore
 
 
@@ -71,9 +71,12 @@ def _start_memory_sampler(sample: bool, interval: float):
 
     try:
         import psutil  # type: ignore
+    except ImportError:
+        return (lambda: None), [None]
 
+    try:
         process = psutil.Process()
-    except Exception:
+    except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
         return (lambda: None), [None]
 
     peak: list[float | None] = [None]
@@ -85,7 +88,8 @@ def _start_memory_sampler(sample: bool, interval: float):
                 rss = process.memory_info().rss / (1024 * 1024)
                 if peak[0] is None or rss > peak[0]:
                     peak[0] = rss
-            except Exception:
+            except psutil.Error:
+                # psutil-specific runtime errors -> skip this sample
                 pass
             time.sleep(interval)
 
@@ -96,7 +100,8 @@ def _start_memory_sampler(sample: bool, interval: float):
         stop_flag[0] = True
         try:
             th.join(timeout=0.5)
-        except Exception:
+        except RuntimeError:
+            # Thread join may raise if thread not started; ignore
             pass
 
     return _stop, peak
@@ -178,7 +183,7 @@ def _write_clip(
         try:
             spec["call"]()
             return
-        except Exception as exc:
+        except (RuntimeError, TypeError, AttributeError, OSError, ValueError) as exc:
             last_exc = exc
             continue
     # Re-raise the last exception so caller surfaces encode failure uniformly.
@@ -239,7 +244,7 @@ def encode_frames(
         return EncodeResult(path=out_path, status="failed", note="no-frames")
     try:
         _write_clip(ImageSequenceClip, frame_list, out_path, codec, fps, preset)
-    except Exception as exc:
+    except (RuntimeError, OSError, ValueError, TypeError, AttributeError) as exc:
         # Cleanup tiny partial file
         try:
             if out_path.exists() and out_path.stat().st_size < 1024:
@@ -258,7 +263,7 @@ def encode_frames(
                         encode_time_s=None,
                         peak_rss_mb=peak_container[0],
                     )
-        except Exception:
+        except OSError:
             pass
         stop_sampler()
         return EncodeResult(

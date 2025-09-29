@@ -54,7 +54,7 @@ try:  # pragma: no cover - import errors would surface in tests
 
     # Intentionally do NOT import robot_env_with_image here to avoid heavy first-call cost.
     RobotEnvWithImage = None  # type: ignore
-except Exception:
+except (ImportError, ModuleNotFoundError):
     # Defer errors until factory invocation (lazy fallback)
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
@@ -482,7 +482,8 @@ def _apply_global_seed(seed: int | None) -> None:
         import numpy as np  # type: ignore
 
         np.random.seed(seed)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
+        # NumPy not available; skip seeding it
         pass
     try:  # PyTorch optional
         import torch as _torch  # type: ignore
@@ -491,7 +492,8 @@ def _apply_global_seed(seed: int | None) -> None:
             _torch.manual_seed(seed)
         if hasattr(_torch, "cuda") and hasattr(_torch.cuda, "manual_seed_all"):
             _torch.cuda.manual_seed_all(seed)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
+        # Torch not available; skip seeding it
         pass
     _os.environ["PYTHONHASHSEED"] = str(seed)
 

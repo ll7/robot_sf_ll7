@@ -59,7 +59,7 @@ def compute_table(
                 continue
             try:
                 fv = float(val)  # type: ignore[arg-type]
-            except Exception:
+            except (TypeError, ValueError):
                 continue
             gs[name] = gs.get(name, 0.0) + fv
             gc[name] = gc.get(name, 0) + 1

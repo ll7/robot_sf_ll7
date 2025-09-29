@@ -45,7 +45,7 @@ try:
     import seaborn as sns
 
     MATPLOTLIB_AVAILABLE = True
-except Exception:  # ImportError or type-checker unresolved-import
+except (ImportError, ModuleNotFoundError):
     # During static analysis seaborn may be unavailable; fall back gracefully.
     MATPLOTLIB_AVAILABLE = False
 
@@ -640,7 +640,7 @@ def _git_commit() -> str:
             .decode()
             .strip()
         )
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return "UNKNOWN"
 
 
@@ -768,7 +768,7 @@ def _handle_visualizations(
             # Return a distinct non-zero code while keeping JSON artifacts on disk
             return EXIT_OPTIONAL_DEPS_MISSING
         analyzer.generate_visualizations(results, output_dir)
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         logger.warning("Failed to generate visualizations: %s", e)
     return None
 
@@ -804,7 +804,8 @@ def main() -> int:
 
     try:
         episodes, baseline_stats, weights = _load_inputs(args)
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError) as e:
+        logger.exception("Failed to load inputs: %s", e)
         return EXIT_RUNTIME_ERROR
 
     _apply_seed_if_any(args.seed)

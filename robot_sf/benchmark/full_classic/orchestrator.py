@@ -81,8 +81,12 @@ def _compute_git_hash(root: Path) -> str:
                     git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
             else:
                 git_hash = content[:12]
-    except Exception:
-        pass
+    except OSError as exc:
+        # Filesystem access errors -> return unknown but log for diagnostics
+        logger.debug("_compute_git_hash fs access error: %s", exc)
+    except (RuntimeError, TypeError):  # pragma: no cover - defensive
+        # Unexpected but plausible runtime/type errors -> log at debug and continue
+        logger.debug("_compute_git_hash unexpected error")
     return git_hash
 
 
@@ -436,7 +440,9 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
         scaling = _update_scaling_efficiency(manifest, cfg)
         try:  # attach for downstream JSON serialization if model allows attribute
             precision_report.scaling_efficiency = scaling  # type: ignore[attr-defined]
-        except Exception:
+        except (AttributeError, TypeError):
+            # precision_report may be a plain dict or a lightweight namespace; ignore
+            # absence of attribute or wrong type but do not swallow unrelated errors.
             pass
         _write_iteration_artifacts(root, groups, effects, precision_report)
 
@@ -522,7 +528,7 @@ def _write_json(path: Path, obj):  # helper
         with tmp.open("w", encoding="utf-8") as f:
             json.dump(obj, f, indent=2, sort_keys=True)
         tmp.replace(path)
-    except Exception as exc:
+    except (OSError, TypeError) as exc:
         logger.warning("Failed writing JSON artifact {}: {}", path, exc)
 
 

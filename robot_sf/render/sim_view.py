@@ -235,7 +235,7 @@ class SimulationView:
                         "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d",
                         parsed,
                     )
-                except Exception:
+                except (ValueError, TypeError):
                     logger.warning(
                         "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '%s' (expected positive int or 'none'). Using default %s.",
                         env_cap,
@@ -486,8 +486,9 @@ class SimulationView:
                             "record_video=True but captured frames appear empty (all-zero pixel data). "
                             "Ensure drawing code executed before frame capture; verify entities are rendered.",
                         )
-                except Exception:
-                    pass
+                except (TypeError, ValueError) as exc:
+                    # Defensive: conversion/summation failed for unexpected frame data
+                    logger.debug("Frame sample check failed: %s", exc)
         if return_frames:
             intermediate_frames = self.frames
         self._handle_quit()

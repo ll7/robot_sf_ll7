@@ -58,7 +58,7 @@ def _git_sha_short(length: int = 7) -> str:
             .strip()
         )
         return sha or "unknown"
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return "unknown"
 
 
@@ -136,7 +136,7 @@ def _load_snqi_inputs(
         if baseline_path is not None and Path(baseline_path).exists():
             with Path(baseline_path).open("r", encoding="utf-8") as f:
                 baseline = json.load(f)
-    except Exception:
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
         # Best-effort; ignore malformed files silently for figure generation
         pass
     return (

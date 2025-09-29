@@ -67,7 +67,7 @@ def pick_worst(
             continue
         try:
             score = float(v)
-        except Exception:
+        except (TypeError, ValueError):
             continue
         scored.append((score, rec))
 

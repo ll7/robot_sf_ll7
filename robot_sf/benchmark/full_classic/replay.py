@@ -192,7 +192,7 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
                 seq.append((float(t), float(x), float(y), float(h)))
             ped_seq = ped_raw if isinstance(ped_raw, list) else None
             action_seq = action_raw if isinstance(action_raw, list) else None
-        except Exception:
+        except (ValueError, TypeError):
             continue
         ep = build_replay_episode(ep_id, sc_id, seq, ped_seq=ped_seq, action_seq=action_seq)
         if validate_replay_episode(ep, min_length=min_length):

@@ -34,7 +34,7 @@ def _to_float(x: Any) -> float | None:
         if x is None:
             return None
         return float(x)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 

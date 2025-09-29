@@ -37,13 +37,25 @@ def simulation_view_ready() -> bool:  # T030
         width: int = getattr(view.screen, "get_width", lambda: 0)()  # type: ignore[arg-type]
         height: int = getattr(view.screen, "get_height", lambda: 0)()  # type: ignore[arg-type]
         ready = width > 0 and height > 0
-    except Exception:
+    except (ImportError, OSError):
+        return False
+    except Exception as exc:  # pragma: no cover - defensive
+        # Unexpected failure during lightweight sim view probe -> treat as not ready
+        # but log at debug level for diagnostics.
+        try:
+            from loguru import logger
+
+            logger.debug("simulation_view_ready probe failed: %s", exc)
+        except (ImportError, ModuleNotFoundError):
+            # If logger import fails, silently ignore to remain graceful
+            pass
         return False
     finally:  # Best effort cleanup (safe if pygame not fully init)
         try:
             pygame.display.quit()  # type: ignore[name-defined]
             pygame.quit()  # type: ignore[name-defined]
-        except Exception:
+        except (OSError, AttributeError):
+            # Best-effort cleanup may fail if pygame partially initialized
             pass
     return ready
 
@@ -54,7 +66,10 @@ def has_pygame() -> bool:
         import pygame  # type: ignore
 
         _ = pygame.time.get_ticks  # access attribute to avoid unused warning
-    except Exception:
+    except ImportError:
+        return False
+    except (AttributeError, OSError):  # pragma: no cover - defensive
+        # Non-import errors (e.g., attributes missing) -> treat as not present
         return False
     return True
 
@@ -65,7 +80,10 @@ def has_moviepy() -> bool:
         import moviepy  # type: ignore
 
         _ = getattr(moviepy, "__version__", None)
-    except Exception:
+    except ImportError:
+        return False
+    except (AttributeError, OSError):  # pragma: no cover - defensive
+        # Any other import issue treat as not available
         return False
     return True
 

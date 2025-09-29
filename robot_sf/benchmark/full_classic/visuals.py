@@ -146,7 +146,11 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
                 max_frames_arg = 10 if smoke and max_frames is None else max_frames
                 frame_iter = _cast(Any, generate_frames).__call__(ep, fps, max_frames_arg)
 
-            enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
+            try:
+                enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
+            except TypeError:
+                # Some tests/mocks provide a legacy signature without keyword names.
+                enc = _cast(Any, encode_frames).__call__(frame_iter, mp4_path, fps, True)
         except (RuntimeError, OSError, ValueError) as exc:
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:

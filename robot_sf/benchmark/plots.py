@@ -40,11 +40,11 @@ def _group_values(
         val = _get_dotted(r, f"metrics.{metric}")
         if g is None or val is None:
             continue
-            try:
-                fv = float(val)  # type: ignore[arg-type]
-            except (TypeError, ValueError):
-                continue
-            out.setdefault(str(g), []).append(fv)
+        try:
+            fv = float(val)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        out.setdefault(str(g), []).append(fv)
     return out
 
 
@@ -138,12 +138,12 @@ def save_pareto_png(
     os.environ.setdefault("MPLBACKEND", "Agg")
     # Style/rcParams for consistent figure exports
     try:
-        from robot_sf.benchmark.plotting_style import apply_latex_style as _apply_latex_style
+        from robot_sf.benchmark.plotting_style import apply_latex_style as _apply_latex_style_fn
     except ImportError:
-        _apply_latex_style = None
-    if _apply_latex_style is not None:
+        _apply_latex_style_fn = None
+    if _apply_latex_style_fn is not None:
         try:
-            _apply_latex_style()
+            _apply_latex_style_fn()
         except (AttributeError, TypeError, ValueError, RuntimeError):
             # Fallback: keep defaults if helper misbehaves
             pass
@@ -181,6 +181,13 @@ def save_pareto_png(
     plt.legend(loc="best", fontsize=8)
     plt.tight_layout()
     plt.savefig(out_path, dpi=150)
+    # Force garbage collection to reduce memory footprint in long CI runs
+    try:
+        import gc
+
+        gc.collect()
+    except Exception:
+        pass
     if out_pdf is not None:
         # Save vector PDF for LaTeX inclusion
         pdf_dir = os.path.dirname(out_pdf)

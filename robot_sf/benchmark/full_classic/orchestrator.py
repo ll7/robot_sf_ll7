@@ -478,7 +478,9 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
         generate_visual_artifacts(root, cfg, groups, all_records)
 
         # Also generate real visualizations using new visualization module
-        if _VISUALIZATION_AVAILABLE:
+        # Skip generating heavy real visualizations when running in smoke mode
+        # (smoke mode intentionally keeps runtime small for tests).
+        if _VISUALIZATION_AVAILABLE and not getattr(cfg, "smoke", False):
             logger.info("Generating additional real visualizations from episode data")
             try:
                 plots_dir = root / "plots"

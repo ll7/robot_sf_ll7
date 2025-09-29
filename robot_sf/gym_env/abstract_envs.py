@@ -47,6 +47,7 @@ class BaseSimulationEnv(Env, ABC):
         self.recorded_states: list[VisualizableSimState] = []
         self.sim_ui = None
         self.map_def = None
+        self.applied_seed: int | None = None
 
         # Initialize common components
         self._setup_environment()

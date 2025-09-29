@@ -20,7 +20,7 @@ def plot_kde_on_map(
     bandwidth: float = 1.0,
     interactive: bool = False,
     unique_id: str | None = None,
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
 ):
     """
     Plot the Kernel Density Estimation of pedestrian positions on a map.

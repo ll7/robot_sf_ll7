@@ -117,7 +117,7 @@ def extract_ego_ped_acceleration(sim_states: list[VisualizableSimState]) -> list
 
 def plot_all_data_pkl(
     sim_states: list[VisualizableSimState],
-    map_def: MapDefinition = None,
+    map_def: MapDefinition | None = None,
     unique_id: str | None = None,
     interactive: bool = True,
 ):

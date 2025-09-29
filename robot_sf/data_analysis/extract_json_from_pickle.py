@@ -408,7 +408,9 @@ if __name__ == "__main__":
     # Example usage
     from pathlib import Path
 
-    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
+    from robot_sf.data_analysis.extract_json_from_pickle import (
+        extract_timestamp,  # type: ignore[attr-defined]
+    )
 
     # Ensure the plots directory exists
     PLOTS_DIR = "robot_sf/data_analysis/plots"

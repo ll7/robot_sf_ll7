@@ -8,6 +8,7 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
@@ -25,7 +26,7 @@ class AgentType(Enum):
 
 def init_collision_and_sensors(
     sim: Simulator,
-    env_config: EnvSettings,
+    env_config: EnvSettings | RobotSimulationConfig,
     orig_obs_space: spaces.Dict,
 ):
     """
@@ -97,7 +98,7 @@ def init_collision_and_sensors(
     return occupancies, sensor_fusions
 
 
-def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
+def init_spaces(env_config: EnvSettings | RobotSimulationConfig, map_def: MapDefinition):
     """
     Initialize the action and observation spaces for the environment.
 
@@ -132,7 +133,7 @@ def init_spaces(env_config: EnvSettings, map_def: MapDefinition):
 
 
 def create_spaces(
-    env_config: EnvSettings | PedEnvSettings,
+    env_config: EnvSettings | PedEnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
 ):
@@ -140,7 +141,12 @@ def create_spaces(
     if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
     elif agent_type == AgentType.PEDESTRIAN:
-        agent = env_config.pedestrian_factory()
+        if hasattr(env_config, "pedestrian_factory"):
+            agent = env_config.pedestrian_factory()  # type: ignore[union-attr]
+        else:
+            raise ValueError(
+                "Pedestrian agent type requires an env_config with pedestrian_factory method",
+            )
     else:
         raise ValueError(f"Unsupported agent type: {agent_type}")
 
@@ -340,7 +346,7 @@ def create_spaces_with_image(
         agent = env_config.robot_factory()
     elif agent_type == AgentType.PEDESTRIAN:
         if hasattr(env_config, "pedestrian_factory"):
-            agent = env_config.pedestrian_factory()
+            agent = env_config.pedestrian_factory()  # type: ignore[union-attr]
         else:
             raise ValueError(
                 "Pedestrian agent type requires an env_config with pedestrian_factory method",
@@ -356,7 +362,7 @@ def create_spaces_with_image(
     image_obs_space = None
 
     if use_image_obs and hasattr(env_config, "image_config"):
-        image_obs_space = image_sensor_space(env_config.image_config)
+        image_obs_space = image_sensor_space(env_config.image_config)  # type: ignore[arg-type]
 
     # Extend the agent's observation space with additional sensors
     if image_obs_space is not None:

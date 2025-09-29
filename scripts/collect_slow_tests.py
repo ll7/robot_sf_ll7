@@ -30,7 +30,10 @@ import json
 import re
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 
 LINE_RE = re.compile(
     r"^(?P<seconds>\d+(?:\.\d+)?)s\s+(?P<phase>call|setup|teardown)\s+(?P<nodeid>.+)$",

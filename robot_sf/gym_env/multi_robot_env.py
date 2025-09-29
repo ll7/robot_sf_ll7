@@ -40,9 +40,25 @@ class MultiRobotEnv(VectorEnv):
         else:
             resolved_num_robots = num_robots or 1
 
+        # Initialize pools as None early so destructor/cleanup paths don't fail
+        # if they are referenced before full initialization.
+        self.sim_worker_pool: ThreadPool | None = None
+        self.obs_worker_pool: ThreadPool | None = None
+
         map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
-        super().__init__(resolved_num_robots, observation_space, action_space)
+
+        # VectorEnv in the installed gymnasium expects no positional args in
+        # its constructor. Call the base init without args and set the
+        # expected attributes on this subclass instead.
+        super().__init__()
+
+        # Single-space descriptors for the VectorEnv API compatibility
+        self.single_action_space = action_space
+        self.single_observation_space = observation_space
+        self.num_envs = resolved_num_robots
+
+        # Combined action space for all robots (vectorized)
         self.action_space = spaces.Box(
             low=np.array([self.single_action_space.low for _ in range(resolved_num_robots)]),
             high=np.array([self.single_action_space.high for _ in range(resolved_num_robots)]),
@@ -72,7 +88,6 @@ class MultiRobotEnv(VectorEnv):
                 for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors, strict=False)
             ]
             self.states.extend(states)
-
         self.sim_worker_pool = ThreadPool(len(self.simulators))
         self.obs_worker_pool = ThreadPool(resolved_num_robots)
 
@@ -127,5 +142,13 @@ class MultiRobotEnv(VectorEnv):
         pass
 
     def close_extras(self, **kwargs):
-        self.sim_worker_pool.close()
-        self.obs_worker_pool.close()
+        if getattr(self, "sim_worker_pool", None) is not None:
+            try:
+                self.sim_worker_pool.close()
+            except Exception:
+                pass
+        if getattr(self, "obs_worker_pool", None) is not None:
+            try:
+                self.obs_worker_pool.close()
+            except Exception:
+                pass

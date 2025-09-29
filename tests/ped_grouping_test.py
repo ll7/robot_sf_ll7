@@ -42,14 +42,14 @@ def init_groups():
 
 def test_can_create_group_from_unassigned_pedestrians():
     ped_ids = {0, 1, 2}
-    groups = PedestrianGroupings(None)
+    groups = PedestrianGroupings(None)  # type: ignore
     gid = groups.new_group(ped_ids)
     assert groups.groups[gid] == ped_ids
 
 
 def test_can_create_group_from_assigned_pedestrians():
     ped_ids = {0, 1, 2}
-    groups = PedestrianGroupings(None)
+    groups = PedestrianGroupings(None)  # type: ignore
     old_gid = groups.new_group(ped_ids)
     new_gid = groups.new_group(ped_ids)
     assert groups.groups[old_gid] == set()

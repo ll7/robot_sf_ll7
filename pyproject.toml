@@ -318,3 +318,6 @@ robot_sf_bench = "robot_sf.benchmark.cli:main"
 
 [tool.uv.sources]
 pysocialforce = { path = "fast-pysf", editable = true }
+
+[tool.ty.src]
+exclude = ["fast-pysf"]

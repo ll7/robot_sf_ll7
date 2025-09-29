@@ -14,7 +14,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from robot_sf.gym_env.environment_factory import (
-    EnvironmentFactory,
     make_image_robot_env,
     make_robot_env,
 )
@@ -37,7 +36,10 @@ def demo_factory_pattern():
         robot_env = make_robot_env(debug=False)
         print(f"✅ Created {type(robot_env).__name__}")
         print(f"   Action space: {robot_env.action_space}")
-        print(f"   Observation space keys: {robot_env.observation_space.spaces.keys()}")
+        if hasattr(robot_env.observation_space, "spaces"):
+            print(f"   Observation space keys: {list(robot_env.observation_space.spaces.keys())}")
+        else:
+            print(f"   Observation space: {robot_env.observation_space}")
         robot_env.exit()
     except Exception as e:
         print(f"❌ Failed to create robot environment: {e}")
@@ -47,7 +49,11 @@ def demo_factory_pattern():
     try:
         image_robot_env = make_image_robot_env(debug=False)
         print(f"✅ Created {type(image_robot_env).__name__}")
-        print(f"   Has image observations: {'image' in image_robot_env.observation_space.spaces}")
+        if hasattr(image_robot_env.observation_space, "spaces"):
+            spaces_dict = image_robot_env.observation_space.spaces  # type: ignore[attr-defined]
+            print(f"   Has image observations: {'image' in spaces_dict}")  # type: ignore[operator]
+        else:
+            print("   Has image observations: False")
         image_robot_env.exit()
     except Exception as e:
         print(f"❌ Failed to create image robot environment: {e}")
@@ -58,7 +64,7 @@ def demo_factory_pattern():
         custom_config = RobotSimulationConfig()
         custom_config.peds_have_obstacle_forces = True
 
-        custom_env = EnvironmentFactory.create_robot_env(
+        custom_env = make_robot_env(
             config=custom_config,
             debug=False,
             recording_enabled=True,

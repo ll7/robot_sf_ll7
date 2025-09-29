@@ -1,4 +1,4 @@
-"""Baseline environment factory creation timing script.
+"""Baseline environment factory creafrom datetime import UTC  # type: ignore[attr-defined]script.
 
 Purpose: Capture current (pre-refactor) performance metrics for make_robot_env,
 make_image_robot_env, make_pedestrian_env (if model available) to enforce FR-017
@@ -32,7 +32,10 @@ import contextlib
 import json
 import statistics as stats
 import time
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 

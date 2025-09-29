@@ -1,0 +1,830 @@
+WARN ty is pre-release software and not ready for production use. Expect to encounter bugs, missing features, and fatal errors.
+error[unresolved-attribute]: Unresolved attribute `_cache_map` on type `def _load_policy(path: str) -> Unknown`.
+   --> examples/classic_interactions_pygame.py:139:9
+    |
+137 |     if cache_map is None:
+138 |         cache_map = {}
+139 |         _load_policy._cache_map = cache_map
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+140 |     if abs_path in cache_map:
+141 |         return cache_map[abs_path]
+    |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `object` has no attribute `keys`
+  --> examples/demo_refactored_environments.py:40:54
+   |
+38 |         print(f"   Action space: {robot_env.action_space}")
+39 |         if hasattr(robot_env.observation_space, "spaces"):
+40 |             print(f"   Observation space keys: {list(robot_env.observation_space.spaces.keys())}")
+   |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+41 |         else:
+42 |             print(f"   Observation space: {robot_env.observation_space}")
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `peds_have_obstacle_forces` on type `Unknown | BaseSimulationConfig` is possibly unbound
+  --> examples/demo_refactored_environments.py:73:49
+   |
+71 |         )
+72 |         print(f"✅ Created {type(custom_env).__name__} with custom config")
+73 |         print(f"   Pedestrian obstacle forces: {custom_env.config.peds_have_obstacle_forces}")
+   |                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+74 |         print(f"   Recording enabled: {custom_env.recording_enabled}")
+75 |         custom_env.exit()
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> examples/image_observation_demo.py:42:43
+   |
+40 |     print("Environment created successfully!")
+41 |     print(f"Action space: {env.action_space}")
+42 |     print(f"Observation space keys: {list(env.observation_space.spaces.keys())}")
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+43 |
+44 |     if "image" in env.observation_space.spaces:
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> examples/image_observation_demo.py:44:19
+   |
+42 |     print(f"Observation space keys: {list(env.observation_space.spaces.keys())}")
+43 |
+44 |     if "image" in env.observation_space.spaces:
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+45 |         image_space = env.observation_space.spaces["image"]
+46 |         print(f"Image observation space: {image_space}")
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> examples/image_observation_demo.py:45:23
+   |
+44 |     if "image" in env.observation_space.spaces:
+45 |         image_space = env.observation_space.spaces["image"]
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+46 |         print(f"Image observation space: {image_space}")
+47 |         print(f"Image shape: {image_space.shape}")
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+error[no-matching-overload]: No overload of function `field` matches arguments
+  --> fast-pysf/pysocialforce/sim_view.py:79:30
+   |
+77 |     scaling: float = 15
+78 |     ped_radius: float = 0.4
+79 |     map_def: MapDefinition = field(default_factory=MapDefinition)
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+80 |     size_changed: bool = field(init=False, default=False)
+81 |     is_exit_requested: bool = field(init=False, default=False)
+   |
+info: First overload defined here
+   --> stdlib/dataclasses.pyi:403:9
+    |
+401 |   elif sys.version_info >= (3, 10):
+402 |       @overload  # `default` and `default_factory` are optional and mutually exclusive.
+403 |       def field(
+    |  _________^
+404 | |         *,
+405 | |         default: _T,
+406 | |         default_factory: Literal[_MISSING_TYPE.MISSING] = ...,
+407 | |         init: bool = True,
+408 | |         repr: bool = True,
+409 | |         hash: bool | None = None,
+410 | |         compare: bool = True,
+411 | |         metadata: Mapping[Any, Any] | None = None,
+412 | |         kw_only: bool | Literal[_MISSING_TYPE.MISSING] = ...,
+413 | |     ) -> _T:
+    | |___________^
+414 |           """Return an object to identify dataclass fields.
+    |
+info: Possible overloads for function `field`:
+info:   (*, default: _T@field, default_factory: Literal[_MISSING_TYPE.MISSING] = EllipsisType, init: bool = Literal[True], repr: bool = Literal[True], hash: bool | None = None, compare: bool = Literal[True], metadata: Mapping[Any, Any] | None = None, kw_only: bool | _MISSING_TYPE = EllipsisType) -> _T@field
+info:   (*, default: Literal[_MISSING_TYPE.MISSING] = EllipsisType, default_factory: () -> _T@field, init: bool = Literal[True], repr: bool = Literal[True], hash: bool | None = None, compare: bool = Literal[True], metadata: Mapping[Any, Any] | None = None, kw_only: bool | _MISSING_TYPE = EllipsisType) -> _T@field
+info:   (*, default: Literal[_MISSING_TYPE.MISSING] = EllipsisType, default_factory: Literal[_MISSING_TYPE.MISSING] = EllipsisType, init: bool = Literal[True], repr: bool = Literal[True], hash: bool | None = None, compare: bool = Literal[True], metadata: Mapping[Any, Any] | None = None, kw_only: bool | _MISSING_TYPE = EllipsisType) -> Any
+info: rule `no-matching-overload` is enabled by default
+
+error[invalid-type-form]: Variable of type `Overload[(object: _ArrayType@array, dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: Literal[True], ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> _ArrayType@array, (object: _SupportsArray[_ArrayType@array], dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: Literal[True], ndmin: Literal[0] = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> _ArrayType@array, (object: @Todo, dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo, (object: object, dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo, (object: Any, dtype: @Todo, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo, (object: Any, dtype: @Todo, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo]` is not allowed in a type expression
+  --> fast-pysf/pysocialforce/sim_view.py:86:13
+   |
+84 |     font: pygame.font.Font = field(init=False)
+85 |     redraw_needed: bool = field(init=False, default=False)
+86 |     offset: np.array = field(default_factory=np.array([0, 0]))
+   |             ^^^^^^^^
+87 |
+88 |     @property
+   |
+info: rule `invalid-type-form` is enabled by default
+
+error[invalid-return-type]: Return type does not match returned value
+   --> fast-pysf/pysocialforce/sim_view.py:253:16
+    |
+252 |     def _scale_pedestrian_state(self, state: VisualizableSimState) \
+253 |             -> Tuple[VisualizableSimState, Tuple[float, float]]:
+    |                ------------------------------------------------ Expected `tuple[VisualizableSimState, tuple[int | float, int | float]]` because of return type
+254 |         state.pedestrian_positions *= self.scaling
+255 |         state.ped_actions *= self.scaling
+256 |         return state
+    |                ^^^^^ expected `tuple[VisualizableSimState, tuple[int | float, int | float]]`, found `VisualizableSimState`
+257 |
+258 |     def _draw_pedestrians(self, ped_pos: np.ndarray):
+    |
+info: rule `invalid-return-type` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:32:71
+   |
+32 | def make_forces(sim: pysf.Simulator, config: SimulatorConfig) -> List[pysf.forces.Force]:
+   |                                                                       ^^^^^^^^^^^
+33 |     """Initialize forces required for simulation."""
+34 |     enable_group = config.scene_config.enable_group
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:36:9
+   |
+34 |     enable_group = config.scene_config.enable_group
+35 |     force_list = [
+36 |         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+37 |         pysf.forces.SocialForce(config.social_force_config, sim.peds),
+38 |         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:37:9
+   |
+35 |     force_list = [
+36 |         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
+37 |         pysf.forces.SocialForce(config.social_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+38 |         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+39 |         ]
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:38:9
+   |
+36 |         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
+37 |         pysf.forces.SocialForce(config.social_force_config, sim.peds),
+38 |         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+   |         ^^^^^^^^^^^
+39 |         ]
+40 |     group_forces = [
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:41:9
+   |
+39 |         ]
+40 |     group_forces = [
+41 |         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+42 |         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+43 |         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:42:9
+   |
+40 |     group_forces = [
+41 |         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+42 |         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+43 |         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+44 |         ]
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `forces`
+  --> fast-pysf/pysocialforce/simulator.py:43:9
+   |
+41 |         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+42 |         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+43 |         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+44 |         ]
+45 |     return force_list + group_forces if enable_group else force_list
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[invalid-argument-type]: Argument is incorrect
+  --> fast-pysf/pysocialforce/simulator.py:74:29
+   |
+72 |         obstacles = [line for o in map_definition.obstacles for line in o.lines] \
+73 |             if map_definition.obstacles else None
+74 |         self.env = EnvState(obstacles, self.config.scene_config.resolution)
+   |                             ^^^^^^^^^ Expected `list[tuple[int | float, int | float, int | float, int | float]]`, found `list[@Todo] | None`
+75 |         self.peds = PedState(
+76 |             self.states.raw_states,
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument is incorrect
+   --> fast-pysf/pysocialforce/simulator.py:165:29
+    |
+163 |         self.on_step = on_step
+164 |         resolution = self.config.scene_config.resolution
+165 |         self.env = EnvState(obstacles, resolution)
+    |                             ^^^^^^^^^ Expected `list[tuple[int | float, int | float, int | float, int | float]]`, found `list[Unknown | tuple[int | float, int | float, int | float, int | float]] | None`
+166 |         self.peds = PedState(state, groups, self.config.scene_config)
+167 |         self.forces = make_forces(self, config)
+    |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to bound method `__init__` is incorrect
+   --> fast-pysf/pysocialforce/simulator.py:166:37
+    |
+164 |         resolution = self.config.scene_config.resolution
+165 |         self.env = EnvState(obstacles, resolution)
+166 |         self.peds = PedState(state, groups, self.config.scene_config)
+    |                                     ^^^^^^ Expected `list[Any]`, found `list[list[int]] | None`
+167 |         self.forces = make_forces(self, config)
+168 |         self.t = 0
+    |
+info: Method defined here
+  --> fast-pysf/pysocialforce/scene.py:21:9
+   |
+19 |     """Tracks the state of pedstrains and social groups"""
+20 |
+21 |     def __init__(self, state: np.ndarray, groups: List[Group], config: SceneConfig):
+   |         ^^^^^^^^                          ------------------- Parameter declared here
+22 |         self.default_tau = config.tau
+23 |         self.d_t = config.dt_secs
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `map_config`
+  --> fast-pysf/tests/test_simulator.py:12:18
+   |
+11 | def test_can_simulate_with_populated_map():
+12 |     obstacle01 = pysf.map_config.Obstacle(
+   |                  ^^^^^^^^^^^^^^^
+13 |         [(10, 10), (15, 10), (15, 15), (10, 15)])
+14 |     obstacle02 = pysf.map_config.Obstacle(
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `map_config`
+  --> fast-pysf/tests/test_simulator.py:14:18
+   |
+12 |     obstacle01 = pysf.map_config.Obstacle(
+13 |         [(10, 10), (15, 10), (15, 15), (10, 15)])
+14 |     obstacle02 = pysf.map_config.Obstacle(
+   |                  ^^^^^^^^^^^^^^^
+15 |         [(20, 10), (25, 10), (25, 15), (20, 15)])
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `map_config`
+  --> fast-pysf/tests/test_simulator.py:17:15
+   |
+15 |         [(20, 10), (25, 10), (25, 15), (20, 15)])
+16 |
+17 |     route01 = pysf.map_config.GlobalRoute(
+   |               ^^^^^^^^^^^^^^^
+18 |         [(0, 0), (10, 10), (20, 10), (30, 0)])
+19 |     crowded_zone01 = ((10, 10), (20, 10), (20, 20))
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `<module 'pysocialforce'>` has no attribute `map_config`
+  --> fast-pysf/tests/test_simulator.py:21:15
+   |
+19 |     crowded_zone01 = ((10, 10), (20, 10), (20, 20))
+20 |
+21 |     map_def = pysf.map_config.MapDefinition(
+   |               ^^^^^^^^^^^^^^^
+22 |         obstacles=[obstacle01, obstacle02],
+23 |         routes=[route01],
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[invalid-argument-type]: Argument to function `generate_benchmark_plots_from_file` is incorrect
+   --> robot_sf/benchmark/visualization.py:206:13
+    |
+204 |     if isinstance(episodes_data, str | Path):
+205 |         return generate_benchmark_plots_from_file(
+206 |             episodes_data,
+    |             ^^^^^^^^^^^^^ Expected `str | Path`, found `list[dict[Unknown, Unknown]] | str | Path`
+207 |             output_dir,
+208 |             scenario_filter,
+    |
+info: Function defined here
+   --> robot_sf/benchmark/visualization.py:147:5
+    |
+147 | def generate_benchmark_plots_from_file(
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+148 |     episodes_path: str | Path,
+    |     ------------------------- Parameter declared here
+149 |     output_dir: str,
+150 |     scenario_filter: str | None = None,
+    |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to function `generate_benchmark_plots_from_data` is incorrect
+   --> robot_sf/benchmark/visualization.py:213:13
+    |
+211 |     else:
+212 |         return generate_benchmark_plots_from_data(
+213 |             episodes_data,
+    |             ^^^^^^^^^^^^^ Expected `list[dict[Unknown, Unknown]]`, found `list[dict[Unknown, Unknown]] | str | Path`
+214 |             output_dir,
+215 |             scenario_filter,
+    |
+info: Function defined here
+  --> robot_sf/benchmark/visualization.py:56:5
+   |
+56 | def generate_benchmark_plots_from_data(
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+57 |     episodes: list[dict],
+   |     -------------------- Parameter declared here
+58 |     output_dir: str,
+59 |     scenario_filter: str | None = None,
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to function `generate_benchmark_videos_from_file` is incorrect
+   --> robot_sf/benchmark/visualization.py:617:13
+    |
+615 |     if isinstance(episodes_data, str | Path):
+616 |         return generate_benchmark_videos_from_file(
+617 |             episodes_data,
+    |             ^^^^^^^^^^^^^ Expected `str | Path`, found `list[dict[Unknown, Unknown]] | str | Path`
+618 |             output_dir,
+619 |             scenario_filter,
+    |
+info: Function defined here
+   --> robot_sf/benchmark/visualization.py:548:5
+    |
+548 | def generate_benchmark_videos_from_file(
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+549 |     episodes_path: str | Path,
+    |     ------------------------- Parameter declared here
+550 |     output_dir: str,
+551 |     scenario_filter: str | None = None,
+    |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to function `generate_benchmark_videos_from_data` is incorrect
+   --> robot_sf/benchmark/visualization.py:626:13
+    |
+624 |     else:
+625 |         return generate_benchmark_videos_from_data(
+626 |             episodes_data,
+    |             ^^^^^^^^^^^^^ Expected `list[dict[Unknown, Unknown]]`, found `list[dict[Unknown, Unknown]] | str | Path`
+627 |             output_dir,
+628 |             scenario_filter,
+    |
+info: Function defined here
+   --> robot_sf/benchmark/visualization.py:434:5
+    |
+434 | def generate_benchmark_videos_from_data(
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+435 |     episodes: list[dict],
+    |     -------------------- Parameter declared here
+436 |     output_dir: str,
+437 |     scenario_filter: str | None = None,
+    |
+info: rule `invalid-argument-type` is enabled by default
+
+error[unresolved-attribute]: Type `EnvSettings | RobotSimulationConfig` has no attribute `pedestrian_factory`
+   --> robot_sf/gym_env/env_util.py:144:17
+    |
+142 |         agent = env_config.robot_factory()
+143 |     elif agent_type == AgentType.PEDESTRIAN:
+144 |         agent = env_config.pedestrian_factory()
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+145 |     else:
+146 |         raise ValueError(f"Unsupported agent type: {agent_type}")
+    |
+info: rule `unresolved-attribute` is enabled by default
+
+error[call-non-callable]: Object of type `object` is not callable
+   --> robot_sf/gym_env/env_util.py:344:21
+    |
+342 |     elif agent_type == AgentType.PEDESTRIAN:
+343 |         if hasattr(env_config, "pedestrian_factory"):
+344 |             agent = env_config.pedestrian_factory()
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+345 |         else:
+346 |             raise ValueError(
+    |
+info: rule `call-non-callable` is enabled by default
+
+error[invalid-argument-type]: Argument to function `image_sensor_space` is incorrect
+   --> robot_sf/gym_env/env_util.py:360:46
+    |
+359 |     if use_image_obs and hasattr(env_config, "image_config"):
+360 |         image_obs_space = image_sensor_space(env_config.image_config)
+    |                                              ^^^^^^^^^^^^^^^^^^^^^^^ Expected `ImageSensorSettings`, found `object`
+361 |
+362 |     # Extend the agent's observation space with additional sensors
+    |
+info: Function defined here
+   --> robot_sf/sensor/image_sensor.py:132:5
+    |
+132 | def image_sensor_space(settings: ImageSensorSettings) -> spaces.Box:
+    |     ^^^^^^^^^^^^^^^^^^ ----------------------------- Parameter declared here
+133 |     """
+134 |     Create the observation space for the image sensor.
+    |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-return-type]: Return type does not match returned value
+   --> robot_sf/gym_env/environment_factory.py:105:16
+    |
+103 |           if EnvCls is None:  # pragma: no cover - defensive
+104 |               raise RuntimeError("Environment classes failed to import; check installation.")
+105 |           return EnvCls(
+    |  ________________^
+106 | |             env_config=config,
+107 | |             reward_func=reward_func,
+108 | |             debug=debug,
+109 | |             recording_enabled=recording_enabled,
+110 | |             record_video=record_video,
+111 | |             video_path=video_path,
+112 | |             video_fps=video_fps,
+113 | |             peds_have_obstacle_forces=peds_have_obstacle_forces,
+114 | |         )
+    | |_________^ expected `SingleAgentEnv`, found `RobotEnv`
+115 |
+116 |       @staticmethod
+    |
+   ::: robot_sf/gym_env/environment_factory.py:92:10
+    |
+ 90 |           video_path: str | None,
+ 91 |           video_fps: float | None,
+ 92 |       ) -> SingleAgentEnv:
+    |            -------------- Expected `SingleAgentEnv` because of return type
+ 93 |           if config is None:
+ 94 |               config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
+    |
+info: rule `invalid-return-type` is enabled by default
+
+error[invalid-return-type]: Return type does not match returned value
+   --> robot_sf/gym_env/environment_factory.py:125:10
+    |
+123 |           recording_enabled: bool,
+124 |           peds_have_obstacle_forces: bool,
+125 |       ) -> SingleAgentEnv:
+    |            -------------- Expected `SingleAgentEnv` because of return type
+126 |           if config is None:
+127 |               config = PedestrianSimulationConfig()
+128 |           from robot_sf.gym_env.pedestrian_env import PedestrianEnv
+129 |
+130 |           return PedestrianEnv(
+    |  ________________^
+131 | |             env_config=config,
+132 | |             robot_model=robot_model,
+133 | |             reward_func=reward_func,
+134 | |             debug=debug,
+135 | |             recording_enabled=recording_enabled,
+136 | |             peds_have_obstacle_forces=peds_have_obstacle_forces,
+137 | |         )
+    | |_________^ expected `SingleAgentEnv`, found `PedestrianEnv`
+138 |
+139 |       @staticmethod
+    |
+info: rule `invalid-return-type` is enabled by default
+
+error[invalid-argument-type]: Argument to bound method `__init__` is incorrect
+   --> robot_sf/gym_env/environment_factory.py:131:13
+    |
+130 |         return PedestrianEnv(
+131 |             env_config=config,
+    |             ^^^^^^^^^^^^^^^^^ Expected `PedEnvSettings | None`, found `PedestrianSimulationConfig`
+132 |             robot_model=robot_model,
+133 |             reward_func=reward_func,
+    |
+info: Method defined here
+  --> robot_sf/gym_env/pedestrian_env.py:50:9
+   |
+48 |     """
+49 |
+50 |     def __init__(
+   |         ^^^^^^^^
+51 |         self,
+52 |         env_config: PedEnvSettings | None = None,
+   |         ---------------------------------------- Parameter declared here
+53 |         reward_func: Callable[[dict], float] = simple_ped_reward,
+54 |         robot_model=None,
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to bound method `__init__` is incorrect
+   --> robot_sf/gym_env/environment_factory.py:133:13
+    |
+131 |             env_config=config,
+132 |             robot_model=robot_model,
+133 |             reward_func=reward_func,
+    |             ^^^^^^^^^^^^^^^^^^^^^^^ Expected `(dict[Unknown, Unknown], /) -> int | float`, found `((...) -> Unknown) | None`
+134 |             debug=debug,
+135 |             recording_enabled=recording_enabled,
+    |
+info: Method defined here
+  --> robot_sf/gym_env/pedestrian_env.py:50:9
+   |
+48 |     """
+49 |
+50 |     def __init__(
+   |         ^^^^^^^^
+51 |         self,
+52 |         env_config: PedEnvSettings | None = None,
+53 |         reward_func: Callable[[dict], float] = simple_ped_reward,
+   |         -------------------------------------------------------- Parameter declared here
+54 |         robot_model=None,
+55 |         debug: bool = False,
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-return-type]: Return type does not match returned value
+   --> robot_sf/gym_env/environment_factory.py:153:16
+    |
+151 |           from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
+152 |
+153 |           return MultiRobotEnv(
+    |  ________________^
+154 | |             env_config=config,
+155 | |             reward_func=reward_func,
+156 | |             debug=debug,
+157 | |             num_robots=num_robots,
+158 | |         )
+    | |_________^ expected `MultiAgentEnv`, found `MultiRobotEnv`
+    |
+   ::: robot_sf/gym_env/environment_factory.py:146:10
+    |
+144 |           reward_func: Callable | None,
+145 |           debug: bool,
+146 |       ) -> MultiAgentEnv:
+    |            ------------- Expected `MultiAgentEnv` because of return type
+147 |           if config is None:
+148 |               config = MultiRobotConfig()
+    |
+info: rule `invalid-return-type` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `cpu_freq` on type `<module 'psutil'>` is possibly unbound
+   --> scripts/benchmark02.py:132:21
+    |
+130 |         "cpu_count": psutil.cpu_count(),
+131 |         "memory_gb": psutil.virtual_memory().total / (1024**3),
+132 |         "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+    |                     ^^^^^^^^^^^^^^^
+133 |     }
+    |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `cpu_freq` on type `<module 'psutil'>` is possibly unbound
+   --> scripts/benchmark02.py:132:52
+    |
+130 |         "cpu_count": psutil.cpu_count(),
+131 |         "memory_gb": psutil.virtual_memory().total / (1024**3),
+132 |         "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+    |                                                    ^^^^^^^^^^^^^^^
+133 |     }
+    |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `ModuleType` has no attribute `SNQIWeightRecomputer`
+   --> scripts/example_snqi_workflow.py:160:36
+    |
+158 |                 recompute_module = importlib.import_module("recompute_snqi_weights")
+159 |
+160 |             SNQIWeightRecomputer = recompute_module.SNQIWeightRecomputer
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+161 |
+162 |             recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
+    |
+info: rule `unresolved-attribute` is enabled by default
+
+error[invalid-argument-type]: Argument to function `len` is incorrect
+   --> scripts/generate_figures.py:445:50
+    |
+443 | def _summary_ci_pair(metric_dict: dict, stat: str) -> tuple[float | None, float | None]:
+444 |     ci = metric_dict.get(f"{stat}_ci")
+445 |     if not (isinstance(ci, list | tuple) and len(ci) == 2):
+    |                                                  ^^ Expected `Sized`, found `Unknown | None`
+446 |         return None, None
+447 |     a, b = ci
+    |
+info: Function defined here
+    --> stdlib/builtins.pyi:3760:5
+     |
+3758 |     """
+3759 |
+3760 | def len(obj: Sized, /) -> int:
+     |     ^^^ ---------- Parameter declared here
+3761 |     """Return the number of items in a container."""
+     |
+info: rule `invalid-argument-type` is enabled by default
+
+error[not-iterable]: Object of type `None` is not iterable
+   --> scripts/generate_figures.py:447:12
+    |
+445 |     if not (isinstance(ci, list | tuple) and len(ci) == 2):
+446 |         return None, None
+447 |     a, b = ci
+    |            ^^
+448 |     if not isinstance(a, int | float) or not isinstance(b, int | float):
+449 |         return None, None
+    |
+info: It doesn't have an `__iter__` method or a `__getitem__` method
+info: rule `not-iterable` is enabled by default
+
+error[unresolved-import]: Cannot resolve imported module `seaborn`
+  --> scripts/snqi_sensitivity_analysis.py:45:12
+   |
+43 | try:
+44 |     import matplotlib.pyplot as plt
+45 |     import seaborn as sns
+   |            ^^^^^^^^^^^^^^
+46 |
+47 |     MATPLOTLIB_AVAILABLE = True
+   |
+info: Searched in the following paths during module resolution:
+info:   1. /Users/lennart/git/robot_sf_ll7 (first-party code)
+info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
+info:   3. /Users/lennart/git/robot_sf_ll7/.venv/lib/python3.13/site-packages (site-packages)
+info:   4. /Users/lennart/git/robot_sf_ll7/fast-pysf (editable install)
+info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
+info: rule `unresolved-import` is enabled by default
+
+error[unresolved-import]: Cannot resolve imported module `recompute_snqi_weights`
+  --> scripts/validate_snqi_scripts.py:97:14
+   |
+95 |         scripts_dir = Path(__file__).resolve().parent
+96 |         sys.path.insert(0, str(scripts_dir))
+97 |         from recompute_snqi_weights import SNQIWeightRecomputer
+   |              ^^^^^^^^^^^^^^^^^^^^^^
+98 |
+99 |         recomputer = SNQIWeightRecomputer(episodes, baseline_stats)
+   |
+info: Searched in the following paths during module resolution:
+info:   1. /Users/lennart/git/robot_sf_ll7 (first-party code)
+info:   2. vendored://stdlib (stdlib typeshed stubs vendored by ty)
+info:   3. /Users/lennart/git/robot_sf_ll7/.venv/lib/python3.13/site-packages (site-packages)
+info:   4. /Users/lennart/git/robot_sf_ll7/fast-pysf (editable install)
+info: make sure your Python environment is properly configured: https://docs.astral.sh/ty/modules/#python-environment
+info: rule `unresolved-import` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:28:37
+   |
+27 |             # Should not contain image observations
+28 |             assert OBS_IMAGE not in env.observation_space.spaces
+   |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+29 |             assert OBS_DRIVE_STATE in env.observation_space.spaces
+30 |             assert OBS_RAYS in env.observation_space.spaces
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:29:39
+   |
+27 |             # Should not contain image observations
+28 |             assert OBS_IMAGE not in env.observation_space.spaces
+29 |             assert OBS_DRIVE_STATE in env.observation_space.spaces
+   |                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+30 |             assert OBS_RAYS in env.observation_space.spaces
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:30:32
+   |
+28 |             assert OBS_IMAGE not in env.observation_space.spaces
+29 |             assert OBS_DRIVE_STATE in env.observation_space.spaces
+30 |             assert OBS_RAYS in env.observation_space.spaces
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+31 |
+32 |         finally:
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:49:39
+   |
+48 |             # Should contain all observation types
+49 |             assert OBS_DRIVE_STATE in env.observation_space.spaces
+   |                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+50 |             assert OBS_RAYS in env.observation_space.spaces
+51 |             assert OBS_IMAGE in env.observation_space.spaces
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:50:32
+   |
+48 |             # Should contain all observation types
+49 |             assert OBS_DRIVE_STATE in env.observation_space.spaces
+50 |             assert OBS_RAYS in env.observation_space.spaces
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+51 |             assert OBS_IMAGE in env.observation_space.spaces
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:51:33
+   |
+49 |             assert OBS_DRIVE_STATE in env.observation_space.spaces
+50 |             assert OBS_RAYS in env.observation_space.spaces
+51 |             assert OBS_IMAGE in env.observation_space.spaces
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+52 |
+53 |             # Verify image space properties
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+  --> tests/test_robot_env_with_image_integration.py:54:27
+   |
+53 |             # Verify image space properties
+54 |             image_space = env.observation_space.spaces[OBS_IMAGE]
+   |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+55 |             assert image_space.shape == (64, 64, 3)
+56 |             assert image_space.dtype == np.float32
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `spaces` on type `Space[Unknown] | Unknown` is possibly unbound
+   --> tests/test_robot_env_with_image_integration.py:327:33
+    |
+325 |             # Should work without errors
+326 |             assert env is not None
+327 |             assert OBS_IMAGE in env.observation_space.spaces
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+328 |
+329 |         finally:
+    |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+error[unresolved-attribute]: Type `ArgumentParser` has no attribute `snqi_loader`
+  --> tests/test_snqi/test_loader_robustness.py:57:14
+   |
+55 |     # Build a parser (attaches dynamic loader with its own cache variables)
+56 |     parser = bench_cli._configure_parser()  # type: ignore[attr-defined]
+57 |     loader = parser.snqi_loader
+   |              ^^^^^^^^^^^^^^^^^^
+58 |
+59 |     # Simulate sys.modules cache anomalies: None placeholders for target module names
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+warning[possibly-unbound-attribute]: Attribute `exit_simulation` on type `Unknown | None | SimulationView` is possibly unbound
+  --> tests/test_video_recording.py:56:9
+   |
+55 |         # Close env to trigger video creation
+56 |         env.sim_ui.exit_simulation()
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+57 |         logger.debug("exit the simulation")
+   |
+info: rule `possibly-unbound-attribute` is enabled by default
+
+error[invalid-argument-type]: Argument to function `validate_schema_integrity` is incorrect
+  --> tests/unit/test_schema_validation.py:38:44
+   |
+36 |         invalid_schema = "not a dict"  # type: ignore
+37 |
+38 |         errors = validate_schema_integrity(invalid_schema)
+   |                                            ^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `Literal["not a dict"]`
+39 |         assert len(errors) > 0
+40 |         assert "Schema must be a JSON object" in errors[0]
+   |
+info: Function defined here
+  --> robot_sf/benchmark/validation_utils.py:14:5
+   |
+14 | def validate_schema_integrity(schema: dict[str, Any]) -> list[str]:
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^ ---------------------- Parameter declared here
+15 |     """
+16 |     Validate that a schema is a well-formed JSON Schema.
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to function `validate_schema_compatibility` is incorrect
+  --> tests/unit/test_schema_validation.py:73:58
+   |
+71 |         incompatible_schema = "not a schema"  # type: ignore
+72 |
+73 |         is_valid, errors = validate_schema_compatibility(incompatible_schema)
+   |                                                          ^^^^^^^^^^^^^^^^^^^ Expected `dict[str, Any]`, found `Literal["not a schema"]`
+74 |         assert not is_valid
+75 |         assert len(errors) > 0
+   |
+info: Function defined here
+  --> robot_sf/benchmark/validation_utils.py:75:5
+   |
+75 | def validate_schema_compatibility(schema: dict[str, Any]) -> tuple[bool, list[str]]:
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ---------------------- Parameter declared here
+76 |     """
+77 |     Validate schema compatibility with a specific JSON Schema draft.
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+Found 54 diagnostics

@@ -12,7 +12,10 @@ Serialization: writing to JSONL will typically convert instances to
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:

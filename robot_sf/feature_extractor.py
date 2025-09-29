@@ -43,8 +43,8 @@ class DynamicsExtractor(BaseFeaturesExtractor):
             kernel_sizes = [3, 3, 3, 3]
         if num_filters is None:
             num_filters = [64, 16, 16, 16]
-        rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
-        drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
+        rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]  # type: ignore[assignment]
+        drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]  # type: ignore[assignment]
 
         # Calculate the number of features for the drive state and rays
         drive_state_features = np.prod(drive_state_space.shape)

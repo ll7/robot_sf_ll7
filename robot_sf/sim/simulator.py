@@ -10,6 +10,7 @@ from pysocialforce.forces import ObstacleForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 from robot_sf.nav.occupancy import is_circle_line_intersection
@@ -183,7 +184,7 @@ class Simulator:
 
 
 def init_simulators(
-    env_config: EnvSettings,
+    env_config: EnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
     num_robots: int = 1,
     random_start_pos: bool = True,

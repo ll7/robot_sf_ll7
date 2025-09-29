@@ -23,7 +23,10 @@ import logging
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import (
+    UTC,  # type: ignore[attr-defined]
+    datetime,
+)
 from itertools import product
 from pathlib import Path
 from time import perf_counter

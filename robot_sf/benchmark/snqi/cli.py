@@ -133,7 +133,7 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
             weights_path = Path(args.weights)
             if not weights_path.exists():
                 return 1
-            weight_obj = SNQIWeights.from_file(weights_path)
+            weight_obj = SNQIWeights.load(weights_path)
             weight_map = dict(weight_obj.weights)
         else:
             # Fallback canonical defaults (mirrors compute.recompute_snqi_weights canonical branch)

@@ -86,7 +86,7 @@ jobs:
           sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 
       - name: Sync dependencies (locked)
-        run: uv sync --frozen
+        run: uv sync --all-extras --frozen
 
       - name: Lint
         run: |

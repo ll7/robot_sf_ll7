@@ -16,7 +16,7 @@ if ! command -v uv &> /dev/null; then
 fi
 
 # Use uv for all dependency management
-uv sync || { echo "Failed to sync dependencies with uv"; exit 1; }
+uv sync --all-extras || { echo "Failed to sync dependencies with uv"; exit 1; }
 
 # Set the display environment variable for GUI applications based on the host OS
 if [ $HOST_OS == *"Windows"* ]; then

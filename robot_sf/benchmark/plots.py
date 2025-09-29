@@ -81,6 +81,24 @@ def compute_pareto_points(
     return points, labels
 
 
+def _maybe_apply_latex_style() -> None:
+    """Attempt to import and apply LaTeX plotting style; no-op if unavailable.
+
+    Kept as a separate helper to reduce complexity in plotting functions and to
+    isolate optional dependency handling.
+    """
+    try:
+        from robot_sf.benchmark.plotting_style import apply_latex_style
+
+        try:
+            apply_latex_style()
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            # If the helper misbehaves, silently continue using defaults.
+            return
+    except ImportError:
+        return
+
+
 def _dominates(
     a: tuple[float, float],
     b: tuple[float, float],
@@ -136,17 +154,8 @@ def save_pareto_png(
     When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
     """
     os.environ.setdefault("MPLBACKEND", "Agg")
-    # Style/rcParams for consistent figure exports
-    try:
-        from robot_sf.benchmark.plotting_style import apply_latex_style as _apply_latex_style_fn
-    except ImportError:
-        _apply_latex_style_fn = None
-    if _apply_latex_style_fn is not None:
-        try:
-            _apply_latex_style_fn()
-        except (AttributeError, TypeError, ValueError, RuntimeError):
-            # Fallback: keep defaults if helper misbehaves
-            pass
+    # Apply optional LaTeX plotting style if available.
+    _maybe_apply_latex_style()
     points, labels = compute_pareto_points(
         records,
         x_metric,

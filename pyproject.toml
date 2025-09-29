@@ -320,4 +320,11 @@ robot_sf_bench = "robot_sf.benchmark.cli:main"
 pysocialforce = { path = "fast-pysf", editable = true }
 
 [tool.ty.src]
-exclude = ["fast-pysf"]
+exclude = [
+    "/tests",
+    "/test_pygame",
+    "fast-pysf"
+]
+
+[tool.ty.environment]
+python = "./.venv"

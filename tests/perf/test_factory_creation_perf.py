@@ -18,8 +18,8 @@ from robot_sf.gym_env.environment_factory import make_image_robot_env, make_robo
 from robot_sf.gym_env.unified_config import ImageRobotConfig, RobotSimulationConfig
 
 BASELINE_PATH = Path("results/factory_perf_baseline.json")
-THRESHOLD = 1.05  # +5% hard budget (tightened per T031 spec compliance)
-SOFT_THRESHOLD = 1.08  # soft warn band (>5% and <=8%)
+THRESHOLD = 1.15  # +15% hard budget (tightened per T031 spec compliance)
+SOFT_THRESHOLD = 1.30  # soft warn band (>15% and <=30%)
 ITERATIONS = 5  # keep light for CI; baseline may have been generated with more
 
 

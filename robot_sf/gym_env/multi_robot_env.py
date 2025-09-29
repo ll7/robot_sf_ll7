@@ -48,16 +48,13 @@ class MultiRobotEnv(VectorEnv):
         map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
 
-        # VectorEnv in the installed gymnasium expects no positional args in
-        # its constructor. Call the base init without args and set the
-        # expected attributes on this subclass instead.
-        super().__init__()
-
-        # Single-space descriptors for the VectorEnv API compatibility
-        self.single_action_space = action_space
-        self.single_observation_space = observation_space
-        self.num_envs = resolved_num_robots
-
+        # VectorEnv in the installed gymnasium expects num_envs, observation_space, and action_space
+        # in its constructor. Pass these arguments to the base class to ensure API compatibility.
+        super().__init__(
+            num_envs=resolved_num_robots,
+            observation_space=observation_space,
+            action_space=action_space,
+        )
         # Combined action space for all robots (vectorized)
         self.action_space = spaces.Box(
             low=np.array([self.single_action_space.low for _ in range(resolved_num_robots)]),

@@ -63,6 +63,32 @@ def get_nested_value(data: dict[str, Any], path: str, default: Any = None) -> An
     return current
 
 
+def ensure_directory(path: str | Path) -> Path:
+    """Ensure a directory exists, creating parent directories as needed.
+
+    Args:
+        path: Directory path to create, or file path (will create parent directory).
+
+    Returns:
+        Path object representing the created directory.
+
+    Examples:
+        >>> ensure_directory("results/plots")  # Creates directory
+        PosixPath('results/plots')
+        >>> ensure_directory("results/data.json")  # Creates parent 'results' directory
+        PosixPath('results')
+    """
+    path_obj = Path(path)
+    # If the path has a suffix, assume it's a file and create parent directory
+    if path_obj.suffix:
+        directory = path_obj.parent
+    else:
+        directory = path_obj
+
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
 def format_summary_table(metrics: dict[str, float]) -> str:
     """Format a metrics mapping as a simple Markdown table.
 

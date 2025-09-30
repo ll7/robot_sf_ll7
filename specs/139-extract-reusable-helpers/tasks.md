@@ -80,10 +80,12 @@ T040. (Test) Add unit tests scaffolding and run local tests.
 - Commands:
   - `uv run pytest tests/unit/benchmark -q`
 - Expected: All unit tests pass locally
+ - Status: [X] Unit tests and full test suite executed; focused benchmark unit tests and full pytest run passed locally (714 passed, 5 skipped).
 
 T041. (Lint) Run Ruff and format to clean style after edits.
 - Commands:
   - `uv run ruff check --fix . && uv run ruff format .`
+ - Status: [X] Ruff autofix and format executed; repository is ruff-clean.
 
 Polish & docs
 
@@ -119,6 +121,7 @@ T070. (PR) Run full test suite and open PR from `139-extract-reusable-helpers` t
 - Commands:
   - `uv run ruff check . && uv run pytest tests`
   - Create PR with the branch and link to `specs/139-extract-reusable-helpers/spec.md` and `docs/dev/issues/classic-interactions-refactor/design.md`.
+ - Status: [READY] Full test suite green; branch ready for PR. I can open the PR if you want me to.
 
 Parallel execution guidance
 - Can run in parallel [P]: T010, T011, T012, T021, T050

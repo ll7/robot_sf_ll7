@@ -36,25 +36,18 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.benchmark.utils import load_optional_json
 
 SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
 SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
 DEFAULT_OUT = Path("tmp/results/classic_interactions/episodes.jsonl")
 
 
-def _load_json(path: str | None) -> dict[str, Any] | None:
-    if not path:
-        return None
-    p = Path(path)
-    if not p.exists():  # pragma: no cover simple guard
-        raise FileNotFoundError(p)
-    with p.open("r", encoding="utf-8") as f:
-        return json.load(f)
+# Helper function moved to robot_sf.benchmark.utils.load_optional_json
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,8 +99,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    snqi_weights = _load_json(args.snqi_weights)
-    snqi_baseline = _load_json(args.snqi_baseline)
+    snqi_weights = load_optional_json(args.snqi_weights)
+    snqi_baseline = load_optional_json(args.snqi_baseline)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

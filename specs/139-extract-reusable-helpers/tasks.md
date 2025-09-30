@@ -39,7 +39,7 @@ T012. (Test [P]) Create contract test for `format_summary_table`. [X]
 
 Core implementation tasks (after tests created — TDD order)
 
-T020. (Core) Implement `robot_sf/benchmark/visualization.py` with minimal helpers: [PARTIAL]
+T020. (Core) Implement `robot_sf/benchmark/visualization.py` with minimal helpers: [X]
 - File: `robot_sf/benchmark/visualization.py`
 - Implementations:
   - `def frame_shape_from_map(map_svg_path: str) -> tuple[int,int]` — parse simple SVG width/height attributes using `xml.etree.ElementTree` and return ints; raise FileNotFoundError or ValueError per contract.
@@ -58,12 +58,14 @@ T021. (Core) Implement `robot_sf/benchmark/utils.py` with formatting helpers: [X
 
 Integration & example update tasks
 
-T030. (Integration) Update `examples/classic_interactions_pygame.py` to import helpers from new modules.
+T030. (Integration) Update `examples/classic_interactions_pygame.py` to import helpers from new modules. [X]
 - File: `examples/classic_interactions_pygame.py`
 - Replace local helper definitions with imports:
   - `from robot_sf.benchmark.visualization import frame_shape_from_map, overlay_text`
   - `from robot_sf.benchmark.utils import format_summary_table`
 - Add an integration smoke test run in a new test `tests/unit/benchmark/test_example_dry_run.py` that runs the example with `--dry-run` and expects no exceptions.
+
+  - Add an integration smoke test run in a new test `tests/unit/benchmark/test_example_dry_run.py` that runs the example with `dry_run=True` and expects no exceptions. The test should be lightweight and not require heavy deps.
 - Notes: Keep behavior identical; if behavior differs, revert and split the change into smaller commits.
 - Parallelizable: no
 

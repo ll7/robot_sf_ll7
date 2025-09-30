@@ -1,20 +1,84 @@
-"""
-Visualization functions for benchmark outputs.
+"""Visualization helpers moved from examples/classic_interactions_pygame.py.
 
-This module provides functions to generate real plots and videos from benchmark
-episode data, replacing placeholder outputs with actual statistical visualizations
-and simulation replays.
+This module contains small, well-documented helpers intended to be
+pure and testable. Heavy optional dependencies must be lazily imported.
 """
 
+from __future__ import annotations
+
+# Standard library
 import json
 import os
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Optional, cast
 
+# Third-party
 import numpy as np
 from loguru import logger
+
+
+def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
+    """Return (width_px, height_px) parsed from an SVG file.
+
+    Looks for width/height attributes on the root <svg> element. If missing,
+    attempts to parse viewBox and derive width/height. Raises FileNotFoundError
+    when the file doesn't exist and ValueError for invalid SVG content.
+    """
+    with open(map_svg_path, encoding="utf-8") as f:
+        data = f.read()
+
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as e:
+        raise ValueError("Invalid SVG content") from e
+
+    # Try width/height attributes first
+    width = root.get("width")
+    height = root.get("height")
+    if width and height:
+        try:
+            return int(float(width)), int(float(height))
+        except Exception:
+            # fallthrough to try viewBox
+            pass
+
+    viewbox = root.get("viewBox") or root.get("viewbox")
+    if viewbox:
+        parts = viewbox.strip().split()
+        if len(parts) == 4:
+            try:
+                _, _, w, h = parts
+                return int(float(w)), int(float(h))
+            except Exception:
+                pass
+
+    raise ValueError("SVG missing width/height or valid viewBox")
+
+
+def overlay_text(canvas, text: str, pos: tuple[int, int], font: Optional[str] = None) -> None:
+    """Draw text on a duck-typed canvas object.
+
+    The canvas must provide a `draw_text(text, pos, font=None)` method. This
+    function calls that method and raises TypeError if unavailable.
+    """
+    draw = getattr(canvas, "draw_text", None)
+    if not callable(draw):
+        raise TypeError("canvas does not implement draw_text(text, pos, font)")
+
+    # Keep simple: pass font through as-is; canvas is responsible for font handling
+    draw(text, pos, font)
+
+
+"""
+Visualization functions for benchmark outputs.
+
+This module provides higher-level functions used by examples and the
+benchmarking pipeline. The heavy plotting code is implemented lazily to
+avoid importing matplotlib at module import time (see Constitution XII).
+"""
 
 # Default robot speed for replay episodes when speed data is not available
 DEFAULT_ROBOT_SPEED = 0.5

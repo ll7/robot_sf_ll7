@@ -16,21 +16,21 @@ T001. (Setup) Ensure local environment and dev tools are ready.
 
 Contract test tasks (TDD) — one failing contract test per contract file [P]
 
-T010. (Test [P]) Create contract test for `frame_shape_from_map`.
+T010. (Test [P]) Create contract test for `frame_shape_from_map`. [X]
 - File: `tests/unit/benchmark/test_contract_frame_shape.py`
 - Create a pytest test that:
   - Imports the contract `specs/139-extract-reusable-helpers/contracts/visualization_helper_contract.md` (as guidance) and asserts that calling `frame_shape_from_map` with a missing path raises FileNotFoundError and with a simple SVG string returns a positive (w,h) tuple.
   - This test should import the future function from `robot_sf.benchmark.visualization` but initially mark import as xfail or mock the function to keep test failing until implementation.
 - Parallelizable: Yes [P]
 
-T011. (Test [P]) Create contract test for `overlay_text`.
+T011. (Test [P]) Create contract test for `overlay_text`. [X]
 - File: `tests/unit/benchmark/test_contract_overlay_text.py`
 - Test behavior:
   - Create a minimal duck-typed `canvas` object with `draw_text` method; assert `overlay_text(canvas, 'hi', (1,2))` mutates or calls `draw_text`.
   - Assert TypeError raised when canvas lacks `draw_text`.
 - Parallelizable: Yes [P]
 
-T012. (Test [P]) Create contract test for `format_summary_table`.
+T012. (Test [P]) Create contract test for `format_summary_table`. [X]
 - File: `tests/unit/benchmark/test_contract_format_summary_table.py`
 - Test behavior:
   - Call with empty dict → expect ValueError.
@@ -39,7 +39,7 @@ T012. (Test [P]) Create contract test for `format_summary_table`.
 
 Core implementation tasks (after tests created — TDD order)
 
-T020. (Core) Implement `robot_sf/benchmark/visualization.py` with minimal helpers:
+T020. (Core) Implement `robot_sf/benchmark/visualization.py` with minimal helpers: [PARTIAL]
 - File: `robot_sf/benchmark/visualization.py`
 - Implementations:
   - `def frame_shape_from_map(map_svg_path: str) -> tuple[int,int]` — parse simple SVG width/height attributes using `xml.etree.ElementTree` and return ints; raise FileNotFoundError or ValueError per contract.
@@ -48,7 +48,7 @@ T020. (Core) Implement `robot_sf/benchmark/visualization.py` with minimal helper
 - Notes: Use lazy import for optional heavy deps; add docstrings per Constitution XI.
 - Parallelizable: no (same file sequential edits allowed)
 
-T021. (Core) Implement `robot_sf/benchmark/utils.py` with formatting helpers:
+T021. (Core) Implement `robot_sf/benchmark/utils.py` with formatting helpers: [X]
 - File: `robot_sf/benchmark/utils.py`
 - Implementations:
   - `def format_summary_table(metrics: dict[str,float]) -> str` — return a Markdown table string; raise ValueError on empty input.

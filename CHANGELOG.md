@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Unified Baseline Interface**: PlannerProtocol for consistent algorithm comparison
   - **Figure Orchestrator**: Publication-quality visualization pipeline
   - **Comprehensive Testing**: 108 tests including 33 new tests for benchmark functionality
+
+- Classic interactions refactor (Feature 139): Extracted small reusable visualization and formatting helpers into `robot_sf.benchmark` (`visualization.py`, `utils.py`) and added contract tests and a dry-run smoke test. See docs/dev/issues/classic-interactions-refactor/design.md.
 - **Complete Documentation**: Step-by-step quickstart guide with example workflows
 - **Performance Validation**: 20-25 steps/second with linear parallel scaling
 

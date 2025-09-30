@@ -35,7 +35,7 @@ import contextlib
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 import numpy as np  # type: ignore
 from loguru import logger
@@ -55,6 +55,11 @@ from robot_sf.benchmark.classic_interactions_loader import (
     load_classic_matrix,
     select_scenario,
 )
+from robot_sf.benchmark.utils import (
+    compute_fast_mode_and_cap,
+    determine_episode_outcome,
+    format_episode_summary_table,
+)
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -62,8 +67,7 @@ from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
+# TYPE_CHECKING imports removed - no longer needed
 
 # ---------------------------------------------------------------------------
 # CONFIG CONSTANTS (edit these to adjust behavior)
@@ -157,14 +161,7 @@ def _load_policy(path: str):  # (FR-004, FR-007 guidance)
     return model
 
 
-def _determine_outcome(info: dict[str, Any]) -> str:
-    if info.get("collision"):
-        return "collision"
-    if info.get("success"):
-        return "success"
-    if info.get("timeout"):
-        return "timeout"
-    return "done"
+# Removed: _determine_outcome - now using determine_episode_outcome from utils
 
 
 def _placeholder_frame_shape(env) -> tuple[int, int, int]:
@@ -249,7 +246,7 @@ def run_episode(
         if fast_step_cap is not None and step >= fast_step_cap:
             done = True
 
-    outcome = _determine_outcome(last_info)
+    outcome = determine_episode_outcome(last_info)
     success = bool(last_info.get("success"))
     collision = bool(last_info.get("collision"))
     timeout = bool(last_info.get("timeout"))
@@ -326,39 +323,14 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
         pass
 
 
-def _overlay_text(scenario: str, seed: int, step: int, outcome: str | None = None) -> str:
-    """Format overlay text (FR-016 helper). Not yet wired into a renderer; provided for future integration."""
-    base = f"{scenario} | seed={seed} | step={step}"
-    if outcome:
-        return base + f" | {outcome}"
-    return base
+# Removed: _overlay_text - now using format_overlay_text from utils
 
 
-def _format_summary_table(rows: Iterable[EpisodeSummary]) -> str:
-    rows = list(rows)
-    if not rows:
-        return "(no episodes)"
-    headers: list[str] = ["scenario", "seed", "steps", "outcome", "recorded"]
-    col_widths = {h: max(len(h), *(len(str(cast(Any, r)[h])) for r in rows)) for h in headers}
-
-    def fmt_row(r: EpisodeSummary | dict[str, Any]) -> str:
-        return " | ".join(str(cast(Any, r)[h]).ljust(col_widths[h]) for h in headers)
-
-    header_row: EpisodeSummary | dict[str, Any] = {h: h for h in headers}
-    lines = [fmt_row(header_row)]
-    lines.append("-|-".join("-" * col_widths[h] for h in headers))
-    lines.extend(fmt_row(r) for r in rows)
-    return "\n" + "\n".join(lines)
+# Removed: _format_summary_table - now using format_episode_summary_table from utils
 
 
 # --- Helper extraction to reduce run_demo complexity (addresses Ruff C901) ---
-def _compute_fast_mode_and_cap(max_episodes: int) -> tuple[bool, int]:
-    in_pytest = "PYTEST_CURRENT_TEST" in os.environ
-    fast_env_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
-    fast_mode = in_pytest or fast_env_flag
-    if fast_mode and max_episodes > 1:
-        max_episodes = 1
-    return fast_mode, max_episodes
+# Removed: _compute_fast_mode_and_cap - now using compute_fast_mode_and_cap from utils
 
 
 def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str, Any]]:
@@ -498,7 +470,7 @@ def _maybe_print_summary(results: list[EpisodeSummary]) -> None:
     if LOGGING_ENABLED:
         print("Summary:")
         # Guarantee at least a header line so logging toggle test observes difference.
-        print(_format_summary_table(results))
+        print(format_episode_summary_table(results))
 
 
 def run_demo(
@@ -538,7 +510,7 @@ def run_demo(
     eff_record = ENABLE_RECORDING if enable_recording is None else enable_recording
     eff_sweep = SWEEP_ALL if sweep is None else sweep
 
-    fast_mode, eff_max = _compute_fast_mode_and_cap(max_episodes=eff_max)
+    fast_mode, eff_max = compute_fast_mode_and_cap(max_episodes=eff_max)
     scenarios = _prepare_scenarios(eff_name, sweep=eff_sweep or (eff_name == "ALL"))
 
     if effective_dry:

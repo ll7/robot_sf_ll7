@@ -4,8 +4,8 @@
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/, quickstart.md
 
 ## Phase 3.1: Setup
-- [ ] T001 Document current helper usage across `examples/` and `scripts/` in `specs/140-extract-reusable-helpers/helper_inventory.yaml` using the two-pass audit criteria.
-- [ ] T002 Capture required regression commands in `specs/140-extract-reusable-helpers/regression_checks.yaml` (pytest suites + validation scripts) with descriptions per RegressionCheck data model.
+- [X] T001 Document current helper usage across `examples/` and `scripts/` in `specs/140-extract-reusable-helpers/helper_inventory.yaml` using the two-pass audit criteria.
+- [X] T002 Capture required regression commands in `specs/140-extract-reusable-helpers/regression_checks.yaml` (pytest suites + validation scripts) with descriptions per RegressionCheck data model.
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 - [ ] T003 [P] Add failing tests for benchmark helper catalog in `tests/benchmark/test_helper_catalog.py` covering `prepare_classic_env`, `load_trained_policy`, and `run_episodes_with_recording` (success + error paths).

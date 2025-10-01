@@ -41,6 +41,7 @@ from loguru import logger
 
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.utils import load_optional_json
+from robot_sf.render.helper_catalog import ensure_output_dir
 
 SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
 SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
@@ -103,7 +104,7 @@ def main() -> int:
     snqi_baseline = load_optional_json(args.snqi_baseline)
 
     out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_output_dir(out_path.parent)
 
     logger.info("Running classic interaction scenarios: {}", SCENARIO_MATRIX)
 

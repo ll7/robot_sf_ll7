@@ -4,6 +4,7 @@ This example shows how to:
 - Run a tiny batch to produce an episodes JSONL (using the demo matrix inline)
 - Compute grouped aggregates with bootstrap confidence intervals programmatically
 - Print a compact JSON summary
+- Uses helper catalog utilities for output directory management
 
 Usage (from repo root):
   uv run python examples/demo_aggregate.py
@@ -16,6 +17,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.render.helper_catalog import ensure_output_dir
 
 
 def _write_demo_matrix(path: Path) -> None:
@@ -39,8 +41,8 @@ def _write_demo_matrix(path: Path) -> None:
 
 
 def main() -> None:
-    out_dir = Path("results/demo_aggregate")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Use helper catalog to ensure output directory exists
+    out_dir = ensure_output_dir(Path("results/demo_aggregate"))
 
     matrix_path = out_dir / "matrix.yaml"
     episodes_path = out_dir / "episodes.jsonl"

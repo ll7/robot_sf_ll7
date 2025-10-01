@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.render.helper_catalog import ensure_output_dir
 
 SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
@@ -27,7 +28,7 @@ def _make_scenarios(repeats: int) -> list[dict]:
 
 
 def bench(workers: int, repeats: int, out_dir: Path) -> dict:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_output_dir(out_dir)
     out_file = out_dir / f"episodes_w{workers}.jsonl"
     scenarios = _make_scenarios(repeats)
     start = time.perf_counter()

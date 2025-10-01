@@ -1,7 +1,7 @@
 import numpy as np
 from gymnasium import spaces
-from stable_baselines3 import PPO
 
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
@@ -39,7 +39,7 @@ def run_simulation():
     )
     env = RobotEnv(env_config, debug=True)
     env.observation_space, env.action_space = prepare_gym_spaces()
-    model = PPO.load("./model/run_023", env=env)
+    model = load_trained_policy("./model/run_023")
 
     def obs_adapter(orig_obs):
         drive_state = orig_obs[OBS_DRIVE_STATE]

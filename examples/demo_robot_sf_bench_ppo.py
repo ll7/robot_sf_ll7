@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from robot_sf.benchmark.cli import cli_main
+from robot_sf.render.helper_catalog import ensure_output_dir
 
 
 def project_root() -> Path:
@@ -32,7 +33,7 @@ def main() -> int:
     matrix = root / "configs/baselines/example_matrix.yaml"
     ppo_cfg = root / "configs/baselines/ppo.yaml"
     out = root / "results/episodes_demo_ppo.jsonl"
-    out.parent.mkdir(parents=True, exist_ok=True)
+    ensure_output_dir(out.parent)
 
     print("[demo] Listing algorithms...", flush=True)
     code = cli_main(["list-algorithms"])

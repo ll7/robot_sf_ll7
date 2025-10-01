@@ -15,9 +15,11 @@ Features demonstrated:
 
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import loguru
 
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
 
@@ -32,14 +34,17 @@ def demo_jsonl_recording():
         logger.info(f"Recording to temporary directory: {temp_dir}")
 
         # Create environment with JSONL recording enabled
-        env = RobotEnv(
-            recording_enabled=True,
-            use_jsonl_recording=True,
-            recording_dir=temp_dir,
-            suite_name="demo",
-            scenario_name="multi_episode",
-            algorithm_name="random_walk",
-            recording_seed=42,
+        env = cast(
+            RobotEnv,
+            make_robot_env(
+                recording_enabled=True,
+                use_jsonl_recording=True,
+                recording_dir=temp_dir,
+                suite_name="demo",
+                scenario_name="multi_episode",
+                algorithm_name="random_walk",
+                recording_seed=42,
+            ),
         )
 
         # Record multiple episodes
@@ -118,14 +123,17 @@ def demo_batch_analysis():
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create a small batch of recordings
         for ep in range(2):
-            env = RobotEnv(
-                recording_enabled=True,
-                use_jsonl_recording=True,
-                recording_dir=temp_dir,
-                suite_name="analysis",
-                scenario_name="batch_test",
-                algorithm_name="demo",
-                recording_seed=ep,
+            env = cast(
+                RobotEnv,
+                make_robot_env(
+                    recording_enabled=True,
+                    use_jsonl_recording=True,
+                    recording_dir=temp_dir,
+                    suite_name="analysis",
+                    scenario_name="batch_test",
+                    algorithm_name="demo",
+                    recording_seed=ep,
+                ),
             )
 
             env.reset()

@@ -90,6 +90,12 @@ class EnvironmentFactory:
         record_video: bool,
         video_path: str | None,
         video_fps: float | None,
+        use_jsonl_recording: bool = False,
+        recording_dir: str = "recordings",
+        suite_name: str = "robot_sim",
+        scenario_name: str = "default",
+        algorithm_name: str = "manual",
+        recording_seed: int | None = None,
     ) -> SingleAgentEnv:
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
@@ -112,6 +118,12 @@ class EnvironmentFactory:
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
+            use_jsonl_recording=use_jsonl_recording,
+            recording_dir=recording_dir,
+            suite_name=suite_name,
+            scenario_name=scenario_name,
+            algorithm_name=algorithm_name,
+            recording_seed=recording_seed,
         )  # type: ignore[return-value]
 
     @staticmethod
@@ -233,6 +245,12 @@ def make_robot_env(
     video_fps: float | None = None,
     render_options: RenderOptions | None = None,
     recording_options: RecordingOptions | None = None,
+    use_jsonl_recording: bool = False,
+    recording_dir: str = "recordings",
+    suite_name: str = "robot_sim",
+    scenario_name: str = "default",
+    algorithm_name: str = "manual",
+    recording_seed: int | None = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a standard robot environment (non-image observations).
@@ -263,6 +281,18 @@ def make_robot_env(
     recording_options : RecordingOptions | None
         Advanced recording options. For robot/image factories, convenience flag may upgrade
         ``record`` to True if conflicting (precedence rule #3).
+    use_jsonl_recording : bool
+        Enable JSONL episode recording (per-episode JSONL + metadata outputs) when recording is on.
+    recording_dir : str
+        Directory where JSONL recorder stores per-episode files if enabled.
+    suite_name : str
+        Suite identifier stored in JSONL metadata for downstream grouping.
+    scenario_name : str
+        Scenario identifier stored in JSONL metadata.
+    algorithm_name : str
+        Algorithm identifier stored in JSONL metadata.
+    recording_seed : int | None
+        Optional stable seed used by the recorder to derive deterministic episode names.
     legacy_kwargs : dict
         Deprecated legacy surface (mapped via :func:`apply_legacy_kwargs`). Unknown params
         rejected unless ``{env}`` is truthy (permissive).
@@ -314,6 +344,12 @@ def make_robot_env(
         record_video=eff_record_video,
         video_path=eff_video_path,
         video_fps=eff_video_fps,
+        use_jsonl_recording=use_jsonl_recording,
+        recording_dir=recording_dir,
+        suite_name=suite_name,
+        scenario_name=scenario_name,
+        algorithm_name=algorithm_name,
+        recording_seed=recording_seed,
     )
     env.applied_seed = seed
     return env
@@ -332,6 +368,12 @@ def make_image_robot_env(
     video_fps: float | None = None,
     render_options: RenderOptions | None = None,
     recording_options: RecordingOptions | None = None,
+    use_jsonl_recording: bool = False,
+    recording_dir: str = "recordings",
+    suite_name: str = "robot_sim",
+    scenario_name: str = "default",
+    algorithm_name: str = "manual",
+    recording_seed: int | None = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
@@ -371,6 +413,12 @@ def make_image_robot_env(
         record_video=eff_record_video,
         video_path=eff_video_path,
         video_fps=eff_video_fps,
+        use_jsonl_recording=use_jsonl_recording,
+        recording_dir=recording_dir,
+        suite_name=suite_name,
+        scenario_name=scenario_name,
+        algorithm_name=algorithm_name,
+        recording_seed=recording_seed,
     )
     env.applied_seed = seed
     return env

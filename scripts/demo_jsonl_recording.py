@@ -85,10 +85,8 @@ def demo_jsonl_recording():
         logger.info(
             f"Loaded batch: {batch.total_episodes} episodes, {batch.total_steps} total steps"
         )
-        for i, episode in enumerate(batch.episodes):
+        for episode in batch.episodes:
             logger.info(f"  Episode {episode.episode_id}: {len(episode.states)} states")
-
-        return temp_dir
 
 
 def demo_interactive_playback():
@@ -105,7 +103,7 @@ def demo_interactive_playback():
 
         # Instead, just load and show info
         loader = JSONLPlaybackLoader()
-        episode, map_def = loader.load_single_episode(test_pickle)
+        episode, _ = loader.load_single_episode(test_pickle)
         logger.info(f"Loaded legacy file: {len(episode.states)} states")
         reset_points = episode.reset_points or []
         logger.info(f"Reset points detected: {len(reset_points)} points at indices {reset_points}")

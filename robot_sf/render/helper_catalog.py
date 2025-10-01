@@ -1,9 +1,11 @@
 """Render helper catalog for reusable rendering and frame capture utilities.
 
 This module provides helper functions for managing output directories, capturing
-frames from environments, and handling recording-related tasks.
+frames from environments, handling recording-related tasks, and deriving
+standardized naming metadata for JSONL recordings.
 """
 
+from hashlib import sha1
 from pathlib import Path
 
 import numpy as np
@@ -69,3 +71,50 @@ def capture_frames(env, stride: int = 1) -> list[np.ndarray]:
     except Exception as e:
         logger.error(f"Frame capture failed: {e}")
         raise
+
+
+def derive_recording_tags(source: str | Path) -> tuple[str, str, str]:
+    """Derive suite, scenario, and algorithm tags from a path or stem.
+
+    Args:
+        source: Path or string used to derive recording identifiers. Typically a
+            filename stem like ``suite_scenario_algorithm``.
+
+    Returns:
+        Tuple of (suite, scenario, algorithm) with sensible defaults when
+        segments are missing.
+    """
+
+    stem = Path(source).stem
+    parts = [part for part in stem.split("_") if part]
+
+    suite = parts[0] if len(parts) > 0 else "converted"
+    scenario = parts[1] if len(parts) > 1 else "legacy"
+    algorithm = parts[2] if len(parts) > 2 else "unknown"
+
+    logger.debug(
+        "Derived recording tags suite=%s scenario=%s algorithm=%s from stem=%s",
+        suite,
+        scenario,
+        algorithm,
+        stem,
+    )
+
+    return suite, scenario, algorithm
+
+
+def deterministic_seed_from_name(name: str | Path) -> int:
+    """Return a deterministic 31-bit seed derived from a file name or path.
+
+    Args:
+        name: File name or path to hash for deterministic seeding.
+
+    Returns:
+        Non-negative integer seed stable across runs and platforms.
+    """
+
+    normalized = str(name)
+    digest = sha1(normalized.encode("utf-8")).hexdigest()
+    seed = int(digest[:8], 16) & 0x7FFFFFFF
+    logger.debug("Generated deterministic seed=%s from name=%s", seed, normalized)
+    return seed

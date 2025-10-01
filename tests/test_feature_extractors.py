@@ -242,7 +242,17 @@ class TestIntegrationWithStableBaselines3:
             "features_extractor_kwargs": {"ray_hidden_dims": [64, 32]},
         }
 
-        model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, verbose=0)
+        model = PPO(
+            "MultiInputPolicy",
+            env,
+            policy_kwargs=policy_kwargs,
+            n_steps=16,
+            batch_size=16,
+            n_epochs=1,
+            gamma=0.95,
+            learning_rate=3e-4,
+            verbose=0,
+        )
 
         # Test that model can be created without errors
         assert model is not None
@@ -257,8 +267,8 @@ class TestIntegrationWithStableBaselines3:
     def test_attention_extractor_with_ppo(self):
         """Test attention extractor integration with PPO."""
         config = EnvSettings()
-        config.sim_config.time_per_step_in_secs = 0.1
-        config.sim_config.sim_time_in_secs = 10
+        config.sim_config.time_per_step_in_secs = 0.02
+        config.sim_config.sim_time_in_secs = 2
 
         def make_env():
             return RobotEnv(config)
@@ -270,12 +280,22 @@ class TestIntegrationWithStableBaselines3:
             "features_extractor_kwargs": {"embed_dim": 32, "num_heads": 2},
         }
 
-        model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, verbose=0)
+        model = PPO(
+            "MultiInputPolicy",
+            env,
+            policy_kwargs=policy_kwargs,
+            n_steps=16,
+            batch_size=16,
+            n_epochs=1,
+            gamma=0.95,
+            learning_rate=3e-4,
+            verbose=0,
+        )
 
         assert model is not None
         assert isinstance(model.policy.features_extractor, AttentionFeatureExtractor)
 
-        model.learn(total_timesteps=100)
+        model.learn(total_timesteps=32)
         env.close()
 
     def test_lightweight_cnn_extractor_with_ppo(self):

@@ -24,6 +24,10 @@ from pathlib import Path
 
 import loguru
 
+from robot_sf.render.helper_catalog import (
+    derive_recording_tags,
+    deterministic_seed_from_name,
+)
 from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
 from robot_sf.render.jsonl_recording import JSONLRecorder
 from robot_sf.render.sim_view import VisualizableSimState
@@ -223,12 +227,8 @@ def convert_directory(
     for pickle_file in pickle_files:
         try:
             # Extract naming info from filename if possible
-            stem = pickle_file.stem
-            parts = stem.split("_") if "_" in stem else [stem]
-
-            suite = parts[0] if len(parts) > 0 else "converted"
-            scenario = parts[1] if len(parts) > 1 else "legacy"
-            algorithm = parts[2] if len(parts) > 2 else "unknown"
+            suite, scenario, algorithm = derive_recording_tags(pickle_file)
+            seed_value = deterministic_seed_from_name(pickle_file)
 
             episodes_converted = convert_pickle_to_jsonl(
                 pickle_file,
@@ -236,7 +236,7 @@ def convert_directory(
                 suite=suite,
                 scenario=scenario,
                 algorithm=algorithm,
-                seed=files_converted,
+                seed=seed_value,
             )
 
             if episodes_converted > 0:
@@ -324,17 +324,15 @@ def main():
     # Perform conversion
     if input_path.is_file():
         # Convert single file (derive naming to avoid collisions)
-        stem = input_path.stem
-        parts = stem.split("_") if "_" in stem else [stem]
-        suite = parts[0] if len(parts) > 0 and parts[0] else "converted"
-        scenario = parts[1] if len(parts) > 1 and parts[1] else "legacy"
-        algorithm = parts[2] if len(parts) > 2 and parts[2] else "unknown"
-        # Stable seed from filename
-        import hashlib as _hashlib  # local import to avoid global side effects
-
-        seed = int(_hashlib.sha1(input_path.name.encode("utf-8")).hexdigest()[:8], 16)
+        suite, scenario, algorithm = derive_recording_tags(input_path)
+        seed = deterministic_seed_from_name(input_path)
         episodes_converted = convert_pickle_to_jsonl(
-            input_path, output_path, suite=suite, scenario=scenario, algorithm=algorithm, seed=seed
+            input_path,
+            output_path,
+            suite=suite,
+            scenario=scenario,
+            algorithm=algorithm,
+            seed=seed,
         )
         files_converted = 1 if episodes_converted > 0 else 0
         total_episodes = episodes_converted

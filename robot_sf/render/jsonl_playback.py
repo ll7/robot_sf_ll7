@@ -421,6 +421,8 @@ class JSONLPlaybackLoader:
 
     def _load_pickle_file(self, file_path: Path) -> tuple[PlaybackEpisode, MapDefinition]:
         """Load legacy pickle file and convert to episode format.
+        Only for backward compatibility.
+        Use with caution and only with trusted inputs.
 
         Args:
             file_path: Path to pickle file

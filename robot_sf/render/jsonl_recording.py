@@ -75,6 +75,8 @@ class JSONLRecorder:
         scenario: str = "default",
         algorithm: str = "manual",
         seed: int = 0,
+        flush_every_n: int | None = 1,
+        flush_on_episode_end: bool = True,
     ):
         """Initialize the JSONL recorder.
 
@@ -98,6 +100,9 @@ class JSONLRecorder:
         self.current_file = None
         self.current_metadata = None
         self.last_simulation_timestep = 0.0
+        self.flush_every_n = self._normalize_flush_interval(flush_every_n)
+        self.flush_on_episode_end = flush_on_episode_end
+        self._records_since_flush = 0
 
         self.schema_version = "1.0"
 
@@ -213,6 +218,44 @@ class JSONLRecorder:
                 pass
         return action_dict or None
 
+    def _normalize_flush_interval(self, flush_every_n: int | None) -> Optional[int]:
+        """Validate and normalize the flush interval setting.
+
+        Returns ``None`` when periodic flushing is disabled.
+        """
+
+        if flush_every_n is None:
+            return None
+        if flush_every_n < 1:
+            logger.warning(
+                "flush_every_n=%s is invalid; defaulting to 1 for safe streaming",
+                flush_every_n,
+            )
+            return 1
+        return flush_every_n
+
+    def _write_record(self, record: JSONLRecord, force_flush: bool = False) -> None:
+        """Write a JSONL record with optional buffered flushing."""
+
+        if self.current_file is None:
+            msg = "Attempted to write record without an open file"
+            raise RuntimeError(msg)
+
+        self.current_file.write(json.dumps(asdict(record)) + "\n")
+
+        if force_flush:
+            self.current_file.flush()
+            self._records_since_flush = 0
+            return
+
+        if self.flush_every_n is None:
+            return
+
+        self._records_since_flush += 1
+        if self._records_since_flush >= self.flush_every_n:
+            self.current_file.flush()
+            self._records_since_flush = 0
+
     def start_episode(self, config_hash: str = "unknown") -> None:
         """Start recording a new episode.
 
@@ -239,6 +282,7 @@ class JSONLRecorder:
         # Open new episode file
         episode_file = self._get_episode_filename(self.current_episode_id)
         self.current_file = open(episode_file, "w", encoding="utf-8")
+        self._records_since_flush = 0
 
         # Write episode start record
         start_record = JSONLRecord(
@@ -248,8 +292,7 @@ class JSONLRecorder:
             timestamp=0.0,
             state={},
         )
-        self.current_file.write(json.dumps(asdict(start_record)) + "\n")
-        self.current_file.flush()
+        self._write_record(start_record, force_flush=self.flush_every_n == 1)
 
         logger.info(f"Started recording episode {self.current_episode_id} to {episode_file}")
 
@@ -282,8 +325,7 @@ class JSONLRecorder:
         )
 
         # Write to file
-        self.current_file.write(json.dumps(asdict(step_record)) + "\n")
-        self.current_file.flush()
+        self._write_record(step_record)
 
     def record_entity_reset(self, entity_ids: list[int], state: VisualizableSimState) -> None:
         """Record an entity reset event.
@@ -314,8 +356,7 @@ class JSONLRecorder:
         )
 
         # Write to file
-        self.current_file.write(json.dumps(asdict(reset_record)) + "\n")
-        self.current_file.flush()
+        self._write_record(reset_record)
 
         logger.info(f"Recorded entity reset for entities {entity_ids}")
 
@@ -333,8 +374,7 @@ class JSONLRecorder:
             timestamp=self.last_simulation_timestep,
             state={},
         )
-        self.current_file.write(json.dumps(asdict(end_record)) + "\n")
-        self.current_file.flush()
+        self._write_record(end_record, force_flush=self.flush_on_episode_end)
 
         # Update metadata
         if self.current_metadata:

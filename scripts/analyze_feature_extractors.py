@@ -175,8 +175,15 @@ class FeatureExtractorAnalyzer:
 
     # ---- Visualization helpers (kept small for C901 compliance) ----
     def _set_plot_style(self) -> None:
-        style = "seaborn-v0_8" if "seaborn-v0_8" in plt.style.available else "default"
-        plt.style.use(style)
+        preferred_styles = ["seaborn-v0_8", "seaborn"]
+        for style in preferred_styles:
+            if style in plt.style.available:
+                plt.style.use(style)
+                return
+        try:
+            plt.style.use("default")
+        except OSError as exc:  # pragma: no cover - extremely unlikely fallback
+            warnings.warn(f"Could not apply matplotlib style: {exc}", stacklevel=2)
 
     def _plot_reward_bar(self, df: pd.DataFrame) -> Optional[str]:
         if "best_reward" not in df.columns or not df["best_reward"].notna().any():

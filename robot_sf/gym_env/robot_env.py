@@ -10,8 +10,8 @@ resetting it, rendering it, and closing it.
 It also defines the action and observation spaces for the robot.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable
 
 from loguru import logger
 
@@ -30,7 +30,9 @@ from robot_sf.render.sim_view import (
 )
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
-from robot_sf.sim.simulator import init_simulators
+from robot_sf.sim.simulator import (
+    init_simulators,  # noqa: F401 (retained for backwards compatibility; may be removed later)
+)
 
 
 class RobotEnv(BaseEnv):
@@ -42,12 +44,12 @@ class RobotEnv(BaseEnv):
     def __init__(
         self,
         env_config: EnvSettings = EnvSettings(),
-        reward_func: Callable[[dict], float] = simple_reward,
+        reward_func: Callable[[dict], float] | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
     ):
         """
@@ -75,23 +77,23 @@ class RobotEnv(BaseEnv):
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = init_spaces(
-            env_config, self.map_def
-        )
-
-        # Assign the reward function and debug flag
-        self.reward_func = reward_func
-
-        # Initialize simulator with a random start position
-        self.simulator = init_simulators(
             env_config,
             self.map_def,
-            random_start_pos=True,
-            peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )[0]
+        )
 
-        # Initialize collision detectors and sensor data processors
+        # Assign the reward function; ensure a valid callable even if None passed via factory
+        if reward_func is None:  # defensive: factory allows Optional
+            logger.warning(
+                "No reward_func provided to RobotEnv; falling back to simple_reward for safety.",
+            )
+        self.reward_func = reward_func or simple_reward
+
+        # BaseEnv has already created self.simulator; avoid redundant initialization.
+        # Initialize collision detectors and sensor data processors using existing simulator.
         occupancies, sensors = init_collision_and_sensors(
-            self.simulator, env_config, orig_obs_space
+            self.simulator,
+            env_config,
+            orig_obs_space,
         )
 
         # Store configuration for factory pattern compatibility
@@ -238,7 +240,10 @@ class RobotEnv(BaseEnv):
         Raises RuntimeError if debug mode is not enabled.
         """
         if not self.sim_ui:
-            raise RuntimeError("Debug mode is not activated! Consider setting `debug=True!`")
+            raise RuntimeError(
+                "Render unavailable: environment was created with debug=False (no sim_ui). "
+                "Recreate via make_robot_env(..., debug=True) to enable visualization and frame capture.",
+            )
 
         state = self._prepare_visualizable_state()
 

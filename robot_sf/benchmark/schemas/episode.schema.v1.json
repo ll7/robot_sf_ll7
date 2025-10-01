@@ -1,0 +1,120 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/robot-sf/episode.schema.v1.json",
+    "title": "RobotSF Benchmark Episode (v1)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "version",
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics"
+    ],
+    "properties": {
+        "version": {
+            "const": "v1"
+        },
+        "episode_id": {
+            "type": "string",
+            "minLength": 1
+        },
+        "scenario_id": {
+            "type": "string",
+            "minLength": 1
+        },
+        "seed": {
+            "type": "integer"
+        },
+        "horizon": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "algo": {
+            "type": "string"
+        },
+        "metrics": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+                "type": [
+                    "number",
+                    "integer"
+                ]
+            }
+        },
+        "timing": {
+            "type": "object",
+            "required": [
+                "steps_per_second"
+            ],
+            "properties": {
+                "steps_per_second": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            },
+            "additionalProperties": false
+        },
+        "tags": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "identity": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "video": {
+            "type": "object",
+            "description": "Optional per-episode video artifact metadata.",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "mp4"
+                    ]
+                },
+                "filesize_bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "frames": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "renderer": {
+                    "type": "string",
+                    "enum": [
+                        "synthetic",
+                        "sim-view",
+                        "none"
+                    ]
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "encode_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "overhead_ratio": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            },
+            "required": [
+                "path",
+                "format",
+                "filesize_bytes",
+                "frames",
+                "renderer"
+            ],
+            "additionalProperties": true
+        }
+    }
+}

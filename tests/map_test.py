@@ -127,7 +127,9 @@ def test_proximity_point():
     map_def = convert_map(svg_file)
     _sim = init_ped_simulators(env_config, map_def)[0]
     new_point = _sim.get_proximity_point(
-        fixed_point, lower_bound=lower_bound, upper_bound=upper_bound
+        fixed_point,
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
     )
     distance = np.linalg.norm(np.array(fixed_point) - np.array(new_point))
     assert lower_bound <= distance <= upper_bound

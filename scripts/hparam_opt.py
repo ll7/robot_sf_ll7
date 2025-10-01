@@ -1,6 +1,5 @@
 import logging
 import sys
-from typing import List
 
 import numpy as np
 import optuna
@@ -18,8 +17,8 @@ optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout)
 
 
 class DriveQualityCallback(BaseCallback):
-    def __init__(self, metrics: VecEnvMetrics, thresholds: List[float], max_steps: int):
-        super(DriveQualityCallback, self).__init__()
+    def __init__(self, metrics: VecEnvMetrics, thresholds: list[float], max_steps: int):
+        super().__init__()
         self.metrics = metrics
         self.completion_thresholds = thresholds
         self.max_steps = max_steps
@@ -28,10 +27,14 @@ class DriveQualityCallback(BaseCallback):
 
     @property
     def score(self) -> float:
-        steps_per_threshold = zip(self.completion_thresholds, self.steps_to_reach_threshold)
+        steps_per_threshold = zip(
+            self.completion_thresholds,
+            self.steps_to_reach_threshold,
+            strict=False,
+        )
         reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
         threshold_scores = sum(
-            [t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds]
+            [t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds],
         )
         return threshold_scores / (sum(self.completion_thresholds) * 3)
 
@@ -44,7 +47,8 @@ class DriveQualityCallback(BaseCallback):
             for i, completion_threshold in enumerate(self.completion_thresholds):
                 if self.metrics.route_completion_rate >= completion_threshold:
                     self.steps_to_reach_threshold[i] = min(
-                        curr_step, self.steps_to_reach_threshold[i]
+                        curr_step,
+                        self.steps_to_reach_threshold[i],
                     )
         return True  # info: don't request early abort
 
@@ -54,8 +58,11 @@ def training_score(
     hparams: dict,
     max_steps: int = 5_000_000,
     difficulty: int = 1,
-    route_completion_thresholds: List[float] = [i / 100 for i in range(1, 101)],
+    route_completion_thresholds: list[float] | None = None,
 ):
+    if route_completion_thresholds is None:
+        route_completion_thresholds = [i / 100 for i in range(1, 101)]
+
     def make_env():
         config = EnvSettings()
         config.sim_config.difficulty = difficulty
@@ -76,15 +83,15 @@ def training_score(
 
     env = make_vec_env(make_env, n_envs=hparams["n_envs"], vec_env_cls=SubprocVecEnv)
 
-    policy_kwargs = dict(
-        features_extractor_class=DynamicsExtractor,
-        features_extractor_kwargs=dict(
-            use_ray_conv=hparams["use_ray_conv"],
-            num_filters=hparams["num_filters"],
-            kernel_sizes=hparams["kernel_sizes"],
-            dropout_rates=hparams["dropout_rates"],
-        ),
-    )
+    policy_kwargs = {
+        "features_extractor_class": DynamicsExtractor,
+        "features_extractor_kwargs": {
+            "use_ray_conv": hparams["use_ray_conv"],
+            "num_filters": hparams["num_filters"],
+            "kernel_sizes": hparams["kernel_sizes"],
+            "dropout_rates": hparams["dropout_rates"],
+        },
+    }
     model = PPO(
         "MultiInputPolicy",
         env,
@@ -96,7 +103,9 @@ def training_score(
     )
     collect_metrics_callback = DrivingMetricsCallback(hparams["n_envs"])
     threshold_callback = DriveQualityCallback(
-        collect_metrics_callback.metrics, route_completion_thresholds, max_steps
+        collect_metrics_callback.metrics,
+        route_completion_thresholds,
+        max_steps,
     )
     combined_callback = CallbackList([collect_metrics_callback, threshold_callback])
 
@@ -192,7 +201,7 @@ def objective(trial: optuna.Trial, study_name: str) -> float:
     sim_params = suggest_simulation_params(trial, tune=False)
     rew_params = suggest_reward_params(trial, tune=True)
 
-    def merge_dicts(dicts: List[dict]) -> dict:
+    def merge_dicts(dicts: list[dict]) -> dict:
         return {k: d[k] for d in dicts for k in d}
 
     sugg_params = merge_dicts([ppo_params, sim_params, rew_params])
@@ -200,7 +209,7 @@ def objective(trial: optuna.Trial, study_name: str) -> float:
 
 
 def generate_storage_url(study_name: str) -> str:
-    return "sqlite:///logs/{}.db".format(study_name)
+    return f"sqlite:///logs/{study_name}.db"
 
 
 def tune_hparams(study_name: str):

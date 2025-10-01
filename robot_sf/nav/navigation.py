@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from math import atan2, dist
 from random import randint, sample
-from typing import List, Optional
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
@@ -42,7 +41,7 @@ class RouteNavigator:
         Sets a new route.
     """
 
-    waypoints: List[Vec2D] = field(default_factory=list)
+    waypoints: list[Vec2D] = field(default_factory=list)
     waypoint_id: int = 0
     proximity_threshold: float = 1.0  # info: should be set to vehicle radius + goal radius
     pos: Vec2D = field(default=(0, 0))
@@ -78,7 +77,7 @@ class RouteNavigator:
         return self.waypoints[self.waypoint_id]
 
     @property
-    def next_waypoint(self) -> Optional[Vec2D]:
+    def next_waypoint(self) -> Vec2D | None:
         """
         Returns the next waypoint.
 
@@ -106,7 +105,8 @@ class RouteNavigator:
         """
 
         return atan2(
-            self.waypoints[1][1] - self.waypoints[0][1], self.waypoints[1][0] - self.waypoints[0][0]
+            self.waypoints[1][1] - self.waypoints[0][1],
+            self.waypoints[1][0] - self.waypoints[0][0],
         )
 
     def update_position(self, pos: Vec2D):
@@ -125,7 +125,7 @@ class RouteNavigator:
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
-    def new_route(self, route: List[Vec2D]):
+    def new_route(self, route: list[Vec2D]):
         """
         Sets a new route.
 
@@ -139,7 +139,7 @@ class RouteNavigator:
         self.waypoint_id = 0
 
 
-def sample_route(map_def: MapDefinition, spawn_id: Optional[int] = None) -> List[Vec2D]:
+def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Vec2D]:
     """
     Samples a route from the given map definition.
 
@@ -170,7 +170,7 @@ def sample_route(map_def: MapDefinition, spawn_id: Optional[int] = None) -> List
     final_goal = sample_zone(route.goal_zone, 1)[0]
 
     # Construct the route
-    route = [initial_spawn] + route.waypoints + [final_goal]
+    route = [initial_spawn, *route.waypoints, final_goal]
 
     # TODO: add noise to the exact waypoint positions to avoid learning routes by heart
 

@@ -1,0 +1,180 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "SocialNavigationEpisodeMetrics",
+    "type": "object",
+    "required": [
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics",
+        "config_hash",
+        "git_hash",
+        "timestamps"
+    ],
+    "properties": {
+        "episode_id": {
+            "type": "string"
+        },
+        "scenario_id": {
+            "type": "string"
+        },
+        "seed": {
+            "type": "integer"
+        },
+        "config_hash": {
+            "type": "string"
+        },
+        "git_hash": {
+            "type": "string"
+        },
+        "timestamps": {
+            "type": "object",
+            "required": [
+                "start",
+                "end"
+            ],
+            "properties": {
+                "start": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "end": {
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "algorithm_metadata": {
+            "type": "object",
+            "description": "Metadata about the algorithm/policy used (name, config, hash).",
+            "properties": {
+                "algorithm": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object"
+                },
+                "config_hash": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": true
+        },
+        "scenario_params": {
+            "type": "object"
+        },
+        "metrics": {
+            "type": "object",
+            "required": [
+                "success",
+                "time_to_goal_norm",
+                "collisions",
+                "near_misses"
+            ],
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                },
+                "time_to_goal_norm": {
+                    "type": "number"
+                },
+                "collisions": {
+                    "type": "integer"
+                },
+                "near_misses": {
+                    "type": "integer"
+                },
+                "min_distance": {
+                    "type": "number"
+                },
+                "path_efficiency": {
+                    "type": "number"
+                },
+                "force_quantiles": {
+                    "type": "object",
+                    "properties": {
+                        "q50": {
+                            "type": "number"
+                        },
+                        "q90": {
+                            "type": "number"
+                        },
+                        "q95": {
+                            "type": "number"
+                        }
+                    }
+                },
+                "force_exceed_events": {
+                    "type": "integer"
+                },
+                "comfort_exposure": {
+                    "type": "number"
+                },
+                "jerk_mean": {
+                    "type": "number"
+                },
+                "energy": {
+                    "type": "number"
+                },
+                "snqi": {
+                    "type": "number"
+                }
+            },
+            "additionalProperties": true
+        },
+        "notes": {
+            "type": "string"
+        },
+        "video": {
+            "type": "object",
+            "description": "Optional per-episode video artifact metadata.",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "mp4"
+                    ]
+                },
+                "filesize_bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "frames": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "renderer": {
+                    "type": "string",
+                    "enum": [
+                        "synthetic",
+                        "sim-view",
+                        "none"
+                    ]
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "encode_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "overhead_ratio": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            },
+            "required": [
+                "path",
+                "format",
+                "filesize_bytes",
+                "frames",
+                "renderer"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "additionalProperties": false
+}

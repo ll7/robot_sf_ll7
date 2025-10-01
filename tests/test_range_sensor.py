@@ -97,7 +97,12 @@ def test_pedestrian_in_range():
     ray_angles = np.array([0.0, np.pi / 2])
 
     raycast_pedestrians(
-        out_ranges, scanner_pos, max_scan_range, ped_positions, ped_radius, ray_angles
+        out_ranges,
+        scanner_pos,
+        max_scan_range,
+        ped_positions,
+        ped_radius,
+        ray_angles,
     )
 
     assert out_ranges[0] == 4.0
@@ -113,7 +118,12 @@ def test_pedestrian_out_of_range():
     ray_angles = np.array([0.0, np.pi / 2])
 
     raycast_pedestrians(
-        out_ranges, scanner_pos, max_scan_range, ped_positions, ped_radius, ray_angles
+        out_ranges,
+        scanner_pos,
+        max_scan_range,
+        ped_positions,
+        ped_radius,
+        ray_angles,
     )
 
     assert np.all(out_ranges == 10.0)

@@ -1,0 +1,9 @@
+# Random baseline configuration example
+algorithm: random
+params:
+  mode: velocity # velocity | unicycle
+  v_max: 1.5
+  omega_max: 2.0
+  dt: 0.1
+  safety_clamp: true
+  noise_std: 0.0

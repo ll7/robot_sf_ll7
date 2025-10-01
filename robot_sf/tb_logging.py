@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import SummaryWriter, TensorBoardOutputFormat
 
@@ -9,11 +7,11 @@ from robot_sf.eval import EnvMetrics, PedEnvMetrics, PedVecEnvMetrics, VecEnvMet
 class BaseMetricsCallback(BaseCallback):
     def __init__(self):
         super().__init__()
-        self.writer: Optional[SummaryWriter] = None
+        self.writer: SummaryWriter | None = None
         self._log_freq = 1000  # log every 1000 calls
 
     @property
-    def meta_dicts(self) -> List[dict]:
+    def meta_dicts(self) -> list[dict]:
         return [m["meta"] for m in self.locals["infos"]]
 
     @property
@@ -23,13 +21,14 @@ class BaseMetricsCallback(BaseCallback):
     def _on_training_start(self):
         if self.logger is not None:
             output_formats = self.logger.output_formats
-            tb_formatter: TensorBoardOutputFormat = next(
-                filter(lambda f: isinstance(f, TensorBoardOutputFormat), output_formats), None
+            tb_formatter: TensorBoardOutputFormat | None = next(
+                (f for f in output_formats if isinstance(f, TensorBoardOutputFormat)),
+                None,
             )
-            self.writer = tb_formatter.writer if tb_formatter else None
+            self.writer = tb_formatter.writer if tb_formatter is not None else None
 
         if self.writer is None:
-            print("WARNING: failed to initialize tensorboard environment metrics!")
+            pass
 
     # Define an abstract method for _on_step() if needed
     def _on_step(self) -> bool:
@@ -56,7 +55,9 @@ class DrivingMetricsCallback(BaseMetricsCallback):
                 self.num_timesteps,
             )
             self.writer.add_scalar(
-                "metrics/timeout_rate", self.metrics.timeout_rate, self.num_timesteps
+                "metrics/timeout_rate",
+                self.metrics.timeout_rate,
+                self.num_timesteps,
             )
             self.writer.add_scalar(
                 "metrics/obstacle_collision_rate",
@@ -82,7 +83,9 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
 
         if self.writer is not None and self.is_logging_step:
             self.writer.add_scalar(
-                "metrics/timeout_rate", self.metrics.timeout_rate, self.num_timesteps
+                "metrics/timeout_rate",
+                self.metrics.timeout_rate,
+                self.num_timesteps,
             )
             self.writer.add_scalar(
                 "metrics/obstacle_collision_rate",
@@ -100,7 +103,9 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
                 self.num_timesteps,
             )
             self.writer.add_scalar(
-                "metrics/robot_at_goal_rate", self.metrics.robot_at_goal_rate, self.num_timesteps
+                "metrics/robot_at_goal_rate",
+                self.metrics.robot_at_goal_rate,
+                self.num_timesteps,
             )
             self.writer.add_scalar(
                 "metrics/robot_obstacle_collision_rate",
@@ -113,7 +118,9 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
                 self.num_timesteps,
             )
             self.writer.add_scalar(
-                "metrics/avg_distance_to_robot", self.metrics.route_end_distance, self.num_timesteps
+                "metrics/avg_distance_to_robot",
+                self.metrics.route_end_distance,
+                self.num_timesteps,
             )
             self.writer.flush()
         return True  # info: don't request early abort

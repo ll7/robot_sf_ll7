@@ -5,8 +5,8 @@ This demonstrates how to migrate PedestrianEnv to use the new abstract base clas
 and unified configuration system.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable
 
 import loguru
 
@@ -42,7 +42,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
 
     def __init__(
         self,
-        config: PedestrianSimulationConfig = None,
+        config: PedestrianSimulationConfig | None = None,
         robot_model=None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         debug: bool = False,
@@ -102,7 +102,8 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         """Create action and observation spaces."""
         # Use existing utility function
         combined_action_space, combined_observation_space, orig_obs_space = init_ped_spaces(
-            self.config, self.map_def
+            self.config,
+            self.map_def,
         )
 
         # Return pedestrian spaces (index 1)
@@ -120,7 +121,9 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
     def _setup_sensors_and_collision(self) -> None:
         """Initialize sensors and collision detection."""
         occupancies, sensors = init_ped_collision_and_sensors(
-            self.simulator, self.config, self.orig_obs_space
+            self.simulator,
+            self.config,
+            self.orig_obs_space,
         )
 
         # Setup robot state

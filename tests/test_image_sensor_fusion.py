@@ -354,7 +354,7 @@ class TestImageSensorFusionIntegration:
                         dtype=np.float32,
                     ),
                     OBS_IMAGE: spaces.Box(low=0.0, high=1.0, shape=(32, 32, 3), dtype=np.float32),
-                }
+                },
             )
 
             # Create fusion

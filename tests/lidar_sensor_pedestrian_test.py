@@ -65,7 +65,12 @@ def test_scanner_detects_only_closest_pedestrian():
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0], [3.4, 0]])
     occupancy = ContinuousOccupancy(
-        10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians
+        10,
+        10,
+        lambda: None,
+        lambda: None,
+        lambda: np.array([[]]),
+        lambda: pedestrians,
     )
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
@@ -79,7 +84,12 @@ def test_scanner_detects_only_closest_pedestrian():
 def test_scanner_detects_nothing_when_there_is_nothing():
     lidar_n_rays = 1
     occupancy = ContinuousOccupancy(
-        10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: np.array([[]])
+        10,
+        10,
+        lambda: None,
+        lambda: None,
+        lambda: np.array([[]]),
+        lambda: np.array([[]]),
     )
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 
@@ -94,7 +104,12 @@ def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
-        10, 10, lambda: None, lambda: None, lambda: np.array([[]]), lambda: pedestrians
+        10,
+        10,
+        lambda: None,
+        lambda: None,
+        lambda: np.array([[]]),
+        lambda: pedestrians,
     )
     settings = LidarScannerSettings(5, 1, lidar_n_rays, scan_noise=NO_SCAN_NOISE)
 

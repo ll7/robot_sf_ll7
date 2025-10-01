@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: Group Crossing -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="40"
+    height="40" viewBox="0 0 40 40">
+    <g id="obstacles" inkscape:label="Obstacles">
+        <rect x="0" y="0" width="40" height="1" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="39" width="40" height="1" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="0" width="1" height="40" fill="#000" inkscape:label="obstacle" />
+        <rect x="39" y="0" width="1" height="40" fill="#000" inkscape:label="obstacle" />
+        <!-- Central plaza with four small islands (scaled) -->
+        <rect x="14" y="14" width="3" height="3" fill="#000" inkscape:label="obstacle" />
+        <rect x="23" y="14" width="3" height="3" fill="#000" inkscape:label="obstacle" />
+        <rect x="14" y="23" width="3" height="3" fill="#000" inkscape:label="obstacle" />
+        <rect x="23" y="23" width="3" height="3" fill="#000" inkscape:label="obstacle" />
+    </g>
+    <g id="robot" inkscape:label="Robot">
+        <rect x="4" y="4" width="4" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="32" y="32" width="4" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+    <g id="pedestrians" inkscape:label="Pedestrians">
+        <rect x="4" y="32" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="32" y="4" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" />
+    </g>
+    <g id="routes" inkscape:label="Routes">
+        <path d="M 6 6 L 34 34" stroke="#0300d5" stroke-width="1" fill="none" inkscape:label="robot_route_0_0" />
+        <path d="M 6 34 L 34 6" stroke="#c40202" stroke-width="1" fill="none" inkscape:label="ped_route_0_0" />
+    </g>
+</svg>

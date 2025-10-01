@@ -4,8 +4,8 @@ It also provides a function `fused_sensor_space` to create a combined observatio
 """
 
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from gymnasium import spaces
@@ -18,8 +18,11 @@ OBS_IMAGE = "image"
 
 
 def fused_sensor_space(
-    timesteps: int, robot_obs: spaces.Box, target_obs: spaces.Box, lidar_obs: spaces.Box
-) -> Tuple[spaces.Dict, spaces.Dict]:
+    timesteps: int,
+    robot_obs: spaces.Box,
+    target_obs: spaces.Box,
+    lidar_obs: spaces.Box,
+) -> tuple[spaces.Dict, spaces.Dict]:
     """
     Create a combined observation space for the robot, target, and LiDAR sensors.
 
@@ -52,7 +55,8 @@ def fused_sensor_space(
 
     # Create the maximum and minimum LiDAR states for each timestep
     max_lidar_state = np.array(
-        [lidar_obs.high.tolist() for t in range(timesteps)], dtype=np.float32
+        [lidar_obs.high.tolist() for t in range(timesteps)],
+        dtype=np.float32,
     )
     min_lidar_state = np.array([lidar_obs.low.tolist() for t in range(timesteps)], dtype=np.float32)
 
@@ -60,7 +64,7 @@ def fused_sensor_space(
     orig_box_drive_state = spaces.Box(low=min_drive_state, high=max_drive_state, dtype=np.float32)
     orig_box_lidar_state = spaces.Box(low=min_lidar_state, high=max_lidar_state, dtype=np.float32)
     orig_obs_space = spaces.Dict(
-        {OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state}
+        {OBS_DRIVE_STATE: orig_box_drive_state, OBS_RAYS: orig_box_lidar_state},
     )
 
     # Create the normalized observation spaces for the drive and LiDAR states
@@ -84,8 +88,8 @@ def fused_sensor_space_with_image(
     robot_obs: spaces.Box,
     target_obs: spaces.Box,
     lidar_obs: spaces.Box,
-    image_obs: Optional[spaces.Box] = None,
-) -> Tuple[spaces.Dict, spaces.Dict]:
+    image_obs: spaces.Box | None = None,
+) -> tuple[spaces.Dict, spaces.Dict]:
     """
     Create a combined observation space for the robot, target, LiDAR, and optionally image sensors.
 
@@ -153,11 +157,11 @@ class SensorFusion:
 
     lidar_sensor: Callable[[], np.ndarray]
     robot_speed_sensor: Callable[[], PolarVec2D]
-    target_sensor: Callable[[], Tuple[float, float, float]]
+    target_sensor: Callable[[], tuple[float, float, float]]
     unnormed_obs_space: spaces.Dict
     use_next_goal: bool
-    drive_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
-    lidar_state_cache: List[np.ndarray] = field(init=False, default_factory=list)
+    drive_state_cache: list[np.ndarray] = field(init=False, default_factory=list)
+    lidar_state_cache: list[np.ndarray] = field(init=False, default_factory=list)
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
@@ -165,12 +169,13 @@ class SensorFusion:
         self.cache_steps = self.unnormed_obs_space[OBS_RAYS].shape[0]
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)
         self.stacked_lidar_state = np.zeros(
-            (self.cache_steps, len(self.lidar_sensor())), dtype=np.float32
+            (self.cache_steps, len(self.lidar_sensor())),
+            dtype=np.float32,
         )
         self.drive_state_cache = deque(maxlen=self.cache_steps)
         self.lidar_state_cache = deque(maxlen=self.cache_steps)
 
-    def next_obs(self) -> Dict[str, np.ndarray]:
+    def next_obs(self) -> dict[str, np.ndarray]:
         """
         Get the next observation by combining data from all sensors.
 
@@ -194,7 +199,7 @@ class SensorFusion:
 
         # Combine the robot speed and target sensor data into the drive state
         drive_state = np.array(
-            [speed_x, speed_rot, target_distance, target_angle, next_target_angle]
+            [speed_x, speed_rot, target_distance, target_angle, next_target_angle],
         )
 
         # info: populate cache with same states -> no movement

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: Head-On Corridor Passing -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="32"
+    height="40" viewBox="0 0 32 40">
+    <g id="obstacles" inkscape:label="Obstacles">
+        <rect x="0" y="0" width="32" height="2" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="38" width="32" height="2" fill="#000" inkscape:label="obstacle" />
+        <!-- Narrow corridor side walls (scaled) -->
+        <rect x="0" y="2" width="2" height="36" fill="#000" inkscape:label="obstacle" />
+        <rect x="30" y="2" width="2" height="36" fill="#000" inkscape:label="obstacle" />
+    </g>
+    <g id="robot" inkscape:label="Robot">
+        <rect x="4" y="6" width="4" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="24" y="30" width="4" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+    <g id="pedestrians" inkscape:label="Pedestrians">
+        <rect x="4" y="30" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="24" y="6" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" />
+    </g>
+    <g id="routes" inkscape:label="Routes">
+        <path d="M 6 8 L 26 32" stroke="#0300d5" stroke-width="1" fill="none" inkscape:label="robot_route_0_0" />
+        <path d="M 6 32 L 26 8" stroke="#c40202" stroke-width="1" fill="none" inkscape:label="ped_route_0_0" />
+    </g>
+</svg>

@@ -13,7 +13,8 @@ from robot_sf.sim.sim_config import SimulationSettings
 
 
 @pytest.mark.skipif(
-    not MOVIEPY_AVAILABLE, reason="MoviePy/ffmpeg not available for video recording"
+    not MOVIEPY_AVAILABLE,
+    reason="MoviePy/ffmpeg not available for video recording",
 )
 def test_video_recording(
     delete_video: bool = True,

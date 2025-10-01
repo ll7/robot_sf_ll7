@@ -1,0 +1,309 @@
+./.pytest_cache/v/cache/nodeids:100:  "tests/factories/test_current_factory_signatures.py::test_make_image_robot_env_signature_snapshot",
+./.pytest_cache/v/cache/nodeids:101:  "tests/factories/test_current_factory_signatures.py::test_make_pedestrian_env_signature_snapshot",
+./.pytest_cache/v/cache/nodeids:102:  "tests/factories/test_current_factory_signatures.py::test_make_robot_env_signature_snapshot",
+./.pytest_cache/v/cache/nodeids:206:  "tests/test_environment_factory_signatures.py::test_make_image_robot_env_signature_explicit",
+./.pytest_cache/v/cache/nodeids:208:  "tests/test_environment_factory_signatures.py::test_make_pedestrian_env_signature_explicit",
+./.pytest_cache/v/cache/nodeids:209:  "tests/test_environment_factory_signatures.py::test_make_robot_env_signature_explicit",
+./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:267:    make_robot_env,
+./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:268:    make_image_robot_env, 
+./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:269:    make_pedestrian_env
+./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:273:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:274:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:275:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:267:    make_robot_env,
+./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:268:    make_image_robot_env, 
+./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:269:    make_pedestrian_env
+./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:273:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:274:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:275:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/NI1PeUOI_MuyP40HXJqSL/robot_sf-2.0.0.dist-info/METADATA:262:    make_robot_env,
+./.uv-cache/archive-v0/NI1PeUOI_MuyP40HXJqSL/robot_sf-2.0.0.dist-info/METADATA:263:    make_image_robot_env, 
+./.uv-cache/archive-v0/NI1PeUOI_MuyP40HXJqSL/robot_sf-2.0.0.dist-info/METADATA:264:    make_pedestrian_env
+./.uv-cache/archive-v0/NI1PeUOI_MuyP40HXJqSL/robot_sf-2.0.0.dist-info/METADATA:268:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/NI1PeUOI_MuyP40HXJqSL/robot_sf-2.0.0.dist-info/METADATA:269:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/NI1PeUOI_MuyP40HXJqSL/robot_sf-2.0.0.dist-info/METADATA:270:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/Lo771-ocyuQHUtGxrPO8c/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/Lo771-ocyuQHUtGxrPO8c/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/Lo771-ocyuQHUtGxrPO8c/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/Lo771-ocyuQHUtGxrPO8c/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/Lo771-ocyuQHUtGxrPO8c/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/Lo771-ocyuQHUtGxrPO8c/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/3uSK9BbQedQzJnNAV-Bn-/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/3uSK9BbQedQzJnNAV-Bn-/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/3uSK9BbQedQzJnNAV-Bn-/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/3uSK9BbQedQzJnNAV-Bn-/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/3uSK9BbQedQzJnNAV-Bn-/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/3uSK9BbQedQzJnNAV-Bn-/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/s9oW5xRnJi6P-l5hkW5wP/robot_sf-2.0.0.dist-info/METADATA:263:    make_robot_env,
+./.uv-cache/archive-v0/s9oW5xRnJi6P-l5hkW5wP/robot_sf-2.0.0.dist-info/METADATA:264:    make_image_robot_env, 
+./.uv-cache/archive-v0/s9oW5xRnJi6P-l5hkW5wP/robot_sf-2.0.0.dist-info/METADATA:265:    make_pedestrian_env
+./.uv-cache/archive-v0/s9oW5xRnJi6P-l5hkW5wP/robot_sf-2.0.0.dist-info/METADATA:269:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/s9oW5xRnJi6P-l5hkW5wP/robot_sf-2.0.0.dist-info/METADATA:270:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/s9oW5xRnJi6P-l5hkW5wP/robot_sf-2.0.0.dist-info/METADATA:271:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/JX4MW5TGjGkCwO_pvnf02/robot_sf-2.0.0.dist-info/METADATA:267:    make_robot_env,
+./.uv-cache/archive-v0/JX4MW5TGjGkCwO_pvnf02/robot_sf-2.0.0.dist-info/METADATA:268:    make_image_robot_env, 
+./.uv-cache/archive-v0/JX4MW5TGjGkCwO_pvnf02/robot_sf-2.0.0.dist-info/METADATA:269:    make_pedestrian_env
+./.uv-cache/archive-v0/JX4MW5TGjGkCwO_pvnf02/robot_sf-2.0.0.dist-info/METADATA:273:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/JX4MW5TGjGkCwO_pvnf02/robot_sf-2.0.0.dist-info/METADATA:274:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/JX4MW5TGjGkCwO_pvnf02/robot_sf-2.0.0.dist-info/METADATA:275:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/bWdWYXpFNhRZXrctVpFVD/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/bWdWYXpFNhRZXrctVpFVD/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/bWdWYXpFNhRZXrctVpFVD/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/bWdWYXpFNhRZXrctVpFVD/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/bWdWYXpFNhRZXrctVpFVD/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/bWdWYXpFNhRZXrctVpFVD/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/J0CkwS13Sk0K-XuLmuiU9/robot_sf-2.0.0.dist-info/METADATA:263:    make_robot_env,
+./.uv-cache/archive-v0/J0CkwS13Sk0K-XuLmuiU9/robot_sf-2.0.0.dist-info/METADATA:264:    make_image_robot_env, 
+./.uv-cache/archive-v0/J0CkwS13Sk0K-XuLmuiU9/robot_sf-2.0.0.dist-info/METADATA:265:    make_pedestrian_env
+./.uv-cache/archive-v0/J0CkwS13Sk0K-XuLmuiU9/robot_sf-2.0.0.dist-info/METADATA:269:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/J0CkwS13Sk0K-XuLmuiU9/robot_sf-2.0.0.dist-info/METADATA:270:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/J0CkwS13Sk0K-XuLmuiU9/robot_sf-2.0.0.dist-info/METADATA:271:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./.uv-cache/archive-v0/TFe6_F2ATZ65EJccS5fFF/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./.uv-cache/archive-v0/TFe6_F2ATZ65EJccS5fFF/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./.uv-cache/archive-v0/TFe6_F2ATZ65EJccS5fFF/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./.uv-cache/archive-v0/TFe6_F2ATZ65EJccS5fFF/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./.uv-cache/archive-v0/TFe6_F2ATZ65EJccS5fFF/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./.uv-cache/archive-v0/TFe6_F2ATZ65EJccS5fFF/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:1:./.pytest_cache/v/cache/nodeids:100:  "tests/factories/test_current_factory_signatures.py::test_make_image_robot_env_signature_snapshot",
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:2:./.pytest_cache/v/cache/nodeids:101:  "tests/factories/test_current_factory_signatures.py::test_make_pedestrian_env_signature_snapshot",
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:3:./.pytest_cache/v/cache/nodeids:102:  "tests/factories/test_current_factory_signatures.py::test_make_robot_env_signature_snapshot",
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:4:./.pytest_cache/v/cache/nodeids:206:  "tests/test_environment_factory_signatures.py::test_make_image_robot_env_signature_explicit",
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:5:./.pytest_cache/v/cache/nodeids:208:  "tests/test_environment_factory_signatures.py::test_make_pedestrian_env_signature_explicit",
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:6:./.pytest_cache/v/cache/nodeids:209:  "tests/test_environment_factory_signatures.py::test_make_robot_env_signature_explicit",
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:7:./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:8:./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:9:./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:10:./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:11:./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:12:./.uv-cache/archive-v0/CtaGuR2SPX_KP1nzKS4zB/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:13:./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:14:./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:15:./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:16:./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:17:./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:18:./.uv-cache/archive-v0/ZzBWBoMJoBKy0AZ-PN3k8/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:19:./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:268:    make_robot_env,
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:20:./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:269:    make_image_robot_env, 
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:21:./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:270:    make_pedestrian_env
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:22:./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:274:robot_env = make_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:23:./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:275:image_env = make_image_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:24:./.uv-cache/archive-v0/j8gngBTY4KJ1oNX0RKLIm/robot_sf-2.0.0.dist-info/METADATA:276:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:25:./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:267:    make_robot_env,
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:26:./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:268:    make_image_robot_env, 
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:27:./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:269:    make_pedestrian_env
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:28:./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:273:robot_env = make_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:29:./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:274:image_env = make_image_robot_env(debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:30:./.uv-cache/archive-v0/b0c-IVu1PE1IP4OyKCn18/robot_sf-2.0.0.dist-info/METADATA:275:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:31:./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:267:    make_robot_env,
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:32:./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:268:    make_image_robot_env, 
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:33:./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:269:    make_pedestrian_env
+./specs/130-improve-environment-factory/deprecation_map_raw.txt:34:./.uv-cache/archive-v0/rbB8zvOUG3_C32-UptNgb/robot_sf-2.0.0.dist-info/METADATA:273:robot_env = make_robot_env(debug=True)
+./specs/130-improve-environment-factory/contracts/factories.md:5:## make_robot_env
+./specs/130-improve-environment-factory/contracts/factories.md:23:## make_image_robot_env
+./specs/130-improve-environment-factory/contracts/factories.md:24:Same as `make_robot_env` plus image-specific fields inside `config` (no additional params added here to avoid signature expansion).
+./specs/130-improve-environment-factory/contracts/factories.md:26:## make_pedestrian_env
+./specs/130-improve-environment-factory/quickstart.md:7:from robot_sf.gym_env.environment_factory import make_robot_env
+./specs/130-improve-environment-factory/quickstart.md:9:env = make_robot_env(debug=True, record_video=True, video_path="run.mp4", fps=30)
+./specs/130-improve-environment-factory/quickstart.md:19:from robot_sf.gym_env.environment_factory import make_robot_env, RecordingOptions, RenderOptions
+./specs/130-improve-environment-factory/quickstart.md:23:env = make_robot_env(debug=True, recording_options=rec_opts, render_options=render_opts, seed=42)
+./specs/130-improve-environment-factory/quickstart.md:28:env = make_robot_env()
+./specs/130-improve-environment-factory/quickstart.md:33:env = make_robot_env(record_video=True, video_path="episode.mp4")
+./specs/130-improve-environment-factory/quickstart.md:40:img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=24))
+./specs/130-improve-environment-factory/quickstart.md:46:ped_env = make_pedestrian_env(robot_model=policy, recording_options=RecordingOptions(record=True))
+./specs/130-improve-environment-factory/tasks.md:68:**T012 [P]**: Update pedestrian factory path (`make_pedestrian_env`) to mirror normalization logic; add test for required `robot_model` presence unaffected.  
+./specs/130-improve-environment-factory/spec.md:11:As a developer integrating Robot SF environments, I want clear, discoverable factory functions (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`, `make_multi_robot_env`) with explicit, well-documented parameters so I can configure simulation behavior confidently without digging through internal code or relying on `**kwargs` guesswork.
+./specs/130-improve-environment-factory/spec.md:14:1. **Given** a developer types `make_robot_env(` in an IDE, **When** signature help appears, **Then** all primary configuration parameters (config object, debug flag, recording options, seeding hooks, optional callbacks) are visible with docstring summaries.
+./specs/130-improve-environment-factory/spec.md:54:- **FR-021**: Provide a compatibility shim function (e.g., `make_robot_env_legacy`) if needed for transitional code paths (optional if deprecation mapping sufficiently covers).
+./specs/120-social-navigation-benchmark-plan/quickstart.md:38:uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('✓ Import successful')"
+./specs/120-social-navigation-benchmark-plan/quickstart.md:60:uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; \
+./specs/120-social-navigation-benchmark-plan/quickstart.md:61:env = make_robot_env(debug=True); obs, info = env.reset(seed=42); \
+./specs/120-social-navigation-benchmark-plan/quickstart.md:70:from robot_sf.gym_env.environment_factory import make_robot_env
+./specs/120-social-navigation-benchmark-plan/quickstart.md:71:env = make_robot_env(debug=True)
+./tests/test_reward_default_fallback.py:7:from robot_sf.gym_env.environment_factory import make_robot_env
+./tests/test_reward_default_fallback.py:11:    env = make_robot_env(reward_func=None)
+./tests/env_test_updated.py:15:    make_image_robot_env,
+./tests/env_test_updated.py:16:    make_robot_env,
+./tests/env_test_updated.py:40:    env = make_robot_env()
+./tests/env_test_updated.py:64:    env = make_robot_env()
+./tests/env_test_updated.py:93:    env = make_robot_env()
+./tests/env_test_updated.py:105:    env = make_image_robot_env(debug=False)
+./tests/env_test_updated.py:139:        ("Robot", make_robot_env(debug=False)),
+./tests/env_test_updated.py:140:        ("Image Robot", make_image_robot_env(debug=False)),
+./tests/test_render_error_message.py:10:from robot_sf.gym_env.environment_factory import make_robot_env
+./tests/test_render_error_message.py:14:    env = make_robot_env(debug=False)
+./tests/test_render_error_message.py:22:    assert "make_robot_env" in msg
+./tests/factories/test_current_factory_signatures.py:18:def test_make_robot_env_signature_snapshot():
+./tests/factories/test_current_factory_signatures.py:19:    params = _param_names(ef.make_robot_env)
+./tests/factories/test_current_factory_signatures.py:34:def test_make_image_robot_env_signature_snapshot():
+./tests/factories/test_current_factory_signatures.py:35:    params = _param_names(ef.make_image_robot_env)
+./tests/factories/test_current_factory_signatures.py:49:def test_make_pedestrian_env_signature_snapshot():
+./tests/factories/test_current_factory_signatures.py:50:    params = _param_names(ef.make_pedestrian_env)
+./tests/test_environment_factory_signatures.py:11:    make_image_robot_env,
+./tests/test_environment_factory_signatures.py:13:    make_pedestrian_env,
+./tests/test_environment_factory_signatures.py:14:    make_robot_env,
+./tests/test_environment_factory_signatures.py:22:def test_make_robot_env_signature_explicit():  # noqa: D401
+./tests/test_environment_factory_signatures.py:23:    params = _param_names(make_robot_env)
+./tests/test_environment_factory_signatures.py:30:    kinds = [p.kind for p in inspect.signature(make_robot_env).parameters.values()]
+./tests/test_environment_factory_signatures.py:34:def test_make_image_robot_env_signature_explicit():  # noqa: D401
+./tests/test_environment_factory_signatures.py:35:    params = _param_names(make_image_robot_env)
+./tests/test_environment_factory_signatures.py:40:def test_make_pedestrian_env_signature_explicit():  # noqa: D401
+./tests/test_environment_factory_signatures.py:41:    params = _param_names(make_pedestrian_env)
+./tests/test_pygame_headless.py:9:from robot_sf.gym_env.environment_factory import make_robot_env
+./tests/test_pygame_headless.py:33:        env = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:60:            env = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:107:            env = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:149:        env_normal = make_robot_env(debug=True)
+./tests/test_pygame_headless.py:158:        env_headless = make_robot_env(debug=True)
+./docs/README.md:208:    make_robot_env,
+./docs/README.md:209:    make_image_robot_env,
+./docs/README.md:210:    make_pedestrian_env
+./docs/README.md:214:robot_env = make_robot_env(debug=True)
+./docs/README.md:215:image_env = make_image_robot_env(debug=True)
+./docs/README.md:216:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:60:from robot_sf.gym_env.environment_factory import make_robot_env
+./docs/refactoring/DEPLOYMENT_READY.md:61:env = make_robot_env(debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:111:robot_env = make_robot_env(debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:112:image_env = make_image_robot_env(debug=True)  
+./docs/refactoring/DEPLOYMENT_READY.md:113:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:146:    make_robot_env,
+./docs/refactoring/DEPLOYMENT_READY.md:147:    make_image_robot_env, 
+./docs/refactoring/DEPLOYMENT_READY.md:148:    make_pedestrian_env
+./docs/refactoring/DEPLOYMENT_READY.md:152:env = make_robot_env(debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:155:env = make_image_robot_env(debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:158:env = make_pedestrian_env(robot_model=trained_model, debug=True)
+./docs/refactoring/DEPLOYMENT_READY.md:164:from robot_sf.gym_env.environment_factory import make_robot_env
+./docs/refactoring/DEPLOYMENT_READY.md:169:env = make_robot_env(config=config, debug=True)
+./docs/refactoring/refactoring_summary.md:29:- Convenience functions: `make_robot_env()`, `make_image_robot_env()`, etc.
+./docs/refactoring/refactoring_summary.md:97:   from robot_sf.gym_env.environment_factory import make_pedestrian_env
+./docs/refactoring/refactoring_summary.md:99:   env = make_pedestrian_env(
+./docs/refactoring/refactoring_summary.md:108:   from robot_sf.gym_env.environment_factory import make_robot_env
+./docs/refactoring/refactoring_summary.md:111:       env = make_robot_env()
+./docs/refactoring/refactoring_summary.md:151:env = make_pedestrian_env(robot_model=robot_model, debug=True)
+./docs/refactoring/README.md:74:    make_robot_env,
+./docs/refactoring/README.md:75:    make_image_robot_env,
+./docs/refactoring/README.md:76:    make_pedestrian_env
+./docs/refactoring/README.md:80:env = make_robot_env(debug=True)
+./docs/refactoring/README.md:83:env = make_image_robot_env(debug=True)
+./docs/refactoring/README.md:86:env = make_pedestrian_env(robot_model=model, debug=True)
+./docs/refactoring/README.md:99:env = make_robot_env(config=config)
+./docs/refactoring/migration_guide.md:56:from robot_sf.gym_env.environment_factory import make_robot_env, make_pedestrian_env
+./docs/refactoring/migration_guide.md:58:robot_env = make_robot_env(debug=True)
+./docs/refactoring/migration_guide.md:59:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./docs/refactoring/migration_guide.md:147:    env = make_robot_env()
+./docs/refactoring/migration_guide.md:151:    env = make_pedestrian_env(robot_model=model)
+./docs/refactoring/migration_guide.md:157:        make_robot_env(),
+./docs/refactoring/migration_guide.md:158:        make_image_robot_env(),
+./docs/refactoring/migration_guide.md:159:        make_pedestrian_env(robot_model=model),
+./docs/refactoring/migration_guide.md:263:    env = make_robot_env()
+./docs/refactoring/migration_guide.md:274:    new_env = make_robot_env()
+./docs/refactoring/migration_report.md:19:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:25:- Recommendations: Consider migrating to factory pattern, Replace PedestrianEnv() with make_pedestrian_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:31:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:42:- Recommendations: Consider migrating to factory pattern, Replace PedestrianEnv() with make_pedestrian_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:48:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:54:- Recommendations: Consider migrating to factory pattern, Replace PedestrianEnv() with make_pedestrian_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:60:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:65:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace PedestrianEnv() with make_pedestrian_env()
+./docs/refactoring/migration_report.md:70:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace PedestrianEnv() with make_pedestrian_env()
+./docs/refactoring/migration_report.md:102:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
+./docs/refactoring/migration_report.md:108:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:121:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
+./docs/refactoring/migration_report.md:127:- Recommendations: Consider migrating to factory pattern, Replace PedestrianEnv() with make_pedestrian_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:132:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
+./docs/refactoring/migration_report.md:137:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
+./docs/refactoring/migration_report.md:143:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:149:- Recommendations: Consider migrating to factory pattern, Replace PedestrianEnv() with make_pedestrian_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:154:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
+./docs/refactoring/migration_report.md:160:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:166:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:171:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env()
+./docs/refactoring/migration_report.md:177:- Recommendations: Consider migrating to factory pattern, Replace PedestrianEnv() with make_pedestrian_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:182:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:188:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/refactoring/migration_report.md:194:- Recommendations: Consider migrating to factory pattern, Replace RobotEnv() with make_robot_env(), Replace EnvSettings with RobotSimulationConfig
+./docs/dev_guide.md:76:uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
+./docs/dev_guide.md:102:from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
+./docs/dev_guide.md:105:env = make_robot_env(debug=True)
+./docs/dev_guide.md:108:env = make_image_robot_env(debug=True)
+./docs/dev_guide.md:111:env = make_pedestrian_env(robot_model=model, debug=True)
+./docs/dev_guide.md:134:env = make_robot_env(config=config)
+./docs/dev_guide.md:158:- Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
+./docs/dev_guide.md:208:- **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
+./docs/dev_guide.md:659:uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; env = make_robot_env(); env.reset(); print('OK')"
+./README.md:247:    make_robot_env,
+./README.md:248:    make_image_robot_env, 
+./README.md:249:    make_pedestrian_env
+./README.md:253:robot_env = make_robot_env(debug=True)
+./README.md:254:image_env = make_image_robot_env(debug=True)
+./README.md:255:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./utilities/README.md:46:  from robot_sf.gym_env.environment_factory import make_robot_env
+./utilities/README.md:56:  env = make_robot_env(config=config, debug=True)
+./utilities/migrate_environments.py:104:            analysis["recommendations"].append("Replace RobotEnv() with make_robot_env()")
+./utilities/migrate_environments.py:107:            analysis["recommendations"].append("Replace PedestrianEnv() with make_pedestrian_env()")
+./utilities/migrate_environments.py:128:                "  from robot_sf.gym_env.environment_factory import make_robot_env"
+./utilities/migrate_environments.py:145:                "  env = make_robot_env(config=config, debug=True)"
+./utilities/migrate_environments.py:153:                "  env = make_pedestrian_env(config=config, robot_model=model)"
+./utilities/migrate_environments.py:173:                "from robot_sf.gym_env.environment_factory import make_robot_env",
+./utilities/migrate_environments.py:177:                "from robot_sf.gym_env.environment_factory import make_pedestrian_env",
+./utilities/migrate_environments.py:192:            (r"RobotEnv\s*\(", "make_robot_env("),
+./utilities/migrate_environments.py:193:            (r"PedestrianEnv\s*\(", "make_pedestrian_env("),
+./results/factory_perf_baseline.json:5:    "make_robot_env": {
+./results/factory_perf_baseline.json:17:    "make_image_robot_env": {
+./examples/demo_pedestrian_updated.py:7:from robot_sf.gym_env.environment_factory import make_pedestrian_env
+./examples/demo_pedestrian_updated.py:34:    return make_pedestrian_env(
+./examples/demo_refactored_environments.py:18:    make_image_robot_env,
+./examples/demo_refactored_environments.py:19:    make_robot_env,
+./examples/demo_refactored_environments.py:37:        robot_env = make_robot_env(debug=False)
+./examples/demo_refactored_environments.py:48:        image_robot_env = make_image_robot_env(debug=False)
+./examples/demo_refactored_environments.py:98:        robot_env = make_robot_env(debug=False)
+./examples/demo_refactored_environments.py:102:        # ped_env = make_pedestrian_env(robot_model=None, debug=False)
+./examples/classic_interactions_pygame.py:55:from robot_sf.gym_env.environment_factory import make_robot_env
+./examples/classic_interactions_pygame.py:358:    env = make_robot_env(
+./.venv/lib/python3.13/site-packages/robot_sf-2.0.0.dist-info/METADATA:301:    make_robot_env,
+./.venv/lib/python3.13/site-packages/robot_sf-2.0.0.dist-info/METADATA:302:    make_image_robot_env, 
+./.venv/lib/python3.13/site-packages/robot_sf-2.0.0.dist-info/METADATA:303:    make_pedestrian_env
+./.venv/lib/python3.13/site-packages/robot_sf-2.0.0.dist-info/METADATA:307:robot_env = make_robot_env(debug=True)
+./.venv/lib/python3.13/site-packages/robot_sf-2.0.0.dist-info/METADATA:308:image_env = make_image_robot_env(debug=True)
+./.venv/lib/python3.13/site-packages/robot_sf-2.0.0.dist-info/METADATA:309:ped_env = make_pedestrian_env(robot_model=model, debug=True)
+./scripts/perf/baseline_factory_creation.py:3:Purpose: Capture current (pre-refactor) performance metrics for make_robot_env,
+./scripts/perf/baseline_factory_creation.py:4:make_image_robot_env, make_pedestrian_env (if model available) to enforce FR-017
+./scripts/perf/baseline_factory_creation.py:16:      "make_robot_env": {"mean_ms": ..., "p95_ms": ..., "std_ms": ...},
+./scripts/perf/baseline_factory_creation.py:42:        make_image_robot_env,
+./scripts/perf/baseline_factory_creation.py:43:        make_robot_env,
+./scripts/perf/baseline_factory_creation.py:114:    logger.info("Timing make_robot_env iterations={}", iterations)
+./scripts/perf/baseline_factory_creation.py:115:    results["make_robot_env"] = _time_creation(
+./scripts/perf/baseline_factory_creation.py:116:        lambda: make_robot_env(config=RobotSimulationConfig(), debug=False), iterations
+./scripts/perf/baseline_factory_creation.py:119:    logger.info("Timing make_image_robot_env iterations={}", iterations)
+./scripts/perf/baseline_factory_creation.py:120:    results["make_image_robot_env"] = _time_creation(
+./scripts/perf/baseline_factory_creation.py:121:        lambda: make_image_robot_env(config=ImageRobotConfig(), debug=False), iterations
+./scripts/validation/test_basic_environment.sh:16:from robot_sf.gym_env.environment_factory import make_robot_env
+./scripts/validation/test_basic_environment.sh:18:env = make_robot_env(debug=True)
+./scripts/validation/performance_smoke_test.py:45:from robot_sf.gym_env.environment_factory import make_robot_env
+./scripts/validation/performance_smoke_test.py:54:    env = make_robot_env(config=config, debug=False)
+./scripts/validation/performance_smoke_test.py:103:    env = make_robot_env(config=config, debug=False)
+./scripts/validation/test_model_prediction.sh:16:from robot_sf.gym_env.environment_factory import make_robot_env
+./scripts/validation/test_model_prediction.sh:18:env = make_robot_env(debug=True)
+./.github/prompts/generate_issue.prompt.md:81:  - Link any affected config, class, or function using backticks (e.g., `make_robot_env`, `JsonlRecorder`, `MapDefinition`).
+./robot_sf/gym_env/robot_env.py:249:                "Recreate via make_robot_env(..., debug=True) to enable visualization and frame capture."
+./robot_sf/gym_env/environment_factory.py:182:def make_robot_env(
+./robot_sf/gym_env/environment_factory.py:227:def make_image_robot_env(
+./robot_sf/gym_env/environment_factory.py:240:    Mirrors `make_robot_env` but sets image observation mode.
+./robot_sf/gym_env/environment_factory.py:255:def make_pedestrian_env(

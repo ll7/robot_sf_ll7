@@ -41,7 +41,7 @@ def simple_reward(
     if meta["is_robot_at_goal"]:
         reward += reach_waypoint_reward
 
-    return reward
+    return float(reward)
 
 
 def simple_ped_reward(
@@ -90,7 +90,7 @@ def simple_ped_reward(
     if meta["is_robot_at_goal"]:
         reward += robot_at_goal_penalty
 
-    return reward
+    return float(reward)
 
 
 def punish_action_reward(
@@ -120,7 +120,11 @@ def punish_action_reward(
 
     # Initialize reward with a discount based on the maximum simulation steps
     reward = simple_reward(
-        meta, max_episode_step_discount, ped_coll_penalty, obst_coll_penalty, reach_waypoint_reward
+        meta,
+        max_episode_step_discount,
+        ped_coll_penalty,
+        obst_coll_penalty,
+        reach_waypoint_reward,
     )
 
     # punish the robot taking a different action from the last action
@@ -129,4 +133,4 @@ def punish_action_reward(
         if action_diff > 0:
             reward += punish_action_penalty * action_diff
 
-    return reward
+    return float(reward)

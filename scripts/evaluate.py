@@ -1,12 +1,16 @@
 import json
 from dataclasses import dataclass
-from typing import List, Union
+from typing import Union
 
 import gymnasium
 import numpy as np
 from gymnasium import spaces
 from stable_baselines3 import A2C, PPO
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None  # type: ignore
 
 from robot_sf.eval import EnvMetrics
 from robot_sf.gym_env.robot_env import EnvSettings, RobotEnv
@@ -49,7 +53,7 @@ class GymAdapterSettings:
 @dataclass
 class EvalSettings:
     num_episodes: int
-    ped_densities: List[float]
+    ped_densities: list[float]
     vehicle_config: VehicleConfig
     prf_config: PedRobotForceConfig
     gym_config: GymAdapterSettings
@@ -81,12 +85,15 @@ class AdaptedEnv(gymnasium.Env):
 def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
     eval_metrics = EnvMetrics(cache_size=num_episodes)
 
-    for _ in tqdm(range(num_episodes)):
+    iterator = tqdm(range(num_episodes)) if tqdm is not None else range(num_episodes)
+    for _ in iterator:
         is_end_of_route = False
         obs = env.reset()
         while not is_end_of_route:
             action, _ = model.predict(obs, deterministic=True)
-            obs, _, done, meta = env.step(action)
+            # Env step returns obs, reward, terminated, truncated, info
+            obs, _reward, terminated, truncated, meta = env.step(action)
+            done = terminated or truncated
             meta = meta["meta"]
             eval_metrics.update(meta)
             if done:
@@ -117,7 +124,7 @@ def prepare_model(model_path: str, env: gymnasium.Env) -> DriveModel:
 
 
 def evaluation_series(model_path: str, settings: EvalSettings):
-    all_metrics = dict()
+    all_metrics = {}
 
     for difficulty in range(len(settings.ped_densities)):
         env = prepare_env(settings, difficulty)
@@ -159,7 +166,10 @@ def main():
     )
 
     prf_config = PedRobotForceConfig(
-        is_active=True, robot_radius=1.0, activation_threshold=2.0, force_multiplier=10.0
+        is_active=True,
+        robot_radius=1.0,
+        activation_threshold=2.0,
+        force_multiplier=10.0,
     )
 
     settings = EvalSettings(

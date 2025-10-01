@@ -6,7 +6,6 @@ Provides common functionality for all environments.
 import datetime
 import os
 import pickle
-from typing import List, Optional
 
 from gymnasium import Env
 from loguru import logger
@@ -26,8 +25,8 @@ class BaseEnv(Env):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
         # New JSONL recording parameters
         use_jsonl_recording: bool = False,
@@ -35,7 +34,7 @@ class BaseEnv(Env):
         suite_name: str = "robot_sim",
         scenario_name: str = "default",
         algorithm_name: str = "manual",
-        recording_seed: int = None,
+        recording_seed: int | None = None,
     ):
         super().__init__()
 
@@ -53,12 +52,12 @@ class BaseEnv(Env):
         self.debug = debug
 
         # Initialize the list to store recorded states
-        self.recorded_states: List[VisualizableSimState] = []
+        self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
 
         # New JSONL recording system
         self.use_jsonl_recording = use_jsonl_recording
-        self.jsonl_recorder: Optional[JSONLRecorder] = None
+        self.jsonl_recorder: JSONLRecorder | None = None
 
         if use_jsonl_recording and recording_enabled:
             # Use provided seed or generate from environment config
@@ -88,8 +87,11 @@ class BaseEnv(Env):
 
         # If in debug mode or video recording is enabled, create simulation view
         if debug or record_video:
+            # Prefer config-driven render scaling when provided; else default to 10.
+            scaling_value = getattr(env_config, "render_scaling", None)
+            scaling_value = 10 if scaling_value is None else int(scaling_value)
             self.sim_ui = SimulationView(
-                scaling=10,
+                scaling=scaling_value,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
@@ -113,7 +115,7 @@ class BaseEnv(Env):
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str = None):
+    def save_recording(self, filename: str | None = None):
         """
         save the recorded states to a file
         filname: str, must end with *.pkl
@@ -154,7 +156,7 @@ class BaseEnv(Env):
         if self.jsonl_recorder is not None:
             self.jsonl_recorder.record_step(state)
 
-    def record_entity_reset(self, entity_ids: List[int], state: VisualizableSimState) -> None:
+    def record_entity_reset(self, entity_ids: list[int], state: VisualizableSimState) -> None:
         """Record an entity reset event."""
         if self.jsonl_recorder is not None:
             self.jsonl_recorder.record_entity_reset(entity_ids, state)

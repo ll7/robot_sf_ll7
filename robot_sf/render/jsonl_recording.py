@@ -24,7 +24,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import loguru
 
@@ -56,8 +56,8 @@ class JSONLRecord:
     step_idx: int
     event: str  # "episode_start", "step", "episode_end", "entity_reset"
     timestamp: float
-    state: Dict[str, Any]
-    entity_ids: Optional[List[int]] = None  # For entity_reset events
+    state: dict[str, Any]
+    entity_ids: Optional[list[int]] = None  # For entity_reset events
 
 
 class JSONLRecorder:
@@ -113,9 +113,9 @@ class JSONLRecorder:
         filename = f"{self.suite}_{self.scenario}_{self.algorithm}_{self.seed}_ep{episode_id:04d}.meta.json"
         return self.output_dir / filename
 
-    def _serialize_state(self, state: VisualizableSimState) -> Dict[str, Any]:
+    def _serialize_state(self, state: VisualizableSimState) -> dict[str, Any]:
         """Serialize a VisualizableSimState to dictionary format."""
-        state_dict: Dict[str, Any] = {"timestep": getattr(state, "timestep", 0.0)}
+        state_dict: dict[str, Any] = {"timestep": getattr(state, "timestep", 0.0)}
 
         # Delegate serialization of optional components to small helpers to keep
         # cyclomatic complexity low (ruff C901 compliance) while retaining
@@ -143,7 +143,7 @@ class JSONLRecorder:
         return state_dict
 
     # --- Serialization helpers (each intentionally small & focused) ---
-    def _serialize_robot_pose(self, state: VisualizableSimState) -> Optional[List[Any]]:  # noqa: D401
+    def _serialize_robot_pose(self, state: VisualizableSimState) -> Optional[list[Any]]:
         """Return robot pose [[x, y], theta] if available else None."""
         if not hasattr(state, "robot_pose") or state.robot_pose is None:
             return None
@@ -157,7 +157,7 @@ class JSONLRecorder:
 
     def _serialize_pedestrian_positions(
         self, state: VisualizableSimState
-    ) -> Optional[List[List[float]]]:  # noqa: D401,E501
+    ) -> Optional[list[list[float]]]:
         """Return list of pedestrian positions [[x,y], ...] or None if absent."""
         if not hasattr(state, "pedestrian_positions") or state.pedestrian_positions is None:
             return None
@@ -169,7 +169,7 @@ class JSONLRecorder:
         except (TypeError, ValueError, IndexError):
             return []
 
-    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> Optional[List[Any]]:  # noqa: D401
+    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> Optional[list[Any]]:
         """Return ego pedestrian pose [[x,y], theta] if available else None."""
         if not hasattr(state, "ego_ped_pose") or state.ego_ped_pose is None:
             return None
@@ -181,7 +181,7 @@ class JSONLRecorder:
         except (TypeError, ValueError, IndexError):
             return None
 
-    def _serialize_ray_vecs(self, state: VisualizableSimState) -> Optional[List[Any]]:  # noqa: D401
+    def _serialize_ray_vecs(self, state: VisualizableSimState) -> Optional[list[Any]]:
         """Return ray vectors list representation or None if absent."""
         if not hasattr(state, "ray_vecs") or state.ray_vecs is None:
             return None
@@ -195,12 +195,12 @@ class JSONLRecorder:
         except (TypeError, ValueError):
             return []
 
-    def _serialize_robot_action(self, state: VisualizableSimState) -> Optional[Dict[str, float]]:  # noqa: D401,E501
+    def _serialize_robot_action(self, state: VisualizableSimState) -> Optional[dict[str, float]]:
         """Return robot action dict {'linear_velocity':..,'angular_velocity':..} or None."""
         if not hasattr(state, "robot_action") or state.robot_action is None:
             return None
         action = state.robot_action
-        action_dict: Dict[str, float] = {}
+        action_dict: dict[str, float] = {}
         if hasattr(action, "linear_velocity"):
             try:
                 action_dict["linear_velocity"] = float(action.linear_velocity)
@@ -285,7 +285,7 @@ class JSONLRecorder:
         self.current_file.write(json.dumps(asdict(step_record)) + "\n")
         self.current_file.flush()
 
-    def record_entity_reset(self, entity_ids: List[int], state: VisualizableSimState) -> None:
+    def record_entity_reset(self, entity_ids: list[int], state: VisualizableSimState) -> None:
         """Record an entity reset event.
 
         Args:

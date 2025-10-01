@@ -12,9 +12,9 @@ It also defines the action and observation spaces for the robot.
 
 import hashlib
 import json
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
-from typing import Callable, Optional
 
 from loguru import logger
 
@@ -30,7 +30,9 @@ from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
-from robot_sf.sim.simulator import init_simulators
+from robot_sf.sim.simulator import (
+    init_simulators,  # noqa: F401 (retained for backwards compatibility; may be removed later)
+)
 
 
 # Helper to compute a stable, short hash for env_config
@@ -42,7 +44,7 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
             sort_keys=True,
             default=str,
         )
-    except Exception:  # pragma: no cover - defensive fallback
+    except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         payload = repr(cfg)
     return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest()
 
@@ -56,12 +58,12 @@ class RobotEnv(BaseEnv):
     def __init__(
         self,
         env_config: EnvSettings = EnvSettings(),
-        reward_func: Callable[[dict], float] = simple_reward,
+        reward_func: Callable[[dict], float] | None = None,
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: Optional[str] = None,
-        video_fps: Optional[float] = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
         # New JSONL recording parameters
         use_jsonl_recording: bool = False,
@@ -69,7 +71,7 @@ class RobotEnv(BaseEnv):
         suite_name: str = "robot_sim",
         scenario_name: str = "default",
         algorithm_name: str = "manual",
-        recording_seed: Optional[int] = None,
+        recording_seed: int | None = None,
     ):
         """
         Initialize the Robot Environment.
@@ -102,23 +104,23 @@ class RobotEnv(BaseEnv):
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = init_spaces(
-            env_config, self.map_def
-        )
-
-        # Assign the reward function and debug flag
-        self.reward_func = reward_func
-
-        # Initialize simulator with a random start position
-        self.simulator = init_simulators(
             env_config,
             self.map_def,
-            random_start_pos=True,
-            peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )[0]
+        )
 
-        # Initialize collision detectors and sensor data processors
+        # Assign the reward function; ensure a valid callable even if None passed via factory
+        if reward_func is None:  # defensive: factory allows Optional
+            logger.warning(
+                "No reward_func provided to RobotEnv; falling back to simple_reward for safety.",
+            )
+        self.reward_func = reward_func or simple_reward
+
+        # BaseEnv has already created self.simulator; avoid redundant initialization.
+        # Initialize collision detectors and sensor data processors using existing simulator.
         occupancies, sensors = init_collision_and_sensors(
-            self.simulator, env_config, orig_obs_space
+            self.simulator,
+            env_config,
+            orig_obs_space,
         )
 
         # Store configuration for factory pattern compatibility
@@ -218,7 +220,11 @@ class RobotEnv(BaseEnv):
                 # End previous episode if active, then start a new one
                 try:
                     self.end_episode_recording()
-                except Exception:  # pragma: no cover - safe if none active
+                except (
+                    RuntimeError,
+                    ValueError,
+                    AttributeError,
+                ):  # pragma: no cover - safe if none active
                     pass
                 config_hash = _stable_config_hash(self.env_config)
                 self.start_episode_recording(config_hash=config_hash)
@@ -276,7 +282,10 @@ class RobotEnv(BaseEnv):
         Raises RuntimeError if debug mode is not enabled.
         """
         if not self.sim_ui:
-            raise RuntimeError("Debug mode is not activated! Consider setting `debug=True!`")
+            raise RuntimeError(
+                "Render unavailable: environment was created with debug=False (no sim_ui). "
+                "Recreate via make_robot_env(..., debug=True) to enable visualization and frame capture.",
+            )
 
         state = self._prepare_visualizable_state()
 

@@ -23,7 +23,7 @@ import json
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import loguru
 
@@ -38,16 +38,16 @@ class PlaybackEpisode:
     """Container for a single episode's playback data."""
 
     episode_id: int
-    states: List[VisualizableSimState]
-    metadata: Optional[Dict[str, Any]] = None
-    reset_points: Optional[List[int]] = None  # Step indices where resets occurred
+    states: list[VisualizableSimState]
+    metadata: Optional[dict[str, Any]] = None
+    reset_points: Optional[list[int]] = None  # Step indices where resets occurred
 
 
 @dataclass
 class BatchPlayback:
     """Container for batch playback data."""
 
-    episodes: List[PlaybackEpisode]
+    episodes: list[PlaybackEpisode]
     map_def: MapDefinition
     total_episodes: int
     total_steps: int
@@ -66,7 +66,7 @@ class JSONLPlaybackLoader:
         self.schema_version = "1.0"
 
     def _deserialize_state(
-        self, state_dict: Dict[str, Any], timestep: int = 0
+        self, state_dict: dict[str, Any], timestep: int = 0
     ) -> VisualizableSimState:
         """Deserialize a state dictionary to VisualizableSimState.
 
@@ -84,28 +84,28 @@ class JSONLPlaybackLoader:
 
         # Extract robot pose
         robot_pose = None
-        if "robot_pose" in state_dict and state_dict["robot_pose"]:
+        if state_dict.get("robot_pose"):
             pos = state_dict["robot_pose"][0]
             ori = state_dict["robot_pose"][1]
             robot_pose = ((pos[0], pos[1]), ori)
 
         # Extract pedestrian positions as numpy array
         pedestrian_positions = np.array([])
-        if "pedestrian_positions" in state_dict and state_dict["pedestrian_positions"]:
+        if state_dict.get("pedestrian_positions"):
             pedestrian_positions = np.array(
                 [[pos[0], pos[1]] for pos in state_dict["pedestrian_positions"]]
             )
 
         # Extract ego pedestrian pose
         ego_ped_pose = None
-        if "ego_ped_pose" in state_dict and state_dict["ego_ped_pose"]:
+        if state_dict.get("ego_ped_pose"):
             pos = state_dict["ego_ped_pose"][0]
             ori = state_dict["ego_ped_pose"][1]
             ego_ped_pose = ((pos[0], pos[1]), ori)
 
         # Extract ray vectors as numpy array
         ray_vecs = np.array([])
-        if "ray_vecs" in state_dict and state_dict["ray_vecs"]:
+        if state_dict.get("ray_vecs"):
             try:
                 ray_vecs = np.array(state_dict["ray_vecs"])
             except (ValueError, TypeError):
@@ -116,7 +116,7 @@ class JSONLPlaybackLoader:
 
         # Extract robot action
         robot_action = None
-        if "robot_action" in state_dict and state_dict["robot_action"]:
+        if state_dict.get("robot_action"):
             # For now, we'll leave robot_action as None since it's complex to reconstruct
             pass
 
@@ -134,7 +134,7 @@ class JSONLPlaybackLoader:
         return state
 
     def _reconstruct_map_definition(
-        self, metadata: Optional[Dict[str, Any]], states: List[VisualizableSimState]
+        self, metadata: Optional[dict[str, Any]], states: list[VisualizableSimState]
     ) -> MapDefinition:
         """Reconstruct MapDefinition from metadata or fallback to minimal dummy.
 
@@ -153,7 +153,7 @@ class JSONLPlaybackLoader:
         # Fallback: estimate bounds from state data and create minimal map
         return self._create_estimated_map_definition(states)
 
-    def _deserialize_map_definition(self, map_data: Dict[str, Any]) -> MapDefinition:
+    def _deserialize_map_definition(self, map_data: dict[str, Any]) -> MapDefinition:
         """Deserialize map definition from metadata format.
 
         Args:
@@ -232,7 +232,7 @@ class JSONLPlaybackLoader:
             ped_routes=ped_routes,
         )
 
-    def _create_estimated_map_definition(self, states: List[VisualizableSimState]) -> MapDefinition:
+    def _create_estimated_map_definition(self, states: list[VisualizableSimState]) -> MapDefinition:
         """Create a minimal MapDefinition by estimating bounds from simulation states.
 
         Args:
@@ -317,7 +317,7 @@ class JSONLPlaybackLoader:
             ped_routes=[],
         )
 
-    def _load_episode_metadata(self, episode_file: Path) -> Optional[Dict[str, Any]]:
+    def _load_episode_metadata(self, episode_file: Path) -> Optional[dict[str, Any]]:
         """Load metadata for an episode from sidecar file.
 
         Args:
@@ -333,15 +333,15 @@ class JSONLPlaybackLoader:
             return None
 
         try:
-            with open(metadata_file, "r", encoding="utf-8") as f:
+            with open(metadata_file, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as e:
-            logger.warning(f"Failed to load metadata from {metadata_file}: {e}")
+        except (OSError, json.JSONDecodeError) as err:
+            logger.warning(f"Failed to load metadata from {metadata_file}: {err}")
             return None
 
     def load_single_episode(
         self, file_path: Union[str, Path]
-    ) -> Tuple[PlaybackEpisode, MapDefinition]:
+    ) -> tuple[PlaybackEpisode, MapDefinition]:
         """Load a single episode from JSONL file.
 
         Args:
@@ -364,7 +364,7 @@ class JSONLPlaybackLoader:
         reset_points = []
         episode_id = 0
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             for line_num, line in enumerate(f):
                 try:
                     record = json.loads(line.strip())
@@ -392,8 +392,13 @@ class JSONLPlaybackLoader:
                         state = self._deserialize_state(state_dict, timestep)
                         states.append(state)
 
-                except Exception as e:
-                    logger.warning(f"Failed to parse line {line_num + 1} in {file_path}: {e}")
+                except (
+                    json.JSONDecodeError,
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                ) as err:
+                    logger.warning(f"Failed to parse line {line_num + 1} in {file_path}: {err}")
                     continue
 
         if not states:
@@ -414,7 +419,7 @@ class JSONLPlaybackLoader:
 
         return episode, map_def
 
-    def _load_pickle_file(self, file_path: Path) -> Tuple[PlaybackEpisode, MapDefinition]:
+    def _load_pickle_file(self, file_path: Path) -> tuple[PlaybackEpisode, MapDefinition]:
         """Load legacy pickle file and convert to episode format.
 
         Args:
@@ -441,7 +446,7 @@ class JSONLPlaybackLoader:
 
         return episode, map_def
 
-    def _detect_reset_points(self, states: List[VisualizableSimState]) -> List[int]:
+    def _detect_reset_points(self, states: list[VisualizableSimState]) -> list[int]:
         """Detect reset points in a sequence of states (for legacy files).
 
         Args:
@@ -519,8 +524,14 @@ class JSONLPlaybackLoader:
                 if map_def is None:
                     map_def = episode_map_def
 
-            except Exception as e:
-                logger.warning(f"Failed to load episode from {file_path}: {e}")
+            except (
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+                pickle.UnpicklingError,
+                EOFError,
+            ) as err:
+                logger.warning(f"Failed to load episode from {file_path}: {err}")
                 continue
 
         if not episodes:
@@ -572,7 +583,7 @@ class JSONLPlaybackLoader:
             raise FileNotFoundError(f"Manifest file not found: {manifest_file}")
 
         # Load manifest
-        with open(manifest_file, "r", encoding="utf-8") as f:
+        with open(manifest_file, encoding="utf-8") as f:
             manifest = json.load(f)
 
         episode_files = manifest.get("episodes", [])
@@ -597,8 +608,14 @@ class JSONLPlaybackLoader:
                 if map_def is None:
                     map_def = episode_map_def
 
-            except Exception as e:
-                logger.warning(f"Failed to load episode from {file_path}: {e}")
+            except (
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+                pickle.UnpicklingError,
+                EOFError,
+            ) as err:
+                logger.warning(f"Failed to load episode from {file_path}: {err}")
                 continue
 
         if not episodes:

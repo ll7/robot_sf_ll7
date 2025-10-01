@@ -23,9 +23,12 @@ def training():
 
     env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
-    policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
+    policy_kwargs = {"features_extractor_class": DynamicsExtractor}
     model = PPO(
-        "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+        "MultiInputPolicy",
+        env,
+        tensorboard_log="./logs/ppo_logs/",
+        policy_kwargs=policy_kwargs,
     )
     save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")
     collect_metrics_callback = DrivingMetricsCallback(n_envs)

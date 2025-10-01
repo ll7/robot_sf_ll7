@@ -20,7 +20,7 @@ def test_can_load_model_snapshot():
 
     n_envs = 2
     vec_env = make_vec_env(lambda: RobotEnv(), n_envs=n_envs, vec_env_cls=SubprocVecEnv)
-    policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
+    policy_kwargs = {"features_extractor_class": DynamicsExtractor}
     model = PPO("MultiInputPolicy", vec_env, policy_kwargs=policy_kwargs)
     model.save(MODEL_PATH)
     assert os.path.exists(MODEL_FILE)

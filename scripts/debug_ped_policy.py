@@ -23,7 +23,8 @@ def make_env():
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
-            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+            difficulty=difficulty,
+            ped_density_by_difficulty=ped_densities,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
@@ -34,7 +35,8 @@ def get_file():
     """Get the latest model file."""
 
     filename = max(
-        os.listdir("model_ped"), key=lambda x: os.path.getctime(os.path.join("model_ped", x))
+        os.listdir("model_ped"),
+        key=lambda x: os.path.getctime(os.path.join("model_ped", x)),
     )
     return Path("model_ped", filename)
 

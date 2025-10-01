@@ -1,6 +1,6 @@
 # robot-sf
 
-> 2024-03-28 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
+> 2025-09-16 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
 
 ## About
 
@@ -19,7 +19,32 @@ map data from OpenStreetMap.
 
 ![](./docs/video/demo_01.gif)
 
-## Installation
+- [About](#about)
+- [Development and Intallation](#development-and-intallation)
+  - [Prerequisites](#prerequisites)
+  - [Quick Start](#quick-start)
+  - [Development Setup](#development-setup)
+  - [Alternative Installation Methods](#alternative-installation-methods)
+    - [Manual dependency installation](#manual-dependency-installation)
+    - [Docker Installation (Advanced)](#docker-installation-advanced)
+  - [System Dependencies](#system-dependencies)
+  - [Tests](#tests)
+    - [PySocialForce Tests](#pysocialforce-tests)
+    - [Run Linter / Tests](#run-linter--tests)
+    - [GUI Tests](#gui-tests)
+  - [5. Run Visual Debugging of Pre-Trained Demo Models](#5-run-visual-debugging-of-pre-trained-demo-models)
+  - [6. Run StableBaselines Training (Docker)](#6-run-stablebaselines-training-docker)
+  - [7. Edit Maps](#7-edit-maps)
+  - [8. Optimize Training Hyperparams (Docker)](#8-optimize-training-hyperparams-docker)
+  - [9. Extension: Pedestrian as Adversarial-Agent](#9-extension-pedestrian-as-adversarial-agent)
+- [📚 Documentation](#-documentation)
+  - [Core Documentation](#core-documentation)
+  - [Environment Architecture (New!)](#environment-architecture-new)
+  - [SNQI Weight Tooling (Benchmark Metrics)](#snqi-weight-tooling-benchmark-metrics)
+
+## Development and Intallation
+
+Refer to the [development guide](./docs/dev_guide.md) for contribution guidelines, code standards, and templates.
 
 This project now uses `uv` for modern Python dependency management and virtual environment handling.
 
@@ -142,7 +167,13 @@ All tests should pass successfully. The test suite includes:
 #### Run Linter / Tests
 
 ```sh
+# Lint and format
+uv run ruff check --fix . && uv run ruff format .
+
+# Run tests
 pytest tests
+
+# Legacy linter (for comparison)
 pylint robot_sf
 ```
 
@@ -157,6 +188,8 @@ pytest test_pygame
 ```sh
 python3 examples/demo_offensive.py
 python3 examples/demo_defensive.py
+# Classic interactions deterministic PPO visualization (Feature 128)
+python3 examples/classic_interactions_pygame.py
 ```
 
 [Visualization](./docs/SIM_VIEW.md)
@@ -209,6 +242,7 @@ python3 examples/demo_pedestrian.py
 - [SVG Map Editor](./docs/SVG_MAP_EDITOR.md) - SVG-based map creation
 - [Simulation View](./docs/SIM_VIEW.md) - Visualization and rendering
 - [UV Migration](./docs/UV_MIGRATION.md) - Migration to UV package manager
+ - [Contributing Agents Guide](./AGENTS.md) – Repository structure, coding style, test workflow, and contributor conventions (start here if new!)
 
 ### Environment Architecture (New!)
 The project has been refactored to provide a **consistent, extensible environment system**:
@@ -234,3 +268,11 @@ ped_env = make_pedestrian_env(robot_model=model, debug=True)
 - ✅ **Backward compatibility** maintained
 
 📖 **[Read the full refactoring documentation →](./docs/refactoring/)**
+
+### SNQI Weight Tooling (Benchmark Metrics)
+
+Tools for recomputing, optimizing, and analyzing Social Navigation Quality Index (SNQI) weights are now available:
+
+- User Guide: [`docs/snqi-weight-tools/README.md`](./docs/snqi-weight-tools/README.md)
+- Design & architecture: [`docs/dev/issues/snqi-recomputation/DESIGN.md`](./docs/dev/issues/snqi-recomputation/DESIGN.md)
+- Headless usage (minimal deps): see [Headless mode](./docs/snqi-weight-tools/README.md#headless-mode-minimal-deps)

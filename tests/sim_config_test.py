@@ -22,7 +22,7 @@ def test_env_settings_initialization():
 
 def test_env_settings_post_init():
     with pytest.raises(ValueError):
-        _env_settings = EnvSettings(sim_config=None)
+        _env_settings = EnvSettings(sim_config=None)  # type: ignore
 
 
 def test_robot_factory():
@@ -35,5 +35,5 @@ def test_robot_factory():
     assert isinstance(robot, BicycleDriveRobot)
 
     with pytest.raises(NotImplementedError):
-        env_settings.robot_config = "unsupported type"
+        env_settings.robot_config = "unsupported type"  # type: ignore
         env_settings.robot_factory()

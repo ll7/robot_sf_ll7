@@ -18,9 +18,9 @@ Features:
 """
 
 import argparse
+import pickle
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 import loguru
 
@@ -31,7 +31,7 @@ from robot_sf.render.sim_view import VisualizableSimState
 logger = loguru.logger
 
 
-def detect_episode_boundaries(states: List[VisualizableSimState]) -> List[int]:
+def detect_episode_boundaries(states: list[VisualizableSimState]) -> list[int]:
     """
     Detect episode boundaries in a sequence of states using position jump heuristics.
 
@@ -100,8 +100,8 @@ def detect_episode_boundaries(states: List[VisualizableSimState]) -> List[int]:
 
 
 def segment_states_by_episodes(
-    states: List[VisualizableSimState], boundaries: List[int]
-) -> List[List[VisualizableSimState]]:
+    states: list[VisualizableSimState], boundaries: list[int]
+) -> list[list[VisualizableSimState]]:
     """
     Segment states into episodes based on boundary indices.
 
@@ -152,7 +152,7 @@ def convert_pickle_to_jsonl(
 
     # Load pickle file
     loader = JSONLPlaybackLoader()
-    episode, map_def = loader.load_single_episode(pickle_file)
+    episode, _ = loader.load_single_episode(pickle_file)
 
     if not episode.states:
         logger.warning(f"No states found in {pickle_file}")
@@ -199,7 +199,7 @@ def convert_pickle_to_jsonl(
 
 def convert_directory(
     input_dir: Path, output_dir: Path, file_pattern: str = "*.pkl"
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Convert all pickle files in a directory to JSONL format.
 
@@ -243,8 +243,8 @@ def convert_directory(
                 files_converted += 1
                 total_episodes += episodes_converted
 
-        except Exception as e:
-            logger.error(f"Failed to convert {pickle_file}: {e}")
+        except (OSError, ValueError, EOFError, pickle.UnpicklingError):
+            logger.exception(f"Failed to convert {pickle_file}")
 
     return files_converted, total_episodes
 
@@ -270,14 +270,14 @@ def validate_conversion(output_dir: Path) -> bool:
 
     for jsonl_file in jsonl_files:
         try:
-            episode, map_def = loader.load_single_episode(jsonl_file)
+            episode, _ = loader.load_single_episode(jsonl_file)
             if episode.states:
                 valid_files += 1
                 logger.debug(f"Validated {jsonl_file}: {len(episode.states)} states")
             else:
                 logger.warning(f"No states found in {jsonl_file}")
-        except Exception as e:
-            logger.error(f"Validation failed for {jsonl_file}: {e}")
+        except (OSError, ValueError, EOFError, pickle.UnpicklingError):
+            logger.exception(f"Validation failed for {jsonl_file}")
 
     logger.info(f"Validation: {valid_files}/{len(jsonl_files)} files are valid")
     return valid_files == len(jsonl_files)

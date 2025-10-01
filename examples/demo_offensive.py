@@ -1,5 +1,4 @@
-from stable_baselines3 import PPO
-
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
@@ -12,7 +11,7 @@ def demo_offensive_policy():
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
     env = RobotEnv(env_config, debug=True, recording_enabled=False)
-    model = PPO.load("./model/run_043", env=env)
+    model = load_trained_policy("./model/run_043")
 
     obs, _ = env.reset()
     for _ in range(10000):

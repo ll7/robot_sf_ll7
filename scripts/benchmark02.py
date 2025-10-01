@@ -2,13 +2,13 @@ import json
 import platform
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import cast
 
 import numpy as np
 import psutil
 from loguru import logger
-from stable_baselines3 import PPO
 
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 
@@ -20,13 +20,13 @@ class BenchmarkMetrics:
     steps_per_second: float
     avg_step_time_ms: float
     total_episodes: int
-    system_info: Dict
+    system_info: dict
     config_hash: str
-    observation_space_info: Dict
+    observation_space_info: dict
     used_random_actions: bool = False
-    env_info: Dict = field(default_factory=dict)
+    env_info: dict = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "steps_per_second": self.steps_per_second,
             "avg_step_time_ms": self.avg_step_time_ms,
@@ -40,7 +40,8 @@ class BenchmarkMetrics:
 
 
 def run_standardized_benchmark(
-    num_steps: int = 2_000, model_path: Optional[str] = "./model/run_043"
+    num_steps: int = 2_000,
+    model_path: str | None = "./model/run_043",
 ) -> BenchmarkMetrics:
     """Run a standardized simulation benchmark.
 
@@ -57,12 +58,18 @@ def run_standardized_benchmark(
     env = RobotEnv(env_config)
 
     # Record observation space info
+    from gymnasium import spaces as _spaces  # local import to avoid global dependency for types
+
+    obs_dict = cast(_spaces.Dict, env.observation_space)
+    drive_space = cast(_spaces.Box, obs_dict["drive_state"])  # type: ignore[index]
+    rays_space = cast(_spaces.Box, obs_dict["rays"])  # type: ignore[index]
+
     obs_space_info = {
-        "drive_state_shape": env.observation_space["drive_state"].shape,
-        "rays_shape": env.observation_space["rays"].shape,
+        "drive_state_shape": drive_space.shape,
+        "rays_shape": rays_space.shape,
         "drive_state_bounds": {
-            "low": env.observation_space["drive_state"].low.tolist(),
-            "high": env.observation_space["drive_state"].high.tolist(),
+            "low": drive_space.low.tolist(),
+            "high": drive_space.high.tolist(),
         },
     }
 
@@ -70,9 +77,9 @@ def run_standardized_benchmark(
     used_random_actions = False
     if model_path:
         try:
-            model = PPO.load(model_path, env=env)
+            model = load_trained_policy(model_path)
             logger.info("Successfully loaded model")
-        except ValueError as e:
+        except (ValueError, FileNotFoundError) as e:
             logger.warning(f"Failed to load model: {e}")
             logger.info("Falling back to random actions")
             model = None
@@ -109,20 +116,25 @@ def run_standardized_benchmark(
             logger.debug(f"Completed {i}/{num_steps} steps")
 
     # Calculate metrics
-    avg_step_time = np.mean(step_times)
-    steps_per_sec = 1.0 / avg_step_time
+    avg_step_time = float(np.mean(step_times))
+    steps_per_sec = float(1.0 / avg_step_time) if avg_step_time > 0 else 0.0
 
     env.close()
     logger.info("Benchmark run complete. env closed. return metrics")
 
     # System info
+    # Some psutil installations/platforms may not expose cpu_freq; guard the attribute
+    if hasattr(psutil, "cpu_freq"):
+        cpu_freq_obj = psutil.cpu_freq()
+    else:
+        cpu_freq_obj = None
     system_info = {
         "platform": platform.platform(),
         "processor": platform.processor(),
         "python_version": platform.python_version(),
         "cpu_count": psutil.cpu_count(),
         "memory_gb": psutil.virtual_memory().total / (1024**3),
-        "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+        "cpu_freq": cpu_freq_obj._asdict() if cpu_freq_obj is not None else None,
     }
 
     # Environment info
@@ -176,7 +188,7 @@ def save_benchmark_results(
                     {
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                         "metrics": results.to_dict(),
-                    }
+                    },
                 )
                 f.seek(0)
                 json.dump(data, f, indent=2)
@@ -189,7 +201,7 @@ def save_benchmark_results(
                         {
                             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                             "metrics": results.to_dict(),
-                        }
+                        },
                     ],
                     f,
                     indent=2,
@@ -202,7 +214,7 @@ def save_benchmark_results(
                     {
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                         "metrics": results.to_dict(),
-                    }
+                    },
                 ],
                 f,
                 indent=2,

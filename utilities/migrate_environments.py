@@ -10,7 +10,6 @@ suggest or make changes automatically.
 import argparse
 import re
 from pathlib import Path
-from typing import List, Optional
 
 
 class EnvironmentMigrator:
@@ -20,7 +19,7 @@ class EnvironmentMigrator:
         self.project_root = Path(project_root)
         self.changes_made = []
 
-    def find_python_files(self, directories: Optional[List[str]] = None) -> List[Path]:
+    def find_python_files(self, directories: list[str] | None = None) -> list[Path]:
         """Find all Python files in specified directories."""
         if directories is None:
             directories = ["examples", "tests", "scripts"]
@@ -35,9 +34,9 @@ class EnvironmentMigrator:
     def analyze_file(self, file_path: Path) -> dict:
         """Analyze a file for migration opportunities."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
-        except (FileNotFoundError, IOError, OSError, UnicodeDecodeError) as e:
+        except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
             return {"error": str(e)}
 
         analysis = {
@@ -112,9 +111,9 @@ class EnvironmentMigrator:
     def suggest_migration(self, file_path: Path) -> str:
         """Generate migration suggestions for a file."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
-        except (FileNotFoundError, IOError, OSError, UnicodeDecodeError):
+        except (FileNotFoundError, OSError, UnicodeDecodeError):
             return "Could not read file"
 
         suggestions = []
@@ -125,7 +124,7 @@ class EnvironmentMigrator:
                 "Replace:\n"
                 "  from robot_sf.gym_env.robot_env import RobotEnv\n"
                 "With:\n"
-                "  from robot_sf.gym_env.environment_factory import make_robot_env"
+                "  from robot_sf.gym_env.environment_factory import make_robot_env",
             )
 
         if "from robot_sf.gym_env.env_config import" in content:
@@ -133,7 +132,7 @@ class EnvironmentMigrator:
                 "Replace:\n"
                 "  from robot_sf.gym_env.env_config import EnvSettings\n"
                 "With:\n"
-                "  from robot_sf.gym_env.unified_config import RobotSimulationConfig"
+                "  from robot_sf.gym_env.unified_config import RobotSimulationConfig",
             )
 
         # Suggest environment creation replacements
@@ -142,7 +141,7 @@ class EnvironmentMigrator:
                 "Replace:\n"
                 "  env = RobotEnv(env_config=config, debug=True)\n"
                 "With:\n"
-                "  env = make_robot_env(config=config, debug=True)"
+                "  env = make_robot_env(config=config, debug=True)",
             )
 
         if "PedestrianEnv(" in content:
@@ -150,7 +149,7 @@ class EnvironmentMigrator:
                 "Replace:\n"
                 "  env = PedestrianEnv(env_config=config, robot_model=model)\n"
                 "With:\n"
-                "  env = make_pedestrian_env(config=config, robot_model=model)"
+                "  env = make_pedestrian_env(config=config, robot_model=model)",
             )
 
         return "\n\n".join(suggestions) if suggestions else "No migration needed"
@@ -158,9 +157,9 @@ class EnvironmentMigrator:
     def create_migrated_version(self, file_path: Path, dry_run: bool = True) -> str:
         """Create a migrated version of the file."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
-        except (FileNotFoundError, IOError, OSError, UnicodeDecodeError) as e:
+        except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
             return f"Error reading file: {e}"
 
         original_content = content
@@ -214,14 +213,14 @@ class EnvironmentMigrator:
 
                     self.changes_made.append(str(file_path))
                     return f"Migrated {file_path} (backup created)"
-                except (IOError, OSError, UnicodeEncodeError) as e:
+                except (OSError, UnicodeEncodeError) as e:
                     return f"Error writing file {file_path}: {e}"
             else:
                 return f"Would migrate {file_path}"
         else:
             return f"No changes needed for {file_path}"
 
-    def generate_migration_report(self, directories: Optional[List[str]] = None) -> str:
+    def generate_migration_report(self, directories: list[str] | None = None) -> str:
         """Generate a comprehensive migration report."""
         files = self.find_python_files(directories)
 
@@ -231,11 +230,11 @@ class EnvironmentMigrator:
 
         report = ["# Migration Report for Robot SF Environment Refactoring\n\n"]
         report.append(
-            "> 📚 **Documentation Navigation**: [← Back to Refactoring Index](README.md) | [🚀 Deployment Status](DEPLOYMENT_READY.md) | [📋 Plan](refactoring_plan.md) | [🔄 Migration Guide](migration_guide.md) | [📊 Summary](refactoring_summary.md)\n"
+            "> 📚 **Documentation Navigation**: [← Back to Refactoring Index](README.md) | [🚀 Deployment Status](DEPLOYMENT_READY.md) | [📋 Plan](refactoring_plan.md) | [🔄 Migration Guide](migration_guide.md) | [📊 Summary](refactoring_summary.md)\n",
         )
         report.append("> \n")
         report.append(
-            f"> 🔧 **Generated by**: [`utilities/migrate_environments.py`](../../utilities/migrate_environments.py) | **Last updated**: {current_date}\n\n"
+            f"> 🔧 **Generated by**: [`utilities/migrate_environments.py`](../../utilities/migrate_environments.py) | **Last updated**: {current_date}\n\n",
         )
         report.append(f"Analyzed {len(files)} Python files\n")
 
@@ -280,7 +279,7 @@ class EnvironmentMigrator:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Migrate Robot SF environments to new factory pattern"
+        description="Migrate Robot SF environments to new factory pattern",
     )
     parser.add_argument("--project-root", default=".", help="Project root directory")
     parser.add_argument(
@@ -293,7 +292,9 @@ def main():
     parser.add_argument("--suggest", help="Show migration suggestions for specific file")
     parser.add_argument("--migrate", help="Migrate specific file")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would be changed without making changes"
+        "--dry-run",
+        action="store_true",
+        help="Show what would be changed without making changes",
     )
 
     args = parser.parse_args()
@@ -302,30 +303,25 @@ def main():
 
     if args.report:
         report = migrator.generate_migration_report(args.directories)
-        print(report)
 
         # Save report to file
         report_path = Path(args.project_root) / "migration_report.md"
         try:
             with open(report_path, "w") as f:
                 f.write(report)
-            print(f"\nReport saved to {report_path}")
-        except (IOError, OSError, UnicodeEncodeError) as e:
-            print(f"\nError saving report to {report_path}: {e}")
+        except (OSError, UnicodeEncodeError):
+            pass
 
     elif args.suggest:
         file_path = Path(args.suggest)
-        suggestions = migrator.suggest_migration(file_path)
-        print(f"Migration suggestions for {file_path}:\n")
-        print(suggestions)
+        migrator.suggest_migration(file_path)
 
     elif args.migrate:
         file_path = Path(args.migrate)
-        result = migrator.create_migrated_version(file_path, dry_run=args.dry_run)
-        print(result)
+        migrator.create_migrated_version(file_path, dry_run=args.dry_run)
 
     else:
-        print("Use --report, --suggest, or --migrate. See --help for details.")
+        pass
 
 
 if __name__ == "__main__":

@@ -16,7 +16,6 @@ Key Features:
 
 from collections import deque
 from pathlib import Path
-from typing import Deque, Dict, List, Optional, Tuple, Union
 
 import pygame
 from loguru import logger
@@ -73,12 +72,12 @@ class InteractivePlayback(SimulationView):
 
     def __init__(
         self,
-        states: List[VisualizableSimState],
+        states: list[VisualizableSimState],
         map_def: MapDefinition,
         sleep_time: float = 0.1,  # Default to 0.1 explicitly
         caption: str = "RobotSF Interactive Playback",
         # New episode-aware parameters
-        episodes: Optional[List[PlaybackEpisode]] = None,
+        episodes: list[PlaybackEpisode] | None = None,
     ):
         """
         Initialize the interactive playback viewer.
@@ -105,12 +104,12 @@ class InteractivePlayback(SimulationView):
         self.show_trajectories = False
         # Use a private backing field during init to avoid triggering updates prematurely
         self._max_trajectory_length = 100  # Default trail length
-        self.robot_trajectory: Deque[Tuple[float, float]] = deque(
-            maxlen=self._max_trajectory_length
+        self.robot_trajectory: deque[tuple[float, float]] = deque(
+            maxlen=self._max_trajectory_length,
         )
-        self.ped_trajectories: Dict[int, Deque[Tuple[float, float]]] = {}
-        self.ego_ped_trajectory: Deque[Tuple[float, float]] = deque(
-            maxlen=self._max_trajectory_length
+        self.ped_trajectories: dict[int, deque[tuple[float, float]]] = {}
+        self.ego_ped_trajectory: deque[tuple[float, float]] = deque(
+            maxlen=self._max_trajectory_length,
         )
 
         # Episode-aware attributes
@@ -292,7 +291,8 @@ class InteractivePlayback(SimulationView):
         # Update pedestrian trajectories
         for ped_id in self.ped_trajectories:
             new_ped_trajectory = deque(
-                self.ped_trajectories[ped_id], maxlen=self.max_trajectory_length
+                self.ped_trajectories[ped_id],
+                maxlen=self.max_trajectory_length,
             )
             self.ped_trajectories[ped_id] = new_ped_trajectory
 
@@ -364,7 +364,10 @@ class InteractivePlayback(SimulationView):
         )
 
     def _draw_trajectory(
-        self, trajectory: Deque[Tuple[float, float]], color: Tuple[int, int, int], width: int = 2
+        self,
+        trajectory: deque[tuple[float, float]],
+        color: tuple[int, int, int],
+        width: int = 2,
     ):
         """Draw a trajectory as connected lines."""
         if len(trajectory) < 2:
@@ -464,7 +467,8 @@ class InteractivePlayback(SimulationView):
             if frames_to_advance >= 1:
                 # Advance frames
                 self.current_frame = min(
-                    int(self.current_frame + frames_to_advance), len(self.states) - 1
+                    int(self.current_frame + frames_to_advance),
+                    len(self.states) - 1,
                 )
                 self.last_update_time = current_time
 
@@ -550,7 +554,7 @@ def load_and_play_interactively(filename: str):
     player.run()
 
 
-def load_and_play_jsonl_interactively(source: Union[str, Path]):
+def load_and_play_jsonl_interactively(source: str | Path):
     """
     Load JSONL recorded states and play them back interactively.
 
@@ -624,7 +628,6 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python -m robot_sf.render.interactive_playback <state_file>")
         sys.exit(1)
 
     state_file = sys.argv[1]

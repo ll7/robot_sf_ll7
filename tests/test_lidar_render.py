@@ -16,7 +16,7 @@ def test_render_lidar_basic():
             [[0, 0], [0 + np.cos(0) * 1, 0 + np.sin(0) * 1]],
             [[0, 0], [0 + np.cos(np.pi / 2) * 2, 0 + np.sin(np.pi / 2) * 2]],
             [[0, 0], [0 + np.cos(np.pi) * 3, 0 + np.sin(np.pi) * 3]],
-        ]
+        ],
     )
 
     result = render_lidar(robot_pos, distances, directions)
@@ -58,7 +58,7 @@ def test_render_lidar_negative_values():
         [
             [[0, 0], [0 + np.cos(-np.pi / 4) * (-1), 0 + np.sin(-np.pi / 4) * (-1)]],
             [[0, 0], [0 + np.cos(-np.pi / 2) * (-2), 0 + np.sin(-np.pi / 2) * (-2)]],
-        ]
+        ],
     )
 
     result = render_lidar(robot_pos, distances, directions)
@@ -104,12 +104,12 @@ def test_render_lidar_output_dtype():
 def test_render_lidar_parametrized(robot_pos, distances, directions):
     # Compute expected endpoints for each parameter set
     expected_list = []
-    for d, theta in zip(distances, directions):
+    for d, theta in zip(distances, directions, strict=False):
         expected_list.append(
             [
                 [robot_pos[0], robot_pos[1]],
                 [robot_pos[0] + np.cos(theta) * d, robot_pos[1] + np.sin(theta) * d],
-            ]
+            ],
         )
     expected = np.array(expected_list)
 

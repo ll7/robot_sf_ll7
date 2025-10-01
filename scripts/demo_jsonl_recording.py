@@ -107,9 +107,8 @@ def demo_interactive_playback():
         loader = JSONLPlaybackLoader()
         episode, map_def = loader.load_single_episode(test_pickle)
         logger.info(f"Loaded legacy file: {len(episode.states)} states")
-        logger.info(
-            f"Reset points detected: {len(episode.reset_points)} points at indices {episode.reset_points}"
-        )
+        reset_points = episode.reset_points or []
+        logger.info(f"Reset points detected: {len(reset_points)} points at indices {reset_points}")
     else:
         logger.info("Test pickle file not found - skipping interactive demo")
 
@@ -196,8 +195,8 @@ def main():
         logger.info("  • Backward compatibility with pickle files")
         logger.info("  • Streaming JSONL format for large datasets")
 
-    except Exception as e:
-        logger.error(f"Demo failed: {e}")
+    except Exception:
+        logger.exception("Demo failed")
         raise
 
 

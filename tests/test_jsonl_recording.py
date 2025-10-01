@@ -50,7 +50,7 @@ def test_jsonl_recording_basic():
         assert jsonl_files[0].name == expected_pattern
 
         # Check file contents
-        with open(jsonl_files[0], "r") as f:
+        with open(jsonl_files[0]) as f:
             lines = f.readlines()
 
         # Should have at least: episode_start + 5 steps + episode_end
@@ -66,7 +66,7 @@ def test_jsonl_recording_basic():
         assert last_record["event"] == "episode_end"
 
         # Check metadata file
-        with open(meta_files[0], "r") as f:
+        with open(meta_files[0]) as f:
             metadata = json.load(f)
 
         assert metadata["episode_id"] == 0

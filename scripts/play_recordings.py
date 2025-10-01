@@ -12,7 +12,8 @@ def get_latest_file():
     """Get the latest recorded file."""
 
     filename = max(
-        os.listdir("recordings"), key=lambda x: os.path.getctime(os.path.join("recordings", x))
+        os.listdir("recordings"),
+        key=lambda x: os.path.getctime(os.path.join("recordings", x)),
     )
     return Path("recordings", filename)
 
@@ -24,7 +25,7 @@ def get_all_files():
             Path("recordings", filename)
             for filename in os.listdir("recordings")
             if filename != "README.md"
-        ]
+        ],
     )
 
 

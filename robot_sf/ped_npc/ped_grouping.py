@@ -1,6 +1,6 @@
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Set
 
 import numpy as np
 
@@ -111,7 +111,7 @@ class PedestrianStates:
         pos_x, pos_y = self.pysf_states()[ped_id, 0:2]
         return (pos_x, pos_y)
 
-    def pos_of_many(self, ped_ids: Set[int]) -> np.ndarray:
+    def pos_of_many(self, ped_ids: set[int]) -> np.ndarray:
         """
         Get the positions of multiple pedestrians.
 
@@ -145,17 +145,17 @@ class PedestrianGroupings:
     """
 
     states: PedestrianStates
-    groups: Dict[int, Set[int]] = field(default_factory=dict)
-    group_by_ped_id: Dict[int, int] = field(default_factory=dict)
+    groups: dict[int, set[int]] = field(default_factory=dict)
+    group_by_ped_id: dict[int, int] = field(default_factory=dict)
 
     @property
-    def groups_as_lists(self) -> List[List[int]]:
+    def groups_as_lists(self) -> list[list[int]]:
         # info: this facilitates slicing over numpy arrays
         #       for some reason, numpy cannot slide over indices provided as set ...
         return [list(ped_ids) for ped_ids in self.groups.values()]
 
     @property
-    def group_ids(self) -> Set[int]:
+    def group_ids(self) -> set[int]:
         # info: ignore empty groups
         return {k for k in self.groups if len(self.groups[k]) > 0}
 
@@ -172,7 +172,7 @@ class PedestrianGroupings:
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
 
-    def new_group(self, ped_ids: Set[int]) -> int:
+    def new_group(self, ped_ids: set[int]) -> int:
         new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0
         self.groups[new_gid] = ped_ids.copy()
         for ped_id in ped_ids:
@@ -192,6 +192,6 @@ class PedestrianGroupings:
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
 
-    def reposition_group(self, group_id: int, new_positions: List[Vec2D]):
-        for ped_id, new_pos in zip(self.groups[group_id], new_positions):
+    def reposition_group(self, group_id: int, new_positions: list[Vec2D]):
+        for ped_id, new_pos in zip(self.groups[group_id], new_positions, strict=False):
             self.states.reposition(ped_id, new_pos)

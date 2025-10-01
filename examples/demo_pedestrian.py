@@ -1,8 +1,8 @@
 """Simulate the trained robot and a trained pedestrian."""
 
 import loguru
-from stable_baselines3 import PPO
 
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.nav.map_config import MapDefinitionPool
@@ -17,12 +17,13 @@ def make_env(map_name: str, robot_model: str):
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map(map_name)
-    robot_model = PPO.load(robot_model, env=None)
+    robot_model = load_trained_policy(robot_model)
 
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
         sim_config=SimulationSettings(
-            difficulty=difficulty, ped_density_by_difficulty=ped_densities
+            difficulty=difficulty,
+            ped_density_by_difficulty=ped_densities,
         ),
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
@@ -34,7 +35,7 @@ def run(filename: str, map_name: str, robot_model: str):
 
     logger.info(f"Loading pedestrian model from {filename}")
 
-    model = PPO.load(filename, env=env)
+    model = load_trained_policy(filename)
 
     obs, _ = env.reset()
 

@@ -32,7 +32,7 @@ class RobotEnvWithPedestrianObstacleForces(RobotEnv):
                 logger.error(f"Default map not found at {default_map_path}")
                 raise
             except Exception as e:
-                logger.error(f"Failed to load default map: {str(e)}")
+                logger.error(f"Failed to load default map: {e!s}")
                 raise
 
         # create map pool with one map

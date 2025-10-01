@@ -1,10 +1,18 @@
 repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version.
-  rev: v0.9.7
-  hooks:
-    # Run the linter.
-    - id: ruff
-      args: [ --fix ]
-    # Run the formatter.
-    - id: ruff-format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.9.7
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: prevent-schema-duplicates
+        name: Prevent Schema Duplicates
+        entry: python hooks/prevent_schema_duplicates.py
+        language: system
+        files: \.schema\.v[0-9]+\.json$
+        pass_filenames: true

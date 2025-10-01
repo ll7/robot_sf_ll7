@@ -7,7 +7,7 @@ feature extractors while maintaining backward compatibility.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Type, Union
+from typing import Any, Union
 
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
@@ -40,13 +40,13 @@ class FeatureExtractorConfig:
     """
 
     extractor_type: FeatureExtractorType = FeatureExtractorType.DYNAMICS
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
-    def get_extractor_class(self) -> Type[BaseFeaturesExtractor]:
+    def get_extractor_class(self) -> type[BaseFeaturesExtractor]:
         """Get the feature extractor class for this configuration."""
         return _EXTRACTOR_REGISTRY[self.extractor_type]
 
-    def get_policy_kwargs(self) -> Dict[str, Any]:
+    def get_policy_kwargs(self) -> dict[str, Any]:
         """Get policy kwargs suitable for StableBaselines3."""
         return {
             "features_extractor_class": self.get_extractor_class(),
@@ -55,7 +55,7 @@ class FeatureExtractorConfig:
 
 
 # Registry mapping extractor types to their classes
-_EXTRACTOR_REGISTRY: Dict[FeatureExtractorType, Type[BaseFeaturesExtractor]] = {
+_EXTRACTOR_REGISTRY: dict[FeatureExtractorType, type[BaseFeaturesExtractor]] = {
     FeatureExtractorType.DYNAMICS: DynamicsExtractor,
     FeatureExtractorType.MLP: MLPFeatureExtractor,
     FeatureExtractorType.ATTENTION: AttentionFeatureExtractor,

@@ -8,7 +8,7 @@ statistical comparisons and visualizations.
 import json
 import warnings
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,7 +32,7 @@ class FeatureExtractorAnalyzer:
         self.results_file = Path(results_file)
         self.results_dir = self.results_file.parent
 
-        with open(results_file, "r") as f:
+        with open(results_file) as f:
             self.data = json.load(f)
 
         self.results = self.data["results"]
@@ -83,7 +83,7 @@ class FeatureExtractorAnalyzer:
         # For now, return None as tensorboard parsing requires additional dependencies
         return None
 
-    def analyze_performance(self) -> Dict:
+    def analyze_performance(self) -> dict:
         """Analyze performance across different metrics."""
         df = self.create_summary_dataframe()
 
@@ -127,7 +127,7 @@ class FeatureExtractorAnalyzer:
 
         return analysis
 
-    def _perform_statistical_tests(self, df: pd.DataFrame) -> Dict:
+    def _perform_statistical_tests(self, df: pd.DataFrame) -> dict:
         """Perform statistical significance tests."""
         tests = {}
 
@@ -150,14 +150,14 @@ class FeatureExtractorAnalyzer:
 
         return tests
 
-    def create_visualizations(self) -> List[str]:
+    def create_visualizations(self) -> list[str]:
         """Create visualizations for the analysis."""
         df = self.create_summary_dataframe()
         if df.empty:
             print("No data available for visualization")
             return []
         self._set_plot_style()
-        created_plots: List[str] = []
+        created_plots: list[str] = []
         # Each helper returns optional path (or None)
         reward_plot = self._plot_reward_bar(df)
         if reward_plot:
@@ -300,7 +300,7 @@ class FeatureExtractorAnalyzer:
             angles = np.linspace(0, 2 * np.pi, len(available_metrics), endpoint=False)
             angles = np.concatenate((angles, [angles[0]]))
             colors = ["red", "blue", "green", "orange", "purple", "brown"]
-            fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection="polar"))
+            fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={"projection": "polar"})
             for i, (_, row) in enumerate(df.iterrows()):
                 values = [df_norm.iloc[i][metric] for metric in available_metrics]
                 values = np.concatenate((values, [values[0]]))
@@ -348,7 +348,7 @@ class FeatureExtractorAnalyzer:
         return report_text
 
     # ---- Report helper methods ----
-    def _build_report_header(self) -> List[str]:
+    def _build_report_header(self) -> list[str]:
         return [
             "# Feature Extractor Comparison Analysis Report",
             f"Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -363,8 +363,8 @@ class FeatureExtractorAnalyzer:
             "",
         ]
 
-    def _build_rankings_section(self, analysis: Dict) -> List[str]:
-        lines: List[str] = ["### Performance Rankings", ""]
+    def _build_rankings_section(self, analysis: dict) -> list[str]:
+        lines: list[str] = ["### Performance Rankings", ""]
         rankings = analysis.get("rankings", {})
         # Best reward
         if "by_reward" in rankings:
@@ -392,8 +392,8 @@ class FeatureExtractorAnalyzer:
             lines.append("")
         return lines
 
-    def _build_detailed_results_table(self, df: pd.DataFrame) -> List[str]:
-        lines: List[str] = [
+    def _build_detailed_results_table(self, df: pd.DataFrame) -> list[str]:
+        lines: list[str] = [
             "### Detailed Results",
             "",
             "| Extractor | Type | Best Reward | Parameters | Training Time (min) |",
@@ -412,8 +412,8 @@ class FeatureExtractorAnalyzer:
             lines.append(f"| {name} | {ext_type} | {reward} | {params} | {time_min} |")
         return lines
 
-    def _build_insights_section(self, df: pd.DataFrame) -> List[str]:
-        lines: List[str] = ["", "## Key Insights", ""]
+    def _build_insights_section(self, df: pd.DataFrame) -> list[str]:
+        lines: list[str] = ["", "## Key Insights", ""]
         if df.empty or "best_reward" not in df.columns:
             return lines
         try:
@@ -435,7 +435,7 @@ class FeatureExtractorAnalyzer:
             pass
         return lines
 
-    def run_complete_analysis(self) -> Dict:
+    def run_complete_analysis(self) -> dict:
         """Run complete analysis and generate all outputs."""
         print("Running feature extractor analysis...")
 

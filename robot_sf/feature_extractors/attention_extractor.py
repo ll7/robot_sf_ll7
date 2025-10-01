@@ -5,7 +5,7 @@ This extractor uses self-attention mechanisms to process LiDAR rays,
 allowing the model to focus on the most relevant rays for decision making.
 """
 
-from typing import List
+from typing import cast
 
 import numpy as np
 import torch as th
@@ -87,15 +87,17 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         num_heads: int = 4,
         num_layers: int = 2,
         dropout_rate: float = 0.1,
-        drive_hidden_dims: List[int] = [32, 16],
+        drive_hidden_dims: list[int] | None = None,
     ):
+        if drive_hidden_dims is None:
+            drive_hidden_dims = [32, 16]
         # Extract observation spaces
-        rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
-        drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
+        rays_space = cast(spaces.Box, observation_space.spaces[OBS_RAYS])
+        drive_state_space = cast(spaces.Box, observation_space.spaces[OBS_DRIVE_STATE])
 
         # Calculate dimensions
         num_timesteps, num_rays = rays_space.shape
-        drive_input_dim = np.prod(drive_state_space.shape)
+        drive_input_dim = int(np.prod(drive_state_space.shape))
         drive_output_dim = drive_hidden_dims[-1] if drive_hidden_dims else drive_input_dim
 
         # Total features: attention output + drive state features
@@ -155,7 +157,7 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
 
         # Apply attention layers with residual connections
         attended_rays = ray_embeddings
-        for attention, layer_norm in zip(self.attention_layers, self.layer_norms):
+        for attention, layer_norm in zip(self.attention_layers, self.layer_norms, strict=False):
             attended_rays = layer_norm(attended_rays + attention(attended_rays))
 
         # Global average pooling to get fixed-size representation

@@ -13,7 +13,7 @@ from .lightweight_cnn_extractor import LightweightCNNExtractor
 from .mlp_extractor import MLPFeatureExtractor
 
 __all__ = [
-    "MLPFeatureExtractor",
     "AttentionFeatureExtractor",
     "LightweightCNNExtractor",
+    "MLPFeatureExtractor",
 ]

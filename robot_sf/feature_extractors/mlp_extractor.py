@@ -6,7 +6,7 @@ LiDAR rays and drive state, providing a lightweight alternative to the
 convolutional approach of the original DynamicsExtractor.
 """
 
-from typing import List
+from typing import cast
 
 import numpy as np
 import torch as th
@@ -39,17 +39,21 @@ class MLPFeatureExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
         observation_space: spaces.Dict,
-        ray_hidden_dims: List[int] = [128, 64],
-        drive_hidden_dims: List[int] = [32, 16],
+        ray_hidden_dims: list[int] | None = None,
+        drive_hidden_dims: list[int] | None = None,
         dropout_rate: float = 0.1,
     ):
+        if ray_hidden_dims is None:
+            ray_hidden_dims = [128, 64]
+        if drive_hidden_dims is None:
+            drive_hidden_dims = [32, 16]
         # Extract observation spaces
-        rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
-        drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
+        rays_space = cast(spaces.Box, observation_space.spaces[OBS_RAYS])
+        drive_state_space = cast(spaces.Box, observation_space.spaces[OBS_DRIVE_STATE])
 
         # Calculate input and output dimensions
-        ray_input_dim = np.prod(rays_space.shape)
-        drive_input_dim = np.prod(drive_state_space.shape)
+        ray_input_dim = int(np.prod(rays_space.shape))
+        drive_input_dim = int(np.prod(drive_state_space.shape))
         ray_output_dim = ray_hidden_dims[-1] if ray_hidden_dims else ray_input_dim
         drive_output_dim = drive_hidden_dims[-1] if drive_hidden_dims else drive_input_dim
 

@@ -9,7 +9,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback, EvalCallback
@@ -39,7 +39,7 @@ class MultiExtractorTraining:
         save_freq: int = 50_000,
         n_eval_episodes: int = 10,
         difficulty: int = 2,
-        ped_densities: Optional[List[float]] = None,
+        ped_densities: Optional[list[float]] = None,
     ):
         """
         Initialize the multi-extractor training setup.
@@ -66,7 +66,7 @@ class MultiExtractorTraining:
         self.ped_densities = ped_densities or [0.01, 0.02, 0.04, 0.08]
 
         # Results storage
-        self.results: Dict[str, Dict] = {}
+        self.results: dict[str, dict] = {}
 
     def create_env(self):
         """Create environment factory function."""
@@ -81,7 +81,7 @@ class MultiExtractorTraining:
 
     def train_with_extractor(
         self, extractor_config: FeatureExtractorConfig, name: str, verbose: int = 1
-    ) -> Dict:
+    ) -> dict:
         """
         Train a model with a specific feature extractor.
 
@@ -203,9 +203,9 @@ class MultiExtractorTraining:
 
     def run_comparison(
         self,
-        extractor_configs: Dict[str, FeatureExtractorConfig],
+        extractor_configs: dict[str, FeatureExtractorConfig],
         save_individual_results: bool = True,
-    ) -> Dict:
+    ) -> dict:
         """
         Run training comparison across multiple feature extractors.
 

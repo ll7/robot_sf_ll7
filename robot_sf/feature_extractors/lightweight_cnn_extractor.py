@@ -6,7 +6,7 @@ than the original DynamicsExtractor while still leveraging spatial relationships
 in the LiDAR data.
 """
 
-from typing import List
+from typing import cast
 
 import numpy as np
 import torch as th
@@ -40,17 +40,23 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
     def __init__(
         self,
         observation_space: spaces.Dict,
-        num_filters: List[int] = [32, 16],
-        kernel_sizes: List[int] = [5, 3],
+        num_filters: list[int] | None = None,
+        kernel_sizes: list[int] | None = None,
         dropout_rate: float = 0.1,
-        drive_hidden_dims: List[int] = [32, 16],
+        drive_hidden_dims: list[int] | None = None,
     ):
+        if num_filters is None:
+            num_filters = [32, 16]
+        if kernel_sizes is None:
+            kernel_sizes = [5, 3]
+        if drive_hidden_dims is None:
+            drive_hidden_dims = [32, 16]
         # Extract observation spaces
-        rays_space: spaces.Box = observation_space.spaces[OBS_RAYS]
-        drive_state_space: spaces.Box = observation_space.spaces[OBS_DRIVE_STATE]
+        rays_space = cast(spaces.Box, observation_space.spaces[OBS_RAYS])
+        drive_state_space = cast(spaces.Box, observation_space.spaces[OBS_DRIVE_STATE])
 
         # Calculate dimensions
-        drive_input_dim = np.prod(drive_state_space.shape)
+        drive_input_dim = int(np.prod(drive_state_space.shape))
         drive_output_dim = drive_hidden_dims[-1] if drive_hidden_dims else drive_input_dim
 
         # Calculate ray features after convolutions
@@ -62,7 +68,7 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         # Initialize the base feature extractor
         super().__init__(observation_space, features_dim=total_features)
 
-        def conv_block(in_channels: int, out_channels: int, kernel_size: int) -> List[nn.Module]:
+        def conv_block(in_channels: int, out_channels: int, kernel_size: int) -> list[nn.Module]:
             """Create a lightweight convolutional block."""
             padding = kernel_size // 2  # Maintain spatial dimension
             return [
@@ -78,7 +84,7 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         in_channels = [rays_space.shape[0]] + num_filters[:-1]
 
         for i, (in_ch, out_ch, kernel_size) in enumerate(
-            zip(in_channels, num_filters, kernel_sizes)
+            zip(in_channels, num_filters, kernel_sizes, strict=False)
         ):
             ray_layers.extend(conv_block(in_ch, out_ch, kernel_size))
 

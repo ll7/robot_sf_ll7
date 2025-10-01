@@ -38,6 +38,7 @@ try:
     from robot_sf.benchmark.baseline_stats import run_and_compute_baseline
     from robot_sf.benchmark.cli import DEFAULT_SCHEMA_PATH
     from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+    from robot_sf.render.helper_catalog import ensure_output_dir
     from scripts.classic_benchmark_full import BenchmarkCLIConfig
 except ImportError as e:
     logger.error(f"Failed to import benchmark components: {e}")
@@ -247,7 +248,7 @@ def main() -> int:
     # Create timestamped output directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_root = root / f"results/social_nav_benchmark_{timestamp}"
-    output_root.mkdir(parents=True, exist_ok=True)
+    ensure_output_dir(output_root)
 
     logger.info("Starting Social Navigation Benchmark")
     logger.info(f"Output directory: {output_root}")

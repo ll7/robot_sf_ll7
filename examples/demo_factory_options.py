@@ -1,43 +1,54 @@
 """Demonstration of ergonomic environment factory options (Feature 130).
 
 Shows legacy convenience flags alongside structured RenderOptions / RecordingOptions.
+Refactored to use helper catalog utilities for common setup patterns.
+
 Run:
     uv run python examples/demo_factory_options.py
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from loguru import logger
 
+from robot_sf.benchmark.helper_catalog import prepare_classic_env
 from robot_sf.gym_env.environment_factory import (
     RecordingOptions,
     RenderOptions,
     make_image_robot_env,
     make_robot_env,
 )
+from robot_sf.render.helper_catalog import ensure_output_dir
 
 
 def demo_minimal():
-    env = make_robot_env()
+    # Use helper catalog for basic environment setup
+    env, _ = prepare_classic_env()
     env.reset()
     env.close()
-    logger.info("Minimal env created and closed.")
+    logger.info("Minimal env created using helper catalog and closed.")
 
 
 def demo_convenience_recording(tmp_path: str = "./results"):
-    env = make_robot_env(record_video=True, video_path=f"{tmp_path}/episode.mp4")
+    # Use render helper to ensure output directory exists
+    output_dir = ensure_output_dir(Path(tmp_path))
+    env = make_robot_env(record_video=True, video_path=f"{output_dir}/episode.mp4")
     env.reset()
     env.close()
-    logger.info("Convenience recording env created.")
+    logger.info(f"Convenience recording env created with output dir: {output_dir}")
 
 
 def demo_structured():
+    # Use render helper to ensure output directory exists
+    output_dir = ensure_output_dir(Path("results"))
     render_opts = RenderOptions(max_fps_override=20)
-    rec_opts = RecordingOptions(record=True, video_path="results/structured_episode.mp4")
+    rec_opts = RecordingOptions(record=True, video_path=f"{output_dir}/structured_episode.mp4")
     env = make_robot_env(render_options=render_opts, recording_options=rec_opts, debug=True)
     env.reset()
     env.close()
-    logger.info("Structured options env created.")
+    logger.info(f"Structured options env created with managed output dir: {output_dir}")
 
 
 def demo_image():

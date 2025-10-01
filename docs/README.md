@@ -293,3 +293,8 @@ When contributing to the project:
 ---
 
 *Last updated: September 2025 - Benchmark runner and batch API added*
+
+
+## Helper Catalog
+
+- **test_helper**: Test summary ([details](path/to/docs))

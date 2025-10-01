@@ -12,6 +12,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from robot_sf.render.helper_catalog import ensure_output_dir
+
 
 def create_minimal_scenario():
     """Create a minimal test scenario for reproducibility testing."""
@@ -202,7 +204,7 @@ def main():
     print("=" * 60)
 
     results_base = Path("results")
-    results_base.mkdir(exist_ok=True)
+    ensure_output_dir(results_base)
 
     # Create temporary working directories
     with (

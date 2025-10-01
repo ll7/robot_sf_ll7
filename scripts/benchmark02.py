@@ -7,8 +7,8 @@ from typing import cast
 import numpy as np
 import psutil
 from loguru import logger
-from stable_baselines3 import PPO
 
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 
@@ -77,9 +77,9 @@ def run_standardized_benchmark(
     used_random_actions = False
     if model_path:
         try:
-            model = PPO.load(model_path, env=env)
+            model = load_trained_policy(model_path)
             logger.info("Successfully loaded model")
-        except ValueError as e:
+        except (ValueError, FileNotFoundError) as e:
             logger.warning(f"Failed to load model: {e}")
             logger.info("Falling back to random actions")
             model = None

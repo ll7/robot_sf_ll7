@@ -4,9 +4,11 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
 from robot_sf.render.jsonl_recording import JSONLRecorder
@@ -16,14 +18,17 @@ def test_jsonl_recording_basic():
     """Test basic JSONL recording functionality."""
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create environment with JSONL recording enabled
-        env = RobotEnv(
-            recording_enabled=True,
-            use_jsonl_recording=True,
-            recording_dir=temp_dir,
-            suite_name="test_suite",
-            scenario_name="test_scenario",
-            algorithm_name="test_algo",
-            recording_seed=42,
+        env = cast(
+            RobotEnv,
+            make_robot_env(
+                recording_enabled=True,
+                use_jsonl_recording=True,
+                recording_dir=temp_dir,
+                suite_name="test_suite",
+                scenario_name="test_scenario",
+                algorithm_name="test_algo",
+                recording_seed=42,
+            ),
         )
 
         # Reset to start episode
@@ -50,7 +55,7 @@ def test_jsonl_recording_basic():
         assert jsonl_files[0].name == expected_pattern
 
         # Check file contents
-        with open(jsonl_files[0]) as f:
+        with open(jsonl_files[0], encoding="utf-8") as f:
             lines = f.readlines()
 
         # Should have at least: episode_start + 5 steps + episode_end
@@ -66,7 +71,7 @@ def test_jsonl_recording_basic():
         assert last_record["event"] == "episode_end"
 
         # Check metadata file
-        with open(meta_files[0]) as f:
+        with open(meta_files[0], encoding="utf-8") as f:
             metadata = json.load(f)
 
         assert metadata["episode_id"] == 0
@@ -108,7 +113,10 @@ def test_jsonl_playback_loading():
 
         # Test loading
         loader = JSONLPlaybackLoader()
-        episode, map_def = loader.load_single_episode(recorder._get_episode_filename(0))
+        episode_path = Path(temp_dir) / (
+            f"{recorder.suite}_{recorder.scenario}_{recorder.algorithm}_{recorder.seed}_ep0000.jsonl"
+        )
+        episode, _ = loader.load_single_episode(episode_path)
 
         # Check episode data
         assert episode.episode_id == 0
@@ -179,7 +187,7 @@ def test_legacy_pickle_compatibility():
 
     # Test loading legacy file
     loader = JSONLPlaybackLoader()
-    episode, map_def = loader.load_single_episode(test_pickle_file)
+    episode, _ = loader.load_single_episode(test_pickle_file)
 
     # Should successfully load as an episode
     assert episode is not None

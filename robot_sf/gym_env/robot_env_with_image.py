@@ -32,6 +32,12 @@ class RobotEnvWithImage(RobotEnv):
         video_path: str | None = None,
         video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
+        use_jsonl_recording: bool = False,
+        recording_dir: str = "recordings",
+        suite_name: str = "robot_sim",
+        scenario_name: str = "default",
+        algorithm_name: str = "manual",
+        recording_seed: int | None = None,
     ):
         """
         Initialize the Robot Environment with Image Observations.
@@ -58,6 +64,12 @@ class RobotEnvWithImage(RobotEnv):
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
+            use_jsonl_recording=use_jsonl_recording,
+            recording_dir=recording_dir,
+            suite_name=suite_name,
+            scenario_name=scenario_name,
+            algorithm_name=algorithm_name,
+            recording_seed=recording_seed,
         )
 
         # Store configuration for factory pattern compatibility

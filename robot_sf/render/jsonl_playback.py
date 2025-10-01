@@ -542,19 +542,7 @@ class JSONLPlaybackLoader:
         # Ensure we have a map definition (use default if none found)
         if map_def is None:
             logger.warning("No valid map definition found, creating minimal default")
-            map_def = MapDefinition(
-                width=20.0,
-                height=20.0,
-                obstacles=[],
-                robot_spawn_zones=[((8, 8), (12, 8), (12, 12))],
-                ped_spawn_zones=[],
-                robot_goal_zones=[((8, 8), (12, 8), (12, 12))],
-                bounds=[(0, 20, 0, 0), (0, 20, 20, 20), (0, 0, 0, 20), (20, 20, 0, 20)],
-                robot_routes=[],
-                ped_goal_zones=[],
-                ped_crowded_zones=[],
-                ped_routes=[],
-            )
+            map_def = self._default_map_definition()
 
         # Create batch playback
         batch = BatchPlayback(
@@ -626,19 +614,7 @@ class JSONLPlaybackLoader:
         # Ensure we have a map definition (use default if none found)
         if map_def is None:
             logger.warning("No valid map definition found, creating minimal default")
-            map_def = MapDefinition(
-                width=20.0,
-                height=20.0,
-                obstacles=[],
-                robot_spawn_zones=[((8, 8), (12, 8), (12, 12))],
-                ped_spawn_zones=[],
-                robot_goal_zones=[((8, 8), (12, 8), (12, 12))],
-                bounds=[(0, 20, 0, 0), (0, 20, 20, 20), (0, 0, 0, 20), (20, 20, 0, 20)],
-                robot_routes=[],
-                ped_goal_zones=[],
-                ped_crowded_zones=[],
-                ped_routes=[],
-            )
+            map_def = self._default_map_definition()
 
         # Create batch playback
         batch = BatchPlayback(
@@ -679,6 +655,24 @@ class JSONLPlaybackLoader:
                 )
         else:
             raise FileNotFoundError(f"Source not found: {source}")
+
+    @staticmethod
+    def _default_map_definition() -> MapDefinition:
+        """Return a minimal default map definition used when no metadata is available."""
+
+        return MapDefinition(
+            width=20.0,
+            height=20.0,
+            obstacles=[],
+            robot_spawn_zones=[((8, 8), (12, 8), (12, 12))],
+            ped_spawn_zones=[],
+            robot_goal_zones=[((8, 8), (12, 8), (12, 12))],
+            bounds=[(0, 20, 0, 0), (0, 20, 20, 20), (0, 0, 0, 20), (20, 20, 0, 20)],
+            robot_routes=[],
+            ped_goal_zones=[],
+            ped_crowded_zones=[],
+            ped_routes=[],
+        )
 
 
 def create_playback_loader() -> JSONLPlaybackLoader:

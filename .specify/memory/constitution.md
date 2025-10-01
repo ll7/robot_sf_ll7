@@ -1,14 +1,14 @@
 <!--
 Sync Impact Report
-Previous Version: 1.2.0 -> New Version: 1.2.0 (PATCH bump)
-Rationale: Template synchronization - updated plan-template.md to reference correct constitution version (v1.2.0 instead of v2.1.1). No semantic changes to constitution content.
+Previous Version: 1.2.1 -> New Version: 1.3.0 (MINOR bump)
+Rationale: Strengthened Principle XI to mandate reusable helpers live in `robot_sf/` with documentation and scripts consume those helpers.
 Modified Principles:
- - (None)
+ - XI. Internal Maintainability & Private Helper Documentation → XI. Library Reuse & Helper Documentation (expanded scope to enforce reusable helper extraction)
 Added Sections:
  - (None)
 Removed Sections: None
 Templates Updated:
- - ✅ plan-template.md: Updated constitution version reference from v2.1.1 to v1.2.0
+ - ✅ plan-template.md: Updated constitution version reference to v1.3.0
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -50,8 +50,8 @@ Any change to public environment behavior, benchmark schema, or metrics computat
 ### X. Scope Discipline
 Out of scope: general robotics control stacks, unrelated perception models, arbitrary RL algorithm zoo, generic data science utilities, unversioned experiment notebooks. The repo remains focused strictly on social navigation simulation, evaluation, and analysis.
 
-### XI. Internal Maintainability & Private Helper Documentation
-Private (underscore‑prefixed or local/inner) helpers that embody non‑obvious branching, fallback semantics, resource management, or performance trade‑offs MUST include a concise docstring or inline comment summarizing: (1) purpose, (2) key decision rules / edge cases, (3) side effects (e.g., filesystem writes, environment access). This requirement ensures future refactors preserve reproducibility and benchmarking invariants. Purely trivial pass‑through wrappers (e.g., one‑line value adapters) are exempt. When complexity is reduced (e.g., helper decomposition, signature introspection replacing branching), newly introduced inner helpers inherit the same documentation requirement at creation time—retroactive addition counts as maintenance (PATCH) unless accompanied by principle changes (MINOR).
+### XI. Library Reuse & Helper Documentation
+Reusable functionality MUST live in the `robot_sf/` library modules first. Examples, demos, and top‑level scripts may only orchestrate these well‑documented helpers; they must not introduce bespoke business logic when an equivalent reusable method could be extracted. Private (underscore‑prefixed or local/inner) helpers that embody non‑obvious branching, fallback semantics, resource management, or performance trade‑offs MUST include a concise docstring or inline comment summarizing: (1) purpose, (2) key decision rules / edge cases, (3) side effects (e.g., filesystem writes, environment access). This guarantees that reusable helpers remain discoverable and maintainable. Purely trivial pass‑through wrappers (e.g., one‑line value adapters) are exempt. When complexity is reduced (e.g., helper decomposition, signature introspection replacing branching), newly introduced inner helpers inherit the same documentation requirement at creation time—retroactive addition counts as maintenance (PATCH) unless accompanied by principle changes (MINOR).
 
 ### XII. Preferred Logging & Observability
 All non-trivial runtime messaging in library code (anything under `robot_sf/` or `fast-pysf/` wrappers) MUST use the designated logging facade: Loguru. Direct `print()` calls are prohibited in library modules except for:
@@ -159,4 +159,4 @@ Traceability Requirements:
 
 This Constitution supersedes ad‑hoc practices. Amendments require: (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected contracts (env, config, metrics, benchmark schema), (3) migration guidance or deprecation plan, (4) version/date update below. Pull Requests must assert compliance by referencing relevant sections. Any introduction of out‑of‑scope functionality must include justification aligning with Core Principles I–X or be rejected.
 
-**Version**: 1.2.1 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-24
+**Version**: 1.3.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-30

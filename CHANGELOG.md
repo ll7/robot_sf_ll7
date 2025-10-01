@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Helper Catalog Consolidation (Feature 140): Extracted reusable helper logic from examples and scripts into organized library modules:
+  - `robot_sf.benchmark.helper_catalog`: Policy loading (`load_trained_policy`), environment preparation (`prepare_classic_env`), and episode execution (`run_episodes_with_recording`) helpers.
+  - `robot_sf.render.helper_catalog`: Directory management (`ensure_output_dir`) and frame capture utilities (`capture_frames`).
+  - `robot_sf.docs.helper_catalog`: Documentation index management (`register_helper`) for automated helper catalog updates.
+  - Complete refactoring of all maintained examples (`examples/demo_*.py`) and scripts (`scripts/*.py`) to use helper catalog functions instead of duplicate logic.
+  - Helper registry data structures with typed interfaces for discoverable, testable helper capabilities.
+  - All helper functions include comprehensive docstrings, error handling, and Loguru logging compliance.
 - Episode Video Artifacts (MVP):
   - New CLI flags for benchmark runner: `--no-video` and `--video-renderer=synthetic|sim-view|none`.
   - Synthetic lightweight encoder that renders a red-dot path from robot positions and writes per‑episode MP4s under `results/videos/`.
@@ -79,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Unified Baseline Interface**: PlannerProtocol for consistent algorithm comparison
   - **Figure Orchestrator**: Publication-quality visualization pipeline
   - **Comprehensive Testing**: 108 tests including 33 new tests for benchmark functionality
+
+- Classic interactions refactor (Feature 139): Extracted small reusable visualization and formatting helpers into `robot_sf.benchmark` (`visualization.py`, `utils.py`) and added contract tests and a dry-run smoke test. See docs/dev/issues/classic-interactions-refactor/design.md.
 - **Complete Documentation**: Step-by-step quickstart guide with example workflows
 - **Performance Validation**: 20-25 steps/second with linear parallel scaling
 

@@ -32,38 +32,39 @@ unavailable (FR-008/FR-009). Logging verbosity controlled by LOGGING_ENABLED (FR
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import Any, TypedDict
 
 import numpy as np  # type: ignore
 from loguru import logger
-
-try:
-    from stable_baselines3 import PPO  # type: ignore
-except Exception as exc:
-    PPO = None  # type: ignore
-    _PPO_IMPORT_ERROR = exc
-else:
-    _PPO_IMPORT_ERROR = None
-
-import json
 
 from robot_sf.benchmark.classic_interactions_loader import (
     iter_episode_seeds,
     load_classic_matrix,
     select_scenario,
 )
+from robot_sf.benchmark.helper_catalog import load_trained_policy
+from robot_sf.benchmark.utils import (
+    compute_fast_mode_and_cap,
+    determine_episode_outcome,
+    format_episode_summary_table,
+)
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.render.helper_catalog import ensure_output_dir
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
+# Stable-baselines3 import moved to helper catalog
+PPO = None  # Retained for compatibility with existing checks
+_PPO_IMPORT_ERROR = None
+
+# TYPE_CHECKING imports removed - no longer needed
 
 # ---------------------------------------------------------------------------
 # CONFIG CONSTANTS (edit these to adjust behavior)
@@ -117,54 +118,15 @@ def _validate_constants() -> None:  # (FR-019)
             f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant.",
         )
     # MODEL_PATH validated lazily (allows dry_run to pass even if missing when not executing episodes)
-    if ENABLE_RECORDING and not OUTPUT_DIR.exists():
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Use helper catalog to ensure output directory exists
+    if ENABLE_RECORDING:
+        ensure_output_dir(OUTPUT_DIR)
 
 
-def _load_policy(path: str):  # (FR-004, FR-007 guidance)
-    """Load (and cache) the PPO policy at `path`.
-
-    Caching detail:
-        The cache is keyed by the absolute path string so that tests which mutate
-        the module-level MODEL_PATH (e.g., to a deliberately missing file) will
-        still trigger path validation instead of returning a previously loaded
-        model for a different path. This fixes earlier behavior where changing
-        MODEL_PATH after the first successful load prevented FileNotFoundError
-        from being raised in the missing-path test (T011).
-    """
-    abs_path = str(Path(path).resolve())
-    cache_map = getattr(_load_policy, "_cache_map", None)
-    if cache_map is None:
-        cache_map = {}
-    # Suppress static attribute resolution by casting the function to Any and
-    # store cache on the function __dict__ to avoid protected-member access lint.
-    cast(Any, _load_policy).__dict__["_cache_map"] = cache_map
-    if abs_path in cache_map:
-        return cache_map[abs_path]
-    if PPO is None:
-        raise RuntimeError(
-            "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this demo.",
-        )
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(
-            f"Model file not found: {path}\n"  # explicit newline
-            "Download or place the pre-trained PPO model at this path. "
-            "See docs/dev/issues/classic-interactions-ppo/ for guidance.",
-        )
-    model = PPO.load(path)
-    cache_map[abs_path] = model
-    return model
+# _load_policy function removed - now using load_trained_policy from helper catalog
 
 
-def _determine_outcome(info: dict[str, Any]) -> str:
-    if info.get("collision"):
-        return "collision"
-    if info.get("success"):
-        return "success"
-    if info.get("timeout"):
-        return "timeout"
-    return "done"
+# Removed: _determine_outcome - now using determine_episode_outcome from utils
 
 
 def _placeholder_frame_shape(env) -> tuple[int, int, int]:
@@ -249,7 +211,7 @@ def run_episode(
         if fast_step_cap is not None and step >= fast_step_cap:
             done = True
 
-    outcome = _determine_outcome(last_info)
+    outcome = determine_episode_outcome(last_info)
     success = bool(last_info.get("success"))
     collision = bool(last_info.get("collision"))
     timeout = bool(last_info.get("timeout"))
@@ -326,39 +288,14 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
         pass
 
 
-def _overlay_text(scenario: str, seed: int, step: int, outcome: str | None = None) -> str:
-    """Format overlay text (FR-016 helper). Not yet wired into a renderer; provided for future integration."""
-    base = f"{scenario} | seed={seed} | step={step}"
-    if outcome:
-        return base + f" | {outcome}"
-    return base
+# Removed: _overlay_text - now using format_overlay_text from utils
 
 
-def _format_summary_table(rows: Iterable[EpisodeSummary]) -> str:
-    rows = list(rows)
-    if not rows:
-        return "(no episodes)"
-    headers: list[str] = ["scenario", "seed", "steps", "outcome", "recorded"]
-    col_widths = {h: max(len(h), *(len(str(cast(Any, r)[h])) for r in rows)) for h in headers}
-
-    def fmt_row(r: EpisodeSummary | dict[str, Any]) -> str:
-        return " | ".join(str(cast(Any, r)[h]).ljust(col_widths[h]) for h in headers)
-
-    header_row: EpisodeSummary | dict[str, Any] = {h: h for h in headers}
-    lines = [fmt_row(header_row)]
-    lines.append("-|-".join("-" * col_widths[h] for h in headers))
-    lines.extend(fmt_row(r) for r in rows)
-    return "\n" + "\n".join(lines)
+# Removed: _format_summary_table - now using format_episode_summary_table from utils
 
 
 # --- Helper extraction to reduce run_demo complexity (addresses Ruff C901) ---
-def _compute_fast_mode_and_cap(max_episodes: int) -> tuple[bool, int]:
-    in_pytest = "PYTEST_CURRENT_TEST" in os.environ
-    fast_env_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
-    fast_mode = in_pytest or fast_env_flag
-    if fast_mode and max_episodes > 1:
-        max_episodes = 1
-    return fast_mode, max_episodes
+# Removed: _compute_fast_mode_and_cap - now using compute_fast_mode_and_cap from utils
 
 
 def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str, Any]]:
@@ -407,7 +344,7 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
             f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy.",
         )
     model_start = time.time()
-    model = _load_policy(str(MODEL_PATH))
+    model = load_trained_policy(str(MODEL_PATH))
     logger.info(f"Loaded model in {time.time() - model_start:.2f}s: {MODEL_PATH}")
     return model
 
@@ -498,7 +435,7 @@ def _maybe_print_summary(results: list[EpisodeSummary]) -> None:
     if LOGGING_ENABLED:
         print("Summary:")
         # Guarantee at least a header line so logging toggle test observes difference.
-        print(_format_summary_table(results))
+        print(format_episode_summary_table(results))
 
 
 def run_demo(
@@ -538,7 +475,7 @@ def run_demo(
     eff_record = ENABLE_RECORDING if enable_recording is None else enable_recording
     eff_sweep = SWEEP_ALL if sweep is None else sweep
 
-    fast_mode, eff_max = _compute_fast_mode_and_cap(max_episodes=eff_max)
+    fast_mode, eff_max = compute_fast_mode_and_cap(max_episodes=eff_max)
     scenarios = _prepare_scenarios(eff_name, sweep=eff_sweep or (eff_name == "ALL"))
 
     if effective_dry:

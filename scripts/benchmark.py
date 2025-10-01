@@ -1,15 +1,15 @@
 import time
 
 from scalene import scalene_profiler
-from stable_baselines3 import PPO
 
+from robot_sf.benchmark.helper_catalog import load_trained_policy
 from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():
     total_steps = 10000
     env = RobotEnv()
-    model = PPO.load("./model/ppo_model", env=env)
+    model = load_trained_policy("./model/ppo_model")
     # Gymnasium-style reset returns (obs, info)
     obs, _info = env.reset()
 

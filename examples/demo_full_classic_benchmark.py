@@ -55,6 +55,7 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 
+from robot_sf.render.helper_catalog import ensure_output_dir
 from scripts.classic_benchmark_full import BenchmarkCLIConfig, run_full_benchmark  # type: ignore
 
 
@@ -73,7 +74,7 @@ def main() -> int:
 
     ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = root / f"results/demo_full_classic_{ts}"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_output_dir(out_dir)
 
     cfg = BenchmarkCLIConfig(
         scenario_matrix_path=str(matrix),

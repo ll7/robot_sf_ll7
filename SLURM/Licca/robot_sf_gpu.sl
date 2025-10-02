@@ -19,6 +19,10 @@ SCRATCH_RESULTS=${SCRATCH_RESULTS:-/hpc/gpfs2/scratch/u/$USER/robot_sf/results}
 WORKDIR=${SLURM_TMPDIR:-/tmp/$USER/$SLURM_JOB_ID}
 ENABLE_CUDA_MPS=${ENABLE_CUDA_MPS:-0}
 
+# Guard conda wrapper variables when running with set -u.
+: "${_CE_M:=}"
+: "${_CE_CONDA:=}"
+
 cleanup() {
   echo "[licca] Syncing results to ${SCRATCH_RESULTS}"
   mkdir -p "${SCRATCH_RESULTS}"

@@ -13,6 +13,10 @@ ENV_NAME=${1:-robot-sf}
 ENV_MANAGER=${LICCA_ENV_MANAGER:-miniforge}
 PY_VERSION=${PY_VERSION:-3.11}
 
+# Guard variables referenced by conda's module wrappers when set -u is active.
+: "${_CE_M:=}"
+: "${_CE_CONDA:=}"
+
 echo "[licca] Preparing ${ENV_MANAGER} environment '${ENV_NAME}'"
 
 module purge

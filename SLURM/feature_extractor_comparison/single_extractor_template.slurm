@@ -44,44 +44,45 @@ export DISPLAY=""
 export MPLBACKEND="Agg"
 export SDL_VIDEODRIVER="dummy"
 
-# Run single extractor training
+# Run single extractor training with the new CLI
 echo "Starting training with %EXTRACTOR_NAME% extractor..."
-python -c "
-import sys
-sys.path.append('.')
-from scripts.multi_extractor_training import MultiExtractorTraining
-from robot_sf.feature_extractors.config import FeatureExtractorPresets
 
-# Get the specific extractor
-extractor_map = {
-    'dynamics_original': FeatureExtractorPresets.dynamics_original(),
-    'dynamics_no_conv': FeatureExtractorPresets.dynamics_no_conv(),
-    'mlp_small': FeatureExtractorPresets.mlp_small(),
-    'mlp_large': FeatureExtractorPresets.mlp_large(),
-    'attention_small': FeatureExtractorPresets.attention_small(),
-    'attention_large': FeatureExtractorPresets.attention_large(),
-    'lightweight_cnn': FeatureExtractorPresets.lightweight_cnn(),
-}
+OUTPUT_ROOT="results/single_extractor_%EXTRACTOR_NAME%"
+CONFIG_PATH="$OUTPUT_ROOT/single_extractor_config.yaml"
 
-extractor_name = '%EXTRACTOR_NAME%'
-if extractor_name not in extractor_map:
-    print(f'Unknown extractor: {extractor_name}')
-    sys.exit(1)
+mkdir -p "$OUTPUT_ROOT"
 
-# Create training manager with full parameters for single run
-trainer = MultiExtractorTraining(
-    output_dir=f'./results/single_extractor_{extractor_name}',
-    n_envs=16,  # More environments for single run
-    total_timesteps=2_000_000,  # More timesteps for single run
-    eval_freq=25_000,
-    save_freq=100_000,
-    n_eval_episodes=10,
-)
+cat <<EOF > "$CONFIG_PATH"
+run:
+  run_id: "single-%EXTRACTOR_NAME%"
+  worker_mode: "vectorized"
+  num_envs: 8
+  total_timesteps: 2000000
+  eval_freq: 25000
+  save_freq: 100000
+  n_eval_episodes: 10
+  device: "cuda"
+  seed: 0
+extractors:
+  - name: "%EXTRACTOR_NAME%"
+    preset: "%EXTRACTOR_NAME%"
+    expected_resources: "gpu"
+EOF
 
-# Train only this extractor
-results = trainer.run_comparison({extractor_name: extractor_map[extractor_name]})
-print(f'Training completed for {extractor_name}!')
-"
+unset ROBOT_SF_MULTI_EXTRACTOR_TEST_MODE
+
+python scripts/multi_extractor_training.py \
+  --config "$CONFIG_PATH" \
+  --run-id "single-%EXTRACTOR_NAME%" \
+  --output-root "$OUTPUT_ROOT"
+
+STATUS=$?
+if [ $STATUS -ne 0 ]; then
+  echo "Training failed with exit code $STATUS"
+  exit $STATUS
+fi
+
+echo "Training completed for %EXTRACTOR_NAME%!"
 
 echo "============================================"
 echo "Job completed at: $(date)"

@@ -35,7 +35,7 @@ trap cleanup EXIT
 
 module purge
 module load miniforge
-module load cuda/12.1
+module load cuda/12.8
 if [[ -n "${CONDA_EXE:-}" ]]; then
   eval "$("${CONDA_EXE}" shell.bash hook)"
 fi

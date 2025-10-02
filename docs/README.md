@@ -250,6 +250,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 - **StableBaselines3 Support**: Ready for SOTA RL algorithms
 - **Data Analysis Tools**: Comprehensive analysis utilities
 - **Performance Monitoring**: Built-in metrics and logging
+- **Multi-Extractor Workflow**: `scripts/multi_extractor_training.py` writes timestamped runs under `tmp/multi_extractor_training/`, capturing JSON + Markdown summaries alongside legacy `complete_results.json` for downstream automation.
 
 ## 📖 Documentation Highlights
 

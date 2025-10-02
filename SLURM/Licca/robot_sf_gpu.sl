@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=robot-sf-gpu
-#SBATCH --partition=epyc-gpu
+#SBATCH --partition=epyc-gpu-test
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=6:00:00
 #SBATCH --gpus=a100:1
 #SBATCH --gres-flags=enforce-binding
 #SBATCH --output=robot-sf-gpu-%j.out

@@ -26,12 +26,14 @@ case "${ENV_MANAGER}" in
     CREATE_CMD=(conda create -y -n "${ENV_NAME}" -c conda-forge "python=${PY_VERSION}" pip)
     RUN_CMD=(conda run -n "${ENV_NAME}")
     ACTIVATE_BIN="conda"
+    PACKAGE_CMD=(conda install -y -n "${ENV_NAME}" -c conda-forge)
     ;;
   micromamba)
     module load micromamba
     CREATE_CMD=(mm create -y -n "${ENV_NAME}" -c conda-forge "python=${PY_VERSION}" pip)
     RUN_CMD=(mm run -n "${ENV_NAME}")
     ACTIVATE_BIN="micromamba"
+    PACKAGE_CMD=(mm install -y -n "${ENV_NAME}" -c conda-forge)
     ;;
   *)
     echo "Unsupported LICCA_ENV_MANAGER='${ENV_MANAGER}' (use miniforge or micromamba)" >&2
@@ -46,9 +48,18 @@ else
   echo "[licca] Environment '${ENV_NAME}' already exists"
 fi
 
+# Ensure OpenCV can load without a system OpenGL stack.
+OPENGL_RUNTIME_PACKAGES=(libglvnd mesa-libgl-cos7-x86_64)
+echo "[licca] Installing OpenGL runtime packages: ${OPENGL_RUNTIME_PACKAGES[*]}"
+"${PACKAGE_CMD[@]}" "${OPENGL_RUNTIME_PACKAGES[@]}"
+
 # Upgrade pip and install Robot SF in editable mode with dev extras.
 "${RUN_CMD[@]}" python -m pip install --upgrade pip ${EXTRA_PIP_FLAGS:-}
 "${RUN_CMD[@]}" python -m pip install --editable ".[dev]" ${EXTRA_PIP_FLAGS:-}
+
+# Force the headless OpenCV build to avoid libGL loader issues in CI/HPC.
+echo "[licca] Replacing OpenCV with headless build"
+"${RUN_CMD[@]}" python -m pip install --upgrade opencv-python-headless ${EXTRA_PIP_FLAGS:-}
 
 cat <<MSG
 [licca] Environment '${ENV_NAME}' ready.

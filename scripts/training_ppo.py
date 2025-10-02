@@ -10,7 +10,7 @@ from robot_sf.tb_logging import DrivingMetricsCallback
 
 
 def training():
-    n_envs = 32
+    n_envs = 22
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
@@ -26,7 +26,7 @@ def training():
     model = PPO(
         "MultiInputPolicy",
         env,
-        tensorboard_log="./logs/ppo_logs/",
+        tensorboard_log="./tmp/tensorboard_logs/ppo_logs/",
         policy_kwargs=policy_kwargs,
     )
     save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")

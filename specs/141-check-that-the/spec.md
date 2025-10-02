@@ -37,17 +37,18 @@ A research engineer wants to compare multiple feature extractors for social-navi
 ### Functional Requirements
 - **FR-001**: The training workflow MUST validate that each supported feature extractor can be launched and trained using the comparison script without runtime crashes.
 - **FR-002**: The script MUST default to single-thread execution and document the steps required to switch to high-performance (multi-process or GPU-accelerated) mode.
-- **FR-003**: Training outputs MUST be written to a temporary results directory under `./tmp/…` with per-extractor subfolders for checkpoints, logs, and metrics summaries.
+- **FR-003**: Training outputs MUST be written to timestamped subdirectories under `./tmp/…`, with each extractor run receiving its own subfolder containing checkpoints, logs, and metrics summaries.
 - **FR-004**: The comparison summary MUST highlight hardware configuration differences (macOS M4 vs. Ubuntu RTX) so that users understand expected performance variance.
 - **FR-005**: Reusable helper logic for feature extractor configuration and results handling MUST be extracted into shared modules when it benefits other areas of the repository.
 - **FR-006**: The workflow MUST produce user-facing guidance for handling missing or failing extractor runs, including how the script continues when a configuration cannot initialize.
 - **FR-007**: The system MUST record training metadata sufficient for cross-platform reproducibility (e.g., timestamp, hardware profile, single vs. multi-process mode).
-- **FR-008**: [NEEDS CLARIFICATION: Are there minimum benchmark metrics or convergence thresholds that each extractor must reach?]
+- **FR-008**: Each extractor run MUST be considered successful once training completes without runtime errors; no minimum reward or convergence threshold is required.
+- **FR-009**: The workflow MUST produce both per-run artifacts and an aggregated summary report (e.g., JSON and/or Markdown) covering all extractor runs.
 
 ### Non-Functional Requirements
 - **NFR-001**: The default single-thread run MUST complete without crashes on macOS M4 hardware using the spawn start method.
 - **NFR-002**: High-performance mode MUST be operable on Ubuntu RTX hardware without manual code edits, relying on documented configuration toggles.
-- **NFR-003**: Output artifacts MUST be organized to avoid cluttering the repository and facilitate cleanup (e.g., versioned folders under `./tmp`).
+- **NFR-003**: Output artifacts MUST be organized to avoid cluttering the repository and facilitate cleanup by creating timestamped folders under `./tmp` and leaving prior runs intact for comparison.
 - **NFR-004**: Logging MUST clearly differentiate between validation warnings and fatal errors to guide user action.
 
 ### Assumptions & Dependencies
@@ -65,9 +66,16 @@ A research engineer wants to compare multiple feature extractors for social-navi
 ---
 
 ## 3. Open Questions
-1. **Benchmark expectations**: Are there minimum convergence metrics or training duration targets that must be met before a run is considered successful? *(Blocks FR-008)*
-2. **Tmp directory policy**: Should previous artifacts under `./tmp` be automatically cleaned before new runs, or should the workflow retain history for comparison?
-3. **Result reporting format**: Do stakeholders require a consolidated report (e.g., JSON, Markdown table) summarizing all extractor runs, or is per-run metadata sufficient?
+1. *(resolved)*
+
+---
+
+## Clarifications
+
+### Session 2025-10-02
+- Q: What defines a “successful” extractor run? → A: Training completes without runtime errors.
+- Q: How should the `./tmp` directory be managed across runs? → A: Keep prior artifacts and create timestamped subfolders for new runs.
+- Q: Do we need a consolidated report across extractor runs? → A: Provide both per-run artifacts and an aggregated summary document.
 
 ---
 

@@ -32,15 +32,52 @@ class FeatureExtractorAnalyzer:
         self.results_file = Path(results_file)
         self.results_dir = self.results_file.parent
 
-        with open(results_file) as f:
+        with open(results_file, encoding="utf-8") as f:
             self.data = json.load(f)
 
-        self.results = self.data["results"]
-        self.metadata = self.data["comparison_metadata"]
+        if "results" in self.data and "comparison_metadata" in self.data:
+            self.results = self.data["results"]
+            self.metadata = self.data["comparison_metadata"]
+        elif "extractor_results" in self.data:
+            self.results, self.metadata = self._load_from_summary(self.data)
+        else:
+            raise ValueError(
+                "Unrecognized results structure. Expected complete_results.json or summary.json"
+            )
 
         # Create analysis output directory
         self.analysis_dir = self.results_dir / "analysis"
         self.analysis_dir.mkdir(exist_ok=True)
+
+    def _load_from_summary(self, payload: dict) -> tuple[dict, dict]:
+        records = payload.get("extractor_results", [])
+        results: dict[str, dict] = {}
+        for record in records:
+            name = record.get("config_name")
+            if not name:
+                continue
+            metrics = record.get("metrics", {})
+            results[name] = {
+                "completed": record.get("status") == "success",
+                "status": record.get("status"),
+                "best_reward": metrics.get("best_mean_reward"),
+                "final_reward": metrics.get("last_mean_reward"),
+                "training_time": record.get("duration_seconds"),
+                "total_timesteps": record.get("training_steps"),
+                "total_parameters": metrics.get("total_parameters"),
+                "trainable_parameters": metrics.get("trainable_parameters"),
+                "artifacts": record.get("artifacts", {}),
+                "reason": record.get("reason"),
+            }
+
+        metadata = {
+            "run_dir": payload.get("output_root"),
+            "run_id": payload.get("run_id"),
+            "created_at": payload.get("created_at"),
+            "aggregate_metrics": payload.get("aggregate_metrics"),
+        }
+
+        return results, metadata
 
     def create_summary_dataframe(self) -> pd.DataFrame:
         """Create a DataFrame with summary statistics for each extractor."""
@@ -466,7 +503,7 @@ class FeatureExtractorAnalyzer:
         }
 
         analysis_path = self.analysis_dir / "analysis_results.json"
-        with open(analysis_path, "w") as f:
+        with open(analysis_path, "w", encoding="utf-8") as f:
             json.dump(analysis_results, f, indent=2)
 
         print(f"Complete analysis saved to: {self.analysis_dir}")
@@ -480,7 +517,10 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Analyze feature extractor comparison results")
-    parser.add_argument("results_file", help="Path to complete_results.json file")
+    parser.add_argument(
+        "results_file",
+        help="Path to complete_results.json or summary.json produced by multi_extractor_training",
+    )
 
     args = parser.parse_args()
 

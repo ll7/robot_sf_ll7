@@ -20,6 +20,7 @@ def test_generate_benchmark_videos_contract():
             "episode_id": "ep_001",
             "scenario_id": "classic_001",
             "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "replay_steps": [
                 [0.0, 0.0, 0.0, 0.0],
                 [0.5, 0.6, 0.3, 0.1],
@@ -65,6 +66,8 @@ def test_generate_benchmark_videos_with_custom_settings():
         {
             "episode_id": "ep_001",
             "scenario_id": "classic_001",
+            "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "replay_steps": [
                 [0.0, 0.0, 0.0, 0.0],
                 [0.5, 0.3, 0.2, 0.1],
@@ -100,6 +103,8 @@ def test_generate_benchmark_videos_missing_trajectory():
         {
             "episode_id": "ep_001",
             "scenario_id": "classic_001",
+            "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "metrics": {"collisions": 0, "success": True},
             # No trajectory_data field
         },

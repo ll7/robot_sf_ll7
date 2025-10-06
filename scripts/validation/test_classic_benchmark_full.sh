@@ -45,4 +45,50 @@ if [[ $missing -ne 0 ]]; then
   exit 2
 fi
 
+EP_PATH="${OUT_DIR}/episodes/episodes.jsonl"
+SUMMARY_PATH="${OUT_DIR}/aggregates/summary.json"
+
+EP_PATH="$EP_PATH" SUMMARY_PATH="$SUMMARY_PATH" uv run python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+episodes_path = Path(os.environ["EP_PATH"])
+summary_path = Path(os.environ["SUMMARY_PATH"])
+
+with episodes_path.open("r", encoding="utf-8") as fh:
+    first_record = None
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        first_record = json.loads(line)
+        break
+
+if not first_record:
+    raise SystemExit("No episode records found for metadata validation")
+
+scenario_params = first_record.get("scenario_params")
+if not isinstance(scenario_params, dict):
+    raise SystemExit("scenario_params missing or not a mapping in episode record")
+
+algo_top = first_record.get("algo")
+algo_nested = scenario_params.get("algo")
+if not algo_top or algo_top != algo_nested:
+    raise SystemExit("Algorithm metadata not mirrored into scenario_params.algo")
+
+summary = json.loads(summary_path.read_text(encoding="utf-8"))
+meta = summary.get("_meta")
+if not isinstance(meta, dict):
+    raise SystemExit("Aggregation summary missing _meta diagnostics")
+
+if meta.get("group_by") != "scenario_params.algo":
+    raise SystemExit("Unexpected aggregation group_by metadata: %r" % (meta.get("group_by"),))
+
+if "effective_group_key" not in meta:
+    raise SystemExit("effective_group_key missing from aggregation metadata")
+
+print("Aggregation metadata validation OK")
+PY
+
 echo "[classic-benchmark-smoke] PASS" >&2

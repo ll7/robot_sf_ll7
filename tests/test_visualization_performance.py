@@ -27,6 +27,7 @@ class TestVisualizationPerformance:
                 "seed": 42 + i,
                 "scenario_id": f"scenario_{(i % 3) + 1}",
                 "scenario_params": {"algo": ["socialforce", "random", "greedy"][i % 3]},
+                "algo": ["socialforce", "random", "greedy"][i % 3],
                 "metrics": {
                     "collisions": i % 5,
                     "success": (i % 4) != 0,  # 75% success rate

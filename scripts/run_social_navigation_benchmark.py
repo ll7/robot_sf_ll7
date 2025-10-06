@@ -113,57 +113,109 @@ def compute_baseline_stats(
         return {"success": False, "error": str(e)}
 
 
+def _collect_episode_records(
+    baseline_results: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Load episode records from successful baseline runs."""
+
+    records: list[dict[str, Any]] = []
+    successful: list[str] = []
+
+    for result in baseline_results:
+        if not result.get("success"):
+            continue
+        episodes_file = Path(result["output_dir"]) / "episodes" / "episodes.jsonl"
+        if not episodes_file.exists():
+            continue
+        try:
+            episodes = read_jsonl(str(episodes_file))
+        except Exception as exc:  # pragma: no cover - defensive against IO errors
+            logger.warning("Failed to read episodes from %s: %s", result["algo"], exc)
+            continue
+        records.extend(episodes)
+        successful.append(result["algo"])
+        logger.info("Aggregated %d episodes from %s", len(episodes), result["algo"])
+
+    return records, successful
+
+
+def _compute_aggregates_payload(
+    records: list[dict[str, Any]],
+    *,
+    expected_algorithms: set[str] | None,
+) -> dict[str, Any]:
+    aggregate_kwargs: dict[str, Any] = {
+        "records": records,
+        "group_by": "scenario_params.algo",
+        "bootstrap_samples": 1000,
+        "bootstrap_confidence": 0.95,
+    }
+    if expected_algorithms:
+        aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
+
+    try:
+        return compute_aggregates_with_ci(**aggregate_kwargs)
+    except TypeError as exc:
+        if "expected_algorithms" not in aggregate_kwargs:
+            raise
+        logger.debug(
+            "compute_aggregates_with_ci missing expected_algorithms support, falling back: %s",
+            exc,
+        )
+        aggregate_kwargs.pop("expected_algorithms", None)
+        return compute_aggregates_with_ci(**aggregate_kwargs)
+
+
+def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:
+    aggregates_file = Path(output_root) / "aggregated_results.json"
+    with open(aggregates_file, "w", encoding="utf-8") as f:
+        json.dump(aggregates, f, indent=2)
+    logger.info("Aggregated results saved to %s", aggregates_file)
+    return aggregates_file
+
+
 def aggregate_all_results(
     baseline_results: list[dict[str, Any]],
     output_root: str,
+    *,
+    expected_algorithms: set[str] | None = None,
 ) -> dict[str, Any]:
     """Aggregate results from all baseline algorithms."""
+
     logger.info("Aggregating results from all baselines")
-
-    all_episodes = []
-    successful_baselines = []
-
-    for result in baseline_results:
-        if result["success"]:
-            episodes_file = Path(result["output_dir"]) / "episodes" / "episodes.jsonl"
-            if episodes_file.exists():
-                try:
-                    episodes = read_jsonl(str(episodes_file))
-                    all_episodes.extend(episodes)
-                    successful_baselines.append(result["algo"])
-                    logger.info(f"Aggregated {len(episodes)} episodes from {result['algo']}")
-                except Exception as e:
-                    logger.warning(f"Failed to read episodes from {result['algo']}: {e}")
+    all_episodes, successful_baselines = _collect_episode_records(baseline_results)
 
     if not all_episodes:
         logger.error("No episodes found to aggregate")
         return {"success": False, "error": "No episodes to aggregate"}
 
     try:
-        # Compute aggregates with confidence intervals
-        aggregates = compute_aggregates_with_ci(
-            records=all_episodes,
-            group_by="scenario_params.algo",
-            bootstrap_samples=1000,
-            bootstrap_confidence=0.95,
+        aggregates = _compute_aggregates_payload(
+            all_episodes,
+            expected_algorithms=expected_algorithms,
         )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Failed to aggregate results: %s", exc)
+        return {"success": False, "error": str(exc)}
 
-        # Save aggregated results
-        aggregates_file = Path(output_root) / "aggregated_results.json"
-        with open(aggregates_file, "w", encoding="utf-8") as f:
-            json.dump(aggregates, f, indent=2)
+    meta = aggregates.get("_meta") if isinstance(aggregates, dict) else {}
+    if meta:
+        missing = meta.get("missing_algorithms") or []
+        if missing:
+            logger.warning(
+                "Aggregation detected missing algorithms: %s",
+                ", ".join(sorted(missing)),
+            )
 
-        logger.info(f"Aggregated results saved to {aggregates_file}")
-        return {
-            "success": True,
-            "aggregates_file": str(aggregates_file),
-            "total_episodes": len(all_episodes),
-            "baselines": successful_baselines,
-        }
+    aggregates_file = _write_aggregates_file(output_root, aggregates)
 
-    except Exception as e:
-        logger.error(f"Failed to aggregate results: {e}")
-        return {"success": False, "error": str(e)}
+    return {
+        "success": True,
+        "aggregates_file": str(aggregates_file),
+        "total_episodes": len(all_episodes),
+        "baselines": successful_baselines,
+        "meta": meta or {},
+    }
 
 
 def log_manual_visualization_steps(aggregates_file: str, output_root: str) -> dict[str, Any]:
@@ -194,11 +246,21 @@ def validate_benchmark_results(results: dict[str, Any]) -> dict[str, Any]:
     """Validate benchmark results against success criteria."""
     logger.info("Validating benchmark results")
 
+    meta = results.get("meta") or {}
     validation_results = {
         "total_baselines": len(results.get("baselines", [])),
         "total_episodes": results.get("total_episodes", 0),
         "checks": {},
+        "meta": meta,
     }
+    missing_algorithms = list(meta.get("missing_algorithms") or [])
+    validation_results["checks"]["expected_algorithms_present"] = len(missing_algorithms) == 0
+    if missing_algorithms:
+        logger.warning(
+            "Validation detected missing algorithms: {}",
+            ", ".join(sorted(missing_algorithms)),
+        )
+    validation_results["missing_algorithms"] = missing_algorithms
 
     # Check minimum baselines
     min_baselines = 3  # SF, PPO, Random
@@ -293,7 +355,12 @@ def main() -> int:
         logger.warning("No episodes file found for baseline statistics")
 
     # Aggregate all results
-    aggregation_result = aggregate_all_results(successful_results, str(output_root))
+    expected_algorithms = {result["algo"] for result in baseline_results}
+    aggregation_result = aggregate_all_results(
+        successful_results,
+        str(output_root),
+        expected_algorithms=expected_algorithms,
+    )
     if not aggregation_result["success"]:
         logger.error("Result aggregation failed")
         return 1
@@ -308,6 +375,7 @@ def main() -> int:
         "output_root": str(output_root),
         "baselines": [r["algo"] for r in successful_results],
         "total_episodes": aggregation_result["total_episodes"],
+        "meta": aggregation_result.get("meta", {}),
     }
     validation_results = validate_benchmark_results(validation_data)
 

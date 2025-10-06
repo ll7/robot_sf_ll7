@@ -14,37 +14,37 @@
 ```
 
 ## Phase 3.1: Setup
-- [ ] **T001** Ensure benchmark dev environment ready: `uv sync`, submodules, and headless env vars (reference quickstart)  _(repo root)_
-- [ ] **T002 [P]** Create custom exception skeleton `robot_sf/benchmark/errors.py::AggregationMetadataError` with docstring and export list  _(robot_sf/benchmark/errors.py)_
+- [X] **T001** Ensure benchmark dev environment ready: `uv sync`, submodules, and headless env vars (reference quickstart)  _(repo root)_
+- [X] **T002 [P]** Create custom exception skeleton `robot_sf/benchmark/errors.py::AggregationMetadataError` with docstring and export list  _(robot_sf/benchmark/errors.py)_
 
 ## Phase 3.2: Tests First (TDD)
-- [ ] **T003 [P]** Contract test: orchestrator injects nested algo (`tests/benchmark/test_orchestrator_metadata.py::test_injects_nested_algo_metadata`)  
-- [ ] **T004 [P]** Contract test: orchestrator raises on missing `algo` (`tests/benchmark/test_orchestrator_metadata.py::test_raises_on_missing_algo`)  
-- [ ] **T005 [P]** Contract test: orchestrator logs warning on mismatch (`tests/benchmark/test_orchestrator_metadata.py::test_logs_warning_on_mismatch`)  
-- [ ] **T006 [P]** Contract test: aggregation groups by nested key + fallback (`tests/benchmark/test_aggregation_algorithms.py::test_grouping_prefers_nested_algo`)  
-- [ ] **T007 [P]** Contract test: aggregation warns on missing algorithms (`tests/benchmark/test_aggregation_algorithms.py::test_warns_and_flags_missing_algorithms`)  
-- [ ] **T008 [P]** Contract test: aggregation raises `AggregationMetadataError` when metadata absent (`tests/benchmark/test_aggregation_algorithms.py::test_missing_algo_fields_raise`)  
-- [ ] **T009 [P]** Integration smoke: quickstart workflow (`tests/integration/test_classic_benchmark_alg_grouping.py::test_smoke_aggregation_workflow`) verifying warning logging & `_meta`
+- [X] **T003 [P]** Contract test: orchestrator injects nested algo (`tests/benchmark/test_orchestrator_metadata.py::test_injects_nested_algo_metadata`)  
+- [X] **T004 [P]** Contract test: orchestrator raises on missing `algo` (`tests/benchmark/test_orchestrator_metadata.py::test_raises_on_missing_algo`)  
+- [X] **T005 [P]** Contract test: orchestrator logs warning on mismatch (`tests/benchmark/test_orchestrator_metadata.py::test_logs_warning_on_mismatch`)  
+- [X] **T006 [P]** Contract test: aggregation groups by nested key + fallback (`tests/benchmark/test_aggregation_algorithms.py::test_grouping_prefers_nested_algo`)  
+- [X] **T007 [P]** Contract test: aggregation warns on missing algorithms (`tests/benchmark/test_aggregation_algorithms.py::test_warns_and_flags_missing_algorithms`)  
+- [X] **T008 [P]** Contract test: aggregation raises `AggregationMetadataError` when metadata absent (`tests/benchmark/test_aggregation_algorithms.py::test_missing_algo_fields_raise`)  
+- [X] **T009 [P]** Integration smoke: quickstart workflow (`tests/integration/test_classic_benchmark_alg_grouping.py::test_smoke_aggregation_workflow`) verifying warning logging & `_meta`
 
 ## Phase 3.3: Core Implementation
-- [ ] **T010** Implement `AggregationMetadataError` with helpful message + import in `robot_sf/benchmark/__init__.py`  
-- [ ] **T011** Update orchestrator (`robot_sf/benchmark/full_classic/orchestrator.py`) to mirror `algo` into `scenario_params`, add structured logging, and raise `AggregationMetadataError` on invalid payloads  
-- [ ] **T012** Ensure resume manifest handling skips duplicate injection (same file as T011)  
-- [ ] **T013** Update aggregation fallback chain in `robot_sf/benchmark/aggregate.py` to prefer `scenario_params.algo`, then `algo`, else `fallback_group_by`; include `_meta.effective_group_key`  
-- [ ] **T014** Add missing algorithm detection + `_meta.missing_algorithms` + warning emission in `robot_sf/benchmark/aggregate.py`  
-- [ ] **T015** Extend `scripts/run_social_navigation_benchmark.py` aggregation path to pass expected algorithm set and propagate `_meta` diagnostics to output JSON
+- [X] **T010** Implement `AggregationMetadataError` with helpful message + import in `robot_sf/benchmark/__init__.py`  
+- [X] **T011** Update orchestrator (`robot_sf/benchmark/full_classic/orchestrator.py`) to mirror `algo` into `scenario_params`, add structured logging, and raise `AggregationMetadataError` on invalid payloads  
+- [X] **T012** Ensure resume manifest handling skips duplicate injection (same file as T011)  
+- [X] **T013** Update aggregation fallback chain in `robot_sf/benchmark/aggregate.py` to prefer `scenario_params.algo`, then `algo`, else `fallback_group_by`; include `_meta.effective_group_key`  
+- [X] **T014** Add missing algorithm detection + `_meta.missing_algorithms` + warning emission in `robot_sf/benchmark/aggregate.py`  
+- [x] **T015** Extend `scripts/run_social_navigation_benchmark.py` aggregation path to pass expected algorithm set and propagate `_meta` diagnostics to output JSON
 
 ## Phase 3.4: Integration & Validation
-- [ ] **T016** Update validation script (e.g., `scripts/validation/test_complete_simulation.sh` or relevant Python validation) to assert mirrored metadata exists  
-- [ ] **T017 [P]** Add CHANGELOG entry documenting per-algorithm aggregation fix  
-- [ ] **T018 [P]** Update `docs/benchmark.md` + related docs index references about algorithm grouping keys and warnings  
-- [ ] **T019** Execute quickstart smoke steps (per quickstart.md) and capture results in progress notes  
-- [ ] **T020** Run full pytest suite for touched modules (`uv run pytest tests/benchmark/test_orchestrator_metadata.py tests/benchmark/test_aggregation_algorithms.py tests/integration/test_classic_benchmark_alg_grouping.py`) and ensure green
+- [X] **T016** Update validation script (e.g., `scripts/validation/test_complete_simulation.sh` or relevant Python validation) to assert mirrored metadata exists  
+- [X] **T017 [P]** Add CHANGELOG entry documenting per-algorithm aggregation fix  
+- [X] **T018 [P]** Update `docs/benchmark.md` + related docs index references about algorithm grouping keys and warnings  
+- [X] **T019** Execute quickstart smoke steps (per quickstart.md) and capture results in progress notes  
+- [X] **T020** Run full pytest suite for touched modules (`uv run pytest tests/benchmark/test_orchestrator_metadata.py tests/benchmark/test_aggregation_algorithms.py tests/integration/test_classic_benchmark_alg_grouping.py`) and ensure green
 
 ## Phase 3.5: Polish
-- [ ] **T021 [P]** Add regression guidance into `docs/dev/issues/142-aggregation-mixes-algorithms/design.md` or create summary note under feature docs (link from docs index)  
-- [ ] **T022 [P]** Clean up any legacy JSONL fixtures or update test fixtures to include mirrored metadata  
-- [ ] **T023** Final sweep: Loguru log level sanity, ensure no stray prints, and check lint (`uv run ruff check`)
+- [X] **T021 [P]** Add regression guidance into `docs/dev/issues/142-aggregation-mixes-algorithms/design.md` or create summary note under feature docs (link from docs index)  
+- [X] **T022 [P]** Clean up any legacy JSONL fixtures or update test fixtures to include mirrored metadata  
+- [X] **T023** Final sweep: Loguru log level sanity, ensure no stray prints, and check lint (`uv run ruff check`)
 
 ## Dependencies & Ordering Notes
 - T001 precedes all tasks.

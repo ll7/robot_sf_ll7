@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from robot_sf.benchmark.errors import AggregationMetadataError
+
 from .aggregation import aggregate_metrics
 from .effects import compute_effect_sizes
 from .io_utils import append_episode_record, write_manifest
@@ -61,6 +63,54 @@ class BenchmarkManifest:
     episodes_per_second: float = 0.0
     workers: int = 1
     scaling_efficiency: dict = field(default_factory=dict)
+
+
+def _ensure_algo_metadata(
+    record: dict[str, Any],
+    *,
+    algo: str | None,
+    episode_id: str | None,
+    logger_ctx=None,
+) -> dict[str, Any]:
+    """Mirror the algorithm identifier into scenario_params and validate payloads."""
+
+    log = logger_ctx or logger
+    algo_value = algo.strip() if isinstance(algo, str) else ""
+    if not algo_value:
+        raise AggregationMetadataError(
+            "Episode missing algorithm identifier required for aggregation.",
+            episode_id=str(episode_id) if episode_id is not None else None,
+            missing_fields=("algo", "scenario_params.algo"),
+            advice="Ensure the benchmark configuration sets `algo` before writing episodes.",
+        )
+
+    scenario_params = record.get("scenario_params")
+    if scenario_params is None:
+        scenario_params = {}
+        record["scenario_params"] = scenario_params
+    elif not isinstance(scenario_params, dict):
+        raise AggregationMetadataError(
+            "scenario_params must be a mapping to inject algorithm metadata.",
+            episode_id=str(episode_id) if episode_id is not None else None,
+            missing_fields=("scenario_params", "scenario_params.algo"),
+            advice="Regenerate the episode with structured scenario parameters.",
+        )
+
+    existing_algo = scenario_params.get("algo")
+    log = log.bind(episode_id=episode_id, algo=algo_value)
+    if existing_algo is None:
+        scenario_params["algo"] = algo_value
+        log.bind(event="episode_metadata_injection").debug(
+            "Mirrored algorithm metadata into scenario_params",
+        )
+    elif str(existing_algo) != algo_value:
+        scenario_params["algo"] = algo_value
+        log.bind(event="episode_metadata_mismatch", previous=str(existing_algo)).warning(
+            "Corrected mismatched algorithm metadata for episode",
+        )
+
+    record["algo"] = algo_value
+    return record
 
 
 def _compute_git_hash(root: Path) -> str:
@@ -190,6 +240,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # minimal synthetic execu
     """
     episode_id = _episode_id_from_job(job)
     now = time.time()
+    algo_value = getattr(cfg, "algo", None)
     record: dict[str, Any] = {
         "episode_id": episode_id,
         "scenario_id": job.scenario_id,
@@ -209,8 +260,13 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # minimal synthetic execu
         "steps": min(job.horizon, 120),  # bounded placeholder
         # Basic timing placeholders updated by caller for sequential path
         "wall_time_sec": 0.0,
-        "algo": getattr(cfg, "algo", "unknown"),
         "created_at": now,
+    }
+    record["scenario_params"] = {
+        "archetype": job.archetype,
+        "density": job.density,
+        "max_episode_steps": job.horizon,
+        "scenario_id": job.scenario_id,
     }
     # Optional: attach placeholder replay steps when capture enabled (T021)
     if getattr(cfg, "capture_replay", False):
@@ -243,6 +299,11 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:  # minimal synthetic execu
         record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
         record["replay_peds"] = ped_positions_series
         record["replay_actions"] = actions_series
+    _ensure_algo_metadata(
+        record,
+        algo=algo_value,
+        episode_id=episode_id,
+    )
     return record
 
 

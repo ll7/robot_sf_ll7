@@ -164,6 +164,27 @@ def _ensure_spawn_start_method() -> None:
         mp.set_start_method("spawn", force=True)
 
 
+def _get_vec_env_config(
+    *, worker_mode: str, num_envs: int
+) -> tuple[Any, dict[str, Any] | None, int]:
+    """Get vectorized environment configuration based on worker mode and platform."""
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
+    if worker_mode == "vectorized":
+        vec_env_cls = SubprocVecEnv
+        if sys.platform == "darwin":
+            vec_kwargs: dict[str, Any] | None = {"start_method": "spawn"}
+        else:
+            vec_kwargs = None
+        n_envs = num_envs
+    else:
+        vec_env_cls = DummyVecEnv
+        vec_kwargs = None
+        n_envs = 1
+
+    return vec_env_cls, vec_kwargs, n_envs
+
+
 def load_configuration(
     config_path: Path,
 ) -> tuple[RunSettings, list[ExtractorConfigurationProfile]]:
@@ -333,7 +354,7 @@ def _run_sb3_training(
         from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import CallbackList, EvalCallback
         from stable_baselines3.common.env_util import make_vec_env
-        from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+        from stable_baselines3.common.vec_env import DummyVecEnv
 
         config = _resolve_feature_config(profile)
 
@@ -345,17 +366,10 @@ def _run_sb3_training(
 
         _ensure_spawn_start_method()
 
-        if context.settings.worker_mode == "vectorized":
-            vec_env_cls = SubprocVecEnv
-            if sys.platform == "darwin":
-                vec_kwargs: dict[str, Any] | None = {"start_method": "spawn"}
-            else:
-                vec_kwargs = None
-            n_envs = context.settings.num_envs
-        else:
-            vec_env_cls = DummyVecEnv
-            vec_kwargs = None
-            n_envs = 1
+        vec_env_cls, vec_kwargs, n_envs = _get_vec_env_config(
+            worker_mode=context.settings.worker_mode,
+            num_envs=context.settings.num_envs,
+        )
 
         train_env = make_vec_env(
             env_factory,

@@ -90,7 +90,7 @@ Useful monitoring commands: `sinfo` (partition/node state), `squeue -u $USER` (y
   CUDA MPS support hooks.
 
 ## Common pitfalls checklist
-- Do not use `uv sync`; LiCCA supports conda/micromamba only.
+- Avoid `uv sync`; LiCCA supports conda/micromamba only.
 - Never run `conda init` or edit ACLs in group directories.
 - Remember to copy results off `/tmp` or `/dev/shm`; both are purged immediately when the
   job exits.

@@ -128,8 +128,16 @@ class TestEpisodeFiltering:
     def test_filter_episodes_no_filters(self):
         """Test filtering episodes with no filters applied."""
         episodes = [
-            {"scenario_id": "scenario1", "scenario_params": {"algo": "socialforce"}},
-            {"scenario_id": "scenario2", "scenario_params": {"algo": "random"}},
+            {
+                "scenario_id": "scenario1",
+                "scenario_params": {"algo": "socialforce"},
+                "algo": "socialforce",
+            },
+            {
+                "scenario_id": "scenario2",
+                "scenario_params": {"algo": "random"},
+                "algo": "random",
+            },
         ]
 
         filtered = _filter_episodes(episodes, None, None)
@@ -139,9 +147,21 @@ class TestEpisodeFiltering:
     def test_filter_episodes_scenario_filter(self):
         """Test filtering episodes by scenario ID."""
         episodes = [
-            {"scenario_id": "scenario1", "scenario_params": {"algo": "socialforce"}},
-            {"scenario_id": "scenario2", "scenario_params": {"algo": "random"}},
-            {"scenario_id": "scenario1", "scenario_params": {"algo": "random"}},
+            {
+                "scenario_id": "scenario1",
+                "scenario_params": {"algo": "socialforce"},
+                "algo": "socialforce",
+            },
+            {
+                "scenario_id": "scenario2",
+                "scenario_params": {"algo": "random"},
+                "algo": "random",
+            },
+            {
+                "scenario_id": "scenario1",
+                "scenario_params": {"algo": "random"},
+                "algo": "random",
+            },
         ]
 
         filtered = _filter_episodes(episodes, "scenario1", None)
@@ -151,9 +171,21 @@ class TestEpisodeFiltering:
     def test_filter_episodes_baseline_filter(self):
         """Test filtering episodes by baseline algorithm."""
         episodes = [
-            {"scenario_id": "scenario1", "scenario_params": {"algo": "socialforce"}},
-            {"scenario_id": "scenario2", "scenario_params": {"algo": "random"}},
-            {"scenario_id": "scenario1", "scenario_params": {"algo": "random"}},
+            {
+                "scenario_id": "scenario1",
+                "scenario_params": {"algo": "socialforce"},
+                "algo": "socialforce",
+            },
+            {
+                "scenario_id": "scenario2",
+                "scenario_params": {"algo": "random"},
+                "algo": "random",
+            },
+            {
+                "scenario_id": "scenario1",
+                "scenario_params": {"algo": "random"},
+                "algo": "random",
+            },
         ]
 
         filtered = _filter_episodes(episodes, None, "socialforce")
@@ -176,7 +208,11 @@ class TestEpisodeFiltering:
     def test_filter_episodes_no_matches(self):
         """Test filtering episodes when no episodes match the filters."""
         episodes = [
-            {"scenario_id": "scenario1", "scenario_params": {"algo": "socialforce"}},
+            {
+                "scenario_id": "scenario1",
+                "scenario_params": {"algo": "socialforce"},
+                "algo": "socialforce",
+            },
         ]
 
         with pytest.raises(VisualizationError) as exc_info:
@@ -188,7 +224,11 @@ class TestEpisodeFiltering:
         episodes = [
             {"scenario_id": "scenario1"},  # Missing scenario_params
             {"scenario_params": {"algo": "socialforce"}},  # Missing scenario_id
-            {"scenario_id": "scenario2", "scenario_params": {"algo": "random"}},
+            {
+                "scenario_id": "scenario2",
+                "scenario_params": {"algo": "random"},
+                "algo": "random",
+            },
         ]
 
         # Should handle missing fields gracefully - no matches for scenario1 + socialforce

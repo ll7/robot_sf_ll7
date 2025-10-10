@@ -48,14 +48,24 @@ export SDL_VIDEODRIVER="dummy"
 
 # Run the complete comparison
 echo "Starting multi-extractor training comparison..."
-python scripts/multi_extractor_training.py
+
+OUTPUT_ROOT="results/feature_extractor_comparison"
+CONFIG_PATH="configs/scenarios/multi_extractor_gpu.yaml"
+
+mkdir -p "$OUTPUT_ROOT"
+unset ROBOT_SF_MULTI_EXTRACTOR_TEST_MODE
+
+python scripts/multi_extractor_training.py \
+  --config "$CONFIG_PATH" \
+  --run-id "feature-comparison" \
+  --output-root "$OUTPUT_ROOT"
 
 # Check if training completed successfully
 if [ $? -eq 0 ]; then
     echo "Training completed successfully!"
     
     # Run analysis if results are available
-    RESULTS_FILE="results/feature_extractor_comparison/complete_results.json"
+    RESULTS_FILE="$OUTPUT_ROOT/complete_results.json"
     if [ -f "$RESULTS_FILE" ]; then
         echo "Running statistical analysis..."
         python scripts/analyze_feature_extractors.py "$RESULTS_FILE"

@@ -21,11 +21,15 @@ def test_generate_benchmark_plots_contract():
         {
             "episode_id": "ep_001",
             "scenario_id": "classic_001",
+            "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "metrics": {"collisions": 0, "success": True, "snqi": 0.95},
         },
         {
             "episode_id": "ep_002",
             "scenario_id": "classic_001",
+            "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "metrics": {"collisions": 1, "success": False, "snqi": 0.75},
         },
     ]
@@ -60,12 +64,14 @@ def test_generate_benchmark_plots_with_filters():
             "episode_id": "ep_001",
             "scenario_id": "scenario_a",
             "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "metrics": {"collisions": 0, "success": True},
         },
         {
             "episode_id": "ep_002",
             "scenario_id": "scenario_b",
             "scenario_params": {"algo": "random"},
+            "algo": "random",
             "metrics": {"collisions": 2, "success": False},
         },
     ]

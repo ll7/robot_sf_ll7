@@ -87,11 +87,21 @@ config = create_feature_extractor_config(
 Run systematic comparison across all extractors:
 
 ```bash
-# Run complete comparison
-python scripts/multi_extractor_training.py
+# Run the default macOS-friendly comparison (single-thread)
+uv run python scripts/multi_extractor_training.py \
+  --config configs/scenarios/multi_extractor_default.yaml \
+  --run-id doc-demo \
+  --output-root results/feature_extractor_comparison
 
-# Analyze results
-python scripts/analyze_feature_extractors.py results/feature_extractor_comparison/complete_results.json
+# Run the GPU/vectorized comparison (skips gracefully when CUDA is absent)
+uv run python scripts/multi_extractor_training.py \
+  --config configs/scenarios/multi_extractor_gpu.yaml \
+  --run-id doc-gpu \
+  --output-root results/feature_extractor_comparison
+
+# Analyze any `complete_results.json` or `summary.json`
+uv run python scripts/analyze_feature_extractors.py \
+  results/feature_extractor_comparison/complete_results.json
 ```
 
 ### SLURM Cluster Training

@@ -144,65 +144,109 @@ if param_count < 100_000:  # Your budget
 
 ### 1. Complete Comparison Study
 
-```python
-# Use the provided multi-extractor training script
-python scripts/multi_extractor_training.py
+```bash
+uv run python scripts/multi_extractor_training.py \
+  --config configs/scenarios/multi_extractor_default.yaml \
+  --run-id study-default \
+  --output-root results/feature_extractor_comparison
 ```
 
-This runs all extractors with the same hyperparameters and saves results for analysis.
+This runs all extractors with the default hyperparameters and saves timestamped results for analysis.
 
 ### 2. Custom Comparison
 
 ```python
-from scripts.multi_extractor_training import MultiExtractorTraining
+from pathlib import Path
 
-# Define your extractors to compare
-custom_extractors = {
-    "baseline": FeatureExtractorPresets.dynamics_original(),
-    "mlp_small": FeatureExtractorPresets.mlp_small(),
-    "mlp_custom": create_feature_extractor_config(
-        "mlp", 
-        ray_hidden_dims=[256, 128], 
-        drive_hidden_dims=[64, 32]
-    ),
-    "attention_custom": create_feature_extractor_config(
-        "attention",
-        embed_dim=64,
-        num_heads=8
-    )
+import yaml  # type: ignore
+
+config = {
+    "run": {
+        "run_id": "custom-mlp-attn",
+        "worker_mode": "single-thread",
+        "num_envs": 1,
+        "total_timesteps": 200_000,
+        "eval_freq": 10_000,
+        "save_freq": 50_000,
+        "n_eval_episodes": 5,
+        "device": "cpu",
+        "seed": 13,
+    },
+    "extractors": [
+        {"name": "baseline", "preset": "dynamics_original", "expected_resources": "cpu"},
+        {"name": "mlp_custom", "preset": "mlp_small", "parameters": {"dropout_rate": 0.05}},
+        {"name": "attention_custom", "preset": "attention_small", "parameters": {"num_heads": 4}},
+    ],
 }
 
-# Run comparison
-trainer = MultiExtractorTraining(
-    output_dir="./my_comparison",
-    total_timesteps=500_000,
-    n_envs=8
-)
+config_path = Path("configs/scenarios/custom_multi_extractor.yaml")
+config_path.parent.mkdir(parents=True, exist_ok=True)
+config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
 
-results = trainer.run_comparison(custom_extractors)
+output_root = Path("results/custom_multi_extractor")
+output_root.mkdir(parents=True, exist_ok=True)
+
+from scripts import multi_extractor_training
+
+multi_extractor_training.main(
+    [
+        "--config",
+        str(config_path),
+        "--run-id",
+        "custom-mix",
+        "--output-root",
+        str(output_root),
+    ]
+)
 ```
 
 ### 3. Ablation Studies
 
 ```python
 # Study effect of MLP depth
-mlp_depths = {
-    "mlp_1_layer": create_feature_extractor_config("mlp", ray_hidden_dims=[64]),
-    "mlp_2_layer": create_feature_extractor_config("mlp", ray_hidden_dims=[128, 64]),  
-    "mlp_3_layer": create_feature_extractor_config("mlp", ray_hidden_dims=[256, 128, 64])
-}
+from pathlib import Path
 
-# Study effect of attention heads
-attention_heads = {
-    "att_2_heads": create_feature_extractor_config("attention", num_heads=2),
-    "att_4_heads": create_feature_extractor_config("attention", num_heads=4),
-    "att_8_heads": create_feature_extractor_config("attention", num_heads=8)
-}
+import yaml  # type: ignore
 
-# Run studies separately
-for study_name, configs in [("mlp_depth", mlp_depths), ("attention_heads", attention_heads)]:
-    trainer = MultiExtractorTraining(output_dir=f"./ablation_{study_name}")
-    results = trainer.run_comparison(configs)
+study_root = Path("results/ablation_studies")
+study_root.mkdir(parents=True, exist_ok=True)
+
+def run_ablation(run_label: str, extractor_names: list[str]) -> None:
+    config = {
+        "run": {
+            "run_id": run_label,
+            "worker_mode": "vectorized",
+            "num_envs": 4,
+            "total_timesteps": 150_000,
+            "eval_freq": 5_000,
+            "save_freq": 25_000,
+            "n_eval_episodes": 5,
+            "device": "cuda",
+        },
+        "extractors": [
+            {"name": name, "preset": name, "expected_resources": "gpu"}
+            for name in extractor_names
+        ],
+    }
+
+    cfg_path = study_root / f"{run_label}.yaml"
+    cfg_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    from scripts import multi_extractor_training
+
+    multi_extractor_training.main(
+        [
+            "--config",
+            str(cfg_path),
+            "--run-id",
+            run_label,
+            "--output-root",
+            str(study_root / run_label),
+        ]
+    )
+
+run_ablation("mlp_depth", ["mlp_small", "mlp_large"])
+run_ablation("attention_heads", ["attention_small", "attention_large"])
 ```
 
 ## Advanced Usage

@@ -65,6 +65,7 @@ def test_snqi_minimal_generate_figures(tmp_path: Path, success_vals):
             "episode_id": f"ep{i}",
             "scenario_id": "scnA",
             "scenario_params": {"algo": "dummy"},
+            "algo": "dummy",
             "seed": i,
             # metrics required / referenced in snqi logic
             "metrics": {

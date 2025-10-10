@@ -486,16 +486,16 @@ def _determine_skip_reason(
     profile: ExtractorConfigurationProfile, context: RunContext
 ) -> Optional[str]:
     settings = context.settings
-    if context.test_mode:
-        if settings.device == "cuda" or profile.expected_resources == "gpu":
-            return "CUDA execution requested but skipped in test mode"
-        return None
-
     gpu_available = _gpu_available()
+
+    # Check GPU availability for CUDA requirements regardless of test mode
     if settings.device == "cuda" and not gpu_available:
         return "CUDA device requested but torch.cuda.is_available() is False"
     if profile.expected_resources == "gpu" and not gpu_available:
         return "Extractor expects GPU resources but CUDA is unavailable"
+
+    # In test mode, allow CUDA extractors to run if CUDA is available
+    # This ensures GPU-enabled CI can exercise the full workflow
     return None
 
 

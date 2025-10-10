@@ -63,7 +63,6 @@ git submodule sync --recursive
 git submodule update --init --recursive
 
 uv sync --all-extras
-source .venv/bin/activate
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256

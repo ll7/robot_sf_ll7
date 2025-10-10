@@ -2,8 +2,8 @@
 An empty environment for the robot to drive to several goals.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable
 
 from gymnasium import Env
 from gymnasium.utils import seeding
@@ -70,12 +70,18 @@ class EmptyRobotEnv(Env):
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_collision_and_sensors(
-            self.simulator, env_config, orig_obs_space
+            self.simulator,
+            env_config,
+            orig_obs_space,
         )
 
         # Setup initial state of the robot
         self.state = RobotState(
-            self.simulator.robot_navs[0], occupancies[0], sensors[0], d_t, max_ep_time
+            self.simulator.robot_navs[0],
+            occupancies[0],
+            sensors[0],
+            d_t,
+            max_ep_time,
         )
 
         # Store last action executed by the robot

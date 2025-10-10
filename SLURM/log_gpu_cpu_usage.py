@@ -3,7 +3,7 @@
 import os
 import sys
 
-import GPUtil
+import GPUtil  # type: ignore[import]
 import psutil
 from loguru import logger
 from stable_baselines3 import PPO
@@ -29,14 +29,20 @@ class LogResourceUsageCallback(BaseCallback):
 
         # Log to TensorBoard
         self.logger.record("cpu_usage", cpu_usage)
-        for idx, (usage, mem_util) in enumerate(zip(gpu_usage, gpu_memory_util)):
+        for idx, (usage, mem_util) in enumerate(zip(gpu_usage, gpu_memory_util, strict=False)):
             self.logger.record(f"gpu_{idx}_usage", usage)
             self.logger.record(f"gpu_{idx}_memory_util", mem_util)
 
         return True
 
 
-def training(n_envs: int = os.cpu_count(), ped_densities: list[float] = None, difficulty: int = 2):
+def training(
+    n_envs: int | None = None,
+    ped_densities: list[float] | None = None,
+    difficulty: int = 2,
+):
+    if n_envs is None:
+        n_envs = os.cpu_count() or 1
     """Train a robot in robot_sf.
     Args:
         n_envs: Number of environments to run in parallel.
@@ -55,14 +61,17 @@ def training(n_envs: int = os.cpu_count(), ped_densities: list[float] = None, di
 
     env = make_vec_env(make_env, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
-    policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
+    policy_kwargs = {"features_extractor_class": DynamicsExtractor}
     model = PPO(
-        "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+        "MultiInputPolicy",
+        env,
+        tensorboard_log="./logs/ppo_logs/",
+        policy_kwargs=policy_kwargs,
     )
     save_model_callback = CheckpointCallback(500_000 // n_envs, "./model/backup", "ppo_model")
     collect_metrics_callback = DrivingMetricsCallback(n_envs)
     combined_callback = CallbackList(
-        [save_model_callback, collect_metrics_callback, LogResourceUsageCallback()]
+        [save_model_callback, collect_metrics_callback, LogResourceUsageCallback()],
     )
 
     logger.info("Start learning")

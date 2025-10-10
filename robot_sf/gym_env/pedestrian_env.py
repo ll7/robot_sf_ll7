@@ -13,12 +13,13 @@ It also defines the action and observation spaces for the pedestrian.
 import datetime
 import os
 import pickle
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable, List
 
 import loguru
 from gymnasium import Env
 
+from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.env_util import (
     init_ped_collision_and_sensors,
@@ -48,7 +49,7 @@ class PedestrianEnv(Env):
 
     def __init__(
         self,
-        env_config: PedEnvSettings = None,
+        env_config: PedEnvSettings | None = None,
         reward_func: Callable[[dict], float] = simple_ped_reward,
         robot_model=None,
         debug: bool = False,
@@ -77,7 +78,8 @@ class PedestrianEnv(Env):
 
         # Initialize spaces based on the environment configuration and map
         combined_action_space, combined_observation_space, orig_obs_space = init_ped_spaces(
-            env_config, self.map_def
+            env_config,
+            self.map_def,
         )
 
         # Assign the action and observation spaces
@@ -89,7 +91,7 @@ class PedestrianEnv(Env):
         self.debug = debug
 
         # Initialize the list to store recorded states
-        self.recorded_states: List[VisualizableSimState] = []
+        self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
 
         # Initialize simulator with a random start position
@@ -102,7 +104,9 @@ class PedestrianEnv(Env):
 
         # Initialize collision detectors and sensor data processors
         occupancies, sensors = init_ped_collision_and_sensors(
-            self.simulator, env_config, orig_obs_space
+            self.simulator,
+            env_config,
+            orig_obs_space,
         )
 
         # Setup initial state of the robot
@@ -123,9 +127,12 @@ class PedestrianEnv(Env):
             sim_time_limit=env_config.sim_config.sim_time_in_secs,
         )
 
-        # Assign the robot model
+        # Assign / create the robot model. Historically the factory injected a stub when
+        # none was provided; some tests rely on this permissive behavior. We retain
+        # that here to ensure backward compatibility with older usage patterns.
         if robot_model is None:
-            raise ValueError("Please provide a valid robot_model during initialization.")
+            # Use shared stub to keep behavior consistent with factory fallback.
+            robot_model = StubRobotModel()
         self.robot_model = robot_model
 
         # Store last state executed by the robot
@@ -137,8 +144,10 @@ class PedestrianEnv(Env):
 
         # If in debug mode, create a simulation view to visualize the state
         if debug:
+            scaling_value = getattr(env_config, "render_scaling", None)
+            scaling_value = 10 if scaling_value is None else int(scaling_value)
             self.sim_ui = SimulationView(
-                scaling=10,
+                scaling=scaling_value,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
@@ -299,7 +308,7 @@ class PedestrianEnv(Env):
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
 
-    def save_recording(self, filename: str = None):
+    def save_recording(self, filename: str | None = None):
         """
         save the recorded states to a file
         filname: str, must end with *.pkl

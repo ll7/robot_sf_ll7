@@ -4,7 +4,7 @@ WORKDIR /app
 ADD ./uv.toml ./uv.lock ./pyproject.toml ./
 ADD ./fast-pysf ./fast-pysf
 ADD ./robot_sf ./robot_sf
-RUN uv sync --frozen
+RUN uv sync --all-extras --frozen
 ADD ./tests ./tests
 
 WORKDIR /app/tests

@@ -1,0 +1,256 @@
+## Classic Interaction Scenario Matrix
+#
+# Defines canonical robot–pedestrian micro-interaction patterns using newly added
+# SVG maps under maps/svg_maps/classic_*.svg.
+#
+# Density levels:
+#   low=0.02, medium=0.05, high=0.08 (ped_density)
+# Flow meanings (informational):
+#   bi: bidirectional, uni: single direction, converging: merging streams
+#
+# Groups applied only to group_crossing archetype (0.5). Others use 0.0.
+
+scenarios:
+  # Crossing archetype variants
+  - name: classic_crossing_low
+    map_file: "maps/svg_maps/classic_crossing.svg"
+    simulation_config:
+      max_episode_steps: 200
+      ped_density: 0.08
+    robot_config: {}
+    metadata:
+      archetype: crossing
+      density: low
+      flow: bi
+      groups: 0.0
+    seeds: [101, 102, 103]
+
+  - name: classic_crossing_medium
+    map_file: "maps/svg_maps/classic_crossing.svg"
+    simulation_config:
+      max_episode_steps: 200
+      ped_density: 0.08
+    robot_config: {}
+    metadata:
+      archetype: crossing
+      density: medium
+      flow: bi
+      groups: 0.0
+    seeds: [101, 102, 103]
+
+  - name: classic_crossing_high
+    map_file: "maps/svg_maps/classic_crossing.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.08
+    robot_config: {}
+    metadata:
+      archetype: crossing
+      density: high
+      flow: bi
+      groups: 0.0
+    seeds: [101, 102, 103]
+
+  # Head-on corridor
+  - name: classic_head_on_corridor_low
+    map_file: "maps/svg_maps/classic_head_on_corridor.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: head_on_corridor
+      density: low
+      flow: bi
+      groups: 0.0
+    seeds: [111, 112, 113]
+
+  - name: classic_head_on_corridor_medium
+    map_file: "maps/svg_maps/classic_head_on_corridor.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: head_on_corridor
+      density: medium
+      flow: bi
+      groups: 0.0
+    seeds: [111, 112, 113]
+
+  # Overtaking (uni-directional, no high density to avoid degeneracy)
+  - name: classic_overtaking_low
+    map_file: "maps/svg_maps/classic_overtaking.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: overtaking
+      density: low
+      flow: uni
+      groups: 0.0
+    seeds: [121, 122, 123]
+
+  - name: classic_overtaking_medium
+    map_file: "maps/svg_maps/classic_overtaking.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: overtaking
+      density: medium
+      flow: uni
+      groups: 0.0
+    seeds: [121, 122, 123]
+
+  # Bottleneck
+  - name: classic_bottleneck_low
+    map_file: "maps/svg_maps/classic_bottleneck.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: bottleneck
+      density: low
+      flow: bi
+      groups: 0.0
+    seeds: [131, 132, 133]
+
+  - name: classic_bottleneck_medium
+    map_file: "maps/svg_maps/classic_bottleneck.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: bottleneck
+      density: medium
+      flow: bi
+      groups: 0.0
+    seeds: [131, 132, 133]
+
+  - name: classic_bottleneck_high
+    map_file: "maps/svg_maps/classic_bottleneck.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.08
+    robot_config: {}
+    metadata:
+      archetype: bottleneck
+      density: high
+      flow: bi
+      groups: 0.0
+    seeds: [131, 132, 133]
+
+  # Doorway
+  - name: classic_doorway_low
+    map_file: "maps/svg_maps/classic_doorway.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: doorway
+      density: low
+      flow: bi
+      groups: 0.0
+    seeds: [141, 142, 143]
+
+  - name: classic_doorway_medium
+    map_file: "maps/svg_maps/classic_doorway.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: doorway
+      density: medium
+      flow: bi
+      groups: 0.0
+    seeds: [141, 142, 143]
+
+  # Merging (converging flows)
+  - name: classic_merging_low
+    map_file: "maps/svg_maps/classic_merging.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: merging
+      density: low
+      flow: converging
+      groups: 0.0
+    seeds: [151, 152, 153]
+
+  - name: classic_merging_medium
+    map_file: "maps/svg_maps/classic_merging.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: merging
+      density: medium
+      flow: converging
+      groups: 0.0
+    seeds: [151, 152, 153]
+
+  # T-Intersection
+  - name: classic_t_intersection_low
+    map_file: "maps/svg_maps/classic_t_intersection.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: t_intersection
+      density: low
+      flow: bi
+      groups: 0.0
+    seeds: [161, 162, 163]
+
+  - name: classic_t_intersection_medium
+    map_file: "maps/svg_maps/classic_t_intersection.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: t_intersection
+      density: medium
+      flow: bi
+      groups: 0.0
+    seeds: [161, 162, 163]
+
+  # Group Crossing (groups influence)
+  - name: classic_group_crossing_low
+    map_file: "maps/svg_maps/classic_group_crossing.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.02
+      groups: 0.5
+    robot_config: {}
+    metadata:
+      archetype: group_crossing
+      density: low
+      flow: bi
+      groups: 0.5
+    seeds: [171, 172, 173]
+
+  - name: classic_group_crossing_medium
+    map_file: "maps/svg_maps/classic_group_crossing.svg"
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.05
+      groups: 0.5
+    robot_config: {}
+    metadata:
+      archetype: group_crossing
+      density: medium
+      flow: bi
+      groups: 0.5
+    seeds: [171, 172, 173]

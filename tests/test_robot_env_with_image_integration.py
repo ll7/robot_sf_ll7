@@ -117,7 +117,7 @@ class TestRobotEnvWithImageIntegration:
             assert 0.0 <= obs[OBS_IMAGE].min() <= obs[OBS_IMAGE].max() <= 1.0
 
             # Verify step outputs
-            assert isinstance(reward, (int, float))
+            assert isinstance(reward, int | float)
             assert isinstance(terminated, bool)
             assert isinstance(truncated, bool)
             assert isinstance(info, dict)
@@ -134,7 +134,7 @@ class TestRobotEnvWithImageIntegration:
         try:
             env = RobotEnvWithImage(env_config=settings, debug=True)
 
-            for episode in range(3):
+            for _episode in range(3):
                 obs, info = env.reset()
 
                 # Verify initial observation
@@ -144,7 +144,7 @@ class TestRobotEnvWithImageIntegration:
                 assert 0 <= obs[OBS_IMAGE].min() <= obs[OBS_IMAGE].max() <= 255
 
                 # Take a few steps
-                for step in range(5):
+                for _step in range(5):
                     action = env.action_space.sample()
                     obs, reward, terminated, truncated, info = env.step(action)
 

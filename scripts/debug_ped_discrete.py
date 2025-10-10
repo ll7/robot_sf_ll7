@@ -60,10 +60,7 @@ def run():
     obs = env.reset()
     ep_rewards = 0
     for _ in range(10000):
-        if isinstance(obs, tuple):
-            action = select_action(obs[0])
-        else:
-            action = select_action(obs)
+        action = select_action(obs[0]) if isinstance(obs, tuple) else select_action(obs)
         obs, reward, done, _, meta = env.step(action)
         ep_rewards += reward
         env.render()

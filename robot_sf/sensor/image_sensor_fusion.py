@@ -3,8 +3,8 @@ Extended sensor fusion that includes image observations.
 """
 
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 from gymnasium import spaces
@@ -25,8 +25,8 @@ class ImageSensorFusion:
 
     lidar_sensor: Callable[[], np.ndarray]
     robot_speed_sensor: Callable[[], PolarVec2D]
-    target_sensor: Callable[[], Tuple[float, float, float]]
-    image_sensor: Optional[ImageSensor]
+    target_sensor: Callable[[], tuple[float, float, float]]
+    image_sensor: ImageSensor | None
     unnormed_obs_space: spaces.Dict
     use_next_goal: bool
     use_image_obs: bool = False
@@ -57,7 +57,7 @@ class ImageSensorFusion:
         if self.use_image_obs:
             self.image_state_cache = deque(maxlen=self.cache_steps)
 
-    def next_obs(self) -> Dict[str, np.ndarray]:
+    def next_obs(self) -> dict[str, np.ndarray]:
         """
         Get the next observation by combining data from all sensors including images.
 
@@ -80,7 +80,7 @@ class ImageSensorFusion:
 
         # Combine the robot speed and target sensor data into the drive state
         drive_state = np.array(
-            [speed_x, speed_rot, target_distance, target_angle, next_target_angle]
+            [speed_x, speed_rot, target_distance, target_angle, next_target_angle],
         )
 
         # Get image state if enabled

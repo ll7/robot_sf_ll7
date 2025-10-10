@@ -3,7 +3,6 @@ Image sensor for capturing visual observations from the pygame rendering system.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import pygame
@@ -31,7 +30,7 @@ class ImageSensor:
     that can be used as part of the observation space for reinforcement learning.
     """
 
-    def __init__(self, settings: ImageSensorSettings, sim_view: Optional[SimulationView] = None):
+    def __init__(self, settings: ImageSensorSettings, sim_view: SimulationView | None = None):
         """
         Initialize the image sensor.
 
@@ -103,7 +102,8 @@ class ImageSensor:
         # Convert to pygame surface for resizing
         surface = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
         resized_surface = pygame.transform.scale(
-            surface, (self.settings.width, self.settings.height)
+            surface,
+            (self.settings.width, self.settings.height),
         )
 
         # Convert back to numpy array

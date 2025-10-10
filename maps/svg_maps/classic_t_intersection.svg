@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Classical Interaction Map: T-Intersection -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="44"
+    height="40" viewBox="0 0 44 40">
+    <g id="obstacles" inkscape:label="Obstacles">
+        <rect x="0" y="0" width="44" height="1" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="39" width="44" height="1" fill="#000" inkscape:label="obstacle" />
+        <rect x="0" y="0" width="1" height="40" fill="#000" inkscape:label="obstacle" />
+        <rect x="43" y="0" width="1" height="40" fill="#000" inkscape:label="obstacle" />
+        <!-- Vertical stem blocker shaping turn (scaled) -->
+        <rect x="20" y="12" width="4" height="16" fill="#000" inkscape:label="obstacle" />
+    </g>
+    <g id="robot" inkscape:label="Robot">
+        <rect x="6" y="32" width="4" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" />
+        <rect x="34" y="6" width="4" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
+    </g>
+    <g id="pedestrians" inkscape:label="Pedestrians">
+        <rect x="6" y="6" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" />
+        <rect x="34" y="32" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" />
+    </g>
+    <g id="routes" inkscape:label="Routes">
+        <path d="M 8 34 L 36 8" stroke="#0300d5" stroke-width="1" fill="none" inkscape:label="robot_route_0_0" />
+        <path d="M 8 8 L 36 34" stroke="#c40202" stroke-width="1" fill="none" inkscape:label="ped_route_0_0" />
+    </g>
+</svg>

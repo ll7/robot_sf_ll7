@@ -1,0 +1,60 @@
+{
+  "contract": "TypeCheckingAPI",
+  "version": "1.0",
+  "endpoints": [
+    {
+      "name": "run_type_check",
+      "method": "command",
+      "command": "uvx ty check . --exit-zero",
+      "parameters": [],
+      "response": {
+        "type": "object",
+        "properties": {
+          "exit_code": {"type": "integer"},
+          "diagnostics_count": {"type": "integer"},
+          "output": {"type": "string"}
+        }
+      },
+      "preconditions": [
+        "Python environment activated",
+        "uvx installed"
+      ],
+      "postconditions": [
+        "Type diagnostics reported",
+        "No runtime errors"
+      ]
+    },
+    {
+      "name": "validate_compatibility",
+      "method": "function",
+      "signature": "validate_python_compatibility(version: str) -> bool",
+      "parameters": [
+        {"name": "version", "type": "str", "description": "Python version string"}
+      ],
+      "response": {"type": "boolean"},
+      "preconditions": [
+        "Python version detectable"
+      ],
+      "postconditions": [
+        "Compatibility confirmed or error raised"
+      ]
+    }
+  ],
+  "data_contracts": [
+    {
+      "name": "TypeDiagnostic",
+      "schema": {
+        "type": "object",
+        "required": ["file", "line", "message", "category"],
+        "properties": {
+          "file": {"type": "string"},
+          "line": {"type": "integer"},
+          "column": {"type": "integer"},
+          "message": {"type": "string"},
+          "category": {"type": "string", "enum": ["invalid-arg", "unresolved-import", "invalid-assignment", "missing-arg"]},
+          "severity": {"type": "string", "enum": ["error", "warning"]}
+        }
+      }
+    }
+  ]
+}

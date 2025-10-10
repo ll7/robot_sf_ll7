@@ -26,7 +26,11 @@ class TestImageSensorSettings:
     def test_custom_settings(self):
         """Test custom ImageSensorSettings initialization."""
         settings = ImageSensorSettings(
-            width=128, height=96, channels=1, normalize=False, grayscale=True
+            width=128,
+            height=96,
+            channels=1,
+            normalize=False,
+            grayscale=True,
         )
         assert settings.width == 128
         assert settings.height == 96
@@ -259,7 +263,7 @@ class TestImageSensorIntegration:
 
             # Fill with different colors for each test
             sim_view.screen.fill(
-                (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255))
+                (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255)),
             )
 
             frame = sensor.capture_frame()

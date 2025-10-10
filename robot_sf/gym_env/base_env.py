@@ -6,12 +6,12 @@ Provides common functionality for all environments.
 import datetime
 import os
 import pickle
-from typing import List
 
 from gymnasium import Env
 from loguru import logger
 
 from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.render.jsonl_recording import JSONLRecorder
 from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 from robot_sf.sim.simulator import init_simulators
 
@@ -25,9 +25,16 @@ class BaseEnv(Env):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
+        # New JSONL recording parameters
+        use_jsonl_recording: bool = False,
+        recording_dir: str = "recordings",
+        suite_name: str = "robot_sim",
+        scenario_name: str = "default",
+        algorithm_name: str = "manual",
+        recording_seed: int | None = None,
     ):
         super().__init__()
 
@@ -45,8 +52,24 @@ class BaseEnv(Env):
         self.debug = debug
 
         # Initialize the list to store recorded states
-        self.recorded_states: List[VisualizableSimState] = []
+        self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
+
+        # New JSONL recording system
+        self.use_jsonl_recording = use_jsonl_recording
+        self.jsonl_recorder: JSONLRecorder | None = None
+
+        if use_jsonl_recording and recording_enabled:
+            # Use provided seed or generate from environment config
+            seed = recording_seed if recording_seed is not None else getattr(env_config, "seed", 0)
+
+            self.jsonl_recorder = JSONLRecorder(
+                output_dir=recording_dir,
+                suite=suite_name,
+                scenario=scenario_name,
+                algorithm=algorithm_name,
+                seed=seed,
+            )
 
         # Initialize simulator with a random start position
         self.simulator = init_simulators(
@@ -64,8 +87,11 @@ class BaseEnv(Env):
 
         # If in debug mode or video recording is enabled, create simulation view
         if debug or record_video:
+            # Prefer config-driven render scaling when provided; else default to 10.
+            scaling_value = getattr(env_config, "render_scaling", None)
+            scaling_value = 10 if scaling_value is None else int(scaling_value)
             self.sim_ui = SimulationView(
-                scaling=10,
+                scaling=scaling_value,
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 robot_radius=env_config.robot_config.radius,
@@ -89,7 +115,7 @@ class BaseEnv(Env):
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str = None):
+    def save_recording(self, filename: str | None = None):
         """
         save the recorded states to a file
         filname: str, must end with *.pkl
@@ -114,3 +140,34 @@ class BaseEnv(Env):
             logger.info(f"Recording saved to {filename}")
             logger.info("Reset state list")
             self.recorded_states = []
+
+    def start_episode_recording(self, config_hash: str = "unknown") -> None:
+        """Start recording a new episode with JSONL recorder."""
+        if self.jsonl_recorder is not None:
+            self.jsonl_recorder.start_episode(config_hash=config_hash)
+
+    def record_simulation_step(self, state: VisualizableSimState) -> None:
+        """Record a single simulation step to both recording systems."""
+        # Legacy pickle recording
+        if self.recording_enabled and not self.use_jsonl_recording:
+            self.recorded_states.append(state)
+
+        # New JSONL recording
+        if self.jsonl_recorder is not None:
+            self.jsonl_recorder.record_step(state)
+
+    def record_entity_reset(self, entity_ids: list[int], state: VisualizableSimState) -> None:
+        """Record an entity reset event."""
+        if self.jsonl_recorder is not None:
+            self.jsonl_recorder.record_entity_reset(entity_ids, state)
+
+    def end_episode_recording(self) -> None:
+        """End the current episode recording."""
+        if self.jsonl_recorder is not None:
+            self.jsonl_recorder.end_episode()
+
+    def close_recorder(self) -> None:
+        """Close the recorder and clean up resources."""
+        if self.jsonl_recorder is not None:
+            self.jsonl_recorder.close()
+            self.jsonl_recorder = None

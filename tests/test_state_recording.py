@@ -19,7 +19,8 @@ def test_recording():
 
     # Check that the file was created
     filename = max(
-        os.listdir("recordings"), key=lambda x: os.path.getctime(os.path.join("recordings", x))
+        os.listdir("recordings"),
+        key=lambda x: os.path.getctime(os.path.join("recordings", x)),
     )
     assert os.path.exists(os.path.join("recordings", filename))
 

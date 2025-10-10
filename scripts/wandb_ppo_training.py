@@ -57,9 +57,12 @@ def make_env():
 
 env = make_vec_env(make_env, n_envs=N_ENVS, vec_env_cls=SubprocVecEnv)
 
-policy_kwargs = dict(features_extractor_class=DynamicsExtractor)
+policy_kwargs = {"features_extractor_class": DynamicsExtractor}
 model = PPO(
-    "MultiInputPolicy", env, tensorboard_log="./logs/ppo_logs/", policy_kwargs=policy_kwargs
+    "MultiInputPolicy",
+    env,
+    tensorboard_log="./logs/ppo_logs/",
+    policy_kwargs=policy_kwargs,
 )
 save_model_callback = CheckpointCallback(500_000 // N_ENVS, "./model/backup", "ppo_model")
 collect_metrics_callback = DrivingMetricsCallback(N_ENVS)
@@ -73,7 +76,9 @@ wandb_callback = WandbCallback(
 combined_callback = CallbackList([save_model_callback, collect_metrics_callback, wandb_callback])
 
 model.learn(
-    total_timesteps=wandb_config["total_timesteps"], progress_bar=True, callback=combined_callback
+    total_timesteps=wandb_config["total_timesteps"],
+    progress_bar=True,
+    callback=combined_callback,
 )
 model.save("./model/ppo_model")
 

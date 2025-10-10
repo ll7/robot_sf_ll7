@@ -3,16 +3,25 @@ Interactive playback module for recorded simulation states.
 
 This module extends the SimulationView to provide interactive navigation through
 recorded simulation states, allowing users to step forward/backward through frames
-and control playback speed. Includes trajectory visualization for entities.
+and control playback speed. Includes trajectory visualization for entities with
+proper episode boundary handling to prevent "teleport" trails.
+
+Key Features:
+    - Episode boundary detection and trajectory clearing
+    - Support for JSONL-format recordings with per-episode files
+    - Batch playback from directories or manifest files
+    - Entity reset event handling
+    - Backward compatibility with pickle files
 """
 
 from collections import deque
-from typing import Deque, Dict, List, Tuple
+from pathlib import Path
 
 import pygame
 from loguru import logger
 
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.render.jsonl_playback import BatchPlayback, JSONLPlaybackLoader, PlaybackEpisode
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import (
     TEXT_BACKGROUND,
@@ -40,6 +49,8 @@ class InteractivePlayback(SimulationView):
     - Play/pause functionality
     - Display current frame index
     - Visualize entity trajectories during playback
+    - Handle episode boundaries to prevent "teleport" trails
+    - Support batch playback from multiple episodes
 
     Attributes:
         states (List[VisualizableSimState]): List of states to playback
@@ -51,14 +62,22 @@ class InteractivePlayback(SimulationView):
         robot_trajectory (Deque[Tuple[float, float]]): Robot position history
         ped_trajectories (Dict[int, Deque[Tuple[float, float]]]): Pedestrian position histories
         ego_ped_trajectory (Deque[Tuple[float, float]]): Ego pedestrian position history
+
+        # Episode-aware attributes
+        episodes (Optional[List[PlaybackEpisode]]): List of episodes for batch playback
+        current_episode_idx (int): Index of current episode in batch playback
+        episode_boundaries (List[int]): Frame indices where episodes start
+        reset_points (List[int]): Frame indices where entity resets occurred
     """
 
     def __init__(
         self,
-        states: List[VisualizableSimState],
+        states: list[VisualizableSimState],
         map_def: MapDefinition,
         sleep_time: float = 0.1,  # Default to 0.1 explicitly
         caption: str = "RobotSF Interactive Playback",
+        # New episode-aware parameters
+        episodes: list[PlaybackEpisode] | None = None,
     ):
         """
         Initialize the interactive playback viewer.
@@ -68,6 +87,7 @@ class InteractivePlayback(SimulationView):
             map_def: Map definition for the simulation
             sleep_time: Time to sleep between frames (default: 0.1s)
             caption: Window caption
+            episodes: Optional list of episodes for batch playback
         """
         super().__init__(map_def=map_def, caption=caption)
         self.states = states
@@ -84,16 +104,43 @@ class InteractivePlayback(SimulationView):
         self.show_trajectories = False
         # Use a private backing field during init to avoid triggering updates prematurely
         self._max_trajectory_length = 100  # Default trail length
-        self.robot_trajectory: Deque[Tuple[float, float]] = deque(
-            maxlen=self._max_trajectory_length
+        self.robot_trajectory: deque[tuple[float, float]] = deque(
+            maxlen=self._max_trajectory_length,
         )
-        self.ped_trajectories: Dict[int, Deque[Tuple[float, float]]] = {}
-        self.ego_ped_trajectory: Deque[Tuple[float, float]] = deque(
-            maxlen=self._max_trajectory_length
+        self.ped_trajectories: dict[int, deque[tuple[float, float]]] = {}
+        self.ego_ped_trajectory: deque[tuple[float, float]] = deque(
+            maxlen=self._max_trajectory_length,
         )
+
+        # Episode-aware attributes
+        self.episodes = episodes
+        self.current_episode_idx = 0
+        self.episode_boundaries = []
+        self.reset_points = []
+
+        # Initialize episode boundaries and reset points
+        self._initialize_episode_data()
 
         # Add playback controls to the help text
         self._extend_help_text()
+
+    def _initialize_episode_data(self):
+        """Initialize episode boundaries and reset points for trajectory clearing."""
+        if self.episodes:
+            # For batch playback, calculate episode boundaries
+            frame_offset = 0
+            for episode in self.episodes:
+                self.episode_boundaries.append(frame_offset)
+
+                # Add reset points relative to global frame indices
+                if episode.reset_points:
+                    for reset_point in episode.reset_points:
+                        self.reset_points.append(frame_offset + reset_point)
+
+                frame_offset += len(episode.states)
+        else:
+            # Single episode - no boundaries, but might have reset points from legacy detection
+            self.episode_boundaries = [0]
 
     def _extend_help_text(self):
         """Extend the help text with playback controls."""
@@ -244,7 +291,8 @@ class InteractivePlayback(SimulationView):
         # Update pedestrian trajectories
         for ped_id in self.ped_trajectories:
             new_ped_trajectory = deque(
-                self.ped_trajectories[ped_id], maxlen=self.max_trajectory_length
+                self.ped_trajectories[ped_id],
+                maxlen=self.max_trajectory_length,
             )
             self.ped_trajectories[ped_id] = new_ped_trajectory
 
@@ -288,6 +336,10 @@ class InteractivePlayback(SimulationView):
         if not self.show_trajectories:
             return
 
+        # Check if we're at an episode boundary or reset point - clear trajectories if so
+        if self._should_clear_trajectories():
+            self._clear_trajectories()
+
         # Update robot trajectory
         if hasattr(state, "robot_pose") and state.robot_pose:
             robot_pos = state.robot_pose[0]  # Get position from pose
@@ -305,8 +357,17 @@ class InteractivePlayback(SimulationView):
             ego_pos = state.ego_ped_pose[0]  # Get position from pose
             self.ego_ped_trajectory.append((ego_pos[0], ego_pos[1]))
 
+    def _should_clear_trajectories(self) -> bool:
+        """Check if trajectories should be cleared at current frame."""
+        return (
+            self.current_frame in self.episode_boundaries or self.current_frame in self.reset_points
+        )
+
     def _draw_trajectory(
-        self, trajectory: Deque[Tuple[float, float]], color: Tuple[int, int, int], width: int = 2
+        self,
+        trajectory: deque[tuple[float, float]],
+        color: tuple[int, int, int],
+        width: int = 2,
     ):
         """Draw a trajectory as connected lines."""
         if len(trajectory) < 2:
@@ -406,7 +467,8 @@ class InteractivePlayback(SimulationView):
             if frames_to_advance >= 1:
                 # Advance frames
                 self.current_frame = min(
-                    int(self.current_frame + frames_to_advance), len(self.states) - 1
+                    int(self.current_frame + frames_to_advance),
+                    len(self.states) - 1,
                 )
                 self.last_update_time = current_time
 
@@ -492,11 +554,80 @@ def load_and_play_interactively(filename: str):
     player.run()
 
 
+def load_and_play_jsonl_interactively(source: str | Path):
+    """
+    Load JSONL recorded states and play them back interactively.
+
+    Args:
+        source: Path to JSONL file, directory with episodes, or manifest file
+    """
+    loader = JSONLPlaybackLoader()
+
+    source_path = Path(source)
+
+    if source_path.is_file() and source_path.suffix == ".jsonl":
+        # Single episode file
+        episode, map_def = loader.load_single_episode(source)
+        states = episode.states
+        episodes = [episode]
+
+        logger.info(f"Starting interactive playback with {len(states)} states from single episode")
+        player = InteractivePlayback(states, map_def, episodes=episodes)
+        player.run()
+
+    elif source_path.is_file() and source_path.suffix == ".pkl":
+        # Legacy pickle file
+        episode, map_def = loader.load_single_episode(source)
+        states = episode.states
+        episodes = [episode]
+
+        logger.info(
+            f"Starting interactive playback with {len(states)} states from legacy pickle file"
+        )
+        player = InteractivePlayback(states, map_def, episodes=episodes)
+        player.run()
+
+    elif source_path.is_dir() or (source_path.is_file() and source_path.suffix == ".json"):
+        # Directory or manifest - batch playback
+        batch = loader.load_batch(source)
+
+        # Concatenate all episode states
+        states = []
+        for episode in batch.episodes:
+            states.extend(episode.states)
+
+        logger.info(
+            f"Starting batch interactive playback with {len(states)} total states from {batch.total_episodes} episodes"
+        )
+        player = InteractivePlayback(states, batch.map_def, episodes=batch.episodes)
+        player.run()
+
+    else:
+        raise ValueError(f"Unsupported source: {source}")
+
+
+def create_interactive_playback_from_batch(batch: BatchPlayback) -> InteractivePlayback:
+    """
+    Create an InteractivePlayback viewer from a BatchPlayback object.
+
+    Args:
+        batch: BatchPlayback object containing episodes and map definition
+
+    Returns:
+        Configured InteractivePlayback instance
+    """
+    # Concatenate all episode states
+    states = []
+    for episode in batch.episodes:
+        states.extend(episode.states)
+
+    return InteractivePlayback(states, batch.map_def, episodes=batch.episodes)
+
+
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python -m robot_sf.render.interactive_playback <state_file>")
         sys.exit(1)
 
     state_file = sys.argv[1]

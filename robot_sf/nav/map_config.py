@@ -7,7 +7,6 @@ import os
 import random
 from dataclasses import dataclass, field
 from math import sqrt
-from typing import Dict, List, Union
 
 import matplotlib.axes
 import numpy as np
@@ -41,24 +40,24 @@ class MapDefinition:
 
     height: float
 
-    obstacles: List[Obstacle]
+    obstacles: list[Obstacle]
     """The obstacles in the map."""
 
-    robot_spawn_zones: List[Rect]
+    robot_spawn_zones: list[Rect]
     """The robot spawn zones. Mustn't be empty."""
 
-    ped_spawn_zones: List[Rect]
-    robot_goal_zones: List[Rect]
+    ped_spawn_zones: list[Rect]
+    robot_goal_zones: list[Rect]
     """The robot goal zones. Mustn't be empty."""
 
-    bounds: List[Line2D]
-    robot_routes: List[GlobalRoute]
-    ped_goal_zones: List[Rect]
-    ped_crowded_zones: List[Rect]
-    ped_routes: List[GlobalRoute]
-    obstacles_pysf: List[Line2D] = field(init=False)
+    bounds: list[Line2D]
+    robot_routes: list[GlobalRoute]
+    ped_goal_zones: list[Rect]
+    ped_crowded_zones: list[Rect]
+    ped_routes: list[GlobalRoute]
+    obstacles_pysf: list[Line2D] = field(init=False)
     """Transformed obstacles in pysf format. Are generated in __post_init__."""
-    robot_routes_by_spawn_id: Dict[int, List[GlobalRoute]] = field(init=False)
+    robot_routes_by_spawn_id: dict[int, list[GlobalRoute]] = field(init=False)
 
     def __post_init__(self):
         """
@@ -81,7 +80,7 @@ class MapDefinition:
         if self.width <= 0 or self.height <= 0:
             logger.critical(
                 "Map width and height mustn't be zero or negative! "
-                + f"Width: {self.width}, Height: {self.height}"
+                + f"Width: {self.width}, Height: {self.height}",
             )
 
         if not self.robot_spawn_zones:
@@ -92,7 +91,7 @@ class MapDefinition:
 
         if len(self.bounds) != 4:
             logger.critical(
-                "Invalid bounds! Expected exactly 4 bounds! " + f"Found {len(self.bounds)} bounds!"
+                "Invalid bounds! Expected exactly 4 bounds! " + f"Found {len(self.bounds)} bounds!",
             )
 
     @property
@@ -109,7 +108,7 @@ class MapDefinition:
         """
         return sqrt(2) * (max(self.width, self.height) * 2)
 
-    def find_route(self, spawn_id: int, goal_id: int) -> Union[GlobalRoute, None]:
+    def find_route(self, spawn_id: int, goal_id: int) -> GlobalRoute | None:
         """
         Returns the route for the given spawn id and goal id. If no route is found, returns None.
         """
@@ -186,7 +185,7 @@ class MapDefinitionPool:
 
     maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
     """The directory where the **default** map files are located."""
-    map_defs: Dict[str, MapDefinition] = field(default_factory=dict)
+    map_defs: dict[str, MapDefinition] = field(default_factory=dict)
 
     def __post_init__(self):
         """
@@ -216,7 +215,7 @@ class MapDefinitionPool:
 
         # Function to load a JSON file
         def load_json(path: str) -> dict:
-            with open(path, "r", encoding="utf-8") as file:
+            with open(path, encoding="utf-8") as file:
                 return json.load(file)
 
         # Get the list of map files

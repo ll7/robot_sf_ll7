@@ -1,0 +1,27 @@
+regression_checks:
+  - command: "uv run pytest tests"
+    description: "Primary unit and integration suite covering benchmark, docs, and helper modules."
+    frequency: "per-commit"
+    categories:
+      - "benchmark"
+      - "render"
+      - "docs"
+    notes: "Must pass after refactoring helpers to ensure behavior parity."
+  - command: "uv run pytest test_pygame"
+    description: "Headless rendering smoke tests validating frame capture pathways."
+    frequency: "per-commit"
+    categories:
+      - "render"
+    notes: "Set DISPLAY=, MPLBACKEND=Agg, SDL_VIDEODRIVER=dummy in CI."
+  - command: "scripts/validation/test_basic_environment.sh"
+    description: "Shell smoke test for environment creation + reset cycle."
+    frequency: "pre-release"
+    categories:
+      - "environment"
+    notes: "Keep executable bit; run via bash."
+  - command: "scripts/validation/test_complete_simulation.sh"
+    description: "End-to-end simulation run ensuring helper refactors preserve outcomes."
+    frequency: "pre-release"
+    categories:
+      - "integration"
+    notes: "Expect runtime < 5 minutes; compare outputs to prior baseline when available."

@@ -6,7 +6,7 @@ ped_behavior.py
 
 from dataclasses import dataclass, field
 from math import dist
-from typing import Dict, List, Protocol
+from typing import Protocol
 
 from robot_sf.nav.map_config import GlobalRoute
 from robot_sf.nav.navigation import RouteNavigator
@@ -54,8 +54,8 @@ class CrowdedZoneBehavior:
     """
 
     groups: PedestrianGroupings
-    zone_assignments: Dict[int, int]
-    crowded_zones: List[Zone]
+    zone_assignments: dict[int, int]
+    crowded_zones: list[Zone]
     goal_proximity_threshold: float = 1
 
     def step(self):
@@ -120,10 +120,10 @@ class FollowRouteBehavior:
     """
 
     groups: PedestrianGroupings
-    route_assignments: Dict[int, GlobalRoute]
-    initial_sections: List[int]
+    route_assignments: dict[int, GlobalRoute]
+    initial_sections: list[int]
     goal_proximity_threshold: float = 1
-    navigators: Dict[int, RouteNavigator] = field(init=False)
+    navigators: dict[int, RouteNavigator] = field(init=False)
 
     def __post_init__(self):
         """
@@ -133,10 +133,17 @@ class FollowRouteBehavior:
         initial section, goal proximity threshold, and current position.
         """
         self.navigators = {}
-        for (gid, route), sec_id in zip(self.route_assignments.items(), self.initial_sections):
+        for (gid, route), sec_id in zip(
+            self.route_assignments.items(),
+            self.initial_sections,
+            strict=False,
+        ):
             group_pos = self.groups.group_centroid(gid)
             self.navigators[gid] = RouteNavigator(
-                route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos
+                route.waypoints,
+                sec_id + 1,
+                self.goal_proximity_threshold,
+                group_pos,
             )
 
     def step(self):

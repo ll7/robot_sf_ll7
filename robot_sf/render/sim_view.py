@@ -2,7 +2,6 @@ import os
 import sys
 from dataclasses import dataclass, field
 from math import cos, sin
-from typing import List, Optional, Tuple, Union
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
@@ -24,7 +23,7 @@ try:
 except ImportError:
     MOVIEPY_AVAILABLE = False
     logger.warning(
-        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?"
+        "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?",
     )
 
 ## Note: PYGAME_HIDE_SUPPORT_PROMPT is set before importing pygame above
@@ -51,10 +50,39 @@ TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
 TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
 
 
+def _empty_map_definition() -> MapDefinition:
+    """Return a minimal valid MapDefinition used as a safe default.
+
+    This avoids needing callers to always supply a map and keeps SimulationView
+    construction lightweight for utility or test contexts. The map is a 1x1 square
+    with a single spawn/goal triangle; routes are empty.
+    """
+    rect = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+    bounds = [
+        (0.0, 0.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0, 1.0),
+        (1.0, 1.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 0.0),
+    ]
+    return MapDefinition(
+        width=1.0,
+        height=1.0,
+        obstacles=[],
+        robot_spawn_zones=[rect],
+        ped_spawn_zones=[rect],
+        robot_goal_zones=[rect],
+        bounds=bounds,
+        robot_routes=[],
+        ped_goal_zones=[rect],
+        ped_crowded_zones=[],
+        ped_routes=[],
+    )
+
+
 @dataclass
 class VisualizableAction:
     pose: RobotPose
-    action: Union[DifferentialDriveAction, BicycleAction, UnicycleAction]
+    action: DifferentialDriveAction | BicycleAction | UnicycleAction
     goal: Vec2D
 
 
@@ -68,7 +96,7 @@ class VisualizableSimState:
     timestep: int
     """The discrete timestep of the simulation."""
 
-    robot_action: Union[VisualizableAction, None]
+    robot_action: VisualizableAction | None
     """The action taken by the robot at this timestep."""
 
     robot_pose: RobotPose
@@ -86,13 +114,13 @@ class VisualizableSimState:
     ego_ped_pose: PedPose = None
     """The pose of the ego pedestrian at this timestep. Defaults to None."""
 
-    ego_ped_ray_vecs: Optional[np.ndarray] = None
+    ego_ped_ray_vecs: np.ndarray | None = None
     """The ray vectors associated with the ego pedestrian's sensors. Defaults to None."""
 
-    ego_ped_action: Union[VisualizableAction, None] = None
+    ego_ped_action: VisualizableAction | None = None
     """The action taken by the ego pedestrian at this timestep. Defaults to None."""
 
-    time_per_step_in_secs: Optional[float] = None
+    time_per_step_in_secs: float | None = None
     """The time taken for each step in seconds. Defaults to None. Usually 0.1 seconds."""
 
     def __post_init__(self):
@@ -152,15 +180,16 @@ class SimulationView:
     ego_ped_radius: float = 0.4
     ped_radius: float = 0.4
     goal_radius: float = 1.0
-    map_def: MapDefinition = field(default_factory=MapDefinition)
-    obstacles: List[Obstacle] = field(default_factory=list)
+    # Provide a minimal valid default map definition (see _empty_map_definition)
+    map_def: MapDefinition = field(default_factory=_empty_map_definition)
+    obstacles: list[Obstacle] = field(default_factory=list)
     caption: str = "RobotSF Simulation"
     focus_on_robot: bool = True
     focus_on_ego_ped: bool = False
     record_video: bool = False
-    video_path: Optional[str] = None
+    video_path: str | None = None
     video_fps: float = 10.0
-    frames: List[np.ndarray] = field(default_factory=list)
+    frames: list[np.ndarray] = field(default_factory=list)
     clock: pygame.time.Clock = field(init=False)
 
     # Add UI state fields
@@ -176,19 +205,57 @@ class SimulationView:
     current_target_fps: float = field(default=60.0)  # Add field for current_target_fps
     display_text: bool = field(default=False)  # Add this field to control text visibility
     ped_velocity_scale: float = field(default=1.0)  # Velocity visualization scaling factor
+    # Internal flag: True when a display window is created via pygame.display.set_mode
+    _use_display: bool = field(init=False, default=False)
+    # Maximum number of frames to retain in memory when recording. None means no hard cap.
+    # Default chosen to balance typical 720p usage (<~4.4GB for 1200 frames) vs runaway memory.
+    max_frames: int | None = field(default=2000)
+    _frame_cap_warned: bool = field(init=False, default=False)
 
     def __post_init__(self):
         """Initialize PyGame components."""
         logger.info("Initializing the simulation view.")
+        # Environment variable override for max_frames (e.g., runtime tuning / CI scenarios)
+        env_cap = os.environ.get("ROBOT_SF_MAX_VIDEO_FRAMES")
+        if env_cap is not None:
+            raw = env_cap.strip().lower()
+            if raw in {"none", "", "-1"}:
+                self.max_frames = None
+                logger.debug(
+                    "ROBOT_SF_MAX_VIDEO_FRAMES set to '%s' -> disabling frame cap (max_frames=None)",
+                    env_cap,
+                )
+            else:
+                try:
+                    parsed = int(raw)
+                    if parsed <= 0:
+                        raise ValueError
+                    self.max_frames = parsed
+                    logger.debug(
+                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d",
+                        parsed,
+                    )
+                except (ValueError, TypeError):
+                    logger.warning(
+                        "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '%s' (expected positive int or 'none'). Using default %s.",
+                        env_cap,
+                        self.max_frames,
+                    )
         pygame.init()
         pygame.font.init()
         self.clock = pygame.time.Clock()
+
+        if self.record_video and not self.video_path:
+            logger.warning(
+                "record_video=True but no video_path provided; frames will be buffered but no file will be written.",
+            )
 
         # Check if we're running in a headless environment
         is_headless = self._is_headless_environment()
 
         if self.record_video or is_headless:
             # Create offscreen surface for recording or headless mode
+            self._use_display = False
             self.screen = pygame.Surface((int(self.width), int(self.height)))
             if self.record_video:
                 logger.info("Created offscreen surface for video recording")
@@ -196,8 +263,10 @@ class SimulationView:
                 logger.info("Created offscreen surface for headless mode")
         else:
             # Create window for display
+            self._use_display = True
             self.screen = pygame.display.set_mode(
-                (int(self.width), int(self.height)), pygame.RESIZABLE
+                (int(self.width), int(self.height)),
+                pygame.RESIZABLE,
             )
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
@@ -219,7 +288,7 @@ class SimulationView:
         if sdl_driver == "dummy":
             logger.debug(
                 "Headless environment detected: "
-                f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'"
+                f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'",
             )
             return True
 
@@ -229,7 +298,7 @@ class SimulationView:
             if is_headless:
                 logger.debug(
                     "Headless environment detected: "
-                    f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'"
+                    f"DISPLAY='{display}', WAYLAND_DISPLAY='{wayland}', SDL_VIDEODRIVER='{sdl_driver}'",
                 )
             return is_headless
 
@@ -272,7 +341,7 @@ class SimulationView:
         """Handle the exit state."""
         pygame.quit()
         if self.is_abortion_requested:
-            exit()
+            sys.exit()
 
     def _prepare_frame(self, state: VisualizableSimState):
         """Prepare a new frame with the given state."""
@@ -299,14 +368,16 @@ class SimulationView:
 
     def _draw_sensor_data(self, state: VisualizableSimState):
         """Draw sensor data like lidar rays."""
-        if hasattr(state, "ray_vecs"):
+        if hasattr(state, "ray_vecs") and state.ray_vecs is not None:
             self._augment_lidar(state.ray_vecs)
         if (
             hasattr(state, "ego_ped_pose")
             and state.ego_ped_pose
             and hasattr(state, "ego_ped_ray_vecs")
         ):
-            self._augment_lidar(state.ego_ped_ray_vecs)
+            # ego_ped_ray_vecs is Optional; skip if None to avoid TypeError
+            if state.ego_ped_ray_vecs is not None:
+                self._augment_lidar(state.ego_ped_ray_vecs)
 
     def _draw_actions(self, state: VisualizableSimState):
         """Draw action indicators for all entities."""
@@ -354,23 +425,41 @@ class SimulationView:
         else:
             # Store the current target FPS for display
             self.current_target_fps = target_fps
-            pygame.display.update()
+            if self._use_display:
+                pygame.display.update()
             # Control frame rate with pygame's clock
             self.clock.tick(target_fps)
 
     def _capture_frame(self):
         """Capture the current frame for video recording."""
-        frame_data = pygame.surfarray.array3d(self.screen)
-        frame_data = frame_data.swapaxes(0, 1)
+        # Enforce frame cap (if configured) before capturing new frame
+        if self.max_frames is not None and len(self.frames) >= self.max_frames:
+            if not self._frame_cap_warned:
+                est_bytes = int(self.width * self.height * 3 * len(self.frames))
+                est_gb = est_bytes / (1024**3)
+                logger.warning(
+                    "Max video frame buffer reached (max_frames=%d, ~%.2f GiB est). "
+                    "Halting further frame capture to prevent excessive memory use. "
+                    "You can raise this via SimulationView(max_frames=...) or disable via max_frames=None.",
+                    self.max_frames,
+                    est_gb,
+                )
+                self._frame_cap_warned = True
+            return
+
+        # Use a view for speed, then transpose to (H, W, C) and copy to detach from the Surface.
+        # pixels3d() avoids an immediate copy like array3d() does, improving per-frame performance.
+        surf_view = pygame.surfarray.pixels3d(self.screen)
+        frame_data = np.transpose(surf_view, (1, 0, 2)).copy()
+        # Ensure the surface is unlocked before returning (explicitly drop the view)
+        del surf_view
         self.frames.append(frame_data)
-        if len(self.frames) > 2000:
-            logger.warning("Too many frames recorded. Stopping video recording.")
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
         return (16, 16)
 
-    def _scale_tuple(self, tup: Tuple[float, float]) -> Tuple[float, float]:
+    def _scale_tuple(self, tup: tuple[float, float]) -> tuple[float, float]:
         """scales a tuple of floats by the scaling factor and adds the offset."""
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
@@ -380,6 +469,26 @@ class SimulationView:
         """Exit the simulation."""
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
+        # Diagnostic guard: warn if recording requested but no frames captured
+        if self.record_video:
+            if not self.frames:
+                logger.warning(
+                    "record_video=True but zero frames were captured; video file will not be written. "
+                    "Likely causes: (1) render() was never called; (2) early exit before any frame finalized. "
+                    "Call render() each step (or enable debug mode) to populate frames.",
+                )
+            else:
+                # Heuristic: sample up to first 5 frames; if all sums are zero, content may be blank
+                try:  # pragma: no cover - defensive
+                    sample = self.frames[:5]
+                    if sample and all(np.array(f).sum() == 0 for f in sample):
+                        logger.warning(
+                            "record_video=True but captured frames appear empty (all-zero pixel data). "
+                            "Ensure drawing code executed before frame capture; verify entities are rendered.",
+                        )
+                except (TypeError, ValueError) as exc:
+                    # Defensive: conversion/summation failed for unexpected frame data
+                    logger.debug("Frame sample check failed: %s", exc)
         if return_frames:
             intermediate_frames = self.frames
         self._handle_quit()
@@ -391,12 +500,16 @@ class SimulationView:
         """Handle the quit event of the pygame window."""
         self.is_exit_requested = True
         self.is_abortion_requested = True
-        if self.record_video and self.frames and MOVIEPY_AVAILABLE:
+        if self.record_video and self.frames and MOVIEPY_AVAILABLE and self.video_path:
             logger.debug("Writing video file.")
             # TODO: get the correct fps from the simulation
             clip = ImageSequenceClip(self.frames, fps=self.video_fps)
             clip.write_videofile(self.video_path)
             self.frames = []
+        elif self.record_video and self.frames and MOVIEPY_AVAILABLE and not self.video_path:
+            logger.warning(
+                "record_video=True but video_path is None; cannot write video file. Skipping write.",
+            )
         elif self.record_video and self.frames and not MOVIEPY_AVAILABLE:
             logger.warning("MoviePy is not available. Cannot write video file.")
 
@@ -434,7 +547,9 @@ class SimulationView:
             pygame.K_h: lambda: setattr(self, "display_help", not self.display_help),
             # display robotinfo
             pygame.K_q: lambda: setattr(
-                self, "display_robot_info", (self.display_robot_info + 1) % 3
+                self,
+                "display_robot_info",
+                (self.display_robot_info + 1) % 3,
             ),
             # toggle text display (add this line)
             pygame.K_t: lambda: setattr(self, "display_text", not self.display_text),
@@ -473,12 +588,17 @@ class SimulationView:
         adds text at position 0, and updates the display.
         """
         self.screen.fill(BACKGROUND_COLOR)
-        pygame.display.update()
+        if self._use_display:
+            pygame.display.update()
 
     def _resize_window(self):
         logger.debug("Resizing the window.")
         old_surface = self.screen
-        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        if self._use_display:
+            self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        else:
+            # In offscreen mode, just recreate the Surface at the new size
+            self.screen = pygame.Surface((int(self.width), int(self.height)))
         self.screen.blit(old_surface, (0, 0))
 
     def _move_camera(self, state: VisualizableSimState):
@@ -555,6 +675,20 @@ class SimulationView:
         )
 
     def _augment_lidar(self, ray_vecs: np.ndarray):
+        """Draw lidar rays given an array of point pairs.
+
+        Accepts an empty array and returns early. If None is provided, does nothing.
+        """
+        if ray_vecs is None:
+            return
+        # Handle empty arrays/lists gracefully
+        try:
+            if len(ray_vecs) == 0:  # works for np.ndarray and list-like
+                return
+        except TypeError:
+            # Not iterable or no length; nothing to draw
+            return
+
         for p1, p2 in ray_vecs:
             pygame.draw.line(
                 self.screen,
@@ -780,7 +914,8 @@ class SimulationView:
 
         # Blit and return the rect to allow children to position additional help relative to this
         return self.screen.blit(
-            text_surface, (self.width - max_width - 10, self._timestep_text_pos[1])
+            text_surface,
+            (self.width - max_width - 10, self._timestep_text_pos[1]),
         )
 
     def _draw_grid(self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)):

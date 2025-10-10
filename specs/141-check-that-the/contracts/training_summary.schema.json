@@ -1,0 +1,215 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://robot-sf.dev/specs/141-check-that-the/training-summary.schema.json",
+    "title": "TrainingRunSummary",
+    "type": "object",
+    "required": [
+        "run_id",
+        "created_at",
+        "output_root",
+        "hardware_overview",
+        "extractor_results",
+        "aggregate_metrics"
+    ],
+    "properties": {
+        "run_id": {
+            "type": "string",
+            "description": "Unique identifier composed of timestamp and short hash."
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp marking run start."
+        },
+        "output_root": {
+            "type": "string",
+            "description": "Absolute path to the timestamped run directory."
+        },
+        "hardware_overview": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/$defs/hardwareProfile"
+            },
+            "description": "List of hardware profiles observed during the run."
+        },
+        "extractor_results": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/$defs/extractorRunRecord"
+            },
+            "description": "Per-extractor outcomes recorded by the workflow."
+        },
+        "aggregate_metrics": {
+            "type": "object",
+            "description": "Top-level aggregated metrics.",
+            "additionalProperties": {
+                "type": "number"
+            }
+        },
+        "notes": {
+            "type": "array",
+            "description": "Human-readable warnings or guidance entries.",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "$defs": {
+        "hardwareProfile": {
+            "type": "object",
+            "required": [
+                "platform",
+                "arch",
+                "python_version",
+                "workers"
+            ],
+            "properties": {
+                "platform": {
+                    "type": "string"
+                },
+                "arch": {
+                    "type": "string"
+                },
+                "gpu_model": {
+                    "type": "string"
+                },
+                "cuda_version": {
+                    "type": "string"
+                },
+                "python_version": {
+                    "type": "string"
+                },
+                "workers": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "required": [
+                            "gpu_model"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "cuda_version"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "required": [
+                            "cuda_version"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "gpu_model"
+                        ]
+                    }
+                }
+            ]
+        },
+        "extractorRunRecord": {
+            "type": "object",
+            "required": [
+                "config_name",
+                "status",
+                "start_time",
+                "worker_mode"
+            ],
+            "properties": {
+                "config_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "success",
+                        "failed",
+                        "skipped"
+                    ]
+                },
+                "start_time": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "end_time": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "duration_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "hardware_profile": {
+                    "$ref": "#/$defs/hardwareProfile"
+                },
+                "worker_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single-thread",
+                        "vectorized"
+                    ]
+                },
+                "training_steps": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "metrics": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "artifacts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Explanation when status is failed or skipped."
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "status": {
+                                "const": "success"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "metrics",
+                            "artifacts"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "status": {
+                                "enum": [
+                                    "failed",
+                                    "skipped"
+                                ]
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "reason"
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}

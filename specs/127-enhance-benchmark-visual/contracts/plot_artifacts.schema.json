@@ -1,0 +1,67 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "PlotArtifactsManifest",
+    "type": "object",
+    "properties": {
+        "artifacts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "status"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "filename": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "success",
+                            "skipped",
+                            "failed"
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "smoke-mode",
+                            "disabled",
+                            null
+                        ]
+                    }
+                },
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "status": {
+                                    "const": "success"
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "filename"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "required": [
+        "artifacts"
+    ],
+    "additionalProperties": false
+}

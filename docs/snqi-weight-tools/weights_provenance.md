@@ -21,7 +21,7 @@ The Social Navigation Quality Index (SNQI) uses weighted composite scoring to ev
   "version": "v1",
   "metadata": {
     "creation_date": "2025-01-02",
-    "method": "pareto_optimization",
+    "method": "optimized",
     "validation_episodes": 500,
     "notes": "Optimized for balanced safety-efficiency trade-offs"
   },

@@ -7,6 +7,7 @@ This guide consolidates user‑facing documentation that was previously split ac
 - [Contents](#contents)
 - [Bootstrap Examples](#bootstrap-examples)
   - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
+- [Standalone SNQI CLI](#standalone-snqi-cli)
 - [Overview](#overview)
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
   - [Clamping and Outliers](#clamping-and-outliers)
@@ -66,6 +67,48 @@ Result JSON includes:
 - `results.bootstrap.recommended_score.confidence_level`
 
 Normalization details are documented in `docs/snqi-weight-tools/normalization.md`.
+
+## Standalone SNQI CLI
+
+The `robot_sf_snqi` command provides direct access to SNQI weight management tools:
+
+```bash
+# Recompute weights from baseline statistics
+uv run robot_sf_snqi recompute \
+  --baseline-stats baseline_stats.json \
+  --out weights.json \
+  --method canonical \
+  --seed 42
+
+# Perform component ablation analysis
+uv run robot_sf_snqi ablation \
+  --episodes episodes.jsonl \
+  --summary-out ablation_results.json \
+  --weights weights.json \
+  --seed 123
+```
+
+### Method Names and Compatibility
+
+The standalone CLI uses **canonical method names** that match the implementation:
+
+- **`canonical`** (default): Standard research weights (w_success=1.0, w_time=0.8, w_collisions=2.0, etc.)
+- **`balanced`**: Equal weights across all components
+- **`optimized`**: Adaptive weights based on baseline statistics
+
+**Legacy aliases** are supported for backward compatibility but will show deprecation warnings:
+- `pareto_optimization` → `optimized`
+- `equal_weights` → `balanced` 
+- `safety_focused` → `optimized`
+
+Example with legacy alias:
+```bash
+# This will work but show a deprecation warning
+uv run robot_sf_snqi recompute \
+  --baseline-stats baseline_stats.json \
+  --out weights.json \
+  --method pareto_optimization  # deprecated, maps to "optimized"
+```
 
 ### Inline SNQI during benchmark run
 You can compute SNQI on the fly while generating episodes via the unified benchmark CLI `run` subcommand by providing a weights JSON and baseline stats JSON:
@@ -254,6 +297,11 @@ Recompute specific:
 - `--compare-strategies`: Evaluate all strategies.
 - `--compare-normalization`: Include normalization variant comparison.
 - `--external-weights-file <path>`: Evaluate user‑provided weight set.
+
+**Note**: The standalone `robot_sf_snqi` CLI uses canonical method names:
+- **Canonical methods**: `canonical`, `balanced`, `optimized` (preferred)
+- **Legacy aliases**: `pareto_optimization`→`optimized`, `equal_weights`→`balanced`, `safety_focused`→`optimized`
+- Default: `canonical`. Alias usage logs deprecation warnings.
  - `--missing-metric-max-list <int>`: Include up to N example episode IDs per missing baseline metric in diagnostics.
  - `--fail-on-missing-metric`: Treat missing baseline metrics (present in episodes) as error (exit code 4).
  - `--progress`: Show progress bars (if `tqdm` installed).

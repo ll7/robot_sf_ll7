@@ -85,14 +85,21 @@ def _render_extractor_table(records: list[ExtractorRunRecord]) -> list[str]:
 
 
 def _best_metric(record: ExtractorRunRecord) -> tuple[str, str]:
-    if record.metrics:
+    # Prioritize the most important metric for the summary table.
+    priority_metric = "best_mean_reward"
+    if record.metrics and priority_metric in record.metrics:
+        key = priority_metric
+        value = record.metrics[key]
+    elif record.metrics:
         key, value = next(iter(record.metrics.items()))
-        if isinstance(value, int | float):
-            formatted = f"{float(value):.3f}"
-        else:
-            formatted = str(value)
-        return key, formatted
-    return "N/A", "N/A"
+    else:
+        return "N/A", "N/A"
+
+    if isinstance(value, int | float):
+        formatted = f"{float(value):.3f}"
+    else:
+        formatted = str(value)
+    return key, formatted
 
 
 def _render_failures(records: list[ExtractorRunRecord]) -> list[str]:

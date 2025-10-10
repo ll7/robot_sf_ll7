@@ -83,7 +83,9 @@ class RunSettings:
         if settings.worker_mode not in {"single-thread", "vectorized"}:
             raise ValueError(f"Unknown worker_mode: {settings.worker_mode}")
         if settings.worker_mode == "vectorized" and settings.num_envs < 2:
-            raise ValueError("vectorized worker_mode requires num_envs >= 2")
+            logger.warning(
+                "vectorized worker_mode is being used with num_envs < 2; this is unusual but allowed for testing or consistency."
+            )
         if settings.device not in {"cpu", "cuda"}:
             raise ValueError(f"Unsupported device requested: {settings.device}")
         return settings

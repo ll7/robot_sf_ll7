@@ -352,7 +352,11 @@ def _run_sb3_training(
 ) -> ExtractorRunRecord:
     try:
         from stable_baselines3 import PPO
-        from stable_baselines3.common.callbacks import CallbackList, EvalCallback
+        from stable_baselines3.common.callbacks import (
+            CallbackList,
+            CheckpointCallback,
+            EvalCallback,
+        )
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import DummyVecEnv
 
@@ -360,6 +364,7 @@ def _run_sb3_training(
 
         total_timesteps = context.settings.effective_timesteps(test_mode=context.test_mode)
         eval_freq = context.settings.effective_eval_freq(test_mode=context.test_mode)
+        save_freq = context.settings.effective_save_freq(test_mode=context.test_mode)
 
         def env_factory() -> Any:
             return environment_factory.make_robot_env(seed=context.settings.seed)
@@ -404,7 +409,13 @@ def _run_sb3_training(
             deterministic=True,
         )
 
-        callbacks = CallbackList([eval_callback])
+        checkpoint_callback = CheckpointCallback(
+            save_freq=max(1, save_freq // n_envs),
+            save_path=str(extractor_dir / "checkpoints"),
+            name_prefix=f"ppo_{profile.name}",
+        )
+
+        callbacks = CallbackList([eval_callback, checkpoint_callback])
         model.learn(total_timesteps=total_timesteps, callback=callbacks, progress_bar=False)
 
         model_path = extractor_dir / "final_model"
@@ -416,6 +427,10 @@ def _run_sb3_training(
         best_model_zip = extractor_dir / "best_model" / "best_model.zip"
         if best_model_zip.exists():
             artifacts["best_model"] = str(best_model_zip.relative_to(context.run_dir))
+
+        checkpoints_dir = extractor_dir / "checkpoints"
+        if checkpoints_dir.exists() and any(checkpoints_dir.iterdir()):
+            artifacts["checkpoints"] = str(checkpoints_dir.relative_to(context.run_dir))
 
         total_parameters = sum(p.numel() for p in model.policy.parameters())
         trainable_parameters = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)

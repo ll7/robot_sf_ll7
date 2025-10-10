@@ -1,3 +1,15 @@
+"""Integration tests for multi-extractor training with vectorized environments.
+
+This module tests the multi-extractor training script's ability to handle GPU/CUDA
+configurations in both available and unavailable scenarios.
+
+Environment Variables:
+    CI_EXPECTS_CUDA: Set to "1" in CI environments where CUDA is expected to be
+                     available and GPU extractors should run successfully. When not
+                     set or set to "0", CUDA extractors are expected to be skipped
+                     with appropriate reasons.
+"""
+
 import json
 import os
 import subprocess
@@ -5,6 +17,10 @@ import sys
 from pathlib import Path
 
 import pytest
+
+# Test configuration constants
+CI_EXPECTS_CUDA_ENV = "CI_EXPECTS_CUDA"
+CUDA_AVAILABLE_FLAG = "1"
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "multi_extractor_training.py"
@@ -49,7 +65,7 @@ def test_vectorized_run_handles_cuda_availability(tmp_path):
     reasons = {record.get("reason", "") for record in data["extractor_results"]}
     worker_modes = {record["worker_mode"] for record in data["extractor_results"]}
 
-    cuda_available = env.get("CI_EXPECTS_CUDA", "0") == "1"
+    cuda_available = env.get(CI_EXPECTS_CUDA_ENV, "0") == CUDA_AVAILABLE_FLAG
 
     if cuda_available:
         assert statuses == {"success"}

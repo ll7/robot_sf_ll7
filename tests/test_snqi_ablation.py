@@ -15,24 +15,28 @@ def _episodes_two_groups():
             **base,
             "episode_id": "A-1",
             "scenario_params": {"algo": "A"},
+            "algo": "A",
             "metrics": {"success": 1.0, "time_to_goal_norm": 0.5, "collisions": 2.0},
         },
         {
             **base,
             "episode_id": "A-2",
             "scenario_params": {"algo": "A"},
+            "algo": "A",
             "metrics": {"success": 1.0, "time_to_goal_norm": 0.5, "collisions": 2.0},
         },
         {
             **base,
             "episode_id": "B-1",
             "scenario_params": {"algo": "B"},
+            "algo": "B",
             "metrics": {"success": 0.5, "time_to_goal_norm": 0.2, "collisions": 0.0},
         },
         {
             **base,
             "episode_id": "B-2",
             "scenario_params": {"algo": "B"},
+            "algo": "B",
             "metrics": {"success": 0.5, "time_to_goal_norm": 0.2, "collisions": 0.0},
         },
     ]

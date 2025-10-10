@@ -22,7 +22,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+from loguru import logger
 
+from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.metrics import snqi as snqi_fn
 
 if TYPE_CHECKING:
@@ -60,6 +62,72 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
         else:
             return default
     return cur
+
+
+_EFFECTIVE_GROUP_KEY = "scenario_params.algo | algo | scenario_id"
+
+
+def _normalize_algo(value: Any) -> str | None:
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if trimmed:
+            return trimmed
+    return None
+
+
+def _ensure_mapping(record: dict[str, Any], key: str, episode_id: str | None) -> None:
+    value = record.get(key)
+    if value is not None and not isinstance(value, dict):
+        raise AggregationMetadataError(
+            f"{key} must be a mapping to access nested algorithm metadata.",
+            episode_id=episode_id,
+            missing_fields=(f"{key}", f"{key}.algo"),
+            advice="Regenerate the benchmark data to include structured scenario parameters.",
+        )
+
+
+def _resolve_group_key(
+    record: dict[str, Any],
+    *,
+    group_by: str,
+    fallback_group_by: str,
+) -> str:
+    episode_id = record.get("episode_id")
+    episode_ref = str(episode_id) if episode_id is not None else None
+
+    if group_by.startswith("scenario_params"):
+        _ensure_mapping(record, "scenario_params", episode_ref)
+
+    nested_algo = _normalize_algo(_get_nested(record, group_by))
+    if nested_algo is not None:
+        return nested_algo
+
+    top_level_algo = _normalize_algo(record.get("algo"))
+    if top_level_algo is not None:
+        return top_level_algo
+
+    # Check algorithm_metadata.algorithm as additional fallback
+    metadata_algo = _normalize_algo(_get_nested(record, "algorithm_metadata.algorithm"))
+    if metadata_algo is not None:
+        return metadata_algo
+
+    fallback_value = _get_nested(record, fallback_group_by)
+    if fallback_value is not None:
+        if group_by == "scenario_params.algo":
+            raise AggregationMetadataError(
+                "Episode lacks algorithm metadata required for aggregation.",
+                episode_id=episode_ref,
+                missing_fields=("scenario_params.algo", "algo", "algorithm_metadata.algorithm"),
+                advice="Ensure the orchestrator mirrors algorithm identifiers before aggregation.",
+            )
+        return str(fallback_value)
+
+    raise AggregationMetadataError(
+        "Unable to determine aggregation group key for episode.",
+        episode_id=episode_ref,
+        missing_fields=(group_by, "algo"),
+        advice="Verify that episode records include algorithm metadata.",
+    )
 
 
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
@@ -147,19 +215,20 @@ def compute_aggregates(
     fallback_group_by: str = "scenario_id",
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
+    expected_algorithms: set[str] | None = None,
+    logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, float]]]:
     # Optionally compute SNQI per record if missing
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
 
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    present_algorithms: set[str] = set()
     for rec in records:
-        g = _get_nested(rec, group_by)
-        if g is None:
-            g = _get_nested(rec, fallback_group_by)
-        if g is None:
-            g = "unknown"
-        groups[str(g)].append(flatten_metrics(rec))
+        key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
+        key_str = str(key)
+        present_algorithms.add(key_str)
+        groups[key_str].append(flatten_metrics(rec))
 
     summary: dict[str, dict[str, dict[str, float]]] = {}
     for g, rows in groups.items():
@@ -178,6 +247,29 @@ def compute_aggregates(
                 "p95": float(np.nanpercentile(arr, 95)),
             }
         summary[g] = agg
+
+    meta: dict[str, Any] = {
+        "group_by": group_by,
+        "effective_group_key": _EFFECTIVE_GROUP_KEY,
+        "missing_algorithms": [],
+        "warnings": [],
+    }
+
+    if expected_algorithms:
+        expected_set = {str(v) for v in expected_algorithms}
+        missing = sorted(expected_set - present_algorithms)
+        meta["missing_algorithms"] = missing
+        if missing:
+            warning_text = f"Missing algorithms detected: {', '.join(missing)}"
+            meta["warnings"] = [warning_text]
+            (logger_ctx or logger).bind(
+                event="aggregation_missing_algorithms",
+                expected=sorted(expected_set),
+                present=sorted(present_algorithms),
+                missing=missing,
+            ).warning(warning_text)
+
+    summary["_meta"] = meta
     return summary
 
 
@@ -236,12 +328,8 @@ def _group_flattened(
 ) -> dict[str, list[dict[str, Any]]]:
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
-        g = _get_nested(rec, group_by)
-        if g is None:
-            g = _get_nested(rec, fallback_group_by)
-        if g is None:
-            g = "unknown"
-        groups[str(g)].append(flatten_metrics(rec))
+        key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
+        groups[str(key)].append(flatten_metrics(rec))
     return groups
 
 
@@ -303,6 +391,8 @@ def compute_aggregates_with_ci(
     bootstrap_samples: int = 1000,
     bootstrap_confidence: float = 0.95,
     bootstrap_seed: int | None = None,
+    expected_algorithms: set[str] | None = None,
+    logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Compute grouped aggregates and optional bootstrap CIs.
 
@@ -317,6 +407,8 @@ def compute_aggregates_with_ci(
         fallback_group_by=fallback_group_by,
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
+        expected_algorithms=expected_algorithms,
+        logger_ctx=logger_ctx,
     )
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
@@ -327,7 +419,11 @@ def compute_aggregates_with_ci(
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
     groups = _group_flattened(records, group_by=group_by, fallback_group_by=fallback_group_by)
 
-    out: dict[str, dict[str, dict[str, Any]]] = {k: dict(v) for k, v in base.items()}
+    out: dict[str, dict[str, dict[str, Any]]] = {
+        k: dict(v) for k, v in base.items() if k != "_meta"
+    }
+    if "_meta" in base:
+        out["_meta"] = dict(base["_meta"])  # type: ignore[assignment]
     for g, rows in groups.items():
         # collect numeric columns per group
         cols: dict[str, list[float]] = defaultdict(list)

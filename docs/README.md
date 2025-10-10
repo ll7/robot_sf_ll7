@@ -80,6 +80,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
  - [**SNQI Figures (orchestrator usage)**](../examples/README.md) - Generate SNQI-augmented figures from existing episodes
  - [**Full SNQI Flow (episodes → baseline → figures)**](../examples/snqi_full_flow.py) - End-to-end reproducible pipeline script
+ - [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys, `_meta` warnings, and validation hooks
+ - [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
  - **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [`benchmark_full_classic.md`](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/`).
  - **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [`benchmark_visuals.md`](./benchmark_visuals.md)

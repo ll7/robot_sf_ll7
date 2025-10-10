@@ -11,6 +11,7 @@ def _rec(g: str, x: float, y: float) -> dict:
     return {
         "scenario_id": f"scn-{g}",
         "scenario_params": {"algo": g},
+        "algo": g,
         "metrics": {"collisions": x, "comfort_exposure": y},
     }
 

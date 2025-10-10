@@ -20,6 +20,7 @@ def test_generate_figures_table_tex(tmp_path: Path):
         "episode_id": "e0",
         "scenario_id": "scnA",
         "scenario_params": {"algo": "dummy"},
+        "algo": "dummy",
         "seed": 0,
         "metrics": {
             "success": 1.0,

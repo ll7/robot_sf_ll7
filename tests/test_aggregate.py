@@ -76,10 +76,15 @@ def test_compute_aggregates_group_by_algo(tmp_path: Path):
     recs = read_jsonl(jsonl_path)
     # We stored algo at the top-level of scenario params; group path is scenario_params.algo
     summary = compute_aggregates(recs, group_by="scenario_params.algo")
-    # Should contain two groups A and B
-    assert set(summary.keys()) == {"A", "B"}
+    # Should contain two groups A and B plus metadata
+    algorithm_groups = {k for k in summary.keys() if k != "_meta"}
+    assert algorithm_groups == {"A", "B"}
+    # Should have _meta section
+    assert "_meta" in summary
     # Each group should have numeric aggregates present for some core metric
-    for metrics in summary.values():
+    for group_name, metrics in summary.items():
+        if group_name == "_meta":
+            continue  # Skip metadata section
         assert "time_to_goal_norm" in metrics
         assert set(metrics["time_to_goal_norm"].keys()) == {"mean", "median", "p95"}
 
@@ -96,8 +101,11 @@ def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
         bootstrap_seed=123,
     )
     # Basic shape: groups and keys
-    assert set(summary_ci.keys()) == {"A", "B"}
-    any_group = next(iter(summary_ci.values()))
+    algorithm_groups = {k for k in summary_ci.keys() if k != "_meta"}
+    assert algorithm_groups == {"A", "B"}
+    # Should have _meta section
+    assert "_meta" in summary_ci
+    any_group = next(iter(g for k, g in summary_ci.items() if k != "_meta"))
     # Ensure a known metric exists
     assert "time_to_goal_norm" in any_group
     m = any_group["time_to_goal_norm"]

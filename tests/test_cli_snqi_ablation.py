@@ -16,6 +16,7 @@ def _write_episodes(path: Path) -> None:
             "scenario_id": "sc-1",
             "seed": 0,
             "scenario_params": {"algo": "A"},
+            "algo": "A",
             "metrics": {"success": 1.0, "time_to_goal_norm": 0.5, "collisions": 1.0},
         },
         {
@@ -23,6 +24,7 @@ def _write_episodes(path: Path) -> None:
             "scenario_id": "sc-1",
             "seed": 1,
             "scenario_params": {"algo": "B"},
+            "algo": "B",
             "metrics": {"success": 0.8, "time_to_goal_norm": 0.4, "collisions": 0.0},
         },
     ]

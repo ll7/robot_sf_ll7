@@ -21,6 +21,7 @@ def test_benchmark_with_visualization_integration():
             "episode_id": "ep_001",
             "scenario_id": "classic_001",
             "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "metrics": {"collisions": 0, "success": True, "snqi": 0.95},
             "trajectory_data": [[0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]],
         },
@@ -82,6 +83,8 @@ def test_benchmark_visualization_creates_output_structure():
         {
             "episode_id": "ep_001",
             "scenario_id": "test_scenario",
+            "scenario_params": {"algo": "socialforce"},
+            "algo": "socialforce",
             "metrics": {"collisions": 0, "success": True},
             "trajectory_data": [[0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]],
         },

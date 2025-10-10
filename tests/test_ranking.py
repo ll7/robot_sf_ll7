@@ -4,7 +4,12 @@ from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markd
 
 
 def _rec(g, **m):
-    return {"scenario_params": {"algo": g}, "scenario_id": g, "metrics": m}
+    return {
+        "scenario_params": {"algo": g},
+        "algo": g,
+        "scenario_id": g,
+        "metrics": m,
+    }
 
 
 def test_compute_ranking_basic():

@@ -76,3 +76,21 @@ Schema loading is optimized with caching:
 - **After**: Single canonical schema with runtime resolution
 - **Compatibility**: All existing code continues to work unchanged
 - **Prevention**: Git hooks block future duplication attempts
+
+## Algorithm Grouping & Aggregation Diagnostics
+
+The classic benchmark aggregates metrics **per algorithm**. To guarantee separation:
+
+- Episode writers (classic orchestrator, CLI resume path, smoke scripts) **must** populate both the top-level `algo` field and the nested mirror `scenario_params["algo"]`. The orchestrator now enforces this contract and raises `robot_sf.benchmark.AggregationMetadataError` when the metadata is missing or malformed.
+- Aggregation utilities (`compute_aggregates`, `compute_aggregates_with_ci`) prefer the nested key, fall back to the top-level `algo`, and fail fast if both are absent. When an expected baseline never appears, aggregation continues but
+  - emits a Loguru warning with `event="aggregation_missing_algorithms"`, and
+  - annotates the JSON summary with `_meta.missing_algorithms`, `_meta.group_by`, and `_meta.effective_group_key` (`"scenario_params.algo | algo | scenario_id"`).
+- Episode injection logs expose observability hooks:
+  - `event="episode_metadata_injection"` (nested value added) and
+  - `event="episode_metadata_mismatch"` (nested value corrected to match top-level `algo`).
+
+### Validation Checklist
+
+- Spot-check the first line of `episodes.jsonl`: `record["algo"] == record["scenario_params"]["algo"]`.
+- Confirm aggregate outputs include `_meta.effective_group_key` and, when applicable, warnings describing any missing algorithms.
+- Treat `AggregationMetadataError` as a signal to regenerate the episode data—legacy files lacking mirrored metadata are no longer accepted silently.

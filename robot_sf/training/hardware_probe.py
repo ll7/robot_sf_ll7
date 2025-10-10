@@ -15,8 +15,11 @@ def _collect_gpu_metadata() -> tuple[Optional[str], Optional[str]]:
 
     try:
         import torch
-    except (ImportError, ModuleNotFoundError, OSError, RuntimeError) as exc:  # pragma: no cover
-        logger.debug("torch import failed during hardware probe: {}", exc)
+    except (ImportError, ModuleNotFoundError):  # pragma: no cover
+        logger.info("torch not found, skipping GPU metadata collection")
+        return None, None
+    except (OSError, RuntimeError) as exc:  # pragma: no cover
+        logger.warning("A runtime error occurred during torch import: {}", exc)
         return None, None
 
     if not torch.cuda.is_available():
@@ -26,7 +29,7 @@ def _collect_gpu_metadata() -> tuple[Optional[str], Optional[str]]:
     try:
         device_index = torch.cuda.current_device()
         gpu_model = torch.cuda.get_device_name(device_index)
-        cuda_version = getattr(torch.version, "cuda", None)
+        cuda_version = getattr(torch, "version", {}).get("cuda", None)
         return gpu_model, cuda_version
     except (OSError, RuntimeError) as exc:  # pragma: no cover - relies on runtime GPU state
         logger.warning("Failed to capture CUDA metadata: {}", exc)

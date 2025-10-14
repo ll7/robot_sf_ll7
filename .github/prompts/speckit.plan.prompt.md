@@ -37,7 +37,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - For each integration → patterns task
 
 2. **Generate and dispatch research agents**:
-   ```
+   ```txt
    For each unknown in Technical Context:
      Task: "Research {unknown} for {feature context}"
    For each technology choice:

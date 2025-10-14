@@ -91,7 +91,7 @@ You **MUST** consider the user input before proceeding (if not empty).
      - Format: `[domain].md` 
      - If file exists, append to existing file
    - Number items sequentially starting from CHK001
-   - Each `/speckit.checklist` run creates a NEW file (never overwrites existing checklists)
+   - The first `/speckit.checklist` run per feature creates a NEW file (never overwrites existing checklists), 
 
    **CORE PRINCIPLE - Test the Requirements, Not the Implementation**:
    Every checklist item MUST evaluate the REQUIREMENTS THEMSELVES for:

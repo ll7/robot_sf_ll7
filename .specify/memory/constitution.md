@@ -1,14 +1,14 @@
 <!--
 Sync Impact Report
-Previous Version: 1.2.1 -> New Version: 1.3.0 (MINOR bump)
-Rationale: Strengthened Principle XI to mandate reusable helpers live in `robot_sf/` with documentation and scripts consume those helpers.
-Modified Principles:
- - XI. Internal Maintainability & Private Helper Documentation → XI. Library Reuse & Helper Documentation (expanded scope to enforce reusable helper extraction)
-Added Sections:
- - (None)
+Previous Version: 1.3.0 -> New Version: 1.3.1 (PATCH bump)
+Rationale: Updated governance dates and validated template consistency. No structural changes to principles or contracts.
+Modified Principles: None
+Added Sections: None
 Removed Sections: None
 Templates Updated:
- - ✅ plan-template.md: Updated constitution version reference to v1.3.0
+ - ✅ plan-template.md: Verified constitution version reference alignment
+ - ✅ spec-template.md: Verified template compatibility
+ - ✅ tasks-template.md: Verified template compatibility
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -159,4 +159,4 @@ Traceability Requirements:
 
 This Constitution supersedes ad‑hoc practices. Amendments require: (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected contracts (env, config, metrics, benchmark schema), (3) migration guidance or deprecation plan, (4) version/date update below. Pull Requests must assert compliance by referencing relevant sections. Any introduction of out‑of‑scope functionality must include justification aligning with Core Principles I–X or be rejected.
 
-**Version**: 1.3.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-09-30
+**Version**: 1.3.1 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-10-13

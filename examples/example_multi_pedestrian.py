@@ -98,6 +98,7 @@ def run_multi_pedestrian_simulation():
     step = 0
     while not done and step < 200:
         _, _, terminated, truncated, _ = env.step(env.action_space.sample())
+        env.render()  # Active pygame visualization
         done = terminated or truncated
         step += 1
     print("\nSimulation completed successfully!")

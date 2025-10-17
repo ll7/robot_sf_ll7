@@ -158,6 +158,7 @@ def run_simulation_with_single_pedestrians(num_steps: int = 500):
             action = env.action_space.sample()
 
             obs, _, terminated, truncated, _ = env.step(action)
+            env.render()  # Active pygame visualization
 
             if step % 50 == 0:
                 print(f"Step {step:3d}: Simulation running...")

@@ -61,11 +61,6 @@ def create_multi_pedestrian_map() -> MapDefinition:
             start=(2.0, 15.0),
             trajectory=[(8.0, 15.0), (8.0, 5.0), (18.0, 5.0)],
         ),
-        SinglePedestrianDefinition(
-            id="ped_traj_2",
-            start=(18.0, 2.0),
-            trajectory=[(15.0, 2.0), (10.0, 10.0), (2.0, 18.0)],
-        ),
     ]
     return MapDefinition(
         width,
@@ -90,7 +85,7 @@ def run_multi_pedestrian_simulation():
     config.map_pool = pool
     env = make_robot_env(config=config, debug=True)
     env.reset()
-    print("\nMulti-pedestrian map created with the following single pedestrians:")
+    print("\nMulti-pedestrian scenario (T033): 4 single pedestrians spawned.")
     for ped in map_def.single_pedestrians:
         if ped.trajectory:
             print(f"  - {ped.id}: start={ped.start}, trajectory={len(ped.trajectory)} waypoints")
@@ -98,6 +93,7 @@ def run_multi_pedestrian_simulation():
             print(f"  - {ped.id}: start={ped.start}, goal={ped.goal}")
         else:
             print(f"  - {ped.id}: start={ped.start} (static)")
+    print("\nObserve their interaction and movement during simulation.")
     done = False
     step = 0
     while not done and step < 200:

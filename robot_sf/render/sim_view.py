@@ -771,38 +771,58 @@ class SimulationView:
         self.screen.blit(text, (x, y))
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
-        lines = []
-        if self.display_robot_info == 1 and hasattr(state, "robot_action") and state.robot_action:
-            lines += [
+        info_lines = self._get_display_info_lines(state)
+        text_lines = self._build_text_lines(timestep, state, info_lines)
+        self._render_text_display(text_lines)
+
+    def _get_display_info_lines(self, state: VisualizableSimState) -> list[str]:
+        """Get lines for robot/pedestrian info display based on display mode."""
+        if self.display_robot_info == 1:
+            return self._get_robot_info_lines(state)
+        elif self.display_robot_info == 2:
+            return self._get_pedestrian_info_lines(state)
+        return []
+
+    def _get_robot_info_lines(self, state: VisualizableSimState) -> list[str]:
+        """Get robot information lines for display."""
+        if hasattr(state, "robot_action") and state.robot_action:
+            return [
                 f"RobotPose: {state.robot_pose}",
                 f"RobotAction: {state.robot_action.action if state.robot_action else None}",
                 f"RobotGoal: {state.robot_action.goal if state.robot_action else None}",
             ]
-        elif self.display_robot_info == 2:
-            if (
-                hasattr(state, "ego_ped_pose")
-                and state.ego_ped_pose
-                and hasattr(state, "ego_ped_action")
-                and state.ego_ped_action
-            ):
-                distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
-                lines += [
-                    f"PedestrianPose: {state.ego_ped_pose}",
-                    f"PedestrianAction: {state.ego_ped_action.action}",
-                    f"PedestrianGoal: {state.ego_ped_action.goal}",
-                    f"DistanceRobot: {distance_to_robot:.2f}",
-                ]
-            else:
-                self.display_robot_info = 0
+        return []
 
-        # Calculate the speedup factor safely
+    def _get_pedestrian_info_lines(self, state: VisualizableSimState) -> list[str]:
+        """Get pedestrian information lines for display."""
+        if self._has_pedestrian_data(state):
+            distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
+            return [
+                f"PedestrianPose: {state.ego_ped_pose}",
+                f"PedestrianAction: {state.ego_ped_action.action}",
+                f"PedestrianGoal: {state.ego_ped_action.goal}",
+                f"DistanceRobot: {distance_to_robot:.2f}",
+            ]
+        else:
+            self.display_robot_info = 0
+            return []
+
+    def _has_pedestrian_data(self, state: VisualizableSimState) -> bool:
+        """Check if the state has complete pedestrian data."""
+        return (
+            hasattr(state, "ego_ped_pose")
+            and state.ego_ped_pose
+            and hasattr(state, "ego_ped_action")
+            and state.ego_ped_action
+        )
+
+    def _build_text_lines(
+        self, timestep: int, state: VisualizableSimState, info_lines: list[str]
+    ) -> list[str]:
+        """Build the complete list of text lines for display."""
+        # Calculate speedup factor safely
         actual_fps = self.clock.get_fps()
-
-        # Get time_per_step_in_secs safely, ensuring a default value
-        time_per_step = getattr(state, "time_per_step_in_secs", None)
-        if time_per_step is None:
-            time_per_step = 0.1  # Default value if missing
-
+        time_per_step = getattr(state, "time_per_step_in_secs", 0.1)
         speedup = actual_fps * time_per_step
 
         text_lines = [
@@ -822,11 +842,12 @@ class SimulationView:
             f"y-offset: {self.offset[1] / self.scaling:.2f}",
         ]
 
-        text_lines += lines
-        text_lines += [
-            "(Press h for help)",
-        ]
+        text_lines += info_lines
+        text_lines += ["(Press h for help)"]
+        return text_lines
 
+    def _render_text_display(self, text_lines: list[str]):
+        """Render the text display on screen."""
         # Create a surface for the text background
         max_width = max(self.font.size(line)[0] for line in text_lines)
         text_height = len(text_lines) * self.font.get_linesize()
@@ -834,19 +855,23 @@ class SimulationView:
         text_surface.fill(TEXT_BACKGROUND)
 
         for i, text in enumerate(text_lines):
-            text_render = self.font.render(text, True, TEXT_COLOR)
-            text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
-
-            pos = (5, i * self.font.get_linesize() + 5)
-
-            # Draw text outline
-            for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                text_surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
-
-            # Draw main text
-            text_surface.blit(text_render, pos)
+            self._render_text_line(text_surface, text, i)
 
         self.screen.blit(text_surface, self._timestep_text_pos)
+
+    def _render_text_line(self, surface, text: str, line_index: int):
+        """Render a single text line with outline effect."""
+        text_render = self.font.render(text, True, TEXT_COLOR)
+        text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
+
+        pos = (5, line_index * self.font.get_linesize() + 5)
+
+        # Draw text outline
+        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
+
+        # Draw main text
+        surface.blit(text_render, pos)
 
     def _add_minimal_hint(self):
         """Show a minimal hint when text display is disabled."""

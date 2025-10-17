@@ -116,10 +116,13 @@ class SvgMapConverter:
             np_coordinates = np.array(filtered_coordinates, dtype=float)
 
             # Append the information to the list
+            label = path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
+            if label is None:
+                label = path.attrib.get("id")
             path_info.append(
                 SvgPath(
                     coordinates=np_coordinates,
-                    label=path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label"),
+                    label=label,
                     id=path.attrib.get("id"),
                 ),
             )

@@ -329,11 +329,72 @@ def populate_crowded_zones(
     return ped_states, groups, zone_assignments
 
 
+def populate_single_pedestrians(
+    single_pedestrians: list,  # list[SinglePedestrianDefinition] - avoid import cycle
+    initial_speed: float = 0.5,
+) -> tuple[np.ndarray, list[dict]]:
+    """
+    Populate single pedestrians from SinglePedestrianDefinition objects.
+
+    Args:
+        single_pedestrians: List of SinglePedestrianDefinition objects
+        initial_speed: Initial walking speed (default: 0.5 m/s)
+
+    Returns:
+        tuple[np.ndarray, list[dict]]:
+            - NumPy array of pedestrian states (Nx7): [x, y, vx, vy, gx, gy, tau]
+            - List of metadata dicts (one per pedestrian) containing id, goal, trajectory info
+    """
+    if not single_pedestrians:
+        return np.empty((0, 7)), []
+
+    num_peds = len(single_pedestrians)
+    ped_states = np.zeros((num_peds, 7))
+    metadata = []
+
+    for i, ped in enumerate(single_pedestrians):
+        # Position (x, y)
+        ped_states[i, 0:2] = ped.start
+
+        # Initial velocity pointing toward goal or first trajectory waypoint
+        if ped.goal is not None:
+            direction = atan2(ped.goal[1] - ped.start[1], ped.goal[0] - ped.start[0])
+            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            ped_states[i, 4:6] = ped.goal
+        elif ped.trajectory:
+            first_wp = ped.trajectory[0]
+            direction = atan2(first_wp[1] - ped.start[1], first_wp[0] - ped.start[0])
+            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            # For trajectory-based, goal is first waypoint initially
+            ped_states[i, 4:6] = first_wp
+        else:
+            # Static pedestrian (no goal, no trajectory)
+            ped_states[i, 2:4] = [0, 0]
+            ped_states[i, 4:6] = ped.start  # Goal equals start for static peds
+
+        # Tau (relaxation time) - use default 0.5 seconds
+        ped_states[i, 6] = 0.5
+
+        # Store metadata
+        metadata.append(
+            {
+                "id": ped.id,
+                "has_goal": ped.goal is not None,
+                "has_trajectory": ped.trajectory is not None and len(ped.trajectory) > 0,
+                "trajectory": ped.trajectory if ped.trajectory else [],
+                "current_waypoint_index": 0,
+            }
+        )
+
+    return ped_states, metadata
+
+
 def populate_simulation(
     tau: float,
     spawn_config: PedSpawnConfig,
     ped_routes: list[GlobalRoute],
     ped_crowded_zones: list[Zone],
+    single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,
@@ -344,15 +405,35 @@ def populate_simulation(
         ped_routes,
     )
 
-    combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
+    # Populate single pedestrians if provided
+    if single_pedestrians:
+        single_ped_states_np, _single_ped_metadata = populate_single_pedestrians(
+            single_pedestrians,
+            spawn_config.initial_speed,
+        )
+    else:
+        single_ped_states_np = np.empty((0, 7))
+
+    # Combine all pedestrian states: crowd + route + single
+    combined_ped_states_np = np.concatenate(
+        (crowd_ped_states_np, route_ped_states_np, single_ped_states_np[:, :6]),
+    )
     taus = np.full((combined_ped_states_np.shape[0]), tau)
     ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
-    id_offset = crowd_ped_states_np.shape[0]
-    combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
 
+    # Calculate ID offsets for each pedestrian category
+    route_offset = crowd_ped_states_np.shape[0]
+    single_offset = route_offset + route_ped_states_np.shape[0]
+
+    # Adjust group IDs for routes
+    combined_groups = crowd_groups + [{id + route_offset for id in peds} for peds in route_groups]
+
+    # Single pedestrians are individual (no groups), so no group entries needed
+
+    # Create pedestrian state views
     pysf_state = PedestrianStates(lambda: ped_states)
-    crowd_pysf_state = PedestrianStates(lambda: ped_states[:id_offset])
-    route_pysf_state = PedestrianStates(lambda: ped_states[id_offset:])
+    crowd_pysf_state = PedestrianStates(lambda: ped_states[:route_offset])
+    route_pysf_state = PedestrianStates(lambda: ped_states[route_offset:single_offset])
 
     groups = PedestrianGroupings(pysf_state)
     for ped_ids in combined_groups:

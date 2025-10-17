@@ -90,13 +90,21 @@ A researcher wants to create a scenario with up to 4 individually controlled ped
 ### Edge Cases
 
 - What happens when a pedestrian's goal position is inside an obstacle?
+  - Create a warning or error during configuration parsing.
 - How does the system handle a trajectory that passes through impassable terrain?
+  - A trajectory can pass through obstacles, but the pedestrian may not be able to follow it correctly; consider validation or warnings.
 - What if a pedestrian's start position overlaps with another pedestrian or robot?
+  - Create a warning and don't spawn overlapping agents.
 - How does the system behave if trajectory waypoints are spaced very far apart or very close together?
+  - Add a non-obstrusive warning if waypoints are too close or too far apart.
 - What happens when no goal or trajectory is specified (both are None)?
+  - Create a warning during parsing. Could be reasonable for static pedestrians.
 - How does the system handle duplicate pedestrian IDs?
+  - Create a warning during parsing and ensure IDs are unique.
 - What if the trajectory list is empty?
+  - Maybe goal is reachable without intermediate waypoints/trajectory. Only inform, do not warn.
 - How does visualization handle scenarios with more pedestrians than can fit clearly on screen?
+  - Not important.
 
 ## Requirements *(mandatory)*
 
@@ -139,7 +147,7 @@ A researcher wants to create a scenario with up to 4 individually controlled ped
 
 ## Assumptions
 
-- The existing PySocialForce integration can accommodate individually spawned pedestrians alongside zone-based spawning
+- The existing PySocialForce integration can accommodate individually spawned pedestrians alongside zone-based spawning. If not, it can be adjusted.
 - SVG map format can be extended with metadata blocks without breaking existing parsers
 - Pygame visualization system has sufficient rendering capacity for additional visual elements
 - The Social Force Model is appropriate for goal-directed pedestrian navigation in the target use cases
@@ -166,12 +174,6 @@ A researcher wants to create a scenario with up to 4 individually controlled ped
 
 - Advanced pedestrian AI behaviors beyond Social Force Model (e.g., adaptive re-planning, learning)
 - Interactive GUI editor for placing pedestrians (remains manual SVG/JSON editing)
-- Dynamic pedestrian spawning during simulation runtime (only at initialization)
-- Pedestrian-specific collision detection beyond existing Social Force repulsion
-- Custom force models for individual pedestrians
-- Performance optimization of the underlying PySocialForce engine
-- Multi-modal pedestrian behaviors (e.g., sitting, waiting, group formations for single pedestrians)
-- Automatic trajectory generation or path planning for single pedestrians
 
 ## Dependencies
 

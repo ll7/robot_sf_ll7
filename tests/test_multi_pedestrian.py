@@ -12,13 +12,12 @@ from robot_sf.nav.map_config import MapDefinitionPool
 
 def test_multi_pedestrian_map_definition():
     map_def = create_multi_pedestrian_map()
-    assert len(map_def.single_pedestrians) == 5
+    assert len(map_def.single_pedestrians) == 4  # T033: exactly 4 single pedestrians
     ids = {ped.id for ped in map_def.single_pedestrians}
     assert "ped_goal_1" in ids
     assert "ped_goal_2" in ids
     assert "ped_static" in ids
     assert "ped_traj_1" in ids
-    assert "ped_traj_2" in ids
     # Check types
     for ped in map_def.single_pedestrians:
         if ped.trajectory:

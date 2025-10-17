@@ -39,6 +39,21 @@ class SvgRectangle:
 
 
 @dataclass
+class SvgCircle:
+    """Represents a circle in an SVG file (for single pedestrian markers)."""
+
+    cx: float
+    cy: float
+    r: float
+    label: str
+    id_: str
+
+    def get_center(self) -> Vec2D:
+        """Returns the center point of the circle."""
+        return (self.cx, self.cy)
+
+
+@dataclass
 class SvgPath:
     """Represents a path in an SVG file (sequence of 2D waypoints)."""
 

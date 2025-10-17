@@ -8,8 +8,8 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition
-from robot_sf.nav.nav_types import SvgPath, SvgRectangle
+from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.nav.nav_types import SvgCircle, SvgPath, SvgRectangle
 from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 from robot_sf.util.types import Line2D, Rect, Zone
 
@@ -21,6 +21,7 @@ class SvgMapConverter:
     svg_root: ET.Element
     path_info: list
     rect_info: list
+    circle_info: list
     map_definition: MapDefinition
 
     def __init__(self, svg_file: str):
@@ -87,10 +88,13 @@ class SvgMapConverter:
         logger.info(f"Found {len(paths)} paths in the SVG file")
         rects = self.svg_root.findall(".//svg:rect", namespaces)
         logger.info(f"Found {len(rects)} rects in the SVG file")
+        circles = self.svg_root.findall(".//svg:circle", namespaces)
+        logger.info(f"Found {len(circles)} circles in the SVG file")
 
         # Initialize an empty list to store the path information
         path_info = []
         rect_info = []
+        circle_info = []
 
         # Compile the regex pattern for performance
         coordinate_pattern = re.compile(r"([+-]?[0-9]*\.?[0-9]+)[, ]([+-]?[0-9]*\.?[0-9]+)")
@@ -134,10 +138,31 @@ class SvgMapConverter:
                 ),
             )
 
+        # Iterate over each 'circle' element
+        for circle in circles:
+            # Extract cx, cy, r attributes
+            try:
+                cx = float(circle.attrib.get("cx", 0))
+                cy = float(circle.attrib.get("cy", 0))
+                r = float(circle.attrib.get("r", 0))
+                circle_info.append(
+                    SvgCircle(
+                        cx,
+                        cy,
+                        r,
+                        circle.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label"),
+                        circle.attrib.get("id"),
+                    ),
+                )
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse circle {circle.attrib.get('id')}: {e}")
+
         logger.info(f"Parsed {len(path_info)} paths in the SVG file")
         self.path_info = path_info
         logger.info(f"Parsed {len(rect_info)} rects in the SVG file")
         self.rect_info = rect_info
+        logger.info(f"Parsed {len(circle_info)} circles in the SVG file")
+        self.circle_info = circle_info
 
     def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
         """Process a path labeled as obstacle."""
@@ -191,6 +216,63 @@ class SvgMapConverter:
     def _process_crowded_zone_path(self, path: SvgPath) -> Zone:
         """Process a path labeled as crowded zone."""
         return Zone(list(path.coordinates))
+
+    def _process_single_pedestrians_from_circles(self) -> list[SinglePedestrianDefinition]:
+        """
+        Process circles labeled as single pedestrian markers.
+
+        Circles should be labeled as:
+        - "single_ped_<id>_start" for start positions
+        - "single_ped_<id>_goal" for goal positions
+
+        Returns a list of SinglePedestrianDefinition objects.
+        """
+        # Group circles by pedestrian ID
+        ped_data: dict[str, dict[str, tuple[float, float]]] = {}
+
+        for circle in self.circle_info:
+            if not circle.label or not circle.label.startswith("single_ped_"):
+                continue
+
+            # Parse label: single_ped_<id>_<type>
+            parts = circle.label.split("_")
+            if len(parts) < 4:
+                logger.warning(
+                    f"Invalid single pedestrian circle label '{circle.label}' (id: {circle.id_}); expected 'single_ped_<id>_start' or 'single_ped_<id>_goal'",
+                )
+                continue
+
+            ped_id = parts[2]
+            marker_type = parts[3]  # "start" or "goal"
+
+            if ped_id not in ped_data:
+                ped_data[ped_id] = {}
+
+            ped_data[ped_id][marker_type] = circle.get_center()
+
+        # Create SinglePedestrianDefinition objects
+        single_pedestrians = []
+        for ped_id, data in ped_data.items():
+            if "start" not in data:
+                logger.warning(
+                    f"Single pedestrian '{ped_id}' has no start marker; skipping",
+                )
+                continue
+
+            # Goal is optional (pedestrian may be static or use trajectory from JSON)
+            single_pedestrians.append(
+                SinglePedestrianDefinition(
+                    id=ped_id,
+                    start=data["start"],
+                    goal=data.get("goal"),
+                    trajectory=None,  # Trajectories must come from JSON config
+                ),
+            )
+
+        if single_pedestrians:
+            logger.info(f"Parsed {len(single_pedestrians)} single pedestrian(s) from circles")
+
+        return single_pedestrians
 
     def _process_rects(
         self,
@@ -332,6 +414,10 @@ class SvgMapConverter:
             else:
                 logger.error(f"Unknown label <{label}> in id <{path.id}>")
 
+        # Process single pedestrians from circles
+        # Circles labeled like "single_ped_<id>_start" or "single_ped_<id>_goal"
+        single_pedestrians = self._process_single_pedestrians_from_circles()
+
         # Log warnings / validation for required / optional elements
         if not obstacles:
             logger.warning("No obstacles found in the SVG file")
@@ -359,6 +445,7 @@ class SvgMapConverter:
             ped_goal_zones,
             ped_crowded_zones,
             ped_routes,
+            single_pedestrians,
         )
         logger.debug(f"MapDefinition object created: {type(self.map_definition)}")
 

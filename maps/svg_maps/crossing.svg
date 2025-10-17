@@ -1,0 +1,19 @@
+<!-- Scenario (c): Crossing | Dimensions < 50m | Scale: 1 SVG unit = 1 meter (SI units) -->
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+    <rect x="180" y="50" width="10" height="120" fill="black" />
+    <rect x="220" y="230" width="10" height="120" fill="black" />
+    <rect x="100" y="180" width="120" height="10" fill="black" />
+    <rect x="230" y="180" width="120" height="10" fill="black" />
+    <circle id="single_ped_h5_start" cx="320" cy="200" r="20" fill="#7fa7ff" stroke="#3a5edb" stroke-width="3" />
+    <circle id="single_ped_h5_goal" cx="100" cy="200" r="15" fill="none" stroke="#3a5edb" stroke-width="3" />
+    <rect id="robot_spawn_zone_2" inkscape:label="robot_spawn_zone" x="190" y="310" width="20" height="20" fill="none"
+        stroke="#d97a00" stroke-width="2" />
+    <rect id="robot_goal_zone_2" inkscape:label="robot_goal_zone" x="192.5" y="62.5" width="15" height="15" fill="none"
+        stroke="#d97a00" stroke-width="2" />
+    <circle id="robot_spawn_2" inkscape:label="robot_spawn" cx="200" cy="320" r="20" fill="#ffb366" stroke="#d97a00"
+        stroke-width="3" />
+    <circle id="robot_goal_2" inkscape:label="robot_goal" cx="200" cy="70" r="15" fill="none" stroke="#d97a00"
+        stroke-width="3" />
+    <path id="robot_route_0_0" d="M200,320 L200,70" stroke="#d97a00" stroke-width="4" fill="none" />
+</svg>

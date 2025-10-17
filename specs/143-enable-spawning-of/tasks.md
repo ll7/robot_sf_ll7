@@ -100,7 +100,7 @@
 ## Phase 7: User Story 5 (P3) - Define Multiple Single Pedestrians
 
 - T030: [US5] Extend simulator and map parsing to support up to 4 single pedestrians
-- T031: [US5] Add/validate Social Force interactions between single and zone-spawned pedestrians
+- [X] T031: [US5] Add/validate Social Force interactions between single and zone-spawned pedestrians
 - T032: [US5] Add/validate unit test: test_multi_pedestrian_interaction (tests/test_single_pedestrian.py)
 - T033: [US5] Add/validate example: example_multi_pedestrian.py (4 pedestrians)
 

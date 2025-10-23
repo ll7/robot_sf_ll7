@@ -78,7 +78,7 @@
 		{
 			"label": "Open Coverage Report",
 			"type": "shell",
-			"command": "open htmlcov/index.html",
+			"command": "python -m webbrowser -t htmlcov/index.html",
 			"problemMatcher": [],
 			"group": "none",
 			"presentation": {

@@ -789,6 +789,8 @@ def timeout(data: EpisodeData, *, horizon: int) -> float:
     """
     if data.reached_goal_step is None:
         return 1.0
+    if data.reached_goal_step >= horizon:
+        return 1.0
     return 0.0
 
 

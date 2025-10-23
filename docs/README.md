@@ -60,6 +60,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ## 📚 Documentation Index
 
 ### 🏗️ Architecture & Development
+- **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, testing, and quality standards
+- **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, and CI integration
 - **[Environment Refactoring](./refactoring/)** - **NEW**: Complete guide to the refactored environment architecture
   - [Deployment Status](./refactoring/DEPLOYMENT_READY.md) - Current implementation status
   - [Refactoring Plan](./refactoring/refactoring_plan.md) - Technical architecture details

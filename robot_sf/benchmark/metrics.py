@@ -839,14 +839,13 @@ def failure_to_progress(
     # Compute distance to goal at each timestep
     dists_to_goal = np.linalg.norm(data.robot_pos - data.goal, axis=1)
 
-    failure_count_val = 0.0
-    for start in range(T - window_steps + 1):
-        end = start + window_steps
-        progress = dists_to_goal[start] - dists_to_goal[end - 1]
-        if progress < distance_threshold:
-            failure_count_val += 1.0
+    # Vectorized sliding window check
+    start_dists = dists_to_goal[: T - window_steps + 1]
+    end_dists = dists_to_goal[window_steps - 1 :]
+    progress = start_dists - end_dists
+    failure_count_val = np.count_nonzero(progress < distance_threshold)
 
-    return failure_count_val
+    return float(failure_count_val)
 
 
 def stalled_time(data: EpisodeData, *, velocity_threshold: float = 0.05) -> float:

@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **pytest-cov Integration (Feature 145)**: Comprehensive code coverage monitoring and CI/CD integration
+  - **Automatic Collection**: Coverage data collected automatically during test runs via `pytest-cov` without additional commands
+  - **Multi-Format Reports**: Terminal summary, interactive HTML (`htmlcov/index.html`), and machine-readable JSON (`coverage.json`)
+  - **Baseline Comparison**: CI/CD pipeline compares coverage against baseline with non-blocking warnings on decreases
+  - **VS Code Integration**: Tasks for "Run Tests with Coverage" and "Open Coverage Report"
+  - **CI/CD Workflow**: GitHub Actions integration with caching, baseline updates on main branch, and artifact uploads
+  - **Library Infrastructure**: 
+    - `robot_sf/coverage_tools/baseline_comparator.py`: CoverageSnapshot, CoverageBaseline, CoverageDelta entities with comparison logic
+    - `robot_sf/coverage_tools/report_formatter.py`: Multi-format report generation (terminal/JSON/markdown)
+    - `scripts/coverage/compare_coverage.py`: CLI tool for local and CI baseline comparison
+  - **Comprehensive Testing**: 18 unit tests (5 smoke + 13 baseline comparator) with 91.51% coverage of comparison logic
+  - **Documentation**: 
+    - `docs/coverage_guide.md`: 500+ line comprehensive guide with quickstart, CI integration, troubleshooting
+    - `examples/coverage_example.py`: Programmatic usage examples
+    - Updated `docs/dev_guide.md` with coverage workflow section
+  - **Configuration**: pyproject.toml with [tool.coverage.*] sections, automatic pytest integration, parallel execution support
+  - Coverage excludes: tests, examples, scripts, fast-pysf submodule per omit configuration
+  - Non-blocking CI design: warnings only, no build failures on coverage decreases
 - Paper Metrics Implementation (Feature 144): Comprehensive implementation of 22 social navigation metrics from paper 2306.16740v4 (Table 1):
   - **NHT (Navigation/Hard Task) Metrics (11)**: `success_rate`, `collision_count`, `wall_collisions`, `agent_collisions`, `human_collisions`, `timeout`, `failure_to_progress`, `stalled_time`, `time_to_goal`, `path_length`, `success_path_length` (SPL)
   - **SHT (Social/Human-aware Task) Metrics (14)**: velocity statistics (`velocity_min/avg/max`), acceleration statistics (`acceleration_min/avg/max`), jerk statistics (`jerk_min/avg/max`), clearing distance (`clearing_distance_min/avg`), `space_compliance`, `distance_to_human_min`, `time_to_collision_min`, `aggregated_time`

@@ -40,6 +40,7 @@ dependencies = [
     "moviepy>=2.0.0",
     # Development tools
     "pytest>=8.3.3",
+    "pytest-cov>=6.0.0",
     "scalene>=1.5.48",
     "ruff>=0.9.7",
     "pre-commit>=4.1.0",
@@ -289,8 +290,53 @@ docstring-code-format = true
 # enabled.
 docstring-code-line-length = "dynamic"
 
+[tool.coverage.run]
+source = ["robot_sf"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "test_pygame/*",
+    "examples/*",
+    "scripts/*",
+    "fast-pysf/*",
+    "*/conftest.py",
+    "*/__pycache__/*",
+]
+parallel = true
+branch = false
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+skip_empty = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+show_contexts = false
+
+[tool.coverage.json]
+output = "coverage.json"
+show_contexts = false
+
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib"]
+addopts = [
+    "--import-mode=importlib",
+    "--cov=robot_sf",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-report=html",
+    "--cov-report=json",
+]
 testpaths = ["tests"]
 filterwarnings = [
     # Suppress external library warnings

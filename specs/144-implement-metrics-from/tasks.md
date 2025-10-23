@@ -123,9 +123,9 @@ def collision_count(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Returns sum of all collision types
-- [ ] Returns 0.0 when all collision data unavailable
-- [ ] Gracefully handles None obstacles/other_agents
+- [X] Returns sum of all collision types
+- [X] Returns 0.0 when all collision data unavailable
+- [X] Gracefully handles None obstacles/other_agents
 
 ---
 
@@ -144,9 +144,9 @@ def wall_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
 ```
 
 **Acceptance**:
-- [ ] Returns 0.0 if obstacles is None
-- [ ] Counts timesteps with min distance < threshold
-- [ ] Uses D_COLL constant from robot_sf.benchmark.constants
+- [X] Returns 0.0 if obstacles is None
+- [X] Counts timesteps with min distance < threshold
+- [X] Uses D_COLL constant from robot_sf.benchmark.constants
 
 ---
 
@@ -165,9 +165,9 @@ def agent_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
 ```
 
 **Acceptance**:
-- [ ] Returns 0.0 if other_agents_pos is None
-- [ ] Counts timesteps with min distance to any agent < threshold
-- [ ] Handles J=0 case (no other agents)
+- [X] Returns 0.0 if other_agents_pos is None
+- [X] Counts timesteps with min distance to any agent < threshold
+- [X] Handles J=0 case (no other agents)
 
 ---
 
@@ -186,9 +186,9 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
 ```
 
 **Acceptance**:
-- [ ] Returns 0.0 if no pedestrians (K=0)
-- [ ] Counts timesteps with min distance < threshold
-- [ ] Matches behavior of existing collisions() metric
+- [X] Returns 0.0 if no pedestrians (K=0)
+- [X] Counts timesteps with min distance < threshold
+- [X] Matches behavior of existing collisions() metric
 
 ---
 
@@ -207,9 +207,9 @@ def timeout(data: EpisodeData, *, horizon: int) -> float:
 ```
 
 **Acceptance**:
-- [ ] Returns 1.0 if reached_goal_step is None
-- [ ] Returns 0.0 if goal was reached
-- [ ] Simple binary logic
+- [X] Returns 1.0 if reached_goal_step is None
+- [X] Returns 0.0 if goal was reached
+- [X] Simple binary logic
 
 ---
 
@@ -234,10 +234,10 @@ def failure_to_progress(
 ```
 
 **Acceptance**:
-- [ ] Computes distance to goal at each timestep
-- [ ] Slides window of time_threshold duration
-- [ ] Counts windows where progress < distance_threshold
-- [ ] Returns 0.0 for short trajectories (T*dt < time_threshold)
+- [X] Computes distance to goal at each timestep
+- [X] Slides window of time_threshold duration
+- [X] Counts windows where progress < distance_threshold
+- [X] Returns 0.0 for short trajectories (T*dt < time_threshold)
 
 ---
 
@@ -256,10 +256,10 @@ def stalled_time(data: EpisodeData, *, velocity_threshold: float = 0.05) -> floa
 ```
 
 **Acceptance**:
-- [ ] Computes speed magnitude at each timestep
-- [ ] Counts timesteps below threshold
-- [ ] Multiplies by dt for time duration
-- [ ] Returns 0.0 if never stalled
+- [X] Computes speed magnitude at each timestep
+- [X] Counts timesteps below threshold
+- [X] Multiplies by dt for time duration
+- [X] Returns 0.0 if never stalled
 
 ---
 
@@ -278,9 +278,9 @@ def time_to_goal(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Returns reached_goal_step * dt if goal reached
-- [ ] Returns NaN if reached_goal_step is None
-- [ ] Simple multiplication
+- [X] Returns reached_goal_step * dt if goal reached
+- [X] Returns NaN if reached_goal_step is None
+- [X] Simple multiplication
 
 ---
 
@@ -299,10 +299,10 @@ def path_length(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Sums Euclidean distances between consecutive positions
-- [ ] Uses full trajectory (not just to goal)
-- [ ] Returns 0.0 for single-timestep trajectories
-- [ ] Similar to existing path_efficiency metric
+- [X] Sums Euclidean distances between consecutive positions
+- [X] Uses full trajectory (not just to goal)
+- [X] Returns 0.0 for single-timestep trajectories
+- [X] Similar to existing path_efficiency metric
 
 ---
 
@@ -326,10 +326,10 @@ def success_path_length(
 ```
 
 **Acceptance**:
-- [ ] Returns 0.0 if not successful
-- [ ] Computes efficiency = optimal / max(actual, optimal)
-- [ ] Clips efficiency to 1.0
-- [ ] Calls success_rate and path_length internally
+- [X] Returns 0.0 if not successful
+- [X] Computes efficiency = optimal / max(actual, optimal)
+- [X] Clips efficiency to 1.0
+- [X] Calls success_rate and path_length internally
 
 ---
 
@@ -353,10 +353,10 @@ def velocity_max(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] All three functions implemented
-- [ ] Compute ||robot_vel[t]|| magnitude at each timestep
-- [ ] Return NaN for empty trajectories (T=0)
-- [ ] Use np.min, np.mean, np.max on magnitudes
+- [X] All three functions implemented
+- [X] Compute ||robot_vel[t]|| magnitude at each timestep
+- [X] Return NaN for empty trajectories (T=0)
+- [X] Use np.min, np.mean, np.max on magnitudes
 
 ---
 
@@ -378,10 +378,10 @@ def acceleration_max(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] All three functions implemented
-- [ ] Compute ||robot_acc[t]|| magnitude
-- [ ] Return NaN for T=0
-- [ ] Mirror velocity statistics pattern
+- [X] All three functions implemented
+- [X] Compute ||robot_acc[t]|| magnitude
+- [X] Return NaN for T=0
+- [X] Mirror velocity statistics pattern
 
 ---
 
@@ -403,10 +403,10 @@ def jerk_max(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Call _compute_jerk(data.robot_acc, data.dt)
-- [ ] Compute magnitude of jerk vectors
-- [ ] Return NaN for T < 2
-- [ ] Apply min/mean/max statistics
+- [X] Call _compute_jerk(data.robot_acc, data.dt)
+- [X] Compute magnitude of jerk vectors
+- [X] Return NaN for T < 2
+- [X] Apply min/mean/max statistics
 
 ---
 
@@ -425,10 +425,10 @@ def clearing_distance_avg(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Return NaN if obstacles is None
-- [ ] Compute min_m ||robot_pos[t] - obstacles[m]|| for each t
-- [ ] Apply min or mean over timesteps
-- [ ] Handle M=0 (no obstacles)
+- [X] Return NaN if obstacles is None
+- [X] Compute min_m ||robot_pos[t] - obstacles[m]|| for each t
+- [X] Apply min or mean over timesteps
+- [X] Handle M=0 (no obstacles)
 
 ---
 
@@ -447,11 +447,11 @@ def space_compliance(data: EpisodeData, *, threshold: float = 0.5) -> float:
 ```
 
 **Acceptance**:
-- [ ] Return NaN if no pedestrians (K=0)
-- [ ] Compute min distance to pedestrians at each timestep
-- [ ] Count timesteps where min_dist < threshold
-- [ ] Divide by total timesteps T
-- [ ] Default threshold 0.5m
+- [X] Return NaN if no pedestrians (K=0)
+- [X] Compute min distance to pedestrians at each timestep
+- [X] Count timesteps where min_dist < threshold
+- [X] Divide by total timesteps T
+- [X] Default threshold 0.5m
 
 ---
 
@@ -470,10 +470,10 @@ def distance_to_human_min(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Return NaN if K=0
-- [ ] Compute distance matrix (T, K)
-- [ ] Return global minimum
-- [ ] Similar to existing min_distance metric
+- [X] Return NaN if K=0
+- [X] Compute distance matrix (T, K)
+- [X] Return global minimum
+- [X] Similar to existing min_distance metric
 
 ---
 
@@ -492,11 +492,11 @@ def time_to_collision_min(data: EpisodeData) -> float:
 ```
 
 **Acceptance**:
-- [ ] Return NaN if K=0 or no collision trajectory
-- [ ] Call _compute_ped_velocities to get pedestrian velocities
-- [ ] Compute relative velocity v_rel = v_robot - v_ped
-- [ ] Compute TTC = distance / ||v_rel|| for approaching pairs
-- [ ] Return minimum TTC across all (t, k) pairs
+- [X] Return NaN if K=0 or no collision trajectory
+- [X] Call _compute_ped_velocities to get pedestrian velocities
+- [X] Compute relative velocity v_rel = v_robot - v_ped
+- [X] Compute TTC = distance / ||v_rel|| for approaching pairs
+- [X] Return minimum TTC across all (t, k) pairs
 
 ---
 
@@ -519,10 +519,10 @@ def aggregated_time(
 ```
 
 **Acceptance**:
-- [ ] Return NaN if agent_goal_times is empty
-- [ ] Find max goal-reaching timestep
-- [ ] Multiply by dt for time duration
-- [ ] Handle None values in dict
+- [X] Return NaN if agent_goal_times is empty
+- [X] Find max goal-reaching timestep
+- [X] Multiply by dt for time duration
+- [X] Handle None values in dict
 
 ---
 
@@ -543,11 +543,11 @@ Add comprehensive unit tests for all 22 metrics:
 - NaN handling: Verify when NaN is returned vs 0.0
 
 **Acceptance**:
-- [ ] At least 2 test cases per metric (normal + edge)
-- [ ] 100% coverage of new metric functions
-- [ ] Tests use synthetic EpisodeData fixtures
-- [ ] Tests verify formula correctness with known inputs
-- [ ] All tests pass with pytest
+- [X] At least 2 test cases per metric (normal + edge)
+- [X] 100% coverage of new metric functions
+- [X] Tests use synthetic EpisodeData fixtures
+- [X] Tests verify formula correctness with known inputs
+- [X] All tests pass with pytest
 
 ---
 

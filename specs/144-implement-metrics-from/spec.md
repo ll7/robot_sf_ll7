@@ -1,8 +1,8 @@
 # Feature Specification: Metrics from Paper 2306.16740v4
 
-**Feature Branch**: `144-implement-metrics-from`  
-**Created**: October 22, 2025  
-**Status**: Draft  
+**Feature Branch**: `144-implement-metrics-from`
+**Created**: October 22, 2025
+**Status**: Draft
 **Input**: User description: "implement metrics from paper 2306.16740v4.pdf"
 
 ## Clarifications
@@ -105,9 +105,9 @@ These metrics evaluate quality and social aspects of navigation:
 - **Linear acceleration based features (A_min, A_avg, A_max)**: Linear acceleration statistics (m/s², [-∞,∞)) - minimum, average, and maximum linear acceleration on trajectory
 - **Movement jerk (J_min, J_avg, J_max)**: Jerk statistics (m/s³, [-∞,∞)) - minimum, average, and maximum linear jerk (second-order derivative of linear speed)
 - **Clearing distance (CD_min, CD_avg)**: Distance statistics (meters, [0,∞)) - minimum and average distance to obstacles in trajectory
-- **Space compliance (SC)**: Ratio metric (meters, [0,1]) - ratio of trajectory with minimum distance to humans < given threshold (default 0.5m, Personal Space Compliance/PSC [26])
+- **Space compliance (SC)**: Ratio metric (unitless, [0,1]) - ratio of trajectory with minimum distance to humans < given threshold (default 0.5m, Personal Space Compliance/PSC [26])
 - **Minimum distance to human (DH_min)**: Distance (meters, [0,∞)) - minimum distance to a human in trajectory
-- **Minimum time to collision (TTC)**: Time duration (meters, [0,∞)) - minimum time to collision with human agent at any point in time (where PSC intersects in linear trajectory)
+- **Minimum time to collision (TTC)**: Time duration (seconds, [0,∞)) - minimum time to collision with human agent at any point in time (where PSC intersects in linear trajectory)
 - **Aggregated Time (AT)**: Time duration (seconds, [0,∞)) - time taken for subset of cooperative agents to meet their goals (has Cooperative agents' set parameter)
 
 ## Requirements *(mandatory)*
@@ -190,4 +190,5 @@ These metrics evaluate quality and social aspects of navigation:
 This specification addresses the implementation of metrics from research paper 2306.16740v4. The exact metric definitions, formulas, and validation criteria require clarification from the paper itself. This spec provides the framework for implementation assuming standard social navigation metrics (collision rates, comfort measures, path efficiency, etc.) commonly found in this research domain.
 
 The implementation should extend the existing comprehensive metric suite already present in robot_sf (success rate, collision metrics, force-based comfort measures, path smoothness, SNQI composite index) rather than duplicating functionality.
-```
+
+Success S is boolean, SR (success_rate) is aggregated.

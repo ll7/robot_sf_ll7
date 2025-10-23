@@ -669,6 +669,7 @@ def test_perfect_navigation_metrics():
 - [ ] Each test verifies multiple metrics
 - [ ] Assertions use 5% tolerance where applicable
 - [ ] Tests document expected vs actual values
+- [ ] Add error message for FR-009
 
 ---
 

@@ -651,16 +651,18 @@ def wall_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     if data.obstacles is None or data.obstacles.shape[0] == 0:
         return 0.0
 
-    T = data.robot_pos.shape[0]
-    collision_count_val = 0.0
+    # Vectorized implementation for performance
+    # robot_pos: (T, 2), obstacles: (M, 2)
+    # Expand dims for broadcasting: (T, 1, 2) and (1, M, 2)
+    diffs = data.robot_pos[:, None, :] - data.obstacles[None, :, :]
+    # dists will have shape (T, M)
+    dists = np.linalg.norm(diffs, axis=2)
+    # min_dists_per_t will have shape (T,)
+    min_dists_per_t = np.min(dists, axis=1)
+    # Count timesteps where the minimum distance is below the threshold
+    collision_count_val = np.count_nonzero(min_dists_per_t < threshold)
 
-    for t in range(T):
-        diffs = data.obstacles - data.robot_pos[t]
-        dists = np.linalg.norm(diffs, axis=1)
-        if np.min(dists) < threshold:
-            collision_count_val += 1.0
-
-    return collision_count_val
+    return float(collision_count_val)
 
 
 def agent_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
@@ -696,16 +698,18 @@ def agent_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     if data.other_agents_pos is None or data.other_agents_pos.shape[1] == 0:
         return 0.0
 
-    T = data.robot_pos.shape[0]
-    collision_count_val = 0.0
+    # Vectorized implementation for performance
+    # robot_pos: (T, 2), other_agents_pos: (T, J, 2)
+    # Expand dims for broadcasting: (T, 1, 2) and (T, J, 2)
+    diffs = data.other_agents_pos - data.robot_pos[:, None, :]
+    # dists will have shape (T, J)
+    dists = np.linalg.norm(diffs, axis=2)
+    # min_dists_per_t will have shape (T,)
+    min_dists_per_t = np.min(dists, axis=1)
+    # Count timesteps where the minimum distance is below the threshold
+    collision_count_val = np.count_nonzero(min_dists_per_t < threshold)
 
-    for t in range(T):
-        diffs = data.other_agents_pos[t] - data.robot_pos[t]
-        dists = np.linalg.norm(diffs, axis=1)
-        if np.min(dists) < threshold:
-            collision_count_val += 1.0
-
-    return collision_count_val
+    return float(collision_count_val)
 
 
 def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
@@ -1314,15 +1318,16 @@ def clearing_distance_min(data: EpisodeData) -> float:
     if data.obstacles is None or data.obstacles.shape[0] == 0:
         return float("nan")
 
-    T = data.robot_pos.shape[0]
-    min_dists = []
-
-    for t in range(T):
-        diffs = data.obstacles - data.robot_pos[t]
-        dists = np.linalg.norm(diffs, axis=1)
-        min_dists.append(np.min(dists))
-
-    return float(np.min(min_dists))
+    # Vectorized implementation for performance
+    # robot_pos: (T, 2), obstacles: (M, 2)
+    # Expand dims for broadcasting: (T, 1, 2) and (1, M, 2)
+    diffs = data.robot_pos[:, None, :] - data.obstacles[None, :, :]
+    # dists will have shape (T, M)
+    dists = np.linalg.norm(diffs, axis=2)
+    # min_dists_per_t will have shape (T,)
+    min_dists_per_t = np.min(dists, axis=1)
+    # Return the minimum across all timesteps
+    return float(np.min(min_dists_per_t))
 
 
 def clearing_distance_avg(data: EpisodeData) -> float:
@@ -1356,15 +1361,16 @@ def clearing_distance_avg(data: EpisodeData) -> float:
     if data.obstacles is None or data.obstacles.shape[0] == 0:
         return float("nan")
 
-    T = data.robot_pos.shape[0]
-    min_dists = []
-
-    for t in range(T):
-        diffs = data.obstacles - data.robot_pos[t]
-        dists = np.linalg.norm(diffs, axis=1)
-        min_dists.append(np.min(dists))
-
-    return float(np.mean(min_dists))
+    # Vectorized implementation for performance
+    # robot_pos: (T, 2), obstacles: (M, 2)
+    # Expand dims for broadcasting: (T, 1, 2) and (1, M, 2)
+    diffs = data.robot_pos[:, None, :] - data.obstacles[None, :, :]
+    # dists will have shape (T, M)
+    dists = np.linalg.norm(diffs, axis=2)
+    # min_dists_per_t will have shape (T,)
+    min_dists_per_t = np.min(dists, axis=1)
+    # Return the mean across all timesteps
+    return float(np.mean(min_dists_per_t))
 
 
 def space_compliance(data: EpisodeData, *, threshold: float = 0.5) -> float:

@@ -1488,42 +1488,39 @@ def time_to_collision_min(data: EpisodeData) -> float:
     if data.peds_pos.shape[1] == 0:
         return float("nan")
 
-    # Compute pedestrian velocities
-    ped_vels = _compute_ped_velocities(data.peds_pos, data.dt)  # (T-1, K, 2)
-
+    ped_vels = _compute_ped_velocities(data.peds_pos, data.dt)
     if ped_vels.shape[0] == 0:
         return float("nan")
 
-    # Align robot velocity with ped velocities (both T-1 length)
-    robot_vel_aligned = data.robot_vel[1:]  # (T-1, 2)
-    robot_pos_aligned = data.robot_pos[1:]  # (T-1, 2)
-    peds_pos_aligned = data.peds_pos[1:]  # (T-1, K, 2)
+    # Align arrays to T-1 length
+    robot_vel_aligned = data.robot_vel[1:]
+    robot_pos_aligned = data.robot_pos[1:]
+    peds_pos_aligned = data.peds_pos[1:]
 
-    ttcs = []
+    # Vectorized calculation
+    v_rel = robot_vel_aligned[:, None, :] - ped_vels
+    d_vec = peds_pos_aligned - robot_pos_aligned[:, None, :]
 
-    for t in range(robot_vel_aligned.shape[0]):
-        for k in range(ped_vels.shape[1]):
-            # Relative velocity: robot - ped
-            v_rel = robot_vel_aligned[t] - ped_vels[t, k]
-            v_rel_mag = np.linalg.norm(v_rel)
+    # Correct approaching condition: dot(v_rel, d_vec) > 0 means distance is decreasing.
+    dot_product = np.einsum("ijk,ijk->ij", v_rel, d_vec)
+    approaching_mask = dot_product > 0
 
-            if v_rel_mag < 1e-9:
-                continue  # No relative motion
+    # Calculate magnitudes for all pairs
+    v_rel_mag = np.linalg.norm(v_rel, axis=2)
+    d_mag = np.linalg.norm(d_vec, axis=2)
 
-            # Distance vector
-            d_vec = peds_pos_aligned[t, k] - robot_pos_aligned[t]
-            d_mag = np.linalg.norm(d_vec)
+    # Calculate TTC for all pairs, use np.inf for non-approaching or zero-velocity pairs
+    ttc_matrix = np.full_like(d_mag, np.inf)
 
-            # Check if approaching (relative velocity points toward pedestrian)
-            # dot(v_rel, d_vec) < 0 means robot moving toward ped
-            if np.dot(v_rel, d_vec) < 0:
-                ttc = d_mag / v_rel_mag
-                ttcs.append(ttc)
+    # Create a mask for valid calculations (approaching and non-zero relative speed)
+    valid_calc_mask = approaching_mask & (v_rel_mag > 1e-9)
 
-    if len(ttcs) == 0:
-        return float("nan")
+    # Calculate TTC only for valid pairs
+    ttc_matrix[valid_calc_mask] = d_mag[valid_calc_mask] / v_rel_mag[valid_calc_mask]
 
-    return float(np.min(ttcs))
+    min_ttc = np.min(ttc_matrix)
+
+    return float(min_ttc) if np.isfinite(min_ttc) else float("nan")
 
 
 def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None = None) -> float:

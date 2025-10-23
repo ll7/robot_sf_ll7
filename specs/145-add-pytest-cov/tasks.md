@@ -58,7 +58,7 @@
 
 - [X] T014 [P] [US1] Verify pytest addopts in pyproject.toml includes --cov=robot_sf --cov-report=term-missing --cov-report=html --cov-report=json
 - [X] T015 [P] [US1] Update .vscode/tasks.json with "Run Tests with Coverage" task using standard pytest command
-- [X] T016 [P] [US1] Update .vscode/tasks.json with "Open Coverage Report" task to open htmlcov/index.html
+- [X] T016 [P] [US1] Update .vscode/tasks.json with "Open Coverage Report" task using cross-platform script (scripts/coverage/open_coverage_report.py)
 - [X] T017 [US1] Test coverage collection with parallel execution (pytest -n auto) and verify .coverage files merge correctly
 - [X] T018 [US1] Update docs/dev_guide.md with coverage workflow section explaining automatic collection
 - [X] T019 [US1] Verify coverage data excludes test files, examples, scripts per omit configuration

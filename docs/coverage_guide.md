@@ -28,18 +28,16 @@ The robot_sf_ll7 project uses `pytest-cov` for automatic code coverage measureme
 # Run tests (coverage collected automatically)
 uv run pytest tests
 
-# View HTML report
-open htmlcov/index.html
+# View HTML report (cross-platform)
+uv run python scripts/coverage/open_coverage_report.py
+
+# Or use VS Code task: "Open Coverage Report"
 
 # Compare with baseline (local)
 uv run python scripts/coverage/compare_coverage.py \
   --current coverage.json \
   --baseline .coverage-baseline.json \
   --format terminal
-
-# Or use VS Code tasks
-# - "Run Tests with Coverage"
-# - "Open Coverage Report"
 ```
 
 ## Automatic Collection
@@ -350,6 +348,22 @@ omit = [
     "*/conftest.py" # Pytest fixtures
 ]
 ```
+
+### Browser won't open automatically
+
+**Symptom**: VS Code task or script doesn't open browser
+**Solution**: Use the cross-platform opener script
+```bash
+# Cross-platform (works on macOS, Linux, Windows)
+uv run python scripts/coverage/open_coverage_report.py
+
+# Manual fallback (platform-specific)
+# macOS: open htmlcov/index.html
+# Linux: xdg-open htmlcov/index.html
+# Windows: start htmlcov/index.html
+```
+
+The `open_coverage_report.py` script uses Python's `webbrowser` module with proper file:// URL handling for reliable cross-platform browser launching.
 
 ## Advanced Usage
 

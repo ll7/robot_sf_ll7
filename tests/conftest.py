@@ -126,3 +126,118 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # type: igno
             terminalreporter.write_line(msg)
             # Use pytest's exit API to set return code cleanly (avoids raw SystemExit trace noise)
             pytest.exit(msg, returncode=pytest.ExitCode.TESTS_FAILED)
+
+
+# Coverage-specific fixtures for test isolation
+
+
+@pytest.fixture
+def sample_coverage_data():
+    """
+    Provide sample coverage data for testing coverage tools.
+
+    Returns a minimal but complete coverage.json structure
+    for unit testing formatters, analyzers, and comparators.
+    """
+    return {
+        "meta": {
+            "version": "7.0.0",
+            "timestamp": "2025-10-23T12:00:00",
+            "branch_coverage": False,
+            "show_contexts": False,
+        },
+        "files": {
+            "robot_sf/gym_env/environment.py": {
+                "executed_lines": [1, 2, 3, 10, 11, 12, 20],
+                "summary": {
+                    "covered_lines": 7,
+                    "num_statements": 10,
+                    "percent_covered": 70.0,
+                    "missing_lines": 3,
+                    "excluded_lines": 0,
+                },
+                "missing_lines": [4, 5, 6],
+            },
+            "robot_sf/sim/simulator.py": {
+                "executed_lines": [1, 2, 3, 4, 5],
+                "summary": {
+                    "covered_lines": 5,
+                    "num_statements": 8,
+                    "percent_covered": 62.5,
+                    "missing_lines": 3,
+                    "excluded_lines": 0,
+                },
+                "missing_lines": [10, 11, 12],
+            },
+        },
+        "totals": {
+            "covered_lines": 12,
+            "num_statements": 18,
+            "percent_covered": 66.67,
+            "missing_lines": 6,
+            "excluded_lines": 0,
+        },
+    }
+
+
+@pytest.fixture
+def sample_gap_data():
+    """Provide sample gap analysis data for testing."""
+    return {
+        "gaps": [
+            {
+                "file": "robot_sf/gym_env/environment.py",
+                "coverage_percent": 70.0,
+                "uncovered_lines": 3,
+                "priority_score": 4.5,
+                "recommendation": "Add integration tests for reset() method",
+            },
+            {
+                "file": "robot_sf/sim/simulator.py",
+                "coverage_percent": 62.5,
+                "uncovered_lines": 3,
+                "priority_score": 4.5,
+                "recommendation": "Add unit tests for step() method",
+            },
+        ],
+        "summary": {
+            "total_gaps": 2,
+            "total_uncovered_lines": 6,
+            "average_coverage": 66.25,
+        },
+    }
+
+
+@pytest.fixture
+def sample_trend_data():
+    """Provide sample trend analysis data for testing."""
+    return {
+        "direction": "improving",
+        "rate_per_week": 0.5,
+        "current_coverage": 66.67,
+        "oldest_coverage": 60.0,
+        "snapshot_count": 10,
+        "date_range": {
+            "start": "2025-10-01",
+            "end": "2025-10-23",
+        },
+    }
+
+
+@pytest.fixture
+def sample_baseline_data():
+    """Provide sample baseline comparison data for testing."""
+    return {
+        "current_coverage": 66.67,
+        "baseline_coverage": 70.0,
+        "delta": -3.33,
+        "threshold": 1.0,
+        "changed_files": [
+            {
+                "file": "robot_sf/gym_env/environment.py",
+                "current": 70.0,
+                "baseline": 75.0,
+                "delta": -5.0,
+            },
+        ],
+    }

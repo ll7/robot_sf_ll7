@@ -18,11 +18,11 @@
 
 **Purpose**: Project initialization and dependency setup for coverage tooling
 
-- [ ] T001 [P] Add pytest-cov dependency to pyproject.toml dependencies list
-- [ ] T002 [P] Create robot_sf/coverage_tools/ directory structure with __init__.py
-- [ ] T003 [P] Create scripts/coverage/ directory for CLI entry points
-- [ ] T004 [P] Create tests/coverage_tools/ directory for coverage tool tests
-- [ ] T005 Update .gitignore with coverage output directories (htmlcov/, .coverage, coverage.json, coverage.xml)
+- [X] T001 [P] Add pytest-cov dependency to pyproject.toml dependencies list
+- [X] T002 [P] Create robot_sf/coverage_tools/ directory structure with __init__.py
+- [X] T003 [P] Create scripts/coverage/ directory for CLI entry points
+- [X] T004 [P] Create tests/coverage_tools/ directory for coverage tool tests
+- [X] T005 Update .gitignore with coverage output directories (htmlcov/, .coverage, coverage.json, coverage.xml)
 
 ---
 
@@ -32,12 +32,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Configure coverage collection in pyproject.toml [tool.coverage.run] section (source, omit, parallel)
-- [ ] T007 Configure coverage reporting in pyproject.toml [tool.coverage.report] section (precision, show_missing, exclude_lines)
-- [ ] T008 Configure coverage output formats in pyproject.toml [tool.coverage.html] and [tool.coverage.json]
-- [ ] T009 Add coverage options to pyproject.toml [tool.pytest.ini_options] for automatic collection
-- [ ] T010 [P] Implement robot_sf/coverage_tools/report_formatter.py with terminal/JSON/markdown formatters
-- [ ] T011 Add coverage fixtures to tests/conftest.py for test isolation
+- [X] T006 Configure coverage collection in pyproject.toml [tool.coverage.run] section (source, omit, parallel)
+- [X] T007 Configure coverage reporting in pyproject.toml [tool.coverage.report] section (precision, show_missing, exclude_lines)
+- [X] T008 Configure coverage output formats in pyproject.toml [tool.coverage.html] and [tool.coverage.json]
+- [X] T009 Add coverage options to pyproject.toml [tool.pytest.ini_options] for automatic collection
+- [X] T010 [P] Implement robot_sf/coverage_tools/report_formatter.py with terminal/JSON/markdown formatters
+- [X] T011 Add coverage fixtures to tests/conftest.py for test isolation
 
 **Checkpoint**: Foundation ready - coverage collection configured, formatters available, user stories can proceed
 
@@ -51,17 +51,17 @@
 
 ### Validation for User Story 1
 
-- [ ] T012 [US1] Create validation script scripts/validation/test_coverage_collection.sh to verify coverage runs
-- [ ] T013 [US1] Add smoke test in tests/coverage_tools/test_smoke_coverage.py to verify coverage collection doesn't break tests
+- [X] T012 [US1] Create validation script scripts/validation/test_coverage_collection.sh to verify coverage runs
+- [X] T013 [US1] Add smoke test in tests/coverage_tools/test_smoke_coverage.py to verify coverage collection doesn't break tests
 
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Verify pytest addopts in pyproject.toml includes --cov=robot_sf --cov-report=term-missing --cov-report=html --cov-report=json
-- [ ] T015 [P] [US1] Update .vscode/tasks.json with "Run Tests with Coverage" task using standard pytest command
-- [ ] T016 [P] [US1] Update .vscode/tasks.json with "Open Coverage Report" task to open htmlcov/index.html
-- [ ] T017 [US1] Test coverage collection with parallel execution (pytest -n auto) and verify .coverage files merge correctly
-- [ ] T018 [US1] Update docs/dev_guide.md with coverage workflow section explaining automatic collection
-- [ ] T019 [US1] Verify coverage data excludes test files, examples, scripts per omit configuration
+- [X] T014 [P] [US1] Verify pytest addopts in pyproject.toml includes --cov=robot_sf --cov-report=term-missing --cov-report=html --cov-report=json
+- [X] T015 [P] [US1] Update .vscode/tasks.json with "Run Tests with Coverage" task using standard pytest command
+- [X] T016 [P] [US1] Update .vscode/tasks.json with "Open Coverage Report" task to open htmlcov/index.html
+- [X] T017 [US1] Test coverage collection with parallel execution (pytest -n auto) and verify .coverage files merge correctly
+- [X] T018 [US1] Update docs/dev_guide.md with coverage workflow section explaining automatic collection
+- [X] T019 [US1] Verify coverage data excludes test files, examples, scripts per omit configuration
 
 **Checkpoint**: P1 Complete - Developers can run tests and see coverage automatically. This is the MVP!
 
@@ -75,19 +75,19 @@
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Implement robot_sf/coverage_tools/baseline_comparator.py with load_baseline(), compare(), generate_warning() methods
-- [ ] T021 [P] [US2] Create scripts/coverage/compare_coverage.py CLI with --current, --baseline, --threshold, --format arguments
-- [ ] T022 [US2] Add CoverageSnapshot, CoverageBaseline, CoverageDelta entity classes to robot_sf/coverage_tools/baseline_comparator.py
-- [ ] T023 [US2] Implement GitHub Actions annotation format output in baseline_comparator.py
-- [ ] T024 [US2] Implement terminal format output for local baseline comparisons
-- [ ] T025 [US2] Implement JSON format output for programmatic consumption
-- [ ] T026 [US2] Add coverage job to .github/workflows/ci.yml after existing test job
-- [ ] T027 [US2] Configure GitHub Actions cache in ci.yml for .coverage-baseline.json with key coverage-baseline-${{ github.base_ref }}
-- [ ] T028 [US2] Add compare coverage step in ci.yml that runs scripts/coverage/compare_coverage.py with continue-on-error: true
-- [ ] T029 [US2] Add baseline update step in ci.yml for main branch pushes to copy coverage.json to .coverage-baseline.json
-- [ ] T030 [US2] Create tests/coverage_tools/test_baseline_comparator.py with unit tests for comparison logic
+- [X] T020 [P] [US2] Implement robot_sf/coverage_tools/baseline_comparator.py with load_baseline(), compare(), generate_warning() methods
+- [X] T021 [P] [US2] Create scripts/coverage/compare_coverage.py CLI with --current, --baseline, --threshold, --format arguments
+- [X] T022 [US2] Add CoverageSnapshot, CoverageBaseline, CoverageDelta entity classes to robot_sf/coverage_tools/baseline_comparator.py
+- [X] T023 [US2] Implement GitHub Actions annotation format output in baseline_comparator.py
+- [X] T024 [US2] Implement terminal format output for local baseline comparisons
+- [X] T025 [US2] Implement JSON format output for programmatic consumption
+- [X] T026 [US2] Add coverage job to .github/workflows/ci.yml after existing test job
+- [X] T027 [US2] Configure GitHub Actions cache in ci.yml for .coverage-baseline.json with key coverage-baseline-${{ github.base_ref }}
+- [X] T028 [US2] Add compare coverage step in ci.yml that runs scripts/coverage/compare_coverage.py with continue-on-error: true
+- [X] T029 [US2] Add baseline update step in ci.yml for main branch pushes to copy coverage.json to .coverage-baseline.json
+- [X] T030 [US2] Create tests/coverage_tools/test_baseline_comparator.py with unit tests for comparison logic
 - [ ] T031 [US2] Test CI integration by creating intentional coverage decrease in test PR
-- [ ] T032 [US2] Update docs/coverage_guide.md (new file) with CI integration section and warning interpretation
+- [X] T032 [US2] Update docs/coverage_guide.md (new file) with CI integration section and warning interpretation
 
 **Checkpoint**: P2 Complete - CI warns on coverage decreases without failing builds
 

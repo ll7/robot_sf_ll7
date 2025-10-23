@@ -38,10 +38,10 @@ class EpisodeData:
 ```
 
 **Acceptance**:
-- [ ] Fields added with correct type hints
-- [ ] Default values set to None
-- [ ] Docstring updated with field descriptions
-- [ ] No breaking changes to existing EpisodeData usage
+- [X] Fields added with correct type hints
+- [X] Default values set to None
+- [X] Docstring updated with field descriptions
+- [X] No breaking changes to existing EpisodeData usage
 
 ---
 
@@ -68,10 +68,10 @@ def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
 ```
 
 **Acceptance**:
-- [ ] All three functions implemented with correct signatures
-- [ ] Functions handle edge cases (T=0, T=1, K=0)
-- [ ] Docstrings include formula, parameters, returns
-- [ ] Prefix with underscore (internal use)
+- [X] All three functions implemented with correct signatures
+- [X] Functions handle edge cases (T=0, T=1, K=0)
+- [X] Docstrings include formula, parameters, returns
+- [X] Prefix with underscore (internal use)
 
 ---
 
@@ -101,10 +101,10 @@ def success_rate(data: EpisodeData, *, horizon: int) -> float:
 ```
 
 **Acceptance**:
-- [ ] Function signature matches contract
-- [ ] Returns 1.0 for successful episodes
-- [ ] Returns 0.0 for failures (timeout, collisions, not reached)
-- [ ] Docstring includes formula, units, edge cases, paper reference
+- [X] Function signature matches contract
+- [X] Returns 1.0 for successful episodes
+- [X] Returns 0.0 for failures (timeout, collisions, not reached)
+- [X] Docstring includes formula, units, edge cases, paper reference
 
 ---
 

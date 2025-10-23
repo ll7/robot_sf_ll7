@@ -580,8 +580,18 @@ def success_rate(data: EpisodeData, *, horizon: int) -> float:
     ---------------
     Section 3.2, Table 1: "Success (S)" metric
     """
-    # Reuse existing success() implementation
-    return success(data, horizon=horizon)
+    # Success requires reaching the goal before horizon and having no
+    # collisions of any type (wall, agent, or human). The older helper
+    # `success()` only checked human collisions; use `collision_count`
+    # which aggregates wall_collisions + agent_collisions + human_collisions.
+    if data.reached_goal_step is None:
+        return 0.0
+    if data.reached_goal_step >= horizon:
+        return 0.0
+    # treat any collision (wall, agent, human) as failure
+    if collision_count(data) > 0:
+        return 0.0
+    return 1.0
 
 
 def collision_count(data: EpisodeData) -> float:

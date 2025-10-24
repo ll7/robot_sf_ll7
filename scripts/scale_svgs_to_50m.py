@@ -52,19 +52,21 @@ def scale_svg_file(input_path: str, output_path: str, scale_factor: float = 0.1)
     for elem in root.iter():
         # Scale geometric attributes
         for attr in ["x", "y", "cx", "cy", "r", "width", "height", "stroke-width"]:
-            if elem.get(attr):
-                elem.set(attr, scale_coordinate(elem.get(attr), scale_factor))
+            attr_value = elem.get(attr)
+            if attr_value is not None:
+                elem.set(attr, scale_coordinate(attr_value, scale_factor))
 
         # Scale path data
-        if elem.get("d"):
-            elem.set("d", scale_path_data(elem.get("d"), scale_factor))
+        path_data = elem.get("d")
+        if path_data is not None:
+            elem.set("d", scale_path_data(path_data, scale_factor))
 
     # Write to output with proper formatting
     ET.register_namespace("inkscape", "http://www.inkscape.org/namespaces/inkscape")
     tree.write(output_path, encoding="UTF-8", xml_declaration=True)
 
     # Fix formatting (ET doesn't preserve it well)
-    with open(output_path) as f:
+    with open(output_path, encoding="utf-8") as f:
         content = f.read()
 
     # Add the comment back at the top
@@ -80,7 +82,7 @@ def scale_svg_file(input_path: str, output_path: str, scale_factor: float = 0.1)
         f'<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n{comment}',
     )
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
 
 

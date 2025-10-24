@@ -1,28 +1,31 @@
+# FILE: robot_sf/util/test_types.py
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-# FILE: robot_sf/util/test_types.py
-from robot_sf.util.types import (
-    BicycleAction,
-    Circle2D,
-    DifferentialDriveAction,
-    Line2D,
-    MapBounds,
-    PedGrouping,
-    PedPose,
-    PedState,
-    Point2D,
-    PolarVec2D,
-    Range,
-    Range2D,
-    Rect,
-    RgbColor,
-    RobotAction,
-    RobotPose,
-    UnicycleAction,
-    Vec2D,
-    Zone,
-    ZoneAssignments,
-)
+if TYPE_CHECKING:
+    from robot_sf.util.types import (
+        BicycleAction,
+        Circle2D,
+        DifferentialDriveAction,
+        Line2D,
+        MapBounds,
+        PedGrouping,
+        PedPose,
+        PedState,
+        Point2D,
+        PolarVec2D,
+        Range,
+        Range2D,
+        Rect,
+        RgbColor,
+        RobotAction,
+        RobotPose,
+        UnicycleAction,
+        Vec2D,
+        Zone,
+        ZoneAssignments,
+    )
 
 
 def test_vec2d():

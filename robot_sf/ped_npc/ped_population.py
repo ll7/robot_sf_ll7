@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
-from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -32,7 +31,7 @@ class PedSpawnConfig:
 
     peds_per_area_m2: float
     max_group_members: int
-    group_member_probs: List[float] = field(default_factory=list)
+    group_member_probs: list[float] = field(default_factory=list)
     initial_speed: float = 0.5
     group_size_decay: float = 0.3
     sidewalk_width: float = 3.0
@@ -42,7 +41,7 @@ class PedSpawnConfig:
         Ensures that `group_member_probs` has exactly `max_group_members`
         elements by creating a power-law distributed list if needed.
         """
-        if not len(self.group_member_probs) == self.max_group_members:
+        if len(self.group_member_probs) != self.max_group_members:
             # initialize group size probabilities decaying by power law
             power_dist = [self.group_size_decay**i for i in range(self.max_group_members)]
             # Normalize the distribution so that the sum equals 1
@@ -50,8 +49,10 @@ class PedSpawnConfig:
 
 
 def sample_route(
-    route: GlobalRoute, num_samples: int, sidewalk_width: float
-) -> Tuple[List[Vec2D], int]:
+    route: GlobalRoute,
+    num_samples: int,
+    sidewalk_width: float,
+) -> tuple[list[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
 
@@ -78,7 +79,8 @@ def sample_route(
 
     # Find the section index that corresponds to the sampled offset
     sec_id = next(
-        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1
+        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]),
+        -1,
     )
 
     # Get start and end points of the chosen section
@@ -125,9 +127,9 @@ class ZonePointsGenerator:
         _zone_probs: Normalized probabilities of choosing each zone.
     """
 
-    zones: List[Zone]
-    zone_areas: List[float] = field(init=False)
-    _zone_probs: List[float] = field(init=False)
+    zones: list[Zone]
+    zone_areas: list[float] = field(init=False)
+    _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
         # Calculate the area for each zone assuming zones are rectangular
@@ -141,7 +143,7 @@ class ZonePointsGenerator:
         self._zone_probs = [area / total_area for area in self.zone_areas]
         # Proportional distribution by zone area is considered
 
-    def generate(self, num_samples: int) -> Tuple[List[Vec2D], int]:
+    def generate(self, num_samples: int) -> tuple[list[Vec2D], int]:
         """
         Generates sample points within a randomly selected zone.
 
@@ -174,9 +176,9 @@ class RoutePointsGenerator:
         _route_probs: Normalized probabilities of choosing each route based on length.
     """
 
-    routes: List[GlobalRoute]
+    routes: list[GlobalRoute]
     sidewalk_width: float
-    _route_probs: List[float] = field(init=False)
+    _route_probs: list[float] = field(init=False)
 
     def __post_init__(self):
         """
@@ -208,7 +210,7 @@ class RoutePointsGenerator:
         """
         return self.total_length * self.sidewalk_width
 
-    def generate(self, num_samples: int) -> Tuple[List[Vec2D], int, int]:
+    def generate(self, num_samples: int) -> tuple[list[Vec2D], int, int]:
         """
         Generates sample points within a randomly selected route.
 
@@ -230,8 +232,9 @@ class RoutePointsGenerator:
 
 
 def populate_ped_routes(
-    config: PedSpawnConfig, routes: List[GlobalRoute]
-) -> Tuple[np.ndarray, List[PedGrouping], Dict[int, GlobalRoute], List[int]]:
+    config: PedSpawnConfig,
+    routes: list[GlobalRoute],
+) -> tuple[np.ndarray, list[PedGrouping], dict[int, GlobalRoute], list[int]]:
     """
     Populate routes with pedestrian groups according to the configuration.
 
@@ -290,8 +293,9 @@ def populate_ped_routes(
 
 
 def populate_crowded_zones(
-    config: PedSpawnConfig, crowded_zones: List[Zone]
-) -> Tuple[PedState, List[PedGrouping], ZoneAssignments]:
+    config: PedSpawnConfig,
+    crowded_zones: list[Zone],
+) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
@@ -325,28 +329,111 @@ def populate_crowded_zones(
     return ped_states, groups, zone_assignments
 
 
+def populate_single_pedestrians(
+    single_pedestrians: list,  # list[SinglePedestrianDefinition] - avoid import cycle
+    initial_speed: float = 0.5,
+) -> tuple[np.ndarray, list[dict]]:
+    """
+    Populate single pedestrians from SinglePedestrianDefinition objects.
+
+    Args:
+        single_pedestrians: List of SinglePedestrianDefinition objects
+        initial_speed: Initial walking speed (default: 0.5 m/s)
+
+    Returns:
+        tuple[np.ndarray, list[dict]]:
+            - NumPy array of pedestrian states (Nx7): [x, y, vx, vy, gx, gy, tau]
+            - List of metadata dicts (one per pedestrian) containing id, goal, trajectory info
+    """
+    if not single_pedestrians:
+        return np.empty((0, 7)), []
+
+    num_peds = len(single_pedestrians)
+    ped_states = np.zeros((num_peds, 7))
+    metadata = []
+
+    for i, ped in enumerate(single_pedestrians):
+        # Position (x, y)
+        ped_states[i, 0:2] = ped.start
+
+        # Initial velocity pointing toward goal or first trajectory waypoint
+        if ped.goal is not None:
+            direction = atan2(ped.goal[1] - ped.start[1], ped.goal[0] - ped.start[0])
+            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            ped_states[i, 4:6] = ped.goal
+        elif ped.trajectory:
+            first_wp = ped.trajectory[0]
+            direction = atan2(first_wp[1] - ped.start[1], first_wp[0] - ped.start[0])
+            ped_states[i, 2:4] = [initial_speed * cos(direction), initial_speed * sin(direction)]
+            # For trajectory-based, goal is first waypoint initially
+            ped_states[i, 4:6] = first_wp
+        else:
+            # Static pedestrian (no goal, no trajectory)
+            ped_states[i, 2:4] = [0, 0]
+            ped_states[i, 4:6] = ped.start  # Goal equals start for static peds
+
+        # Tau (relaxation time) - use default 0.5 seconds
+        ped_states[i, 6] = 0.5
+
+        # Store metadata
+        metadata.append(
+            {
+                "id": ped.id,
+                "has_goal": ped.goal is not None,
+                "has_trajectory": ped.trajectory is not None and len(ped.trajectory) > 0,
+                "trajectory": ped.trajectory if ped.trajectory else [],
+                "current_waypoint_index": 0,
+            }
+        )
+
+    return ped_states, metadata
+
+
 def populate_simulation(
     tau: float,
     spawn_config: PedSpawnConfig,
-    ped_routes: List[GlobalRoute],
-    ped_crowded_zones: List[Zone],
-) -> Tuple[PedestrianStates, PedestrianGroupings, List[PedestrianBehavior]]:
+    ped_routes: list[GlobalRoute],
+    ped_crowded_zones: list[Zone],
+    single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
+) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
-        spawn_config, ped_crowded_zones
+        spawn_config,
+        ped_crowded_zones,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
-        spawn_config, ped_routes
+        spawn_config,
+        ped_routes,
     )
 
-    combined_ped_states_np = np.concatenate((crowd_ped_states_np, route_ped_states_np))
+    # Populate single pedestrians if provided
+    if single_pedestrians:
+        single_ped_states_np, _single_ped_metadata = populate_single_pedestrians(
+            single_pedestrians,
+            spawn_config.initial_speed,
+        )
+    else:
+        single_ped_states_np = np.empty((0, 7))
+
+    # Combine all pedestrian states: crowd + route + single
+    combined_ped_states_np = np.concatenate(
+        (crowd_ped_states_np, route_ped_states_np, single_ped_states_np[:, :6]),
+    )
     taus = np.full((combined_ped_states_np.shape[0]), tau)
     ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
-    id_offset = crowd_ped_states_np.shape[0]
-    combined_groups = crowd_groups + [{id + id_offset for id in peds} for peds in route_groups]
 
+    # Calculate ID offsets for each pedestrian category
+    route_offset = crowd_ped_states_np.shape[0]
+    single_offset = route_offset + route_ped_states_np.shape[0]
+
+    # Adjust group IDs for routes
+    combined_groups = crowd_groups + [{id + route_offset for id in peds} for peds in route_groups]
+
+    # Single pedestrians are individual (no groups), so no group entries needed
+
+    # Create pedestrian state views
     pysf_state = PedestrianStates(lambda: ped_states)
-    crowd_pysf_state = PedestrianStates(lambda: ped_states[:id_offset])
-    route_pysf_state = PedestrianStates(lambda: ped_states[id_offset:])
+    crowd_pysf_state = PedestrianStates(lambda: ped_states[:route_offset])
+    route_pysf_state = PedestrianStates(lambda: ped_states[route_offset:single_offset])
 
     groups = PedestrianGroupings(pysf_state)
     for ped_ids in combined_groups:
@@ -360,5 +447,5 @@ def populate_simulation(
 
     crowd_behavior = CrowdedZoneBehavior(crowd_groupings, zone_assignments, ped_crowded_zones)
     route_behavior = FollowRouteBehavior(route_groupings, route_assignments, initial_sections)
-    ped_behaviors: List[PedestrianBehavior] = [crowd_behavior, route_behavior]
+    ped_behaviors: list[PedestrianBehavior] = [crowd_behavior, route_behavior]
     return pysf_state, groups, ped_behaviors

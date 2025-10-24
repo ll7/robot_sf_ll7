@@ -22,3 +22,13 @@ robot_sf/data_analysis/plots/*.png
 robot_sf/data_analysis/datasets/*.json
 wandb
 *.DS_Store
+tmp*
+# multi-extractor training artifacts
+tmp/multi_extractor_training/
+
+# Coverage outputs
+htmlcov/
+.coverage
+.coverage.*
+coverage.json
+coverage.xml

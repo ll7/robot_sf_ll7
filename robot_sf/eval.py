@@ -2,7 +2,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
 from statistics import mean
-from typing import List
 
 
 class EnvOutcome(IntEnum):
@@ -17,8 +16,8 @@ class EnvOutcome(IntEnum):
 
 @dataclass
 class EnvMetrics:
-    route_outcomes: List[EnvOutcome] = field(default_factory=list)
-    intermediate_goal_outcomes: List[EnvOutcome] = field(default_factory=list)
+    route_outcomes: list[EnvOutcome] = field(default_factory=list)
+    intermediate_goal_outcomes: list[EnvOutcome] = field(default_factory=list)
     cache_size: int = 10
 
     @property
@@ -123,7 +122,7 @@ class EnvMetrics:
 
 @dataclass
 class VecEnvMetrics:
-    metrics: List[EnvMetrics]
+    metrics: list[EnvMetrics]
 
     @property
     def route_completion_rate(self) -> float:
@@ -145,8 +144,8 @@ class VecEnvMetrics:
     def pedestrian_collision_rate(self) -> float:
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
-    def update(self, metas: List[dict]):
-        for metric, meta in zip(self.metrics, metas):
+    def update(self, metas: list[dict]):
+        for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)
 
 
@@ -271,7 +270,7 @@ class PedEnvMetrics:
 
 @dataclass
 class PedVecEnvMetrics:
-    metrics: List[PedEnvMetrics]
+    metrics: list[PedEnvMetrics]
 
     @property
     def timeout_rate(self) -> float:
@@ -305,6 +304,6 @@ class PedVecEnvMetrics:
     def route_end_distance(self) -> float:
         return sum(m.route_end_distance for m in self.metrics) / len(self.metrics)
 
-    def update(self, metas: List[dict]):
-        for metric, meta in zip(self.metrics, metas):
+    def update(self, metas: list[dict]):
+        for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)

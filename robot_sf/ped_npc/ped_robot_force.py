@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Tuple
 
 import numba
 import numpy as np
@@ -25,7 +25,10 @@ class PedRobotForce:
     this force can be used for adverserial trainings as well."""
 
     def __init__(
-        self, config: PedRobotForceConfig, peds: PedState, get_robot_pos: Callable[[], Vec2D]
+        self,
+        config: PedRobotForceConfig,
+        peds: PedState,
+        get_robot_pos: Callable[[], Vec2D],
     ):
         self.config = config
         self.peds = peds
@@ -47,7 +50,10 @@ class PedRobotForce:
 
 @numba.njit(fastmath=True)
 def ped_robot_force(
-    out_forces: np.ndarray, ped_positions: np.ndarray, robot_pos: Vec2D, threshold: float
+    out_forces: np.ndarray,
+    ped_positions: np.ndarray,
+    robot_pos: Vec2D,
+    threshold: float,
 ):
     """
     Compute the forces exerted on pedestrians by a robot.
@@ -124,6 +130,6 @@ def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
 
 
 @numba.njit(fastmath=True)
-def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> Tuple[float, float]:
+def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> tuple[float, float]:
     der_potential = 1 / pow(dist, 3)
     return der_potential * dx_dist, der_potential * dy_dist

@@ -2,7 +2,7 @@
 Extended robot environment with image-based observation space support.
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 from robot_sf.gym_env.env_config import RobotEnvSettings
 from robot_sf.gym_env.env_util import (
@@ -29,9 +29,15 @@ class RobotEnvWithImage(RobotEnv):
         debug: bool = False,
         recording_enabled: bool = False,
         record_video: bool = False,
-        video_path: str = None,
-        video_fps: float = None,
+        video_path: str | None = None,
+        video_fps: float | None = None,
         peds_have_obstacle_forces: bool = False,
+        use_jsonl_recording: bool = False,
+        recording_dir: str = "recordings",
+        suite_name: str = "robot_sim",
+        scenario_name: str = "default",
+        algorithm_name: str = "manual",
+        recording_seed: int | None = None,
     ):
         """
         Initialize the Robot Environment with Image Observations.
@@ -58,6 +64,12 @@ class RobotEnvWithImage(RobotEnv):
             video_path=video_path,
             video_fps=video_fps,
             peds_have_obstacle_forces=peds_have_obstacle_forces,
+            use_jsonl_recording=use_jsonl_recording,
+            recording_dir=recording_dir,
+            suite_name=suite_name,
+            scenario_name=scenario_name,
+            algorithm_name=algorithm_name,
+            recording_seed=recording_seed,
         )
 
         # Store configuration for factory pattern compatibility
@@ -65,12 +77,16 @@ class RobotEnvWithImage(RobotEnv):
 
         # Override spaces initialization to include image observations
         self.action_space, self.observation_space, orig_obs_space = create_spaces_with_image(
-            env_config, self.map_def
+            env_config,
+            self.map_def,
         )
 
         # Override sensor initialization to include image sensors
         occupancies, sensors = init_collision_and_sensors_with_image(
-            self.simulator, env_config, orig_obs_space, sim_view=getattr(self, "sim_ui", None)
+            self.simulator,
+            env_config,
+            orig_obs_space,
+            sim_view=getattr(self, "sim_ui", None),
         )
 
         # Setup initial state of the robot with the new sensor fusion

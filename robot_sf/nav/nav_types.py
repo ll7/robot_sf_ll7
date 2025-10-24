@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Tuple
 
 from robot_sf.util.types import Vec2D, Zone
 
@@ -40,11 +39,32 @@ class SvgRectangle:
 
 
 @dataclass
-class SvgPath:
-    """
-    A class to represent a path in an SVG file.
-    """
+class SvgCircle:
+    """Represents a circle in an SVG file (for single pedestrian markers)."""
 
-    coordinates: Tuple[Vec2D]
+    cx: float
+    cy: float
+    r: float
+    label: str
+    id_: str
+
+    def __post_init__(self):
+        """
+        Validates the radius.
+        Raises a ValueError if radius is less than or equal to 0.
+        """
+        if self.r <= 0:
+            raise ValueError("Radius needs to be a float > 0!")
+
+    def get_center(self) -> Vec2D:
+        """Returns the center point of the circle."""
+        return (self.cx, self.cy)
+
+
+@dataclass
+class SvgPath:
+    """Represents a path in an SVG file (sequence of 2D waypoints)."""
+
+    coordinates: tuple[Vec2D, ...]
     label: str
     id: str

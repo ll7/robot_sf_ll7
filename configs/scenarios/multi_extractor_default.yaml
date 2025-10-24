@@ -1,0 +1,19 @@
+run:
+  run_id: "default"
+  worker_mode: "single-thread"
+  num_envs: 1
+  total_timesteps: 4096
+  eval_freq: 512
+  save_freq: 2048
+  n_eval_episodes: 3
+  device: "cpu"
+  seed: 42
+extractors:
+  - name: "dynamics_original"
+    preset: "dynamics_original"
+    description: "Baseline dynamics feature extractor"
+    expected_resources: "cpu"
+  - name: "mlp_small"
+    preset: "mlp_small"
+    description: "Compact MLP baseline"
+    expected_resources: "cpu"

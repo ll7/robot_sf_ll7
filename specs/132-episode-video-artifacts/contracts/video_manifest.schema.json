@@ -1,0 +1,52 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Episode Video Manifest",
+    "type": "object",
+    "properties": {
+        "video": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "mp4"
+                    ]
+                },
+                "filesize_bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "frames": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "renderer": {
+                    "type": "string",
+                    "enum": [
+                        "synthetic",
+                        "sim-view",
+                        "none"
+                    ]
+                },
+                "notes": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "path",
+                "format",
+                "filesize_bytes",
+                "frames",
+                "renderer"
+            ],
+            "additionalProperties": true
+        }
+    },
+    "required": [
+        "video"
+    ],
+    "additionalProperties": true
+}

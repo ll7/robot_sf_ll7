@@ -1,0 +1,1 @@
+srun -v --job-name=robot-sf --account=mitarbeiter --partition=a30 --nodes=1 --ntasks-per-node=1 --cpus-per-task=24 --hint=multithread --mem=32G --time=01:00:00 --qos=a30-gpu --pty bash -i

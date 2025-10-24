@@ -2,14 +2,13 @@
 
 from dataclasses import dataclass, field
 from math import cos, sin
-from typing import Tuple
 
 import numpy as np
 from gymnasium import spaces
 
 from robot_sf.util.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
-WheelSpeedState = Tuple[float, float]  # tuple of (left, right) speeds
+WheelSpeedState = tuple[float, float]  # tuple of (left, right) speeds
 # TODO: Is WheelSpeedState in translation or rotation units?
 
 
@@ -45,7 +44,7 @@ class DifferentialDriveSettings:
             raise ValueError("Robot's wheel radius must be positive and non-zero!")
         if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
             raise ValueError(
-                "Robot's max. linear and angular speeds must be positive and non-zero!"
+                "Robot's max. linear and angular speeds must be positive and non-zero!",
             )
         if self.interaxis_length <= 0:
             raise ValueError("Robot's interaxis length must be positive and non-zero!")
@@ -116,7 +115,10 @@ class DifferentialDriveMotion:
         return new_left_wheel_speed, new_right_wheel_speed
 
     def _covered_distance(
-        self, last_wheel_speeds: WheelSpeedState, new_wheel_speeds: WheelSpeedState, d_t: float
+        self,
+        last_wheel_speeds: WheelSpeedState,
+        new_wheel_speeds: WheelSpeedState,
+        d_t: float,
     ) -> float:
         """
         Computes the distance covered by the robot over the time interval `d_t`.
@@ -205,7 +207,8 @@ class DifferentialDriveRobot:
                  linear and angular speeds.
         """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32
+            [self.config.max_linear_speed, self.config.max_angular_speed],
+            dtype=np.float32,
         )
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
@@ -221,7 +224,8 @@ class DifferentialDriveRobot:
                  linear and angular speeds.
         """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed], dtype=np.float32
+            [self.config.max_linear_speed, self.config.max_angular_speed],
+            dtype=np.float32,
         )
         low = np.array([0.0, -self.config.max_angular_speed], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)

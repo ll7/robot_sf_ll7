@@ -1,0 +1,10 @@
+id: C00_collision_sanity
+preset: collision_sanity
+density: low
+flow: uni
+obstacle: open
+groups: 0.0
+speed_var: low
+goal_topology: point
+robot_context: embedded
+repeats: 1

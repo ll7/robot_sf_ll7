@@ -27,7 +27,9 @@ def demonstrate_fix():
 
     # Show what the old (incorrect) ped_actions would have been
     old_ped_actions = np.column_stack([ped_positions, ped_positions + ped_velocities * 2]).reshape(
-        len(ped_positions), 2, 2
+        len(ped_positions),
+        2,
+        2,
     )
 
     print("\n--- BEFORE FIX (incorrect) ---")
@@ -38,7 +40,9 @@ def demonstrate_fix():
 
     # Show what the new (correct) ped_actions are
     new_ped_actions = np.column_stack([ped_positions, ped_positions + ped_velocities]).reshape(
-        len(ped_positions), 2, 2
+        len(ped_positions),
+        2,
+        2,
     )
 
     print("\n--- AFTER FIX (correct) ---")

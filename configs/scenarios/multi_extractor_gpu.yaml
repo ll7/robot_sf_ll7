@@ -1,0 +1,19 @@
+run:
+  run_id: "gpu"
+  worker_mode: "vectorized"
+  num_envs: 2
+  total_timesteps: 4096
+  eval_freq: 512
+  save_freq: 2048
+  n_eval_episodes: 3
+  device: "cuda"
+  seed: 84
+extractors:
+  - name: "lightweight_cnn"
+    preset: "lightweight_cnn"
+    description: "Lightweight CNN optimized for GPU throughput"
+    expected_resources: "gpu"
+  - name: "attention_small"
+    preset: "attention_small"
+    description: "Compact attention encoder"
+    expected_resources: "gpu"

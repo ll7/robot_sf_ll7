@@ -38,13 +38,13 @@ def main():
         visualize_kde_of_pedestrians_on_map(pedestrian_positions, map_def, "silverman")
 
     except FileNotFoundError as e:
-        logger.error(f"File not found: {str(e)}")
+        logger.error(f"File not found: {e!s}")
         raise
     except ValueError as e:
-        logger.error(f"Value error: {str(e)}")
+        logger.error(f"Value error: {e!s}")
         raise
     except Exception as e:
-        logger.error(f"Error during execution: {str(e)}")
+        logger.error(f"Error during execution: {e!s}")
         raise
 
 

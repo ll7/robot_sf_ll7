@@ -39,7 +39,10 @@ class TestRobotEnvSettingsWithImage:
     def test_custom_image_config(self):
         """Test custom image configuration."""
         custom_image_config = ImageSensorSettings(
-            width=128, height=96, grayscale=True, normalize=False
+            width=128,
+            height=96,
+            grayscale=True,
+            normalize=False,
         )
 
         settings = RobotEnvSettings(use_image_obs=True, image_config=custom_image_config)
@@ -185,7 +188,7 @@ class TestInitCollisionAndSensorsWithImage:
                 OBS_DRIVE_STATE: spaces.Box(low=-1, high=1, shape=(2, 5), dtype=np.float32),
                 OBS_RAYS: spaces.Box(low=0, high=10, shape=(2, 4), dtype=np.float32),
                 OBS_IMAGE: spaces.Box(low=0, high=1, shape=(64, 64, 3), dtype=np.float32),
-            }
+            },
         )
 
     def test_init_without_image_observations(self, mock_simulator, mock_obs_space):
@@ -193,7 +196,10 @@ class TestInitCollisionAndSensorsWithImage:
         settings = RobotEnvSettings(use_image_obs=False)
 
         occupancies, sensors = init_collision_and_sensors_with_image(
-            mock_simulator, settings, mock_obs_space, sim_view=None
+            mock_simulator,
+            settings,
+            mock_obs_space,
+            sim_view=None,
         )
 
         assert len(occupancies) == 1  # One robot
@@ -208,7 +214,11 @@ class TestInitCollisionAndSensorsWithImage:
     @patch("robot_sf.sensor.image_sensor.ImageSensor")
     @patch("robot_sf.gym_env.env_util.ImageSensorFusion")
     def test_init_with_image_observations(
-        self, mock_image_fusion, mock_image_sensor, mock_simulator, mock_obs_space
+        self,
+        mock_image_fusion,
+        mock_image_sensor,
+        mock_simulator,
+        mock_obs_space,
     ):
         """Test initialization with image observations."""
         # Setup mocks
@@ -223,7 +233,10 @@ class TestInitCollisionAndSensorsWithImage:
         settings = RobotEnvSettings(use_image_obs=True)
 
         occupancies, sensors = init_collision_and_sensors_with_image(
-            mock_simulator, settings, mock_obs_space, sim_view=mock_sim_view
+            mock_simulator,
+            settings,
+            mock_obs_space,
+            sim_view=mock_sim_view,
         )
 
         assert len(occupancies) == 1
@@ -238,7 +251,10 @@ class TestInitCollisionAndSensorsWithImage:
         settings = RobotEnvSettings(use_image_obs=True)
 
         occupancies, sensors = init_collision_and_sensors_with_image(
-            mock_simulator, settings, mock_obs_space, sim_view=None
+            mock_simulator,
+            settings,
+            mock_obs_space,
+            sim_view=None,
         )
 
         # Should fall back to regular sensor fusion
@@ -289,7 +305,8 @@ class TestImageObservationIntegration:
             # Use RobotEnvSettings which properly supports image observations
             env_settings = RobotEnvSettings(use_image_obs=True)
             action_space, obs_space, orig_obs_space = create_spaces_with_image(
-                env_settings, map_def
+                env_settings,
+                map_def,
             )
 
             # Sample from observation space
@@ -342,11 +359,14 @@ class TestImageObservationIntegration:
                 OBS_DRIVE_STATE: spaces.Box(low=-1, high=1, shape=(2, 5), dtype=np.float32),
                 OBS_RAYS: spaces.Box(low=0, high=10, shape=(2, 4), dtype=np.float32),
                 OBS_IMAGE: spaces.Box(low=0, high=1, shape=(64, 64, 3), dtype=np.float32),
-            }
+            },
         )
 
         occupancies, sensors = init_collision_and_sensors_with_image(
-            simulator, settings, obs_space, sim_view=Mock()
+            simulator,
+            settings,
+            obs_space,
+            sim_view=Mock(),
         )
 
         # Should create sensors for each robot

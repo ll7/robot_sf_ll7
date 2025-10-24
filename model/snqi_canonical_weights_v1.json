@@ -1,0 +1,32 @@
+{
+    "schema_version": 1,
+    "artifact_version": 1,
+    "description": "Canonical SNQI weights derived on synthetic fixture dataset (simplex OFF).",
+    "simplex": false,
+    "seed": 123,
+    "provenance": {
+        "dataset": "tests/data/snqi/episodes_small.jsonl",
+        "baseline": "tests/data/snqi/baseline_stats.json",
+        "method": "grid_search",
+        "grid_resolution_effective": 2,
+        "objective_components": {
+            "stability_component": 1.0,
+            "discriminative_component": 1.0
+        },
+        "git_commit": "af5c9bb"
+    },
+    "weights": {
+        "w_success": 0.1,
+        "w_time": 0.1,
+        "w_collisions": 0.1,
+        "w_near": 0.1,
+        "w_comfort": 0.1,
+        "w_force_exceed": 0.1,
+        "w_jerk": 3.0
+    },
+    "rationale": {
+        "why_simplex_off": "Retain original relative scaling freedom; early empirical search showed simplex projection compressed discriminative variance on small datasets.",
+        "selection_rule": "Chose recommended (grid_search) configuration maximizing heuristic objective under seed=123 with validation enabled.",
+        "stability_note": "Fixture has perfect stability (Spearman=1) so discriminative component saturates; larger real datasets expected to reduce potential degeneracy."
+    }
+}

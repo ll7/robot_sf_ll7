@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,20 +41,52 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Cache uv cache
+      - name: Cache pip packages
         uses: actions/cache@v4
         with:
-          path: ~/.cache/uv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache compiled extensions
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv/archive-v0
+          key: uv-archive-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+      - name: Cache test results
+        uses: actions/cache@v4
+        with:
+          path: .pytest_cache
+          key: pytest-${{ runner.os }}-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            pytest-${{ runner.os }}-
 
       - name: Set up Python
-        run: uv python install 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure faster apt mirror
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.enzu.com/ubuntu/|g' /etc/apt/sources.list
+          sudo apt-get update
+
+      - name: Install apt-fast
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2
+          wget https://raw.githubusercontent.com/ilikenwf/apt-fast/master/apt-fast
+          sudo mv apt-fast /usr/local/bin/apt-fast
+          sudo chmod +x /usr/local/bin/apt-fast
 
       - name: System packages for headless
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
+        run: |
+          sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 
       - name: Sync dependencies (locked)
-        run: uv sync --frozen
+        run: uv sync --all-extras --frozen
 
       - name: Lint
         run: |
@@ -64,4 +97,137 @@ jobs:
         run: uvx ty check . --exit-zero
 
       - name: Unit tests
-        run: uv run pytest -q
+        run: uv run pytest -q -n auto --max-worker-restart=0
+
+      - name: Restore coverage baseline
+        uses: actions/cache@v4
+        with:
+          path: .coverage-baseline.json
+          key: coverage-baseline-${{ github.ref_name }}
+          restore-keys: |
+            coverage-baseline-main
+
+      - name: Compare coverage with baseline
+        continue-on-error: true
+        run: |
+          if [ -f .coverage-baseline.json ]; then
+            echo "Baseline found, comparing coverage..."
+            uv run python scripts/coverage/compare_coverage.py \
+              --current coverage.json \
+              --baseline .coverage-baseline.json \
+              --format github \
+              --threshold 1.0
+          else
+            echo "No baseline found, skipping comparison"
+          fi
+
+      - name: Update coverage baseline (main branch only)
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
+          cp coverage.json .coverage-baseline.json
+          echo "Coverage baseline updated for main branch"
+
+      - name: Save coverage baseline (main branch only)
+        if: github.ref == 'refs/heads/main' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: .coverage-baseline.json
+          key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.json
+            htmlcov/
+            .coverage
+
+      - name: Validation smoke tests
+        run: |
+          echo "Running environment validation tests..."
+          ./scripts/validation/test_basic_environment.sh
+          ./scripts/validation/test_model_prediction.sh
+
+          # Run full performance smoke test only on main branch or workflow_dispatch
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Running full performance smoke test..."
+            uv run python scripts/validation/performance_smoke_test.py
+          else
+            echo "Skipping full performance smoke test on PR branch"
+          fi
+
+      - name: Preflight for Tiny batch smoke
+        run: |
+          set -euo pipefail
+          echo "Preflight: checking schema file, uv availability, and optional jq"
+          SCHEMA_PATH="docs/dev/issues/social-navigation-benchmark/episode_schema.json"
+          if [ ! -r "$SCHEMA_PATH" ]; then
+            echo "ERROR: Schema file not found or not readable: $SCHEMA_PATH" >&2
+            ls -la "$(dirname "$SCHEMA_PATH")" || true
+            exit 1
+          fi
+          if ! command -v uv >/dev/null 2>&1; then
+            echo "ERROR: 'uv' CLI not found in PATH" >&2
+            exit 1
+          fi
+          if [ ! -x "$(command -v uv)" ]; then
+            echo "ERROR: 'uv' CLI is not executable" >&2
+            exit 1
+          fi
+          if command -v jq >/dev/null 2>&1; then
+            echo "jq found; JSONL validation will be performed after smoke run"
+          else
+            echo "jq not found; JSONL validation will be skipped (episodes.jsonl size will still be checked)"
+          fi
+
+      - name: Tiny batch smoke
+        run: |
+          cat > matrix.yaml <<'YAML'
+          - id: ci-smoke-uni-low-open
+            density: low
+            flow: uni
+            obstacle: open
+            groups: 0.0
+            speed_var: low
+            goal_topology: point
+            robot_context: embedded
+            repeats: 1
+          YAML
+          uv run robot_sf_bench run \
+            --matrix matrix.yaml \
+            --out episodes.jsonl \
+            --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
+            --horizon 3 --dt 0.1 --base-seed 0
+          test -s episodes.jsonl
+
+      - name: Validate JSONL (optional jq)
+        run: |
+          set -euo pipefail
+          if command -v jq >/dev/null 2>&1; then
+            echo "Validating first JSONL record with jq…"
+            head -n1 episodes.jsonl | jq type >/dev/null
+          else
+            echo "jq not installed; skipping JSONL validation"
+          fi
+
+      - name: Upload smoke artifact on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-smoke-episodes
+          path: episodes.jsonl
+
+      - name: Reproducibility check (manual trigger only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Running end-to-end reproducibility validation..."
+          uv run python scripts/benchmark_repro_check.py
+
+      - name: Upload reproducibility report
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reproducibility-report
+          path: results/reproducibility_check.json

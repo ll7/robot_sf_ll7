@@ -9,13 +9,12 @@ external dependencies.
 import sys
 from collections import deque
 from dataclasses import dataclass
-from typing import List, Tuple
 
 
 # Mock the dependencies for testing
 @dataclass
 class MockPose:
-    position: Tuple[float, float]
+    position: tuple[float, float]
     orientation: float
 
     def __getitem__(self, index):
@@ -31,8 +30,8 @@ class MockPose:
 class MockVisualizableSimState:
     timestep: int
     robot_pose: MockPose
-    pedestrian_positions: List[List[float]]
-    ego_ped_pose: MockPose = None
+    pedestrian_positions: list[list[float]]
+    ego_ped_pose: MockPose | None = None
 
 
 @dataclass
@@ -136,7 +135,9 @@ class TrajectoryVisualizationTest:
         for i in range(5):
             robot_pose = MockPose((i * 1.0, i * 0.5), 0.0)
             state = MockVisualizableSimState(
-                timestep=i, robot_pose=robot_pose, pedestrian_positions=[]
+                timestep=i,
+                robot_pose=robot_pose,
+                pedestrian_positions=[],
             )
             self._update_trajectories(state)
 
@@ -158,7 +159,9 @@ class TrajectoryVisualizationTest:
         # Add some data
         robot_pose = MockPose((1.0, 1.0), 0.0)
         state = MockVisualizableSimState(
-            timestep=0, robot_pose=robot_pose, pedestrian_positions=[[1.0, 1.0]]
+            timestep=0,
+            robot_pose=robot_pose,
+            pedestrian_positions=[[1.0, 1.0]],
         )
         self._update_trajectories(state)
 
@@ -185,7 +188,9 @@ class TrajectoryVisualizationTest:
 
         robot_pose = MockPose((1.0, 1.0), 0.0)
         state = MockVisualizableSimState(
-            timestep=0, robot_pose=robot_pose, pedestrian_positions=[[1.0, 1.0]]
+            timestep=0,
+            robot_pose=robot_pose,
+            pedestrian_positions=[[1.0, 1.0]],
         )
 
         # Try to update - should be ignored
@@ -219,7 +224,7 @@ def main():
         test.test_trajectory_toggle()
 
         print(
-            "\n🎉 All tests passed! Trajectory visualization implementation is working correctly."
+            "\n🎉 All tests passed! Trajectory visualization implementation is working correctly.",
         )
         return 0
 

@@ -2,8 +2,6 @@
 Anaylsis of the data recorded from the simulation.
 """
 
-from typing import List
-
 import matplotlib.pyplot as plt
 import numpy as np
 from loguru import logger
@@ -13,7 +11,7 @@ from robot_sf.nav.map_config import MapDefinition
 from robot_sf.render.sim_view import VisualizableSimState
 
 
-def extract_pedestrian_positions(states: List[VisualizableSimState]) -> np.ndarray:
+def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarray:
     """Extract pedestrian positions from recorded states.
 
     Args:
@@ -109,7 +107,7 @@ def visualize_kde_of_pedestrians_on_map(
     _, ax = plt.subplots(1, 1, figsize=(6, 5))
 
     kde_vals = pedestrian_kde(grid_points).reshape(
-        grid_xx.shape
+        grid_xx.shape,
     )  # 5. Reshape back to 2D for plotting
 
     # Normalize KDE values to probabilities

@@ -44,6 +44,79 @@ class SvgMapConverter:
         svg_tree = ET.parse(self.svg_file_str)
         self.svg_root = svg_tree.getroot()
 
+    def _parse_path_element(
+        self, path: ET.Element, coordinate_pattern: re.Pattern
+    ) -> SvgPath | None:
+        """Parse a single SVG path element into a SvgPath object."""
+        input_string = path.attrib.get("d")
+        if not input_string:
+            return None
+
+        filtered_coordinates = coordinate_pattern.findall(input_string)
+        if not filtered_coordinates:
+            logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
+            return None
+
+        np_coordinates = np.array(filtered_coordinates, dtype=float)
+
+        label = path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
+        path_id = path.attrib.get("id")
+        if label is None:
+            label = path_id
+        if label is None:
+            logger.warning(
+                "Path element missing both inkscape:label and id attribute; using empty string",
+            )
+            label = ""
+
+        return SvgPath(
+            coordinates=np_coordinates,
+            label=label,
+            id=path_id or "",
+        )
+
+    def _parse_rect_element(self, rect: ET.Element) -> SvgRectangle:
+        """Parse a single SVG rectangle element into a SvgRectangle object."""
+        rect_label = rect.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
+        rect_id = rect.attrib.get("id")
+        if rect_label is None and rect_id is None:
+            logger.warning(
+                "Rectangle element missing both inkscape:label and id attribute; using empty string",
+            )
+
+        return SvgRectangle(
+            float(rect.attrib.get("x")),
+            float(rect.attrib.get("y")),
+            float(rect.attrib.get("width")),
+            float(rect.attrib.get("height")),
+            rect_label or rect_id or "",
+            rect_id or "",
+        )
+
+    def _parse_circle_element(self, circle: ET.Element) -> SvgCircle | None:
+        """Parse a single SVG circle element into a SvgCircle object."""
+        try:
+            cx = float(circle.attrib.get("cx", 0))
+            cy = float(circle.attrib.get("cy", 0))
+            r = float(circle.attrib.get("r", 0))
+            circle_label = circle.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
+            circle_id = circle.attrib.get("id")
+            if circle_label is None and circle_id is None:
+                logger.warning(
+                    "Circle element missing both inkscape:label and id attribute; using empty string",
+                )
+
+            return SvgCircle(
+                cx,
+                cy,
+                r,
+                circle_label or circle_id or "",
+                circle_id or "",
+            )
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse circle {circle.attrib.get('id')}: {e}")
+            return None
+
     def _get_svg_info(self):
         """
         Extracts path and rectangle information from an SVG file.
@@ -72,18 +145,15 @@ class SvgMapConverter:
 
         If the SVG root is not loaded, an error is logged and the method returns None.
         """
-        # check that the svg root is loaded
         if self.svg_root is None:
             logger.error("SVG root not loaded")
             return
 
-        # Define the SVG and Inkscape namespaces
         namespaces = {
             "svg": "http://www.w3.org/2000/svg",
             "inkscape": "http://www.inkscape.org/namespaces/inkscape",
         }
 
-        # Find all 'path' elements in the SVG file
         paths = self.svg_root.findall(".//svg:path", namespaces)
         logger.info(f"Found {len(paths)} paths in the SVG file")
         rects = self.svg_root.findall(".//svg:rect", namespaces)
@@ -91,74 +161,13 @@ class SvgMapConverter:
         circles = self.svg_root.findall(".//svg:circle", namespaces)
         logger.info(f"Found {len(circles)} circles in the SVG file")
 
-        # Initialize an empty list to store the path information
-        path_info = []
-        rect_info = []
-        circle_info = []
-
-        # Compile the regex pattern for performance
         coordinate_pattern = re.compile(r"([+-]?[0-9]*\.?[0-9]+)[, ]([+-]?[0-9]*\.?[0-9]+)")
 
-        # Iterate over each 'path' element
-        for path in paths:
-            # Extract the 'd' attribute (coordinates), 'inkscape:label' and 'id'
-            input_string = path.attrib.get("d")
-            if not input_string:
-                continue  # Skip paths without the 'd' attribute
-
-            # Find all matching coordinates
-            filtered_coordinates = coordinate_pattern.findall(input_string)
-            if not filtered_coordinates:
-                logger.warning("No coordinates found for path: %s", id)
-                continue
-
-            # Convert the matched strings directly into a numpy array of floats
-            np_coordinates = np.array(filtered_coordinates, dtype=float)
-
-            # Append the information to the list
-            label = path.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
-            if label is None:
-                label = path.attrib.get("id")
-            path_info.append(
-                SvgPath(
-                    coordinates=np_coordinates,
-                    label=label,
-                    id=path.attrib.get("id"),
-                ),
-            )
-
-        # Iterate over each 'rect' element
-        for rect in rects:
-            # Extract the attributes and append the information to the list
-            rect_info.append(
-                SvgRectangle(
-                    float(rect.attrib.get("x")),
-                    float(rect.attrib.get("y")),
-                    float(rect.attrib.get("width")),
-                    float(rect.attrib.get("height")),
-                    rect.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label"),
-                    rect.attrib.get("id"),
-                ),
-            )
-
-        # Iterate over each 'circle' element
-        for circle in circles:
-            # Extract cx, cy, r attributes
-            try:
-                cx = float(circle.attrib.get("cx", 0))
-                cy = float(circle.attrib.get("cy", 0))
-                r = float(circle.attrib.get("r", 0))
-                circle_info.append(
-                    SvgCircle(
-                        cx,
-                        cy,
-                        r,
-                        circle.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label"),
-                        circle.attrib.get("id"),
-                    ),
-                )
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse circle {circle.attrib.get('id')}: {e}")
+        path_info = [
+            p for path in paths if (p := self._parse_path_element(path, coordinate_pattern))
+        ]
+        rect_info = [self._parse_rect_element(rect) for rect in rects]
+        circle_info = [c for circle in circles if (c := self._parse_circle_element(circle))]
 
         logger.info(f"Parsed {len(path_info)} paths in the SVG file")
         self.path_info = path_info

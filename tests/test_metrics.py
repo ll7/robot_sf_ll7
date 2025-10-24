@@ -548,11 +548,11 @@ def test_velocity_statistics():
 
     # Empty trajectory -> NaN
     ep_empty = _make_episode(T=0, K=0)
-    ep_empty.robot_vel = np.array([]).reshape(0, 2)
-    ep_empty.robot_pos = np.array([]).reshape(0, 2)
-    ep_empty.robot_acc = np.array([]).reshape(0, 2)
-    ep_empty.peds_pos = np.array([]).reshape(0, 0, 2)
-    ep_empty.ped_forces = np.array([]).reshape(0, 0, 2)
+    ep_empty.robot_vel = np.empty((0, 2))
+    ep_empty.robot_pos = np.empty((0, 2))
+    ep_empty.robot_acc = np.empty((0, 2))
+    ep_empty.peds_pos = np.empty((0, 0, 2))
+    ep_empty.ped_forces = np.empty((0, 0, 2))
     assert np.isnan(velocity_min(ep_empty))
 
 

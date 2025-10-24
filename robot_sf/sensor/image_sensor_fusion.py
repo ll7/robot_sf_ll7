@@ -32,9 +32,9 @@ class ImageSensorFusion:
     use_image_obs: bool = False
 
     # Inherited from SensorFusion
-    drive_state_cache: deque = field(init=False, default_factory=lambda: deque())
-    lidar_state_cache: deque = field(init=False, default_factory=lambda: deque())
-    image_state_cache: deque = field(init=False, default_factory=lambda: deque())
+    drive_state_cache: deque = field(init=False, default_factory=deque)
+    lidar_state_cache: deque = field(init=False, default_factory=deque)
+    image_state_cache: deque = field(init=False, default_factory=deque)
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
@@ -120,7 +120,7 @@ class ImageSensorFusion:
         self.stacked_lidar_state = np.roll(self.stacked_lidar_state, -1, axis=0)
         self.stacked_lidar_state[-1] = sensor_data["lidar_state"]
 
-    def _build_observation(self, sensor_data: dict) -> Dict[str, np.ndarray]:
+    def _build_observation(self, sensor_data: dict) -> dict[str, np.ndarray]:
         """Build the final observation dictionary."""
         obs = {}
 

@@ -242,26 +242,38 @@ class SvgMapConverter:
         # Group circles by pedestrian ID
         ped_data: dict[str, dict[str, tuple[float, float]]] = {}
 
+        # Use regex to robustly parse labels that may contain underscores in the ID
+        pattern = re.compile(r"^single_ped_(?P<pid>.+)_(?P<kind>start|goal)$")
         for circle in self.circle_info:
-            if not circle.label or not circle.label.startswith("single_ped_"):
+            if not circle.label:
                 continue
 
-            # Parse label: single_ped_<id>_<type>
-            # Remove prefix and split from right to handle IDs with underscores
-            # (e.g., "single_ped_my_ped_1_start" -> id="my_ped_1", type="start")
-            suffix = circle.label[len("single_ped_") :]
-            parts = suffix.rsplit("_", 1)
-            if len(parts) != 2:
+            m = pattern.match(circle.label)
+            if not m:
                 logger.warning(
-                    f"Invalid single pedestrian circle label '{circle.label}' (id: {circle.id_}); expected 'single_ped_<id>_start' or 'single_ped_<id>_goal'",
+                    "Invalid single pedestrian circle label '{lab}' (id={cid}); "
+                    "expected 'single_ped_<id>_(start|goal)'",
+                    lab=circle.label,
+                    cid=circle.id_,
                 )
                 continue
 
-            ped_id = parts[0]
-            marker_type = parts[1]  # "start" or "goal"
+            ped_id = m.group("pid")
+            marker_type = m.group("kind")  # "start" or "goal"
 
             if ped_id not in ped_data:
                 ped_data[ped_id] = {}
+
+            # Detect and warn about duplicate markers
+            if marker_type in ped_data[ped_id]:
+                logger.warning(
+                    "Duplicate single_ped marker for id={pid} kind={k}; "
+                    "keeping first, ignoring circle id={cid}",
+                    pid=ped_id,
+                    k=marker_type,
+                    cid=circle.id_,
+                )
+                continue
 
             ped_data[ped_id][marker_type] = circle.get_center()
 

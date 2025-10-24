@@ -25,7 +25,7 @@ SVG_MAPS = [
 STEPS_PER_SCENARIO = 200
 
 
-def run_svg_scenario(name: str, svg_path: str):
+def run_svg_scenario(name: str, svg_path: str) -> None:
     print(f"\n=== Scenario: {name} ===")
     map_def = convert_map(svg_path)
     pool = MapDefinitionPool(map_defs={name: map_def})

@@ -60,6 +60,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ## 📚 Documentation Index
 
 ### 🏗️ Architecture & Development
+- **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, testing, and quality standards
+- **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, and CI integration
 - **[Environment Refactoring](./refactoring/)** - **NEW**: Complete guide to the refactored environment architecture
   - [Deployment Status](./refactoring/DEPLOYMENT_READY.md) - Current implementation status
   - [Refactoring Plan](./refactoring/refactoring_plan.md) - Technical architecture details
@@ -73,6 +75,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**Simulation View**](./SIM_VIEW.md) - Visualization and rendering system
 - [**Map Editor Usage**](./MAP_EDITOR_USAGE.md) - Creating and editing simulation maps
 - [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
+- [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
+- [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
  - **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
  - **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
 

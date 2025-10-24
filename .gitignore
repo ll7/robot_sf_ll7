@@ -25,3 +25,10 @@ wandb
 tmp*
 # multi-extractor training artifacts
 tmp/multi_extractor_training/
+
+# Coverage outputs
+htmlcov/
+.coverage
+.coverage.*
+coverage.json
+coverage.xml

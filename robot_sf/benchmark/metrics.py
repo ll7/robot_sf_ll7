@@ -751,10 +751,11 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     ---------------
     Section 3.2, Table 1: "Human Collisions (HC)" metric
     """
-    # Reuse existing collisions() implementation which uses D_COLL
-    # Note: threshold parameter kept for API consistency but currently ignored
-    _ = threshold  # Acknowledge parameter for linter
-    return collisions(data)
+    if data.peds_pos.shape[1] == 0:
+        return 0.0
+    dists = _compute_distance_matrix(data)
+    min_d = dists.min(axis=1)
+    return float(np.count_nonzero(min_d < threshold))
 
 
 def timeout(data: EpisodeData, *, horizon: int) -> float:

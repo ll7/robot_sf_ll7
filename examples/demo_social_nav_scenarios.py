@@ -45,7 +45,7 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
     time.sleep(1)
 
 
-def main():
+def main() -> None:
     for name, svg_path in SVG_MAPS:
         run_svg_scenario(name, svg_path)
     print("\nAll scenarios completed.")

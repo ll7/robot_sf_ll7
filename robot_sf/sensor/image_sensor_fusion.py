@@ -137,12 +137,19 @@ class ImageSensorFusion:
         obs[OBS_RAYS] = self.stacked_lidar_state / max_lidar
 
         # Add image observation if enabled
-        if self.use_image_obs and sensor_data["image_state"] is not None:
-            self.image_state_cache.append(sensor_data["image_state"])
-            # Images are already normalized in the sensor
-            # Note: Images are intentionally NOT stacked like drive/lidar states
-            # to match the observation space design where images represent current frame only
-            obs[OBS_IMAGE] = sensor_data["image_state"]
+        if self.use_image_obs:
+            img = sensor_data["image_state"]
+            if img is None:
+                # Fallback to zeros matching the observation space
+                space = self.unnormed_obs_space.get(OBS_IMAGE)
+                shape = getattr(space, "shape", None)
+                img = np.zeros(shape, dtype=np.float32) if shape is not None else None
+            if img is not None:
+                self.image_state_cache.append(img)
+                # Images are already normalized in the sensor
+                # Note: Images are intentionally NOT stacked like drive/lidar states
+                # to match the observation space design where images represent current frame only
+                obs[OBS_IMAGE] = img
 
         return obs
 

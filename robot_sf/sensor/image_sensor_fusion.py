@@ -136,11 +136,11 @@ class ImageSensorFusion:
         obs[OBS_DRIVE_STATE] = self.stacked_drive_state / max_drive
         obs[OBS_RAYS] = self.stacked_lidar_state / max_lidar
 
-        # Add image observation if enabled
-        if self.use_image_obs:
+        # Add image observation if enabled and sensor is available
+        if self.use_image_obs and self.image_sensor is not None:
             img = sensor_data["image_state"]
             if img is None:
-                # Fallback to zeros matching the observation space
+                # Fallback to zeros matching the observation space when capture fails
                 space = self.unnormed_obs_space.get(OBS_IMAGE)
                 shape = getattr(space, "shape", None)
                 img = np.zeros(shape, dtype=np.float32) if shape is not None else None

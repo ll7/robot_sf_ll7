@@ -32,10 +32,10 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
     config = RobotSimulationConfig()
     config.map_pool = pool
     env = make_robot_env(config=config, debug=True)
-    obs, _ = env.reset()
+    env.reset()
     for step in range(STEPS_PER_SCENARIO):
         action = env.action_space.sample()
-        obs, _, terminated, truncated, _ = env.step(action)
+        _, _, terminated, truncated, _ = env.step(action)
         env.render()
         if terminated or truncated:
             print(f"Episode finished at step {step}")

@@ -247,15 +247,18 @@ class SvgMapConverter:
                 continue
 
             # Parse label: single_ped_<id>_<type>
-            parts = circle.label.split("_")
-            if len(parts) < 4:
+            # Remove prefix and split from right to handle IDs with underscores
+            # (e.g., "single_ped_my_ped_1_start" -> id="my_ped_1", type="start")
+            suffix = circle.label[len("single_ped_") :]
+            parts = suffix.rsplit("_", 1)
+            if len(parts) != 2:
                 logger.warning(
                     f"Invalid single pedestrian circle label '{circle.label}' (id: {circle.id_}); expected 'single_ped_<id>_start' or 'single_ped_<id>_goal'",
                 )
                 continue
 
-            ped_id = parts[2]
-            marker_type = parts[3]  # "start" or "goal"
+            ped_id = parts[0]
+            marker_type = parts[1]  # "start" or "goal"
 
             if ped_id not in ped_data:
                 ped_data[ped_id] = {}

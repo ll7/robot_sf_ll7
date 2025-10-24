@@ -48,6 +48,14 @@ class SvgCircle:
     label: str
     id_: str
 
+    def __post_init__(self):
+        """
+        Validates the radius.
+        Raises a ValueError if radius is less than or equal to 0.
+        """
+        if self.r <= 0:
+            raise ValueError("Radius needs to be a float > 0!")
+
     def get_center(self) -> Vec2D:
         """Returns the center point of the circle."""
         return (self.cx, self.cy)

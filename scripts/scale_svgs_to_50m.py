@@ -5,6 +5,7 @@ Converts 400x400 viewBox to 40x40 and scales all coordinates accordingly.
 
 import re
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 
 def scale_coordinate(value_str: str, scale_factor: float) -> str:
@@ -32,6 +33,7 @@ def scale_path_data(d: str, scale_factor: float) -> str:
 
 def scale_svg_file(input_path: str, output_path: str, scale_factor: float = 0.1):
     """Scale an entire SVG file by the given factor."""
+    input_path_obj = Path(input_path)
     tree = ET.parse(input_path)
     root = tree.getroot()
 
@@ -66,7 +68,7 @@ def scale_svg_file(input_path: str, output_path: str, scale_factor: float = 0.1)
         content = f.read()
 
     # Add the comment back at the top
-    scenario_name = input_path.split("/")[-1].replace("_", " ").replace(".svg", "").title()
+    scenario_name = input_path_obj.stem.replace("_", " ").title()
     comment = (
         f"<!-- {scenario_name} | Dimensions < 50m | Scale: 1 SVG unit = 1 meter (SI units) -->\n"
     )

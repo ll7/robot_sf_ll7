@@ -185,6 +185,66 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
 uv run python -m pytest fast-pysf/tests/ -v
 ```
 
+### Coverage workflow (automatic collection)
+
+**Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
+
+#### Quick start
+```bash
+# Run tests (coverage collected automatically)
+uv run pytest tests
+
+# View HTML report
+open htmlcov/index.html
+
+# Or use VS Code task: "Run Tests with Coverage" → "Open Coverage Report"
+```
+
+#### What gets measured
+- **Included**: All code in `robot_sf/` package
+- **Excluded**: Tests, examples, scripts, `fast-pysf/` submodule
+- **Output formats**: 
+  - Terminal summary (printed after test run)
+  - HTML report (`htmlcov/index.html` - interactive, detailed)
+  - JSON data (`coverage.json` - for tooling)
+
+#### Understanding coverage output
+```
+Name                                    Stmts   Miss  Cover   Missing
+---------------------------------------------------------------------
+robot_sf/gym_env/environment.py           150     15  90.00%  42-45, 89-92
+robot_sf/sim/simulator.py                 200     50  75.00%  10-20, 150-180
+---------------------------------------------------------------------
+TOTAL                                   10605    876  91.73%
+```
+
+- **Stmts**: Total executable lines
+- **Miss**: Uncovered lines
+- **Cover**: Percentage covered
+- **Missing**: Line numbers not executed by tests
+
+#### Coverage configuration
+Configured in `pyproject.toml`:
+- `[tool.coverage.run]` — collection settings (source, omit patterns, parallel support)
+- `[tool.coverage.report]` — report formatting (precision, exclusions)
+- `[tool.pytest.ini_options]` — automatic pytest integration
+
+No changes needed for normal development — defaults are production-ready.
+
+#### Advanced usage
+```bash
+# Run with parallel workers (coverage merges automatically)
+uv run pytest tests -n auto
+
+# Run specific test file with coverage
+uv run pytest tests/test_gym_env.py -v
+
+# View coverage data programmatically
+python -c "import json; print(json.load(open('coverage.json'))['totals'])"
+```
+
+For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
+
 ### Must-have checklist
 - [ ] Initialize submodules after clone: `git submodule update --init --recursive` (needed for `fast-pysf/`).
 - [ ] Use factory env creators; do not instantiate env classes directly.

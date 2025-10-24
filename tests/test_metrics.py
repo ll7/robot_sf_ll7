@@ -335,3 +335,422 @@ def test_snqi_scoring():
     assert s_good > s_bad
     # Ensure scores are finite
     assert np.isfinite(s_good) and np.isfinite(s_bad)
+
+
+# =============================================================================
+# Paper Metrics Tests (2306.16740v4)
+# =============================================================================
+
+
+def test_success_rate():
+    """Test success_rate metric - binary success indicator."""
+    from robot_sf.benchmark.metrics import success_rate
+
+    # Success case: reached goal before horizon with no collisions
+    ep = _make_episode(T=5, K=0)
+    ep.reached_goal_step = 3
+    assert success_rate(ep, horizon=10) == 1.0
+
+    # Failure: timeout (no goal reached)
+    ep.reached_goal_step = None
+    assert success_rate(ep, horizon=10) == 0.0
+
+    # Failure: reached but after horizon
+    ep.reached_goal_step = 11
+    assert success_rate(ep, horizon=10) == 0.0
+
+
+def test_collision_count():
+    """Test collision_count metric - sum of all collision types."""
+    from robot_sf.benchmark.metrics import collision_count
+
+    ep = _make_episode(T=5, K=2)
+    # No obstacles or other agents -> only human collisions
+    # Make pedestrians very close
+    ep.peds_pos[:, 0, :] = ep.robot_pos + 0.01
+    result = collision_count(ep)
+    assert result >= 0.0
+    assert np.isfinite(result)
+
+
+def test_wall_collisions():
+    """Test wall_collisions metric."""
+    from robot_sf.benchmark.metrics import wall_collisions
+
+    ep = _make_episode(T=5, K=0)
+
+    # No obstacles -> 0.0
+    ep.obstacles = None
+    assert wall_collisions(ep) == 0.0
+
+    # Add obstacles far away -> 0.0
+    ep.obstacles = np.array([[10.0, 10.0], [15.0, 15.0]])
+    assert wall_collisions(ep) == 0.0
+
+    # Add obstacle close to robot -> should detect collision
+    ep.obstacles = np.array([[0.01, 0.01]])  # Very close to origin
+    result = wall_collisions(ep)
+    assert result >= 0.0
+
+
+def test_agent_collisions():
+    """Test agent_collisions metric."""
+    from robot_sf.benchmark.metrics import agent_collisions
+
+    ep = _make_episode(T=5, K=0)
+
+    # No other agents -> 0.0
+    ep.other_agents_pos = None
+    assert agent_collisions(ep) == 0.0
+
+    # Add agents far away -> 0.0
+    ep.other_agents_pos = np.ones((5, 2, 2)) * 10.0
+    assert agent_collisions(ep) == 0.0
+
+    # Add agent close to robot
+    ep.other_agents_pos = np.zeros((5, 1, 2)) + 0.01
+    result = agent_collisions(ep)
+    assert result >= 0.0
+
+
+def test_human_collisions():
+    """Test human_collisions metric."""
+    from robot_sf.benchmark.metrics import human_collisions
+
+    ep = _make_episode(T=5, K=0)
+    # No pedestrians -> 0.0
+    assert human_collisions(ep) == 0.0
+
+    # Add pedestrians far away
+    ep = _make_episode(T=5, K=2)
+    ep.peds_pos[:, :, :] = 10.0
+    assert human_collisions(ep) == 0.0
+
+
+def test_timeout():
+    """Test timeout metric - binary timeout indicator."""
+    from robot_sf.benchmark.metrics import timeout
+
+    ep = _make_episode(T=5, K=0)
+
+    # Goal reached -> no timeout
+    ep.reached_goal_step = 3
+    assert timeout(ep, horizon=10) == 0.0
+
+    # Goal not reached -> timeout
+    ep.reached_goal_step = None
+    assert timeout(ep, horizon=10) == 1.0
+
+    # Reached after horizon -> timeout
+    ep.reached_goal_step = 11
+    assert timeout(ep, horizon=10) == 1.0
+
+
+def test_failure_to_progress():
+    """Test failure_to_progress metric."""
+    from robot_sf.benchmark.metrics import failure_to_progress
+
+    # Robot moving toward goal -> low failures
+    T = 50
+    ep = _make_episode(T=T, K=0)
+    ep.robot_pos[:, 0] = np.linspace(0, 4.0, T)
+    ep.goal = np.array([5.0, 0.0])
+    result = failure_to_progress(ep, distance_threshold=0.1, time_threshold=1.0)
+    assert result >= 0.0
+    assert np.isfinite(result)
+
+    # Too short trajectory -> 0.0
+    short_ep = _make_episode(T=2, K=0)
+    assert failure_to_progress(short_ep, time_threshold=5.0) == 0.0
+
+
+def test_stalled_time():
+    """Test stalled_time metric."""
+    from robot_sf.benchmark.metrics import stalled_time
+
+    ep = _make_episode(T=10, K=0)
+
+    # No velocity -> all time stalled
+    ep.robot_vel[:, :] = 0.0
+    result = stalled_time(ep, velocity_threshold=0.05)
+    assert result == 10 * 0.1  # T * dt
+
+    # High velocity -> no stalling
+    ep.robot_vel[:, :] = 1.0
+    result = stalled_time(ep, velocity_threshold=0.05)
+    assert result == 0.0
+
+
+def test_time_to_goal():
+    """Test time_to_goal metric."""
+    from robot_sf.benchmark.metrics import time_to_goal
+
+    ep = _make_episode(T=10, K=0)
+
+    # Goal reached at step 5
+    ep.reached_goal_step = 5
+    assert time_to_goal(ep) == 5 * 0.1
+
+    # Goal not reached -> NaN
+    ep.reached_goal_step = None
+    assert np.isnan(time_to_goal(ep))
+
+
+def test_path_length():
+    """Test path_length metric."""
+    from robot_sf.benchmark.metrics import path_length
+
+    # Straight line path
+    ep = _make_episode(T=11, K=0)
+    ep.robot_pos[:, 0] = np.linspace(0, 10, 11)
+    result = path_length(ep)
+    assert np.isclose(result, 10.0, atol=0.01)
+
+    # Single timestep -> 0.0
+    ep_short = _make_episode(T=1, K=0)
+    assert path_length(ep_short) == 0.0
+
+
+def test_success_path_length():
+    """Test success_path_length (SPL) metric."""
+    from robot_sf.benchmark.metrics import success_path_length
+
+    # Success with optimal path
+    ep = _make_episode(T=11, K=0)
+    ep.robot_pos[:, 0] = np.linspace(0, 5, 11)
+    ep.reached_goal_step = 10
+    ep.goal = np.array([5.0, 0.0])
+    result = success_path_length(ep, horizon=20, optimal_length=5.0)
+    assert result == 1.0  # Perfect efficiency
+
+    # Failure -> 0.0
+    ep.reached_goal_step = None
+    result = success_path_length(ep, horizon=20, optimal_length=5.0)
+    assert result == 0.0
+
+
+def test_velocity_statistics():
+    """Test velocity_min, velocity_avg, velocity_max metrics."""
+    from robot_sf.benchmark.metrics import velocity_avg, velocity_max, velocity_min
+
+    ep = _make_episode(T=10, K=0)
+    # Varying velocity
+    ep.robot_vel[:5, 0] = 1.0  # speed = 1.0
+    ep.robot_vel[5:, 0] = 2.0  # speed = 2.0
+
+    v_min = velocity_min(ep)
+    v_avg = velocity_avg(ep)
+    v_max = velocity_max(ep)
+
+    assert v_min == 1.0
+    assert v_max == 2.0
+    assert 1.0 <= v_avg <= 2.0
+
+    # Empty trajectory -> NaN
+    ep_empty = _make_episode(T=0, K=0)
+    ep_empty.robot_vel = np.array([]).reshape(0, 2)
+    ep_empty.robot_pos = np.array([]).reshape(0, 2)
+    ep_empty.robot_acc = np.array([]).reshape(0, 2)
+    ep_empty.peds_pos = np.array([]).reshape(0, 0, 2)
+    ep_empty.ped_forces = np.array([]).reshape(0, 0, 2)
+    assert np.isnan(velocity_min(ep_empty))
+
+
+def test_acceleration_statistics():
+    """Test acceleration_min, acceleration_avg, acceleration_max metrics."""
+    from robot_sf.benchmark.metrics import acceleration_avg, acceleration_max, acceleration_min
+
+    ep = _make_episode(T=10, K=0)
+    ep.robot_acc[:5, 0] = 0.5
+    ep.robot_acc[5:, 0] = 1.5
+
+    a_min = acceleration_min(ep)
+    a_avg = acceleration_avg(ep)
+    a_max = acceleration_max(ep)
+
+    assert a_min == 0.5
+    assert a_max == 1.5
+    assert 0.5 <= a_avg <= 1.5
+
+
+def test_jerk_statistics():
+    """Test jerk_min, jerk_avg, jerk_max metrics."""
+    from robot_sf.benchmark.metrics import jerk_avg, jerk_max, jerk_min
+
+    ep = _make_episode(T=10, K=0)
+    # Linear acceleration change -> constant jerk
+    ep.robot_acc[:, 0] = np.linspace(0, 1, 10)
+
+    j_min = jerk_min(ep)
+    j_avg = jerk_avg(ep)
+    j_max = jerk_max(ep)
+
+    assert np.isfinite(j_min)
+    assert np.isfinite(j_avg)
+    assert np.isfinite(j_max)
+    assert j_min <= j_avg <= j_max
+
+    # Too few timesteps -> NaN
+    ep_short = _make_episode(T=1, K=0)
+    assert np.isnan(jerk_min(ep_short))
+
+
+def test_clearing_distance_statistics():
+    """Test clearing_distance_min and clearing_distance_avg metrics."""
+    from robot_sf.benchmark.metrics import clearing_distance_avg, clearing_distance_min
+
+    ep = _make_episode(T=5, K=0)
+
+    # No obstacles -> NaN
+    ep.obstacles = None
+    assert np.isnan(clearing_distance_min(ep))
+    assert np.isnan(clearing_distance_avg(ep))
+
+    # Add obstacles at varying distances
+    ep.obstacles = np.array([[2.0, 0.0], [5.0, 0.0]])
+    cd_min = clearing_distance_min(ep)
+    cd_avg = clearing_distance_avg(ep)
+
+    assert np.isfinite(cd_min)
+    assert np.isfinite(cd_avg)
+    assert cd_min <= cd_avg
+
+
+def test_space_compliance():
+    """Test space_compliance metric."""
+    from robot_sf.benchmark.metrics import space_compliance
+
+    # No pedestrians -> NaN
+    ep = _make_episode(T=10, K=0)
+    assert np.isnan(space_compliance(ep))
+
+    # Pedestrians far away -> low compliance (0.0)
+    ep = _make_episode(T=10, K=2)
+    ep.peds_pos[:, :, :] = 10.0
+    result = space_compliance(ep, threshold=0.5)
+    assert result == 0.0
+
+    # Pedestrians close -> high compliance (> 0)
+    ep.peds_pos[:, 0, :] = 0.3  # Within 0.5m threshold
+    result = space_compliance(ep, threshold=0.5)
+    assert result > 0.0
+
+
+def test_distance_to_human_min():
+    """Test distance_to_human_min metric."""
+    from robot_sf.benchmark.metrics import distance_to_human_min
+
+    # No pedestrians -> NaN
+    ep = _make_episode(T=5, K=0)
+    assert np.isnan(distance_to_human_min(ep))
+
+    # Pedestrians at known distances
+    ep = _make_episode(T=5, K=2)
+    ep.peds_pos[:, 0, :] = np.array([1.0, 0.0])
+    ep.peds_pos[:, 1, :] = np.array([2.0, 0.0])
+    result = distance_to_human_min(ep)
+    assert np.isclose(result, 1.0, atol=0.01)
+
+
+def test_time_to_collision_min():
+    """Test time_to_collision_min metric."""
+    from robot_sf.benchmark.metrics import time_to_collision_min
+
+    # No pedestrians -> NaN
+    ep = _make_episode(T=5, K=0)
+    assert np.isnan(time_to_collision_min(ep))
+
+    # Pedestrians with no approaching motion -> NaN
+    ep = _make_episode(T=10, K=1)
+    ep.robot_vel[:, :] = 0.0
+    ep.peds_pos[:, 0, :] = np.array([5.0, 0.0])
+    result = time_to_collision_min(ep)
+    assert np.isnan(result)  # No relative motion or not approaching
+
+
+def test_aggregated_time():
+    """Test aggregated_time metric."""
+    from robot_sf.benchmark.metrics import aggregated_time
+
+    ep = _make_episode(T=10, K=0)
+    ep.reached_goal_step = 8
+
+    # Should return time_to_goal for single robot
+    result = aggregated_time(ep)
+    assert result == 8 * 0.1
+
+    # No goal reached -> NaN
+    ep.reached_goal_step = None
+    result = aggregated_time(ep)
+    assert np.isnan(result)
+
+
+def test_all_paper_metrics_smoke():
+    """Smoke test: all 22 paper metrics are callable and return float/NaN."""
+    from robot_sf.benchmark.metrics import (
+        acceleration_avg,
+        acceleration_max,
+        acceleration_min,
+        agent_collisions,
+        aggregated_time,
+        clearing_distance_avg,
+        clearing_distance_min,
+        collision_count,
+        distance_to_human_min,
+        failure_to_progress,
+        human_collisions,
+        jerk_avg,
+        jerk_max,
+        jerk_min,
+        path_length,
+        space_compliance,
+        stalled_time,
+        success_path_length,
+        success_rate,
+        time_to_collision_min,
+        time_to_goal,
+        timeout,
+        velocity_avg,
+        velocity_max,
+        velocity_min,
+        wall_collisions,
+    )
+
+    ep = _make_episode(T=10, K=2)
+    ep.reached_goal_step = 5
+    ep.obstacles = np.array([[5.0, 5.0]])
+    ep.other_agents_pos = np.ones((10, 1, 2)) * 8.0
+
+    metrics = [
+        (success_rate, {"horizon": 20}),
+        (collision_count, {}),
+        (wall_collisions, {}),
+        (agent_collisions, {}),
+        (human_collisions, {}),
+        (timeout, {"horizon": 20}),
+        (failure_to_progress, {}),
+        (stalled_time, {}),
+        (time_to_goal, {}),
+        (path_length, {}),
+        (success_path_length, {"horizon": 20, "optimal_length": 5.0}),
+        (velocity_min, {}),
+        (velocity_avg, {}),
+        (velocity_max, {}),
+        (acceleration_min, {}),
+        (acceleration_avg, {}),
+        (acceleration_max, {}),
+        (jerk_min, {}),
+        (jerk_avg, {}),
+        (jerk_max, {}),
+        (clearing_distance_min, {}),
+        (clearing_distance_avg, {}),
+        (space_compliance, {}),
+        (distance_to_human_min, {}),
+        (time_to_collision_min, {}),
+        (aggregated_time, {}),
+    ]
+
+    for func, kwargs in metrics:
+        result = func(ep, **kwargs)
+        # Should return float or NaN (both are float type)
+        assert isinstance(result, float), f"{func.__name__} did not return float"

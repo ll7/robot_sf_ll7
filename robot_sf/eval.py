@@ -236,28 +236,41 @@ class PedEnvMetrics:
             "is_robot_collision",
             "is_timesteps_exceeded",
             "is_robot_at_goal",
+            "is_route_complete",
             "is_robot_obstacle_collision",
             "is_robot_pedestrian_collision",
         ]
         return any(meta.get(condition, False) for condition in end_conditions)
 
     def _determine_outcome(self, meta: dict) -> EnvOutcome:
-        """Determine the outcome based on the meta information."""
-        # If Robot collides with ego_pedestrian, the outcome is ROBOT_COLLISION
-        # If Robot collides with pysf pedestrian, the outcome is ROBOT_PEDESTRIAN_COLLISION
-        outcome_mapping = {
-            "is_pedestrian_collision": EnvOutcome.PEDESTRIAN_COLLISION,
-            "is_obstacle_collision": EnvOutcome.OBSTACLE_COLLISION,
-            "is_robot_collision": EnvOutcome.ROBOT_COLLISION,
-            "is_timesteps_exceeded": EnvOutcome.TIMEOUT,
-            "is_robot_at_goal": EnvOutcome.REACHED_GOAL,
-            "is_robot_obstacle_collision": EnvOutcome.ROBOT_OBSTACLE_COLLISION,
-            "is_robot_pedestrian_collision": EnvOutcome.ROBOT_PEDESTRIAN_COLLISION,
-        }
+        """Determine the outcome based on the meta information.
 
-        for condition, outcome in outcome_mapping.items():
+        Note: Collision outcomes take precedence over goal/timeout outcomes.
+        This ensures that if both a collision and goal are flagged simultaneously,
+        the collision is reported as the outcome.
+        """
+        # Check collisions first (highest priority)
+        collision_checks = [
+            ("is_robot_collision", EnvOutcome.ROBOT_COLLISION),
+            ("is_robot_pedestrian_collision", EnvOutcome.ROBOT_PEDESTRIAN_COLLISION),
+            ("is_robot_obstacle_collision", EnvOutcome.ROBOT_OBSTACLE_COLLISION),
+            ("is_pedestrian_collision", EnvOutcome.PEDESTRIAN_COLLISION),
+            ("is_obstacle_collision", EnvOutcome.OBSTACLE_COLLISION),
+        ]
+
+        for condition, outcome in collision_checks:
             if meta.get(condition, False):
                 return outcome
+
+        # Then check timeout (medium priority)
+        if meta.get("is_timesteps_exceeded", False):
+            return EnvOutcome.TIMEOUT
+
+        # Finally check goal conditions (lowest priority)
+        if meta.get("is_robot_at_goal", False):
+            return EnvOutcome.REACHED_GOAL
+        if meta.get("is_route_complete", False):
+            return EnvOutcome.REACHED_GOAL
 
         raise NotImplementedError("unknown environment outcome")
 

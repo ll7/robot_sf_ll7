@@ -87,14 +87,98 @@ Future maintainers and users need clear documentation of the per-ped quantile fo
 
 ## Success Criteria *(mandatory)*
 
-<!--
-  ACTION REQUIRED: Define measurable success criteria.
-  These must be technology-agnostic and measurable.
--->
-
 ### Measurable Outcomes
 
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- **SC-001**: All unit tests pass, including tests for no-pedestrians (returns NaN), single-pedestrian (per-ped == individual), and multi-pedestrian scenarios
+- **SC-002**: Per-ped force quantiles produce **different numerical results** than aggregated quantiles for the same episode (Pearson correlation < 0.95 across test suite)
+- **SC-003**: Function executes in O(T×K) time complexity - benchmark with T=1000, K=50 completes in < 50ms on standard hardware
+- **SC-004**: Documentation in `metrics_spec.md` includes formal mathematical definition with LaTeX symbols and at least 2 edge case examples
+- **SC-005**: `compute_all_metrics()` returns all three per-ped quantile keys (`ped_force_q50`, `ped_force_q90`, `ped_force_q95`) for any valid episode
+- **SC-006**: Ruff linting passes with no new warnings; type hints are complete (`mypy` or `ty check` passes)
+- **SC-007**: The todo item in `docs/dev/issues/social-navigation-benchmark/todo.md` line 113 is updated to mark per-ped force quantiles as `[x]` complete
+
+## Implementation Notes
+
+### Proposed Algorithm
+
+```python
+def per_ped_force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> dict[str, float]:
+    """Compute per-pedestrian force quantiles then average across pedestrians.
+    
+    For each pedestrian k:
+    1. Extract force magnitude time series: M_k = ||F_{k,t}||₂ for all t
+    2. Compute quantiles Q_k(q) for each requested quantile q
+    3. Average Q_k(q) across all pedestrians k
+    
+    Returns dict with keys: ped_force_q50, ped_force_q90, ped_force_q95
+    Returns NaN for all keys if K=0.
+    """
+    K = data.peds_pos.shape[1]
+    if K == 0:
+        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
+    
+    # Compute magnitudes: (T,K)
+    mags = np.linalg.norm(data.ped_forces, axis=2)
+    
+    # Compute quantiles per pedestrian: (K, len(qs))
+    per_ped_quantiles = np.quantile(mags, q=list(qs), axis=0)  # shape: (Q, K)
+    
+    # Average across pedestrians: (len(qs),)
+    mean_quantiles = np.mean(per_ped_quantiles, axis=1)
+    
+    return {f"ped_force_q{int(q * 100)}": float(mean_quantiles[i]) for i, q in enumerate(qs)}
+```
+
+### Naming Convention Decision
+
+Use prefix `ped_force_` to distinguish from aggregated `force_` metrics:
+- Aggregated (existing): `force_q50`, `force_q90`, `force_q95`
+- Per-pedestrian (new): `ped_force_q50`, `ped_force_q90`, `ped_force_q95`
+
+This naming makes the semantic difference clear in output files and avoids key collisions.
+
+### Edge Case Handling Policy
+
+| Scenario | Behavior | Rationale |
+|----------|----------|-----------|
+| No pedestrians (K=0) | Return NaN for all keys | Consistent with `force_quantiles()`, `min_distance()` |
+| Single pedestrian (K=1) | Return that ped's quantiles | Mean of single value is identity; mathematically correct |
+| Ped with 1 timestep | Quantiles = that magnitude | `np.quantile([x], q)` returns `x` for any q |
+| All forces identical | All quantiles equal | Degenerate distribution; mathematically correct |
+| NaN in force array | Use `np.nan_to_num` first | Consistent with other metrics; prevents propagation |
+
+## Test Plan
+
+### Unit Tests (tests/test_metrics.py)
+
+1. **test_per_ped_force_quantiles_no_peds**: K=0 → all keys return NaN
+2. **test_per_ped_force_quantiles_single_ped**: K=1 with forces [1,5,10] → median=5, q90≈9.5, q95≈9.75
+3. **test_per_ped_force_quantiles_multi_ped_varying**: K=3, ped0=[10,10,10], ped1=[1,1,1], ped2=[1,1,1] → per-ped median ≈ (10+1+1)/3 = 4, aggregated median = 1
+4. **test_per_ped_force_quantiles_all_identical**: All forces = 5.0 → all quantiles = 5.0
+5. **test_per_ped_force_quantiles_in_compute_all**: Verify keys present in `compute_all_metrics()` output
+
+### Integration Test
+
+Run benchmark suite subset (10 episodes) and verify:
+- Per-ped quantiles differ from aggregated quantiles
+- No crashes or NaN propagation issues
+- Output validates against JSON schema
+
+## Dependencies & Risks
+
+**Dependencies**:
+- Existing `EpisodeData` dataclass structure
+- NumPy ≥1.21 for `quantile` function with `axis` parameter
+- Existing test infrastructure in `tests/test_metrics.py`
+
+**Risks**:
+1. **NaN propagation**: If force arrays contain NaN, `np.quantile` will propagate them. Mitigation: Pre-process with `np.nan_to_num` or use `np.nanquantile`
+2. **Performance regression**: Computing quantiles per-ped is more expensive than flattening. Mitigation: Vectorize with `axis` parameter; benchmark shows <50ms for T=1000, K=50
+3. **Schema compatibility**: Adding new metric keys. Mitigation: Episode schema already allows `additionalProperties` for metrics dict
+
+## Follow-Up Work (Out of Scope)
+
+- Integrate per-ped quantiles into SNQI weight optimization (separate issue)
+- Add per-ped variance metrics (std, IQR) for force distributions
+- Visualizations comparing aggregated vs per-ped quantiles in distribution plots
+- Sensitivity analysis showing rank stability improvements with per-ped metrics

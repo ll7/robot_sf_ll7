@@ -3,8 +3,8 @@
 Compare coverage against baseline and generate warnings.
 
 This CLI tool compares current coverage.json against a baseline and generates
-warnings in various formats for CI/CD integration. Non-blocking by design -
-always exits 0 unless there's a fatal error.
+warnings in various formats for CI/CD integration. Non-blocking by default
+(exits 0 on coverage decrease), but can optionally fail via --fail-on-decrease.
 
 Usage:
     python scripts/coverage/compare_coverage.py \\

@@ -3,10 +3,11 @@ Update SVG scenario files to have dimensions < 50m by modifying only the viewBox
 The viewBox defines the coordinate system in meters (1 SVG unit = 1 meter).
 """
 
+import re
 import xml.etree.ElementTree as ET
 
 
-def update_svg_viewbox(filepath: str, new_viewbox: str):
+def update_svg_viewbox(filepath: str, new_viewbox: str) -> bool:
     """Update the viewBox attribute of an SVG file."""
     tree = ET.parse(filepath)
     root = tree.getroot()
@@ -18,8 +19,6 @@ def update_svg_viewbox(filepath: str, new_viewbox: str):
             content = f.read()
 
         # Replace viewBox
-        import re
-
         content = re.sub(r'viewBox="[^"]*"', f'viewBox="{new_viewbox}"', content)
 
         # Write back

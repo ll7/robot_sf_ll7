@@ -697,7 +697,7 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 # Optional perf benchmark
 DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
 
-# remember to source the environment
+# If running commands outside of `uv run`, activate the virtual environment:
 source .venv/bin/activate
 ```
 

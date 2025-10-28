@@ -179,6 +179,107 @@ def test_force_metrics_no_peds():
     assert vals["comfort_exposure"] == 0
 
 
+def test_per_ped_force_quantiles_no_peds():
+    """T001: Verify K=0 returns NaN for all per-ped quantile keys."""
+    ep = _make_episode(T=4, K=0)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert np.isnan(vals["ped_force_q50"]), "Expected NaN for ped_force_q50 with no peds"
+    assert np.isnan(vals["ped_force_q90"]), "Expected NaN for ped_force_q90 with no peds"
+    assert np.isnan(vals["ped_force_q95"]), "Expected NaN for ped_force_q95 with no peds"
+
+
+def test_per_ped_force_quantiles_single_ped():
+    """T002: Verify single ped quantiles equal that pedestrian's individual quantiles."""
+    T, K = 5, 1
+    ep = _make_episode(T=T, K=K)
+    # Single ped with varying forces: magnitudes will be [1, 5, 10, 5, 1]
+    forces = [1.0, 5.0, 10.0, 5.0, 1.0]
+    for t, mag in enumerate(forces):
+        ep.ped_forces[t, 0] = np.array([mag, 0.0])  # Force in x direction only
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # For single ped, per-ped quantiles should equal individual quantiles
+    # Expected quantiles of [1, 5, 10, 5, 1]: q50=5, q90=9.5, q95=9.75
+    expected_q50 = np.quantile(forces, 0.5)
+    expected_q90 = np.quantile(forces, 0.9)
+    expected_q95 = np.quantile(forces, 0.95)
+
+    assert np.isclose(vals["ped_force_q50"], expected_q50), (
+        f"Expected ped_force_q50={expected_q50}, got {vals['ped_force_q50']}"
+    )
+    assert np.isclose(vals["ped_force_q90"], expected_q90), (
+        f"Expected ped_force_q90={expected_q90}, got {vals['ped_force_q90']}"
+    )
+    assert np.isclose(vals["ped_force_q95"], expected_q95), (
+        f"Expected ped_force_q95={expected_q95}, got {vals['ped_force_q95']}"
+    )
+
+
+def test_per_ped_force_quantiles_multi_ped_varying():
+    """T003: Verify multi-ped with varying forces shows per-ped mean differs from aggregated."""
+    T, K = 3, 3
+    ep = _make_episode(T=T, K=K)
+
+    # Ped 0: consistently high forces [10, 10, 10]
+    # Ped 1, 2: consistently low forces [1, 1, 1]
+    for t in range(T):
+        ep.ped_forces[t, 0] = np.array([10.0, 0.0])
+        ep.ped_forces[t, 1] = np.array([1.0, 0.0])
+        ep.ped_forces[t, 2] = np.array([1.0, 0.0])
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # Per-ped medians: ped0=10, ped1=1, ped2=1 → mean = (10+1+1)/3 = 4
+    expected_per_ped_median = (10.0 + 1.0 + 1.0) / 3.0
+    assert np.isclose(vals["ped_force_q50"], expected_per_ped_median), (
+        f"Expected per-ped median ~{expected_per_ped_median}, got {vals['ped_force_q50']}"
+    )
+
+    # Aggregated median (existing force_q50) should be 1.0 (6 samples of 1, 3 samples of 10)
+    # This demonstrates the difference between per-ped and aggregated approaches
+    assert vals["force_q50"] == 1.0, "Aggregated median should be 1.0"
+    assert vals["ped_force_q50"] > vals["force_q50"], (
+        "Per-ped median should be higher than aggregated median in this case"
+    )
+
+
+def test_per_ped_force_quantiles_all_identical():
+    """T004: Verify all identical forces yield identical quantiles."""
+    T, K = 4, 2
+    ep = _make_episode(T=T, K=K)
+
+    # All forces = 5.0
+    for t in range(T):
+        for k in range(K):
+            ep.ped_forces[t, k] = np.array([5.0, 0.0])
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # All quantiles should equal 5.0
+    assert np.isclose(vals["ped_force_q50"], 5.0), f"Expected 5.0, got {vals['ped_force_q50']}"
+    assert np.isclose(vals["ped_force_q90"], 5.0), f"Expected 5.0, got {vals['ped_force_q90']}"
+    assert np.isclose(vals["ped_force_q95"], 5.0), f"Expected 5.0, got {vals['ped_force_q95']}"
+
+
+def test_per_ped_force_quantiles_in_compute_all():
+    """T005: Verify keys present in compute_all_metrics output."""
+    T, K = 3, 2
+    ep = _make_episode(T=T, K=K)
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    # Verify all three keys are present
+    assert "ped_force_q50" in vals, "ped_force_q50 key missing from metrics"
+    assert "ped_force_q90" in vals, "ped_force_q90 key missing from metrics"
+    assert "ped_force_q95" in vals, "ped_force_q95 key missing from metrics"
+
+    # Verify values are finite (not NaN) since we have pedestrians
+    assert np.isfinite(vals["ped_force_q50"]), "ped_force_q50 should be finite with K>0"
+    assert np.isfinite(vals["ped_force_q90"]), "ped_force_q90 should be finite with K>0"
+    assert np.isfinite(vals["ped_force_q95"]), "ped_force_q95 should be finite with K>0"
+
+
 def test_energy_and_jerk_mean():
     T = 6
     ep = _make_episode(T=T, K=0)

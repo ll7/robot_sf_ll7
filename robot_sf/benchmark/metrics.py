@@ -253,6 +253,59 @@ def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -
     return {f"force_q{int(q * 100)}": float(np.quantile(flat, q)) for q in qs}
 
 
+def per_ped_force_quantiles(
+    data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)
+) -> dict[str, float]:
+    """Compute per-pedestrian force quantiles then average across pedestrians.
+
+    For each pedestrian k:
+    1. Extract force magnitude time series: M_k = ||F_{k,t}||_2 for all t
+    2. Compute quantiles Q_k(q) for each requested quantile q using nanquantile
+    3. Average Q_k(q) across all pedestrians k using nanmean
+
+    This differs from force_quantiles() which flattens all (t,k) samples before
+    computing quantiles. The per-ped approach preserves individual pedestrian
+    experiences before aggregating, revealing whether high forces are concentrated
+    on specific individuals or distributed evenly.
+
+    Parameters
+    ----------
+    data : EpisodeData
+        Episode trajectory with ped_forces (T,K,2) array
+    qs : Iterable[float], optional
+        Quantile levels to compute, by default (0.5, 0.9, 0.95)
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary with keys ped_force_q{50,90,95} mapping to float values.
+        Returns NaN for all keys if K=0 (no pedestrians).
+        Returns NaN if all pedestrians have no finite force samples.
+
+    Examples
+    --------
+    >>> # Episode with 3 peds: ped0=[10,10,10], ped1=[1,1,1], ped2=[1,1,1]
+    >>> # Per-ped medians: 10, 1, 1 → mean = 4.0
+    >>> # Aggregated median (force_q50): 1.0 (6 samples of 1, 3 samples of 10)
+    """
+    K = data.peds_pos.shape[1]
+    if K == 0:
+        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
+
+    # Compute force magnitudes: (T,K)
+    mags = np.linalg.norm(data.ped_forces, axis=2)
+
+    # Compute quantiles per pedestrian: (len(qs), K)
+    # Use nanquantile to handle NaN values (missing timesteps)
+    per_ped_quantiles = np.nanquantile(mags, q=list(qs), axis=0)
+
+    # Average across pedestrians: (len(qs),)
+    # Use nanmean to exclude pedestrians with all-NaN samples
+    mean_quantiles = np.nanmean(per_ped_quantiles, axis=1)
+
+    return {f"ped_force_q{int(q * 100)}": float(mean_quantiles[i]) for i, q in enumerate(qs)}
+
+
 def force_exceed_events(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHOLD) -> float:
     """Count (t,k) events where |F| > threshold.
 
@@ -1579,6 +1632,9 @@ METRIC_NAMES: list[str] = [
     "force_q50",
     "force_q90",
     "force_q95",
+    "ped_force_q50",
+    "ped_force_q90",
+    "ped_force_q95",
     "force_exceed_events",
     "comfort_exposure",
     "jerk_mean",
@@ -1627,6 +1683,7 @@ def compute_all_metrics(
     values["mean_distance"] = mean_distance(data)
     values["path_efficiency"] = path_efficiency(data, shortest_path_len)
     values.update(force_quantiles(data))
+    values.update(per_ped_force_quantiles(data))
     values["force_exceed_events"] = force_exceed_events(data)
     values["comfort_exposure"] = comfort_exposure(data)
     values["jerk_mean"] = jerk_mean(data)

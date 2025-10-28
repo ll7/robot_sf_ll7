@@ -54,12 +54,12 @@ Focused list of MUST‑complete items before announcing the benchmark as a stabl
 - [ ] Formal metric specification document (single source: definitions, formulae, units, edge cases)
 
 ### B. Metrics & Data Integrity
-- [ ] Implement per‑pedestrian force magnitude quantiles (current: only aggregated) + tests
-	- [ ] Data plumbing: expose per‑pedestrian instantaneous force magnitudes per step in episode records (schema update with optional `ped_force_mag_per_step: List[List[float]]]` gated behind a debug flag to control size).
-	- [ ] Computation: for each episode, compute per‑ped quantiles (e.g., q50/q90/q95) across time, then aggregate across pedestrians (mean/median) to produce episode‑level features `metrics.ped_force_q50_mean`, `metrics.ped_force_q95_mean`, etc.
-	- [ ] Aggregation: update aggregator to include new fields in group summaries and optional bootstrap CIs.
-	- [ ] Tests: unit test with a tiny synthetic trace (2 peds, 5 steps) verifying exact quantile math and episode aggregation; integration test to ensure fields appear in JSONL when enabled.
-	- [ ] Docs: extend `docs/ped_metrics/README.md` with formal definitions, units, and edge‑case handling (missing peds, zero length windows).
+- [x] Implement per‑pedestrian force magnitude quantiles (current: only aggregated) + tests (2025-10-24)
+	- [x] Data plumbing: expose per‑pedestrian instantaneous force magnitudes per step in episode records (schema update with optional `ped_force_mag_per_step: List[List[float]]]` gated behind a debug flag to control size). (Already available in EpisodeData.ped_forces)
+	- [x] Computation: for each episode, compute per‑ped quantiles (e.g., q50/q90/q95) across time, then aggregate across pedestrians (mean/median) to produce episode‑level features `metrics.ped_force_q50_mean`, `metrics.ped_force_q95_mean`, etc. (Implemented as ped_force_q50, ped_force_q90, ped_force_q95)
+	- [x] Aggregation: update aggregator to include new fields in group summaries and optional bootstrap CIs. (Fields automatically included via METRIC_NAMES)
+	- [x] Tests: unit test with a tiny synthetic trace (2 peds, 5 steps) verifying exact quantile math and episode aggregation; integration test to ensure fields appear in JSONL when enabled. (5 tests added in test_metrics.py)
+	- [x] Docs: extend `docs/ped_metrics/README.md` with formal definitions, units, and edge‑case handling (missing peds, zero length windows). (Updated metrics_spec.md with formal definition)
 - [ ] Contact / collision stress scenario (narrow corridor or tuned density) ensures non‑zero collision counts appear in seed batch
 - [ ] SNQI baseline med/p95 stats persisted to `results/baseline_stats.json` & automatically consumed by orchestrator (documented)
 
@@ -110,7 +110,7 @@ Focused list of MUST‑complete items before announcing the benchmark as a stabl
 	- [x] Time-to-goal / normalized path efficiency (2025-09-10)
 	- [x] Collision count / near-miss count (distance < threshold) (2025-09-10)
 	- [x] Min / mean interpersonal distance distribution (mean implemented) (2025-09-16)
-	- [ ] Force magnitude quantiles (per ped & aggregated) (aggregated implemented; per-ped pending)
+	- [x] Force magnitude quantiles (per ped & aggregated) (both implemented 2025-10-24)
 	- [x] Force exceedance events (above comfort threshold) (2025-09-10)
 	- [x] Comfort exposure time (% of steps above threshold) (2025-09-10)
 	- [x] Path smoothness (jerk + curvature stats) (2025-09-10)

@@ -17,16 +17,17 @@ Use Euclidean norm $\|\cdot\|$.
 
 ## Force / Comfort Metrics
 7. $\text{force\_quantiles}(q50,q90,q95)$: quantiles of all pedestrian force magnitudes $\|F_t^k\|$.
-8. $\text{force\_exceed\_events} = \left| \{ (t,k): \|F_t^k\| > \tau_{\text{force}} \} \right|$.
-9. $\text{comfort\_exposure} = \frac{\text{force\_exceed\_events}}{|P|\, T_{\text{eff}}}$.
+8. $\text{per\_ped\_force\_quantiles}(q50,q90,q95)$: per-pedestrian force quantiles. For each pedestrian $k$, compute $M_k = \{\|F_{t}^k\|_2 : t = 0,\dots,T-1\}$; then compute quantiles $Q_k(q) = \text{quantile}(M_k, q)$ for each $q \in \{0.50, 0.90, 0.95\}$. Episode value is the mean across pedestrians: $\frac{1}{K} \sum_{k=1}^K Q_k(q)$. Returns NaN when $K=0$; single-pedestrian case ($K=1$) returns individual quantiles; NaN force samples are excluded using `nanquantile` and `nanmean`.
+9. $\text{force\_exceed\_events} = \left| \{ (t,k): \|F_t^k\| > \tau_{\text{force}} \} \right|$.
+10. $\text{comfort\_exposure} = \frac{\text{force\_exceed\_events}}{|P|\, T_{\text{eff}}}$.
 
 ## Smoothness / Energy
-10. $\text{jerk\_mean} = \frac{1}{T-2} \sum_{t=0}^{T-3} \| a_{t+1} - a_t \|$ where $a_t$ is robot acceleration.
-11. $\text{curvature\_mean} = \operatorname{mean}_t \frac{\| v_t \times a_t \|}{\|v_t\|^3}$ computed from discrete differences with $\Delta t$; entries with $\|v_t\| \le \varepsilon$ are excluded; non-finite values filtered; returns $0$ if no valid samples.
-12. $\text{energy} = \sum_{t=0}^{T-1} \| a_t \|$.
+11. $\text{jerk\_mean} = \frac{1}{T-2} \sum_{t=0}^{T-3} \| a_{t+1} - a_t \|$ where $a_t$ is robot acceleration.
+12. $\text{curvature\_mean} = \operatorname{mean}_t \frac{\| v_t \times a_t \|}{\|v_t\|^3}$ computed from discrete differences with $\Delta t$; entries with $\|v_t\| \le \varepsilon$ are excluded; non-finite values filtered; returns $0$ if no valid samples.
+13. $\text{energy} = \sum_{t=0}^{T-1} \| a_t \|$.
 
 ## Optional Field Metrics
-12. $\text{force\_gradient\_norm\_mean} = \frac{1}{M} \sum_{m=1}^M \| \nabla F(x_m,y_m) \|$ along sampled path points $(x_m,y_m)$.
+14. $\text{force\_gradient\_norm\_mean} = \frac{1}{M} \sum_{m=1}^M \| \nabla F(x_m,y_m) \|$ along sampled path points $(x_m,y_m)$.
 
 ## Composite Index (SNQI) (Draft)
 \[
@@ -45,8 +46,8 @@ Normalization: $\text{norm}_x = \frac{x - b_{\text{med}}}{b_{p95} - b_{\text{med
 - Weight selection procedure (grid search maximizing rank stability across scenario subsets)
 - Whether to include path_efficiency directly or encode via time_to_goal_norm
 
-## Coverage Status (as of 2025-09-10)
-- Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, path_efficiency, force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, curvature_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
+## Coverage Status (as of 2025-10-24)
+- Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, mean_distance, path_efficiency, force_quantiles (q50/q90/q95), per_ped_force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, curvature_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
 - Documented but partially specified/optional: mean interpersonal distance (pending), force field divergence (pending).
 
 ## Validation & Tests

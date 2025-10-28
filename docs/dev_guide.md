@@ -1,65 +1,5 @@
 # Robot SF – Development Guide
 
-- [Setup](#setup)
-  - [Installation and setup](#installation-and-setup)
-  - [Critical dependencies and setup: Fast-pysf submodule (REQUIRED)](#critical-dependencies-and-setup-fast-pysf-submodule-required)
-  - [Quick Start Commands](#quick-start-commands)
-  - [Environment factory pattern (CRITICAL)](#environment-factory-pattern-critical)
-  - [Key architectural layers](#key-architectural-layers)
-  - [Data flow and integration](#data-flow-and-integration)
-  - [Configuration hierarchy](#configuration-hierarchy)
-- [Design and development workflow recommendations](#design-and-development-workflow-recommendations)
-  - [Testing strategy (THREE test suites)](#testing-strategy-three-test-suites)
-  - [Must-have checklist](#must-have-checklist)
-  - [Optional backlog (track but don’t block)](#optional-backlog-track-but-dont-block)
-  - [Quick links](#quick-links)
-  - [Executive summary](#executive-summary)
-  - [Code quality standards](#code-quality-standards)
-  - [Design decisions](#design-decisions)
-    - [CLI vs programmatic use](#cli-vs-programmatic-use)
-  - [Code reviews](#code-reviews)
-    - [Docstrings](#docstrings)
-  - [Clarify questions (with options)](#clarify-questions-with-options)
-  - [Problem‑solving approach](#problemsolving-approach)
-  - [Tooling and tasks (uv, Ruff, pytest, ty, VS Code)](#tooling-and-tasks-uv-ruff-pytest-ty-vs-code)
-- [Documentation Standards](#documentation-standards)
-  - [Technical Documentation](#technical-documentation)
-  - [Docs Folder Structure](#docs-folder-structure)
-    - [Top-level guides (entry points)](#top-level-guides-entry-points)
-    - [Focused subfolders](#focused-subfolders)
-  - [Documentation Content Requirements](#documentation-content-requirements)
-  - [Documentation Best Practices](#documentation-best-practices)
-    - [Visualizations and Reports](#visualizations-and-reports)
-    - [Figure and Visualization Guidelines](#figure-and-visualization-guidelines)
-- [Tooling and tasks (uv, Ruff, pytest, VS Code)](#tooling-and-tasks-uv-ruff-pytest-vs-code)
-- [CI/CD expectations](#cicd-expectations)
-- [Validation scenarios and performance](#validation-scenarios-and-performance)
-  - [Validation scenarios (run after changes)](#validation-scenarios-run-after-changes)
-  - [Performance benchmarking (optional)](#performance-benchmarking-optional)
-  - [Performance expectations](#performance-expectations)
-- [Benchmark runner: parallel workers and resume](#benchmark-runner-parallel-workers-and-resume)
-- [Aggregation and Confidence Intervals](#aggregation-and-confidence-intervals)
-- [Training and examples](#training-and-examples)
-  - [Available demos](#available-demos)
-  - [Training scripts](#training-scripts)
-  - [Docker training (advanced)](#docker-training-advanced)
-- [Common issues and solutions](#common-issues-and-solutions)
-  - [Build issues](#build-issues)
-  - [Runtime issues](#runtime-issues)
-  - [Docker issues](#docker-issues)
-- [Migration notes](#migration-notes)
-- [Helpful definitions and repository structure](#helpful-definitions-and-repository-structure)
-  - [Helpful definitions](#helpful-definitions)
-  - [Repository structure (key dirs)](#repository-structure-key-dirs)
-- [Definition of Done (DoD)](#definition-of-done-dod)
-- [Templates](#templates)
-- [Security \& network policy](#security--network-policy)
-- [Large files \& artifacts policy](#large-files--artifacts-policy)
-- [Quick reference and TL;DR checklist](#quick-reference-and-tldr-checklist)
-  - [Quick reference commands](#quick-reference-commands)
-  - [TL;DR workflow checklist](#tldr-workflow-checklist)
-  - [Per-Test Performance Budget](#per-test-performance-budget)
-
 ## Setup
 
 ### Installation and setup
@@ -756,6 +696,9 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 
 # Optional perf benchmark
 DISPLAY= MPLBACKEND=Agg uv run python scripts/benchmark02.py
+
+# remember to source the environment
+source .venv/bin/activate
 ```
 
 ### TL;DR workflow checklist

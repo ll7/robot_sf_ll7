@@ -243,10 +243,11 @@ def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
 def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> dict[str, float]:
     """Compute quantiles of pedestrian force magnitudes.
 
-    Returns NaN for each quantile if there are no pedestrians.
+    Returns NaN for each quantile if there are no pedestrians or timesteps.
     """
     K = data.peds_pos.shape[1]
-    if K == 0:
+    T = data.ped_forces.shape[0]
+    if K == 0 or T == 0:
         return {f"force_q{int(q * 100)}": float("nan") for q in qs}
     mags = np.linalg.norm(data.ped_forces, axis=2)  # (T,K)
     flat = mags.ravel()
@@ -289,7 +290,10 @@ def per_ped_force_quantiles(
     >>> # Aggregated median (force_q50): 1.0 (6 samples of 1, 3 samples of 10)
     """
     K = data.peds_pos.shape[1]
-    if K == 0:
+    T = data.ped_forces.shape[0]
+
+    # Handle edge cases: no pedestrians or no timesteps
+    if K == 0 or T == 0:
         return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
 
     # Compute force magnitudes: (T,K)

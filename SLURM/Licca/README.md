@@ -97,6 +97,3 @@ Useful monitoring commands: `sinfo` (partition/node state), `squeue -u $USER` (y
 - Set `OMP_NUM_THREADS` in every sbatch script and request realistic CPU counts for GPU jobs.
 - Install GPU packages from the login node using `CONDA_OVERRIDE_CUDA` to avoid missing
   wheels on compute nodes.
-- Initialise `fast-pysf` (`git submodule update --init --recursive`) before packaging the
-  project for submission.
-

@@ -4,6 +4,7 @@ handle the visualisation of pysocialforce in pygame
 """
 
 import os
+import sys
 from dataclasses import dataclass, field
 from signal import SIGINT, signal
 from threading import Thread
@@ -83,6 +84,7 @@ class SimulationView:
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
     offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0]))
+
     @property
     def timestep_text_pos(self) -> Vec2D:
         return (16, 16)
@@ -219,7 +221,7 @@ class SimulationView:
             pygame.quit()
             self.ui_events_thread.join()
             if self.is_abortion_requested:
-                exit()
+                sys.exit()
         if self.size_changed:
             self._resize_window()
             self.size_changed = False

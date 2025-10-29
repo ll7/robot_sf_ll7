@@ -84,7 +84,7 @@ Backward Compatibility
   - Always note if existing JSONL logs remain loadable.
 
 Testing
-  - Indicate which test suites are touched: core (`tests/`), GUI (`test_pygame/`), submodule (`fast-pysf/tests`).
+  - Indicate which test suites are touched: core (`tests/`), GUI (`test_pygame/`), subtree (`fast-pysf/tests`).
   - If adding new tests, specify rough count and focus.
 
 Performance

@@ -14,13 +14,13 @@ logger = logging.getLogger(__name__)
 
 def load_map(file_path: str | Path) -> MapDefinition:
     """Load map data from the given file path.
-    
+
     Args:
         file_path: Path to the JSON map file (string or Path object)
-    
+
     Returns:
         MapDefinition object containing obstacles, routes, and crowded zones
-    
+
     Raises:
         json.JSONDecodeError: If the file contains invalid JSON
         FileNotFoundError: If the file does not exist
@@ -61,12 +61,12 @@ def load_map(file_path: str | Path) -> MapDefinition:
                 logger.warning("No crowded zones found in map file")
 
         except json.JSONDecodeError:
-            logger.error(f"Failed to parse JSON from map file: {file_path}")
+            logger.exception(f"Failed to parse JSON from map file: {file_path}")
             raise
         except KeyError as e:
-            logger.warning(f"Key {e} not found in map file")
+            logger.exception(f"Key {e} not found in map file")
         except Exception as e:
-            logger.error(f"An error occurred while loading the map: {e}")
+            logger.exception(f"An error occurred while loading the map: {e}")
             raise
 
     return MapDefinition(obstacles, routes, crowded_zones)

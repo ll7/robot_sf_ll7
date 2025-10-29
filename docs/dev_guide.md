@@ -109,18 +109,40 @@ env = make_robot_env(config=config)
 - Ensure that the documentation, docstrings, and comments are updated to reflect code changes.
 - Progress cadence: always keep tests and documentation up-to-date. As long as you document your chain of thought and what ran, you can report outcomes after finishing the work.
 
-### Testing strategy (THREE test suites)
+### Testing strategy (UNIFIED test suite)
+
+**The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
+
+#### Unified Test Suite
 
 ```bash
-# 1. Main unit/integration tests (2-3 min)
-uv run pytest tests
+# Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
+uv run pytest  # → 893 tests (881 robot_sf + 12 fast-pysf)
+
+# Run only robot_sf tests
+uv run pytest tests  # → 881 tests
+
+# Run only fast-pysf tests  
+uv run pytest fast-pysf/tests  # → 12 tests
+
+# Run with parallel execution (faster)
+uv run pytest -n auto
+```
+
+#### Legacy / Specialized Test Suites
+
+```bash
+# 1. Main unit/integration tests (2-3 min) - NOW PART OF UNIFIED SUITE
+uv run pytest tests  # → 881 tests
 
 # 2. GUI/display-dependent tests (headless mode)  
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
 
-# 3. fast-pysf subtree tests (some may fail without map files)
-uv run python -m pytest fast-pysf/tests/ -v
+# 3. fast-pysf subtree tests - NOW PART OF UNIFIED SUITE
+uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 ```
+
+**Note**: The unified test command (`uv run pytest`) automatically discovers and runs tests from both `tests/` and `fast-pysf/tests/` directories. Test count increased from ~43 (legacy documentation) to 893 tests after fast-pysf integration.
 
 ### Coverage workflow (automatic collection)
 

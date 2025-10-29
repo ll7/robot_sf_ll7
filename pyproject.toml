@@ -291,14 +291,15 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.coverage.run]
-source = ["robot_sf"]
+source = ["robot_sf", "fast-pysf/pysocialforce"]
 omit = [
     "*/tests/*",
     "*/test_*",
     "test_pygame/*",
     "examples/*",
     "scripts/*",
-    "fast-pysf/*",
+    "fast-pysf/tests/*",
+    "fast-pysf/examples/*",
     "*/conftest.py",
     "*/__pycache__/*",
 ]
@@ -337,7 +338,7 @@ addopts = [
     "--cov-report=html",
     "--cov-report=json",
 ]
-testpaths = ["tests"]
+testpaths = ["tests", "fast-pysf/tests"]
 filterwarnings = [
     # Suppress external library warnings
     "ignore::DeprecationWarning:pygame.*",

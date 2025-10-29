@@ -4,6 +4,7 @@ map_loader.py
 
 import json
 import logging
+import numbers
 from pathlib import Path
 
 from pysocialforce.map_config import GlobalRoute, MapDefinition, Obstacle, Zone
@@ -42,6 +43,20 @@ def load_map(file_path: str | Path) -> MapDefinition:
             else:
                 logger.warning("No obstacles found in map file")
 
+            # Helper to coerce truthy/falsey strings and numbers to bool
+            def _as_bool(value) -> bool:
+                if isinstance(value, bool):
+                    return value
+                if isinstance(value, numbers.Real):
+                    return bool(value)
+                if isinstance(value, str):
+                    v = value.strip().lower()
+                    if v in {"true", "1", "yes", "y", "on"}:
+                        return True
+                    if v in {"false", "0", "no", "n", "off"}:
+                        return False
+                return False
+
             # Load pedestrian routes if they exist
             if "ped_routes" in map_json:
                 routes = [GlobalRoute(r["waypoints"]) for r in map_json["ped_routes"]]
@@ -49,7 +64,7 @@ def load_map(file_path: str | Path) -> MapDefinition:
                 routes += [
                     GlobalRoute(list(reversed(r["waypoints"])))
                     for r in map_json["ped_routes"]
-                    if r.get("reversible", False)
+                    if _as_bool(r.get("reversible", False))
                 ]
             else:
                 logger.warning("No pedestrian routes found in map file")
@@ -61,12 +76,12 @@ def load_map(file_path: str | Path) -> MapDefinition:
                 logger.warning("No crowded zones found in map file")
 
         except json.JSONDecodeError:
-            logger.exception(f"Failed to parse JSON from map file: {file_path}")
+            logger.exception("Failed to parse JSON from map file: %s", file_path)
             raise
         except KeyError as e:
-            logger.exception(f"Key {e} not found in map file")
+            logger.exception("Key %s not found in map file", e)
         except Exception as e:
-            logger.exception(f"An error occurred while loading the map: {e}")
+            logger.exception("An error occurred while loading the map: %s", e)
             raise
 
     return MapDefinition(obstacles, routes, crowded_zones)

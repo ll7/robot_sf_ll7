@@ -1,5 +1,5 @@
 """
-# Example 05: simulate map03
+# Example 06: simulate map04
 """
 
 import pysocialforce as pysf

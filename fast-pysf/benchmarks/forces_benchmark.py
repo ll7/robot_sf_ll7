@@ -20,7 +20,7 @@ class SimSettings:
     map_height: float
     sim_steps: int
     num_peds: int
-    num_groups: float
+    num_groups: int
     group_cov: list[list[float]]  # shape (2, 2)
     num_obstacles: int
 

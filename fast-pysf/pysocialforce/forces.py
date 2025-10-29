@@ -86,7 +86,7 @@ class DesiredForce:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         """
         Calculate and return the desired force for each pedestrian.
 
@@ -139,7 +139,7 @@ class SocialForce:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
         forces = social_force(
@@ -513,7 +513,7 @@ class GroupCoherenceForceAlt:
         # Store the configuration for calculating coherence forces.
         self.config = config
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         # Initialize an array to store coherence forces for each pedestrian with zero values.
         forces = np.zeros((self.peds.size(), 2))
 
@@ -567,7 +567,7 @@ class GroupRepulsiveForce:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         # Retrieve the distance threshold from configuration where repulsive force is effective.
         threshold = self.config.threshold
         # Initialize a zero np.array to store repulsive forces for each pedestrian.
@@ -615,7 +615,7 @@ class GroupGazeForceAlt:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         """
         Calculates and returns the group gaze forces for all pedestrian groups.
         This method allows an instance of the class to be called as a function.

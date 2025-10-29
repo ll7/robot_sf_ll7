@@ -139,15 +139,17 @@ description: "Task list for fast-pysf integration quality improvements"
 
 ### High-Priority Issues (7 total - 4-6 hours)
 
-- [ ] T019 [P] [US2] Fix unreachable print in `fast-pysf/pysocialforce/map_config.py:81`:
-  - Investigate conditional logic around line 81
-  - Either remove unreachable code or fix condition
-  - Verify with: `uv run ruff check fast-pysf/pysocialforce/map_config.py`
+- [x] T019 [P] [US2] Fix unreachable print in `fast-pysf/pysocialforce/map_config.py:81`:
+  - Investigated conditional logic around line 81
+  - Removed unreachable print statement (line 70 already raises ValueError if vertices empty)
+  - Verified with: `uv run ruff check fast-pysf/pysocialforce/map_config.py` ✅
+  - **FILE MODIFIED**: fast-pysf/pysocialforce/map_config.py (removed lines 80-81)
 
-- [ ] T020 [P] [US2] Verify test result in `fast-pysf/tests/unittest/test_forces.py:44` (TestObstacleForce):
-  - Review test at line 44
-  - Add explicit assertion or verification comment
-  - Run test: `uv run pytest fast-pysf/tests/unittest/test_forces.py::TestObstacleForce -v`
+- [x] T020 [P] [US2] Verify test result in `fast-pysf/tests/unittest/TestObstacleForce.py:44`:
+  - Reviewed test at line 44 (test_orthogonal_miss_outside_segment)
+  - Ran test to verify expected value is correct ✅
+  - Replaced TODO with verification comment
+  - **FILE MODIFIED**: fast-pysf/tests/unittest/TestObstacleForce.py (lines 39-44)
 
 - [ ] T021 [US2] Implement or document empty reset in `fast-pysf/pysocialforce/ped_behavior.py:114`:
   - Review PedBehavior.reset() method
@@ -188,21 +190,28 @@ description: "Task list for fast-pysf integration quality improvements"
   - Update docstring to match actual example content
   - Ensure description is accurate
 
-- [ ] T029 [P] [US2] Fill placeholder migration metadata in `docs/SUBTREE_MIGRATION.md:246-247`:
-  - Replace `[TODO: Date]` and `[TODO: Commit]` with actual values
-  - Verify migration history accuracy
+- [x] T029 [P] [US2] Fill placeholder migration metadata in `docs/SUBTREE_MIGRATION.md:246-247`:
+  - Verified migration commit metadata is already filled (no [TODO] placeholders found)
+  - Document contains actual commit hash c872663 and author information
+  - **STATUS**: Already complete (no action needed)
 
 - [ ] T030 [P] [US2] Update GitHub Actions versions in `.github/workflows/ci.yml:15-23`:
   - Upgrade actions/checkout from v2 to v4
   - Upgrade actions/setup-python from v2 to v5
   - Test CI pipeline after upgrade
 
-- [ ] T031 [P] [US2] Fix spelling: "Fucntion" → "Function" in relevant file
-- [ ] T032 [P] [US2] Fix spelling: "Tehere" → "There" in relevant file
-- [ ] T033 [P] [US2] Fix spelling: "verices" → "vertices" in relevant file
-- [ ] T034 [P] [US2] Fix spelling: "pedstrains" → "pedestrians" in relevant file
-- [ ] T035 [P] [US2] Fix spelling: "approximetly" → "approximately" in relevant file
-- [ ] T036 [P] [US2] Fix spelling: "thh" → "the" in relevant file
+- [x] T031 [P] [US2] Fix spelling: "Fucntion" → "Function" in relevant file
+  - **FILE MODIFIED**: fast-pysf/tests/unittest/test_forces.py line 7 ✅
+- [x] T032 [P] [US2] Fix spelling: "Tehere" → "There" in relevant file
+  - **STATUS**: Not found in codebase (may have been fixed already) ✅
+- [x] T033 [P] [US2] Fix spelling: "verices" → "vertices" in relevant file
+  - **STATUS**: Not found in codebase (may have been fixed already) ✅
+- [x] T034 [P] [US2] Fix spelling: "pedstrains" → "pedestrians" in relevant file
+  - **STATUS**: Not found in codebase (may have been fixed already) ✅
+- [x] T035 [P] [US2] Fix spelling: "approximetly" → "approximately" in relevant file
+  - **STATUS**: Not found in codebase (may have been fixed already) ✅
+- [x] T036 [P] [US2] Fix spelling: "thh" → "the" in relevant file
+  - **STATUS**: Not found in codebase (may have been fixed already) ✅
 
 ### Low-Priority Issues (7 total - 1-2 hours)
 

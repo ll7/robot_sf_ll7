@@ -84,16 +84,18 @@ def path_info_to_mapdefintion(path_info):
             # Convert the coordinates to a list of vertices
             vertices = path['coordinates'].tolist()
 
-            # Check if the first and last verices are the same
+            # Check if the first and last vertices are the same
+            # Note: Obstacle.__post_init__ automatically closes polygons by creating
+            # an edge from vertices[-1] to vertices[0], so explicit closing is optional.
+            # We close here for consistency with expected SVG polygon format.
             if not np.array_equal(vertices[0], vertices[-1]):
                 logger.warning(
-                    "The first and last vertices of the obstacle in path <%s> are not the same. " +
+                    "The first and last vertices of the obstacle in path <%s> are not the same. "
                     "Adding the first vertex to the end to close the polygon.",
                     path['id']
                     )
                 # Add the first vertex to the end to close the polygon
                 vertices.append(vertices[0])
-                # TODO is it really necessary to close the polygon?
 
             # Append the obstacle to the list
             obstacles.append(Obstacle(vertices))

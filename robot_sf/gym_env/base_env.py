@@ -13,6 +13,7 @@ from loguru import logger
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.render.jsonl_recording import JSONLRecorder
 from robot_sf.render.sim_view import SimulationView, VisualizableSimState
+from robot_sf.sim.registry import get_backend
 from robot_sf.sim.simulator import init_simulators
 
 
@@ -71,13 +72,26 @@ class BaseEnv(Env):
                 seed=seed,
             )
 
-        # Initialize simulator with a random start position
-        self.simulator = init_simulators(
-            env_config,
-            self.map_def,
-            random_start_pos=True,
-            peds_have_obstacle_forces=peds_have_obstacle_forces,
-        )[0]
+        # Initialize simulator via backend registry (falls back to legacy init on error)
+        backend_key = getattr(env_config, "backend", "fast-pysf")
+        try:
+            factory = get_backend(backend_key)
+            self.simulator = factory(
+                env_config,
+                self.map_def,
+                peds_have_obstacle_forces,
+            )
+        except KeyError:
+            logger.warning(
+                "Unknown backend '{}' — falling back to legacy init_simulators().",
+                backend_key,
+            )
+            self.simulator = init_simulators(
+                env_config,
+                self.map_def,
+                random_start_pos=True,
+                peds_have_obstacle_forces=peds_have_obstacle_forces,
+            )[0]
 
         # Store last action executed by the robot
         self.last_action = None

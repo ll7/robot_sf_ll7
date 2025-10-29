@@ -1,0 +1,55 @@
+[project]
+name = "PySocialForce"
+version = "2.0.0"
+description = "Numpy implementation of the Extended Social Force model."
+authors = [
+    {name = "Marco Tröster", email = "marco@troester-gmbh.de"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26.4",
+    "toml>=0.10.2",
+    "numba>=0.60.0",
+    "scipy>=1.14.1",
+    "matplotlib>=3.9.2",
+    "pillow>=10.4.0",
+    "pygame>=2.6.1",
+]
+
+license = {text = "MIT"}
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0.0",
+    "jupyter>=1.0.0",
+    "pytest>=8.3.3",
+    "pylint>=3.3.1",
+]
+plot = [
+    "matplotlib>=3.9.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/Bonifatius94/PySocialForce"
+Repository = "https://github.com/Bonifatius94/PySocialForce"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatchling.build.targets.wheel]
+packages = ["pysocialforce"]
+
+[tool.hatchling.build.targets.sdist]
+include = [
+    "/pysocialforce",
+    "/README.md",
+    "/LICENSE",
+]
+exclude = [
+    "/tests",
+    "/.git",
+    "/.pytest_cache",
+    "/__pycache__",
+]

@@ -1,0 +1,40 @@
+{
+    "version": "1.0",
+    "name": "default_map",
+    "bounds": {
+        "x_margin": [0, 200],
+        "y_margin": [0, 200]
+    },
+    "ped_routes": [
+        {
+            "name": "u_around_center",
+            "waypoints": [
+                [-30, -30],
+                [-30, 30],
+                [30, 30],
+                [30, -30]
+            ],
+            "reversible": "true"
+        }
+    ],
+    "obstacles": [
+        {
+            "name": "rectangle_40x40_center_0x0",
+            "vertices": [
+                [20, 20],
+                [20, -20],
+                [-20, -20],
+                [-20, 20]
+            ]
+        },
+        {
+            "name": "diamond_obstacle_65x65_center_0x0",
+            "vertices": [
+                [0, 35],
+                [35, 0],
+                [0, -35],
+                [-35, 0]
+            ]
+        }
+    ]
+}

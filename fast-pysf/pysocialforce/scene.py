@@ -22,15 +22,15 @@ class PedState:
         self.agent_radius = config.agent_radius
         self.max_speed_multiplier = config.max_speed_multiplier
 
-        self.max_speeds = None
-        self.initial_speeds = None
+        self.max_speeds: np.ndarray | None = None
+        self.initial_speeds: np.ndarray | None = None
         self.update(state, groups)
 
-    def update(self, state: np.ndarray, groups: list[list[int]]):
+    def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
         self.state = state
         self.groups = groups
 
-    def _update_state(self, state: np.ndarray):
+    def _update_state(self, state: np.ndarray) -> None:
         tau = np.full((state.shape[0]), self.default_tau)
         if state.shape[1] < 7:
             self._state = np.concatenate((state, np.expand_dims(tau, -1)), axis=-1)
@@ -48,7 +48,7 @@ class PedState:
     def state(self, state: np.ndarray):
         self._update_state(state)
 
-    def get_states(self):
+    def get_states(self) -> tuple[np.ndarray, list[list[list[int]]]]:
         return np.array([self.state]), [self.groups]
 
     def size(self) -> int:
@@ -63,10 +63,10 @@ class PedState:
     def goal(self) -> np.ndarray:
         return self.state[:, 4:6]
 
-    def tau(self):
+    def tau(self) -> np.ndarray:
         return self.state[:, 6:7]
 
-    def speeds(self):
+    def speeds(self) -> np.ndarray:
         """Return the speeds corresponding to a given state."""
         return np.linalg.norm(self.vel(), axis=1)
 

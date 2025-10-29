@@ -166,7 +166,7 @@ def populate_ped_routes(
     total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
-    route_assignments = dict()
+    route_assignments = {}
     initial_sections = []
 
     while num_unassigned_peds > 0:
@@ -213,7 +213,7 @@ def populate_crowded_zones(
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
-    zone_assignments = dict()
+    zone_assignments = {}
 
     while num_unassigned_peds > 0:
         probs = config.group_member_probs

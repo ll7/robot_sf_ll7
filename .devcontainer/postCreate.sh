@@ -3,11 +3,6 @@ set -e
 
 git config --global --add safe.directory /workspaces/robot_sf_ll7
 
-## This script is run after the devcontainer is created. It installs the necessary dependencies for the project.
-pwd
-git submodule update --init --recursive || { echo "Failed to update git submodules"; exit 1; }
-git config --global --add safe.directory /workspaces/robot_sf_ll7/fast-pysf
-
 # Install uv if not already installed
 if ! command -v uv &> /dev/null; then
     echo "Installing uv..."

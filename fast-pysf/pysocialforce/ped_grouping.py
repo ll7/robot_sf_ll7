@@ -4,13 +4,13 @@ Handles the
 - PedstrianStates
 - PedestrianGroupings
 """
-from typing import List, Set, Dict, Tuple
-from dataclasses import dataclass, field
+
 from copy import deepcopy
+from dataclasses import dataclass, field
 
 import numpy as np
 
-Vec2D = Tuple[float, float]
+Vec2D = tuple[float, float]
 
 
 @dataclass
@@ -30,6 +30,7 @@ class PedestrianStates:
         pos_of(ped_id: int) -> Vec2D: Returns the current position of a pedestrian.
         pos_of_many(ped_ids: Set[int]) -> np.ndarray: Returns the positions of multiple pedestrians.
     """
+
     raw_states: np.ndarray
 
     @property
@@ -108,7 +109,7 @@ class PedestrianStates:
         pos_x, pos_y = self.raw_states[ped_id, 0:2]
         return (pos_x, pos_y)
 
-    def pos_of_many(self, ped_ids: Set[int]) -> np.ndarray:
+    def pos_of_many(self, ped_ids: set[int]) -> np.ndarray:
         """
         Returns the positions of multiple pedestrians.
 
@@ -142,12 +143,13 @@ class PedestrianGroupings:
         redirect_group(group_id: int, new_goal: Vec2D): Redirects the pedestrians in a group to a new goal.
         reposition_group(group_id: int, new_positions: List[Vec2D]): Repositions the pedestrians in a group to new positions.
     """
+
     states: PedestrianStates
-    groups: Dict[int, Set[int]] = field(default_factory=dict)
-    group_by_ped_id: Dict[int, int] = field(default_factory=dict)
+    groups: dict[int, set[int]] = field(default_factory=dict)
+    group_by_ped_id: dict[int, int] = field(default_factory=dict)
 
     @property
-    def groups_as_lists(self) -> List[List[int]]:
+    def groups_as_lists(self) -> list[list[int]]:
         """
         Returns the groups as lists of pedestrian IDs.
 
@@ -159,7 +161,7 @@ class PedestrianGroupings:
         return [list(ped_ids) for ped_ids in self.groups.values()]
 
     @property
-    def group_ids(self) -> Set[int]:
+    def group_ids(self) -> set[int]:
         """
         Returns the set of group IDs.
 
@@ -209,7 +211,7 @@ class PedestrianGroupings:
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
 
-    def new_group(self, ped_ids: Set[int]) -> int:
+    def new_group(self, ped_ids: set[int]) -> int:
         """
         Creates a new group with the given pedestrian IDs.
 
@@ -251,7 +253,7 @@ class PedestrianGroupings:
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
 
-    def reposition_group(self, group_id: int, new_positions: List[Vec2D]):
+    def reposition_group(self, group_id: int, new_positions: list[Vec2D]):
         """
         Repositions the pedestrians in a group to new positions.
 
@@ -259,5 +261,5 @@ class PedestrianGroupings:
             group_id (int): The ID of the group.
             new_positions (List[Vec2D]): The new positions of the pedestrians.
         """
-        for ped_id, new_pos in zip(self.groups[group_id], new_positions):
+        for ped_id, new_pos in zip(self.groups[group_id], new_positions, strict=False):
             self.states.reposition(ped_id, new_pos)

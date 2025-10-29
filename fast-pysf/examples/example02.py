@@ -1,6 +1,7 @@
 """
 # Example 02: test the configuration of the simulator
 """
+
 import pysocialforce as pysf
 
 map_def = pysf.load_map("./maps/default_map.json")

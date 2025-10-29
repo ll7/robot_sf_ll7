@@ -2,9 +2,11 @@
 ex09_inkscape_svg_map.py
 Inkscape SVG map used in in pysocialforce.
 """
+
 import logging
+
 import pysocialforce as pysf
-from pysocialforce.map_loader_svg import svg_path_info, path_info_to_mapdefintion
+from pysocialforce.map_loader_svg import path_info_to_mapdefintion, svg_path_info
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -16,7 +18,6 @@ map_def = path_info_to_mapdefintion(path_info)
 
 print(map_def.routes)
 
-simulator = pysf.Simulator_v2(map_def)
 display = pysf.SimulationView(map_def=map_def, scaling=10)
 
 

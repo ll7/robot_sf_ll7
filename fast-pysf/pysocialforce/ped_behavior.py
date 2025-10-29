@@ -1,13 +1,13 @@
-from math import dist
-from typing import List, Dict, Tuple, Protocol
 from dataclasses import dataclass, field
+from math import dist
+from typing import Protocol
 
 from pysocialforce.map_config import GlobalRoute, sample_circle, sample_zone
 from pysocialforce.navigation import RouteNavigator
 from pysocialforce.ped_grouping import PedestrianGroupings
 
-Vec2D = Tuple[float, float]
-Zone = Tuple[Vec2D, Vec2D, Vec2D]
+Vec2D = tuple[float, float]
+Zone = tuple[Vec2D, Vec2D, Vec2D]
 
 
 class PedestrianBehavior(Protocol):
@@ -35,8 +35,8 @@ class CrowdedZoneBehavior:
     """
 
     groups: PedestrianGroupings
-    zone_assignments: Dict[int, int]
-    crowded_zones: List[Zone]
+    zone_assignments: dict[int, int]
+    crowded_zones: list[Zone]
     goal_proximity_threshold: float = 1
 
     def step(self):
@@ -80,21 +80,25 @@ class FollowRouteBehavior:
         goal_proximity_threshold (float): The proximity threshold to consider a goal reached.
         navigators (Dict[int, RouteNavigator]): The route navigators for each group.
     """
+
     groups: PedestrianGroupings
-    route_assignments: Dict[int, GlobalRoute]
-    initial_sections: List[int]
+    route_assignments: dict[int, GlobalRoute]
+    initial_sections: list[int]
     goal_proximity_threshold: float = 1
-    navigators: Dict[int, RouteNavigator] = field(init=False)
+    navigators: dict[int, RouteNavigator] = field(init=False)
 
     def __post_init__(self):
         """
         Initializes the route navigators for each group based on the route assignments and initial sections.
         """
         self.navigators = {}
-        for (gid, route), sec_id in zip(self.route_assignments.items(), self.initial_sections):
+        for (gid, route), sec_id in zip(
+            self.route_assignments.items(), self.initial_sections, strict=False
+        ):
             group_pos = self.groups.group_centroid(gid)
             self.navigators[gid] = RouteNavigator(
-                route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos)
+                route.waypoints, sec_id + 1, self.goal_proximity_threshold, group_pos
+            )
 
     def step(self):
         """

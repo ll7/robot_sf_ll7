@@ -2,27 +2,25 @@
 sim_view.py
 handle the visualisation of pysocialforce in pygame
 """
-from time import sleep
-from dataclasses import dataclass, field
-from threading import Thread
-from signal import signal, SIGINT
-from typing import Tuple
 
 import os
+from dataclasses import dataclass, field
+from signal import SIGINT, signal
+from threading import Thread
+from time import sleep
 
-import pygame
 import numpy as np
+import pygame
 
-
-from pysocialforce.simulator import SimState
 from pysocialforce.map_config import MapDefinition
+from pysocialforce.simulator import SimState
 
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
-Vec2D = Tuple[float, float]
-RobotPose = Tuple[Vec2D, float]
-RobotAction = Tuple[float, float]
-RgbColor = Tuple[int, int, int]
+Vec2D = tuple[float, float]
+RobotPose = tuple[Vec2D, float]
+RobotAction = tuple[float, float]
+RgbColor = tuple[int, int, int]
 
 
 BACKGROUND_COLOR = (255, 255, 255)
@@ -37,6 +35,7 @@ TEXT_COLOR = (0, 0, 0)
 class VisualizableSimState:
     """Representing a collection of properties to display
     the simulator's state at a discrete timestep."""
+
     timestep: int
     pedestrian_positions: np.ndarray
     ped_actions: np.ndarray
@@ -46,10 +45,9 @@ def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimStat
     state, groups = sim_state
     ped_pos = np.array(state[:, 0:2])
     ped_vel = np.array(state[:, 2:4])
-    actions = np.concatenate((
-        np.expand_dims(ped_pos, axis=1),
-        np.expand_dims(ped_pos + ped_vel, axis=1)
-        ), axis=1)
+    actions = np.concatenate(
+        (np.expand_dims(ped_pos, axis=1), np.expand_dims(ped_pos + ped_vel, axis=1)), axis=1
+    )
     return VisualizableSimState(step, ped_pos, actions)
 
 
@@ -72,6 +70,7 @@ class SimulationView:
         redraw_needed (bool): Flag indicating if a redraw is needed.
         offset (np.array): The offset of the view.
     """
+
     width: float = 1200
     height: float = 800
     scaling: float = 15
@@ -92,10 +91,9 @@ class SimulationView:
     def __post_init__(self):
         pygame.init()
         pygame.font.init()
-        self.screen = pygame.display.set_mode(
-            (self.width, self.height), pygame.RESIZABLE)
-        pygame.display.set_caption('RobotSF Simulation')
-        self.font = pygame.font.SysFont('Consolas', 14)
+        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        pygame.display.set_caption("RobotSF Simulation")
+        self.font = pygame.font.SysFont("Consolas", 14)
         self.surface_obstacles = self.preprocess_obstacles()
         self.clear()
 
@@ -164,8 +162,8 @@ class SimulationView:
         """Handle key presses for the simulation view."""
         key_action_map = {
             # scale the view
-            pygame.K_PLUS: lambda: setattr(self, 'scaling', self.scaling + 1),
-            pygame.K_MINUS: lambda: setattr(self, 'scaling', max(self.scaling - 1, 1)),
+            pygame.K_PLUS: lambda: setattr(self, "scaling", self.scaling + 1),
+            pygame.K_MINUS: lambda: setattr(self, "scaling", max(self.scaling - 1, 1)),
             # move the view
             pygame.K_LEFT: lambda: self.offset.__setitem__(0, self.offset[0] - 10),
             pygame.K_RIGHT: lambda: self.offset.__setitem__(0, self.offset[0] + 10),
@@ -173,7 +171,7 @@ class SimulationView:
             pygame.K_DOWN: lambda: self.offset.__setitem__(1, self.offset[1] + 10),
             # reset the view
             pygame.K_r: lambda: self.offset.__setitem__(slice(None), (0, 0)),
-            }
+        }
 
         if e.key in key_action_map:
             key_action_map[e.key]()
@@ -188,7 +186,7 @@ class SimulationView:
             pygame.QUIT: self._handle_quit,
             pygame.VIDEORESIZE: self._handle_video_resize,
             pygame.KEYDOWN: self._handle_keydown,
-            }
+        }
         while not self.is_exit_requested:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
@@ -245,12 +243,12 @@ class SimulationView:
 
     def _resize_window(self):
         old_surface = self.screen
-        self.screen = pygame.display.set_mode(
-            (self.width, self.height), pygame.RESIZABLE)
+        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
-    def _scale_pedestrian_state(self, state: VisualizableSimState) \
-            -> Tuple[VisualizableSimState, Tuple[float, float]]:
+    def _scale_pedestrian_state(
+        self, state: VisualizableSimState
+    ) -> tuple[VisualizableSimState, tuple[float, float]]:
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
         return state
@@ -261,17 +259,17 @@ class SimulationView:
                 self.screen,
                 PED_COLOR,
                 (ped_x + self.offset[0], ped_y + self.offset[1]),
-                self.ped_radius * self.scaling
-                )
+                self.ped_radius * self.scaling,
+            )
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [
-                (x * self.scaling + self.offset[0],
-                 y * self.scaling + self.offset[1]
-                 ) for x, y in obstacle.vertices_np]
+                (x * self.scaling + self.offset[0], y * self.scaling + self.offset[1])
+                for x, y in obstacle.vertices_np
+            ]
             # Draw the obstacle as a polygon on the screen
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
@@ -279,12 +277,8 @@ class SimulationView:
         """Draw the actions of the pedestrians as lines."""
         for p1, p2 in ped_actions:
             pygame.draw.line(
-                self.screen,
-                PED_ACTION_COLOR,
-                p1 + self.offset,
-                p2 + self.offset,
-                width=3
-                )
+                self.screen, PED_ACTION_COLOR, p1 + self.offset, p2 + self.offset, width=3
+            )
 
     def _draw_pedestrian_routes(self):
         """
@@ -295,28 +289,28 @@ class SimulationView:
                 self.screen,
                 (0, 0, 255),
                 False,
-                [(x * self.scaling + self.offset[0], y * self.scaling + self.offset[1])
-                 for x, y in route.waypoints]
-                )
+                [
+                    (x * self.scaling + self.offset[0], y * self.scaling + self.offset[1])
+                    for x, y in route.waypoints
+                ],
+            )
 
     def _add_text(self, timestep: int):
         text_lines = [
-            f'step: {timestep}',
-            f'scaling: {self.scaling}',
-            f'x-offset: {self.offset[0]/self.scaling:.2f}',
-            f'y-offset: {self.offset[1]/self.scaling:.2f}'
-            ]
+            f"step: {timestep}",
+            f"scaling: {self.scaling}",
+            f"x-offset: {self.offset[0] / self.scaling:.2f}",
+            f"y-offset: {self.offset[1] / self.scaling:.2f}",
+        ]
         for i, text in enumerate(text_lines):
             text_surface = self.font.render(text, False, TEXT_COLOR)
-            pos = self.timestep_text_pos[0], \
-                self.timestep_text_pos[1] + i * self.font.get_linesize()
+            pos = (
+                self.timestep_text_pos[0],
+                self.timestep_text_pos[1] + i * self.font.get_linesize(),
+            )
             self.screen.blit(text_surface, pos)
 
-    def _draw_grid(
-            self,
-            grid_increment: int = 50,
-            grid_color: RgbColor = (200, 200, 200)
-            ):
+    def _draw_grid(self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)):
         """
         Draw a grid on the screen.
         :param grid_increment: The increment of the grid in pixels.
@@ -328,11 +322,8 @@ class SimulationView:
         start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
         for x in range(start_x, self.width - self.offset[0], scaled_grid_size):
             pygame.draw.line(
-                self.screen,
-                grid_color,
-                (x + self.offset[0], 0),
-                (x + self.offset[0], self.height)
-                )
+                self.screen, grid_color, (x + self.offset[0], 0), (x + self.offset[0], self.height)
+            )
             label = font.render(str(int(x / self.scaling)), 1, grid_color)
             self.screen.blit(label, (x + self.offset[0], 0))
 
@@ -340,10 +331,7 @@ class SimulationView:
         start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
         for y in range(start_y, self.height - self.offset[1], scaled_grid_size):
             pygame.draw.line(
-                self.screen,
-                grid_color,
-                (0, y + self.offset[1]),
-                (self.width, y + self.offset[1])
-                )
+                self.screen, grid_color, (0, y + self.offset[1]), (self.width, y + self.offset[1])
+            )
             label = font.render(str(int(y / self.scaling)), 1, grid_color)
             self.screen.blit(label, (0, y + self.offset[1]))

@@ -1,17 +1,16 @@
-from typing import Tuple, List
 from dataclasses import dataclass
 
 import numpy as np
-import scalene.scalene_profiler as scalene_profiler
 import pysocialforce as psf
+from scalene import scalene_profiler
 
 
 @dataclass
 class SimConfig:
     sim_steps: int
     initial_state: np.ndarray
-    groups: List[List[int]]
-    obstacles: List[Tuple[float, float, float, float]]
+    groups: list[list[int]]
+    obstacles: list[tuple[float, float, float, float]]
     # config: psf.utils.config.DefaultConfig = psf.utils.config.DefaultConfig()
 
 
@@ -22,7 +21,7 @@ class SimSettings:
     sim_steps: int
     num_peds: int
     num_groups: float
-    group_cov: List[List[float]]  # shape (2, 2)
+    group_cov: list[list[float]]  # shape (2, 2)
     num_obstacles: int
 
     def sample(self) -> SimConfig:
@@ -44,7 +43,8 @@ class SimSettings:
                 num_peds_on_group = round(np.random.normal(avg_peds_on_group))
 
             peds_pos_of_group = np.random.multivariate_normal(
-                group_centroids[gid], self.group_cov, num_peds_on_group)
+                group_centroids[gid], self.group_cov, num_peds_on_group
+            )
             groups.append(list(range(spawned_peds, spawned_peds + num_peds_on_group)))
 
             for i, ped_pos in enumerate(peds_pos_of_group):
@@ -57,15 +57,18 @@ class SimSettings:
 
         obs_start = self.rand_2d_coords(self.num_obstacles)
         obs_end = self.rand_2d_coords(self.num_obstacles)
-        obstacles = [[s_x, s_y, e_x, e_y] for ((s_x, s_y), (e_x, e_y)) in zip(obs_start, obs_end)]
+        obstacles = [
+            [s_x, s_y, e_x, e_y]
+            for ((s_x, s_y), (e_x, e_y)) in zip(obs_start, obs_end, strict=False)
+        ]
 
         config = SimConfig(self.sim_steps, individuals, groups, obstacles)
         return config
 
-    def rand_2d_coords(self, num_coords: int) -> List[Tuple[float, float]]:
+    def rand_2d_coords(self, num_coords: int) -> list[tuple[float, float]]:
         x = np.random.uniform(0, self.map_width, num_coords)
         y = np.random.uniform(0, self.map_height, num_coords)
-        return list(zip(x, y))
+        return list(zip(x, y, strict=False))
 
 
 def simulate(config: SimConfig):
@@ -82,15 +85,16 @@ def benchmark():
         num_peds=25,
         num_groups=3,
         group_cov=[[1, 0], [0, 1]],
-        num_obstacles=10)
+        num_obstacles=10,
+    )
     configs = [settings.sample() for _ in range(num_simulations)]
 
     scalene_profiler.start()
     for sim_id, config in enumerate(configs):
-        print(f'simulating {sim_id+1} / {num_simulations}')
+        print(f"simulating {sim_id + 1} / {num_simulations}")
         simulate(config)
     scalene_profiler.stop()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     benchmark()

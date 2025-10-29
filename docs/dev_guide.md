@@ -643,7 +643,7 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 - Quality gates: Minimal checks before pushing (install → lint/format → quality check → tests).
 
 ### Repository structure (key dirs)
-- `robot_sf/` (source), `examples/`, `tests/`, `test_pygame/`, `fast-pysf/` (submodule), `scripts/`, `model/`, `docs/`
+- `robot_sf/` (source), `examples/`, `tests/`, `test_pygame/`, `fast-pysf/` (subtree), `scripts/`, `model/`, `docs/`
 
 ---
 

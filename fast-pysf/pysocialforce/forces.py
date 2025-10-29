@@ -9,7 +9,6 @@ from typing import Protocol
 import numpy as np
 from numba import njit
 
-from pysocialforce.logging import logger
 from pysocialforce.config import (
     DesiredForceConfig,
     GroupCoherenceForceConfig,
@@ -18,6 +17,7 @@ from pysocialforce.config import (
     ObstacleForceConfig,
     SocialForceConfig,
 )
+from pysocialforce.logging import logger
 from pysocialforce.scene import Line2D, PedState, Point2D
 
 logging.getLogger("numba").setLevel(logging.WARNING)

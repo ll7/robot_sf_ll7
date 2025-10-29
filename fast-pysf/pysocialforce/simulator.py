@@ -138,7 +138,7 @@ class Simulator_v2:
         for behavior in self.behaviors:
             behavior.step()
 
-    def step(self, n: int = 1) -> Simulator_v2:
+    def step(self, n: int = 1) -> None:
         """
         Performs n steps in the simulation.
 
@@ -146,13 +146,12 @@ class Simulator_v2:
             n (int, optional): The number of steps to perform. Defaults to 1.
 
         Returns:
-            Simulator_v2: The Simulator_v2 object.
+            None
         """
         for _ in range(n):
             self._step_once()
             self.on_step(self.t, self.current_state)
             self.t += 1
-        return self
 
 
 class Simulator:
@@ -205,10 +204,9 @@ class Simulator:
         """step once"""
         self.peds.step(self.compute_forces())
 
-    def step(self, n: int = 1) -> Simulator:
+    def step(self, n: int = 1) -> None:
         """Step n time"""
         for _ in range(n):
             self.step_once()
             self.on_step(self.t, self.current_state)
             self.t += 1
-        return self

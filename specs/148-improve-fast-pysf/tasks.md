@@ -410,8 +410,9 @@ description: "Task list for fast-pysf integration quality improvements"
   - Use proper types for `peds`, `groups`, `obstacles`
   - Annotate `State` dataclass if present
   - **FILES MODIFIED**: fast-pysf/pysocialforce/simulator.py
-  - **CHANGES**: Added `-> None` to _step_once()/step_once(), `-> Simulator/_v2` to step() methods
+  - **CHANGES**: Added `-> None` to _step_once()/step_once() and step() methods (both Simulator and Simulator_v2)
   - **OUTCOME**: ✅ All tests pass
+  - **CORRECTION APPLIED**: Initially added `return self` to step() methods (breaking API change), reverted to maintain backward compatibility with `-> None` and no return statement
 
 - [X] T059 [P] [US4] Add type hints to `fast-pysf/pysocialforce/map_loader.py` functions:
   - Functions: `load_map`, parsing helpers

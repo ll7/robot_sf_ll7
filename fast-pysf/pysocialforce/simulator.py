@@ -144,9 +144,6 @@ class Simulator_v2:
 
         Args:
             n (int, optional): The number of steps to perform. Defaults to 1.
-
-        Returns:
-            None
         """
         for _ in range(n):
             self._step_once()

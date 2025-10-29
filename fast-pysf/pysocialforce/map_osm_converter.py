@@ -9,7 +9,6 @@ import re
 import time
 import xml.etree.ElementTree as ET
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # OSM SVG export calibration constants

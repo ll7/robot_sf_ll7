@@ -38,12 +38,6 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 ```bash
 # Run all tests (recommended)
 uv run pytest
-
-# Expected output:
-# ======================== test session starts =========================
-# collected 55 items (43 robot_sf + 12 fast-pysf)
-# ...
-# ===================== 55 passed in ~12s =========================
 ```
 
 ### Selective Test Execution

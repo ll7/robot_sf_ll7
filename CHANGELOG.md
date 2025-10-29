@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **fast-pysf Subtree (Feature 146)**: Integrated `fast-pysf` as a git subtree for easier management and updates
 - **pytest-cov Integration (Feature 145)**: Comprehensive code coverage monitoring and CI/CD integration
   - **Automatic Collection**: Coverage data collected automatically during test runs via `pytest-cov` without additional commands
   - **Multi-Format Reports**: Terminal summary, interactive HTML (`htmlcov/index.html`), and machine-readable JSON (`coverage.json`)

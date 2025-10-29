@@ -47,10 +47,6 @@ export UV_PROJECT_ENVIRONMENT="${ENV_DIR}"
 
 cd "${PROJECT_ROOT}"
 
-echo "[auxme] Synchronising git submodules"
-git submodule sync --recursive
-git submodule update --init --recursive
-
 echo "[auxme] Installing Python ${PY_VERSION} via uv"
 uv python install --if-missing "${PY_VERSION}"
 

@@ -4,7 +4,7 @@ import unittest
 
 
 class TestCentroidFunction(unittest.TestCase):
-    """TestCentroidFucntion"""
+    """TestCentroidFunction"""
 
     def test_single_point(self):
         """Test that the centroid of a single point is the point itself."""

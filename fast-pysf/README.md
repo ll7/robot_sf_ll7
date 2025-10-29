@@ -1,6 +1,6 @@
 # PySocialForce
 
-[](https://github.com/Bonifatius94/PySocialForce/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Bonifatius94/PySocialForce/actions/workflows/ci.yml/badge.svg)
 
 ## About
 This project is a Python implementation of the **Extended Social Force Model** [[2]](#2).

@@ -25,7 +25,7 @@ Scenarios:
 
 Requirements:
     This demo requires the Social Force planner implementation and its dependencies:
-    - fast-pysf submodule (git submodule update --init --recursive)
+    - fast-pysf subtree (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
     - numpy, matplotlib (for visualization)
     - numba (for fast-pysf performance)
 
@@ -81,7 +81,7 @@ try:
 except ImportError as e:
     SOCIAL_FORCE_AVAILABLE = False
     print(f"⚠️  Social Force implementation not available: {e}")
-    print("   This may be due to missing dependencies (numba, fast-pysf submodule).")
+    print("   This may be due to missing dependencies (numba, fast-pysf subtree).")
     print("   Running in mock mode to demonstrate interface...")
 
     # Mock implementations for demo purposes

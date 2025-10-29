@@ -80,7 +80,7 @@ This principle adds governance scope (hence MINOR bump) but does not change publ
 ## Domain Scope & Deliverables
 
 1. Simulation Environments: Robot navigation (state and image modalities) and pedestrian interaction variants (including adversarial pedestrian spawn). Must expose consistent Gymnasium API (reset/step/seed/spec) through factory functions.
-2. Pedestrian Dynamics Integration: Fast‑pysf SocialForce physics submodule providing pedestrian motion and interaction forces; accessed indirectly via a wrapper; considered an external but version-pinned dependency.
+2. Pedestrian Dynamics Integration: Fast‑pysf SocialForce physics subtree providing pedestrian motion and interaction forces; accessed indirectly via a wrapper; considered an external but version-pinned dependency.
 3. Benchmark Runner: Batch and single episode execution producing JSONL lines with scenario parameters, seed, per‑episode metrics, and outcome flags; supports parallel workers and resume semantics.
 4. Metrics Suite: Social navigation metrics (collisions, near misses, comfort exposure, SNQI composite, and others enumerated in docs) with deterministic computation definitions and optional bootstrap resampling for CIs.
 5. Baseline Planners: Minimal, documented reference strategies integrated with the benchmark runner producing comparable metrics.
@@ -131,7 +131,6 @@ Performance Targets (soft bounds):
 
 Reliability Targets:
 - Headless execution supported (no display) for CI across all demos essential for validation.
-- Submodule presence mandatory: missing submodule fails fast with clear error (not undefined behavior).
 
 ## Development Workflow & Compliance Gates (WHAT must exist)
 

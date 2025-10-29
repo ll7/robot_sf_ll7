@@ -4,8 +4,7 @@
 
 ### Installation and setup
 ```bash
-# One‑time
-git submodule update --init --recursive
+# One‑time setup
 uv sync && source .venv/bin/activate
 
 # Dev extras and pre‑commit (optional)
@@ -16,12 +15,10 @@ uv run pre-commit install
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
 ```
 
-### Critical dependencies and setup: Fast-pysf submodule (REQUIRED)
-**Always initialize submodules** after git clone or checkout:
-```bash
-git submodule update --init --recursive
-```
-Without this, pedestrian simulation will fail. The `fast-pysf/` directory contains optimized SocialForce physics.
+### Critical dependencies and setup: Fast-pysf integration
+The `fast-pysf/` directory contains the optimized SocialForce physics engine and is now integrated as a **git subtree** (previously a submodule). After cloning the repository, the fast-pysf code is automatically available—no additional initialization steps required.
+
+**Note**: If you're working with an older branch that still uses submodules, see the [Subtree Migration Guide](./SUBTREE_MIGRATION.md) for migration instructions and workflow differences.
 
 ### Quick Start Commands
 ```bash
@@ -56,7 +53,7 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 - **`robot_sf/baselines/`**: Baseline navigation algorithms (e.g., SocialForce) for benchmarking
 - **`robot_sf/benchmark/`**: Benchmark runner, CLI, metrics collection, and schema validation
 - **`robot_sf/sim/`**: Core simulation components (FastPysfWrapper for pedestrian physics)
-- **`fast-pysf/`**: Git submodule providing optimized SocialForce pedestrian simulation
+- **`fast-pysf/`**: Git subtree providing optimized SocialForce pedestrian simulation
 - **`docs/`**: Documentation, design notes, and development guides
 
 ### Schema Management
@@ -70,7 +67,7 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 ### Data flow and integration
 - **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
 - **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis
-- **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` submodule → NumPy/Numba physics
+- **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` subtree → NumPy/Numba physics
 
 ### Configuration hierarchy
 Use unified config classes from `robot_sf.gym_env.unified_config`:
@@ -112,18 +109,40 @@ env = make_robot_env(config=config)
 - Ensure that the documentation, docstrings, and comments are updated to reflect code changes.
 - Progress cadence: always keep tests and documentation up-to-date. As long as you document your chain of thought and what ran, you can report outcomes after finishing the work.
 
-### Testing strategy (THREE test suites)
+### Testing strategy (UNIFIED test suite)
+
+**The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
+
+#### Unified Test Suite
 
 ```bash
-# 1. Main unit/integration tests (2-3 min)
-uv run pytest tests
+# Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
+uv run pytest  # → 893 tests (881 robot_sf + 12 fast-pysf)
+
+# Run only robot_sf tests
+uv run pytest tests  # → 881 tests
+
+# Run only fast-pysf tests  
+uv run pytest fast-pysf/tests  # → 12 tests
+
+# Run with parallel execution (faster)
+uv run pytest -n auto
+```
+
+#### Legacy / Specialized Test Suites
+
+```bash
+# 1. Main unit/integration tests (2-3 min) - NOW PART OF UNIFIED SUITE
+uv run pytest tests  # → 881 tests
 
 # 2. GUI/display-dependent tests (headless mode)  
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame
 
-# 3. fast-pysf submodule tests (some may fail without map files)
-uv run python -m pytest fast-pysf/tests/ -v
+# 3. fast-pysf subtree tests - NOW PART OF UNIFIED SUITE
+uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 ```
+
+**Note**: The unified test command (`uv run pytest`) automatically discovers and runs tests from both `tests/` and `fast-pysf/tests/` directories. Test count increased from ~43 (legacy documentation) to 893 tests after fast-pysf integration.
 
 ### Coverage workflow (automatic collection)
 
@@ -142,7 +161,7 @@ open htmlcov/index.html
 
 #### What gets measured
 - **Included**: All code in `robot_sf/` package
-- **Excluded**: Tests, examples, scripts, `fast-pysf/` submodule
+- **Excluded**: Tests, examples, scripts, `fast-pysf/` subtree
 - **Output formats**: 
   - Terminal summary (printed after test run)
   - HTML report (`htmlcov/index.html` - interactive, detailed)
@@ -186,14 +205,13 @@ python -c "import json; print(json.load(open('coverage.json'))['totals'])"
 For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
 
 ### Must-have checklist
-- [ ] Initialize submodules after clone: `git submodule update --init --recursive` (needed for `fast-pysf/`).
 - [ ] Use factory env creators; do not instantiate env classes directly.
 - [ ] Set config via `robot_sf.gym_env.unified_config` before env creation; avoid ad‑hoc kwargs.
 - [ ] Keep lib code print-free; use logging for info and warnings.
 - [ ] Run VS Code Tasks: Install Dependencies, Ruff: Format and Fix, Check Code Quality, Type Check, Run Tests.
 - [ ] Add a test or smoke (e.g., env reset/step) when you change public behavior.
 - [ ] For GUI-dependent tests, set headless env vars; avoid flaky display usage in CI.
-- [ ] Treat `fast-pysf/` as a submodule; don’t modify unless scoped and justified.
+- [ ] Treat `fast-pysf/` as a subtree; modifications should be coordinated with upstream (see [Subtree Migration Guide](./SUBTREE_MIGRATION.md)).
 - [ ] Put new demos under `examples/` and new runners under `scripts/`.
 - [ ] Whenever a demo is possible, add one.
 
@@ -212,9 +230,9 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 - Contributor onboarding / repo structure: `AGENTS.md`
 
 ### Executive summary
-- **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` submodule, StableBaselines3 training pipeline
+- **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
-- **Dependencies**: `fast-pysf` git submodule for pedestrian physics; always run `git submodule update --init --recursive` after clone
+- **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
 - **Toolchain**: uv + Ruff + ty + pytest with VS Code tasks; run quality gates before pushing
 - **Testing**: Unit tests in `tests/`, GUI-dependent tests in `test_pygame/` (with headless env vars), integration tests for smoke/performance validation
 - **Documentation**: Comprehensive docs under `docs/` with design principles, architecture, usage, and migration notes
@@ -619,7 +637,6 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 ### Build issues
 - uv not found → `pip install uv` (or use official installer)
 - ffmpeg missing → `sudo apt-get install -y ffmpeg`
-- Submodules empty → `git submodule update --init --recursive`
 
 ### Runtime issues
 - Import errors → ensure venv is activated: `source .venv/bin/activate`
@@ -648,7 +665,7 @@ docker compose build && docker compose run robotsf-cuda python ./scripts/trainin
 - Quality gates: Minimal checks before pushing (install → lint/format → quality check → tests).
 
 ### Repository structure (key dirs)
-- `robot_sf/` (source), `examples/`, `tests/`, `test_pygame/`, `fast-pysf/` (submodule), `scripts/`, `model/`, `docs/`
+- `robot_sf/` (source), `examples/`, `tests/`, `test_pygame/`, `fast-pysf/` (subtree), `scripts/`, `model/`, `docs/`
 
 ---
 
@@ -685,7 +702,7 @@ Use the following templates for specific tasks.
 ### Quick reference commands
 ```bash
 # Setup after installation
-git submodule update --init --recursive && uv sync && source .venv/bin/activate
+uv sync && source .venv/bin/activate
 
 # Validate changes
 uv run ruff check . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests

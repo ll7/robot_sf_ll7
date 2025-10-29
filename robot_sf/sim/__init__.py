@@ -2,9 +2,8 @@
 
 This package provides glue code that connects the high‑level gymnasium
 environments to the optimized SocialForce pedestrian physics provided by the
-`fast-pysf` git submodule. Import-time guard logic below surfaces a clear and
-actionable error message when the submodule has not been initialized (common
-after a fresh clone without `git submodule update --init --recursive`).
+`fast-pysf` git subtree. Import-time guard logic below surfaces a clear and
+actionable error message when the subtree has not been initialized.
 
 The goal is to fail fast with guidance rather than raising obscure import
 errors deeper in the call stack.

@@ -87,8 +87,14 @@ uv sync --extra dev
 # Install pre-commit hooks
 uv run pre-commit install
 
-# Run tests
-uv run pytest tests
+# Run tests (unified suite: robot_sf + fast-pysf)
+uv run pytest  # → 893 tests total
+
+# Run only robot_sf tests
+uv run pytest tests  # → 881 tests
+
+# Run only fast-pysf tests
+uv run pytest fast-pysf/tests  # → 12 tests
 
 # Run linting and formatting
 uv run ruff check .
@@ -143,26 +149,29 @@ brew install ffmpeg
 
 ### Tests
 
-#### PySocialForce Tests
+#### Unified Test Suite
 
-The PySocialForce tests are located in the `fast-pysf/tests/` directory and can be run with:
-
-```sh
-cd fast-pysf
-uv run python -m pytest tests/ -v
-```
-
-Or with dev dependencies explicitly:
+The project uses a unified test suite that runs both robot_sf and fast-pysf tests via a single command:
 
 ```sh
-cd fast-pysf  
-uv run --extra dev python -m pytest tests/ -v
+# Run all tests (recommended)
+uv run pytest  # → 893 tests (881 robot_sf + 12 fast-pysf)
+
+# Run only robot_sf tests
+uv run pytest tests  # → 881 tests
+
+# Run only fast-pysf tests  
+uv run pytest fast-pysf/tests  # → 12 tests
+
+# Run with parallel execution (faster)
+uv run pytest -n auto
 ```
 
 All tests should pass successfully. The test suite includes:
-- Force calculation tests (desired, social, group repulsion forces)
-- Map loading tests 
-- Simulator functionality tests
+- **robot_sf tests** (881): Unit, integration, baselines, benchmarks
+- **fast-pysf tests** (12): Force calculations, map loading, simulator functionality
+
+**Note**: The fast-pysf tests are now integrated into the main pytest configuration and no longer require running from the `fast-pysf/` directory or using `python -m pytest`.
 
 #### Run Linter / Tests
 
@@ -170,8 +179,8 @@ All tests should pass successfully. The test suite includes:
 # Lint and format
 uv run ruff check --fix . && uv run ruff format .
 
-# Run tests
-pytest tests
+# Run all tests (unified suite)
+uv run pytest
 
 # Legacy linter (for comparison)
 pylint robot_sf

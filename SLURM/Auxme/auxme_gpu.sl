@@ -58,10 +58,6 @@ export UV_PROJECT_ENVIRONMENT="${ENV_DIR}"
 
 cd "${PROJECT_ROOT}"
 
-echo "[auxme] Synchronising git submodules"
-git submodule sync --recursive
-git submodule update --init --recursive
-
 uv sync --all-extras
 
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}

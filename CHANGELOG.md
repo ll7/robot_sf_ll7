@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **fast-pysf Integration Improvements (Feature 148)**: Enhanced fast-pysf integration with comprehensive testing and quality tooling
+  - **Unified Test Suite**: Single `uv run pytest` command now executes both robot_sf (881 tests) and fast-pysf (12 tests) for total 893 tests
+  - **Quality Tooling Extension**: Extended ruff linting, ty type checking, and coverage reporting to include fast-pysf subtree
+  - **Type Annotations**: Added comprehensive type hints to fast-pysf public APIs (map_loader, forces, simulator, scene modules)
+  - **Configuration**: Per-file ignores in pyproject.toml for gradual quality adoption, ty configuration includes fast-pysf/pysocialforce
+  - **Code Quality**: Fixed circular imports, removed dead code, alphabetized imports, replaced wildcard imports
+  - **Documentation**: Created annotation_plan.md with numba compatibility guidelines and implementation strategy
+- **fast-pysf Subtree (Feature 146)**: Integrated `fast-pysf` as a git subtree for easier management and updates
 - **pytest-cov Integration (Feature 145)**: Comprehensive code coverage monitoring and CI/CD integration
   - **Automatic Collection**: Coverage data collected automatically during test runs via `pytest-cov` without additional commands
   - **Multi-Format Reports**: Terminal summary, interactive HTML (`htmlcov/index.html`), and machine-readable JSON (`coverage.json`)
@@ -120,6 +128,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance Validation**: 20-25 steps/second with linear parallel scaling
 
 ### Changed
+- **fast-pysf Type Annotations (Feature 148)**: Enhanced type safety across fast-pysf public APIs
+  - Added return type annotations to all Force classes (`__call__` methods return `np.ndarray`)
+  - Added type hints to Simulator and Simulator_v2 classes (step methods, state management)
+  - Improved PedState class with proper array type annotations (`np.ndarray | None` for optional attributes)
+  - Added `str | Path` type support to map_loader.load_map() for flexible path handling
 - Classic interactions pygame demo now respects per-scenario `map_file` entries in the scenario matrix: on each selected scenario it loads the referenced SVG (via converter) or JSON map definition and injects a single-map `MapDefinitionPool` into the environment config. Falls back gracefully (with a warning) to the default pool if loading fails.
 - SVG map conversion now validates presence of at least one `robot_route_*_*` path; missing robot routes raises a clear `ValueError` (callers can fallback to default maps) preventing downstream division-by-zero in simulator initialization. Added richer conversion logging (route and zone counts).
 - Enhanced baseline planner interface with unified PlannerProtocol
@@ -142,6 +155,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive backward compatibility maintained
 
 ### Fixed
+- **fast-pysf Code Quality Issues (Feature 148 / PR #236)**: Resolved 24 PR review comments
+  - Fixed circular import in forces.py (changed `from pysocialforce import logger` to `from pysocialforce.logging import logger`)
+  - Removed dead code from scene.py (commented desired_directions method)
+  - Alphabetized imports in simulator.py for consistency
+  - Removed duplicate simulator assignment in ex09_inkscape_svg_map.py
+  - Replaced wildcard import with explicit import in TestObstacleForce.py
+  - Fixed file path resolution in test_map_loader.py to work with dynamic paths
+  - Added per-file ruff ignores for complexity and print statements in examples
 - Video artifact manifest now emits a per-episode `skipped` entry with `moviepy-missing` note instead of silently omitting episodes when SimulationView encoding is unavailable for that episode only.
 - Robot / multi-robot environments now gracefully fallback to `simple_reward` when `reward_func=None` is passed via factory functions, preventing a `TypeError: 'NoneType' object is not callable` during `env.step` (affects new classic interactions PPO visualization demo).
 

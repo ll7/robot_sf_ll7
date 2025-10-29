@@ -46,6 +46,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [🚀 Quick Start Guides](#-quick-start-guides)
   - [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
   - [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
+    - [Environment Factory Ergonomics Migration (Feature 130)](#environment-factory-ergonomics-migration-feature-130)
 - [🎯 Key Features](#-key-features)
   - [Environment System](#environment-system)
   - [Simulation Capabilities](#simulation-capabilities)
@@ -56,6 +57,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [🔗 External Links](#-external-links)
 - [🤝 Contributing](#-contributing)
 - [📞 Support](#-support)
+- [Helper Catalog](#helper-catalog)
 
 ## 📚 Documentation Index
 
@@ -197,6 +199,7 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 ### ⚙️ Setup & Configuration
 - [**GPU Setup**](./GPU_SETUP.md) - GPU configuration for accelerated training
 - [**UV Migration**](./UV_MIGRATION.md) - Migration to UV package manager
+- [**Subtree Migration**](./SUBTREE_MIGRATION.md) - Git subtree integration for fast-pysf (migration from submodule)
 
 ### 📈 Pedestrian Metrics  
 - [**Pedestrian Metrics Overview**](./ped_metrics/PED_METRICS.md) - Summary of implemented metrics and their purpose

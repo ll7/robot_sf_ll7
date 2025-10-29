@@ -82,8 +82,7 @@ class SimulationView:
     screen: pygame.surface.Surface = field(init=False)
     font: pygame.font.Font = field(init=False)
     redraw_needed: bool = field(init=False, default=False)
-    offset: np.array = field(default_factory=np.array([0, 0]))
-
+    offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0])) 
     @property
     def timestep_text_pos(self) -> Vec2D:
         return (16, 16)

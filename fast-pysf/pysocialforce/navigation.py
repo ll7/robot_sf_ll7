@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from math import atan2, dist
-from typing import Optional
 
 Vec2D = tuple[float, float]
 Zone = tuple[Vec2D, Vec2D, Vec2D]
@@ -62,7 +61,7 @@ class RouteNavigator:
         return self.waypoints[self.waypoint_id]
 
     @property
-    def next_waypoint(self) -> Optional[Vec2D]:
+    def next_waypoint(self) -> Vec2D | None:
         """
         Get the next waypoint.
 
@@ -94,11 +93,15 @@ class RouteNavigator:
         Args:
             pos (Vec2D): The new position of the navigator.
         """
-        reached_waypoint = dist(self.current_waypoint, pos) <= self.proximity_threshold
-        if reached_waypoint:
-            self.waypoint_id = min(len(self.waypoints) - 1, self.waypoint_id + 1)
         self.pos = pos
-        self.reached_waypoint = reached_waypoint
+
+        if self.waypoints:
+            reached_waypoint = dist(self.current_waypoint, pos) <= self.proximity_threshold
+            if reached_waypoint:
+                self.waypoint_id = min(len(self.waypoints) - 1, self.waypoint_id + 1)
+            self.reached_waypoint = reached_waypoint
+        else:
+            self.reached_waypoint = False
 
     def new_route(self, route: list[Vec2D]):
         """

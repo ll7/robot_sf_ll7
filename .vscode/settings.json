@@ -49,4 +49,8 @@
         ".specify/scripts/bash/": true,
         ".specify/scripts/powershell/": true
     },
+    "[markdown]": {
+        "editor.formatOnSave": true,
+        "editor.formatOnPaste": true
+    },
 }

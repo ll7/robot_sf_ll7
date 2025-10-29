@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:  # avoid runtime imports
-    from robot_sf.gym_env.env_config import EnvSettings
-    from robot_sf.nav.map_config import MapDefinition
     from robot_sf.sim.facade import SimulatorFactory
 
 _REGISTRY: dict[str, SimulatorFactory] = {}
@@ -40,18 +38,17 @@ def list_backends() -> list[str]:
 
 
 # Default backend registration (fast-pysf)
-
-
-def _fast_pysf_factory(env_config: EnvSettings, map_def: MapDefinition, peds: bool):
-    from robot_sf.sim.simulator import init_simulators
-
-    return init_simulators(
-        env_config, map_def, random_start_pos=True, peds_have_obstacle_forces=peds
-    )[0]
-
-
-# Register default on import
+# Register default backends on import
 try:
-    register_backend("fast-pysf", _fast_pysf_factory, override=True)
+    from robot_sf.sim.backends.fast_pysf_backend import fast_pysf_factory
+
+    register_backend("fast-pysf", fast_pysf_factory, override=True)
 except (ValueError, KeyError) as _e:  # pragma: no cover - defensive
     logger.warning("Failed to register default fast-pysf backend: {}", _e)
+
+try:
+    from robot_sf.sim.backends.dummy_backend import dummy_factory
+
+    register_backend("dummy", dummy_factory, override=True)
+except (ValueError, KeyError) as _e:  # pragma: no cover - defensive
+    logger.warning("Failed to register dummy backend: {}", _e)

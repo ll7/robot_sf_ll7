@@ -60,6 +60,7 @@ except (ImportError, ModuleNotFoundError):
     RobotEnvWithImage = None  # type: ignore
 
 from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
+from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import (
@@ -318,6 +319,13 @@ def make_robot_env(
         recording_options = recording_options_local
 
     _apply_global_seed(seed)
+
+    # Validate configuration if provided
+    if config is not None:
+        validate_config(config, strict=True)
+        resolved = get_resolved_config_dict(config)
+        logger.debug("Resolved config: backend={}", resolved.get("backend", "fast-pysf"))
+
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,

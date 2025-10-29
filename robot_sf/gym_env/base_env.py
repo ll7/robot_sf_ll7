@@ -81,6 +81,7 @@ class BaseEnv(Env):
                 self.map_def,
                 peds_have_obstacle_forces,
             )
+            logger.debug("Initialized simulator with backend={}", backend_key)
         except KeyError:
             logger.warning(
                 "Unknown backend '{}' — falling back to legacy init_simulators().",

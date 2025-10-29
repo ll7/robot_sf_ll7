@@ -129,7 +129,7 @@ class Simulator_v2:
         """
         return self.env.obstacles_raw
 
-    def _step_once(self):
+    def _step_once(self) -> None:
         """
         Performs a single step in the simulation.
         """
@@ -138,7 +138,7 @@ class Simulator_v2:
         for behavior in self.behaviors:
             behavior.step()
 
-    def step(self, n: int = 1):
+    def step(self, n: int = 1) -> Simulator_v2:
         """
         Performs n steps in the simulation.
 
@@ -152,6 +152,7 @@ class Simulator_v2:
             self._step_once()
             self.on_step(self.t, self.current_state)
             self.t += 1
+        return self
 
 
 class Simulator:
@@ -200,13 +201,14 @@ class Simulator:
     def get_raw_obstacles(self):
         return self.env.obstacles_raw
 
-    def step_once(self):
+    def step_once(self) -> None:
         """step once"""
         self.peds.step(self.compute_forces())
 
-    def step(self, n=1):
+    def step(self, n: int = 1) -> Simulator:
         """Step n time"""
         for _ in range(n):
             self.step_once()
             self.on_step(self.t, self.current_state)
             self.t += 1
+        return self

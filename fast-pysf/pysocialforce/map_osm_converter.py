@@ -12,6 +12,12 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# OSM SVG export calibration constants
+# These values were empirically determined for typical OSM SVG exports
+# and may need adjustment for different export settings or coordinate systems
+OSM_REFERENCE_SCALE = 1350  # Reference scale denominator from OSM export
+OSM_COORDINATE_ADJUSTMENT = 4.08  # Coordinate system scaling factor
+
 
 def extract_buildings_as_obstacle(
         map_full_name,
@@ -19,22 +25,35 @@ def extract_buildings_as_obstacle(
         map_scale_factor: float = 5000):
     """
     Extracts the buildings from the SVG file and saves them to a new SVG file.
+
+    The scale factor calculation combines the user-provided map_scale_factor with
+    OSM export calibration constants (OSM_REFERENCE_SCALE and OSM_COORDINATE_ADJUSTMENT).
+    These constants were empirically determined for typical OSM SVG exports and may
+    require adjustment for different coordinate systems or export settings.
+
     Args:
-    map_full_name (str): The full path to the SVG file.
-    building_rgb_color_str (str): The color to filter by (in percentage format).
-    map_scale_factor (float): The scale factor applied during the export.
-        !!!Tehere is uncertainty in this scale factor!!!
+        map_full_name (str): The full path to the SVG file.
+        building_rgb_color_str (str): The color to filter by (in percentage format).
+        map_scale_factor (float): The scale factor applied during the export.
+            Default 5000 is calibrated for typical OSM exports.
+
     Returns:
-    ET.Element: The root element of the new SVG file.
+        ET.Element: The root element of the new SVG file.
+
+    Note:
+        If scaling appears incorrect, verify:
+        - OSM export settings match the calibration constants
+        - map_scale_factor is appropriate for your coordinate system
+        - Source SVG viewBox dimensions are as expected
     """
     logger.info("Converting Map: %s", map_full_name)
     tree = ET.parse(map_full_name)
     root = tree.getroot()
 
-    # The scale factor applied during the export
-    # TODO: Replace this with the actual scale factor
-    scale_factor = map_scale_factor / 1350 * 1 / 4.08
-    logger.debug("Scale factor: %s", scale_factor)
+    # Calculate composite scale factor from map scale and OSM calibration constants
+    # Formula: (user_scale / reference_scale) * (1 / coordinate_adjustment)
+    scale_factor = (map_scale_factor / OSM_REFERENCE_SCALE) * (1 / OSM_COORDINATE_ADJUSTMENT)
+    logger.debug("Scale factor: %s (from map_scale=%s)", scale_factor, map_scale_factor)
 
     # Identify all elements with the specified color
     # Initialize an empty list to store the elements

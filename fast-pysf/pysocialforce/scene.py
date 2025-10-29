@@ -104,7 +104,7 @@ class PedState:
         else:
             self._groups = groups
 
-    def has_group(self):
+    def has_group(self) -> bool:
         return self.groups is not None
 
     def which_group(self, index: int) -> int:

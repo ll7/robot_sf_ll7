@@ -45,7 +45,20 @@ class RouteNavigator:
 
         Returns:
             Vec2D: The current waypoint.
+
+        Raises:
+            IndexError: If waypoint_id is out of bounds or waypoints list is empty.
         """
+        if not self.waypoints:
+            raise IndexError(
+                f"Cannot access current waypoint: waypoints list is empty "
+                f"(waypoint_id={self.waypoint_id})"
+            )
+        if not (0 <= self.waypoint_id < len(self.waypoints)):
+            raise IndexError(
+                f"Waypoint index {self.waypoint_id} is out of bounds "
+                f"(valid range: 0 to {len(self.waypoints) - 1})"
+            )
         return self.waypoints[self.waypoint_id]
 
     @property

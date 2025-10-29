@@ -773,7 +773,7 @@ def centroid(vecs: np.ndarray) -> Tuple[float, float]:
     Tuple[float, float]: A tuple containing the x and y coordinates of the centroid.
     """
     # Check if the array is empty
-    if vecs.size == 0 or vecs.shape == (0, ):
+    if vecs.size == 0:
         raise ValueError("Input array is empty")
 
     # Determine the number of data points in the array

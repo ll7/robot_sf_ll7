@@ -1,3 +1,32 @@
 Dockerfile
 logs
 model
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Env files
+.env*
+
+# Temporary
+tmp/
+.DS_Store

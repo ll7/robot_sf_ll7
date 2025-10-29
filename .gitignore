@@ -32,3 +32,25 @@ htmlcov/
 .coverage.*
 coverage.json
 coverage.xml
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python distribution / packaging
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.*
+!.env.example

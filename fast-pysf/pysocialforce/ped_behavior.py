@@ -110,9 +110,15 @@ class FollowRouteBehavior:
 
     def reset(self):
         """
-        TODO: why does the reset method do nothing?
+        Reset the behavior state.
+
+        For FollowRouteBehavior, groups maintain their current navigation state
+        across episodes. When groups reach their destination, they are respawned
+        via respawn_group_at_start() during step() execution.
+
+        This method intentionally performs no action to preserve group continuity
+        within ongoing route navigation sessions.
         """
-        pass
 
     def respawn_group_at_start(self, gid: int):
         """

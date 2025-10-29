@@ -5,7 +5,6 @@ import numba
 import numpy as np
 from pysocialforce.scene import PedState
 
-# FIXME: This import is not working
 from robot_sf.util.types import Vec2D
 
 

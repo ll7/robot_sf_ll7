@@ -16,7 +16,6 @@ SLURM/model
 profile.json
 profiles
 pysf_tests
-pysocialforce
 recordings/*.pkl
 robot_sf/data_analysis/plots/*.png
 robot_sf/data_analysis/datasets/*.json

@@ -77,9 +77,6 @@ class Obstacle:
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
         self.lines = lines
 
-        if not self.vertices:
-            print('WARNING: obstacle is just a single point that cannot collide!')
-
 
 @dataclass
 class GlobalRoute:

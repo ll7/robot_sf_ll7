@@ -43,7 +43,6 @@ dist/
 *.egg-info/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo

@@ -133,7 +133,7 @@ class Simulator_v2:
         """
         Performs a single step in the simulation.
         """
-        forces = sum(map(lambda force: force(), self.forces))
+        forces = sum(force() for force in self.forces)
         self.peds.step(forces)
         for behavior in self.behaviors:
             behavior.step()
@@ -174,7 +174,7 @@ class Simulator:
 
     def compute_forces(self):
         """compute forces"""
-        return sum(map(lambda force: force(), self.forces))
+        return sum(force() for force in self.forces)
 
     @property
     def current_state(self) -> SimState:

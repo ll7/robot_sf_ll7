@@ -147,7 +147,6 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
-    "fast-pysf",
 ]
 
 # Same as Black.

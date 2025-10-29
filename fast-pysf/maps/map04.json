@@ -12,7 +12,7 @@
                 [5, 0],
                 [195, 0]
             ],
-            "reversible": "false"
+            "reversible": false
         }
     ],
     "obstacles": [

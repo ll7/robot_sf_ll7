@@ -14,7 +14,7 @@
                 [30, 30],
                 [30, -30]
             ],
-            "reversible": "true"
+            "reversible": true
         }
     ],
     "obstacles": [

@@ -24,7 +24,7 @@ Complete map with all components (obstacles, routes, crowded zones).
         {
             "name": "route_name",
             "waypoints": [[x1, y1], [x2, y2], ...],
-            "reversible": "true" | "false"
+            "reversible": true | false
         }
     ],
     "crowded_zones": [
@@ -125,13 +125,13 @@ To add a new test map fixture:
 {
     "name": "route_1",
     "waypoints": [[x1, y1], [x2, y2], ...],
-    "reversible": "true"
+    "reversible": true
 }
 ```
 
 - `name`: Unique identifier for the route
 - `waypoints`: Array of [x, y] coordinate pairs (minimum 2 points)
-- `reversible`: String "true" or "false" (pedestrians can walk both directions)
+- `reversible`: Boolean `true` or `false` (pedestrians can walk both directions)
 
 ### Crowded Zone Object
 

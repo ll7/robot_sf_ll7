@@ -1,17 +1,16 @@
-from math import dist
-from typing import List, Tuple
 from dataclasses import dataclass, field
+from math import dist
 
 import numpy as np
 
-Vec2D = Tuple[float, float]
-Line2D = Tuple[float, float, float, float]
-Circle = Tuple[Vec2D, float]
-Rect = Tuple[Vec2D, Vec2D, Vec2D]
-Zone = Tuple[Vec2D, Vec2D, Vec2D]  # rect ABC with sides |A B|, |B C| and diagonal |A C|
+Vec2D = tuple[float, float]
+Line2D = tuple[float, float, float, float]
+Circle = tuple[Vec2D, float]
+Rect = tuple[Vec2D, Vec2D, Vec2D]
+Zone = tuple[Vec2D, Vec2D, Vec2D]  # rect ABC with sides |A B|, |B C| and diagonal |A C|
 
 
-def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
+def sample_zone(zone: Zone, num_samples: int) -> list[Vec2D]:
     """
     Sample points within a given zone.
 
@@ -31,7 +30,7 @@ def sample_zone(zone: Zone, num_samples: int) -> List[Vec2D]:
     return [(x, y) for x, y in points]
 
 
-def sample_circle(circle: Circle, num_samples: int) -> List[Vec2D]:
+def sample_circle(circle: Circle, num_samples: int) -> list[Vec2D]:
     """
     Sample points within a given circle.
 
@@ -61,24 +60,22 @@ class Obstacle:
         vertices_np (np.ndarray): The vertices as a NumPy array.
     """
 
-    vertices: List[Vec2D]
-    lines: List[Line2D] = field(init=False)
+    vertices: list[Vec2D]
+    lines: list[Line2D] = field(init=False)
     vertices_np: np.ndarray = field(init=False)
 
     def __post_init__(self):
         if not self.vertices:
-            raise ValueError('No vertices specified for obstacle!')
+            raise ValueError("No vertices specified for obstacle!")
 
         self.vertices_np = np.array(self.vertices)
-        edges = list(zip(self.vertices[:-1], self.vertices[1:])) \
-            + [(self.vertices[-1], self.vertices[0])]
+        edges = list(zip(self.vertices[:-1], self.vertices[1:], strict=False)) + [
+            (self.vertices[-1], self.vertices[0])
+        ]
         # remove fake lines that are just points
         edges = list(filter(lambda l: l[0] != l[1], edges))
         lines = [(p1[0], p2[0], p1[1], p2[1]) for p1, p2 in edges]
         self.lines = lines
-
-        if not self.vertices:
-            print('WARNING: obstacle is just a single point that cannot collide!')
 
 
 @dataclass
@@ -86,7 +83,8 @@ class GlobalRoute:
     """
     Represents a global route from a spawn point to a goal point in a map.
     """
-    waypoints: List[Vec2D]
+
+    waypoints: list[Vec2D]
     spawn_radius: float = 5.0
 
     def __post_init__(self):
@@ -99,7 +97,7 @@ class GlobalRoute:
         """
 
         if len(self.waypoints) < 1:
-            raise ValueError(f'Route contains no waypoints!')
+            raise ValueError("Route contains no waypoints!")
 
     @property
     def spawn_circle(self) -> Circle:
@@ -112,17 +110,21 @@ class GlobalRoute:
         return (self.waypoints[0], self.spawn_radius)
 
     @property
-    def sections(self) -> List[Tuple[Vec2D, Vec2D]]:
+    def sections(self) -> list[tuple[Vec2D, Vec2D]]:
         """
         Returns a list of sections along the route.
 
         Returns:
             List[Tuple[Vec2D, Vec2D]]: The list of sections, where each section is represented by a tuple of two waypoints.
         """
-        return [] if len(self.waypoints) < 2 else list(zip(self.waypoints[:-1], self.waypoints[1:]))
+        return (
+            []
+            if len(self.waypoints) < 2
+            else list(zip(self.waypoints[:-1], self.waypoints[1:], strict=False))
+        )
 
     @property
-    def section_lengths(self) -> List[float]:
+    def section_lengths(self) -> list[float]:
         """
         Returns a list of lengths of each section along the route.
 
@@ -132,7 +134,7 @@ class GlobalRoute:
         return [dist(p1, p2) for p1, p2 in self.sections]
 
     @property
-    def section_offsets(self) -> List[float]:
+    def section_offsets(self) -> list[float]:
         """
         Returns a list of offsets for each section along the route.
 
@@ -168,6 +170,7 @@ class MapDefinition:
         routes (List[GlobalRoute]): A list of global routes in the map.
         crowded_zones (List[Zone]): A list of crowded zones in the map.
     """
-    obstacles: List[Obstacle]
-    routes: List[GlobalRoute]
-    crowded_zones: List[Zone]
+
+    obstacles: list[Obstacle]
+    routes: list[GlobalRoute]
+    crowded_zones: list[Zone]

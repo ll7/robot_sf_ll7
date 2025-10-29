@@ -256,6 +256,18 @@ ignore = [
 "robot_sf/benchmark/full_classic/visuals.py" = ["C901"]
 "robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]
 
+# fast-pysf subtree: gradual adoption - complexity rules relaxed, allow prints in examples/benchmarks
+"fast-pysf/**/*.py" = [
+    "C901",    # Complex function (relax initially for existing code)
+    "PLR0912", # Too many branches
+    "PLR0913", # Too many arguments
+    "PLR0915", # Too many statements
+]
+"fast-pysf/examples/**/*" = ["T201"]  # Allow prints in examples
+"fast-pysf/benchmarks/**/*" = ["T201"]  # Allow prints in benchmarks
+"fast-pysf/tests/**/*" = ["S101", "T201"]  # Allow asserts and prints in tests
+"fast-pysf/pysocialforce/__init__.py" = ["F401"]  # Public API re-exports
+
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
@@ -291,14 +303,17 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.coverage.run]
-source = ["robot_sf"]
+source = ["robot_sf", "fast-pysf/pysocialforce"]
+
+# Omit test files and non-library code from coverage measurement
 omit = [
     "*/tests/*",
     "*/test_*",
     "test_pygame/*",
     "examples/*",
     "scripts/*",
-    "fast-pysf/*",
+    "fast-pysf/tests/*",
+    "fast-pysf/examples/*",
     "*/conftest.py",
     "*/__pycache__/*",
 ]
@@ -337,7 +352,7 @@ addopts = [
     "--cov-report=html",
     "--cov-report=json",
 ]
-testpaths = ["tests"]
+testpaths = ["tests", "fast-pysf/tests"]
 filterwarnings = [
     # Suppress external library warnings
     "ignore::DeprecationWarning:pygame.*",
@@ -372,7 +387,9 @@ pysocialforce = { path = "fast-pysf", editable = true }
 exclude = [
     "tests",
     "test_pygame",
-    "fast-pysf"
+    "fast-pysf/tests",
+    "fast-pysf/examples",
+    "fast-pysf/benchmarks"
 ]
 
 [tool.ty.environment]

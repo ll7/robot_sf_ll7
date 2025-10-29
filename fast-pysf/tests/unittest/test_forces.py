@@ -1,10 +1,11 @@
+import unittest
+
 import numpy as np
 from pysocialforce.forces import centroid  # Import the centroid function from its module
-import unittest
 
 
 class TestCentroidFunction(unittest.TestCase):
-    """TestCentroidFucntion"""
+    """TestCentroidFunction"""
 
     def test_single_point(self):
         """Test that the centroid of a single point is the point itself."""
@@ -39,5 +40,5 @@ class TestCentroidFunction(unittest.TestCase):
 
 
 # This allows the test code to be executed when the script is run directly
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

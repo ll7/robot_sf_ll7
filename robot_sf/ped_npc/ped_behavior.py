@@ -165,10 +165,16 @@ class FollowRouteBehavior:
 
     def reset(self):
         """
-        No action is performed in this method.
-        TODO: Is this method necessary? If not, remove it.
+        Reset the behavior state.
+
+        For FollowRouteBehavior, groups maintain their current navigation state
+        across episodes. When groups reach their destination, they are respawned
+        via respawn_group_at_start() during step() execution.
+
+        This method intentionally performs no action to preserve group continuity
+        within ongoing route navigation sessions. The method is retained to satisfy
+        the PedestrianBehavior protocol interface.
         """
-        pass
 
     def respawn_group_at_start(self, gid: int):
         """

@@ -1,8 +1,8 @@
 """
 # Example 01: basic import test
 """
-import pysocialforce as pysf
 
+import pysocialforce as pysf
 
 simulator = pysf.Simulator_v2()
 

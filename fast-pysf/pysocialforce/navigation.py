@@ -1,9 +1,9 @@
-from math import dist, atan2
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from math import atan2, dist
+from typing import Optional
 
-Vec2D = Tuple[float, float]
-Zone = Tuple[Vec2D, Vec2D, Vec2D]
+Vec2D = tuple[float, float]
+Zone = tuple[Vec2D, Vec2D, Vec2D]
 
 
 @dataclass
@@ -19,7 +19,7 @@ class RouteNavigator:
         reached_waypoint (bool): Indicates whether the current waypoint has been reached.
     """
 
-    waypoints: List[Vec2D] = field(default_factory=list)
+    waypoints: list[Vec2D] = field(default_factory=list)
     waypoint_id: int = 0
     proximity_threshold: float = 1.0  # info: should be set to vehicle radius + goal radius
     pos: Vec2D = field(default=(0, 0))
@@ -33,8 +33,10 @@ class RouteNavigator:
         Returns:
             bool: True if the destination has been reached, False otherwise.
         """
-        return len(self.waypoints) == 0 or \
-            dist(self.waypoints[-1], self.pos) <= self.proximity_threshold
+        return (
+            len(self.waypoints) == 0
+            or dist(self.waypoints[-1], self.pos) <= self.proximity_threshold
+        )
 
     @property
     def current_waypoint(self) -> Vec2D:
@@ -54,8 +56,11 @@ class RouteNavigator:
         Returns:
             Optional[Vec2D]: The next waypoint if available, None otherwise.
         """
-        return self.waypoints[self.waypoint_id + 1] \
-            if self.waypoint_id + 1 < len(self.waypoints) else None
+        return (
+            self.waypoints[self.waypoint_id + 1]
+            if self.waypoint_id + 1 < len(self.waypoints)
+            else None
+        )
 
     @property
     def initial_orientation(self) -> float:
@@ -65,8 +70,9 @@ class RouteNavigator:
         Returns:
             float: The initial orientation in radians.
         """
-        return atan2(self.waypoints[1][1] - self.waypoints[0][1],
-                     self.waypoints[1][0] - self.waypoints[0][0])
+        return atan2(
+            self.waypoints[1][1] - self.waypoints[0][1], self.waypoints[1][0] - self.waypoints[0][0]
+        )
 
     def update_position(self, pos: Vec2D):
         """
@@ -81,7 +87,7 @@ class RouteNavigator:
         self.pos = pos
         self.reached_waypoint = reached_waypoint
 
-    def new_route(self, route: List[Vec2D]):
+    def new_route(self, route: list[Vec2D]):
         """
         Set a new route for the navigator.
 

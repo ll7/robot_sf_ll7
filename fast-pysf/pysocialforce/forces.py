@@ -1,19 +1,26 @@
 """Calculate forces for individuals and groups"""
-import re
-from math import atan2, exp
-from typing import Tuple, List, Protocol, Callable
+
 import logging
+import re
+from collections.abc import Callable
+from math import atan2, exp
+from typing import Protocol
 
 import numpy as np
 from numba import njit
 
-from pysocialforce.scene import Line2D, Point2D, PedState
-from pysocialforce import logger
-from pysocialforce.config import \
-    DesiredForceConfig, SocialForceConfig, ObstacleForceConfig, \
-    GroupCoherenceForceConfig, GroupGazeForceConfig, GroupReplusiveForceConfig
+from pysocialforce.logging import logger
+from pysocialforce.config import (
+    DesiredForceConfig,
+    GroupCoherenceForceConfig,
+    GroupGazeForceConfig,
+    GroupReplusiveForceConfig,
+    ObstacleForceConfig,
+    SocialForceConfig,
+)
+from pysocialforce.scene import Line2D, PedState, Point2D
 
-logging.getLogger('numba').setLevel(logging.WARNING)
+logging.getLogger("numba").setLevel(logging.WARNING)
 
 Force = Callable[[], np.ndarray]
 
@@ -21,7 +28,7 @@ Force = Callable[[], np.ndarray]
 class SimEntitiesProvider(Protocol):
     """Not implemented!!!"""
 
-    def get_obstacles(self) -> List[np.ndarray]:
+    def get_obstacles(self) -> list[np.ndarray]:
         raise NotImplementedError()
 
     def get_raw_obstacles(self) -> np.ndarray:
@@ -51,7 +58,7 @@ class DebuggableForce:
         force = self.force()
         if debug:
             force_type = self.camel_to_snake(type(self).__name__)
-            logger.debug(f"{force_type}:\n {repr(force)}")
+            logger.debug(f"{force_type}:\n {force!r}")
         return force
 
     @staticmethod
@@ -79,7 +86,7 @@ class DesiredForce:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         """
         Calculate and return the desired force for each pedestrian.
 
@@ -104,9 +111,8 @@ class DesiredForce:
         # For pedestrians further than the goal threshold from their goal,
         # calculate the force based on the desired speed and current velocity
         force[dist > goal_threshold] = (
-            direction *
-            self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
-            )[dist > goal_threshold, :]
+            direction * self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
+        )[dist > goal_threshold, :]
 
         # For pedestrians within the goal threshold, apply a braking force
         force[dist <= goal_threshold] = -1.0 * vel[dist <= goal_threshold]
@@ -133,12 +139,18 @@ class SocialForce:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
         forces = social_force(
-            ped_positions, ped_velocities, self.config.activation_threshold,
-            self.config.n, self.config.n_prime, self.config.lambda_importance, self.config.gamma)
+            ped_positions,
+            ped_velocities,
+            self.config.activation_threshold,
+            self.config.n,
+            self.config.n_prime,
+            self.config.lambda_importance,
+            self.config.gamma,
+        )
         return forces * self.config.factor
 
 
@@ -147,10 +159,11 @@ def social_force(
     ped_positions: np.ndarray,
     ped_velocities: np.ndarray,
     activation_threshold: float,
-    n: int, n_prime: int,
+    n: int,
+    n_prime: int,
     lambda_importance: float,
-    gamma: float
-        ) -> np.ndarray:
+    gamma: float,
+) -> np.ndarray:
     """
     Calculates the social force acting on each pedestrian.
 
@@ -191,7 +204,8 @@ def social_force(
         vel_diffs = ped_velocities[other_ped_ids] - ped_velocities[ped_i]
         # Calculate the social force components for the current pedestrian
         force_x, force_y = social_force_single_ped(
-            pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma)
+            pos_diffs, vel_diffs, n, n_prime, lambda_importance, gamma
+        )
         # Assign calculated force components to the forces array
         forces[ped_i, 0] = force_x
         forces[ped_i, 1] = force_y
@@ -204,10 +218,11 @@ def social_force(
 def social_force_single_ped(
     pos_diffs: np.ndarray,
     vel_diffs: np.ndarray,
-    n: int, n_prime:
-    int, lambda_importance:
-    float, gamma: float
-        ) -> Point2D:
+    n: int,
+    n_prime: int,
+    lambda_importance: float,
+    gamma: float,
+) -> Point2D:
     """
     Calculates the social force exerted on a single pedestrian.
 
@@ -225,7 +240,8 @@ def social_force_single_ped(
     force_sum_x, force_sum_y = 0.0, 0.0
     for i in range(pos_diffs.shape[0]):
         force_x, force_y = social_force_ped_ped(
-            pos_diffs[i], vel_diffs[i], n, n_prime, lambda_importance, gamma)
+            pos_diffs[i], vel_diffs[i], n, n_prime, lambda_importance, gamma
+        )
         force_sum_x += force_x
         force_sum_y += force_y
     return force_sum_x, force_sum_y
@@ -238,8 +254,8 @@ def social_force_ped_ped(
     n: int,
     n_prime: int,
     lambda_importance: float,
-    gamma: float
-        ) -> Point2D:
+    gamma: float,
+) -> Point2D:
     """
     Calculates the social force between two pedestrians.
 
@@ -266,24 +282,20 @@ def social_force_ped_ped(
     interaction_vec_y = lambda_importance * vel_diff_y + diff_dir_y
 
     # Normalize the interaction vector and get its length
-    interaction_dir, interaction_length = norm_vec(
-        (interaction_vec_x, interaction_vec_y))
+    interaction_dir, interaction_length = norm_vec((interaction_vec_x, interaction_vec_y))
     interaction_dir_x, interaction_dir_y = interaction_dir
 
     # Calculate angle between interaction direction and difference direction
-    theta = atan2(interaction_dir[1], interaction_dir[0]
-                  ) - atan2(diff_dir_y, diff_dir_x)
+    theta = atan2(interaction_dir[1], interaction_dir[0]) - atan2(diff_dir_y, diff_dir_x)
     # Determine the sign of theta for force calculation
     theta_sign = 1 if theta >= 0 else -1
     # Calculate B parameter with a small constant to avoid division by zero
     B = gamma * interaction_length + 1e-8
 
     # Compute the magnitude of the velocity component of the social force
-    force_velocity_amount = exp(-1.0 * diff_length /
-                                B - (n_prime * B * theta)**2)
+    force_velocity_amount = exp(-1.0 * diff_length / B - (n_prime * B * theta) ** 2)
     # Compute the magnitude of the angle component of the social force
-    force_angle_amount = -theta_sign * \
-        exp(-1.0 * diff_length / B - (n * B * theta)**2)
+    force_angle_amount = -theta_sign * exp(-1.0 * diff_length / B - (n * B * theta) ** 2)
 
     # Calculate the x and y components of the velocity force
     force_velocity_x = interaction_dir_x * force_velocity_amount
@@ -297,10 +309,10 @@ def social_force_ped_ped(
 
 
 @njit(fastmath=True)
-def norm_vec(vec: Point2D) -> Tuple[Point2D, float]:
+def norm_vec(vec: Point2D) -> tuple[Point2D, float]:
     if vec[0] == 0 and vec[1] == 0:
         return vec, 0
-    vec_len = (vec[0]**2 + vec[1]**2)**0.5
+    vec_len = (vec[0] ** 2 + vec[1] ** 2) ** 0.5
     return (vec[0] / vec_len, vec[1] / vec_len), vec_len
 
 
@@ -336,11 +348,8 @@ class ObstacleForce:
 
 @njit(fastmath=True)
 def all_obstacle_forces(
-    out_forces: np.ndarray,
-    ped_positions: np.ndarray,
-    obstacles: np.ndarray,
-    ped_radius: float
-        ):
+    out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
+):
     """
     Calculates the forces exerted by all obstacles on each pedestrian.
 
@@ -369,7 +378,8 @@ def all_obstacle_forces(
         for j in range(num_obstacles):
             # Calculate the force exerted by the current obstacle
             force_x, force_y = obstacle_force(
-                obstacle_segments[j], ortho_vecs[j], ped_pos, ped_radius)
+                obstacle_segments[j], ortho_vecs[j], ped_pos, ped_radius
+            )
 
             # Accumulate forces from all obstacles on the current pedestrian
             out_forces[i, 0] += force_x
@@ -377,11 +387,9 @@ def all_obstacle_forces(
 
 
 @njit(fastmath=True)
-def obstacle_force(obstacle: Line2D,
-                   ortho_vec: Point2D,
-                   ped_pos: Point2D,
-                   ped_radius: float
-                   ) -> Tuple[float, float]:
+def obstacle_force(
+    obstacle: Line2D, ortho_vec: Point2D, ped_pos: Point2D, ped_radius: float
+) -> tuple[float, float]:
     """
     Calculate the repulsive force exerted by an obstacle on a pedestrian.
 
@@ -393,14 +401,21 @@ def obstacle_force(obstacle: Line2D,
     Args:
         obstacle: A tuple representing the endpoints (x1, y1, x2, y2) of the
                   line segment that forms the obstacle.
-        ortho_vec: A vector orthogonal to the direction of pedestrian movement.
-            # TODO Is this correct? Maybe the ortho_vec is orthogonal to the obstacle?
+        ortho_vec: A vector orthogonal to the pedestrian's direction of movement.
+                   This vector is used to construct a line from the pedestrian's
+                   position for intersection testing with the obstacle. The intersection
+                   point determines the closest approach vector to the obstacle.
         ped_pos: The current position (x, y) of the pedestrian.
         ped_radius: The radius of the pedestrian (used for collision avoidance).
 
     Returns:
         A tuple (force_x, force_y) representing the x and y components of the
         repulsive force exerted by the obstacle on the pedestrian.
+
+    Note:
+        The ortho_vec parameter represents a direction perpendicular to the pedestrian's
+        movement, not to the obstacle. It's used to compute geometric intersection points
+        for determining the nearest obstacle location relative to the pedestrian's trajectory.
     """
 
     # Minimum distance to consider for collision calculations.
@@ -408,15 +423,12 @@ def obstacle_force(obstacle: Line2D,
 
     # Unpack obstacle endpoints and calculate orthogonal projection points.
     x1, y1, x2, y2 = obstacle
-    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] + ortho_vec[0],
-                                   ped_pos[1] + ortho_vec[1])
+    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] + ortho_vec[0], ped_pos[1] + ortho_vec[1])
 
     # Case 1: Obstacle is a single point (no length).
     if (x1, y1) == (x2, y2):
-        obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], x1, y1) -
-                        ped_radius, coll_dist)
-        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos, (x1, y1),
-                                                     obst_dist)
+        obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], x1, y1) - ped_radius, coll_dist)
+        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos, (x1, y1), obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
     # Calculate intersection of orthogonal projection with obstacle line.
@@ -431,31 +443,31 @@ def obstacle_force(obstacle: Line2D,
         d2 = euclid_dist(ped_pos[0], ped_pos[1], x2, y2)
         obst_dist = max(min(d1, d2) - ped_radius, coll_dist)
         closer_obst_bound = (x1, y1) if d1 < d2 else (x2, y2)
-        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos,
-                                                     closer_obst_bound,
-                                                     obst_dist)
+        dx_obst_dist, dy_obst_dist = der_euclid_dist(ped_pos, closer_obst_bound, obst_dist)
         return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
     # Case 1: Orthogonal projection hits within the obstacle segment.
     cross_x, cross_y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
-    obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], cross_x, cross_y) -
-                    ped_radius, coll_dist)
+    obst_dist = max(euclid_dist(ped_pos[0], ped_pos[1], cross_x, cross_y) - ped_radius, coll_dist)
     # Compute derivatives of the intersection point with respect to ped_pos.
     dx3_cross_x = (y4 - y3) / den * (x2 - x1)
     dx3_cross_y = (y4 - y3) / den * (y2 - y1)
     dy3_cross_x = (x3 - x4) / den * (x2 - x1)
     dy3_cross_y = (x3 - x4) / den * (y2 - y1)
     # Compute derivatives of the obstacle distance with respect to ped_pos.
-    dx_obst_dist = ((cross_x - ped_pos[0]) * (dx3_cross_x - 1) +
-                    (cross_y - ped_pos[1]) * dx3_cross_y) / obst_dist
-    dy_obst_dist = ((cross_x - ped_pos[0]) * dy3_cross_x +
-                    (cross_y - ped_pos[1]) * (dy3_cross_y - 1)) / obst_dist
+    dx_obst_dist = (
+        (cross_x - ped_pos[0]) * (dx3_cross_x - 1) + (cross_y - ped_pos[1]) * dx3_cross_y
+    ) / obst_dist
+    dy_obst_dist = (
+        (cross_x - ped_pos[0]) * dy3_cross_x + (cross_y - ped_pos[1]) * (dy3_cross_y - 1)
+    ) / obst_dist
     return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
 
 @njit(fastmath=True)
-def potential_field_force(obst_dist: float, dx_obst_dist: float,
-                          dy_obst_dist: float) -> Tuple[float, float]:
+def potential_field_force(
+    obst_dist: float, dx_obst_dist: float, dy_obst_dist: float
+) -> tuple[float, float]:
     der_potential = 1 / pow(obst_dist, 3)
     return der_potential * dx_obst_dist, der_potential * dy_obst_dist
 
@@ -471,7 +483,7 @@ def euclid_dist_sq(x1: float, y1: float, x2: float, y2: float) -> float:
 
 
 @njit(fastmath=True)
-def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> Tuple[float, float]:
+def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> tuple[float, float]:
     # info: distance is an expensive operation and therefore pre-computed
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
@@ -501,7 +513,7 @@ class GroupCoherenceForceAlt:
         # Store the configuration for calculating coherence forces.
         self.config = config
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         # Initialize an array to store coherence forces for each pedestrian with zero values.
         forces = np.zeros((self.peds.size(), 2))
 
@@ -555,7 +567,7 @@ class GroupRepulsiveForce:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         # Retrieve the distance threshold from configuration where repulsive force is effective.
         threshold = self.config.threshold
         # Initialize a zero np.array to store repulsive forces for each pedestrian.
@@ -603,7 +615,7 @@ class GroupGazeForceAlt:
         self.config = config
         self.peds = peds
 
-    def __call__(self):
+    def __call__(self) -> np.ndarray:
         """
         Calculates and returns the group gaze forces for all pedestrian groups.
         This method allows an instance of the class to be called as a function.
@@ -632,17 +644,16 @@ class GroupGazeForceAlt:
                 continue
             # Compute the group gaze force for the current group and assign it to the forces array.
             forces[group, :] = group_gaze_force(
-                ped_positions[group, :], directions[group, :], dist[group])
+                ped_positions[group, :], directions[group, :], dist[group]
+            )
 
         return forces * self.config.factor
 
 
 @njit(fastmath=True)
 def group_gaze_force(
-    member_pos: np.ndarray,
-    member_directions: np.ndarray,
-    member_dist: np.ndarray
-        ) -> np.ndarray:
+    member_pos: np.ndarray, member_directions: np.ndarray, member_dist: np.ndarray
+) -> np.ndarray:
     """
     Calculates the group gaze force for each member in a group.
 
@@ -699,17 +710,17 @@ def group_gaze_force(
 
 @njit
 def vec_len_2d(vec_x: float, vec_y: float) -> float:
-    return (vec_x**2 + vec_y**2)**0.5
+    return (vec_x**2 + vec_y**2) ** 0.5
 
 
 @njit
-def normalize(vecs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Normalize nx2 array along the second axis
     input: [n,2] ndarray
     output: (normalized vectors, norm factors)
     """
     num_vecs = vecs.shape[0]
-    vec_lengths = np.zeros((num_vecs))
+    vec_lengths = np.zeros(num_vecs)
     unit_vecs = np.zeros((num_vecs, 2))
 
     for i, (vec_x, vec_y) in enumerate(vecs):
@@ -722,7 +733,7 @@ def normalize(vecs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 @njit
-def desired_directions(state: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def desired_directions(state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Given the current state and destination, compute desired direction."""
     destination_vectors = state[:, 4:6] - state[:, 0:2]
     directions, dist = normalize(destination_vectors)
@@ -751,7 +762,7 @@ def each_diff(vecs: np.ndarray, keepdims=False) -> np.ndarray:
 
 
 @njit
-def centroid(vecs: np.ndarray) -> Tuple[float, float]:
+def centroid(vecs: np.ndarray) -> tuple[float, float]:
     """
     Compute the centroid of a set of points in 2D space.
 
@@ -766,7 +777,7 @@ def centroid(vecs: np.ndarray) -> Tuple[float, float]:
     Tuple[float, float]: A tuple containing the x and y coordinates of the centroid.
     """
     # Check if the array is empty
-    if vecs.size == 0 or vecs.shape == (0, ):
+    if vecs.size == 0:
         raise ValueError("Input array is empty")
 
     # Determine the number of data points in the array

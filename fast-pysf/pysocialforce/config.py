@@ -1,5 +1,7 @@
 """Config"""
+
 from dataclasses import dataclass, field
+
 from pysocialforce.ped_population import PedSpawnConfig
 
 
@@ -58,9 +60,11 @@ class ObstacleForceConfig:
 class SimulatorConfig:
     scene_config: SceneConfig = field(default_factory=SceneConfig)
     group_coherence_force_config: GroupCoherenceForceConfig = field(
-        default_factory=GroupCoherenceForceConfig)
+        default_factory=GroupCoherenceForceConfig
+    )
     group_repulsive_force_config: GroupReplusiveForceConfig = field(
-        default_factory=GroupReplusiveForceConfig)
+        default_factory=GroupReplusiveForceConfig
+    )
     group_gaze_force_config: GroupGazeForceConfig = field(default_factory=GroupGazeForceConfig)
     desired_force_config: DesiredForceConfig = field(default_factory=DesiredForceConfig)
     social_force_config: SocialForceConfig = field(default_factory=SocialForceConfig)

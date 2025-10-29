@@ -1,0 +1,275 @@
+warning[possibly-missing-attribute]: Attribute `reshape` may be missing on object of type `Unknown | None`
+   --> fast-pysf/pysocialforce/forces.py:114:25
+    |
+112 |         # calculate the force based on the desired speed and current velocity
+113 |         force[dist > goal_threshold] = (
+114 |             direction * self.peds.max_speeds.reshape((-1, 1)) - vel.reshape((-1, 2))
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+115 |         )[dist > goal_threshold, :]
+    |
+info: rule `possibly-missing-attribute` is enabled by default
+
+error[no-matching-overload]: No overload of function `field` matches arguments
+  --> fast-pysf/pysocialforce/sim_view.py:78:30
+   |
+76 |     scaling: float = 15
+77 |     ped_radius: float = 0.4
+78 |     map_def: MapDefinition = field(default_factory=MapDefinition)
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+79 |     size_changed: bool = field(init=False, default=False)
+80 |     is_exit_requested: bool = field(init=False, default=False)
+   |
+info: First overload defined here
+   --> stdlib/dataclasses.pyi:403:9
+    |
+401 |   elif sys.version_info >= (3, 10):
+402 |       @overload  # `default` and `default_factory` are optional and mutually exclusive.
+403 |       def field(
+    |  _________^
+404 | |         *,
+405 | |         default: _T,
+406 | |         default_factory: Literal[_MISSING_TYPE.MISSING] = ...,
+407 | |         init: bool = True,
+408 | |         repr: bool = True,
+409 | |         hash: bool | None = None,
+410 | |         compare: bool = True,
+411 | |         metadata: Mapping[Any, Any] | None = None,
+412 | |         kw_only: bool | Literal[_MISSING_TYPE.MISSING] = ...,
+413 | |     ) -> _T:
+    | |___________^
+414 |           """Return an object to identify dataclass fields.
+    |
+info: Possible overloads for function `field`:
+info:   (*, default: _T@field, default_factory: Literal[_MISSING_TYPE.MISSING] = EllipsisType, init: bool = Literal[True], repr: bool = Literal[True], hash: bool | None = None, compare: bool = Literal[True], metadata: Mapping[Any, Any] | None = None, kw_only: bool | _MISSING_TYPE = EllipsisType) -> _T@field
+info:   (*, default: Literal[_MISSING_TYPE.MISSING] = EllipsisType, default_factory: () -> _T@field, init: bool = Literal[True], repr: bool = Literal[True], hash: bool | None = None, compare: bool = Literal[True], metadata: Mapping[Any, Any] | None = None, kw_only: bool | _MISSING_TYPE = EllipsisType) -> _T@field
+info:   (*, default: Literal[_MISSING_TYPE.MISSING] = EllipsisType, default_factory: Literal[_MISSING_TYPE.MISSING] = EllipsisType, init: bool = Literal[True], repr: bool = Literal[True], hash: bool | None = None, compare: bool = Literal[True], metadata: Mapping[Any, Any] | None = None, kw_only: bool | _MISSING_TYPE = EllipsisType) -> Any
+info: rule `no-matching-overload` is enabled by default
+
+error[invalid-type-form]: Variable of type `Overload[(object: _ArrayType@array, dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: Literal[True], ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> _ArrayType@array, (object: _SupportsArray[_ArrayType@array], dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: Literal[True], ndmin: Literal[0] = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> _ArrayType@array, (object: @Todo, dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo, (object: object, dtype: None = EllipsisType, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo, (object: Any, dtype: @Todo, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo, (object: Any, dtype: @Todo, *, copy: None | bool | _CopyMode = EllipsisType, order: @Todo = EllipsisType, subok: bool = EllipsisType, ndmin: int = EllipsisType, like: None | _SupportsArrayFunc = EllipsisType) -> @Todo]` is not allowed in a type expression
+  --> fast-pysf/pysocialforce/sim_view.py:85:13
+   |
+83 |     font: pygame.font.Font = field(init=False)
+84 |     redraw_needed: bool = field(init=False, default=False)
+85 |     offset: np.array = field(default_factory=np.array([0, 0]))
+   |             ^^^^^^^^
+86 |
+87 |     @property
+   |
+info: rule `invalid-type-form` is enabled by default
+
+error[invalid-assignment]: Object of type `tuple[VisualizableSimState, tuple[int | float, int | float]]` is not assignable to `VisualizableSimState`
+   --> fast-pysf/pysocialforce/sim_view.py:230:9
+    |
+228 |             self.surface_obstacles = self.preprocess_obstacles()
+229 |             self.redraw_needed = False
+230 |         state = self._scale_pedestrian_state(state)
+    |         ^^^^^
+231 |
+232 |         # static objects
+    |
+info: rule `invalid-assignment` is enabled by default
+
+error[invalid-return-type]: Return type does not match returned value
+   --> fast-pysf/pysocialforce/sim_view.py:251:10
+    |
+249 |     def _scale_pedestrian_state(
+250 |         self, state: VisualizableSimState
+251 |     ) -> tuple[VisualizableSimState, tuple[float, float]]:
+    |          ------------------------------------------------ Expected `tuple[VisualizableSimState, tuple[int | float, int | float]]` because of return type
+252 |         state.pedestrian_positions *= self.scaling
+253 |         state.ped_actions *= self.scaling
+254 |         return state
+    |                ^^^^^ expected `tuple[VisualizableSimState, tuple[int | float, int | float]]`, found `VisualizableSimState`
+255 |
+256 |     def _draw_pedestrians(self, ped_pos: np.ndarray):
+    |
+info: rule `invalid-return-type` is enabled by default
+
+error[invalid-argument-type]: Argument to function `__new__` is incorrect
+   --> fast-pysf/pysocialforce/sim_view.py:323:62
+    |
+321 |         # draw the vertical lines
+322 |         start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
+323 |         for x in range(start_x, self.width - self.offset[0], scaled_grid_size):
+    |                                                              ^^^^^^^^^^^^^^^^ Expected `SupportsIndex`, found `int | float`
+324 |             pygame.draw.line(
+325 |                 self.screen, grid_color, (x + self.offset[0], 0), (x + self.offset[0], self.height)
+    |
+info: Matching overload defined here
+    --> stdlib/builtins.pyi:3259:9
+     |
+3257 |     def __new__(cls, stop: SupportsIndex, /) -> Self: ...
+3258 |     @overload
+3259 |     def __new__(cls, start: SupportsIndex, stop: SupportsIndex, step: SupportsIndex = 1, /) -> Self: ...
+     |         ^^^^^^^                                                 ----------------------- Parameter declared here
+3260 |     def count(self, value: int, /) -> int:
+3261 |         """rangeobject.count(value) -> integer -- return number of occurrences of value"""
+     |
+info: Non-matching overloads for function `__new__`:
+info:   (cls, stop: SupportsIndex, /) -> Self@__new__
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to function `__new__` is incorrect
+   --> fast-pysf/pysocialforce/sim_view.py:332:63
+    |
+330 |         # draw the horizontal lines
+331 |         start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
+332 |         for y in range(start_y, self.height - self.offset[1], scaled_grid_size):
+    |                                                               ^^^^^^^^^^^^^^^^ Expected `SupportsIndex`, found `int | float`
+333 |             pygame.draw.line(
+334 |                 self.screen, grid_color, (0, y + self.offset[1]), (self.width, y + self.offset[1])
+    |
+info: Matching overload defined here
+    --> stdlib/builtins.pyi:3259:9
+     |
+3257 |     def __new__(cls, stop: SupportsIndex, /) -> Self: ...
+3258 |     @overload
+3259 |     def __new__(cls, start: SupportsIndex, stop: SupportsIndex, step: SupportsIndex = 1, /) -> Self: ...
+     |         ^^^^^^^                                                 ----------------------- Parameter declared here
+3260 |     def count(self, value: int, /) -> int:
+3261 |         """rangeobject.count(value) -> integer -- return number of occurrences of value"""
+     |
+info: Non-matching overloads for function `__new__`:
+info:   (cls, stop: SupportsIndex, /) -> Self@__new__
+info: rule `invalid-argument-type` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:32:71
+   |
+32 | def make_forces(sim: pysf.Simulator, config: SimulatorConfig) -> list[pysf.forces.Force]:
+   |                                                                       ^^^^^^^^^^^
+33 |     """Initialize forces required for simulation."""
+34 |     enable_group = config.scene_config.enable_group
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:36:9
+   |
+34 |     enable_group = config.scene_config.enable_group
+35 |     force_list = [
+36 |         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+37 |         pysf.forces.SocialForce(config.social_force_config, sim.peds),
+38 |         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:37:9
+   |
+35 |     force_list = [
+36 |         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
+37 |         pysf.forces.SocialForce(config.social_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+38 |         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+39 |     ]
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:38:9
+   |
+36 |         pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
+37 |         pysf.forces.SocialForce(config.social_force_config, sim.peds),
+38 |         pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+   |         ^^^^^^^^^^^
+39 |     ]
+40 |     group_forces = [
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:41:9
+   |
+39 |     ]
+40 |     group_forces = [
+41 |         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+42 |         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+43 |         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:42:9
+   |
+40 |     group_forces = [
+41 |         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+42 |         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+43 |         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+44 |     ]
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[unresolved-attribute]: Module `pysocialforce` has no member `forces`
+  --> fast-pysf/pysocialforce/simulator.py:43:9
+   |
+41 |         pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+42 |         pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+43 |         pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+   |         ^^^^^^^^^^^
+44 |     ]
+45 |     return force_list + group_forces if enable_group else force_list
+   |
+info: rule `unresolved-attribute` is enabled by default
+
+error[invalid-argument-type]: Argument is incorrect
+  --> fast-pysf/pysocialforce/simulator.py:77:29
+   |
+75 |             else None
+76 |         )
+77 |         self.env = EnvState(obstacles, self.config.scene_config.resolution)
+   |                             ^^^^^^^^^ Expected `list[tuple[int | float, int | float, int | float, int | float]]`, found `list[@Todo] | None`
+78 |         self.peds = PedState(
+79 |             self.states.raw_states, self.groupings.groups_as_lists, self.config.scene_config
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument is incorrect
+  --> fast-pysf/pysocialforce/simulator.py:81:35
+   |
+79 |             self.states.raw_states, self.groupings.groups_as_lists, self.config.scene_config
+80 |         )
+81 |         self.forces = make_forces(self, config)
+   |                                   ^^^^ Expected `Simulator`, found `Self@__init__`
+82 |         self.t = 0
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument is incorrect
+   --> fast-pysf/pysocialforce/simulator.py:170:29
+    |
+168 |         self.on_step = on_step
+169 |         resolution = self.config.scene_config.resolution
+170 |         self.env = EnvState(obstacles, resolution)
+    |                             ^^^^^^^^^ Expected `list[tuple[int | float, int | float, int | float, int | float]]`, found `list[tuple[int | float, int | float, int | float, int | float]] | None`
+171 |         self.peds = PedState(state, groups, self.config.scene_config)
+172 |         self.forces = make_forces(self, config)
+    |
+info: rule `invalid-argument-type` is enabled by default
+
+error[invalid-argument-type]: Argument to bound method `__init__` is incorrect
+   --> fast-pysf/pysocialforce/simulator.py:171:37
+    |
+169 |         resolution = self.config.scene_config.resolution
+170 |         self.env = EnvState(obstacles, resolution)
+171 |         self.peds = PedState(state, groups, self.config.scene_config)
+    |                                     ^^^^^^ Expected `list[list[int]]`, found `list[list[int]] | None`
+172 |         self.forces = make_forces(self, config)
+173 |         self.t = 0
+    |
+info: Method defined here
+  --> fast-pysf/pysocialforce/scene.py:19:9
+   |
+17 |     """Tracks the state of pedstrains and social groups"""
+18 |
+19 |     def __init__(self, state: np.ndarray, groups: list[Group], config: SceneConfig):
+   |         ^^^^^^^^                          ------------------- Parameter declared here
+20 |         self.default_tau = config.tau
+21 |         self.d_t = config.dt_secs
+   |
+info: rule `invalid-argument-type` is enabled by default
+
+Found 18 diagnostics

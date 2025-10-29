@@ -1,38 +1,36 @@
 """This module tracks the state of scene and scene elements
 like pedestrians, groups and obstacles"""
 
-from math import cos, sin, atan2, pi
-from typing import List, Tuple
 from dataclasses import dataclass, field
+from math import atan2, cos, pi, sin
 
 import numpy as np
 
 from pysocialforce.config import SceneConfig
 
-
-Line2D = Tuple[float, float, float, float]
-Point2D = Tuple[float, float]
-Group = List[int]
+Line2D = tuple[float, float, float, float]
+Point2D = tuple[float, float]
+Group = list[int]
 
 
 class PedState:
     """Tracks the state of pedstrains and social groups"""
 
-    def __init__(self, state: np.ndarray, groups: List[Group], config: SceneConfig):
+    def __init__(self, state: np.ndarray, groups: list[Group], config: SceneConfig):
         self.default_tau = config.tau
         self.d_t = config.dt_secs
         self.agent_radius = config.agent_radius
         self.max_speed_multiplier = config.max_speed_multiplier
 
-        self.max_speeds = None
-        self.initial_speeds = None
+        self.max_speeds: np.ndarray | None = None
+        self.initial_speeds: np.ndarray | None = None
         self.update(state, groups)
 
-    def update(self, state: np.ndarray, groups: List[List[int]]):
+    def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
         self.state = state
         self.groups = groups
 
-    def _update_state(self, state: np.ndarray):
+    def _update_state(self, state: np.ndarray) -> None:
         tau = np.full((state.shape[0]), self.default_tau)
         if state.shape[1] < 7:
             self._state = np.concatenate((state, np.expand_dims(tau, -1)), axis=-1)
@@ -50,7 +48,7 @@ class PedState:
     def state(self, state: np.ndarray):
         self._update_state(state)
 
-    def get_states(self):
+    def get_states(self) -> tuple[np.ndarray, list[list[list[int]]]]:
         return np.array([self.state]), [self.groups]
 
     def size(self) -> int:
@@ -65,10 +63,10 @@ class PedState:
     def goal(self) -> np.ndarray:
         return self.state[:, 4:6]
 
-    def tau(self):
+    def tau(self) -> np.ndarray:
         return self.state[:, 6:7]
 
-    def speeds(self):
+    def speeds(self) -> np.ndarray:
         """Return the speeds corresponding to a given state."""
         return np.linalg.norm(self.vel(), axis=1)
 
@@ -87,9 +85,6 @@ class PedState:
         next_groups = groups if groups is not None else self.groups
         self.update(next_state, next_groups)
 
-    # def desired_directions(self):
-    #     return stateutils.desired_directions(self.state)[0]
-
     @staticmethod
     def capped_velocity(desired_velocity, max_velocity):
         """Scale down a desired velocity to its capped speed."""
@@ -99,11 +94,11 @@ class PedState:
         return desired_velocity * np.expand_dims(factor, -1)
 
     @property
-    def groups(self) -> List[List]:
+    def groups(self) -> list[list]:
         return self._groups
 
     @groups.setter
-    def groups(self, groups: List[List]):
+    def groups(self, groups: list[list]):
         if groups is None:
             self._groups = []
         else:
@@ -123,9 +118,10 @@ class PedState:
 @dataclass
 class EnvState:
     """State of the environment obstacles"""
-    _orig_obstacles: List[Line2D]
+
+    _orig_obstacles: list[Line2D]
     _resolution: float = 10
-    _obstacles_linspace: List[np.ndarray] = field(init=False)
+    _obstacles_linspace: list[np.ndarray] = field(init=False)
     _obstacles_raw: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -141,32 +137,38 @@ class EnvState:
         return self._obstacles_raw
 
     @property
-    def obstacles(self) -> List[np.ndarray]:
+    def obstacles(self) -> list[np.ndarray]:
         """a list of np.ndarrays, each representing a uniform
         linspace of 0.1 steps between |p_start, p_end|"""
         return self._obstacles_linspace
 
     @obstacles.setter
-    def obstacles(self, obstacles: List[Line2D]):
+    def obstacles(self, obstacles: list[Line2D]):
         """Input an list of (start_x, end_x, start_y, end_y) as start and end of a line"""
         self._orig_obstacles = obstacles
         self._obstacles_raw = self._update_obstacles_raw(obstacles)
         self._obstacles_linspace = self._update_obstacles_linspace(obstacles)
 
-    def _update_obstacles_linspace(self, obs_lines: List[Line2D]) -> List[np.ndarray]:
+    def _update_obstacles_linspace(self, obs_lines: list[Line2D]) -> list[np.ndarray]:
         if obs_lines is None:
             obstacles = []
         else:
             obstacles = []
             for start_x, end_x, start_y, end_y in obs_lines:
                 samples = int(np.linalg.norm((start_x - end_x, start_y - end_y)) * self._resolution)
-                line = np.array(list(zip(
-                    np.linspace(start_x, end_x, samples),
-                    np.linspace(start_y, end_y, samples))))
+                line = np.array(
+                    list(
+                        zip(
+                            np.linspace(start_x, end_x, samples),
+                            np.linspace(start_y, end_y, samples),
+                            strict=False,
+                        )
+                    )
+                )
                 obstacles.append(line)
         return obstacles
 
-    def _update_obstacles_raw(self, obs_lines: List[Line2D]) -> np.ndarray:
+    def _update_obstacles_raw(self, obs_lines: list[Line2D]) -> np.ndarray:
         def orient(line):
             start_x, end_x, start_y, end_y = line
             vec_x, vec_y = end_x - start_x, end_y - start_y
@@ -183,8 +185,9 @@ class EnvState:
         ortho_vecs = np.array([unit_vec(orient) for orient in ortho_orients])
 
         obstacles = np.zeros((len(obs_lines), 6))
-        obstacles[:, :4] = [[start_x, start_y, end_x, end_y]
-                            for start_x, end_x, start_y, end_y in obs_lines]
+        obstacles[:, :4] = [
+            [start_x, start_y, end_x, end_y] for start_x, end_x, start_y, end_y in obs_lines
+        ]
         obstacles[:, 4:] = ortho_vecs
 
         return obstacles

@@ -1,23 +1,18 @@
 import numpy as np
 import pytest
-
-from pysocialforce.config import SimulatorConfig
-from pysocialforce.ped_grouping import PedestrianStates, PedestrianGroupings
-from pysocialforce.map_config import MapDefinition
-from pysocialforce import forces
 from pysocialforce import Simulator_v2 as Simulator
+from pysocialforce import forces
+from pysocialforce.config import SimulatorConfig
+from pysocialforce.map_config import MapDefinition
+from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 
 
 @pytest.fixture()
 def generate_scene():
     raw_states = np.zeros((5, 7))
-    raw_states[:, :4] = np.array([
-        [1, 1, 1, 0],
-        [1, 1.1, 0, 1],
-        [3, 3, 1, 1],
-        [3, 3.01, 1, 2],
-        [3, 4, 3, 1]
-        ])
+    raw_states[:, :4] = np.array(
+        [[1, 1, 1, 0], [1, 1.1, 0, 1], [3, 3, 1, 1], [3, 3.01, 1, 2], [3, 4, 3, 1]]
+    )
 
     def populate(sim_config: SimulatorConfig, map_def: MapDefinition):
         states = PedestrianStates(raw_states)
@@ -32,13 +27,9 @@ def generate_scene():
 def generate_scene_with_groups():
     groups = {0: {1, 0}, 1: {3, 2}}
     raw_states = np.zeros((5, 7))
-    raw_states[:, :4] = np.array([
-        [1, 1, 1, 0],
-        [1, 1.1, 0, 1],
-        [3, 3, 1, 1],
-        [3, 3.01, 1, 2],
-        [3, 4, 3, 1]
-        ])
+    raw_states[:, :4] = np.array(
+        [[1, 1, 1, 0], [1, 1.1, 0, 1], [3, 3, 1, 1], [3, 3.01, 1, 2], [3, 4, 3, 1]]
+    )
 
     def populate(sim_config: SimulatorConfig, map_def: MapDefinition):
         states = PedestrianStates(raw_states)
@@ -62,9 +53,9 @@ def test_desired_force(generate_scene: Simulator):
                 [-4.6, -4.6],
                 [-6.10411508, -8.11779546],
                 [-10.93315315, -8.57753753],
-                ]
-            )
+            ]
         )
+    )
 
 
 def test_social_force(generate_scene: Simulator):
@@ -80,9 +71,9 @@ def test_social_force(generate_scene: Simulator):
                 [7.86014187e-03, 1.66840389e-04],
                 [7.70524167e-03, -3.03788477e-05],
                 [9.12767677e-06, 1.23117582e-05],
-                ]
-            )
+            ]
         )
+    )
 
 
 def test_group_rep_force(generate_scene_with_groups: Simulator):
@@ -90,9 +81,10 @@ def test_group_rep_force(generate_scene_with_groups: Simulator):
     print(scene)
     config = scene.config
     scene.peds.groups = [[1, 0], [3, 2]]
-    f = forces.DebuggableForce(forces.GroupRepulsiveForce(
-        config.group_repulsive_force_config, scene.peds))
+    f = forces.DebuggableForce(
+        forces.GroupRepulsiveForce(config.group_repulsive_force_config, scene.peds)
+    )
     config.group_repulsive_force_config.factor = 1.0
     assert f(debug=True) == pytest.approx(
         np.array([[0.0, -0.1], [0.0, 0.1], [0.0, -0.01], [0.0, 0.01], [0.0, 0.0]])
-        )
+    )

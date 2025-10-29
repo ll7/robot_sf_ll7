@@ -1,4 +1,5 @@
 """General utilities"""
+
 import logging
 from functools import wraps
 from time import time
@@ -31,7 +32,7 @@ def timeit(f):
         ts = time()
         result = f(*args, **kw)
         te = time()
-        logger.debug(f"Timeit: {f.__name__}({args}, {kw}), took: {te-ts:2.4f} sec")
+        logger.debug(f"Timeit: {f.__name__}({args}, {kw}), took: {te - ts:2.4f} sec")
         return result
 
     return wrap

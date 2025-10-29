@@ -304,6 +304,8 @@ docstring-code-line-length = "dynamic"
 
 [tool.coverage.run]
 source = ["robot_sf", "fast-pysf/pysocialforce"]
+
+# Omit test files and non-library code from coverage measurement
 omit = [
     "*/tests/*",
     "*/test_*",

@@ -44,74 +44,141 @@ Integrate fast-pysf physics tests into the main pytest suite, resolve all 24 PR 
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+### Compliance Analysis
+
+**I. Reproducible Social Navigation Research Core**: ✅ PASS
+- Feature maintains reproducibility by unifying test execution
+- No changes to deterministic simulation or benchmark outputs
+- Test infrastructure improvements support reproducibility validation
+
+**II. Factory-Based Environment Abstraction**: ✅ PASS  
+- No changes to factory functions or environment interfaces
+- FastPysfWrapper integration point preserved
+- Quality improvements are internal to fast-pysf subtree
+
+**III. Benchmark & Metrics First**: ✅ PASS
+- No benchmark schema changes
+- PR review resolution includes test result verification (high priority issue)
+- Maintains structured episode output contracts
+
+**IV. Unified Configuration & Deterministic Seeds**: ✅ PASS
+- No configuration schema changes
+- Test infrastructure maintains seed propagation patterns
+- Quality tooling activation doesn't affect runtime determinism
+
+**V. Minimal, Documented Baselines**: ✅ PASS
+- No baseline algorithm changes
+- Documentation updates align with constitution requirement
+- Test integration validates baseline compatibility
+
+**VI. Metrics Transparency & Statistical Rigor**: ✅ PASS
+- No metrics computation changes
+- Test infrastructure supports metrics validation
+- Coverage reporting enhances transparency
+
+**VII. Backward Compatibility & Evolution Gates**: ✅ PASS
+- No breaking changes to public APIs
+- Internal quality improvements only
+- Test integration is additive (doesn't break existing tests)
+
+**VIII. Documentation as an API Surface**: ✅ PASS
+- Documentation updates planned (Phase 1, Task 1.3)
+- dev_guide.md and README.md to be updated
+- All changes will be documented in appropriate sections
+
+**IX. Test Coverage for Public Behavior**: ✅ PASS (ENHANCING)
+- Feature explicitly adds test coverage for fast-pysf
+- Target: coverage ≥70% for fast-pysf code
+- Integration tests validate unified test suite
+
+**X. Scope Discipline**: ✅ PASS
+- Strictly internal quality and testing improvements
+- No scope expansion beyond social navigation simulation
+- Fast-pysf remains focused on pedestrian physics
+
+**XI. Library Reuse & Helper Documentation**: ✅ PASS
+- PR review resolution includes documentation improvements (medium priority: placeholders, copy-paste docstrings)
+- Type annotation improvements will enhance API clarity
+- Helper documentation maintained in line with constitution
+
+**XII. Preferred Logging & Observability**: ✅ PASS
+- No logging framework changes in this feature
+- Fast-pysf subtree uses print statements (separate codebase, acceptable per constitution)
+- Robot_sf integration layer (FastPysfWrapper) already uses proper logging
+
+### Overall Gate Status: ✅ ALL GATES PASS
+
+No constitution violations. Feature is scoped as internal quality improvements that strengthen compliance with Principles VIII (Documentation), IX (Test Coverage), and XI (Helper Documentation).
+
+## Project Structure
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```
-specs/[###-feature]/
+specs/148-improve-fast-pysf/
 ├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+├── spec.md              # Feature specification (already created)
+├── implementation_plan.md  # Detailed 4-phase plan (already created)
+├── pr236_review_comments.md  # PR review analysis (already created)
+├── README.md            # Executive summary (already created)
+├── checklists/
+│   └── requirements.md  # Quality validation (already created)
+├── research.md          # Phase 0 output (to be created)
+├── data-model.md        # Phase 1 output (to be created)
+├── quickstart.md        # Phase 1 output (to be created)
+├── contracts/           # Phase 1 output (to be created)
+└── tasks.md             # Phase 2 output (/speckit.tasks - NOT created by /speckit.plan)
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+robot_sf_ll7/
+├── robot_sf/           # Main library (quality standards already applied)
+│   ├── gym_env/       # Factory functions and environments
+│   ├── sim/           # FastPysfWrapper integration point
+│   ├── benchmark/     # Runner and metrics
+│   └── ...
+├── fast-pysf/         # Git subtree (TARGET for quality improvements)
+│   ├── pysocialforce/ # Physics engine implementation
+│   │   ├── forces.py  # Force computations (PR review issues)
+│   │   ├── map_config.py  # Map configuration (PR review issues)
+│   │   ├── map_loader.py  # Map loading (failing tests)
+│   │   ├── map_loader_svg.py  # SVG map support (PR review issues)
+│   │   ├── map_osm_converter.py  # OSM conversion (PR review issues)
+│   │   ├── scene.py   # Scene management (PR review issues)
+│   │   └── simulator.py  # Main simulator (PR review issues)
+│   ├── tests/         # Test suite to be integrated
+│   │   ├── test_forces.py  # Force tests (3 pass)
+│   │   ├── test_map_loader.py  # Map loader tests (2 fail - missing fixtures)
+│   │   ├── test_simulator.py  # Simulator tests (2 pass)
+│   │   ├── unittest/
+│   │   │   └── test_forces.py  # Centroid tests (5 pass)
+│   │   └── test_maps/  # Test fixtures (MISSING - to be created/fixed)
+│   ├── examples/      # Demo scripts (PR review issues)
+│   ├── README.md      # Subtree documentation (PR review issues)
+│   └── .github/       # CI configuration (PR review issues)
+├── tests/             # Main test suite (~43 tests, all passing)
+├── test_pygame/       # GUI tests (separate suite)
+├── pyproject.toml     # Configuration (to be updated for pytest/ruff/coverage)
+├── .github/
+│   └── workflows/
+│       └── ci.yml     # CI pipeline (PR review issues)
+└── docs/
+    ├── dev_guide.md   # To be updated with test integration info
+    └── README.md      # To be updated with new test commands
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Single Python library with integrated subtree pattern. The fast-pysf/ directory is a git subtree (not submodule) containing the pedestrian physics engine. Quality improvements target fast-pysf/ while maintaining integration through robot_sf/sim/FastPysfWrapper.py. Test integration adds fast-pysf/tests/ to pytest discovery without restructuring existing layout.
 
 ## Complexity Tracking
 
-*Fill ONLY if Constitution Check has violations that must be justified*
+*This feature has NO constitution violations. Table left for reference.*
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| None | N/A | N/A |
+
+**Justification**: All improvements are internal quality enhancements that strengthen existing constitution compliance (Principles VIII, IX, XI). No additional complexity introduced.

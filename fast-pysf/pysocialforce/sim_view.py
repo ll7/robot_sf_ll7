@@ -71,8 +71,8 @@ class SimulationView:
         offset (np.array): The offset of the view.
     """
 
-    width: float = 1200
-    height: float = 800
+    width: int = 1200
+    height: int = 800
     scaling: float = 15
     ped_radius: float = 0.4
     map_def: MapDefinition = field(default_factory=MapDefinition)

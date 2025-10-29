@@ -35,12 +35,18 @@ class SimSettings:
         groups = []
 
         for gid in range(self.num_groups):
-            if spawned_peds > self.num_groups - gid:
+            remaining_peds = self.num_peds - spawned_peds
+            remaining_groups = self.num_groups - gid
+
+            if remaining_peds <= remaining_groups:
                 num_peds_on_group = 1
             elif gid == self.num_groups - 1:
-                num_peds_on_group = self.num_peds - spawned_peds
+                num_peds_on_group = remaining_peds
             else:
-                num_peds_on_group = round(np.random.normal(avg_peds_on_group))
+                # Sample candidate, ensure at least 1, then clamp to leave at least 1 per remaining group
+                candidate = max(1, int(round(np.random.normal(avg_peds_on_group))))
+                max_allowed = remaining_peds - (remaining_groups - 1)
+                num_peds_on_group = min(candidate, max_allowed)
 
             peds_pos_of_group = np.random.multivariate_normal(
                 group_centroids[gid], self.group_cov, num_peds_on_group

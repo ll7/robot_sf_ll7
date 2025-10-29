@@ -393,14 +393,21 @@ def obstacle_force(obstacle: Line2D,
     Args:
         obstacle: A tuple representing the endpoints (x1, y1, x2, y2) of the
                   line segment that forms the obstacle.
-        ortho_vec: A vector orthogonal to the direction of pedestrian movement.
-            # TODO Is this correct? Maybe the ortho_vec is orthogonal to the obstacle?
+        ortho_vec: A vector orthogonal to the pedestrian's direction of movement.
+                   This vector is used to construct a line from the pedestrian's
+                   position for intersection testing with the obstacle. The intersection
+                   point determines the closest approach vector to the obstacle.
         ped_pos: The current position (x, y) of the pedestrian.
         ped_radius: The radius of the pedestrian (used for collision avoidance).
 
     Returns:
         A tuple (force_x, force_y) representing the x and y components of the
         repulsive force exerted by the obstacle on the pedestrian.
+
+    Note:
+        The ortho_vec parameter represents a direction perpendicular to the pedestrian's
+        movement, not to the obstacle. It's used to compute geometric intersection points
+        for determining the nearest obstacle location relative to the pedestrian's trajectory.
     """
 
     # Minimum distance to consider for collision calculations.

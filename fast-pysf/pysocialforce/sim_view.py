@@ -76,7 +76,7 @@ class SimulationView:
     height: int = 800
     scaling: float = 15
     ped_radius: float = 0.4
-    map_def: MapDefinition = field(default_factory=MapDefinition)
+    map_def: MapDefinition = field(default_factory=lambda: MapDefinition([], [], []))
     size_changed: bool = field(init=False, default=False)
     is_exit_requested: bool = field(init=False, default=False)
     is_abortion_requested: bool = field(init=False, default=False)
@@ -247,9 +247,7 @@ class SimulationView:
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
-    def _scale_pedestrian_state(
-        self, state: VisualizableSimState
-    ) -> tuple[VisualizableSimState, tuple[float, float]]:
+    def _scale_pedestrian_state(self, state: VisualizableSimState) -> VisualizableSimState:
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
         return state
@@ -317,11 +315,13 @@ class SimulationView:
         :param grid_increment: The increment of the grid in pixels.
         :param grid_color: The color of the grid lines.
         """
-        scaled_grid_size = grid_increment * self.scaling
+        # Use integer pixel values for grid computations
+        scaled_grid_size = max(1, int(grid_increment * self.scaling))
         font = pygame.font.Font(None, 24)
         # draw the vertical lines
-        start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
-        for x in range(start_x, self.width - self.offset[0], scaled_grid_size):
+        start_x = int(((-int(self.offset[0])) // scaled_grid_size) * scaled_grid_size)
+        end_x = int(self.width - self.offset[0])
+        for x in range(start_x, end_x, scaled_grid_size):
             pygame.draw.line(
                 self.screen, grid_color, (x + self.offset[0], 0), (x + self.offset[0], self.height)
             )
@@ -329,8 +329,9 @@ class SimulationView:
             self.screen.blit(label, (x + self.offset[0], 0))
 
         # draw the horizontal lines
-        start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
-        for y in range(start_y, self.height - self.offset[1], scaled_grid_size):
+        start_y = int(((-int(self.offset[1])) // scaled_grid_size) * scaled_grid_size)
+        end_y = int(self.height - self.offset[1])
+        for y in range(start_y, end_y, scaled_grid_size):
             pygame.draw.line(
                 self.screen, grid_color, (0, y + self.offset[1]), (self.width, y + self.offset[1])
             )

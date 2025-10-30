@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 
+from robot_sf.common.errors import raise_fatal_with_remedy
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import SvgCircle, SvgPath, SvgRectangle
@@ -40,9 +41,20 @@ class SvgMapConverter:
         """
         logger.info(f"Loading the root of the SVG file: {self.svg_file_str}")
 
-        # Parse the SVG file
-        svg_tree = ET.parse(self.svg_file_str)
-        self.svg_root = svg_tree.getroot()
+        # Parse the SVG file with actionable error handling
+        try:
+            svg_tree = ET.parse(self.svg_file_str)
+            self.svg_root = svg_tree.getroot()
+        except FileNotFoundError:
+            raise_fatal_with_remedy(
+                f"Map file not found: {self.svg_file_str}",
+                f"Place SVG map at '{self.svg_file_str}' or check available maps in maps/svg_maps/",
+            )
+        except ET.ParseError as e:
+            raise_fatal_with_remedy(
+                f"Invalid SVG format in {self.svg_file_str}: {e}",
+                "Ensure the SVG file is valid XML (use Inkscape or check XML syntax)",
+            )
 
     def _parse_path_element(
         self, path: ET.Element, coordinate_pattern: re.Pattern

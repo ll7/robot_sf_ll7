@@ -11,6 +11,10 @@ from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSet
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
+from robot_sf.sensor.fusion_adapter import (
+    MergedObservationFusion,
+    create_sensors_from_config,
+)
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
 from robot_sf.sensor.image_sensor import image_sensor_space
 from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
@@ -56,8 +60,8 @@ def init_collision_and_sensors(
         ContinuousOccupancy(
             sim.map_def.width,
             sim.map_def.height,
-            lambda: sim.robot_pos[i],
-            lambda: sim.goal_pos[i],
+            (lambda idx=i: sim.robot_pos[idx]),
+            (lambda idx=i: sim.goal_pos[idx]),
             lambda: sim.pysf_sim.env.obstacles_raw[:, :4],
             lambda: sim.ped_pos,
             robot_config.radius,
@@ -85,15 +89,31 @@ def init_collision_and_sensors(
             return sim.robots[r_id].current_speed
 
         # Create the sensor fusion object and add it to the list
-        sensor_fusions.append(
-            SensorFusion(
-                ray_sensor,
-                speed_sensor,
-                target_sensor,
-                orig_obs_space,
-                sim_config.use_next_goal,
-            ),
+        base_fusion = SensorFusion(
+            ray_sensor,
+            speed_sensor,
+            target_sensor,
+            orig_obs_space,
+            sim_config.use_next_goal,
         )
+
+        # Optionally augment with registry-defined sensors via adapter
+        sensor_cfgs: list[dict] = getattr(env_config, "sensors", []) or []
+        if len(sensor_cfgs) > 0:
+            sensors = create_sensors_from_config(sensor_cfgs)
+            names = [
+                cfg.get("name", cfg.get("type", f"s{idx}")) for idx, cfg in enumerate(sensor_cfgs)
+            ]
+            wrapped = MergedObservationFusion(
+                base_fusion,
+                sensors,
+                names,
+                sim=sim,
+                robot_id=r_id,
+            )
+            sensor_fusions.append(wrapped)  # type: ignore[list-item]
+        else:
+            sensor_fusions.append(base_fusion)
 
     return occupancies, sensor_fusions
 
@@ -160,6 +180,34 @@ def create_spaces(
         target_sensor_space(map_def.max_target_dist),
         lidar_sensor_space(env_config.lidar_config.num_rays, env_config.lidar_config.max_scan_dist),
     )
+    # If registry-defined sensors are configured, extend spaces with their declared spaces
+    sensor_cfgs: list[dict] = getattr(env_config, "sensors", []) or []
+    if len(sensor_cfgs) > 0:
+        # Convert to mutable dict and extend
+        orig_dict = dict(orig_obs_space.spaces)
+        norm_dict = dict(observation_space.spaces)
+        for cfg in sensor_cfgs:
+            name = cfg.get("name", cfg.get("type", "sensor"))
+            space_cfg = cfg.get("space")
+            if not space_cfg:
+                # Skip sensors without declared space to avoid invalid spaces
+                continue
+            shape = tuple(space_cfg.get("shape", []))
+            low = space_cfg.get("low", 0.0)
+            high = space_cfg.get("high", 1.0)
+            dtype = np.float32
+            low_arr = np.array(low, dtype=dtype)
+            high_arr = np.array(high, dtype=dtype)
+            # Broadcast to shape if provided
+            if shape:
+                low_arr = np.broadcast_to(low_arr, shape).astype(dtype, copy=False)
+                high_arr = np.broadcast_to(high_arr, shape).astype(dtype, copy=False)
+            box = spaces.Box(low=low_arr, high=high_arr, dtype=dtype)
+            key = f"custom.{name}"
+            orig_dict[key] = box
+            norm_dict[key] = box
+        orig_obs_space = spaces.Dict(orig_dict)
+        observation_space = spaces.Dict(norm_dict)
     return action_space, observation_space, orig_obs_space
 
 

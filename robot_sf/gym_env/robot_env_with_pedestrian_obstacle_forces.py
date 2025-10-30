@@ -4,6 +4,7 @@ Create a robot environment with pedestrian obstacle forces
 
 from loguru import logger
 
+from robot_sf.common.errors import raise_fatal_with_remedy
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.nav.map_config import MapDefinitionPool
@@ -29,11 +30,16 @@ class RobotEnvWithPedestrianObstacleForces(RobotEnv):
             try:
                 map_def = convert_map(default_map_path)
             except FileNotFoundError:
-                logger.error(f"Default map not found at {default_map_path}")
-                raise
-            except Exception as e:
-                logger.error(f"Failed to load default map: {e!s}")
-                raise
+                raise_fatal_with_remedy(
+                    f"Default map not found at {default_map_path}",
+                    "Place the map file at 'maps/svg_maps/example_map_with_obstacles.svg' "
+                    "or provide a map_def explicitly when creating the environment",
+                )
+            except (RuntimeError, ValueError) as e:
+                raise_fatal_with_remedy(
+                    f"Failed to load default map: {e!s}",
+                    "Check map file validity and path; see docs/SVG_MAP_EDITOR.md for map creation",
+                )
 
         # create map pool with one map
         map_pool = MapDefinitionPool(map_defs={"my_map": map_def})

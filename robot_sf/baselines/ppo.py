@@ -37,6 +37,7 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
 from robot_sf.baselines.social_force import Observation
+from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 
 
 @dataclass
@@ -93,19 +94,45 @@ class PPOPlanner:
 
     def _load_model(self) -> None:
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
+            warn_soft_degrade(
+                "PPO",
+                "stable_baselines3 not installed",
+                "will use fallback-to-goal if enabled",
+            )
             self._model = None
             return
         mp = Path(self.config.model_path)
         if not mp.exists():
-            # Delay error until predict; allow smoke tests to run with fallback
-            self._model = None
-            return
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "PPO model",
+                    f"Model not found at {mp}",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                return
+            raise_fatal_with_remedy(
+                f"PPO model file not found: {mp}",
+                f"Place model at '{mp}' or check available models in model/ directory. "
+                "Download from releases or train with scripts/training_ppo.py",
+            )
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
-        except (RuntimeError, ValueError, OSError):
-            # Defer to fallback on typical load/pickle errors
-            self._model = None
+        except (RuntimeError, ValueError, OSError) as e:
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "PPO model",
+                    f"Failed to load model: {e}",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                return
+            raise_fatal_with_remedy(
+                f"Failed to load PPO model from {mp}: {e}",
+                "Check model compatibility with current stable_baselines3 version. "
+                "Re-train if needed using scripts/training_ppo.py",
+            )
 
     def reset(self, *, seed: int | None = None) -> None:
         # No RNN state; just update seed and keep model

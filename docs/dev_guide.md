@@ -79,6 +79,34 @@ config.peds_have_obstacle_forces = True  # Enable ped-robot physics interaction
 env = make_robot_env(config=config)
 ```
 
+### Backend selection (simulator swap)
+The simulation backend can be selected via configuration without modifying environment code. Available backends are registered in `robot_sf.sim.registry`:
+
+```python
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+# Use fast-pysf backend (default)
+config = RobotSimulationConfig()
+config.backend = "fast-pysf"  # Default; can be omitted
+env = make_robot_env(config=config)
+
+# Use dummy backend (for testing)
+config = RobotSimulationConfig()
+config.backend = "dummy"
+env = make_robot_env(config=config)
+```
+
+**Available backends:**
+- `"fast-pysf"` (default): SocialForce pedestrian simulation via fast-pysf subtree
+- `"dummy"`: Minimal test simulator with constant positions (for smoke tests)
+
+**Backend registration:**
+Custom backends can be registered via `robot_sf.sim.registry.register_backend()`. See `robot_sf/sim/backends/` for implementation examples.
+
+**Error handling:**
+Unknown backend names fall back to legacy `init_simulators()` with a warning. For strict validation, use `robot_sf.gym_env.config_validation.validate_config()` before environment creation.
+
 ## Design and development workflow recommendations
 
 - Clarify exact requirements before starting implementation.

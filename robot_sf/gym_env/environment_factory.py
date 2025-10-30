@@ -60,6 +60,7 @@ except (ImportError, ModuleNotFoundError):
     RobotEnvWithImage = None  # type: ignore
 
 from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
+from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import (
@@ -195,6 +196,27 @@ def _apply_recording(mapped: dict[str, Any], rec: RecordingOptions | None):
     return rec
 
 
+def _validate_and_log_config(config: Any) -> None:
+    """Validate configuration and log resolved config for reproducibility.
+
+    Extracted helper to avoid duplication across factory functions (addresses
+    CodeRabbit review feedback on T030/T031 duplication).
+    """
+    if config is None:
+        return
+
+    validate_config(config, strict=True)
+    resolved = get_resolved_config_dict(config)
+    # Log resolved config for reproducibility (T031)
+    logger.info(
+        "Resolved config: type={} backend={} sensors={}",
+        type(config).__name__,
+        resolved.get("backend", "fast-pysf"),
+        len(resolved.get("sensors", [])),
+    )
+    logger.debug("Full resolved config: {}", resolved)
+
+
 def _normalize_factory_inputs(
     *,
     record_video: bool,
@@ -318,6 +340,10 @@ def make_robot_env(
         recording_options = recording_options_local
 
     _apply_global_seed(seed)
+
+    # Validate configuration and log resolved config (T030/T031)
+    _validate_and_log_config(config)
+
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
@@ -387,6 +413,10 @@ def make_image_robot_env(
         render_options = _apply_render(mapped, render_options)
         recording_options = _apply_recording(mapped, recording_options)
     _apply_global_seed(seed)
+
+    # Validate configuration and log resolved config (T030/T031)
+    _validate_and_log_config(config)
+
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
@@ -463,6 +493,9 @@ def make_pedestrian_env(
         recording_options = _apply_recording(mapped, recording_options)
 
     _apply_global_seed(seed)
+
+    # Validate configuration and log resolved config (T030/T031)
+    _validate_and_log_config(config)
 
     _explicit_no_record = (
         recording_options is not None and recording_options.record is False and record_video

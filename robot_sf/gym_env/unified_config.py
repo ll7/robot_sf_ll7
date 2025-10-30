@@ -34,6 +34,9 @@ class BaseSimulationConfig:
     lidar_config: LidarScannerSettings = field(default_factory=LidarScannerSettings)
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
     render_scaling: int | None = None
+    # Backend selection and sensor wiring via registries
+    backend: str = "fast-pysf"
+    sensors: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate that all required fields are initialized."""
@@ -141,18 +144,12 @@ class MultiRobotConfig(RobotSimulationConfig):
 class EnvSettings(RobotSimulationConfig):
     """Deprecated: Use RobotSimulationConfig instead."""
 
-    pass
-
 
 @dataclass
 class RobotEnvSettings(ImageRobotConfig):
     """Deprecated: Use ImageRobotConfig instead."""
 
-    pass
-
 
 @dataclass
 class PedEnvSettings(PedestrianSimulationConfig):
     """Deprecated: Use PedestrianSimulationConfig instead."""
-
-    pass

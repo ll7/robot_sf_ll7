@@ -42,7 +42,8 @@ def _clean_registry():
 
 def test_merged_observation_fusion_adds_custom_keys(_clean_registry):
     # Arrange: register a constant sensor and build via adapter
-    register_sensor("dummy_constant", DummyConstantSensor)
+    # (sensor may already be registered via __init__.py)
+    register_sensor("dummy_constant", DummyConstantSensor, override=True)
     cfgs = [
         {
             "type": "dummy_constant",

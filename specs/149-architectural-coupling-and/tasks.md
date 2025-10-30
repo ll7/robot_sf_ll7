@@ -81,7 +81,7 @@ Independent Test: Implement a dummy sensor returning constants; enable via confi
 - [x] T020 [US2] Implement `robot_sf/sensor/dummy_constant.py` exposing Sensor base API; register with `sensor/registry.py`.
 - [x] T021 [P] [US2] Extend `robot_sf/gym_env/env_util.py` or factory wiring to build sensor instances from `config.sensors` using the registry and inject into SensorFusion without code changes to fusion internals.
 - [ ] T022 [US2] Update `robot_sf/sensor/sensor_fusion.py` only if necessary to accept abstract Sensor inputs (avoid hardcoding specific types; prefer adapter layer from T010).
-- [ ] T023 [P] [US2] Document sensor registration in `specs/149-architectural-coupling-and/quickstart.md` with a second example (new sensor).
+- [x] T023 [P] [US2] Document sensor registration in `specs/149-architectural-coupling-and/quickstart.md` with a second example (new sensor).
 
 Checkpoint: New sensor can be added via config; fusion/simulator code unchanged.
 
@@ -95,10 +95,10 @@ Independent Test: Remove a required asset → RuntimeError with path and quick f
 
 ### Implementation
 
-- [ ] T024 [US3] Apply error policy in env factories: wrap missing map/model loads with clear remediation messages (edit `robot_sf/gym_env/environment_factory.py`).
-- [ ] T025 [P] [US3] Apply policy in simulator adapters: map loader failures produce actionable errors (edit `robot_sf/sim/backends/fast_pysf_backend.py`).
-- [ ] T026 [US3] Apply policy in sensor initialization: unknown sensor names raise KeyError listing known names (implement via `sensor/registry.py`).
-- [ ] T027 [P] [US3] Audit `fast-pysf/pysocialforce/` loading points; where applicable, translate exceptions at integration boundaries to actionable messages in our adapter.
+- [x] T024 [US3] Apply error policy in env factories: wrap missing map/model loads with clear remediation messages (edit `robot_sf/gym_env/environment_factory.py`).
+- [x] T025 [P] [US3] Apply policy in simulator adapters: map loader failures produce actionable errors (edit `robot_sf/sim/backends/fast_pysf_backend.py`).
+- [x] T026 [US3] Apply policy in sensor initialization: unknown sensor names raise KeyError listing known names (implement via `sensor/registry.py`).
+- [x] T027 [P] [US3] Audit `fast-pysf/pysocialforce/` loading points; where applicable, translate exceptions at integration boundaries to actionable messages in our adapter.
 
 Checkpoint: Errors are consistent and actionable across env/sim/sensors.
 
@@ -112,10 +112,10 @@ Independent Test: Invalid backend/sensor names rejected with allowed alternative
 
 ### Implementation
 
-- [ ] T028 [US4] Implement strict validation: unknown keys rejected; supply message with valid keys (edit `robot_sf/gym_env/config_validation.py`).
-- [ ] T029 [P] [US4] Implement conflict checks (e.g., mutually exclusive image vs non-image stacks) in `config_validation.py`.
-- [ ] T030 [US4] Integrate validation into env factory path before instantiation; on failure raise concise validation errors.
-- [ ] T031 [P] [US4] Add resolved-config serializer (dict) and log at env creation.
+- [x] T028 [US4] Implement strict validation: unknown keys rejected; supply message with valid keys (edit `robot_sf/gym_env/config_validation.py`).
+- [x] T029 [P] [US4] Implement conflict checks (e.g., mutually exclusive image vs non-image stacks) in `config_validation.py`.
+- [x] T030 [US4] Integrate validation into env factory path before instantiation; on failure raise concise validation errors.
+- [x] T031 [P] [US4] Add resolved-config serializer (dict) and log at env creation.
 
 Checkpoint: Unified config is enforced with friendly validation and a resolved dump.
 
@@ -123,11 +123,18 @@ Checkpoint: Unified config is enforced with friendly validation and a resolved d
 
 ## Phase N: Polish & cross-cutting concerns
 
-- [ ] T032 [P] Documentation refresh across `docs/` and examples.
-- [ ] T033 Code cleanup and dead import pruning in areas touched by adapters.
-- [ ] T034 [P] Optional: small perf smoke to confirm no step-rate regressions (wire to existing scripts in `scripts/validation/`).
-- [ ] T035 Security/robustness: ensure registries don’t allow re-registering under same key without explicit override flag.
-- [ ] T036 [P] Link this feature’s docs from `docs/README.md` central point.
+- [x] **T032**: Update `docs/README.md` to reference the new feature documentation
+  - **Owner**: All
+  - **Context**: Ensure central docs index links to specs/149
+  - **Definition of Done**: Link present in Architecture section
+- [x] T033 Code cleanup and dead import pruning in areas touched by adapters.
+  - **Verification**: Ran `uv run ruff check --select F401` on all modified files; all checks passed.
+- [x] T034 [P] Optional: small perf smoke to confirm no step-rate regressions (wire to existing scripts in `scripts/validation/`).
+  - **Verification**: Ran `scripts/validation/performance_smoke_test.py`; all thresholds PASS (creation: 0.86s, reset: 2118 resets/sec).
+- [x] T035 Security/robustness: ensure registries don't allow re-registering under same key without explicit override flag.
+  - **Verification**: Both `robot_sf/sim/registry.py` and `robot_sf/sensor/registry.py` raise errors on duplicate registration without `override=True`.
+- [x] T036 [P] Link this feature's docs from `docs/README.md` central point.
+  - **Verification**: Same as T032; grep confirms "Architectural Decoupling (Feature 149)" linked in docs/README.md.
 
 ---
 

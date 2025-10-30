@@ -72,6 +72,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   - [Implementation Summary](./refactoring/refactoring_summary.md) - What was accomplished
   - [Migration Report](./refactoring/migration_report.md) - Automated codebase analysis
   - **Classic interactions refactor (Feature 139)** — Design note: Extract visualization & formatting helpers — `docs/dev/issues/classic-interactions-refactor/design.md`
+- **[Architectural Decoupling (Feature 149)](../specs/149-architectural-coupling-and/)** - Backend and sensor registry system for extensible simulation
+  - [Quickstart Guide](../specs/149-architectural-coupling-and/quickstart.md) - Usage examples for backend selection and sensor registration
+  - [Tasks & Progress](../specs/149-architectural-coupling-and/tasks.md) - Implementation task tracking
  - **[Agents & Contributor Onboarding](../AGENTS.md)** – High-level repository structure, coding/testing conventions, and workflow tips for new contributors
 
 ### 🎮 Simulation & Environment

@@ -320,11 +320,18 @@ def make_robot_env(
 
     _apply_global_seed(seed)
 
-    # Validate configuration if provided
+    # Validate configuration if provided (T030)
     if config is not None:
         validate_config(config, strict=True)
         resolved = get_resolved_config_dict(config)
-        logger.debug("Resolved config: backend={}", resolved.get("backend", "fast-pysf"))
+        # Log resolved config for reproducibility (T031)
+        logger.info(
+            "Resolved config: type={} backend={} sensors={}",
+            type(config).__name__,
+            resolved.get("backend", "fast-pysf"),
+            len(resolved.get("sensors", [])),
+        )
+        logger.debug("Full resolved config: {}", resolved)
 
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
@@ -395,6 +402,20 @@ def make_image_robot_env(
         render_options = _apply_render(mapped, render_options)
         recording_options = _apply_recording(mapped, recording_options)
     _apply_global_seed(seed)
+
+    # Validate configuration if provided (T030)
+    if config is not None:
+        validate_config(config, strict=True)
+        resolved = get_resolved_config_dict(config)
+        # Log resolved config for reproducibility (T031)
+        logger.info(
+            "Resolved config: type={} backend={} sensors={}",
+            type(config).__name__,
+            resolved.get("backend", "fast-pysf"),
+            len(resolved.get("sensors", [])),
+        )
+        logger.debug("Full resolved config: {}", resolved)
+
     render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
         _normalize_factory_inputs(
             record_video=record_video,
@@ -471,6 +492,19 @@ def make_pedestrian_env(
         recording_options = _apply_recording(mapped, recording_options)
 
     _apply_global_seed(seed)
+
+    # Validate configuration if provided (T030)
+    if config is not None:
+        validate_config(config, strict=True)
+        resolved = get_resolved_config_dict(config)
+        # Log resolved config for reproducibility (T031)
+        logger.info(
+            "Resolved config: type={} backend={} sensors={}",
+            type(config).__name__,
+            resolved.get("backend", "fast-pysf"),
+            len(resolved.get("sensors", [])),
+        )
+        logger.debug("Full resolved config: {}", resolved)
 
     _explicit_no_record = (
         recording_options is not None and recording_options.record is False and record_video

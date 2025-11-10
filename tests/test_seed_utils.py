@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import random
 
-from robot_sf.utils.seed_utils import _import_torch, get_seed_state_sample, set_global_seed
+from robot_sf.common.seed import _import_torch, get_seed_state_sample, set_global_seed
 
 
 def test_set_global_seed_determinism():

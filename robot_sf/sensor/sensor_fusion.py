@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import PolarVec2D
+from robot_sf.common.types import PolarVec2D
 
 OBS_DRIVE_STATE = "drive_state"
 OBS_RAYS = "rays"

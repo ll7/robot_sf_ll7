@@ -4,7 +4,7 @@ from math import atan2, cos, sin, tan
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import PedPose, PolarVec2D, UnicycleAction, Vec2D
+from robot_sf.common.types import PedPose, PolarVec2D, UnicycleAction, Vec2D
 
 
 @dataclass

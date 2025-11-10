@@ -19,7 +19,7 @@ from PIL import Image  # pillow
 
 from robot_sf.benchmark.plotting_style import apply_latex_style
 from robot_sf.benchmark.scenario_generator import AREA_HEIGHT, AREA_WIDTH, generate_scenario
-from robot_sf.utils.seed_utils import set_global_seed
+from robot_sf.common.seed import set_global_seed
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence

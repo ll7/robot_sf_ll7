@@ -18,7 +18,7 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePede
 from robot_sf.nav.obstacle import Obstacle
 
 if TYPE_CHECKING:
-    from robot_sf.util.types import Vec2D
+    from robot_sf.common.types import Vec2D
 
 
 def create_simple_map_with_single_pedestrians() -> MapDefinition:

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from robot_sf.util.types import (
+    from robot_sf.common.types import (
         BicycleAction,
         Circle2D,
         DifferentialDriveAction,

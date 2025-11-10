@@ -5,7 +5,7 @@ import numba
 import numpy as np
 from pysocialforce.scene import PedState
 
-from robot_sf.util.types import Vec2D
+from robot_sf.common.types import Vec2D
 
 
 @dataclass

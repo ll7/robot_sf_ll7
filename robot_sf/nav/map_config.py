@@ -12,9 +12,9 @@ import matplotlib.axes
 import numpy as np
 from loguru import logger
 
+from robot_sf.common.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.obstacle import Obstacle
-from robot_sf.util.types import Line2D, Rect, Vec2D
 
 
 @dataclass

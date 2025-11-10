@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from robot_sf.util.types import Vec2D, Zone
+from robot_sf.common.types import Vec2D, Zone
 
 
 @dataclass

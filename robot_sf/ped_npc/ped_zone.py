@@ -1,6 +1,6 @@
 import numpy as np
 
-from robot_sf.util.types import Vec2D, Zone
+from robot_sf.common.types import Vec2D, Zone
 
 
 def sample_zone(zone: Zone, num_samples: int) -> list[Vec2D]:

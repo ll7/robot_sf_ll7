@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numba
 import numpy as np
 
-from robot_sf.util.types import Circle2D, Line2D, Vec2D
+from robot_sf.common.types import Circle2D, Line2D, Vec2D
 
 # TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
 

@@ -39,8 +39,8 @@ from robot_sf.benchmark.scenario_thumbnails import save_montage as _thumb_montag
 from robot_sf.benchmark.scenario_thumbnails import save_scenario_thumbnails as _thumb_save_all
 from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
 from robot_sf.benchmark.summary import summarize_to_plots
-from robot_sf.utils.seed_utils import get_seed_state_sample as _seed_sample
-from robot_sf.utils.seed_utils import set_global_seed as _set_seed
+from robot_sf.common.seed import get_seed_state_sample as _seed_sample
+from robot_sf.common.seed import set_global_seed as _set_seed
 
 DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 

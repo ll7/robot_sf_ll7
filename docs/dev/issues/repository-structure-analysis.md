@@ -57,17 +57,24 @@ The repository is **functionally solid but organizationally cluttered**. The cod
 
 ## Critical Issues (High Priority)
 
-### 1. Utility Module Fragmentation 🔴
+### 1. Utility Module Fragmentation 🔴 ✅ RESOLVED
 
-**Problem:**
-Three separate utility modules with overlapping purposes:
-- `robot_sf/util/` - Contains `types.py`, `compatibility.py`
-- `robot_sf/utils/` - Contains `seed_utils.py`
-- `robot_sf/common/` - Contains `errors.py`
+**Problem (Historical):**
+Three separate utility modules with overlapping purposes existed before consolidation:
+- `robot_sf/util/` - Contained `types.py`, `compatibility.py`
+- `robot_sf/utils/` - Contained `seed_utils.py`
+- `robot_sf/common/` - Contained `errors.py`
 
-**Impact:**
-- 🔴 High cognitive load - developers don't know where to put/find utilities
-- 🔴 Breaks IDE navigation and auto-import
+**Solution (v2.1.0):**
+All utilities consolidated into `robot_sf/common/` directory:
+- `robot_sf/common/types` - Type aliases (Vec2D, Line2D, RobotPose, etc.)
+- `robot_sf/common/errors` - Error handling utilities
+- `robot_sf/common/seed` - Random seed management
+- `robot_sf/common/compat` - Compatibility helpers
+
+**Impact (Before Resolution):**
+- 🔴 High cognitive load - developers didn't know where to put/find utilities
+- 🔴 Broke IDE navigation and auto-import
 - 🔴 Violates "There should be one obvious way to do it"
 - Import inconsistency across 50+ files
 
@@ -525,7 +532,7 @@ for py_file in Path('robot_sf').rglob('*.py'):
 30+ top-level directories, some questionable:
 ```
 svg_conv/        # Single-purpose utility?
-utilities/       # vs. robot_sf/util?
+utilities/       # vs. robot_sf/common/ (note: robot_sf/util/ and robot_sf/utils/ consolidated in v2.1.0)
 SLURM/          # HPC-specific, could be in docs/
 hooks/          # Git hooks?
 specs/          # Specifications?

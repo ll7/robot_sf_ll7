@@ -4,7 +4,7 @@ This module implements the rendering of the lidar sensor.
 
 import numpy as np
 
-from robot_sf.util.types import Vec2D
+from robot_sf.common.types import Vec2D
 
 
 def render_lidar(robot_pos: Vec2D, distances: np.ndarray, directions: np.ndarray) -> np.ndarray:

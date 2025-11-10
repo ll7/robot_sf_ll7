@@ -1,3 +1,7 @@
+# UV Package Manager Migration
+
+Migration to the UV package manager for faster dependency resolution and modern Python packaging.
+
 ## Migration Complete ✅
 
 2025-06-20

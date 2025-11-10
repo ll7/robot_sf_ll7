@@ -268,7 +268,8 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 ## 📖 Documentation Highlights
 
 ### 🆕 Latest Updates
- - **Architecture Decoupling (Feature 149)**: Simulator facade and registries (simulator & sensors) scaffolded behind the factory pattern; backend selection via unified config with a default of "fast-pysf". See design docs and quickstart below.
+
+- **Architecture Decoupling (Feature 149)**: Simulator facade and registries (simulator & sensors) scaffolded behind the factory pattern; backend selection via unified config with a default of "fast-pysf". See design docs and quickstart below.
 
 ### 📋 Migration Status
 

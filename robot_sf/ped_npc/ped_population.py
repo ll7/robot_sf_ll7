@@ -3,6 +3,7 @@ from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
 
+from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 from robot_sf.nav.map_config import GlobalRoute
 from robot_sf.ped_npc.ped_behavior import (
     CrowdedZoneBehavior,
@@ -11,7 +12,6 @@ from robot_sf.ped_npc.ped_behavior import (
 )
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import sample_zone
-from robot_sf.util.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 
 
 @dataclass

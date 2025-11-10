@@ -25,7 +25,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Phase 1: Update agent context by running the agent script
    - Re-evaluate Constitution Check post-design
 
-4. **Stop and report**: Command ends after Phase 1 planning. Report branch, IMPL_PLAN path, and generated artifacts.
+4. **Stop and report**: Command ends after Phase 2 planning. Report branch, IMPL_PLAN path, and generated artifacts.
 
 ## Phases
 
@@ -37,7 +37,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - For each integration → patterns task
 
 2. **Generate and dispatch research agents**:
-   ```txt
+
+   ```text
    For each unknown in Technical Context:
      Task: "Research {unknown} for {feature context}"
    For each technology choice:

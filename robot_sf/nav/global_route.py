@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from math import dist
 
-from robot_sf.util.types import Rect, Vec2D
+from robot_sf.common.types import Rect, Vec2D
 
 
 @dataclass

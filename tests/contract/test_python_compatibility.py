@@ -11,7 +11,7 @@ class TestPythonCompatibility:
         if Python version is compatible.
         """
         # Import the function (will fail if not implemented)
-        from robot_sf.util.compatibility import validate_compatibility
+        from robot_sf.common.compat import validate_compatibility
 
         # Contract: Should return bool for valid version strings
         assert isinstance(validate_compatibility("3.11"), bool)

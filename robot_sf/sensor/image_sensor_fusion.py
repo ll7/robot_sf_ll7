@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.types import PolarVec2D
 from robot_sf.sensor.image_sensor import ImageSensor
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_IMAGE, OBS_RAYS
-from robot_sf.util.types import PolarVec2D
 
 
 @dataclass

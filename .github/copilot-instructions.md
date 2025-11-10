@@ -13,3 +13,10 @@ It is everyones guide on how to use this repository effectively.
 - Save any progress and decisions in the `docs/dev/issues/<feature_name>/` folder.
 - For any changes that affect users, update the `CHANGELOG.md` file.
 
+
+## Active Technologies
+- Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml) + None for refactoring (uses standard Python module system) (241-consolidate-utility-modules)
+- Filesystem (source code files only) (241-consolidate-utility-modules)
+
+## Recent Changes
+- 241-consolidate-utility-modules: Added Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml) + None for refactoring (uses standard Python module system)

@@ -3,7 +3,7 @@ from math import atan2, dist
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import PolarVec2D, RobotPose, Vec2D
+from robot_sf.common.types import PolarVec2D, RobotPose, Vec2D
 
 
 def norm_angle(angle: float) -> float:

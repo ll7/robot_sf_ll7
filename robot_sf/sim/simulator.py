@@ -9,6 +9,7 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
+from robot_sf.common.types import RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -21,7 +22,6 @@ from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.robot.robot_state import Robot
-from robot_sf.util.types import RobotAction, RobotPose, Vec2D
 
 
 @dataclass

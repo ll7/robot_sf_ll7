@@ -6,7 +6,7 @@ from math import cos, sin
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.util.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
+from robot_sf.common.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
 WheelSpeedState = tuple[float, float]  # tuple of (left, right) speeds
 # TODO: Is WheelSpeedState in translation or rotation units?

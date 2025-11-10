@@ -107,6 +107,29 @@ Custom backends can be registered via `robot_sf.sim.registry.register_backend()`
 **Error handling:**
 Unknown backend names fall back to legacy `init_simulators()` with a warning. For strict validation, use `robot_sf.gym_env.config_validation.validate_config()` before environment creation.
 
+### Utility Modules
+
+All shared utility functions and type definitions live in `robot_sf/common/`:
+- `robot_sf/common/types` - Type aliases (Vec2D, Line2D, RobotPose, Circle2D, etc.)
+- `robot_sf/common/errors` - Error handling utilities (raise_fatal_with_remedy, warn_soft_degrade)
+- `robot_sf/common/seed` - Random seed management for reproducibility (set_global_seed, SeedReport)
+- `robot_sf/common/compat` - Compatibility helpers (validate_compatibility)
+
+**Example imports:**
+```python
+from robot_sf.common.types import Vec2D, RobotPose, Line2D
+from robot_sf.common.errors import raise_fatal_with_remedy
+from robot_sf.common.seed import set_global_seed
+
+# Convenience imports also available:
+from robot_sf.common import Vec2D, RobotPose, set_global_seed
+```
+
+**Troubleshooting:**
+- If IDE autocomplete doesn't work after importing from `robot_sf.common`, restart your IDE's language server:
+  - **VS Code**: Command Palette → "Python: Restart Language Server"
+  - **PyCharm**: File → Invalidate Caches / Restart
+
 ## Design and development workflow recommendations
 
 - Clarify exact requirements before starting implementation.

@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from robot_sf.common.types import Line2D, Vec2D
 from robot_sf.nav.nav_types import SvgRectangle
-from robot_sf.util.types import Line2D, Vec2D
 
 
 @dataclass

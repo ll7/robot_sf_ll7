@@ -8,11 +8,11 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.common.errors import raise_fatal_with_remedy
+from robot_sf.common.types import Line2D, Rect, Zone
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import SvgCircle, SvgPath, SvgRectangle
 from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
-from robot_sf.util.types import Line2D, Rect, Zone
 
 
 class SvgMapConverter:

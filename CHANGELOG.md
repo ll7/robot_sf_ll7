@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **[BREAKING for internal imports]** Consolidated utility modules into single `robot_sf/common/` directory (#241)
+  - Moved `robot_sf/util/types.py` → `robot_sf/common/types.py`
+  - Moved `robot_sf/utils/seed_utils.py` → `robot_sf/common/seed.py` (renamed)
+  - Moved `robot_sf/util/compatibility.py` → `robot_sf/common/compat.py` (renamed)
+  - Removed empty `robot_sf/util/` and `robot_sf/utils/` directories
+  
+### Migration Guide (Version 2.1.0)
+
+**For robot_sf developers and contributors:**
+
+All utility imports must be updated to reference `robot_sf.common`:
+
+```python
+# Before (old paths - no longer valid)
+from robot_sf.util.types import Vec2D, RobotPose
+from robot_sf.utils.seed_utils import set_global_seed
+from robot_sf.util.compatibility import validate_compatibility
+
+# After (new paths - required)
+from robot_sf.common.types import Vec2D, RobotPose
+from robot_sf.common.seed import set_global_seed
+from robot_sf.common.compat import validate_compatibility
+
+# Convenience imports also available:
+from robot_sf.common import Vec2D, RobotPose, set_global_seed
+```
+
+**Why this change?**
+- Eliminates navigation confusion from fragmented utility locations
+- Improves IDE autocomplete and discoverability
+- Reduces cognitive load for new contributors
+- Establishes single canonical location for all shared utilities
+
+**Impact:**
+- ~50 import statements updated across codebase
+- All 923 tests passing after migration
+- No functional changes - pure reorganization
+
+**For external consumers (if any):**
+If your project imports from `robot_sf.util` or `robot_sf.utils`, update your imports using the patterns above. The behavior of all utilities remains unchanged.
+
 ### Added
 - **Architecture Decoupling (Feature 149)**: Introduced simulator facade and backend/sensor registries scaffolding behind the existing factory pattern. Default backend is "fast-pysf" with future backend selection via unified config.
 - Backend registry integrated into environment initialization: `BaseEnv` now resolves the simulator via a backend key (`env_config.backend`, default "fast-pysf") using `robot_sf.sim.registry`, with a safe fallback to legacy `init_simulators()` for full backward compatibility.

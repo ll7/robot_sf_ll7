@@ -4,7 +4,7 @@ import sys
 
 from svgelements import SVG, Path, Point  # type: ignore[attr-defined]
 
-from robot_sf.util.types import RgbColor, Vec2D
+from robot_sf.common.types import RgbColor, Vec2D
 
 HELP_MSG = """This tool converts SVG maps from OpenStreetMap to JSON maps that can be imported
 into the RobotSF simulator.

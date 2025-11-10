@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from robot_sf.util.types import Vec2D
+from robot_sf.common.types import Vec2D
 
 
 @dataclass

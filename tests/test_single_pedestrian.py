@@ -23,7 +23,7 @@ from robot_sf.ped_npc.ped_population import (
 )
 
 if TYPE_CHECKING:
-    from robot_sf.util.types import Vec2D
+    from robot_sf.common.types import Vec2D
 
 
 @pytest.fixture

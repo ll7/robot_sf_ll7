@@ -5,8 +5,8 @@ import numba
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.types import Circle2D, Line2D, Range, RobotPose, Vec2D
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
-from robot_sf.util.types import Circle2D, Line2D, Range, RobotPose, Vec2D
 
 
 # TODO: Refactor. this method is used in multiple places (occupancy, ped_robot_force)

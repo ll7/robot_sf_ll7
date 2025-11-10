@@ -2,9 +2,9 @@ from dataclasses import dataclass, field
 from math import atan2, dist
 from random import randint, sample
 
+from robot_sf.common.types import Vec2D
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
-from robot_sf.util.types import Vec2D
 
 
 @dataclass

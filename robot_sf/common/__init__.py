@@ -21,8 +21,8 @@ from robot_sf.common.types import (
     Zone,
 )
 
-__all__ = [
-    # Types
+__all__ = [  # noqa: RUF022 - Grouped by source module for clarity
+    # Types (from .types)
     "Circle2D",
     "Line2D",
     "MapBounds",
@@ -30,14 +30,14 @@ __all__ = [
     "Range",
     "Range2D",
     "RobotPose",
-    # Seed management
-    "SeedReport",
     "Vec2D",
     "Zone",
-    # Errors
-    "raise_fatal_with_remedy",
+    # Seed management (from .seed)
+    "SeedReport",
     "set_global_seed",
-    # Compatibility
-    "validate_compatibility",
+    # Errors (from .errors)
+    "raise_fatal_with_remedy",
     "warn_soft_degrade",
+    # Compatibility (from .compat)
+    "validate_compatibility",
 ]

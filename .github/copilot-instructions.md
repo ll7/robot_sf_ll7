@@ -17,6 +17,8 @@ It is everyones guide on how to use this repository effectively.
 ## Active Technologies
 - Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml) + None for refactoring (uses standard Python module system) (241-consolidate-utility-modules)
 - Filesystem (source code files only) (241-consolidate-utility-modules)
+- Markdown + Python 3.11 (repository standard per `pyproject.toml`) + N/A for docs reorg; repository tooling uses uv, Ruff, pytest (no changes) (242-reorganize-docs)
+- N/A (versioned docs in repository) (242-reorganize-docs)
 
 ## Recent Changes
 - 241-consolidate-utility-modules: Added Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml) + None for refactoring (uses standard Python module system)

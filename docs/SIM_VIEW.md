@@ -1,11 +1,15 @@
 # robot-sf
 
+[← Back to Documentation Index](./README.md)
+
 ## SIM VIEW
 
 ### About
 
 The [sim_view.py](../robot_sf/render/sim_view.py) file manages the visualization of the simulation.\
 If you want to change the colors or display more information you have to adjust this file.
+
+**See also**: [Environment Setup](./ENVIRONMENT.md) for environment configuration, and [demo videos](./video/) for rendered examples.
 
 ### Key Events
 

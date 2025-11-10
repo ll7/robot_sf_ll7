@@ -62,52 +62,6 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ## 📚 Documentation Index
 
-### Getting Started
-- **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
-- **[Environment Overview](./ENVIRONMENT.md)** - Gymnasium environment interfaces, factory pattern, observation/action spaces
-
-### Benchmarking & Metrics
-- **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
-- **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
-- **[Benchmark Visual Artifacts](./benchmark_visuals.md)** - SimulationView & synthetic video pipeline, performance metrics
-
-### Tooling
-- **[SNQI Weight Tools](./snqi-weight-tools/README.md)** - Recompute, optimize, and analyze SNQI weights; command reference and workflow examples
-- **[Pyreverse UML Generation](./pyreverse.md)** - Generate class diagrams from code
-- **[Data Analysis Utilities](./DATA_ANALYSIS.md)** - Analysis helpers and data processing tools
-
-### Architecture & Refactoring
-- **[Refactoring Overview](./refactoring/)** - Complete guide to the refactored environment architecture (deployment status, plan, migration guide, summary, automated codebase analysis)
-- **[Subtree Migration Guide](./SUBTREE_MIGRATION.md)** - Git subtree integration for fast-pysf (migration from submodule)
-- **[UV Migration Notes](./UV_MIGRATION.md)** - Migration to UV package manager
-- **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
-- **[Agents & Contributor Onboarding](../AGENTS.md)** - High-level repository structure, coding/testing conventions, workflow tips
-
-### Simulation & UI
-- **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
-- **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
-
-### Figures & Visualization
-- **[Trajectory Visualization](./trajectory_visualization.md)** - Generate trajectory plots
-- **[Force Field Visualization](./force_field_visualization.md)** - Heatmap + quiver figures (PNG/PDF)
-- **[Pareto Plotting](./pareto_plotting.md)** - Generate Pareto frontier plots
-- **[Force Field Heatmap](./force_field_heatmap.md)** - Heatmap + vector overlays figure (PNG/PDF)
-
-### Performance & CI
-- **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
-- **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
-
-### Hardware & Environment
-- **[GPU Setup](./GPU_SETUP.md)** - GPU configuration for accelerated training
-- **[Environment Configuration](./ENVIRONMENT.md)** - Detailed environment setup and usage
-
----
-
-### Additional Resources (Legacy Structure)
-
-<details>
-<summary>Click to expand legacy/detailed index sections</summary>
-
 ### 🏗️ Architecture & Development
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, testing, and quality standards
 - **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
@@ -148,8 +102,6 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
  - [**Force Field Visualization**](./force_field_visualization.md) — How to generate heatmap + quiver figures (PNG/PDF)
  - [**Scenario Thumbnails & Montage**](./scenario_thumbnails.md) — Generate per-scenario thumbnails and montage grids (PNG/PDF)
  - [**Force Field Heatmap**](./force_field_heatmap.md) — Heatmap + vector overlays figure (PNG/PDF)
-
-</details>
 
 #### Social Navigation Benchmark (Overview)
 

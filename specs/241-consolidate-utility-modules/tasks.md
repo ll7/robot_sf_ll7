@@ -132,17 +132,17 @@ This project follows the single-project Python library structure:
 
 ### Documentation Updates for User Story 3
 
-- [ ] T038 [P] [US3] Update `CHANGELOG.md` with migration notes for version 2.1.0 (add Breaking Changes section with before/after import examples)
-- [ ] T039 [P] [US3] Update `docs/dev_guide.md` with "Utility Modules" section documenting robot_sf/common/ structure and import patterns
-- [ ] T040 [US3] Add migration example to CHANGELOG.md: before/after import statements for all 4 modules (types, errors, seed, compat)
-- [ ] T041 [US3] Update dev_guide.md with example imports: `from robot_sf.common.types import Vec2D`, `from robot_sf.common.seed import set_global_seed`
-- [ ] T042 [US3] Add troubleshooting note in dev_guide.md: "If autocomplete doesn't work, restart IDE language server"
+- [x] T038 [P] [US3] Update `CHANGELOG.md` with migration notes for version 2.1.0 (add Breaking Changes section with before/after import examples)
+- [x] T039 [P] [US3] Update `docs/dev_guide.md` with "Utility Modules" section documenting robot_sf/common/ structure and import patterns
+- [x] T040 [US3] Add migration example to CHANGELOG.md: before/after import statements for all 4 modules (types, errors, seed, compat)
+- [x] T041 [US3] Update dev_guide.md with example imports: `from robot_sf.common.types import Vec2D`, `from robot_sf.common.seed import set_global_seed`
+- [x] T042 [US3] Add troubleshooting note in dev_guide.md: "If autocomplete doesn't work, restart IDE language server"
 
 **Verification**
 
-- [ ] T043 [US3] Verify CHANGELOG.md contains version 2.1.0 section with migration guide
-- [ ] T044 [US3] Verify dev_guide.md contains "Utility Modules" section with clear examples
-- [ ] T045 [US3] Search for outdated references: `grep -r "robot_sf/util\|robot_sf/utils" docs/` (expect: only in migration guide context)
+- [x] T043 [US3] Verify CHANGELOG.md contains version 2.1.0 section with migration guide
+- [x] T044 [US3] Verify dev_guide.md contains "Utility Modules" section with clear examples
+- [x] T045 [US3] Search for outdated references: `grep -r "robot_sf/util\|robot_sf/utils" docs/` (expect: only in migration guide context)
 
 **Checkpoint**: Documentation updated - new contributors have clear guidance
 
@@ -152,14 +152,14 @@ This project follows the single-project Python library structure:
 
 **Purpose**: Final validation and cleanup
 
-- [ ] T046 [P] Verify git history preserved for moved files: `git log --follow robot_sf/common/types.py` (should show history from robot_sf/util/types.py)
-- [ ] T047 [P] Run GUI tests (if display available): `uv run pytest test_pygame` (expect: all passing, no import errors)
-- [ ] T048 Run final smoke test from quickstart.md validation section
-- [ ] T049 [P] Review all changed files in git: `git diff --stat` (verify expected file changes only)
-- [ ] T050 Stage all changes: `git add -A`
-- [ ] T051 Commit changes: `git commit -m "refactor: consolidate utility modules into robot_sf/common (#241)"`
-- [ ] T052 Push branch: `git push origin 241-consolidate-utility-modules`
-- [ ] T053 Create pull request with summary, links to spec/plan, and verification checklist
+- [x] T046 [P] Verify git history preserved for moved files: `git log --follow robot_sf/common/types.py` (should show history from robot_sf/util/types.py)
+- [x] T047 [P] Run GUI tests (if display available): `uv run pytest test_pygame` (expect: all passing, no import errors)
+- [x] T048 Run final smoke test from quickstart.md validation section
+- [x] T049 [P] Review all changed files in git: `git diff --stat` (verify expected file changes only)
+- [x] T050 Stage all changes: `git add -A`
+- [x] T051 Commit changes: `git commit -m "refactor: consolidate utility modules into robot_sf/common (#241)"`
+- [x] T052 Push branch: `git push origin 241-consolidate-utility-modules`
+- [x] T053 Create pull request with summary, links to spec/plan, and verification checklist
 
 ---
 
@@ -371,16 +371,16 @@ echo "✓ Verification passed - no old imports found"
 
 Before considering migration complete, verify:
 
-- [ ] All old imports replaced (grep verification passes)
-- [ ] Tests pass: `uv run pytest tests` (893/893)
-- [ ] Type checking passes: `uvx ty check .`
-- [ ] Linting passes: `uv run ruff check .`
-- [ ] Code runs without import errors
-- [ ] CHANGELOG.md updated with migration notes
-- [ ] dev_guide.md updated with new import patterns
-- [ ] Git history preserved for moved files
-- [ ] Old directories removed (robot_sf/util/, robot_sf/utils/)
-- [ ] Pull request created with verification checklist
+- [x] All old imports replaced (grep verification passes)
+- [x] Tests pass: `uv run pytest tests` (893/893)
+- [x] Type checking passes: `uvx ty check .`
+- [x] Linting passes: `uv run ruff check .`
+- [x] Code runs without import errors
+- [x] CHANGELOG.md updated with migration notes
+- [x] dev_guide.md updated with new import patterns
+- [x] Git history preserved for moved files
+- [x] Old directories removed (robot_sf/util/, robot_sf/utils/)
+- [x] Pull request created with verification checklist
 
 ---
 

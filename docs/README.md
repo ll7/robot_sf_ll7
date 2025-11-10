@@ -54,6 +54,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [📖 Documentation Highlights](#-documentation-highlights)
   - [🆕 Latest Updates](#-latest-updates)
   - [📋 Migration Status](#-migration-status)
+  - [Architecture \& design features](#architecture--design-features)
 - [🔗 External Links](#-external-links)
 - [🤝 Contributing](#-contributing)
 - [📞 Support](#-support)
@@ -71,6 +72,9 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   - [Implementation Summary](./refactoring/refactoring_summary.md) - What was accomplished
   - [Migration Report](./refactoring/migration_report.md) - Automated codebase analysis
   - **Classic interactions refactor (Feature 139)** — Design note: Extract visualization & formatting helpers — `docs/dev/issues/classic-interactions-refactor/design.md`
+- **[Architectural Decoupling (Feature 149)](../specs/149-architectural-coupling-and/)** - Backend and sensor registry system for extensible simulation
+  - [Quickstart Guide](../specs/149-architectural-coupling-and/quickstart.md) - Usage examples for backend selection and sensor registration
+  - [Tasks & Progress](../specs/149-architectural-coupling-and/tasks.md) - Implementation task tracking
  - **[Agents & Contributor Onboarding](../AGENTS.md)** – High-level repository structure, coding/testing conventions, and workflow tips for new contributors
 
 ### 🎮 Simulation & Environment
@@ -264,17 +268,20 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
 ## 📖 Documentation Highlights
 
 ### 🆕 Latest Updates
-**Benchmark Visual Artifacts (Real Plots + Videos)**: The Full Classic Interaction Benchmark now emits real statistical PDF plots and simulation replay MP4 videos with machine-readable manifests. See updated documentation: [`benchmark_visuals.md`](./benchmark_visuals.md).
-- **Environment Refactoring Complete**: New unified architecture deployed
-- **Migration Tools Available**: Automated migration script for updating code
-- **Factory Pattern**: Clean, consistent environment creation interface
-- **Comprehensive Testing**: All patterns validated and working
- - **Benchmark Runner Added**: Single-episode and batch APIs with schema validation and JSONL output. See the Social Navigation Benchmark docs for usage.
+
+- **Architecture Decoupling (Feature 149)**: Simulator facade and registries (simulator & sensors) scaffolded behind the factory pattern; backend selection via unified config with a default of "fast-pysf". See design docs and quickstart below.
 
 ### 📋 Migration Status
+
+### Architecture & design features
+
+- Architectural decoupling and consistency overhaul (Feature 149):
+  - Design: `specs/149-architectural-coupling-and/spec.md`
+  - Plan: `specs/149-architectural-coupling-and/plan.md`
+  - Quickstart: `specs/149-architectural-coupling-and/quickstart.md`
+
 - **33 files** identified for migration to new pattern
 - **Migration script** available for automated updates
-- **Backward compatibility** maintained throughout transition
 - **Full documentation** provided for smooth migration
 
 ## 🔗 External Links

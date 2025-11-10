@@ -1,8 +1,16 @@
 {
-  "timestamp": "2025-09-19 11:18:27",
-  "environment_creation_sec": 1.162217140197754,
-  "resets_per_sec": 1745.2996005326231,
-  "ms_per_reset": 0.572967529296875,
+  "timestamp": "2025-10-30 09:22:54",
+  "environment_creation_sec": 0.8622097969055176,
+  "resets_per_sec": 2118.121401878598,
+  "ms_per_reset": 0.47211647033691406,
   "total_test_resets": 5,
-  "total_test_time_sec": 0.002864837646484375
+  "total_test_time_sec": 0.0023605823516845703,
+  "thresholds": {
+    "creation_soft": 3.0,
+    "creation_hard": 8.0,
+    "reset_soft": 0.5,
+    "reset_hard": 0.2,
+    "enforce": false,
+    "ci": false
+  }
 }

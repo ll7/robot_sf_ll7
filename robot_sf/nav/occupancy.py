@@ -6,7 +6,7 @@ import numpy as np
 
 from robot_sf.common.types import Circle2D, Line2D, Vec2D
 
-# TODO(#250): REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
+# TODO(#250): Refactor duplicated `euclid_dist` function to a central utils file.
 # See: https://github.com/ll7/robot_sf_ll7/issues/250
 
 

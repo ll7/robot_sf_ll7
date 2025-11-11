@@ -90,6 +90,11 @@ def ped_robot_force(
             out_forces[i] = potential_field_force(distance, dx_dist, dy_dist)
 
 
+# TODO(#250): Refactor duplicated `euclid_dist` function to a central utils file.
+# See: https://github.com/ll7/robot_sf_ll7/issues/250
+
+
+@numba.njit(fastmath=True)
 # TODO(#250): REFACTOR TO UTILS FILE -> euclid_dist is defined in range_sensor.py
 # See: https://github.com/ll7/robot_sf_ll7/issues/250
 @numba.njit(fastmath=True)

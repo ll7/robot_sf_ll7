@@ -623,7 +623,7 @@ class SimulationView:
         )
 
     def _draw_ego_ped(self, pose: PedPose):
-        # TODO(#252): display robot with an image instead of a circle
+        # TODO(#252): display ego ped with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
         pygame.draw.circle(
             self.screen,

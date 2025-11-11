@@ -72,6 +72,8 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 - **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` subtree → NumPy/Numba physics
 
 ### Configuration hierarchy
+**For complete documentation, see [Configuration Architecture](./architecture/configuration.md)** (precedence rules, migration guide, module structure).
+
 Use unified config classes from `robot_sf.gym_env.unified_config`:
 ```python
 from robot_sf.gym_env.unified_config import RobotSimulationConfig, ImageRobotConfig

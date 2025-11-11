@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Comprehensive configuration architecture documentation (#244)
+  - Created `docs/architecture/configuration.md` with configuration precedence hierarchy
+  - Documented three-tier precedence system: Code Defaults < YAML < Runtime
+  - Added migration guide from legacy config classes to unified config
+  - Documented all configuration modules (canonical vs legacy)
+  - Linked from `docs/README.md` and `docs/dev_guide.md`
+
 ### Changed
 - **[BREAKING for internal imports]** Consolidated utility modules into single `robot_sf/common/` directory (#241)
   - Moved `robot_sf/util/types.py` → `robot_sf/common/types.py`

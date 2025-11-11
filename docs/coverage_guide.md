@@ -297,7 +297,7 @@ def debug_helper():  # pragma: no cover
 **Symptom**: No `coverage.json` or `htmlcov/` after tests
 **Solution**: Ensure pytest runs from repository root with coverage enabled
 ```bash
-cd /Users/lennart/git/robot_sf_ll7
+cd robot_sf_ll7
 uv run pytest tests  # Not: pytest tests (uses wrong Python)
 ```
 

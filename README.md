@@ -243,6 +243,10 @@ python3 examples/demo_pedestrian.py
 
 ## 📚 Documentation
 
+**Comprehensive documentation is available in the [`docs/`](./docs/) directory.**
+
+For detailed guides on setup, development, benchmarking, and architecture, visit the **[Documentation Index](./docs/README.md)**.
+
 ### Core Documentation
 - [Environment Refactoring](./docs/refactoring/) - **NEW**: Comprehensive guide to the refactored environment architecture
 - [Data Analysis](./docs/DATA_ANALYSIS.md) - Analysis tools and utilities

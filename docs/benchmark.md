@@ -1,8 +1,12 @@
 # Benchmark Schema Management
 
+[← Back to Documentation Index](./README.md)
+
 ## Schema Consolidation
 
 The RobotSF benchmark system uses a consolidated schema management approach to ensure consistency and prevent duplication across the codebase.
+
+**See also**: [SNQI Weight Tools](./snqi-weight-tools/README.md) for weight recomputation and optimization, and [Distribution Plots](./distribution_plots.md) for visualization guidance.
 
 ### Canonical Schema Location
 

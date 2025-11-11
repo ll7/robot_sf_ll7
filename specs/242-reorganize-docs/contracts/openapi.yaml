@@ -1,0 +1,10 @@
+openapi: 3.1.0
+info:
+  title: Docs Reorganization Placeholder API
+  version: 0.0.0
+  description: >-
+    This feature does not introduce runtime HTTP APIs. Placeholder maintained so
+    planning workflow has a contracts artifact. Future documentation-related automation
+    (e.g., link checker service) would define endpoints here.
+paths: {}
+components: {}

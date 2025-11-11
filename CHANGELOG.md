@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved `robot_sf/utils/seed_utils.py` → `robot_sf/common/seed.py` (renamed)
   - Moved `robot_sf/util/compatibility.py` → `robot_sf/common/compat.py` (renamed)
   - Removed empty `robot_sf/util/` and `robot_sf/utils/` directories
+
+### Documentation
+- Reorganized documentation index with categorized sections (#242)
+  - Added clear navigation sections: Getting Started, Benchmarking & Metrics, Tooling, Architecture & Refactoring, Simulation & UI, Figures & Visualization, Performance & CI, Hardware & Environment
+  - Added cross-links between core guides for improved discoverability
+  - Normalized H1 headings and purpose statements across key documentation files
+  - Collapsed legacy detailed index into expandable section for backward compatibility
   
 ### Migration Guide (Version 2.1.0)
 

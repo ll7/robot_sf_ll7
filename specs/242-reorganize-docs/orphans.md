@@ -6,7 +6,7 @@ Generated: 2025-11-10 (Feature 242 - Reorganize Docs)
 List markdown files under `docs/` not explicitly linked from `docs/README.md` to ensure discoverability.
 
 ## Methodology
-- Listed all `.md` files under `/Users/lennart/git/robot_sf_ll7/docs/`
+- Listed all `.md` files under `docs/`
 - Checked each against central index (`docs/README.md`)
 - Identified files not explicitly mentioned
 

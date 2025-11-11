@@ -1,6 +1,6 @@
-# UV Package Manager Migration
+# uv Migration
 
-Migration to the UV package manager for faster dependency resolution and modern Python packaging.
+Migration to the uv package manager for faster dependency resolution and modern Python packaging.
 
 ## Migration Complete ✅
 

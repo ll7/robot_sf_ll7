@@ -4,7 +4,7 @@
 Track decisions, link validations, and manual checks performed during docs reorganization.
 
 ## Phase 1: Setup
-- [x] T001: Created backup at /Users/lennart/git/robot_sf_ll7/docs/README.backup.md
+- [x] T001: Created backup at `docs/README.backup.md`
 - [x] T002: Created this audit notes file
 
 ## Phase 2: Foundational

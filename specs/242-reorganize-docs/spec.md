@@ -1,115 +1,105 @@
-# Feature Specification: [FEATURE NAME]
+# Feature Specification: Reorganize Documentation Index
 
-**Feature Branch**: `[###-feature-name]`  
-**Created**: [DATE]  
-**Status**: Draft  
-**Input**: User description: "$ARGUMENTS"
+**Feature Branch**: `242-reorganize-docs`  
+**Created**: 2025-11-10  
+**Status**: Complete  
+**Input**: User description: "Reorganize docs index with categorized sections and improve discoverability"
 
 ## User Scenarios & Testing *(mandatory)*
 
-<!--
-  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
-  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
-  you should still have a viable MVP (Minimum Viable Product) that delivers value.
-  
-  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
-  Think of each story as a standalone slice of functionality that can be:
-  - Developed independently
-  - Tested independently
-  - Deployed independently
-  - Demonstrated to users independently
--->
+### User Story 1 - Central Docs Index with Categorized Sections (Priority: P1) 🎯 MVP
 
-### User Story 1 - [Brief Title] (Priority: P1)
+Reorganize `docs/README.md` into 8 categorized sections (Getting Started, Benchmarking & Metrics, Tooling, Architecture & Refactoring, Simulation & UI, Figures & Visualization, Performance & CI, Hardware & Environment) to enable two-click navigation to key content.
 
-[Describe this user journey in plain language]
+**Why this priority**: Central navigation is critical for discoverability. Without categorization, developers waste time searching for documentation.
 
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently - e.g., "Can be fully tested by [specific action] and delivers [specific value]"]
+**Independent Test**: Open `docs/README.md` and verify each top-level section exists and links resolve locally.
 
 **Acceptance Scenarios**:
 
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-2. **Given** [initial state], **When** [action], **Then** [expected outcome]
+1. **Given** a developer needs setup instructions, **When** they open `docs/README.md`, **Then** they see "Getting Started" section with Development Guide and Environment links
+2. **Given** a developer needs benchmark info, **When** they scan the index, **Then** they find "Benchmarking & Metrics" section with all benchmark-related guides
 
 ---
 
-### User Story 2 - [Brief Title] (Priority: P2)
+### User Story 2 - Normalize H1 Headings and Purpose Statements (Priority: P2)
 
-[Describe this user journey in plain language]
+Ensure all major documentation files have proper H1 headings and clear purpose statements at the top for consistency and clarity.
 
-**Why this priority**: [Explain the value and why it has this priority level]
+**Why this priority**: Consistent structure improves readability and helps developers quickly determine if a document is relevant.
 
-**Independent Test**: [Describe how this can be tested independently]
+**Independent Test**: Check `docs/UV_MIGRATION.md`, `docs/ENVIRONMENT.md`, and other major guides for H1 heading + purpose statement.
 
 **Acceptance Scenarios**:
 
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
+1. **Given** a file like `UV_MIGRATION.md`, **When** opened, **Then** it starts with an H1 heading and one-line purpose statement
+2. **Given** all major guides, **When** reviewed, **Then** they follow consistent heading structure
 
 ---
 
-### User Story 3 - [Brief Title] (Priority: P3)
+### User Story 3 - Add Cross-Links and Back-Links (Priority: P2)
 
-[Describe this user journey in plain language]
+Add "See also" cross-references in related documents and back-links to central index for improved navigation.
 
-**Why this priority**: [Explain the value and why it has this priority level]
+**Why this priority**: Cross-links enable discovery of related content without returning to index repeatedly.
 
-**Independent Test**: [Describe how this can be tested independently]
+**Independent Test**: Check `docs/benchmark.md` and `docs/SIM_VIEW.md` for "See also" sections; verify major guides have back-links to index.
 
 **Acceptance Scenarios**:
 
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
+1. **Given** `docs/benchmark.md`, **When** scrolling to bottom, **Then** "See also" section lists related docs (SNQI tools, distribution plots)
+2. **Given** major guide pages, **When** opened, **Then** back-link to central index appears at top
 
 ---
 
-[Add more user stories as needed, each with an assigned priority]
+### User Story 4 - Orphan Documentation Scan (Priority: P3)
+
+Identify documentation files not explicitly linked from central index to ensure all content is discoverable.
+
+**Why this priority**: Prevents valuable documentation from being hidden due to missing links.
+
+**Independent Test**: Run manual scan of `docs/*.md` and compare with index; record findings in `specs/242-reorganize-docs/orphans.md`.
+
+**Acceptance Scenarios**:
+
+1. **Given** all `.md` files in `docs/`, **When** compared with index, **Then** orphan list is generated with recommendations
+2. **Given** orphan scan results, **When** reviewed, **Then** critical docs are linked in index or marked as intentionally unlisted
+
+---
+
 
 ### Edge Cases
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
--->
-
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
+- **Empty sections**: If a category has no docs, do not create the section (keep only populated categories)
+- **Broken links**: Verify all links resolve to existing files before merging
+- **Duplicate links**: ENVIRONMENT.md was listed twice - removed duplicate under "Getting Started"
+- **Backup safety**: Create backup before any modifications to enable rollback
 
 ## Requirements *(mandatory)*
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right functional requirements.
--->
-
 ### Functional Requirements
 
-- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
+- **FR-001**: Central index MUST categorize all major documentation files into logical sections
+- **FR-002**: All major guides MUST have H1 headings and purpose statements
+- **FR-003**: Related documentation MUST include cross-reference links for discoverability
+- **FR-004**: Central index MUST provide back-link targets for major guides  
+- **FR-005**: System MUST identify orphaned documentation files not linked from index
+- **FR-006**: All links MUST be validated to resolve correctly before merging
 
-*Example of marking unclear requirements:*
-
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
 ### Key Entities *(include if feature involves data)*
 
-- **[Entity 1]**: [What it represents, key attributes without implementation]
-- **[Entity 2]**: [What it represents, relationships to other entities]
+- **DocPage**: Represents a markdown documentation file (attributes: file path, H1 heading, purpose statement, links to/from)
+- **Section**: A category in the central index (attributes: name, description, list of DocPage links)
+- **Link**: Connection between documentation pages (attributes: source page, target page, link text, link type: cross-reference/back-link)
 
 ## Success Criteria *(mandatory)*
 
-<!--
-  ACTION REQUIRED: Define measurable success criteria.
-  These must be technology-agnostic and measurable.
--->
-
 ### Measurable Outcomes
 
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- **SC-001**: Developers can find any major guide within 2 clicks from `docs/README.md`
+- **SC-002**: All 8 categorized sections contain correct, working links to existing documentation
+- **SC-003**: 100% of major guides have H1 headings and purpose statements  
+- **SC-004**: Zero broken links in central index (validated manually before merge)
+- **SC-005**: Orphan scan identifies all unlisted docs with recommendations for inclusion
+

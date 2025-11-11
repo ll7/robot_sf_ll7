@@ -22,8 +22,8 @@ description: "Task list for feature 242-reorganize-docs"
 
 **Purpose**: Prepare working artifacts and backups for safe docs reorganization
 
-- [X] T001 [P] Create backup of central index at /Users/lennart/git/robot_sf_ll7/docs/README.backup.md (copy of /Users/lennart/git/robot_sf_ll7/docs/README.md)
-- [X] T002 [P] Create audit notes file at /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/audit_notes.md
+- [X] T001 [P] Create backup of central index at docs/README.backup.md (copy of docs/README.md)
+- [X] T002 [P] Create audit notes file at specs/242-reorganize-docs/audit_notes.md
 
 ---
 
@@ -31,9 +31,9 @@ description: "Task list for feature 242-reorganize-docs"
 
 **Purpose**: Ensure required design artifacts exist to guide reorganization
 
-- [X] T003 [P] Verify quickstart exists at /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/quickstart.md (create if missing)
-- [X] T004 [P] Verify data model exists at /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/data-model.md (create if missing)
-- [X] T005 [P] Verify contracts placeholder exists at /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/contracts/openapi.yaml (create if missing)
+- [X] T003 [P] Verify quickstart exists at specs/242-reorganize-docs/quickstart.md (create if missing)
+- [X] T004 [P] Verify data model exists at specs/242-reorganize-docs/data-model.md (create if missing)
+- [X] T005 [P] Verify contracts placeholder exists at specs/242-reorganize-docs/contracts/openapi.yaml (create if missing)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -43,19 +43,19 @@ description: "Task list for feature 242-reorganize-docs"
 
 **Goal**: A clear, categorized `docs/README.md` that links to all primary guides, enabling two-click navigation to key content.
 
-**Independent Test**: Open /Users/lennart/git/robot_sf_ll7/docs/README.md and verify each top-level section exists and links resolve locally.
+**Independent Test**: Open docs/README.md and verify each top-level section exists and links resolve locally.
 
 ### Implementation for User Story 1
 
-- [X] T010 [US1] Add "Getting Started" section linking to /Users/lennart/git/robot_sf_ll7/docs/dev_guide.md and /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T011 [US1] Add "Benchmarking & Metrics" section linking to /Users/lennart/git/robot_sf_ll7/docs/benchmark.md, /Users/lennart/git/robot_sf_ll7/docs/benchmark_full_classic.md, /Users/lennart/git/robot_sf_ll7/docs/benchmark_visuals.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T012 [US1] Add "Tooling" section linking to /Users/lennart/git/robot_sf_ll7/docs/snqi-weight-tools/README.md, /Users/lennart/git/robot_sf_ll7/docs/pyreverse.md, /Users/lennart/git/robot_sf_ll7/docs/DATA_ANALYSIS.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T013 [US1] Add "Architecture & Refactoring" section linking to /Users/lennart/git/robot_sf_ll7/docs/refactoring/ (directory index), /Users/lennart/git/robot_sf_ll7/docs/SUBTREE_MIGRATION.md, /Users/lennart/git/robot_sf_ll7/docs/UV_MIGRATION.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T014 [US1] Add "Simulation & UI" section linking to /Users/lennart/git/robot_sf_ll7/docs/SIM_VIEW.md and /Users/lennart/git/robot_sf_ll7/docs/SVG_MAP_EDITOR.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T015 [US1] Add "Figures & Visualization" section linking to /Users/lennart/git/robot_sf_ll7/docs/trajectory_visualization.md, /Users/lennart/git/robot_sf_ll7/docs/force_field_visualization.md, /Users/lennart/git/robot_sf_ll7/docs/pareto_plotting.md, /Users/lennart/git/robot_sf_ll7/docs/force_field_heatmap.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T016 [US1] Add "Performance & CI" section linking to /Users/lennart/git/robot_sf_ll7/docs/performance_notes.md and /Users/lennart/git/robot_sf_ll7/docs/coverage_guide.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T017 [US1] Add "Hardware & Environment" section linking to /Users/lennart/git/robot_sf_ll7/docs/GPU_SETUP.md and /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T018 [US1] Verify all links in /Users/lennart/git/robot_sf_ll7/docs/README.md resolve locally; update anchors/paths if needed
+- [X] T010 [US1] Add "Getting Started" section linking to docs/dev_guide.md and docs/ENVIRONMENT.md in docs/README.md
+- [X] T011 [US1] Add "Benchmarking & Metrics" section linking to docs/benchmark.md, docs/benchmark_full_classic.md, docs/benchmark_visuals.md in docs/README.md
+- [X] T012 [US1] Add "Tooling" section linking to docs/snqi-weight-tools/README.md, docs/pyreverse.md, docs/DATA_ANALYSIS.md in docs/README.md
+- [X] T013 [US1] Add "Architecture & Refactoring" section linking to docs/refactoring/ (directory index), docs/SUBTREE_MIGRATION.md, docs/UV_MIGRATION.md in docs/README.md
+- [X] T014 [US1] Add "Simulation & UI" section linking to docs/SIM_VIEW.md and docs/SVG_MAP_EDITOR.md in docs/README.md
+- [X] T015 [US1] Add "Figures & Visualization" section linking to docs/trajectory_visualization.md, docs/force_field_visualization.md, docs/pareto_plotting.md, docs/force_field_heatmap.md in docs/README.md
+- [X] T016 [US1] Add "Performance & CI" section linking to docs/performance_notes.md and docs/coverage_guide.md in docs/README.md
+- [X] T017 [US1] Add "Hardware & Environment" section linking to docs/GPU_SETUP.md and docs/ENVIRONMENT.md in docs/README.md
+- [X] T018 [US1] Verify all links in docs/README.md resolve locally; update anchors/paths if needed
 
 **Checkpoint**: User Story 1 is fully functional; central index present and working
 
@@ -69,15 +69,15 @@ description: "Task list for feature 242-reorganize-docs"
 
 ### Implementation for User Story 2
 
-- [X] T020 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/dev_guide.md
-- [X] T021 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md
-- [X] T022 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/SIM_VIEW.md
-- [X] T023 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/benchmark.md
-- [X] T024 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/snqi-weight-tools/README.md
-- [X] T025 [P] [US2] Ensure H1 + purpose page exists at /Users/lennart/git/robot_sf_ll7/docs/refactoring/README.md (create minimal if missing)
-- [X] T026 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/UV_MIGRATION.md
-- [X] T027 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/GPU_SETUP.md
-- [X] T028 [P] [US2] Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/DATA_ANALYSIS.md
+- [X] T020 [P] [US2] Ensure H1 + purpose in docs/dev_guide.md
+- [X] T021 [P] [US2] Ensure H1 + purpose in docs/ENVIRONMENT.md
+- [X] T022 [P] [US2] Ensure H1 + purpose in docs/SIM_VIEW.md
+- [X] T023 [P] [US2] Ensure H1 + purpose in docs/benchmark.md
+- [X] T024 [P] [US2] Ensure H1 + purpose in docs/snqi-weight-tools/README.md
+- [X] T025 [P] [US2] Ensure H1 + purpose page exists at docs/refactoring/README.md (create minimal if missing)
+- [X] T026 [P] [US2] Ensure H1 + purpose in docs/UV_MIGRATION.md
+- [X] T027 [P] [US2] Ensure H1 + purpose in docs/GPU_SETUP.md
+- [X] T028 [P] [US2] Ensure H1 + purpose in docs/DATA_ANALYSIS.md
 
 **Checkpoint**: User Story 2 is complete; headings and purposes normalized
 
@@ -91,11 +91,11 @@ description: "Task list for feature 242-reorganize-docs"
 
 ### Implementation for User Story 3
 
-- [X] T030 [P] [US3] Add "Back to Docs Index" link at top of /Users/lennart/git/robot_sf_ll7/docs/dev_guide.md
-- [X] T031 [P] [US3] Add "Back to Docs Index" link at top of /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md
-- [X] T032 [P] [US3] Add cross-links in /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/quickstart.md to /Users/lennart/git/robot_sf_ll7/docs/dev_guide.md and /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md
-- [X] T033 [P] [US3] Add "See also" in /Users/lennart/git/robot_sf_ll7/docs/benchmark.md linking to /Users/lennart/git/robot_sf_ll7/docs/snqi-weight-tools/README.md and /Users/lennart/git/robot_sf_ll7/docs/distribution_plots.md
-- [X] T034 [P] [US3] Add cross-links in /Users/lennart/git/robot_sf_ll7/docs/SIM_VIEW.md to /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md and /Users/lennart/git/robot_sf_ll7/docs/video/ (directory)
+- [X] T030 [P] [US3] Add "Back to Docs Index" link at top of docs/dev_guide.md
+- [X] T031 [P] [US3] Add "Back to Docs Index" link at top of docs/ENVIRONMENT.md
+- [X] T032 [P] [US3] Add cross-links in specs/242-reorganize-docs/quickstart.md to docs/dev_guide.md and docs/ENVIRONMENT.md
+- [X] T033 [P] [US3] Add "See also" in docs/benchmark.md linking to docs/snqi-weight-tools/README.md and docs/distribution_plots.md
+- [X] T034 [P] [US3] Add cross-links in docs/SIM_VIEW.md to docs/ENVIRONMENT.md and docs/video/ (directory)
 
 **Checkpoint**: User Story 3 complete; cross-linking reduces navigation clicks
 
@@ -109,9 +109,9 @@ description: "Task list for feature 242-reorganize-docs"
 
 ### Implementation for User Story 4
 
-- [X] T040 [US4] Add Baselines docs entry in /Users/lennart/git/robot_sf_ll7/docs/README.md linking to /Users/lennart/git/robot_sf_ll7/docs/baselines/social_force.md
-- [X] T041 [US4] Add missing index entry for /Users/lennart/git/robot_sf_ll7/docs/GPU_SETUP.md in /Users/lennart/git/robot_sf_ll7/docs/README.md
-- [X] T043 [P] [US4] Create orphans report at /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/orphans.md listing any `.md` under /Users/lennart/git/robot_sf_ll7/docs/ not referenced by /Users/lennart/git/robot_sf_ll7/docs/README.md
+- [X] T040 [US4] Add Baselines docs entry in docs/README.md linking to docs/baselines/social_force.md
+- [X] T041 [US4] Add missing index entry for docs/GPU_SETUP.md in docs/README.md
+- [X] T043 [P] [US4] Create orphans report at specs/242-reorganize-docs/orphans.md listing any `.md` under docs/ not referenced by docs/README.md
 
 **Checkpoint**: User Story 4 complete; orphaned docs addressed or tracked
 
@@ -123,7 +123,7 @@ description: "Task list for feature 242-reorganize-docs"
 
 - [X] T050 [P] Documentation updates in docs/
 - [X] T051 [P] Code cleanup and refactoring
-- [X] T052 Run manual link validation and record results in /Users/lennart/git/robot_sf_ll7/specs/242-reorganize-docs/audit_notes.md
+- [X] T052 Run manual link validation and record results in specs/242-reorganize-docs/audit_notes.md
 
 ---
 
@@ -161,9 +161,9 @@ description: "Task list for feature 242-reorganize-docs"
 
 ```bash
 # Parallelizable edits (different files):
-Task: "Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/dev_guide.md"
-Task: "Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/ENVIRONMENT.md"
-Task: "Ensure H1 + purpose in /Users/lennart/git/robot_sf_ll7/docs/SIM_VIEW.md"
+Task: "Ensure H1 + purpose in docs/dev_guide.md"
+Task: "Ensure H1 + purpose in docs/ENVIRONMENT.md"
+Task: "Ensure H1 + purpose in docs/SIM_VIEW.md"
 ```
 
 ---

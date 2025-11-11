@@ -64,7 +64,6 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### Getting Started
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
-- **[Environment Overview](./ENVIRONMENT.md)** - Gymnasium environment interfaces, factory pattern, observation/action spaces
 
 ### Benchmarking & Metrics
 - **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
@@ -106,7 +105,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Additional Resources (Legacy Structure)
 
 <details>
-<summary>Click to expand legacy/detailed index sections</summary>
+<summary>Click to expand legacy detailed index</summary>
 
 ### 🏗️ Architecture & Development
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, testing, and quality standards

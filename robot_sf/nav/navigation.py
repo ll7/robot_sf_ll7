@@ -172,6 +172,7 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     # Construct the route
     route = [initial_spawn, *route.waypoints, final_goal]
 
-    # TODO: add noise to the exact waypoint positions to avoid learning routes by heart
+    # TODO(#254): add noise to the exact waypoint positions to avoid learning routes by heart
+    # See: https://github.com/ll7/robot_sf_ll7/issues/254
 
     return route

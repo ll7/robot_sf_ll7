@@ -613,7 +613,8 @@ class SimulationView:
             self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
 
     def _draw_robot(self, pose: RobotPose):
-        # TODO: display robot with an image instead of a circle
+        # TODO(#252): display robot with an image instead of a circle
+        # See: https://github.com/ll7/robot_sf_ll7/issues/252
         pygame.draw.circle(
             self.screen,
             ROBOT_COLOR,
@@ -622,7 +623,8 @@ class SimulationView:
         )
 
     def _draw_ego_ped(self, pose: PedPose):
-        # TODO: display robot with an image instead of a circle
+        # TODO(#252): display ego ped with an image instead of a circle
+        # See: https://github.com/ll7/robot_sf_ll7/issues/252
         pygame.draw.circle(
             self.screen,
             EGO_PED_COLOR,
@@ -631,7 +633,8 @@ class SimulationView:
         )
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
-        # TODO: display pedestrians with an image instead of a circle
+        # TODO(#252): display pedestrians with an image instead of a circle
+        # See: https://github.com/ll7/robot_sf_ll7/issues/252
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(
                 self.screen,

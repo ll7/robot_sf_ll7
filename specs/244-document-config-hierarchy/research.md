@@ -1,7 +1,7 @@
 # Research: Configuration Hierarchy Documentation
 
 **Feature**: 244-document-config-hierarchy  
-**Date**: 2025-11-11  
+**Date**: 2025-01-11  
 **Status**: Complete
 
 ## Overview
@@ -32,10 +32,13 @@ This model is consistent with established patterns in Python configuration libra
 ## Decision 2: Legacy Config Classes Identification
 
 **Decision**: Mark the following as legacy with deprecation warnings:
+- `BaseEnvSettings` in `robot_sf/gym_env/env_config.py` (base of legacy hierarchy)
+- `RobotEnvSettings` in `robot_sf/gym_env/env_config.py` (intermediate class, also legacy)
 - `EnvSettings` in `robot_sf/gym_env/env_config.py`
 - `PedEnvSettings` in `robot_sf/gym_env/env_config.py`
-- `RobotEnvSettings` in `robot_sf/gym_env/env_config.py` (intermediate class, also legacy)
-- `BaseEnvSettings` in `robot_sf/gym_env/env_config.py` (base of legacy hierarchy)
+
+**Canonical (NOT deprecated)**:
+- `SimulationSettings` in `robot_sf/sim/sim_config.py` - Used by `BaseSimulationConfig` in unified config system
 
 **Canonical Classes** (in `unified_config.py`):
 - `BaseSimulationConfig` - Core simulation configuration

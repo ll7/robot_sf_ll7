@@ -1,6 +1,6 @@
 # Implementation Plan: Document Configuration Hierarchy and Deprecate Legacy Config Classes
 
-**Branch**: `244-document-config-hierarchy` | **Date**: 2025-11-11 | **Spec**: [spec.md](./spec.md)
+**Branch**: `244-document-config-hierarchy` | **Date**: 2025-01-11 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/244-document-config-hierarchy/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -29,8 +29,9 @@ This feature addresses the need to document the configuration hierarchy and depr
 
 **Scale/Scope**: 
 - 1 new documentation file (`docs/architecture/configuration.md`)
-- 3 legacy config classes to deprecate (`EnvSettings`, `PedEnvSettings`, `SimulationSettings`)
-- 4 canonical config classes documented (`BaseSimulationConfig`, `RobotSimulationConfig`, `ImageRobotConfig`, `PedestrianSimulationConfig`)
+- 4 legacy config classes to deprecate (`BaseEnvSettings`, `RobotEnvSettings`, `EnvSettings`, `PedEnvSettings` - all in `env_config.py`)
+- 4 canonical config classes documented (`BaseSimulationConfig`, `RobotSimulationConfig`, `ImageRobotConfig`, `PedestrianSimulationConfig` in `unified_config.py`)
+- **Note**: `SimulationSettings` (in `sim_config.py`) is canonical and used by the unified config system
 - Migration guide covering ~3-5 common conversion scenarios
 
 ## Constitution Check

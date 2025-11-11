@@ -1,7 +1,7 @@
 # Quickstart: Configuration Hierarchy Documentation
 
 **Feature**: 244-document-config-hierarchy  
-**Date**: 2025-11-11
+**Date**: 2025-01-11
 
 ## For Developers: Using the Configuration Documentation
 
@@ -62,7 +62,9 @@ config = RobotSimulationConfig()
 ### Step 1: Add Deprecation Warnings to Legacy Classes
 
 **Files to modify**:
-- `robot_sf/gym_env/env_config.py` (3 classes)
+- `robot_sf/gym_env/env_config.py` (4 classes: `BaseEnvSettings`, `RobotEnvSettings`, `EnvSettings`, `PedEnvSettings`)
+
+**Note**: Do NOT modify `sim_config.py` - `SimulationSettings` is canonical and used by unified config
 
 **Pattern**:
 ```python
@@ -274,7 +276,7 @@ config = RobotSimulationConfig(
 )
 ```
 
-**Note**: Field names and structure are identical, only import paths change!
+**Note**: `SimulationSettings` is still canonical - it's used by both legacy and unified configs. Only the outer config class changes (`EnvSettings` → `RobotSimulationConfig`).
 
 ---
 

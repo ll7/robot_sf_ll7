@@ -1,7 +1,7 @@
 # Feature Specification: Document Configuration Hierarchy and Deprecate Legacy Config Classes
 
 **Feature Branch**: `244-document-config-hierarchy`  
-**Created**: 2025-11-11  
+**Created**: 2025-01-11  
 **Status**: Draft  
 **Input**: Issue #244 - Document configuration hierarchy and deprecate legacy config classes
 
@@ -113,7 +113,9 @@ As a **contributor planning future work**, I want the current config module stru
 ### Key Entities
 
 - **Configuration Document** (`docs/architecture/configuration.md`): Central reference explaining hierarchy, module structure, precedence rules, and migration paths
-- **Legacy Config Classes**: `EnvSettings`, `PedEnvSettings` (in `env_config.py`), `SimulationSettings` (in `sim_config.py`)
+- **Legacy Config Classes**: `BaseEnvSettings`, `RobotEnvSettings`, `EnvSettings`, `PedEnvSettings` (in `env_config.py`)
+- **Canonical Config Classes**: `BaseSimulationConfig`, `RobotSimulationConfig`, `ImageRobotConfig`, `PedestrianSimulationConfig` (in `unified_config.py`)
+- **SimulationSettings** (in `sim_config.py`): Still canonical - used by unified config classes
 - **Canonical Config Classes**: `BaseSimulationConfig`, `RobotSimulationConfig`, `ImageRobotConfig`, `PedestrianSimulationConfig` (in `unified_config.py`)
 - **YAML Configs**: Scenario and baseline configuration files in `configs/scenarios/` and `configs/baselines/`
 - **Migration Guide**: Section in configuration.md or separate doc showing legacy → unified conversions

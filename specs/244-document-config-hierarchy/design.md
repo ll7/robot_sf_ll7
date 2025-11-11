@@ -2,8 +2,8 @@
 
 **Feature**: Issue #244  
 **Author**: GitHub Copilot  
-**Date**: 2025-11-11  
-**Status**: Draft
+**Date**: 2025-01-11  
+**Status**: Implementation Complete
 
 ## Purpose
 
@@ -73,9 +73,9 @@ This creates confusion, maintenance burden, and technical debt accumulation.
 | Module | Status | Replacement | Notes |
 |--------|--------|-------------|-------|
 | `unified_config.py` | ✅ **Canonical** | N/A | Use for all new code |
+| `sim_config.py` | ✅ **Canonical** | N/A | `SimulationSettings` used by unified config |
 | `map_config.py` | ✅ **Canonical** | N/A | Map definitions, still current |
 | `env_config.py` | ⚠️ **Legacy** | `unified_config.py` | To be deprecated |
-| `sim_config.py` | ⚠️ **Legacy** | `unified_config.py` | To be deprecated |
 | `fast-pysf/config.py` | 🔗 **External** | N/A | Managed by subtree, pass-through |
 
 ### Deprecation Strategy
@@ -131,8 +131,9 @@ class EnvSettings:
 ### Deprecation Implementation
 
 **Files to modify**:
-- `robot_sf/gym_env/env_config.py` - Add warnings to `EnvSettings`, `PedEnvSettings`
-- `robot_sf/sim/sim_config.py` - Add warning to `SimulationSettings`
+- `robot_sf/gym_env/env_config.py` - Add warnings to `BaseEnvSettings`, `RobotEnvSettings`, `EnvSettings`, `PedEnvSettings`
+
+**Note**: `sim_config.py` is NOT modified - `SimulationSettings` remains canonical (used by unified config)
 
 **Warning message template**:
 ```
@@ -188,29 +189,7 @@ def test_deprecation_warning_env_settings():
 
 ## Migration Examples
 
-### Example 1: SimulationSettings → RobotSimulationConfig
-
-**Before (Legacy)**:
-```python
-from robot_sf.sim.sim_config import SimulationSettings
-
-settings = SimulationSettings(
-    time_per_step=0.1,
-    sim_time_in_secs=60.0,
-)
-```
-
-**After (Unified)**:
-```python
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
-
-config = RobotSimulationConfig(
-    time_per_step_in_secs=0.1,  # Note: parameter name changed
-    sim_time_in_secs=60.0,
-)
-```
-
-### Example 2: EnvSettings → RobotSimulationConfig
+### Example 1: EnvSettings → RobotSimulationConfig
 
 **Before (Legacy)**:
 ```python

@@ -58,19 +58,11 @@ grep "configuration" docs/dev_guide.md
 
 **Story Complete When**: Developer can read configuration.md and determine which override level (code/YAML/runtime) to use for their scenario
 
-            warnings.warn(
+---
 
----                "EnvSettings is deprecated, use RobotSimulationConfig from unified_config",
+## Phase 3: User Story 2 - Legacy Config Identification (P2)
 
-                DeprecationWarning,
-
-## Phase 3: User Story 2 - Legacy Config Identification (P2)                stacklevel=2
-
-            )
-
-**Story Goal**: Mark legacy config classes as deprecated to guide contributors toward unified config system            # ... rest of init
-
-    ```
+**Story Goal**: Mark legacy config classes as deprecated to guide contributors toward unified config system
 
 **Independent Test Criteria**:
 

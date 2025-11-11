@@ -87,11 +87,11 @@ robot_sf/
     ├── unified_config.py         # EXISTING: Canonical config classes (documented)
     ├── env_config.py             # MODIFIED: Add deprecation warnings to EnvSettings, PedEnvSettings
     └── sim/
-        └── sim_config.py         # MODIFIED: Add deprecation warning to SimulationSettings
+        └── sim_config.py         # NO CHANGE: SimulationSettings is canonical (used by unified_config)
 
 tests/
 └── test_gym_env/
-    └── test_config_deprecation.py  # NEW: Test deprecation warnings
+    └── test_config_deprecation.py  # NEW: Test deprecation warnings for legacy classes
 
 configs/
 ├── scenarios/                    # EXISTING: YAML scenario configs (document in new docs)

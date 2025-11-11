@@ -274,7 +274,7 @@ config.robot_radius = 0.5
 When we're ready for breaking changes:
 
 1. **Consolidate modules** into `robot_sf/config/` package
-2. **Remove legacy classes** (EnvSettings, PedEnvSettings, SimulationSettings)
+2. **Remove legacy classes** (EnvSettings, PedEnvSettings) - Note: SimulationSettings is canonical and remains
 3. **Add schema validation** for YAML configs (e.g., using Pydantic)
 4. **Unify YAML and code config formats** for consistency
 5. **Create config versioning system** for backward compatibility

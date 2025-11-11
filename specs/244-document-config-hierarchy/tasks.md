@@ -74,15 +74,15 @@ grep "configuration" docs/dev_guide.md
 
   - **Acceptance**: DeprecationWarning emitted with message pointing to `PedestrianSimulationConfig`
 
+**Note**: SimulationSettings in sim_config.py is NOT deprecated - it's canonical and used by unified config classes.
+
 ### Tasks
 
-- [ ] **Task 2.3**: Add deprecation warning to `sim_config.py::SimulationSettings`
+- [ ] T012 [P] [US2] Create tests/test_gym_env/test_config_deprecation.py with test structure
 
-- [ ] T012 [P] [US2] Create tests/test_gym_env/test_config_deprecation.py with test structure  - **Estimate**: 30 minutes
+- [ ] T013 [P] [US2] Add test_base_env_settings_deprecated() to verify BaseEnvSettings emits DeprecationWarning
 
-- [ ] T013 [P] [US2] Add test_base_env_settings_deprecated() to verify BaseEnvSettings emits DeprecationWarning  - **Dependencies**: Task 1.3
-
-- [ ] T014 [P] [US2] Add test_robot_env_settings_deprecated() to verify RobotEnvSettings emits DeprecationWarning  - **Acceptance**: DeprecationWarning emitted with message pointing to appropriate unified config
+- [ ] T014 [P] [US2] Add test_robot_env_settings_deprecated() to verify RobotEnvSettings emits DeprecationWarning
 
 - [ ] T015 [P] [US2] Add test_env_settings_deprecated() to verify EnvSettings emits DeprecationWarning (if distinct from RobotEnvSettings)
 
@@ -102,57 +102,60 @@ grep "configuration" docs/dev_guide.md
 
     - Document any test failures (should be none)
 
-**Deprecation Warning Pattern**:    - Update tests if needed to suppress warnings where appropriate
-
+**Deprecation Warning Pattern**:
 ```python
+import warnings
 
-import warnings### Phase 3: Migration Guide (P3 - Nice to Have)
-
-
-
-def __post_init__(self):- [ ] **Task 3.1**: Create migration guide section in configuration.md
-
-    warnings.warn(  - **Estimate**: 2 hours
-
-        "{LegacyClass} is deprecated and will be removed in a future version. "  - **Dependencies**: Task 2.4
-
-        "Use {CanonicalClass} from robot_sf.gym_env.unified_config instead.",  - **Acceptance**: Section with code examples for each legacy → unified conversion
-
-        DeprecationWarning,  - **Content includes**:
-
-        stacklevel=2    - `SimulationSettings` → `RobotSimulationConfig` example
-
-    )    - `EnvSettings` → `RobotSimulationConfig` example
-
-    # ... existing validation code ...    - `PedEnvSettings` → `PedestrianSimulationConfig` example
-
-```    - Parameter mapping table showing old → new names if any differ
-
-    - Common gotchas and differences in behavior
+def __post_init__(self):
+    warnings.warn(
+        "{LegacyClass} is deprecated and will be removed in a future version. "
+        "Use {CanonicalClass} from robot_sf.gym_env.unified_config instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    # ... existing validation code ...
+```
 
 **Mapping**:
+- BaseEnvSettings → BaseSimulationConfig
+- RobotEnvSettings → RobotSimulationConfig
+- EnvSettings → RobotSimulationConfig
+- PedEnvSettings → PedestrianSimulationConfig
 
-- BaseEnvSettings → BaseSimulationConfig- [ ] **Task 3.2**: Add YAML config examples showing unified config usage
-
-- RobotEnvSettings → RobotSimulationConfig  - **Estimate**: 1 hour
-
-- EnvSettings → RobotSimulationConfig  - **Dependencies**: Task 3.1
-
-- PedEnvSettings → PedestrianSimulationConfig  - **Acceptance**: Examples show how YAML parameters map to unified config classes
-
-  - **Content includes**:
-
-**Acceptance Validation**:    - Example YAML snippet
-
-```bash    - Corresponding unified config instantiation
-
-# Verify warnings appear    - Explanation of how YAML overrides work
-
+**Acceptance Validation**:
+```bash
+# Verify warnings appear
 uv run pytest tests/test_gym_env/test_config_deprecation.py -v
 
-### Phase 4: Validation and Documentation (P1 - Must Have)
-
 # Verify all tests still pass
+uv run pytest tests -v
+```
+
+**Story Complete When**: All legacy config classes emit deprecation warnings and tests verify the warnings
+
+---
+
+## Phase 4: User Story 3 - Migration Guide (P3)
+
+**Story Goal**: Expand migration guide with comprehensive examples
+
+### Tasks
+
+- [ ] T023 [US3] Create migration guide section in configuration.md
+- [ ] T024 [US3] Add `EnvSettings` → `RobotSimulationConfig` example
+- [ ] T025 [US3] Add `PedEnvSettings` → `PedestrianSimulationConfig` example
+- [ ] T026 [US3] Add parameter mapping table showing old → new names if any differ
+- [ ] T027 [US3] Document common gotchas and differences in behavior
+- [ ] T028 [US3] Add YAML config examples showing unified config usage
+- [ ] T029 [US3] Link migration guide from docs/README.md and docs/dev_guide.md
+
+---
+
+## Phase 5: User Story 4 - Module Structure Documentation (P4)
+
+**Story Goal**: Document module responsibilities and relationships
+
+### Tasks
 
 uv run pytest tests -v | grep -E "(PASSED|FAILED|ERROR)"- [ ] **Task 4.1**: Add tests validating configuration precedence
 

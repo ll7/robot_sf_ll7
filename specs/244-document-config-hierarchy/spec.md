@@ -62,7 +62,7 @@ As a **user upgrading robot_sf**, I want a migration guide showing how to conver
 
 **Acceptance Scenarios**:
 
-1. **Given** a migration guide exists, **When** a user has legacy `SimulationSettings`, **Then** they can find the equivalent `RobotSimulationConfig` example
+1. **Given** a migration guide exists, **When** a user has legacy `EnvSettings` or `PedEnvSettings`, **Then** they can find the equivalent unified config example (Note: SimulationSettings is canonical, not legacy)
 2. **Given** migration examples are provided, **When** a user follows them, **Then** their code works identically with the new config
 3. **Given** the guide is linked from dev_guide.md, **When** users search for configuration docs, **Then** they discover the migration path
 

@@ -9,7 +9,8 @@ from robot_sf.common.types import Circle2D, Line2D, Range, RobotPose, Vec2D
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
 
 
-# TODO: Refactor. this method is used in multiple places (occupancy, ped_robot_force)
+# TODO(#250): Refactor. this method is used in multiple places (occupancy, ped_robot_force)
+# See: https://github.com/ll7/robot_sf_ll7/issues/250
 @numba.njit(fastmath=True)
 def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     """
@@ -275,7 +276,8 @@ def raycast(
             enemy_radius,
             ray_angles,
         )
-    # TODO: add raycast for other robots
+    # TODO(#251): add raycast for other robots
+    # See: https://github.com/ll7/robot_sf_ll7/issues/251
     return out_ranges
 
 

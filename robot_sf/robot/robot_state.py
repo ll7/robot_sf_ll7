@@ -105,7 +105,8 @@ class RobotState:
         checking for collisions, goal achievement, and timeout. Returns the next observation
         from sensors.
         """
-        # TODO: add check for robot-robot collisions as well
+        # TODO(#253): add check for robot-robot collisions as well
+        # See: https://github.com/ll7/robot_sf_ll7/issues/253
         self.timestep += 1
         self.sim_time_elapsed += self.d_t
         self.is_collision_with_ped = self.occupancy.is_pedestrian_collision

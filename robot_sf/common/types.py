@@ -31,7 +31,8 @@ Type alias for the bounds of a map represented as a tuple of two ranges (x and y
 
 Rect = tuple[Vec2D, Vec2D, Vec2D]
 """
-# TODO: Is there a difference between a Rect and a Zone?
+# TODO(#257): Is there a difference between a Rect and a Zone?
+# See: https://github.com/ll7/robot_sf_ll7/issues/257
 # rect ABC with sides |A B|, |B C| and diagonal |A C|
 """
 

@@ -131,7 +131,8 @@ class DifferentialDriveMotion:
         avg_left_speed = (last_wheel_speeds[0] + new_wheel_speeds[0]) / 2
         avg_right_speed = (last_wheel_speeds[1] + new_wheel_speeds[1]) / 2
         average_velocity = (avg_left_speed + avg_right_speed) / 2
-        # TODO: Validate that this is the correct formula for distance covered
+        # TODO(#255): Validate that this is the correct formula for distance covered
+        # See: https://github.com/ll7/robot_sf_ll7/issues/255
         return self.config.wheel_radius / 2 * average_velocity * d_t
 
     def _new_orientation(
@@ -153,7 +154,8 @@ class DifferentialDriveMotion:
         last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
         wheel_speed_left, wheel_speed_right = wheel_speeds
 
-        # TODO: Validate that this is the correct formula for orientation change
+        # TODO(#255): Validate that this is the correct formula for orientation change
+        # See: https://github.com/ll7/robot_sf_ll7/issues/255
         right_left_diff = (last_wheel_speed_right + wheel_speed_right) / 2 - (
             last_wheel_speed_left + wheel_speed_left
         ) / 2

@@ -6,13 +6,20 @@ Rewritten to purge legacy pytest_sessionfinish hook with invalid signature.
 from __future__ import annotations
 
 import os
+import sys
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+root_str = str(PROJECT_ROOT)
+if root_str not in sys.path:
+    sys.path.insert(0, root_str)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -39,6 +46,20 @@ def headless_pygame_environment() -> Generator[None, None, None]:
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
+
+
+@pytest.fixture(scope="session", autouse=True)
+def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator[None, None, None]:
+    original = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
+    override_dir = tmp_path_factory.mktemp("robot_sf_artifacts")
+    os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(override_dir)
+    try:
+        yield
+    finally:
+        if original is None:
+            os.environ.pop("ROBOT_SF_ARTIFACT_ROOT", None)
+        else:
+            os.environ["ROBOT_SF_ARTIFACT_ROOT"] = original
 
 
 @pytest.fixture(scope="session")
@@ -87,6 +108,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # type: igno
       * If ROBOT_SF_PERF_ENFORCE=1 and any soft breach occurs, convert to failure.
       * Hard breaches are expected to be handled by individual test timeouts / assertions.
     """
+    del exitstatus, config
     if not _SLOW_SAMPLES:
         return
     try:

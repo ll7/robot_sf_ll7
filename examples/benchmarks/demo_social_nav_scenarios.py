@@ -1,10 +1,24 @@
 """Run social navigation SVG scenarios sequentially.
 
-Loads and runs all four classic social navigation scenarios from SVG maps:
-(a) Static humans, (b) Overtaking, (c) Crossing, (d) Door passing
+Purpose:
+    Execute the classic quartet of SVG-based navigation scenarios to review
+    path planning behaviours interactively or in headless mode.
 
 Usage:
     uv run python examples/benchmarks/demo_social_nav_scenarios.py
+
+Prerequisites:
+    - `maps/svg_maps/static_humans.svg`
+    - `maps/svg_maps/overtaking.svg`
+    - `maps/svg_maps/crossing.svg`
+    - `maps/svg_maps/door_passing.svg`
+
+Expected Output:
+    - Console logs per scenario with completion status
+    - Optional rendering via `env.render()` in a window when display available
+
+Limitations:
+    - Rendering requires a display; set `SDL_VIDEODRIVER=dummy` for headless runs.
 """
 
 import time

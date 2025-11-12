@@ -1,13 +1,21 @@
-"""Aggregate episode metrics with optional bootstrap CIs.
+"""Aggregate episode metrics with optional bootstrap confidence intervals.
 
-This example shows how to:
-- Run a tiny batch to produce an episodes JSONL (using the demo matrix inline)
-- Compute grouped aggregates with bootstrap confidence intervals programmatically
-- Print a compact JSON summary
-- Uses helper catalog utilities for output directory management
+Purpose:
+    Demonstrate how to generate a minimal scenario matrix, run a smoke batch,
+    and compute grouped aggregates with bootstrap CIs for reporting.
 
-Usage (from repo root):
+Usage:
     uv run python examples/benchmarks/demo_aggregate.py
+
+Prerequisites:
+    - None (matrix is generated inline for a synthetic policy)
+
+Expected Output:
+    - `results/demo_aggregate/episodes.jsonl` (raw episodes)
+    - `results/demo_aggregate/summary_ci.json` (aggregate stats with CIs)
+
+Limitations:
+    - Uses a toy scenario; replace the matrix path for production analyses.
 """
 
 from __future__ import annotations

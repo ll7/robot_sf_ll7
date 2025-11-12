@@ -14,7 +14,7 @@ Each archived script retains its history but is excluded from automated smoke te
 
 | Archived Path | Replacement | Reason |
 | --- | --- | --- |
-| `examples/_archived/classic_interactions_pygame.py` | `examples/demo_full_classic_benchmark.py` | Interactive pygame workflow kept only for manual debugging. |
+| `examples/_archived/classic_interactions_pygame.py` | `examples/benchmarks/demo_full_classic_benchmark.py` | Interactive pygame workflow kept only for manual debugging. |
 | `examples/_archived/demo_pedestrian.py` | `examples/advanced/06_pedestrian_env_factory.py` | Legacy pedestrian env API replaced by factory-based demo. |
 | `examples/_archived/interactive_playback_demo.py` | `examples/advanced/15_view_recording.py` | Manual playback UI superseded by view-recording utility. |
 

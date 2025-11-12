@@ -21,7 +21,7 @@ def test_load_states_and_record_video(delete_video: bool = True):
     """
     # Create recordings directory if it doesn't exist
     recordings_dir = Path("tmp/recording_test")
-    recordings_dir.mkdir(exist_ok=True)
+    recordings_dir.mkdir(parents=True, exist_ok=True)
 
     # create a unique video name
     video_name = "playback_test_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"

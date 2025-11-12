@@ -26,6 +26,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
+
 DEFAULT_SCHEMA = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
@@ -34,10 +36,15 @@ def _run(cmd: list[str]) -> None:
     subprocess.check_call(cmd)
 
 
-def _ensure_weights(path: Path) -> None:
+def _ensure_weights(path: Path) -> Path:
     if path.exists():
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
+        return path.resolve()
+
+    resolved = resolve_artifact_path(path)
+    if resolved.exists():
+        return resolved
+
+    resolved.parent.mkdir(parents=True, exist_ok=True)
     weights = {
         "w_success": 1.0,
         "w_time": 0.5,
@@ -48,8 +55,9 @@ def _ensure_weights(path: Path) -> None:
         "w_jerk": 0.5,
         "w_curvature": 0.5,
     }
-    path.write_text(json.dumps(weights, indent=2) + "\n", encoding="utf-8")
-    print(f"[info] Wrote default weights JSON -> {path}")
+    resolved.write_text(json.dumps(weights, indent=2) + "\n", encoding="utf-8")
+    print(f"[info] Wrote default weights JSON -> {resolved}")
+    return resolved
 
 
 def main() -> int:
@@ -79,7 +87,14 @@ def main() -> int:
     ap.add_argument("--schema", type=Path, default=Path(DEFAULT_SCHEMA))
     args = ap.parse_args()
 
-    episodes = args.episodes
+    if args.episodes.exists():
+        episodes = args.episodes.resolve()
+    else:
+        episodes = resolve_artifact_path(args.episodes)
+        episodes.parent.mkdir(parents=True, exist_ok=True)
+
+    baseline_json = resolve_artifact_path(args.baseline_json)
+    baseline_json.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Generate episodes if needed
     if not episodes.exists():
@@ -118,9 +133,9 @@ def main() -> int:
             "robot_sf.benchmark.cli",
             "baseline",
             "--matrix",
-            str(args.matrix) if args.matrix else str(args.episodes),
+            str(args.matrix) if args.matrix else str(episodes),
             "--out",
-            str(args.baseline_json),
+            str(baseline_json),
             "--schema",
             str(args.schema),
             "--base-seed",
@@ -133,7 +148,7 @@ def main() -> int:
     )
 
     # Step 3: Ensure weights (user could alternatively run optimization and point here)
-    _ensure_weights(args.weights_json)
+    weights_json = _ensure_weights(args.weights_json)
 
     # Step 4: Generate figures (SNQI injected)
     _run(
@@ -153,9 +168,9 @@ def main() -> int:
             "--table-metrics",
             "collisions,comfort_exposure,near_misses,snqi",
             "--snqi-weights",
-            str(args.weights_json),
+            str(weights_json),
             "--snqi-baseline",
-            str(args.baseline_json),
+            str(baseline_json),
         ],
     )
 

@@ -17,10 +17,13 @@ Limitations:
     - Requires matplotlib; ensure plotting extras are installed.
 """
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from pysocialforce import Simulator
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
@@ -71,14 +74,13 @@ def main():
     ax.set_xlabel("x")
     ax.set_ylabel("y")
 
-    out_png = "docs/img/force_field_example.png"
-    fig.savefig(out_png, dpi=200)
+    out_png = resolve_artifact_path(Path("docs/img/force_field_example.png"))
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(out_png), dpi=200)
     print(f"Wrote {out_png}")
 
     # Also export vector PDF to docs/figures for LaTeX inclusion
-    from pathlib import Path
-
-    pdf_path = Path("docs/figures/force_field_example.pdf")
+    pdf_path = resolve_artifact_path(Path("docs/figures/force_field_example.pdf"))
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(str(pdf_path))
     print(f"Wrote {pdf_path}")

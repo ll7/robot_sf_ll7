@@ -70,6 +70,7 @@ from robot_sf.benchmark.utils import (
     determine_episode_outcome,
     format_episode_summary_table,
 )
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -95,7 +96,13 @@ SCENARIO_NAME: str | None = None  # default = first scenario
 SWEEP_ALL = False
 MAX_EPISODES = 8
 ENABLE_RECORDING = True
-OUTPUT_DIR = Path("tmp/vis_runs/" + time.strftime("%Y%m%d_%H%M%S"))
+
+
+def _default_output_dir() -> Path:
+    return resolve_artifact_path(Path("tmp/vis_runs") / time.strftime("%Y%m%d_%H%M%S"))
+
+
+OUTPUT_DIR = _default_output_dir()
 DRY_RUN = False  # global default dry_run if run_demo not passed a value
 LOGGING_ENABLED = True  # toggle for non-essential prints (FR-014)
 
@@ -413,6 +420,7 @@ def _run_episodes(
     seeds: list[int],
     eff_max: int,
     eff_record: bool,
+    out_dir: Path,
 ) -> list[EpisodeSummary]:
     results: list[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error
@@ -427,7 +435,7 @@ def _run_episodes(
                 env=env,
                 policy=model,
                 record=eff_record,
-                out_dir=OUTPUT_DIR,
+                out_dir=out_dir,
                 scenario_name=scenario.get("name", "unknown"),
                 seed=seed,
                 episode_index=ep_index,
@@ -495,6 +503,7 @@ def run_demo(
 
     fast_mode, eff_max = compute_fast_mode_and_cap(max_episodes=eff_max)
     scenarios = _prepare_scenarios(eff_name, sweep=eff_sweep or (eff_name == "ALL"))
+    effective_output_dir = resolve_artifact_path(OUTPUT_DIR)
 
     if effective_dry:
         dry_msgs: list[str] = []
@@ -545,14 +554,22 @@ def run_demo(
             reward_func=simple_reward,
             debug=True,
             record_video=eff_record,
-            video_path=str(OUTPUT_DIR) if eff_record else None,
+            video_path=str(effective_output_dir) if eff_record else None,
         )
         logger.info(
             "Environment created (reward fallback active if custom reward not provided).",
         )  # (T022)
         _warn_if_recording_without_ui(env, eff_record)
         seeds = list(iter_episode_seeds(scenario))
-        scenario_results = _run_episodes(env, model, scenario, seeds, eff_max, eff_record)
+        scenario_results = _run_episodes(
+            env,
+            model,
+            scenario,
+            seeds,
+            eff_max,
+            eff_record,
+            out_dir=effective_output_dir,
+        )
         all_results.extend(scenario_results)
     _maybe_print_summary(all_results)
     return all_results

@@ -30,6 +30,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.plots import save_pareto_png
+from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def _synthetic_records():
@@ -73,8 +74,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-pdf", default=None, help="Optional vector PDF path (LaTeX-ready)")
     args = ap.parse_args(argv)
 
-    out = Path(args.out)
+    out = resolve_artifact_path(Path(args.out))
     out.parent.mkdir(parents=True, exist_ok=True)
+    out_pdf = resolve_artifact_path(Path(args.out_pdf)) if args.out_pdf else None
+    if out_pdf is not None:
+        out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
     if args.synthetic:
         records = _synthetic_records()
@@ -94,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         x_higher_better=bool(args.x_higher_better),
         y_higher_better=bool(args.y_higher_better),
         title=args.title,
-        out_pdf=(str(args.out_pdf) if args.out_pdf else None),
+        out_pdf=(str(out_pdf) if out_pdf else None),
     )
     print({"wrote": str(out), **meta})
     return 0

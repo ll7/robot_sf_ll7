@@ -24,11 +24,15 @@ import json
 import subprocess
 from pathlib import Path
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 
-def _ensure_file(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text(content + "\n", encoding="utf-8")
+
+def _ensure_file(path: Path, content: str) -> Path:
+    resolved = resolve_artifact_path(path)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    if not resolved.exists():
+        resolved.write_text(content + "\n", encoding="utf-8")
+    return resolved
 
 
 def main() -> int:
@@ -42,7 +46,7 @@ def main() -> int:
     weights = args.weights
     if weights is None:
         weights = Path("examples/snqi_weights_example.json")
-        _ensure_file(
+        weights = _ensure_file(
             weights,
             json.dumps(
                 {

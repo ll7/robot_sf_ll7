@@ -245,6 +245,14 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 ### Coverage workflow (automatic collection)
 
 **Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
+# Artifact routing during tests
+
+The test harness sets the ``ROBOT_SF_ARTIFACT_ROOT`` environment variable so that
+example scripts and helpers write into a temporary directory instead of the
+repository tree. This keeps ``results/`` and ``docs/`` clean while preserving the
+examples' default behavior for normal runs. To opt-in manually, export the same
+variable before invoking scripts.
+
 
 #### Quick start
 ```bash

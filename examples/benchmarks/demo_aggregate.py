@@ -1,4 +1,4 @@
-"""Demo: Aggregate episode metrics with optional bootstrap CIs.
+"""Aggregate episode metrics with optional bootstrap CIs.
 
 This example shows how to:
 - Run a tiny batch to produce an episodes JSONL (using the demo matrix inline)
@@ -7,7 +7,7 @@ This example shows how to:
 - Uses helper catalog utilities for output directory management
 
 Usage (from repo root):
-  uv run python examples/demo_aggregate.py
+    uv run python examples/benchmarks/demo_aggregate.py
 """
 
 from __future__ import annotations

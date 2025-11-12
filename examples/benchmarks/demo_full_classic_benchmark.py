@@ -1,4 +1,4 @@
-"""Demo: Run the Full Classic Interaction Benchmark (programmatic helper).
+"""Run the full classic interaction benchmark via programmatic helper.
 
 Purpose:
     Provide a concise, reproducible example for invoking the full
@@ -28,7 +28,7 @@ Related docs:
     - specs/127-enhance-benchmark-visual/* (feature spec + tasks + plan)
 
 Usage:
-    uv run python examples/demo_full_classic_benchmark.py
+    uv run python examples/benchmarks/demo_full_classic_benchmark.py
 
 Optional arguments / env vars:
     - Set cfg.video_renderer = 'synthetic' or 'sim-view' to force mode.
@@ -60,7 +60,7 @@ from scripts.classic_benchmark_full import BenchmarkCLIConfig, run_full_benchmar
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def main() -> int:

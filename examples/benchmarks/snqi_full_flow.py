@@ -7,7 +7,7 @@ This script demonstrates a complete reproducible pipeline:
 4. Generate canonical figures with SNQI injected using the orchestrator
 
 Usage:
-    uv run python examples/snqi_full_flow.py \
+    uv run python examples/benchmarks/snqi_full_flow.py \
         --episodes results/episodes_sf_long_fix1.jsonl \
         --matrix configs/baselines/example_matrix.yaml \
         --baseline-json results/baseline_stats.json \

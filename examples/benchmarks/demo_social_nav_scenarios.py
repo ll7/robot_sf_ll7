@@ -1,11 +1,10 @@
-"""
-Demo: Social Navigation Scenarios (SVG)
+"""Run social navigation SVG scenarios sequentially.
 
 Loads and runs all four classic social navigation scenarios from SVG maps:
 (a) Static humans, (b) Overtaking, (c) Crossing, (d) Door passing
 
 Usage:
-    python examples/demo_social_nav_scenarios.py
+    uv run python examples/benchmarks/demo_social_nav_scenarios.py
 """
 
 import time

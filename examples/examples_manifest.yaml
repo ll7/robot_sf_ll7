@@ -62,7 +62,7 @@ examples:
     tags: [analysis]
   - path: benchmarks/demo_aggregate.py
     name: "Demo Aggregate"
-    summary: "Aggregate episode metrics with optional bootstrap CIs."
+    summary: "Aggregate episode metrics with optional bootstrap confidence intervals."
     category_slug: benchmarks
     prerequisites: []
     ci_enabled: true

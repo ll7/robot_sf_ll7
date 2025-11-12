@@ -30,6 +30,25 @@ uv run ruff check --fix . && uv run ruff format .
 uv run pytest tests
 ```
 
+### Examples Quickstart Walkthrough
+The `examples/README.md` file now captures a curated onboarding path. New contributors
+can get a full tour in roughly five minutes by running the quickstart trio in order:
+
+```bash
+uv run python examples/quickstart/01_basic_robot.py
+uv run python examples/quickstart/02_trained_model.py
+uv run python examples/quickstart/03_custom_map.py
+```
+
+- `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
+- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
+  `results/episodes_demo_ppo.jsonl`.
+- `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
+  `RobotSimulationConfig.map_pool` for custom layouts.
+
+See `examples/README.md` for the decision tree, prerequisites, and links to additional
+tiers (advanced features, benchmarks, plotting, and archived scripts).
+
 One‑liner quality gates (CLI):
 ```bash
 uv run ruff check --fix . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests

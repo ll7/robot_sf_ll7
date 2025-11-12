@@ -73,11 +73,11 @@ description: "Implementation task list for feature 245"
 ### Implementation for User Story 2
 
 - [X] T014 [P] [US2] Move backend/feature demos (`examples/demo_backend_selection.py`, `examples/demo_feature_extractors.py`, `examples/demo_factory_options.py`, `examples/image_observation_demo.py`, `examples/demonstrate_2x_speed_fix.py`) into `examples/advanced/` with consistent naming.
-- [ ] T015 [P] [US2] Move complex agent and scenario demos (`examples/demo_pedestrian_updated.py`, `examples/example_multi_pedestrian.py`, `examples/example_single_pedestrian.py`, `examples/demo_defensive.py`, `examples/demo_offensive.py`, `examples/ego_ped_example.py`, `examples/sfp_demo.py`, `examples/svg_map_example.py`, `examples/trajectory_demo.py`, `examples/view_recording.py`) into `examples/advanced/` and adjust imports.
-- [ ] T016 [US2] Align docstrings in `examples/advanced/*.py` with the template (usage, prerequisites, limitations).
-- [ ] T017 [US2] Update advanced section entries in `examples/examples_manifest.yaml`, including `tags` (e.g., `image`, `pedestrian`).
-- [ ] T018 [US2] Extend the advanced section of `examples/README.md` with developer-focused decision tree paths and cross-links to docs.
-- [ ] T019 [US2] Refresh `docs/dev_guide.md` feature sections to reference the reorganized `examples/advanced/` scripts.
+- [X] T015 [P] [US2] Move complex agent and scenario demos (`examples/demo_pedestrian_updated.py`, `examples/example_multi_pedestrian.py`, `examples/example_single_pedestrian.py`, `examples/demo_defensive.py`, `examples/demo_offensive.py`, `examples/ego_ped_example.py`, `examples/sfp_demo.py`, `examples/svg_map_example.py`, `examples/trajectory_demo.py`, `examples/view_recording.py`) into `examples/advanced/` and adjust imports.
+- [X] T016 [US2] Align docstrings in `examples/advanced/*.py` with the template (usage, prerequisites, limitations).
+- [X] T017 [US2] Update advanced section entries in `examples/examples_manifest.yaml`, including `tags` (e.g., `image`, `pedestrian`).
+- [X] T018 [US2] Extend the advanced section of `examples/README.md` with developer-focused decision tree paths and cross-links to docs.
+- [X] T019 [US2] Refresh `docs/dev_guide.md` feature sections to reference the reorganized `examples/advanced/` scripts.
 
 **Checkpoint**: Developers can find and execute feature-specific demos with clear docstrings and documentation support.
 

@@ -1,9 +1,20 @@
 """Plot a sampled social-force field using matplotlib.
 
-Run:
+Purpose:
+    Build a tiny pysocialforce simulator, query the wrapped force field, and
+    visualize vectors with a `matplotlib.quiver` plot for quick inspection.
 
+Usage:
     uv run python examples/plotting/plot_force_field.py
 
+Prerequisites:
+    - None (uses synthetic pedestrians and obstacles)
+
+Expected Output:
+    - Interactive matplotlib window showing vector arrows coloured by magnitude
+
+Limitations:
+    - Requires a display; use `MPLBACKEND=Agg` when running headless to skip UI.
 """
 
 import matplotlib.pyplot as plt

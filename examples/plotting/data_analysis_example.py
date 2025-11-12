@@ -1,4 +1,23 @@
-"""Perform a showcase on how to use the data analysis module."""
+"""Perform a showcase on how to use the data analysis module.
+
+Purpose:
+    Demonstrate converting simulation recordings to JSON, plotting analytics,
+    and saving figures via the `robot_sf.data_analysis` helpers.
+
+Usage:
+    uv run python examples/plotting/data_analysis_example.py
+
+Prerequisites:
+    - Recording pickle in `examples/recordings/` (script selects the latest)
+    - Optional dataset directory `examples/datasets/` for JSON exports
+
+Expected Output:
+    - Plots written under `robot_sf/data_analysis/plots`
+    - Console logs describing generated assets
+
+Limitations:
+    - Requires example recordings to be present; otherwise logs an error.
+"""
 
 import os
 from pathlib import Path
@@ -70,16 +89,16 @@ if __name__ == "__main__":
     # Find the most recent recording file
     recording_dir = Path("examples/recordings")
     if recording_dir.exists():
-        latest_file = max(recording_dir.glob("*.pkl"), key=os.path.getctime, default=None)
+        recording_path = max(recording_dir.glob("*.pkl"), key=os.path.getctime, default=None)
 
-        if latest_file:
-            unique_id = extract_timestamp(str(latest_file))
+        if recording_path:
+            recording_id = extract_timestamp(str(recording_path))
 
-            show_from_json(str(latest_file), unique_id)
+            show_from_json(str(recording_path), recording_id)
 
-            show_from_pkl(str(latest_file), unique_id)
+            show_from_pkl(str(recording_path), recording_id)
 
-            logger.info(f"Successfully extracted and plotted data from {latest_file}")
+            logger.info(f"Successfully extracted and plotted data from {recording_path}")
             logger.info(f"Plots saved in {os.path.abspath(PLOTS_DIR)}")
         else:
             logger.error("No recording files found in the 'examples/recordings' directory")

@@ -1,8 +1,21 @@
 """Plot normalized force vectors with a magnitude colormap and save PNG+PDF.
 
-Outputs:
-- `docs/img/force_field_example_norm.png`
-- `docs/figures/force_field_example_norm.pdf`
+Purpose:
+    Produce publication-ready quiver plots with colour-coded magnitudes from a
+    synthetic pysocialforce simulation.
+
+Usage:
+    uv run python examples/plotting/plot_force_field_normalized.py
+
+Prerequisites:
+    - None (synthetic state is embedded)
+
+Expected Output:
+    - `docs/img/force_field_example_norm.png`
+    - `docs/figures/force_field_example_norm.pdf`
+
+Limitations:
+    - Requires matplotlib; ensure `uv sync --all-extras` if optional plotting deps missing.
 """
 
 import matplotlib.pyplot as plt

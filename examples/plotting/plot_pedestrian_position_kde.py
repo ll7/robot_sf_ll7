@@ -1,4 +1,22 @@
-"""Plot a KDE of pedestrian positions on top of the source map."""
+"""Plot a KDE of pedestrian positions on top of the source map.
+
+Purpose:
+    Load a recorded simulation, extract pedestrian coordinates, and visualise
+    their density overlayed on the originating SVG map.
+
+Usage:
+    uv run python examples/plotting/plot_pedestrian_position_kde.py \
+        --recording examples/recordings/2024-12-06_15-39-44.pkl
+
+Prerequisites:
+    - Recording pickle containing pedestrian states (default path above)
+
+Expected Output:
+    - Matplotlib window showing KDE heatmap atop the map layout
+
+Limitations:
+    - Requires `examples/recordings` assets; update `--recording` for other files.
+"""
 
 import argparse
 

@@ -1,5 +1,9 @@
 """Generate Pareto front plots from benchmark episodes or synthetic data.
 
+Purpose:
+    Aggregate episode metrics and produce Pareto scatter plots for model
+    comparison with optional PDF export.
+
 Usage (JSONL):
     uv run python examples/plotting/plot_pareto.py --in results/episodes.jsonl --out results/pareto.png \
     --x-metric collisions --y-metric comfort_exposure
@@ -7,6 +11,16 @@ Usage (JSONL):
 Usage (synthetic fallback):
     uv run python examples/plotting/plot_pareto.py --out results/pareto_demo.png --x-metric collisions \
     --y-metric comfort_exposure --synthetic
+
+Prerequisites:
+    - Episodes JSONL with `metrics` fields (unless `--synthetic` flag is used)
+
+Expected Output:
+    - PNG chart at the path passed via `--out`
+    - Optional PDF when `--out-pdf` is supplied
+
+Limitations:
+    - CLI expects valid metric names; refer to `robot_sf.benchmark.aggregate` outputs.
 """
 
 from __future__ import annotations

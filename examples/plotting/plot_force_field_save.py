@@ -1,8 +1,20 @@
 """Generate and save static images of the force field for documentation.
 
-Writes:
-- PNG: docs/img/force_field_example.png
-- PDF: docs/figures/force_field_example.pdf (LaTeX-friendly)
+Purpose:
+    Export reproducible quiver figures for inclusion in README files or papers.
+
+Usage:
+    uv run python examples/plotting/plot_force_field_save.py
+
+Prerequisites:
+    - None (synthetic pedestrians embedded)
+
+Expected Output:
+    - PNG: docs/img/force_field_example.png
+    - PDF: docs/figures/force_field_example.pdf (LaTeX-friendly)
+
+Limitations:
+    - Requires matplotlib; ensure plotting extras are installed.
 """
 
 import matplotlib.pyplot as plt

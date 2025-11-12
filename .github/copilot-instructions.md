@@ -10,3 +10,4 @@ It is everyones guide on how to use this repository effectively.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.
+- Source the environment before using pyhton or uv `source .venv/bin/activate`.

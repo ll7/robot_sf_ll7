@@ -87,8 +87,8 @@ If your project imports from `robot_sf.util` or `robot_sf.utils`, update your im
     - `scripts/coverage/compare_coverage.py`: CLI tool for local and CI baseline comparison
   - **Comprehensive Testing**: 18 unit tests (5 smoke + 13 baseline comparator) with 91.51% coverage of comparison logic
   - **Documentation**: 
-    - `docs/coverage_guide.md`: 500+ line comprehensive guide with quickstart, CI integration, troubleshooting
-    - `examples/coverage_example.py`: Programmatic usage examples
+  - `docs/coverage_guide.md`: 500+ line comprehensive guide with quickstart, CI integration, troubleshooting
+  - `examples/plotting/coverage_example.py`: Programmatic usage examples
     - Updated `docs/dev_guide.md` with coverage workflow section
   - **Configuration**: pyproject.toml with [tool.coverage.*] sections, automatic pytest integration, parallel execution support
   - Coverage excludes: tests, examples, scripts, fast-pysf submodule per omit configuration

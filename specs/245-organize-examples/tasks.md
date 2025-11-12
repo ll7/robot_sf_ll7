@@ -111,12 +111,12 @@ description: "Implementation task list for feature 245"
 
 ### Implementation for User Story 4
 
-- [ ] T027 [P] [US4] Move benchmark runners (`examples/demo_full_classic_benchmark.py`, `examples/demo_social_nav_scenarios.py`, `examples/demo_aggregate.py`, `examples/snqi_full_flow.py`) into `examples/benchmarks/` and update relative paths.
-- [ ] T028 [P] [US4] Move plotting and analysis scripts (`examples/plot_force_field.py`, `examples/plot_force_field_normalized.py`, `examples/plot_force_field_save.py`, `examples/plot_pareto.py`, `examples/plot_pedestrian_position_kde.py`, `examples/snqi_figures_example.py`, `examples/coverage_example.py`, `examples/data_analysis_example.py`) into `examples/plotting/` with consistent naming.
-- [ ] T029 [US4] Refresh docstrings in `examples/benchmarks/*.py` and `examples/plotting/*.py` to describe outputs and required assets.
-- [ ] T030 [US4] Update manifest entries for benchmarks/plotting with tags (`benchmark`, `visualization`) and `ci_enabled` overrides for long-running scripts.
-- [ ] T031 [US4] Expand `examples/README.md` decision tree with benchmark/plotting branches and document expected outputs.
-- [ ] T032 [US4] Update documentation (`docs/benchmark.md`, `docs/benchmark_visuals.md`, `docs/distribution_plots.md`, `docs/README.md`, `README.md`) to reference new file paths and link prominently to `examples/README.md`.
+- [X] T027 [P] [US4] Move benchmark runners (`examples/demo_full_classic_benchmark.py`, `examples/demo_social_nav_scenarios.py`, `examples/demo_aggregate.py`, `examples/snqi_full_flow.py`) into `examples/benchmarks/` and update relative paths.
+- [X] T028 [P] [US4] Move plotting and analysis scripts (`examples/plot_force_field.py`, `examples/plot_force_field_normalized.py`, `examples/plot_force_field_save.py`, `examples/plot_pareto.py`, `examples/plot_pedestrian_position_kde.py`, `examples/snqi_figures_example.py`, `examples/coverage_example.py`, `examples/data_analysis_example.py`) into `examples/plotting/` with consistent naming.
+- [X] T029 [US4] Refresh docstrings in `examples/benchmarks/*.py` and `examples/plotting/*.py` to describe outputs and required assets.
+- [X] T030 [US4] Update manifest entries for benchmarks/plotting with tags (`benchmark`, `visualization`) and `ci_enabled` overrides for long-running scripts.
+- [X] T031 [US4] Expand `examples/README.md` decision tree with benchmark/plotting branches and document expected outputs.
+- [X] T032 [US4] Update documentation (`docs/benchmark.md`, `docs/benchmark_visuals.md`, `docs/distribution_plots.md`, `docs/README.md`, `README.md`) to reference new file paths and link prominently to `examples/README.md`.
 
 **Checkpoint**: Documentation references align with reorganized benchmark/plotting examples, and outputs are clearly described.
 
@@ -126,9 +126,9 @@ description: "Implementation task list for feature 245"
 
 **Purpose**: Repository-wide cleanup, validation, and release notes after all user stories are complete.
 
-- [ ] T033 Run `scripts/validation/validate_examples_manifest.py` and `scripts/validation/run_examples_smoke.py --dry-run` to ensure manifest/doc sync.
-- [ ] T034 Update `CHANGELOG.md` with a summary of the example reorganization and smoke test addition.
-- [ ] T035 Execute full validation suite (`uv run pytest tests/examples/test_examples_run.py` and `uv run pytest tests`) and fix any regressions.
+- [X] T033 Run `scripts/validation/validate_examples_manifest.py` and `scripts/validation/run_examples_smoke.py --dry-run` to ensure manifest/doc sync.
+- [X] T034 Update `CHANGELOG.md` with a summary of the example reorganization and smoke test addition.
+- [X] T035 Execute full validation suite (`uv run pytest tests/examples/test_examples_run.py` and `uv run pytest tests`) and fix any regressions.
 
 ---
 

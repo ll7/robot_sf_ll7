@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added migration guide from legacy config classes to unified config
   - Documented all configuration modules (canonical vs legacy)
   - Linked from `docs/README.md` and `docs/dev_guide.md`
+- Automated example smoke harness (`scripts/validation/run_examples_smoke.py`, `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
 ### Changed
 - **[BREAKING for internal imports]** Consolidated utility modules into single `robot_sf/common/` directory (#241)
@@ -21,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved `robot_sf/utils/seed_utils.py` → `robot_sf/common/seed.py` (renamed)
   - Moved `robot_sf/util/compatibility.py` → `robot_sf/common/compat.py` (renamed)
   - Removed empty `robot_sf/util/` and `robot_sf/utils/` directories
+- Example catalog reorganization and automation improvements (#245)
+  - Moved benchmark and plotting scripts into dedicated `examples/benchmarks/` and `examples/plotting/` tiers
+  - Regenerated manifest-backed `examples/README.md` and refreshed docs (`README.md`, `docs/README.md`, `docs/benchmark*.md`, `docs/distribution_plots.md`) to reference new paths
+  - Updated `examples/examples_manifest.yaml` metadata (tags, CI flags, summaries) and added quick links from docs
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

@@ -46,10 +46,10 @@ Pending classification into the new tiered structure.
 | [Plot Force Field](./plot_force_field.py) | Placeholder summary for Plot Force Field. | _None_ | _None_ | ✅ |
 | [Plot Force Field Normalized](./plot_force_field_normalized.py) | Placeholder summary for Plot Force Field Normalized. | _None_ | _None_ | ✅ |
 | [Plot Force Field Save](./plot_force_field_save.py) | Placeholder summary for Plot Force Field Save. | _None_ | _None_ | ✅ |
-| [Plot Pareto](./plot_pareto.py) | Placeholder summary for Plot Pareto. | _None_ | _None_ | ✅ |
+| [Plot Pareto](./plot_pareto.py) | Placeholder summary for Plot Pareto. | _None_ | _None_ | ⚠️ CLI expects --in dataset argument; no default input for CI. |
 | [Plot Pedestrian Position Kde](./plot_pedestrian_position_kde.py) | Placeholder summary for Plot Pedestrian Position Kde. | _None_ | _None_ | ✅ |
-| [Snqi Figures Example](./snqi_figures_example.py) | Placeholder summary for Snqi Figures Example. | _None_ | _None_ | ✅ |
-| [Snqi Full Flow](./snqi_full_flow.py) | Placeholder summary for Snqi Full Flow. | _None_ | _None_ | ✅ |
+| [Snqi Figures Example](./snqi_figures_example.py) | Placeholder summary for Snqi Figures Example. | _None_ | _None_ | ⚠️ Requires --episodes CLI input and benchmark outputs. |
+| [Snqi Full Flow](./snqi_full_flow.py) | Placeholder summary for Snqi Full Flow. | _None_ | _None_ | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
 ## Quickstart
 
 Foundational walkthroughs for first-time users.
@@ -65,20 +65,20 @@ Feature-focused demos for developers exploring capabilities.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | None | backend | ✅ |
+| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | None | backend | ⚠️ Dummy backend currently lacks map metadata and fails under automation. |
 | [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | None | factory | ✅ |
 | [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
-| [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ✅ |
+| [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ⚠️ Needs optional extras and lengthy PPO rollout; exceeds smoke timeout. |
 | [05 Fast-pysf Speed Fix](./advanced/05_fast_pysf_speed_fix.py) | Inspect the fast-pysf pedestrian speed fix output. | None | analysis, fast-pysf | ✅ |
-| [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model_ped/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ✅ |
+| [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model_ped/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ⚠️ Depends on external models (model/run_043, model_ped/ppo_ped_02.zip). |
 | [07 Single Pedestrian](./advanced/07_single_pedestrian.py) | Spawn and simulate single pedestrians with custom maps. | None | pedestrian | ✅ |
 | [08 Multi-Pedestrian](./advanced/08_multi_pedestrian.py) | Build a multi-pedestrian scenario using map definitions. | None | pedestrian | ✅ |
-| [09 Defensive Policy](./advanced/09_defensive_policy.py) | Replay defensive PPO policy with observation adapters. | model/run_023 | policy, ppo | ✅ |
-| [10 Offensive Policy](./advanced/10_offensive_policy.py) | Replay offensive PPO policy in the robot environment. | model/run_043 | policy, ppo | ✅ |
-| [11 Ego Pedestrian Policy](./advanced/11_ego_pedestrian_policy.py) | Run ego pedestrian simulation with recording playback. | maps/svg_maps/narrow_corridor2.svg<br>model/run_043 | pedestrian, recording | ✅ |
+| [09 Defensive Policy](./advanced/09_defensive_policy.py) | Replay defensive PPO policy with observation adapters. | model/run_023 | policy, ppo | ⚠️ Requires offline PPO checkpoint (model/run_023). |
+| [10 Offensive Policy](./advanced/10_offensive_policy.py) | Replay offensive PPO policy in the robot environment. | model/run_043 | policy, ppo | ⚠️ Requires offline PPO checkpoint (model/run_043). |
+| [11 Ego Pedestrian Policy](./advanced/11_ego_pedestrian_policy.py) | Run ego pedestrian simulation with recording playback. | maps/svg_maps/narrow_corridor2.svg<br>model/run_043 | pedestrian, recording | ⚠️ Requires external PPO checkpoint and long recording playback. |
 | [12 Social Force Planner](./advanced/12_social_force_planner_demo.py) | Explore Social Force planner scenarios and options. | uv sync --all-extras<br>fast-pysf subtree (bundled) | planner, social-force | ✅ |
 | [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | None | maps, tooling | ✅ |
-| [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ✅ |
+| [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
 ## Benchmarks
 

@@ -75,8 +75,8 @@ examples:
     category_slug: advanced
     prerequisites:
       - None
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Dummy backend currently lacks map metadata and fails under automation."
     doc_reference: docs/dev_guide.md#environment-factory
     tags: [backend]
   - path: advanced/09_defensive_policy.py
@@ -85,8 +85,8 @@ examples:
     category_slug: advanced
     prerequisites:
       - model/run_023
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Requires offline PPO checkpoint (model/run_023)."
     doc_reference: docs/dev_guide.md#baseline-policies
     tags: [policy, ppo]
   - path: advanced/02_factory_options.py
@@ -105,8 +105,8 @@ examples:
     category_slug: advanced
     prerequisites:
       - uv sync --all-extras
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Needs optional extras and lengthy PPO rollout; exceeds smoke timeout."
     doc_reference: docs/dev_guide.md#feature-extractors
     tags: [training, feature-extractor]
   - path: demo_full_classic_benchmark.py
@@ -124,8 +124,8 @@ examples:
     category_slug: advanced
     prerequisites:
       - model/run_043
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Requires offline PPO checkpoint (model/run_043)."
     doc_reference: docs/dev_guide.md#baseline-policies
     tags: [policy, ppo]
   - path: _archived/demo_pedestrian.py
@@ -148,8 +148,8 @@ examples:
       - maps/svg_maps/debug_06.svg
       - model_ped/ppo_ped_02.zip
       - model/run_043
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Depends on external models (model/run_043, model_ped/ppo_ped_02.zip)."
     doc_reference: docs/dev_guide.md#pedestrian-environments
     tags: [pedestrian, factory]
   - path: quickstart/01_basic_robot.py
@@ -199,8 +199,8 @@ examples:
     prerequisites:
       - maps/svg_maps/narrow_corridor2.svg
       - model/run_043
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Requires external PPO checkpoint and long recording playback."
     doc_reference: docs/dev_guide.md#pedestrian-environments
     tags: [pedestrian, recording]
   - path: advanced/08_multi_pedestrian.py
@@ -275,8 +275,8 @@ examples:
     summary: "Placeholder summary for Plot Pareto."
     category_slug: uncategorized
     prerequisites: []
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "CLI expects --in dataset argument; no default input for CI."
     doc_reference: null
     tags: []
   - path: plot_pedestrian_position_kde.py
@@ -314,8 +314,8 @@ examples:
     summary: "Placeholder summary for Snqi Figures Example."
     category_slug: uncategorized
     prerequisites: []
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Requires --episodes CLI input and benchmark outputs."
     doc_reference: null
     tags: []
   - path: snqi_full_flow.py
@@ -323,8 +323,8 @@ examples:
     summary: "Placeholder summary for Snqi Full Flow."
     category_slug: uncategorized
     prerequisites: []
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Full CLI workflow expects episode/baseline JSON arguments."
     doc_reference: null
     tags: []
   - path: advanced/13_svg_map_validation.py
@@ -343,8 +343,8 @@ examples:
     category_slug: advanced
     prerequisites:
       - recordings/<file>.pkl
-    ci_enabled: true
-    ci_reason: null
+    ci_enabled: false
+    ci_reason: "Interactive playback; requires user input to exit."
     doc_reference: docs/SIM_VIEW.md
     tags: [visualization, playback]
   - path: advanced/15_view_recording.py

@@ -596,6 +596,8 @@ The CI pipeline includes integrated performance monitoring for system package in
 ./scripts/validation/test_basic_environment.sh
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
+uv run python scripts/validation/run_examples_smoke.py --dry-run
+uv run python scripts/validation/run_examples_smoke.py
 
 # Performance baseline validation
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
@@ -605,6 +607,7 @@ Success criteria:
 - Basic environment: exits 0; no exceptions.
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
+- Example smoke harness: exits 0; all `ci_enabled` examples pass and archived entries are reported as skipped via manifest metadata.
 - Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
   - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.
     - Environment variables:
@@ -615,6 +618,13 @@ Success criteria:
   - `ROBOT_SF_PERF_ENFORCE=1` to fail on soft (and hard) breaches (use locally for strict tuning).
   - (Advanced) `ROBOT_SF_PERF_SOFT` / `ROBOT_SF_PERF_HARD` may be set to numeric seconds to temporarily override thresholds (intended only for internal testing of enforcement logic; not part of the stable public interface).
     - Hard threshold breaches always FAIL.
+
+  ### Example maintenance workflow
+
+  1. **Validate catalog** – `uv run python scripts/validation/validate_examples_manifest.py` ensures the manifest enumerates every script and that docstrings stay aligned with summaries.
+  2. **Review planned changes** – `uv run python scripts/validation/run_examples_smoke.py --dry-run` prints the `ci_enabled` set before executing pytest, making it easy to confirm archive decisions.
+  3. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
+  4. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
 
 ### Performance benchmarking (optional)
 ```bash

@@ -42,32 +42,17 @@ Pending classification into the new tiered structure.
 | [Coverage Example](./coverage_example.py) | Placeholder summary for Coverage Example. | _None_ | _None_ | ✅ |
 | [Data Analysis Example](./data_analysis_example.py) | Placeholder summary for Data Analysis Example. | _None_ | _None_ | ✅ |
 | [Demo Aggregate](./demo_aggregate.py) | Placeholder summary for Demo Aggregate. | _None_ | _None_ | ✅ |
-| [Demo Backend Selection](./demo_backend_selection.py) | Placeholder summary for Demo Backend Selection. | _None_ | _None_ | ✅ |
-| [Demo Defensive](./demo_defensive.py) | Placeholder summary for Demo Defensive. | _None_ | _None_ | ✅ |
-| [Demo Factory Options](./demo_factory_options.py) | Placeholder summary for Demo Factory Options. | _None_ | _None_ | ✅ |
-| [Demo Feature Extractors](./demo_feature_extractors.py) | Placeholder summary for Demo Feature Extractors. | _None_ | _None_ | ✅ |
 | [Demo Full Classic Benchmark](./demo_full_classic_benchmark.py) | Placeholder summary for Demo Full Classic Benchmark. | _None_ | _None_ | ✅ |
-| [Demo Offensive](./demo_offensive.py) | Placeholder summary for Demo Offensive. | _None_ | _None_ | ✅ |
 | [Demo Pedestrian](./demo_pedestrian.py) | Placeholder summary for Demo Pedestrian. | _None_ | _None_ | ✅ |
-| [Demo Pedestrian Updated](./demo_pedestrian_updated.py) | Placeholder summary for Demo Pedestrian Updated. | _None_ | _None_ | ✅ |
 | [Demo Social Nav Scenarios](./demo_social_nav_scenarios.py) | Placeholder summary for Demo Social Nav Scenarios. | _None_ | _None_ | ✅ |
-| [Demonstrate 2x Speed Fix](./demonstrate_2x_speed_fix.py) | Placeholder summary for Demonstrate 2x Speed Fix. | _None_ | _None_ | ✅ |
-| [Ego Ped Example](./ego_ped_example.py) | Placeholder summary for Ego Ped Example. | _None_ | _None_ | ✅ |
-| [Example Multi Pedestrian](./example_multi_pedestrian.py) | Placeholder summary for Example Multi Pedestrian. | _None_ | _None_ | ✅ |
-| [Example Single Pedestrian](./example_single_pedestrian.py) | Placeholder summary for Example Single Pedestrian. | _None_ | _None_ | ✅ |
-| [Image Observation Demo](./image_observation_demo.py) | Placeholder summary for Image Observation Demo. | _None_ | _None_ | ✅ |
 | [Interactive Playback Demo](./interactive_playback_demo.py) | Placeholder summary for Interactive Playback Demo. | _None_ | _None_ | ✅ |
 | [Plot Force Field](./plot_force_field.py) | Placeholder summary for Plot Force Field. | _None_ | _None_ | ✅ |
 | [Plot Force Field Normalized](./plot_force_field_normalized.py) | Placeholder summary for Plot Force Field Normalized. | _None_ | _None_ | ✅ |
 | [Plot Force Field Save](./plot_force_field_save.py) | Placeholder summary for Plot Force Field Save. | _None_ | _None_ | ✅ |
 | [Plot Pareto](./plot_pareto.py) | Placeholder summary for Plot Pareto. | _None_ | _None_ | ✅ |
 | [Plot Pedestrian Position Kde](./plot_pedestrian_position_kde.py) | Placeholder summary for Plot Pedestrian Position Kde. | _None_ | _None_ | ✅ |
-| [Sfp Demo](./sfp_demo.py) | Placeholder summary for Sfp Demo. | _None_ | _None_ | ✅ |
 | [Snqi Figures Example](./snqi_figures_example.py) | Placeholder summary for Snqi Figures Example. | _None_ | _None_ | ✅ |
 | [Snqi Full Flow](./snqi_full_flow.py) | Placeholder summary for Snqi Full Flow. | _None_ | _None_ | ✅ |
-| [Svg Map Example](./svg_map_example.py) | Placeholder summary for Svg Map Example. | _None_ | _None_ | ✅ |
-| [Trajectory Demo](./trajectory_demo.py) | Placeholder summary for Trajectory Demo. | _None_ | _None_ | ✅ |
-| [View Recording](./view_recording.py) | Placeholder summary for View Recording. | _None_ | _None_ | ✅ |
 ## Quickstart
 
 Foundational walkthroughs for first-time users.
@@ -81,7 +66,23 @@ Foundational walkthroughs for first-time users.
 
 Feature-focused demos for developers exploring capabilities.
 
-_No examples assigned yet._
+| Example | Summary | Prerequisites | Tags | CI |
+| --- | --- | --- | --- | --- |
+| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | None | backend | ✅ |
+| [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | None | factory | ✅ |
+| [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
+| [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ✅ |
+| [05 Fast-pysf Speed Fix](./advanced/05_fast_pysf_speed_fix.py) | Inspect the fast-pysf pedestrian speed fix output. | None | analysis, fast-pysf | ✅ |
+| [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model_ped/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ✅ |
+| [07 Single Pedestrian](./advanced/07_single_pedestrian.py) | Spawn and simulate single pedestrians with custom maps. | None | pedestrian | ✅ |
+| [08 Multi-Pedestrian](./advanced/08_multi_pedestrian.py) | Build a multi-pedestrian scenario using map definitions. | None | pedestrian | ✅ |
+| [09 Defensive Policy](./advanced/09_defensive_policy.py) | Replay defensive PPO policy with observation adapters. | model/run_023 | policy, ppo | ✅ |
+| [10 Offensive Policy](./advanced/10_offensive_policy.py) | Replay offensive PPO policy in the robot environment. | model/run_043 | policy, ppo | ✅ |
+| [11 Ego Pedestrian Policy](./advanced/11_ego_pedestrian_policy.py) | Run ego pedestrian simulation with recording playback. | maps/svg_maps/narrow_corridor2.svg<br>model/run_043 | pedestrian, recording | ✅ |
+| [12 Social Force Planner](./advanced/12_social_force_planner_demo.py) | Explore Social Force planner scenarios and options. | uv sync --all-extras<br>fast-pysf subtree (bundled) | planner, social-force | ✅ |
+| [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | None | maps, tooling | ✅ |
+| [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ✅ |
+| [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
 ## Benchmarks
 
 Benchmark runners and evaluation workflows.

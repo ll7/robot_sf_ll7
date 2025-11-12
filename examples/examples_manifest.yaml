@@ -67,42 +67,46 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: []
-  - path: demo_backend_selection.py
-    name: "Demo Backend Selection"
-    summary: "Placeholder summary for Demo Backend Selection."
-    category_slug: uncategorized
-    prerequisites: []
+  - path: advanced/01_backend_selection.py
+    name: "01 Backend Selection"
+    summary: "Switch Robot SF backends using unified config."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: demo_defensive.py
-    name: "Demo Defensive"
-    summary: "Placeholder summary for Demo Defensive."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/dev_guide.md#environment-factory
+    tags: [backend]
+  - path: advanced/09_defensive_policy.py
+    name: "09 Defensive Policy"
+    summary: "Replay defensive PPO policy with observation adapters."
+    category_slug: advanced
+    prerequisites:
+      - model/run_023
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: demo_factory_options.py
-    name: "Demo Factory Options"
-    summary: "Placeholder summary for Demo Factory Options."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/dev_guide.md#baseline-policies
+    tags: [policy, ppo]
+  - path: advanced/02_factory_options.py
+    name: "02 Factory Options"
+    summary: "Compare environment factory options for rendering and recording."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: demo_feature_extractors.py
-    name: "Demo Feature Extractors"
-    summary: "Placeholder summary for Demo Feature Extractors."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/dev_guide.md#environment-factory
+    tags: [factory]
+  - path: advanced/04_feature_extractors.py
+    name: "04 Feature Extractors"
+    summary: "Run PPO demos with different feature extractors."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
+    doc_reference: docs/dev_guide.md#feature-extractors
+    tags: [training, feature-extractor]
   - path: demo_full_classic_benchmark.py
     name: "Demo Full Classic Benchmark"
     summary: "Placeholder summary for Demo Full Classic Benchmark."
@@ -112,15 +116,16 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: []
-  - path: demo_offensive.py
-    name: "Demo Offensive"
-    summary: "Placeholder summary for Demo Offensive."
-    category_slug: uncategorized
-    prerequisites: []
+  - path: advanced/10_offensive_policy.py
+    name: "10 Offensive Policy"
+    summary: "Replay offensive PPO policy in the robot environment."
+    category_slug: advanced
+    prerequisites:
+      - model/run_043
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
+    doc_reference: docs/dev_guide.md#baseline-policies
+    tags: [policy, ppo]
   - path: demo_pedestrian.py
     name: "Demo Pedestrian"
     summary: "Placeholder summary for Demo Pedestrian."
@@ -130,15 +135,18 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: []
-  - path: demo_pedestrian_updated.py
-    name: "Demo Pedestrian Updated"
-    summary: "Placeholder summary for Demo Pedestrian Updated."
-    category_slug: uncategorized
-    prerequisites: []
+  - path: advanced/06_pedestrian_env_factory.py
+    name: "06 Pedestrian Env Factory"
+    summary: "Compare factory and legacy pedestrian environment creation."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/debug_06.svg
+      - model_ped/ppo_ped_02.zip
+      - model/run_043
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
+    doc_reference: docs/dev_guide.md#pedestrian-environments
+    tags: [pedestrian, factory]
   - path: quickstart/01_basic_robot.py
     name: "01 Basic Robot Rollout"
     summary: "Run a basic Robot SF environment with a random policy."
@@ -169,51 +177,57 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: []
-  - path: demonstrate_2x_speed_fix.py
-    name: "Demonstrate 2x Speed Fix"
-    summary: "Placeholder summary for Demonstrate 2x Speed Fix."
-    category_slug: uncategorized
-    prerequisites: []
+  - path: advanced/05_fast_pysf_speed_fix.py
+    name: "05 Fast-pysf Speed Fix"
+    summary: "Inspect the fast-pysf pedestrian speed fix output."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: ego_ped_example.py
-    name: "Ego Ped Example"
-    summary: "Placeholder summary for Ego Ped Example."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/performance_notes.md#fast-pysf-speed-fix
+    tags: [analysis, fast-pysf]
+  - path: advanced/11_ego_pedestrian_policy.py
+    name: "11 Ego Pedestrian Policy"
+    summary: "Run ego pedestrian simulation with recording playback."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/narrow_corridor2.svg
+      - model/run_043
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: example_multi_pedestrian.py
-    name: "Example Multi Pedestrian"
-    summary: "Placeholder summary for Example Multi Pedestrian."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/dev_guide.md#pedestrian-environments
+    tags: [pedestrian, recording]
+  - path: advanced/08_multi_pedestrian.py
+    name: "08 Multi-Pedestrian"
+    summary: "Build a multi-pedestrian scenario using map definitions."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: example_single_pedestrian.py
-    name: "Example Single Pedestrian"
-    summary: "Placeholder summary for Example Single Pedestrian."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/dev_guide.md#pedestrian-environments
+    tags: [pedestrian]
+  - path: advanced/07_single_pedestrian.py
+    name: "07 Single Pedestrian"
+    summary: "Spawn and simulate single pedestrians with custom maps."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: image_observation_demo.py
-    name: "Image Observation Demo"
-    summary: "Placeholder summary for Image Observation Demo."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/dev_guide.md#pedestrian-environments
+    tags: [pedestrian]
+  - path: advanced/03_image_observations.py
+    name: "03 Image Observations"
+    summary: "Enable image-based observations in the robot environment."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
+    doc_reference: docs/dev_guide.md#environment-factory
+    tags: [image]
   - path: interactive_playback_demo.py
     name: "Interactive Playback Demo"
     summary: "Placeholder summary for Interactive Playback Demo."
@@ -268,15 +282,17 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: []
-  - path: sfp_demo.py
-    name: "Sfp Demo"
-    summary: "Placeholder summary for Sfp Demo."
-    category_slug: uncategorized
-    prerequisites: []
+  - path: advanced/12_social_force_planner_demo.py
+    name: "12 Social Force Planner"
+    summary: "Explore Social Force planner scenarios and options."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
+      - fast-pysf subtree (bundled)
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
+    doc_reference: docs/baselines/social_force.md
+    tags: [planner, social-force]
   - path: quickstart/03_custom_map.py
     name: "03 Custom SVG Map"
     summary: "Load an SVG map into Robot SF and simulate random navigation."
@@ -305,30 +321,33 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: []
-  - path: svg_map_example.py
-    name: "Svg Map Example"
-    summary: "Placeholder summary for Svg Map Example."
-    category_slug: uncategorized
-    prerequisites: []
+  - path: advanced/13_svg_map_validation.py
+    name: "13 SVG Map Validation"
+    summary: "Validate and summarize SVG maps from the repository."
+    category_slug: advanced
+    prerequisites:
+      - None
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: trajectory_demo.py
-    name: "Trajectory Demo"
-    summary: "Placeholder summary for Trajectory Demo."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/SVG_MAP_EDITOR.md
+    tags: [maps, tooling]
+  - path: advanced/14_trajectory_visualization.py
+    name: "14 Trajectory Visualization"
+    summary: "Visualize trajectories during interactive playback sessions."
+    category_slug: advanced
+    prerequisites:
+      - recordings/<file>.pkl
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
-  - path: view_recording.py
-    name: "View Recording"
-    summary: "Placeholder summary for View Recording."
-    category_slug: uncategorized
-    prerequisites: []
+    doc_reference: docs/SIM_VIEW.md
+    tags: [visualization, playback]
+  - path: advanced/15_view_recording.py
+    name: "15 View Recording"
+    summary: "Record a simulation from an SVG map and replay it."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/02_simple_maps.svg
     ci_enabled: true
     ci_reason: null
-    doc_reference: null
-    tags: []
+    doc_reference: docs/SIM_VIEW.md
+    tags: [recording, maps]

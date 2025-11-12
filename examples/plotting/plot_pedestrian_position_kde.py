@@ -1,6 +1,4 @@
-"""
-Use a recording and plot the kde of the pedestrian positions on a map.
-"""
+"""Plot a KDE of pedestrian positions on top of the source map."""
 
 import argparse
 

@@ -9,7 +9,7 @@ Usage:
     uv run pytest tests
 
     # Run this example
-    uv run python examples/coverage_example.py
+    uv run python examples/plotting/coverage_example.py
 """
 
 import json

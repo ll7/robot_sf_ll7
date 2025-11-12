@@ -1,11 +1,11 @@
-"""Example: Generate a Pareto plot from episodes JSONL or synthetic fallback.
+"""Generate Pareto front plots from benchmark episodes or synthetic data.
 
 Usage (JSONL):
-  uv run python examples/plot_pareto.py --in results/episodes.jsonl --out results/pareto.png \
+    uv run python examples/plotting/plot_pareto.py --in results/episodes.jsonl --out results/pareto.png \
     --x-metric collisions --y-metric comfort_exposure
 
 Usage (synthetic fallback):
-  uv run python examples/plot_pareto.py --out results/pareto_demo.png --x-metric collisions \
+    uv run python examples/plotting/plot_pareto.py --out results/pareto_demo.png --x-metric collisions \
     --y-metric comfort_exposure --synthetic
 """
 

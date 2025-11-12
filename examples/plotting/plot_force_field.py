@@ -1,9 +1,8 @@
-"""Small example that constructs a pysocialforce Simulator, wraps it and
-plots a sampled force field using matplotlib.
+"""Plot a sampled social-force field using matplotlib.
 
 Run:
 
-    python examples/plot_force_field.py
+    uv run python examples/plotting/plot_force_field.py
 
 """
 

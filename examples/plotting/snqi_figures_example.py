@@ -1,11 +1,11 @@
-"""SNQI-augmented figures example.
+"""Generate publication-ready SNQI figures via the orchestrator script.
 
 This example demonstrates how to generate publication-ready figures with SNQI
 included, using the orchestrator script. It assumes you have an episodes JSONL
 and (optionally) an SNQI weights JSON and baseline stats JSON.
 
 Usage (from repo root):
-    uv run python examples/snqi_figures_example.py \
+    uv run python examples/plotting/snqi_figures_example.py \
         --episodes results/episodes_sf_long_fix1.jsonl \
         --weights examples/snqi_weights_example.json \
         --baseline results/baseline_stats.json

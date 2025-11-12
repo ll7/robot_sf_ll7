@@ -42,33 +42,33 @@ examples:
     ci_reason: "Interactive pygame session not reliable for CI."
     doc_reference: examples/_archived/README.md
     tags: [archived, interactive]
-  - path: coverage_example.py
+  - path: plotting/coverage_example.py
     name: "Coverage Example"
-    summary: "Placeholder summary for Coverage Example."
-    category_slug: uncategorized
+    summary: "Coverage tools programmatic usage example."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
-  - path: data_analysis_example.py
+    tags: [coverage, tooling]
+  - path: plotting/data_analysis_example.py
     name: "Data Analysis Example"
-    summary: "Placeholder summary for Data Analysis Example."
-    category_slug: uncategorized
+    summary: "Perform a showcase on how to use the data analysis module."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
-  - path: demo_aggregate.py
+    tags: [analysis]
+  - path: benchmarks/demo_aggregate.py
     name: "Demo Aggregate"
-    summary: "Placeholder summary for Demo Aggregate."
-    category_slug: uncategorized
+    summary: "Aggregate episode metrics with optional bootstrap CIs."
+    category_slug: benchmarks
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
+    tags: [benchmark, aggregation]
   - path: advanced/01_backend_selection.py
     name: "01 Backend Selection"
     summary: "Switch Robot SF backends using unified config."
@@ -109,15 +109,15 @@ examples:
     ci_reason: "Needs optional extras and lengthy PPO rollout; exceeds smoke timeout."
     doc_reference: docs/dev_guide.md#feature-extractors
     tags: [training, feature-extractor]
-  - path: demo_full_classic_benchmark.py
+  - path: benchmarks/demo_full_classic_benchmark.py
     name: "Demo Full Classic Benchmark"
-    summary: "Placeholder summary for Demo Full Classic Benchmark."
-    category_slug: uncategorized
+    summary: "Run the full classic interaction benchmark via programmatic helper."
+    category_slug: benchmarks
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
+    tags: [benchmark]
   - path: advanced/10_offensive_policy.py
     name: "10 Offensive Policy"
     summary: "Replay offensive PPO policy in the robot environment."
@@ -173,15 +173,15 @@ examples:
     ci_reason: null
     doc_reference: docs/benchmark.md
     tags: [quickstart, benchmark]
-  - path: demo_social_nav_scenarios.py
+  - path: benchmarks/demo_social_nav_scenarios.py
     name: "Demo Social Nav Scenarios"
-    summary: "Placeholder summary for Demo Social Nav Scenarios."
-    category_slug: uncategorized
+    summary: "Run social navigation SVG scenarios sequentially."
+    category_slug: benchmarks
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
+    tags: [benchmark, scenario]
   - path: advanced/05_fast_pysf_speed_fix.py
     name: "05 Fast-pysf Speed Fix"
     summary: "Inspect the fast-pysf pedestrian speed fix output."
@@ -243,51 +243,51 @@ examples:
     ci_reason: "Requires manual interaction and recording assets."
     doc_reference: examples/_archived/README.md
     tags: [archived, playback]
-  - path: plot_force_field.py
+  - path: plotting/plot_force_field.py
     name: "Plot Force Field"
-    summary: "Placeholder summary for Plot Force Field."
-    category_slug: uncategorized
+    summary: "Plot a sampled social-force field using matplotlib."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
-  - path: plot_force_field_normalized.py
+    tags: [visualization, force-field]
+  - path: plotting/plot_force_field_normalized.py
     name: "Plot Force Field Normalized"
-    summary: "Placeholder summary for Plot Force Field Normalized."
-    category_slug: uncategorized
+    summary: "Plot normalized force vectors with a magnitude colormap and save PNG+PDF."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
-  - path: plot_force_field_save.py
+    tags: [visualization, force-field]
+  - path: plotting/plot_force_field_save.py
     name: "Plot Force Field Save"
-    summary: "Placeholder summary for Plot Force Field Save."
-    category_slug: uncategorized
+    summary: "Generate and save static images of the force field for documentation."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
-  - path: plot_pareto.py
+    tags: [visualization, force-field]
+  - path: plotting/plot_pareto.py
     name: "Plot Pareto"
-    summary: "Placeholder summary for Plot Pareto."
-    category_slug: uncategorized
+    summary: "Generate Pareto front plots from benchmark episodes or synthetic data."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: false
     ci_reason: "CLI expects --in dataset argument; no default input for CI."
     doc_reference: null
-    tags: []
-  - path: plot_pedestrian_position_kde.py
-    name: "Plot Pedestrian Position Kde"
-    summary: "Placeholder summary for Plot Pedestrian Position Kde."
-    category_slug: uncategorized
+    tags: [visualization, pareto]
+  - path: plotting/plot_pedestrian_position_kde.py
+    name: "Plot Pedestrian Position KDE"
+    summary: "Plot a KDE of pedestrian positions on top of the source map."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: null
-    tags: []
+    tags: [visualization, pedestrian]
   - path: advanced/12_social_force_planner_demo.py
     name: "12 Social Force Planner"
     summary: "Explore Social Force planner scenarios and options."
@@ -309,24 +309,24 @@ examples:
     ci_reason: null
     doc_reference: docs/SVG_MAP_EDITOR.md
     tags: [quickstart, maps]
-  - path: snqi_figures_example.py
-    name: "Snqi Figures Example"
-    summary: "Placeholder summary for Snqi Figures Example."
-    category_slug: uncategorized
+  - path: plotting/snqi_figures_example.py
+    name: "SNQI Figures Example"
+    summary: "Generate publication-ready SNQI figures via the orchestrator script."
+    category_slug: plotting
     prerequisites: []
     ci_enabled: false
     ci_reason: "Requires --episodes CLI input and benchmark outputs."
     doc_reference: null
-    tags: []
-  - path: snqi_full_flow.py
-    name: "Snqi Full Flow"
-    summary: "Placeholder summary for Snqi Full Flow."
-    category_slug: uncategorized
+    tags: [visualization, snqi]
+  - path: benchmarks/snqi_full_flow.py
+    name: "SNQI Full Flow"
+    summary: "End-to-end SNQI figure generation flow."
+    category_slug: benchmarks
     prerequisites: []
     ci_enabled: false
     ci_reason: "Full CLI workflow expects episode/baseline JSON arguments."
     doc_reference: null
-    tags: []
+    tags: [benchmark, snqi]
   - path: advanced/13_svg_map_validation.py
     name: "13 SVG Map Validation"
     summary: "Validate and summarize SVG maps from the repository."

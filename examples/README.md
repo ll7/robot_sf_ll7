@@ -36,20 +36,7 @@ customization without requiring additional assets beyond the repository.
 
 Pending classification into the new tiered structure.
 
-| Example | Summary | Prerequisites | Tags | CI |
-| --- | --- | --- | --- | --- |
-| [Coverage Example](./coverage_example.py) | Placeholder summary for Coverage Example. | _None_ | _None_ | ✅ |
-| [Data Analysis Example](./data_analysis_example.py) | Placeholder summary for Data Analysis Example. | _None_ | _None_ | ✅ |
-| [Demo Aggregate](./demo_aggregate.py) | Placeholder summary for Demo Aggregate. | _None_ | _None_ | ✅ |
-| [Demo Full Classic Benchmark](./demo_full_classic_benchmark.py) | Placeholder summary for Demo Full Classic Benchmark. | _None_ | _None_ | ✅ |
-| [Demo Social Nav Scenarios](./demo_social_nav_scenarios.py) | Placeholder summary for Demo Social Nav Scenarios. | _None_ | _None_ | ✅ |
-| [Plot Force Field](./plot_force_field.py) | Placeholder summary for Plot Force Field. | _None_ | _None_ | ✅ |
-| [Plot Force Field Normalized](./plot_force_field_normalized.py) | Placeholder summary for Plot Force Field Normalized. | _None_ | _None_ | ✅ |
-| [Plot Force Field Save](./plot_force_field_save.py) | Placeholder summary for Plot Force Field Save. | _None_ | _None_ | ✅ |
-| [Plot Pareto](./plot_pareto.py) | Placeholder summary for Plot Pareto. | _None_ | _None_ | ⚠️ CLI expects --in dataset argument; no default input for CI. |
-| [Plot Pedestrian Position Kde](./plot_pedestrian_position_kde.py) | Placeholder summary for Plot Pedestrian Position Kde. | _None_ | _None_ | ✅ |
-| [Snqi Figures Example](./snqi_figures_example.py) | Placeholder summary for Snqi Figures Example. | _None_ | _None_ | ⚠️ Requires --episodes CLI input and benchmark outputs. |
-| [Snqi Full Flow](./snqi_full_flow.py) | Placeholder summary for Snqi Full Flow. | _None_ | _None_ | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
+_No examples assigned yet._
 ## Quickstart
 
 Foundational walkthroughs for first-time users.
@@ -84,9 +71,23 @@ Feature-focused demos for developers exploring capabilities.
 
 Benchmark runners and evaluation workflows.
 
-_No examples assigned yet._
+| Example | Summary | Prerequisites | Tags | CI |
+| --- | --- | --- | --- | --- |
+| [Demo Aggregate](./benchmarks/demo_aggregate.py) | Aggregate episode metrics with optional bootstrap CIs. | _None_ | benchmark, aggregation | ✅ |
+| [Demo Full Classic Benchmark](./benchmarks/demo_full_classic_benchmark.py) | Run the full classic interaction benchmark via programmatic helper. | _None_ | benchmark | ✅ |
+| [Demo Social Nav Scenarios](./benchmarks/demo_social_nav_scenarios.py) | Run social navigation SVG scenarios sequentially. | _None_ | benchmark, scenario | ✅ |
+| [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | End-to-end SNQI figure generation flow. | _None_ | benchmark, snqi | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
 ## Plotting & Analysis
 
 Visualization and analysis scripts built atop benchmark outputs.
 
-_No examples assigned yet._
+| Example | Summary | Prerequisites | Tags | CI |
+| --- | --- | --- | --- | --- |
+| [Coverage Example](./plotting/coverage_example.py) | Coverage tools programmatic usage example. | _None_ | coverage, tooling | ✅ |
+| [Data Analysis Example](./plotting/data_analysis_example.py) | Perform a showcase on how to use the data analysis module. | _None_ | analysis | ✅ |
+| [Plot Force Field](./plotting/plot_force_field.py) | Plot a sampled social-force field using matplotlib. | _None_ | visualization, force-field | ✅ |
+| [Plot Force Field Normalized](./plotting/plot_force_field_normalized.py) | Plot normalized force vectors with a magnitude colormap and save PNG+PDF. | _None_ | visualization, force-field | ✅ |
+| [Plot Force Field Save](./plotting/plot_force_field_save.py) | Generate and save static images of the force field for documentation. | _None_ | visualization, force-field | ✅ |
+| [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes or synthetic data. | _None_ | visualization, pareto | ⚠️ CLI expects --in dataset argument; no default input for CI. |
+| [Plot Pedestrian Position KDE](./plotting/plot_pedestrian_position_kde.py) | Plot a KDE of pedestrian positions on top of the source map. | _None_ | visualization, pedestrian | ✅ |
+| [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate publication-ready SNQI figures via the orchestrator script. | _None_ | visualization, snqi | ⚠️ Requires --episodes CLI input and benchmark outputs. |

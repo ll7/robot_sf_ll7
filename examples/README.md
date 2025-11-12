@@ -38,14 +38,11 @@ Pending classification into the new tiered structure.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [Classic Interactions Pygame](./classic_interactions_pygame.py) | Placeholder summary for Classic Interactions Pygame. | _None_ | _None_ | ✅ |
 | [Coverage Example](./coverage_example.py) | Placeholder summary for Coverage Example. | _None_ | _None_ | ✅ |
 | [Data Analysis Example](./data_analysis_example.py) | Placeholder summary for Data Analysis Example. | _None_ | _None_ | ✅ |
 | [Demo Aggregate](./demo_aggregate.py) | Placeholder summary for Demo Aggregate. | _None_ | _None_ | ✅ |
 | [Demo Full Classic Benchmark](./demo_full_classic_benchmark.py) | Placeholder summary for Demo Full Classic Benchmark. | _None_ | _None_ | ✅ |
-| [Demo Pedestrian](./demo_pedestrian.py) | Placeholder summary for Demo Pedestrian. | _None_ | _None_ | ✅ |
 | [Demo Social Nav Scenarios](./demo_social_nav_scenarios.py) | Placeholder summary for Demo Social Nav Scenarios. | _None_ | _None_ | ✅ |
-| [Interactive Playback Demo](./interactive_playback_demo.py) | Placeholder summary for Interactive Playback Demo. | _None_ | _None_ | ✅ |
 | [Plot Force Field](./plot_force_field.py) | Placeholder summary for Plot Force Field. | _None_ | _None_ | ✅ |
 | [Plot Force Field Normalized](./plot_force_field_normalized.py) | Placeholder summary for Plot Force Field Normalized. | _None_ | _None_ | ✅ |
 | [Plot Force Field Save](./plot_force_field_save.py) | Placeholder summary for Plot Force Field Save. | _None_ | _None_ | ✅ |

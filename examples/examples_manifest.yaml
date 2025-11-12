@@ -31,15 +31,17 @@ categories:
     order: 5
     ci_default: false
 examples:
-  - path: classic_interactions_pygame.py
+  - path: _archived/classic_interactions_pygame.py
     name: "Classic Interactions Pygame"
-    summary: "Placeholder summary for Classic Interactions Pygame."
-    category_slug: uncategorized
-    prerequisites: []
-    ci_enabled: true
-    ci_reason: null
-    doc_reference: null
-    tags: []
+    summary: "Archived: Classic interactions pygame demo (see benchmarks/demo_full_classic_benchmark.py)."
+    category_slug: _archived
+    prerequisites:
+      - model/run_043.zip
+      - configs/scenarios/classic_interactions.yaml
+    ci_enabled: false
+    ci_reason: "Interactive pygame session not reliable for CI."
+    doc_reference: examples/_archived/README.md
+    tags: [archived, interactive]
   - path: coverage_example.py
     name: "Coverage Example"
     summary: "Placeholder summary for Coverage Example."
@@ -126,15 +128,18 @@ examples:
     ci_reason: null
     doc_reference: docs/dev_guide.md#baseline-policies
     tags: [policy, ppo]
-  - path: demo_pedestrian.py
+  - path: _archived/demo_pedestrian.py
     name: "Demo Pedestrian"
-    summary: "Placeholder summary for Demo Pedestrian."
-    category_slug: uncategorized
-    prerequisites: []
-    ci_enabled: true
-    ci_reason: null
-    doc_reference: null
-    tags: []
+    summary: "Archived: Legacy pedestrian env demo (see advanced/06_pedestrian_env_factory.py)."
+    category_slug: _archived
+    prerequisites:
+      - maps/svg_maps/debug_06.svg
+      - model_ped/ppo_ped_02.zip
+      - model/run_043
+    ci_enabled: false
+    ci_reason: "Manual pygame demo with external models."
+    doc_reference: examples/_archived/README.md
+    tags: [archived, pedestrian]
   - path: advanced/06_pedestrian_env_factory.py
     name: "06 Pedestrian Env Factory"
     summary: "Compare factory and legacy pedestrian environment creation."
@@ -228,15 +233,16 @@ examples:
     ci_reason: null
     doc_reference: docs/dev_guide.md#environment-factory
     tags: [image]
-  - path: interactive_playback_demo.py
+  - path: _archived/interactive_playback_demo.py
     name: "Interactive Playback Demo"
-    summary: "Placeholder summary for Interactive Playback Demo."
-    category_slug: uncategorized
-    prerequisites: []
-    ci_enabled: true
-    ci_reason: null
-    doc_reference: null
-    tags: []
+    summary: "Archived: Interactive playback demo (prefer advanced/15_view_recording.py)."
+    category_slug: _archived
+    prerequisites:
+      - examples/recordings/<file>.pkl
+    ci_enabled: false
+    ci_reason: "Requires manual interaction and recording assets."
+    doc_reference: examples/_archived/README.md
+    tags: [archived, playback]
   - path: plot_force_field.py
     name: "Plot Force Field"
     summary: "Placeholder summary for Plot Force Field."

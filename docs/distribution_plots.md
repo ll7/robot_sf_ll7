@@ -2,6 +2,10 @@
 
 This page documents the per-metric distribution plots for benchmark episodes.
 
+> **Hands-on examples**: See `examples/plotting/snqi_figures_example.py` and
+> `examples/plotting/plot_pareto.py` (catalogued in
+> [`examples/README.md`](../examples/README.md)) for ready-to-run figure scripts.
+
 - Input: JSONL of episode records produced by `robot_sf_bench run`
 - Output: PNG histograms per metric, optionally vector PDFs for LaTeX
 - Grouping: values are collected per group using a dotted key

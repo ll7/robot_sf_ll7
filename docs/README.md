@@ -64,6 +64,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### Getting Started
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+- **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 
 ### Benchmarking & Metrics
 - **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks

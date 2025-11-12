@@ -14,7 +14,7 @@ Once the `*.json` file has been created, you can reuse it in different plots.
 
 The data can be plotted via the newly generated `*.json` file or directly via the recording `*.pkl` file.
 
-An easy to use example can be found in the [data_analysis_example.py](../examples/data_analysis_example.py) file.
+An easy to use example can be found in the [data_analysis_example.py](../examples/plotting/data_analysis_example.py) file.
 
 In-depth for more customization: 
 - Json: [extract_json_from_pickle.py](../robot_sf/data_analysis/extract_json_from_pickle.py)

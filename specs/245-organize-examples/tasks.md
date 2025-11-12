@@ -91,13 +91,13 @@ description: "Implementation task list for feature 245"
 
 ### Implementation for User Story 3
 
-- [ ] T020 [P] [US3] Relocate deprecated or interactive-only scripts (`examples/demo_pedestrian.py`, `examples/classic_interactions_pygame.py`, `examples/interactive_playback_demo.py`, other duplicates flagged during manifest review) to `examples/_archived/` with inline pointers to replacements.
-- [ ] T021 [US3] Create `examples/_archived/README.md` documenting archival criteria and replacement mappings.
-- [ ] T022 [US3] Mark archived items in `examples/examples_manifest.yaml` with `ci_enabled: false` and `ci_reason` messages.
-- [ ] T023 [US3] Implement manifest-driven smoke test `tests/examples/test_examples_run.py` executing all `ci_enabled` scripts headlessly (configure DISPLAY/MPLBACKEND/SDL).
-- [ ] T024 [US3] Add CLI wrapper `scripts/validation/run_examples_smoke.py` that delegates to the pytest module with optional dry-run flag.
-- [ ] T025 [US3] Integrate the smoke test into CI by updating `scripts/validation/test_complete_simulation.sh` (and documentation of quality gates) to invoke `uv run pytest tests/examples/test_examples_run.py`.
-- [ ] T026 [US3] Document maintainer workflow in `docs/dev_guide.md` (archival policy + smoke test usage).
+- [X] T020 [P] [US3] Relocate deprecated or interactive-only scripts (`examples/demo_pedestrian.py`, `examples/classic_interactions_pygame.py`, `examples/interactive_playback_demo.py`, other duplicates flagged during manifest review) to `examples/_archived/` with inline pointers to replacements.
+- [X] T021 [US3] Create `examples/_archived/README.md` documenting archival criteria and replacement mappings.
+- [X] T022 [US3] Mark archived items in `examples/examples_manifest.yaml` with `ci_enabled: false` and `ci_reason` messages.
+- [X] T023 [US3] Implement manifest-driven smoke test `tests/examples/test_examples_run.py` executing all `ci_enabled` scripts headlessly (configure DISPLAY/MPLBACKEND/SDL).
+- [X] T024 [US3] Add CLI wrapper `scripts/validation/run_examples_smoke.py` that delegates to the pytest module with optional dry-run flag.
+- [X] T025 [US3] Integrate the smoke test into CI by updating `scripts/validation/test_complete_simulation.sh` (and documentation of quality gates) to invoke `uv run pytest tests/examples/test_examples_run.py`.
+- [X] T026 [US3] Document maintainer workflow in `docs/dev_guide.md` (archival policy + smoke test usage).
 
 **Checkpoint**: Maintainers have an archival directory, manifest flags, and automated harness ensuring example health.
 

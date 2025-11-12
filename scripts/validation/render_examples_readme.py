@@ -38,15 +38,28 @@ reference but are excluded from CI by default.
 
 DECISION_TREE_NOTE = """## Quickstart Decision Path
 
-1. **New to Robot SF?** Begin with the quickstart tier to learn environment
-   creation and trained-agent playback. These examples run headless and require
-   no additional assets.
-2. **Exploring specific features?** Jump to the advanced section and filter by
-   tags such as `image`, `pedestrian`, or `backend`.
-3. **Validating performance?** Use the benchmark runners to generate JSONL
-   outputs for aggregation tooling.
-4. **Visualizing results?** Plotting scripts transform benchmark outputs into
-   figures for documentation and analysis.
+1. **Need a five-minute tour?** Run the quickstart trio in order:
+    1. `01_basic_robot.py` &rarr; learns the factory pattern and random rollout.
+    2. `02_trained_model.py` &rarr; replays the bundled PPO agent.
+    3. `03_custom_map.py` &rarr; swaps in an SVG map for custom layouts.
+2. **Looking for a specific capability?** Jump to **Advanced Features** and
+    filter by tags such as `image`, `pedestrian`, or `backend`.
+3. **Validating performance?** Use the **Benchmarks** tier to produce JSONL
+    episode logs for aggregation.
+4. **Visualizing results?** Try the **Plotting & Analysis** scripts to convert
+    benchmark outputs into figures.
+
+### Five-Minute Quickstart Walkthrough
+
+```bash
+uv run python examples/quickstart/01_basic_robot.py
+uv run python examples/quickstart/02_trained_model.py
+uv run python examples/quickstart/03_custom_map.py
+```
+
+Each command runs headless and finishes in under two minutes. The sequence
+introduces factory-based environment creation, benchmark automation, and map
+customization without requiring additional assets beyond the repository.
 
 """
 

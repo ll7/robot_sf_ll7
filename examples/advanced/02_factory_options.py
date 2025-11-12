@@ -1,10 +1,19 @@
-"""Demonstration of ergonomic environment factory options (Feature 130).
+"""Compare environment factory options for rendering and recording.
 
-Shows legacy convenience flags alongside structured RenderOptions / RecordingOptions.
-Refactored to use helper catalog utilities for common setup patterns.
+Usage:
+    uv run python examples/advanced/02_factory_options.py
 
-Run:
-    uv run python examples/demo_factory_options.py
+Prerequisites:
+    - None
+
+Expected Output:
+    - Console logs confirming each factory helper ran successfully.
+
+Limitations:
+    - Recording demos write to `results/` if directories already contain data.
+
+References:
+    - docs/dev_guide.md#environment-factory
 """
 
 from __future__ import annotations

@@ -1,24 +1,19 @@
-"""
-Demo script to showcase trajectory visualization in interactive playback.
+"""Visualize trajectories during interactive playback sessions.
 
-This script demonstrates the new trajectory visualization feature that allows
-displaying the movement trails of entities (robot, pedestrians, ego pedestrian)
-during playback of recorded simulation states.
+Usage:
+    uv run python examples/advanced/14_trajectory_visualization.py <recording.pkl>
 
-Features demonstrated:
-- Toggle trajectory display on/off (V key)
-- Adjust trajectory trail length (B/C keys)
-- Clear trajectory history (X key)
-- Different colors for different entity types
+Prerequisites:
+    - Recording generated under `recordings/` or `examples/recordings/`
 
-Controls:
-- V: Toggle trajectory display
-- B: Increase trail length
-- C: Decrease trail length
-- X: Clear trajectories
-- Space: Play/pause
-- Period (.): Next frame
-- Comma (,): Previous frame
+Expected Output:
+    - Interactive playback window with trajectory overlays enabled by default.
+
+Limitations:
+    - Requires a GUI display; script falls back to prompting when no recording is found.
+
+References:
+    - docs/SIM_VIEW.md
 """
 
 import sys

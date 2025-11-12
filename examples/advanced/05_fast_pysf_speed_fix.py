@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
-"""
-Demonstration script showing the impact of removing the 2x speed multiplier.
+"""Inspect the fast-pysf pedestrian speed fix output.
 
-This script creates a simple VisualizableSimState and shows how ped_actions
-now contain actual velocity vectors instead of artificially doubled ones.
+Usage:
+    uv run python examples/advanced/05_fast_pysf_speed_fix.py
+
+Prerequisites:
+    - None
+
+Expected Output:
+    - Console diff comparing pre- and post-fix pedestrian velocity vectors.
+
+Limitations:
+    - Informational only; does not launch a simulator.
+
+References:
+    - docs/performance_notes.md#fast-pysf-speed-fix
 """
 
 import numpy as np

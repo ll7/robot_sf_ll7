@@ -1,13 +1,19 @@
-"""
-Example demonstrating single pedestrian spawning and control.
-
-This example shows how to:
-1. Create a map with single pedestrians (goal-based and trajectory-based)
-2. Spawn pedestrians at specific positions with fixed goals
-3. Visualize single pedestrian movement in the simulation
+"""Spawn and simulate single pedestrians with custom maps.
 
 Usage:
-    python examples/example_single_pedestrian.py
+    uv run python examples/advanced/07_single_pedestrian.py
+
+Prerequisites:
+    - None
+
+Expected Output:
+    - Console overview of configured pedestrians and an interactive pygame window.
+
+Limitations:
+    - Requires display or headless setup to render the simulation.
+
+References:
+    - docs/dev_guide.md#pedestrian-environments
 """
 
 from typing import TYPE_CHECKING

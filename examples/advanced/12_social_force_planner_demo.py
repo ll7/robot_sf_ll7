@@ -1,35 +1,21 @@
 #!/usr/bin/env python3
-"""
-Social Force Planner (SFP) Demo Script
-
-This script demonstrates the capabilities of the Social Force Planner baseline
-algorithm for navigation planning. It showcases different scenarios including:
-
-1. Basic goal attraction without obstacles
-2. Pedestrian avoidance scenarios
-3. Multiple pedestrian navigation
-4. Different action spaces (velocity vs unicycle)
-5. Force field visualization
-6. Configuration options and their effects
+"""Explore Social Force planner scenarios and options.
 
 Usage:
-    python examples/sfp_demo.py [--scenario SCENARIO] [--visualize] [--steps STEPS]
+    uv run python examples/advanced/12_social_force_planner_demo.py [--scenario SCENARIO] [--visualize]
 
-Scenarios:
-    basic       - Simple goal navigation without obstacles
-    single_ped  - Navigation around a single pedestrian
-    multiple    - Navigation through multiple pedestrians
-    crossing    - Pedestrians crossing the robot's path
-    corridor    - Navigation through a narrow corridor
-    all         - Run all scenarios sequentially
+Prerequisites:
+    - fast-pysf subtree (included in repo)
+    - `uv sync --all-extras` to install numpy, numba, matplotlib
 
-Requirements:
-    This demo requires the Social Force planner implementation and its dependencies:
-    - fast-pysf subtree (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
-    - numpy, matplotlib (for visualization)
-    - numba (for fast-pysf performance)
+Expected Output:
+    - Console summaries (and optional plots) for each Social Force scenario.
 
-    If dependencies are missing, run in mock mode with --mock flag.
+Limitations:
+    - Visualization requires a GUI backend; use `--mock` for dependency-light runs.
+
+References:
+    - docs/baselines/social_force.md
 """
 
 import argparse

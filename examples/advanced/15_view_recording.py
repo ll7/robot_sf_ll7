@@ -1,4 +1,20 @@
-"""Simulate a random policy with a map defined in SVG format and view the recording."""
+"""Record a simulation from an SVG map and replay it.
+
+Usage:
+    uv run python examples/advanced/15_view_recording.py
+
+Prerequisites:
+    - maps/svg_maps/02_simple_maps.svg
+
+Expected Output:
+    - Recording saved under `recordings/` and visualized via the playback tool.
+
+Limitations:
+    - Requires display access for rendering and playback visualization.
+
+References:
+    - docs/SIM_VIEW.md
+"""
 
 import os
 from pathlib import Path
@@ -11,7 +27,7 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.render.playback_recording import load_states_and_visualize
 
-logger.info("Simulate a random policy with a map defined in SVG format.")
+logger.info("Recording a random policy rollout and replaying the results.")
 
 
 def test_simulation(map_definition: MapDefinition):

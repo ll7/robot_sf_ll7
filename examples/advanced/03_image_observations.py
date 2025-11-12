@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
-"""
-Example demonstrating image-based observation space for the robot environment.
+"""Enable image-based observations in the robot environment.
 
-This script shows how to use the extended robot environment with visual observations
-captured from the pygame rendering system.
+Usage:
+    uv run python examples/advanced/03_image_observations.py
+
+Prerequisites:
+    - None
+
+Expected Output:
+    - Console logs describing image observation shapes and value ranges.
+
+Limitations:
+    - Opens a pygame window; set headless env vars if running without a display.
+
+References:
+    - docs/dev_guide.md#environment-factory
 """
 
 from robot_sf.gym_env.env_config import RobotEnvSettings

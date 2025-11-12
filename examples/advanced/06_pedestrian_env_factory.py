@@ -1,4 +1,22 @@
-"""Simulate the trained robot and a trained pedestrian - Updated to use factory pattern."""
+"""Compare factory and legacy pedestrian environment creation.
+
+Usage:
+    uv run python examples/advanced/06_pedestrian_env_factory.py
+
+Prerequisites:
+    - maps/svg_maps/debug_06.svg
+    - model_ped/ppo_ped_02.zip
+    - model/run_043
+
+Expected Output:
+    - Console logs showing factory and legacy environment runs for the same assets.
+
+Limitations:
+    - Opens a pygame window; use headless environment variables on CI.
+
+References:
+    - docs/dev_guide.md#pedestrian-environments
+"""
 
 import loguru
 

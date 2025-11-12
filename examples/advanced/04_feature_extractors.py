@@ -1,8 +1,19 @@
-"""
-Demo script showing how to use the new feature extractors.
+"""Run PPO demos with different feature extractors.
 
-This script demonstrates the different feature extractors and their usage
-with minimal training to validate everything works.
+Usage:
+    uv run python examples/advanced/04_feature_extractors.py
+
+Prerequisites:
+    - Install extras with `uv sync --all-extras` (installs Stable-Baselines3).
+
+Expected Output:
+    - Console logs summarizing each extractor, parameter counts, and demo status.
+
+Limitations:
+    - Performs short PPO training sessions; runtime depends on CPU speed.
+
+References:
+    - docs/dev_guide.md#feature-extractors
 """
 
 from stable_baselines3 import PPO

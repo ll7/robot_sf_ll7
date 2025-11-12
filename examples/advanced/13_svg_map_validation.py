@@ -1,19 +1,19 @@
-"""Manual SVG map validation & bulk loading helper.
+"""Validate and summarize SVG maps from the repository.
 
-Run this file directly to:
-1. Convert a single SVG (default: classic_bottleneck.svg)
-2. Optionally bulk-validate every SVG under maps/svg_maps/
-3. Provide a per-map summary of routes/zones and highlight invalid maps
+Usage:
+    uv run python examples/advanced/13_svg_map_validation.py [--all] [--strict]
 
-Design notes:
- - This is intentionally a script (not part of automated test suite) to allow
-   iterative map authoring without slowing CI.
- - Uses existing `convert_map` + `load_svg_maps` functions (lenient mode) and
-   re-runs strict validation when requested.
+Prerequisites:
+    - None
 
-Exit codes:
- - 0: All requested validations succeeded (or lenient skips only)
- - 1: Strict validation failed for one or more maps
+Expected Output:
+    - Loguru summary of map statistics and any strict validation failures.
+
+Limitations:
+    - Intended for manual inspection; not part of automated CI checks.
+
+References:
+    - docs/SVG_MAP_EDITOR.md
 """
 
 from __future__ import annotations

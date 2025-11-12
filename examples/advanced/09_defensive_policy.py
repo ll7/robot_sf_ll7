@@ -1,3 +1,21 @@
+"""Replay defensive PPO policy with observation adapters.
+
+Usage:
+    uv run python examples/advanced/09_defensive_policy.py
+
+Prerequisites:
+    - model/run_023
+
+Expected Output:
+    - Pygame window showing the defensive policy interacting with pedestrians.
+
+Limitations:
+    - Uses legacy Gym-trained checkpoints and direct `RobotEnv` instantiation.
+
+References:
+    - docs/dev_guide.md#baseline-policies
+"""
+
 import numpy as np
 from gymnasium import spaces
 
@@ -9,26 +27,8 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.sim_config import SimulationSettings
 
 
-def run_simulation():
-    """
-    Run a simulation using a pre-trained PPO model in a robot environment.
-
-    This function sets up the environment, loads a pre-trained model,
-    and runs a simulation for a fixed number of steps. It adapts the
-    observations from the environment to match the expected input of
-    the trained model.
-
-    The simulation continues until it reaches 10000 steps or the
-    environment signals it's done. The environment is reset and
-    re-rendered when it's done.
-
-    Note:
-        This function uses a model trained with OpenAI Gym. Consider
-        updating to Gymnasium and re-saving the model to avoid warnings.
-
-    Returns:
-        None
-    """
+def run_simulation() -> None:
+    """Execute the defensive policy rollout and render the result."""
     env_config = EnvSettings(
         sim_config=SimulationSettings(
             stack_steps=1,

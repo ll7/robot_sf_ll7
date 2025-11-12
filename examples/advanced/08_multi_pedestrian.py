@@ -1,10 +1,19 @@
-"""
-Example: Multi-Pedestrian Scenario (T020)
-
-Demonstrates spawning and simulation of multiple single pedestrians (goal-based, trajectory-based, static) in a single map.
+"""Build a multi-pedestrian scenario using map definitions.
 
 Usage:
-    python examples/example_multi_pedestrian.py
+    uv run python examples/advanced/08_multi_pedestrian.py
+
+Prerequisites:
+    - None
+
+Expected Output:
+    - Console listing of pedestrian behaviors and an interactive pygame window.
+
+Limitations:
+    - Requires display or headless configuration for rendering.
+
+References:
+    - docs/dev_guide.md#pedestrian-environments
 """
 
 from robot_sf.gym_env.environment_factory import make_robot_env

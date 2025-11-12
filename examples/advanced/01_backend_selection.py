@@ -1,6 +1,19 @@
-"""Demo: Backend selection via unified config.
+"""Switch Robot SF backends using unified config.
 
-Shows how to switch simulator backends without editing environment code.
+Usage:
+    uv run python examples/advanced/01_backend_selection.py
+
+Prerequisites:
+    - None
+
+Expected Output:
+    - Console logs comparing fast-pysf and dummy backend resets.
+
+Limitations:
+    - Headless run only; no rendering or recording occurs.
+
+References:
+    - docs/dev_guide.md#environment-factory
 """
 
 from robot_sf.gym_env.environment_factory import make_robot_env

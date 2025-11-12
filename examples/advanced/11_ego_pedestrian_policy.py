@@ -1,4 +1,21 @@
-"""Simulate the trained robot and a pedestrian with a random policy."""
+"""Run ego pedestrian simulation with recording playback.
+
+Usage:
+    uv run python examples/advanced/11_ego_pedestrian_policy.py
+
+Prerequisites:
+    - maps/svg_maps/narrow_corridor2.svg
+    - model/run_043
+
+Expected Output:
+    - Recording saved under `recordings/` and replayed via the playback viewer.
+
+Limitations:
+    - Requires Stable-Baselines3 and an interactive display for playback.
+
+References:
+    - docs/dev_guide.md#pedestrian-environments
+"""
 
 import os
 from pathlib import Path
@@ -14,7 +31,7 @@ from robot_sf.render.playback_recording import load_states_and_visualize
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
-logger.info("Simulate the trained robot and a pedestrian with a random policy.")
+logger.info("Running ego pedestrian policy rollout and recording playback.")
 
 
 def test_simulation(map_definition: MapDefinition):

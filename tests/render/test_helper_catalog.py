@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.render.helper_catalog import capture_frames, ensure_output_dir
 
 
@@ -14,11 +15,12 @@ def test_ensure_output_dir():
     with tempfile.TemporaryDirectory() as temp_dir:
         test_path = Path(temp_dir) / "nested" / "output" / "dir"
 
-        result = ensure_output_dir(test_path)
+    result = ensure_output_dir(test_path)
+    expected_path = resolve_artifact_path(test_path)
 
-        assert result.exists()
-        assert result.is_dir()
-        assert result == test_path.resolve()
+    assert result.exists()
+    assert result.is_dir()
+    assert result == expected_path
 
 
 def test_capture_frames():

@@ -54,11 +54,11 @@ description: "Implementation task list for feature 245"
 ### Implementation for User Story 1
 
 - [X] T008 [P] [US1] Move `examples/demo_refactored_environments.py` to `examples/quickstart/01_basic_robot.py` and update docstring to match manifest template.
-- [ ] T009 [P] [US1] Move `examples/demo_robot_sf_bench_ppo.py` to `examples/quickstart/02_trained_model.py` with updated docstring and prerequisites.
-- [ ] T010 [P] [US1] Move `examples/simulate_with_svg_map.py` to `examples/quickstart/03_custom_map.py`, including new docstring instructions for map assets.
-- [ ] T011 [US1] Populate quickstart entries in `examples/examples_manifest.yaml` (summaries, prerequisites, tags).
-- [ ] T012 [US1] Regenerate `examples/README.md` using `render_examples_readme.py` and author the quickstart decision tree + 5-minute walkthrough.
-- [ ] T013 [US1] Update quickstart guidance in `docs/dev_guide.md` to reference the new `examples/quickstart/` scripts and execution commands.
+- [X] T009 [P] [US1] Move `examples/demo_robot_sf_bench_ppo.py` to `examples/quickstart/02_trained_model.py` with updated docstring and prerequisites.
+- [X] T010 [P] [US1] Move `examples/simulate_with_svg_map.py` to `examples/quickstart/03_custom_map.py`, including new docstring instructions for map assets.
+- [X] T011 [US1] Populate quickstart entries in `examples/examples_manifest.yaml` (summaries, prerequisites, tags).
+- [X] T012 [US1] Regenerate `examples/README.md` using `render_examples_readme.py` and author the quickstart decision tree + 5-minute walkthrough.
+- [X] T013 [US1] Update quickstart guidance in `docs/dev_guide.md` to reference the new `examples/quickstart/` scripts and execution commands.
 
 **Checkpoint**: Quickstart directory, manifest entries, and docs enable a first-time user to complete the walkthrough independently.
 

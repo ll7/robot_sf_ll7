@@ -1,0 +1,334 @@
+version: 0.1.0
+categories:
+  - slug: uncategorized
+    title: "Uncategorized Examples"
+    description: "Pending classification into the new tiered structure."
+    order: 0
+    ci_default: true
+  - slug: quickstart
+    title: "Quickstart"
+    description: "Foundational walkthroughs for first-time users."
+    order: 1
+    ci_default: true
+  - slug: advanced
+    title: "Advanced Features"
+    description: "Feature-focused demos for developers exploring capabilities."
+    order: 2
+    ci_default: true
+  - slug: benchmarks
+    title: "Benchmarks"
+    description: "Benchmark runners and evaluation workflows."
+    order: 3
+    ci_default: true
+  - slug: plotting
+    title: "Plotting & Analysis"
+    description: "Visualization and analysis scripts built atop benchmark outputs."
+    order: 4
+    ci_default: true
+  - slug: _archived
+    title: "Archived"
+    description: "Deprecated or interactive-only examples kept for reference."
+    order: 5
+    ci_default: false
+examples:
+  - path: classic_interactions_pygame.py
+    name: "Classic Interactions Pygame"
+    summary: "Placeholder summary for Classic Interactions Pygame."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: coverage_example.py
+    name: "Coverage Example"
+    summary: "Placeholder summary for Coverage Example."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: data_analysis_example.py
+    name: "Data Analysis Example"
+    summary: "Placeholder summary for Data Analysis Example."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_aggregate.py
+    name: "Demo Aggregate"
+    summary: "Placeholder summary for Demo Aggregate."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_backend_selection.py
+    name: "Demo Backend Selection"
+    summary: "Placeholder summary for Demo Backend Selection."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_defensive.py
+    name: "Demo Defensive"
+    summary: "Placeholder summary for Demo Defensive."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_factory_options.py
+    name: "Demo Factory Options"
+    summary: "Placeholder summary for Demo Factory Options."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_feature_extractors.py
+    name: "Demo Feature Extractors"
+    summary: "Placeholder summary for Demo Feature Extractors."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_full_classic_benchmark.py
+    name: "Demo Full Classic Benchmark"
+    summary: "Placeholder summary for Demo Full Classic Benchmark."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_offensive.py
+    name: "Demo Offensive"
+    summary: "Placeholder summary for Demo Offensive."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_pedestrian.py
+    name: "Demo Pedestrian"
+    summary: "Placeholder summary for Demo Pedestrian."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demo_pedestrian_updated.py
+    name: "Demo Pedestrian Updated"
+    summary: "Placeholder summary for Demo Pedestrian Updated."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: quickstart/01_basic_robot.py
+    name: "01 Basic Robot Rollout"
+    summary: "Run a basic Robot SF environment with a random policy."
+    category_slug: quickstart
+    prerequisites:
+      - None
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev_guide.md#quickstart
+    tags: [quickstart]
+  - path: quickstart/02_trained_model.py
+    name: "02 Trained PPO Benchmark"
+    summary: "Run the Robot SF benchmark with the pre-trained PPO baseline."
+    category_slug: quickstart
+    prerequisites:
+      - configs/baselines/example_matrix.yaml
+      - configs/baselines/ppo.yaml
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/benchmark.md
+    tags: [quickstart, benchmark]
+  - path: demo_social_nav_scenarios.py
+    name: "Demo Social Nav Scenarios"
+    summary: "Placeholder summary for Demo Social Nav Scenarios."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: demonstrate_2x_speed_fix.py
+    name: "Demonstrate 2x Speed Fix"
+    summary: "Placeholder summary for Demonstrate 2x Speed Fix."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: ego_ped_example.py
+    name: "Ego Ped Example"
+    summary: "Placeholder summary for Ego Ped Example."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: example_multi_pedestrian.py
+    name: "Example Multi Pedestrian"
+    summary: "Placeholder summary for Example Multi Pedestrian."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: example_single_pedestrian.py
+    name: "Example Single Pedestrian"
+    summary: "Placeholder summary for Example Single Pedestrian."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: image_observation_demo.py
+    name: "Image Observation Demo"
+    summary: "Placeholder summary for Image Observation Demo."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: interactive_playback_demo.py
+    name: "Interactive Playback Demo"
+    summary: "Placeholder summary for Interactive Playback Demo."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: plot_force_field.py
+    name: "Plot Force Field"
+    summary: "Placeholder summary for Plot Force Field."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: plot_force_field_normalized.py
+    name: "Plot Force Field Normalized"
+    summary: "Placeholder summary for Plot Force Field Normalized."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: plot_force_field_save.py
+    name: "Plot Force Field Save"
+    summary: "Placeholder summary for Plot Force Field Save."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: plot_pareto.py
+    name: "Plot Pareto"
+    summary: "Placeholder summary for Plot Pareto."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: plot_pedestrian_position_kde.py
+    name: "Plot Pedestrian Position Kde"
+    summary: "Placeholder summary for Plot Pedestrian Position Kde."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: sfp_demo.py
+    name: "Sfp Demo"
+    summary: "Placeholder summary for Sfp Demo."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: quickstart/03_custom_map.py
+    name: "03 Custom SVG Map"
+    summary: "Load an SVG map into Robot SF and simulate random navigation."
+    category_slug: quickstart
+    prerequisites:
+      - maps/svg_maps/debug_06.svg
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/SVG_MAP_EDITOR.md
+    tags: [quickstart, maps]
+  - path: snqi_figures_example.py
+    name: "Snqi Figures Example"
+    summary: "Placeholder summary for Snqi Figures Example."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: snqi_full_flow.py
+    name: "Snqi Full Flow"
+    summary: "Placeholder summary for Snqi Full Flow."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: svg_map_example.py
+    name: "Svg Map Example"
+    summary: "Placeholder summary for Svg Map Example."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: trajectory_demo.py
+    name: "Trajectory Demo"
+    summary: "Placeholder summary for Trajectory Demo."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []
+  - path: view_recording.py
+    name: "View Recording"
+    summary: "Placeholder summary for View Recording."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: []

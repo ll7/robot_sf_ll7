@@ -49,7 +49,31 @@ uv run python examples/quickstart/03_custom_map.py
 See `examples/README.md` for the decision tree, prerequisites, and links to additional
 tiers (advanced features, benchmarks, plotting, and archived scripts).
 
-One‑liner quality gates (CLI):
+### Advanced Feature Demos
+
+Developers exploring specific capabilities should jump to the curated scripts in
+`examples/advanced/`. Each file follows the numbered naming scheme surfaced in
+`examples/README.md` and comes with a manifest-backed docstring describing how to
+run it. Highlights include:
+
+- **Backends & factory ergonomics**: `01_backend_selection.py` and
+  `02_factory_options.py` demonstrate switching simulators and recording options via
+  unified configs.
+- **Observation & training workflows**: `03_image_observations.py` and
+  `04_feature_extractors.py` showcase image sensors and feature extractor presets
+  (run with `uv sync --all-extras`).
+- **Pedestrian & policy scenarios**: Scripts `06`–`11` cover factory-based
+  pedestrian environments, single/multi pedestrian setups, and PPO rollouts using
+  the maintained checkpoints under `model/`.
+- **Tooling, validation, and visualization**: `12_social_force_planner_demo.py`
+  through `15_view_recording.py` provide the Social Force planner showcase, SVG
+  map validation helper, trajectory visualization, and recording playback flows.
+
+Check the Advanced table in `examples/README.md` for prerequisites, tags, and whether
+a script is enabled for CI smoke execution.
+
+### One‑liner quality gates (CLI):
+
 ```bash
 uv run ruff check --fix . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
 ```

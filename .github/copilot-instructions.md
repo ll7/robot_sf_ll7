@@ -4,21 +4,9 @@ ALWAYS use the official [dev_guide](../docs/dev_guide.md) as the primary referen
 It is everyones guide on how to use this repository effectively.
 
 ## Additional Instructions
-- Refer to or create the `docs/dev/issues/<feature_name>/design.md` document for the new feature or change first.
-- Track progress in `docs/dev/issues/<feature_name>/todo.md`.
+
 - Use scriptable interfaces instead of cli interfaces when possible.
 - Make everything reproducible.
 - Central point to link new documentation pages is `docs/README.md`.
   - Link new documentation (sub-)pages in the appropriate section.
-- Save any progress and decisions in the `docs/dev/issues/<feature_name>/` folder.
 - For any changes that affect users, update the `CHANGELOG.md` file.
-
-
-## Active Technologies
-- Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml) + None for refactoring (uses standard Python module system) (241-consolidate-utility-modules)
-- Filesystem (source code files only) (241-consolidate-utility-modules)
-- Markdown + Python 3.11 (repository standard per `pyproject.toml`) + N/A for docs reorg; repository tooling uses uv, Ruff, pytest (no changes) (242-reorganize-docs)
-- N/A (versioned docs in repository) (242-reorganize-docs)
-
-## Recent Changes
-- 241-consolidate-utility-modules: Added Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml) + None for refactoring (uses standard Python module system)

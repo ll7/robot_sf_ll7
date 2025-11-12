@@ -1,9 +1,27 @@
-"""Classic Interaction Scenario Visualization with PPO (Feature 128).
+"""Archived: Classic interactions pygame demo (see benchmarks/demo_full_classic_benchmark.py).
+
+Usage:
+    uv run python examples/_archived/classic_interactions_pygame.py
+
+Prerequisites:
+    - model/run_043.zip
+    - configs/scenarios/classic_interactions.yaml
+
+Expected Output:
+    - Interactive pygame window plus optional MP4 recordings per episode.
+
+Limitations:
+    - Heavy interactive workflow retained for reference; prefer benchmark runner for CI.
+
+References:
+    - examples/demo_full_classic_benchmark.py
+
+Classic Interaction Scenario Visualization with PPO (Feature 128).
 
 Implemented per spec/tasks (FR-001..FR-021). Constants configure behavior; no CLI.
 
 Quick start:
-    uv run python examples/classic_interactions_pygame.py
+    uv run python examples/_archived/classic_interactions_pygame.py
 
 Public API:
     run_demo(dry_run: bool | None = None,

@@ -1,4 +1,22 @@
-"""Simulate the trained robot and a trained pedestrian."""
+"""Archived: Legacy pedestrian env demo (see advanced/06_pedestrian_env_factory.py).
+
+Usage:
+    uv run python examples/_archived/demo_pedestrian.py
+
+Prerequisites:
+    - maps/svg_maps/debug_06.svg
+    - model_ped/ppo_ped_02.zip
+    - model/run_043
+
+Expected Output:
+    - Interactive pygame window showing robot/pedestrian rollout.
+
+Limitations:
+    - Not maintained; prefer the advanced replacement script.
+
+References:
+    - examples/advanced/06_pedestrian_env_factory.py
+"""
 
 import loguru
 

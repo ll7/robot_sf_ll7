@@ -15,6 +15,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -89,6 +91,7 @@ def ensure_directory(path: str | Path) -> Path:
     else:
         directory = path_obj
 
+    directory = resolve_artifact_path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 

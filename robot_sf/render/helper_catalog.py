@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
+
 
 def ensure_output_dir(path: Path) -> Path:
     """Create directories with exist_ok=True and return normalized path.
@@ -25,7 +27,7 @@ def ensure_output_dir(path: Path) -> Path:
         OSError: If directory creation fails due to permissions or other issues
     """
     try:
-        path = Path(path).resolve()
+        path = resolve_artifact_path(path)
         path.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Ensured output directory exists: {path}")
         return path

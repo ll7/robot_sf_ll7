@@ -14,3 +14,8 @@ export SDL_VIDEODRIVER=dummy
 timeout 30 uv run python examples/demo_defensive.py
 
 echo "✅ Complete simulation test passed"
+
+echo "Running manifest-driven example smoke tests..."
+uv run python scripts/validation/run_examples_smoke.py
+
+echo "✅ Example smoke tests passed"

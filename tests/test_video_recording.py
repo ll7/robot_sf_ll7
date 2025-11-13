@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
@@ -22,8 +23,8 @@ def test_video_recording(
     """Test that video recording works and creates/deletes files properly."""
 
     # Create recordings directory if it doesn't exist
-    recordings_dir = Path("recordings")
-    recordings_dir.mkdir(exist_ok=True)
+    recordings_dir = resolve_artifact_path(Path("recordings/tests"))
+    recordings_dir.mkdir(parents=True, exist_ok=True)
 
     # Create environment settings
     env_config = EnvSettings(

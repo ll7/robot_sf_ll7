@@ -159,7 +159,8 @@ def build_markdown(
         if archived_section:
             sections.append(archived_section)
 
-    return "\n".join(section.rstrip() for section in sections if section)
+    body = "\n\n".join(section.strip() for section in sections if section)
+    return f"{body}\n"
 
 
 def build_table_header(*, include_ci_column: bool) -> str:

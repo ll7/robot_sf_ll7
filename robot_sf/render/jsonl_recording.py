@@ -28,6 +28,7 @@ from typing import Any, Optional
 
 import loguru
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.render.sim_view import VisualizableSimState
 
 logger = loguru.logger
@@ -87,7 +88,8 @@ class JSONLRecorder:
             algorithm: Algorithm name for file naming
             seed: Random seed for file naming
         """
-        self.output_dir = Path(output_dir)
+        resolved_output = resolve_artifact_path(output_dir)
+        self.output_dir = Path(resolved_output)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.suite = suite

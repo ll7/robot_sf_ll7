@@ -16,6 +16,9 @@ References:
     - docs/single_pedestrians.md
 """
 
+from typing import cast
+
+from robot_sf.common.types import Line2D
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
@@ -34,12 +37,15 @@ def create_multi_pedestrian_map() -> MapDefinition:
     ped_spawn_zones = []
     ped_goal_zones = []
     ped_crowded_zones = []
-    bounds = [
-        ((0.0, 0.0), (width, 0.0)),  # bottom
-        ((0.0, height), (width, height)),  # top
-        ((0.0, 0.0), (0.0, height)),  # left
-        ((width, 0.0), (width, height)),  # right
-    ]
+    bounds = cast(
+        list[Line2D],
+        [
+            (0.0, width, 0.0, 0.0),  # bottom
+            (0.0, width, height, height),  # top
+            (0.0, 0.0, 0.0, height),  # left
+            (width, width, 0.0, height),  # right
+        ],
+    )
     robot_routes = [
         GlobalRoute(
             spawn_id=0,

@@ -28,7 +28,7 @@ References:
 """
 ```
 
-### Authoring Guidelines
+## Authoring Guidelines
 
 - Keep the *Purpose* sentence under 100 characters so it renders well in tables.
 - Provide `uv run python ...` commands to align with repository tooling.

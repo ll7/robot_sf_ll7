@@ -74,7 +74,7 @@ def main() -> int:
 
     ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = root / f"results/demo_full_classic_{ts}"
-    ensure_output_dir(out_dir)
+    out_dir = ensure_output_dir(out_dir)
 
     cfg = BenchmarkCLIConfig(
         scenario_matrix_path=str(matrix),

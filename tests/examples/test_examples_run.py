@@ -61,6 +61,8 @@ def _example_env(repo_root_path: Path) -> dict[str, str]:
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
     env["PYTHONPATH"] = _merge_pythonpath(repo_root_path, env.get("PYTHONPATH"))
+    env.setdefault("ROBOT_SF_FAST_DEMO", "1")
+    env.setdefault("ROBOT_SF_EXAMPLES_MAX_STEPS", "64")
     return env
 
 

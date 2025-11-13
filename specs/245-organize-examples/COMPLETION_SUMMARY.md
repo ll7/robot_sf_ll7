@@ -156,7 +156,7 @@ The specification is complete, validated, and ready for development planning.
 
 ## Files Created
 
-```
+```text
 specs/245-organize-examples/
 ├── spec.md                           (Complete specification)
 ├── checklists/

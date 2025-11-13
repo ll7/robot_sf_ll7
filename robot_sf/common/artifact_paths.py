@@ -183,12 +183,12 @@ def resolve_artifact_path(path: str | Path) -> Path:
 
     if candidate.is_absolute():
         if override_root is None:
-            return candidate.resolve()
+            return candidate
         try:
             relative = candidate.resolve().relative_to(_canonical_repository_root())
         except ValueError:
             # Path outside repository – leave untouched.
-            return candidate.resolve()
+            return candidate
         return (override_root / relative).resolve()
 
     if override_root is not None:

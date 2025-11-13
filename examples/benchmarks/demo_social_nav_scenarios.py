@@ -21,6 +21,7 @@ Limitations:
     - Rendering requires a display; set `SDL_VIDEODRIVER=dummy` for headless runs.
 """
 
+import os
 import time
 
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -35,7 +36,24 @@ SVG_MAPS = [
     ("Door passing", "maps/svg_maps/door_passing.svg"),
 ]
 
-STEPS_PER_SCENARIO = 200
+
+def _fast_demo_enabled() -> bool:
+    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
+
+
+def _step_budget(default: int) -> int:
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:  # pragma: no cover
+            pass
+    if _fast_demo_enabled():
+        return min(default, 64)
+    return default
+
+
+STEPS_PER_SCENARIO = _step_budget(200)
 
 
 def run_svg_scenario(name: str, svg_path: str) -> None:
@@ -55,7 +73,8 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
             break
     env.close()
     print(f"Completed scenario: {name}")
-    time.sleep(1)
+    if not _fast_demo_enabled():
+        time.sleep(1)
 
 
 def main() -> None:

@@ -14,10 +14,13 @@ Usage:
 
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.coverage_tools.baseline_comparator import (
     CoverageSnapshot,
     compare,
@@ -26,17 +29,81 @@ from robot_sf.coverage_tools.baseline_comparator import (
 )
 
 
+def _sample_coverage_payload() -> dict[str, Any]:
+    """Return a deterministic sample coverage payload for demonstrations."""
+
+    timestamp = datetime.now(tz=UTC).isoformat()
+    return {
+        "meta": {
+            "version": "6.5.0",
+            "timestamp": timestamp,
+            "branch_coverage": False,
+        },
+        "totals": {
+            "covered_lines": 92,
+            "num_statements": 108,
+            "percent_covered": 85.19,
+        },
+        "files": {
+            "robot_sf/examples/demo_module.py": {
+                "executed_lines": [1, 2, 3, 4, 5, 6, 7],
+                "missing_lines": [8, 9],
+                "summary": {
+                    "covered_lines": 7,
+                    "num_statements": 9,
+                    "percent_covered": 77.78,
+                },
+            },
+            "robot_sf/examples/utilities.py": {
+                "executed_lines": [1, 2, 3, 4, 5],
+                "missing_lines": [6],
+                "summary": {
+                    "covered_lines": 5,
+                    "num_statements": 6,
+                    "percent_covered": 83.33,
+                },
+            },
+            "robot_sf/examples/cli.py": {
+                "executed_lines": list(range(1, 21)),
+                "missing_lines": [],
+                "summary": {
+                    "covered_lines": 20,
+                    "num_statements": 20,
+                    "percent_covered": 100.0,
+                },
+            },
+        },
+    }
+
+
+def _load_or_create_coverage(path: Path) -> dict[str, Any]:
+    """Load coverage data, falling back to a sample payload when needed."""
+
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            logger.warning(
+                "Invalid coverage JSON at %s (%s). Falling back to sample payload.",
+                path,
+                exc,
+            )
+
+    logger.info("Generating sample coverage dataset for demonstration purposes.")
+    sample = _sample_coverage_payload()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sample, indent=2) + "\n", encoding="utf-8")
+        logger.debug("Wrote sample coverage dataset to %s", path)
+    except OSError as exc:
+        logger.debug("Unable to persist sample coverage dataset: %s", exc)
+    return sample
+
+
 def example_load_coverage() -> CoverageSnapshot:
     """Load current coverage data from JSON file."""
-    coverage_path = Path("coverage.json")
-
-    if not coverage_path.exists():
-        logger.error(f"Coverage file not found: {coverage_path}")
-        logger.info("Run 'uv run pytest tests' first to generate coverage data")
-        raise FileNotFoundError(coverage_path)
-
-    with coverage_path.open(encoding="utf-8") as f:
-        data = json.load(f)
+    coverage_path = resolve_artifact_path(Path("coverage.json"))
+    data = _load_or_create_coverage(coverage_path)
 
     snapshot = CoverageSnapshot.from_coverage_json(data)
     logger.info(f"Loaded coverage: {snapshot.total_coverage:.2f}%")
@@ -66,18 +133,20 @@ def example_snapshot_inspection(snapshot: CoverageSnapshot) -> None:
 
 def example_baseline_comparison() -> None:
     """Demonstrate baseline comparison workflow."""
-    baseline_path = Path(".coverage-baseline.json")
-    current_path = Path("coverage.json")
+    baseline_path = resolve_artifact_path(Path("coverage/.coverage-baseline.json"))
+    current_path = resolve_artifact_path(Path("coverage.json"))
+    current_data = _load_or_create_coverage(current_path)
 
     # Check if baseline exists
     if not baseline_path.exists():
         logger.warning(f"No baseline found at {baseline_path}")
         logger.info("Creating baseline from current coverage...")
-        if current_path.exists():
-            import shutil
-
-            shutil.copy(current_path, baseline_path)
+        try:
+            baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            baseline_path.write_text(json.dumps(current_data, indent=2) + "\n", encoding="utf-8")
             logger.info("Baseline created. Run 'uv run pytest tests' again to see comparison")
+        except OSError as exc:
+            logger.error(f"Failed to create baseline: {exc}")
         return
 
     # Load baseline
@@ -114,8 +183,8 @@ def example_baseline_comparison() -> None:
 
 def example_generate_warnings() -> None:
     """Demonstrate different warning formats."""
-    baseline_path = Path(".coverage-baseline.json")
-    current_path = Path("coverage.json")
+    baseline_path = resolve_artifact_path(Path("coverage/.coverage-baseline.json"))
+    current_path = resolve_artifact_path(Path("coverage.json"))
 
     if not baseline_path.exists() or not current_path.exists():
         logger.warning("Baseline or current coverage missing, skipping warning demo")

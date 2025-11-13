@@ -122,43 +122,35 @@ Files with decreased coverage:
       "file": "robot_sf/gym_env/environment.py",
       "before": 90.0,
       "after": 85.0,
-      ```yaml
-      # 1. Tests run with automatic coverage collection
-      - name: Unit tests
-        run: uv run pytest -q -n auto
+      "change": -5.0
+    }
+  ]
+}
+```
 
-      # 2. Restore baseline from cache
-      - name: Restore coverage baseline
-        uses: actions/cache@v4
-        with:
-          path: output/coverage/.coverage-baseline.json
-          key: coverage-baseline-${{ github.ref_name }}
+## CI/CD Integration
 
-      # 3. Compare (non-blocking)
-      - name: Compare coverage
-        continue-on-error: true  # Warning only, doesn't fail CI
-        run: |
-          uv run python scripts/coverage/compare_coverage.py \
-            --current output/coverage/coverage.json \
-            --baseline output/coverage/.coverage-baseline.json \
-            --format github
+Coverage comparison and publishing run automatically in CI using a reusable sequence of steps:
 
-      # 4. Update baseline on main
-      - name: Update baseline
-        if: github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p output/coverage
-          cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
+```yaml
+# 1. Tests run with automatic coverage collection
+- name: Unit tests
+  run: uv run pytest -q -n auto
 
-      # 5. Upload artifacts
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          path: |
-            output/coverage/coverage.json
-            output/coverage/htmlcov/
-            output/coverage/.coverage
-      ```
+# 2. Restore baseline from cache
+- name: Restore coverage baseline
+  uses: actions/cache@v4
+  with:
+    path: output/coverage/.coverage-baseline.json
+    key: coverage-baseline-${{ github.ref_name }}
+
+# 3. Compare (non-blocking)
+- name: Compare coverage
+  continue-on-error: true  # Warning only, doesn't fail CI
+  run: |
+    uv run python scripts/coverage/compare_coverage.py \
+      --current output/coverage/coverage.json \
+      --baseline output/coverage/.coverage-baseline.json \
       --format github
 
 # 4. Update baseline on main
@@ -415,8 +407,8 @@ current = CoverageSnapshot.from_coverage_json("output/coverage/coverage.json")
 # Compare with baseline
 delta = compare(
     current_path="output/coverage/coverage.json",
-  baseline_path="coverage/.coverage-baseline.json",
-    threshold=1.0
+    baseline_path="output/coverage/.coverage-baseline.json",
+    threshold=1.0,
 )
 
 # Generate warning

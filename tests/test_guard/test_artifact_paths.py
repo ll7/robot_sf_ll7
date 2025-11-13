@@ -79,7 +79,33 @@ def test_get_artifact_category_unknown_raises() -> None:
         get_artifact_category("non-existent")
 
 
-def test_resolve_artifact_path_honours_override(
+def test_resolve_artifact_path_uses_canonical_root_when_no_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
+    expected_base = get_artifact_category_path("benchmarks")
+    resolved = resolve_artifact_path("benchmarks/output.json")
+    assert resolved == (expected_base / "output.json").resolve()
+
+
+def test_resolve_artifact_path_preserves_repo_relative_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
+    resolved = resolve_artifact_path(Path("docs/example.md"))
+    assert resolved == (get_repository_root() / "docs/example.md").resolve()
+
+
+def test_resolve_artifact_path_migrates_legacy_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
+    expected = get_artifact_category_path("coverage") / "coverage.json"
+    resolved = resolve_artifact_path("coverage.json")
+    assert resolved == expected.resolve()
+
+
+def test_resolve_artifact_path_honors_override(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     override = (tmp_path / "override").resolve()

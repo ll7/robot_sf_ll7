@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Canonical artifact root enforcement and tooling (Feature 243)
+  - Introduced `output/` hierarchy as single destination for coverage, benchmark, recording, wandb, and tmp artifacts
+  - Added migration helper (`scripts/tools/migrate_artifacts.py`) and guard (`scripts/tools/check_artifact_root.py`) with console entry point and regression tests
+  - Wired guard + migration into CI workflow, publishing artifacts from canonical paths only
+  - Refreshed core docs (`docs/dev_guide.md`, `docs/coverage_guide.md`, `docs/README.md`, root `README.md`) with policy overview, quickstart links, and updated coverage instructions
+  - Extended quickstart guidance to cover guard execution, artifact overrides, and validation expectations
 - Comprehensive configuration architecture documentation (#244)
   - Created `docs/architecture/configuration.md` with configuration precedence hierarchy
   - Documented three-tier precedence system: Code Defaults < YAML < Runtime

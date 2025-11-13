@@ -19,6 +19,7 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+output/
 
 # IDE
 .vscode/

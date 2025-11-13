@@ -107,6 +107,14 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+### Artifact Outputs
+
+- Generated artifacts are routed into the canonical `output/` tree (`output/coverage/`, `output/benchmarks/`, `output/recordings/`, `output/wandb/`, `output/tmp/`).
+- After pulling new changes, run `uv run python scripts/tools/migrate_artifacts.py` (or `uv run robot-sf-migrate-artifacts`) to relocate any legacy `results/`, `recordings/`, or `htmlcov/` directories.
+- Use `uv run python scripts/tools/check_artifact_root.py` to verify the repository root stays clean; CI runs the same guard.
+- Set `ROBOT_SF_ARTIFACT_ROOT=/path/to/custom/output` before invoking scripts if you need to direct artifacts elsewhere—the helpers and guard respect the override.
+- Coverage HTML is available via `uv run python scripts/coverage/open_coverage_report.py`, which opens `output/coverage/htmlcov/index.html` cross-platform.
+
 ### Alternative Installation Methods
 
 #### Manual dependency installation
@@ -261,6 +269,7 @@ For detailed guides on setup, development, benchmarking, and architecture, visit
 - [SVG Map Editor](./docs/SVG_MAP_EDITOR.md) - SVG-based map creation
 - [Simulation View](./docs/SIM_VIEW.md) - Visualization and rendering
 - [UV Migration](./docs/UV_MIGRATION.md) - Migration to UV package manager
+- [Artifact Policy Quickstart](./specs/243-clean-output-dirs/quickstart.md) - Migration workflow, guard usage, and override instructions for the canonical `output/` tree
  - [Contributing Agents Guide](./AGENTS.md) – Repository structure, coding style, test workflow, and contributor conventions (start here if new!)
 
 ### Environment Architecture (New!)

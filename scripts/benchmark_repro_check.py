@@ -12,6 +12,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 from robot_sf.render.helper_catalog import ensure_output_dir
 
 
@@ -203,7 +204,8 @@ def main():
     print("Social Navigation Benchmark - Reproducibility Check")
     print("=" * 60)
 
-    results_base = Path("results")
+    ensure_canonical_tree(categories=("benchmarks",))
+    results_base = get_artifact_category_path("benchmarks")
     ensure_output_dir(results_base)
 
     # Create temporary working directories

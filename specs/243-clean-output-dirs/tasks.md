@@ -17,8 +17,8 @@
 
 **Purpose**: Prepare repository ignore rules and tooling skeleton for artifact consolidation.
 
-- [ ] T001 Update `.gitignore` to ignore the new `output/` hierarchy and remove redundant top-level artifact entries.
-- [ ] T002 Create `scripts/tools/__init__.py` with a module docstring to establish the tooling package namespace.
+- [x] T001 Update `.gitignore` to ignore the new `output/` hierarchy and remove redundant top-level artifact entries.
+- [x] T002 Create `scripts/tools/__init__.py` with a module docstring to establish the tooling package namespace.
 
 ---
 
@@ -28,10 +28,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Refactor `robot_sf/common/artifact_paths.py` to expose canonical `output/` root helpers, category metadata, and an `ensure_canonical_tree` utility.
-- [ ] T004 Update `robot_sf/common/__init__.py` to re-export the new artifact helper functions for downstream imports.
-- [ ] T005 Integrate the canonical tree helper into `tests/conftest.py` so pytest sessions create and tear down the expected artifact layout.
-- [ ] T006 Add unit coverage for artifact helpers in `tests/test_guard/test_artifact_paths.py` (default root, override handling, legacy path detection).
+- [x] T003 Refactor `robot_sf/common/artifact_paths.py` to expose canonical `output/` root helpers, category metadata, and an `ensure_canonical_tree` utility.
+- [x] T004 Update `robot_sf/common/__init__.py` to re-export the new artifact helper functions for downstream imports.
+- [x] T005 Integrate the canonical tree helper into `tests/conftest.py` so pytest sessions create and tear down the expected artifact layout.
+- [x] T006 Add unit coverage for artifact helpers in `tests/test_guard/test_artifact_paths.py` (default root, override handling, legacy path detection).
 
 **Checkpoint**: Foundation ready – artifact root helpers available to all stories.
 
@@ -45,13 +45,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Implement `scripts/tools/migrate_artifacts.py` with dry-run, summary report, and legacy path relocation into `output/`.
-- [ ] T008 [P] [US1] Register a console entry point in `pyproject.toml` (e.g., `robot-sf-migrate-artifacts`) that invokes the migration script.
-- [ ] T009 [US1] Update `scripts/benchmark02.py` to default JSON outputs into `output/benchmarks/` via the artifact helper.
-- [ ] T010 [P] [US1] Update `scripts/validation/performance_smoke_test.py` to persist logs under `output/benchmarks/` and remove root-level `results/` usage.
-- [ ] T011 [P] [US1] Update `scripts/run_classic_interactions.py` and related CLI defaults to write episode manifests under `output/benchmarks/`.
-- [ ] T012 [P] [US1] Update `scripts/play_recordings.py` to read from and list `output/recordings/` while honoring the override.
-- [ ] T013 [US1] Create migration regression tests in `tests/test_guard/test_migrate_artifacts.py` covering dry-run, actual relocation, and idempotency.
+- [x] T007 [US1] Implement `scripts/tools/migrate_artifacts.py` with dry-run, summary report, and legacy path relocation into `output/`.
+- [x] T008 [P] [US1] Register a console entry point in `pyproject.toml` (e.g., `robot-sf-migrate-artifacts`) that invokes the migration script.
+- [x] T009 [US1] Update `scripts/benchmark02.py` to default JSON outputs into `output/benchmarks/` via the artifact helper.
+- [x] T010 [P] [US1] Update `scripts/validation/performance_smoke_test.py` to persist logs under `output/benchmarks/` and remove root-level `results/` usage.
+- [x] T011 [P] [US1] Update `scripts/run_classic_interactions.py` and related CLI defaults to write episode manifests under `output/benchmarks/`.
+- [x] T012 [P] [US1] Update `scripts/play_recordings.py` to read from and list `output/recordings/` while honoring the override.
+- [x] T013 [US1] Create migration regression tests in `tests/test_guard/test_migrate_artifacts.py` covering dry-run, actual relocation, and idempotency.
 
 **Checkpoint**: Maintainers running local workflows produce no stray root directories.
 
@@ -65,12 +65,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Implement `scripts/tools/check_artifact_root.py` to detect unapproved top-level files/directories and emit actionable failures.
-- [ ] T015 [P] [US2] Add guard coverage in `tests/test_guard/test_check_artifact_root.py`, including positive (clean) and negative (legacy path) scenarios.
-- [ ] T016 [US2] Wire the guard script into `.github/workflows/ci.yml` so every job fails fast when legacy directories appear.
-- [ ] T017 [P] [US2] Update `scripts/coverage/open_coverage_report.py` and related tooling to target `output/coverage/` (HTML + JSON paths).
-- [ ] T018 [P] [US2] Revise `scripts/validation/test_coverage_collection.sh` and any coverage utilities to look under `output/coverage/`.
-- [ ] T019 [US2] Adjust CI artifact upload steps in `.github/workflows/ci.yml` to publish `output/coverage/`, `output/benchmarks/`, and `output/recordings/` directories.
+- [x] T014 [US2] Implement `scripts/tools/check_artifact_root.py` to detect unapproved top-level files/directories and emit actionable failures.
+- [x] T015 [P] [US2] Add guard coverage in `tests/test_guard/test_check_artifact_root.py`, including positive (clean) and negative (legacy path) scenarios.
+- [x] T016 [US2] Wire the guard script into `.github/workflows/ci.yml` so every job fails fast when legacy directories appear.
+- [x] T017 [P] [US2] Update `scripts/coverage/open_coverage_report.py` and related tooling to target `output/coverage/` (HTML + JSON paths).
+- [x] T018 [P] [US2] Revise `scripts/validation/test_coverage_collection.sh` and any coverage utilities to look under `output/coverage/`.
+- [x] T019 [US2] Adjust CI artifact upload steps in `.github/workflows/ci.yml` to publish `output/coverage/`, `output/benchmarks/`, and `output/recordings/` directories.
 
 **Checkpoint**: Guard enforcement active in CI; artifacts published from canonical paths.
 
@@ -84,10 +84,10 @@
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Update `docs/dev_guide.md` sections on artifact handling, coverage, and validation to reference the `output/` hierarchy and migration script.
-- [ ] T021 [P] [US3] Refresh root `README.md` to summarize the artifact policy and link to the quickstart.
-- [ ] T022 [P] [US3] Update `docs/coverage_guide.md` with the new coverage paths and guard workflow.
-- [ ] T023 [US3] Add cross-links (e.g., `docs/README.md` and `docs/dev/issues/*`) pointing to the quickstart and guard scripts for discoverability.
+- [x] T020 [US3] Update `docs/dev_guide.md` sections on artifact handling, coverage, and validation to reference the `output/` hierarchy and migration script.
+- [x] T021 [P] [US3] Refresh root `README.md` to summarize the artifact policy and link to the quickstart.
+- [x] T022 [P] [US3] Update `docs/coverage_guide.md` with the new coverage paths and guard workflow.
+- [x] T023 [US3] Add cross-links (e.g., `docs/README.md` and `docs/dev/issues/*`) pointing to the quickstart and guard scripts for discoverability.
 
 **Checkpoint**: Documentation accurately reflects artifact management expectations.
 

@@ -82,9 +82,9 @@
 - [X] T024 [US2] Implement terminal format output for local baseline comparisons
 - [X] T025 [US2] Implement JSON format output for programmatic consumption
 - [X] T026 [US2] Add coverage job to .github/workflows/ci.yml after existing test job
-- [X] T027 [US2] Configure GitHub Actions cache in ci.yml for .coverage-baseline.json with key coverage-baseline-${{ github.base_ref }}
+- [X] T027 [US2] Configure GitHub Actions cache in ci.yml for coverage/.coverage-baseline.json with key coverage-baseline-${{ github.base_ref }}
 - [X] T028 [US2] Add compare coverage step in ci.yml that runs scripts/coverage/compare_coverage.py with continue-on-error: true
-- [X] T029 [US2] Add baseline update step in ci.yml for main branch pushes to copy coverage.json to .coverage-baseline.json
+- [X] T029 [US2] Add baseline update step in ci.yml for main branch pushes to copy coverage.json to coverage/.coverage-baseline.json
 - [X] T030 [US2] Create tests/coverage_tools/test_baseline_comparator.py with unit tests for comparison logic
 - [ ] T031 [US2] Test CI integration by creating intentional coverage decrease in test PR
 - [X] T032 [US2] Update docs/coverage_guide.md (new file) with CI integration section and warning interpretation

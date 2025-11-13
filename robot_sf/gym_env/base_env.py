@@ -4,12 +4,12 @@ Provides common functionality for all environments.
 """
 
 import datetime
-import os
 import pickle
 
 from gymnasium import Env
 from loguru import logger
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.render.jsonl_recording import JSONLRecorder
 from robot_sf.render.sim_view import SimulationView, VisualizableSimState
@@ -56,6 +56,9 @@ class BaseEnv(Env):
         self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
 
+        # Route recordings through the canonical artifact tree (or override) by default.
+        self._recording_dir = resolve_artifact_path(recording_dir)
+
         # New JSONL recording system
         self.use_jsonl_recording = use_jsonl_recording
         self.jsonl_recorder: JSONLRecorder | None = None
@@ -65,7 +68,7 @@ class BaseEnv(Env):
             seed = recording_seed if recording_seed is not None else getattr(env_config, "seed", 0)
 
             self.jsonl_recorder = JSONLRecorder(
-                output_dir=recording_dir,
+                output_dir=self._recording_dir,
                 suite=suite_name,
                 scenario=scenario_name,
                 algorithm=algorithm_name,
@@ -138,21 +141,20 @@ class BaseEnv(Env):
         """
         if filename is None:
             now = datetime.datetime.now()
-            # get current working directory
-            cwd = os.getcwd()
-            filename = f"{cwd}/recordings/{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
+            target_path = self._recording_dir / f"{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
+        else:
+            target_path = resolve_artifact_path(filename)
 
-        # only save if there are recorded states
         if len(self.recorded_states) == 0:
             logger.warning("No states recorded, skipping save")
             # TODO: First env.reset will always have no recorded states
             return
 
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(filename, "wb") as f:  # write binary
+        with target_path.open("wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
-            logger.info(f"Recording saved to {filename}")
+            logger.info(f"Recording saved to {target_path}")
             logger.info("Reset state list")
             self.recorded_states = []
 

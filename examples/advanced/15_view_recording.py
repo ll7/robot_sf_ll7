@@ -7,7 +7,7 @@ Prerequisites:
     - maps/svg_maps/02_simple_maps.svg
 
 Expected Output:
-    - Recording saved under `recordings/` and visualized via the playback tool.
+    - Recording saved under `output/recordings/` and visualized via the playback tool.
 
 Limitations:
     - Requires display access for rendering and playback visualization.
@@ -17,10 +17,10 @@ References:
 """
 
 import os
-from pathlib import Path
 
 from loguru import logger
 
+from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
@@ -80,11 +80,9 @@ def convert_map(svg_file: str):
 def get_file():
     """Get the latest recorded file."""
 
-    filename = max(
-        os.listdir("recordings"),
-        key=lambda x: os.path.getctime(os.path.join("recordings", x)),
-    )
-    return Path("recordings", filename)
+    recordings_dir = get_artifact_category_path("recordings")
+    latest_file = max(recordings_dir.iterdir(), key=lambda path: path.stat().st_ctime)
+    return latest_file
 
 
 def main():

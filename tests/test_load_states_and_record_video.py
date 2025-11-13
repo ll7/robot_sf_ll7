@@ -1,10 +1,10 @@
 """pytest for load_states_and_record_video.py"""
 
 import datetime
-from pathlib import Path
 
 import pytest
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.render.playback_recording import load_states_and_record_video
 from robot_sf.render.sim_view import MOVIEPY_AVAILABLE
 
@@ -20,7 +20,7 @@ def test_load_states_and_record_video(delete_video: bool = True):
         delete_video: Whether to delete the video file after test. Default True.
     """
     # Create recordings directory if it doesn't exist
-    recordings_dir = Path("tmp/recording_test")
+    recordings_dir = resolve_artifact_path("tmp/recording_test")
     recordings_dir.mkdir(parents=True, exist_ok=True)
 
     # create a unique video name

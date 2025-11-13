@@ -14,6 +14,19 @@ from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
 from robot_sf.render.jsonl_recording import JSONLRecorder
 
 
+def test_jsonl_recording_respects_artifact_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ensure default recordings route through the artifact override root."""
+
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
+
+    recorder = JSONLRecorder()
+
+    assert recorder.output_dir == tmp_path / "recordings"
+    assert recorder.output_dir.exists()
+
+
 def test_jsonl_recording_basic():
     """Test basic JSONL recording functionality."""
     with tempfile.TemporaryDirectory() as temp_dir:

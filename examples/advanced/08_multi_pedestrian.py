@@ -13,7 +13,7 @@ Limitations:
     - Requires display or headless configuration for rendering.
 
 References:
-    - docs/dev_guide.md#pedestrian-environments
+    - docs/single_pedestrians.md
 """
 
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -35,10 +35,10 @@ def create_multi_pedestrian_map() -> MapDefinition:
     ped_goal_zones = []
     ped_crowded_zones = []
     bounds = [
-        (0, width, 0, 0),  # bottom
-        (0, width, height, height),  # top
-        (0, 0, 0, height),  # left
-        (width, width, 0, height),  # right
+        ((0.0, 0.0), (width, 0.0)),  # bottom
+        ((0.0, height), (width, height)),  # top
+        ((0.0, 0.0), (0.0, height)),  # left
+        ((width, 0.0), (width, height)),  # right
     ]
     robot_routes = [
         GlobalRoute(

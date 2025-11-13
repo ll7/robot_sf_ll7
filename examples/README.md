@@ -8,6 +8,7 @@ an introductory walkthrough, explore **Advanced Features** for targeted demos,
 runtime evaluation tooling lives under **Benchmarks**, and plotting resources
 reside in **Plotting & Analysis**. Archived scripts remain available for
 reference but are excluded from CI by default.
+
 ## Quickstart Decision Path
 
 1. **Need a five-minute tour?** Run the quickstart trio in order:
@@ -32,11 +33,13 @@ uv run python examples/quickstart/03_custom_map.py
 Each command runs headless and finishes in under two minutes. The sequence
 introduces factory-based environment creation, benchmark automation, and map
 customization without requiring additional assets beyond the repository.
+
 ## Uncategorized Examples
 
 Pending classification into the new tiered structure.
 
 _No examples assigned yet._
+
 ## Quickstart
 
 Foundational walkthroughs for first-time users.
@@ -46,6 +49,7 @@ Foundational walkthroughs for first-time users.
 | [01 Basic Robot Rollout](./quickstart/01_basic_robot.py) | Run a basic Robot SF environment with a random policy. | None | quickstart | ✅ |
 | [02 Trained PPO Benchmark](./quickstart/02_trained_model.py) | Run the Robot SF benchmark with the pre-trained PPO baseline. | configs/baselines/example_matrix.yaml<br>configs/baselines/ppo.yaml | quickstart, benchmark | ✅ |
 | [03 Custom SVG Map](./quickstart/03_custom_map.py) | Load an SVG map into Robot SF and simulate random navigation. | maps/svg_maps/debug_06.svg | quickstart, maps | ✅ |
+
 ## Advanced Features
 
 Feature-focused demos for developers exploring capabilities.
@@ -67,16 +71,18 @@ Feature-focused demos for developers exploring capabilities.
 | [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | None | maps, tooling | ✅ |
 | [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
+
 ## Benchmarks
 
 Benchmark runners and evaluation workflows.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [Demo Aggregate](./benchmarks/demo_aggregate.py) | Aggregate episode metrics with optional bootstrap CIs. | _None_ | benchmark, aggregation | ✅ |
+| [Demo Aggregate](./benchmarks/demo_aggregate.py) | Aggregate episode metrics with optional bootstrap confidence intervals. | _None_ | benchmark, aggregation | ✅ |
 | [Demo Full Classic Benchmark](./benchmarks/demo_full_classic_benchmark.py) | Run the full classic interaction benchmark via programmatic helper. | _None_ | benchmark | ✅ |
 | [Demo Social Nav Scenarios](./benchmarks/demo_social_nav_scenarios.py) | Run social navigation SVG scenarios sequentially. | _None_ | benchmark, scenario | ✅ |
 | [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | End-to-end SNQI figure generation flow. | _None_ | benchmark, snqi | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
+
 ## Plotting & Analysis
 
 Visualization and analysis scripts built atop benchmark outputs.

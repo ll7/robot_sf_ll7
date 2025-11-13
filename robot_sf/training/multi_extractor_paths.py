@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
+
 ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
-DEFAULT_TMP_ROOT = Path("./tmp/multi_extractor_training")
+DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
 
 
 def resolve_base_output_root(env: Optional[dict[str, str]] = None) -> Path:
@@ -17,7 +19,7 @@ def resolve_base_output_root(env: Optional[dict[str, str]] = None) -> Path:
     override = env.get(ENV_TMP_OVERRIDE)
     if override:
         return Path(override).expanduser().resolve()
-    return DEFAULT_TMP_ROOT.expanduser()
+    return resolve_artifact_path(DEFAULT_TMP_ROOT)
 
 
 def make_run_directory(

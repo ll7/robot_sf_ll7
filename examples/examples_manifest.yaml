@@ -73,8 +73,7 @@ examples:
     name: "01 Backend Selection"
     summary: "Switch Robot SF backends using unified config."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: false
     ci_reason: "Dummy backend currently lacks map metadata and fails under automation."
     doc_reference: docs/dev_guide.md#environment-factory
@@ -93,8 +92,7 @@ examples:
     name: "02 Factory Options"
     summary: "Compare environment factory options for rendering and recording."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/dev_guide.md#environment-factory
@@ -150,14 +148,13 @@ examples:
       - model/run_043
     ci_enabled: false
     ci_reason: "Depends on external models (model/run_043, model_ped/ppo_ped_02.zip)."
-    doc_reference: docs/dev_guide.md#pedestrian-environments
+    doc_reference: docs/single_pedestrians.md
     tags: [pedestrian, factory]
   - path: quickstart/01_basic_robot.py
     name: "01 Basic Robot Rollout"
     summary: "Run a basic Robot SF environment with a random policy."
     category_slug: quickstart
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/dev_guide.md#quickstart
@@ -186,8 +183,7 @@ examples:
     name: "05 Fast-pysf Speed Fix"
     summary: "Inspect the fast-pysf pedestrian speed fix output."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/performance_notes.md#fast-pysf-speed-fix
@@ -201,27 +197,25 @@ examples:
       - model/run_043
     ci_enabled: false
     ci_reason: "Requires external PPO checkpoint and long recording playback."
-    doc_reference: docs/dev_guide.md#pedestrian-environments
+    doc_reference: docs/single_pedestrians.md
     tags: [pedestrian, recording]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
-    doc_reference: docs/dev_guide.md#pedestrian-environments
+    doc_reference: docs/single_pedestrians.md
     tags: [pedestrian]
   - path: advanced/07_single_pedestrian.py
     name: "07 Single Pedestrian"
     summary: "Spawn and simulate single pedestrians with custom maps."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
-    doc_reference: docs/dev_guide.md#pedestrian-environments
+    doc_reference: docs/single_pedestrians.md
     tags: [pedestrian]
   - path: advanced/03_image_observations.py
     name: "03 Image Observations"

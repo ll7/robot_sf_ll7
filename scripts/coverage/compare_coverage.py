@@ -7,10 +7,10 @@ warnings in various formats for CI/CD integration. Non-blocking by default
 (exits 0 on coverage decrease), but can optionally fail via --fail-on-decrease.
 
 Usage:
-    python scripts/coverage/compare_coverage.py \\
-        --current coverage.json \\
-        --baseline .coverage-baseline.json \\
-        --threshold 1.0 \\
+    python scripts/coverage/compare_coverage.py \
+        --current coverage.json \
+        --baseline coverage/.coverage-baseline.json \
+        --threshold 1.0 \
         --format github
 
 Exit Codes:
@@ -41,8 +41,8 @@ def main() -> int:
     parser.add_argument(
         "--baseline",
         type=Path,
-        default=Path(".coverage-baseline.json"),
-        help="Path to baseline coverage JSON (default: .coverage-baseline.json)",
+        default=Path("coverage/.coverage-baseline.json"),
+        help="Path to baseline coverage JSON (default: coverage/.coverage-baseline.json)",
     )
     parser.add_argument(
         "--threshold",

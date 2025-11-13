@@ -30,7 +30,50 @@ uv run ruff check --fix . && uv run ruff format .
 uv run pytest tests
 ```
 
-One‑liner quality gates (CLI):
+### Examples Quickstart Walkthrough
+The `examples/README.md` file now captures a curated onboarding path. New contributors
+can get a full tour in roughly five minutes by running the quickstart trio in order:
+
+```bash
+uv run python examples/quickstart/01_basic_robot.py
+uv run python examples/quickstart/02_trained_model.py
+uv run python examples/quickstart/03_custom_map.py
+```
+
+- `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
+- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
+  `results/episodes_demo_ppo.jsonl`.
+- `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
+  `RobotSimulationConfig.map_pool` for custom layouts.
+
+See `examples/README.md` for the decision tree, prerequisites, and links to additional
+tiers (advanced features, benchmarks, plotting, and archived scripts).
+
+### Advanced Feature Demos
+
+Developers exploring specific capabilities should jump to the curated scripts in
+`examples/advanced/`. Each file follows the numbered naming scheme surfaced in
+`examples/README.md` and comes with a manifest-backed docstring describing how to
+run it. Highlights include:
+
+- **Backends & factory ergonomics**: `01_backend_selection.py` and
+  `02_factory_options.py` demonstrate switching simulators and recording options via
+  unified configs.
+- **Observation & training workflows**: `03_image_observations.py` and
+  `04_feature_extractors.py` showcase image sensors and feature extractor presets
+  (run with `uv sync --all-extras`).
+- **Pedestrian & policy scenarios**: Scripts `06`–`11` cover factory-based
+  pedestrian environments, single/multi pedestrian setups, and PPO rollouts using
+  the maintained checkpoints under `model/`.
+- **Tooling, validation, and visualization**: `12_social_force_planner_demo.py`
+  through `15_view_recording.py` provide the Social Force planner showcase, SVG
+  map validation helper, trajectory visualization, and recording playback flows.
+
+Check the Advanced table in `examples/README.md` for prerequisites, tags, and whether
+a script is enabled for CI smoke execution.
+
+### One‑liner quality gates (CLI):
+
 ```bash
 uv run ruff check --fix . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
 ```
@@ -202,6 +245,14 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 ### Coverage workflow (automatic collection)
 
 **Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
+# Artifact routing during tests
+
+The test harness sets the ``ROBOT_SF_ARTIFACT_ROOT`` environment variable so that
+example scripts and helpers write into a temporary directory instead of the
+repository tree. This keeps ``results/`` and ``docs/`` clean while preserving the
+examples' default behavior for normal runs. To opt-in manually, export the same
+variable before invoking scripts.
+
 
 #### Quick start
 ```bash
@@ -553,6 +604,8 @@ The CI pipeline includes integrated performance monitoring for system package in
 ./scripts/validation/test_basic_environment.sh
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
+uv run python scripts/validation/run_examples_smoke.py --dry-run
+uv run python scripts/validation/run_examples_smoke.py
 
 # Performance baseline validation
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
@@ -562,6 +615,7 @@ Success criteria:
 - Basic environment: exits 0; no exceptions.
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
+- Example smoke harness: exits 0; all `ci_enabled` examples pass and archived entries are reported as skipped via manifest metadata.
 - Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
   - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.
     - Environment variables:
@@ -572,6 +626,13 @@ Success criteria:
   - `ROBOT_SF_PERF_ENFORCE=1` to fail on soft (and hard) breaches (use locally for strict tuning).
   - (Advanced) `ROBOT_SF_PERF_SOFT` / `ROBOT_SF_PERF_HARD` may be set to numeric seconds to temporarily override thresholds (intended only for internal testing of enforcement logic; not part of the stable public interface).
     - Hard threshold breaches always FAIL.
+
+  ### Example maintenance workflow
+
+  1. **Validate catalog** – `uv run python scripts/validation/validate_examples_manifest.py` ensures the manifest enumerates every script and that docstrings stay aligned with summaries.
+  2. **Review planned changes** – `uv run python scripts/validation/run_examples_smoke.py --dry-run` prints the `ci_enabled` set before executing pytest, making it easy to confirm archive decisions.
+  3. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
+  4. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
 
 ### Performance benchmarking (optional)
 ```bash

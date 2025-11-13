@@ -1,0 +1,103 @@
+"""Plot normalized force vectors with a magnitude colormap and save PNG+PDF.
+
+Purpose:
+    Produce publication-ready quiver plots with colour-coded magnitudes from a
+    synthetic pysocialforce simulation.
+
+Usage:
+    uv run python examples/plotting/plot_force_field_normalized.py
+
+Prerequisites:
+    - None (synthetic state is embedded)
+
+Expected Output:
+    - `docs/img/force_field_example_norm.png`
+    - `docs/figures/force_field_example_norm.pdf`
+
+Limitations:
+    - Requires matplotlib; ensure `uv sync --all-extras` if optional plotting deps missing.
+"""
+
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from pysocialforce import Simulator
+
+from robot_sf.common.artifact_paths import resolve_artifact_path
+from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
+
+
+def make_demo_sim():
+    state = np.array(
+        [
+            [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 0.0, 5.0, 1.0, 1.0],
+        ],
+    )
+    obstacles = [
+        (2.5, 2.5, -1.0, 2.0),
+    ]
+    sim = Simulator(state=state, obstacles=obstacles)
+    return sim
+
+
+def main():
+    # LaTeX-friendly export settings (see docs/dev_guide.md)
+    plt.rcParams.update(
+        {
+            "savefig.bbox": "tight",
+            "pdf.fonttype": 42,
+            "font.size": 9,
+            "axes.labelsize": 9,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 8,
+        },
+    )
+    sim = make_demo_sim()
+    wrapper = FastPysfWrapper(sim)
+
+    xs = np.linspace(-1, 5, 80)
+    ys = np.linspace(-2, 3, 80)
+
+    field = wrapper.get_force_field(xs, ys)
+    U = field[:, :, 0]
+    V = field[:, :, 1]
+    mags = np.sqrt(U**2 + V**2)
+
+    # Avoid division by zero
+    mags_safe = np.where(mags == 0, 1.0, mags)
+    Un = U / mags_safe
+    Vn = V / mags_safe
+
+    # Subsample for clarity: plot every 3rd vector
+    step = 3
+    X, Y = np.meshgrid(xs, ys)
+    Xs = X[::step, ::step]
+    Ys = Y[::step, ::step]
+    Us = Un[::step, ::step]
+    Vs = Vn[::step, ::step]
+    Ms = mags[::step, ::step]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    q = ax.quiver(Xs, Ys, Us, Vs, Ms, cmap="viridis", scale=30, width=0.005)
+    cb = fig.colorbar(q, ax=ax)
+    cb.set_label("force magnitude")
+    ax.set_title("Normalized force field (color = magnitude)")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+
+    out_png = resolve_artifact_path(Path("docs/img/force_field_example_norm.png"))
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(out_png), dpi=200)
+    print(f"Wrote {out_png}")
+
+    pdf_path = resolve_artifact_path(Path("docs/figures/force_field_example_norm.pdf"))
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(pdf_path))
+    print(f"Wrote {pdf_path}")
+
+
+if __name__ == "__main__":
+    main()

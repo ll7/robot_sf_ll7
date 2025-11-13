@@ -106,14 +106,14 @@ output = "coverage.json"
 - name: Cache baseline coverage
   uses: actions/cache@v4
   with:
-    path: .coverage-baseline.json
+    path: coverage/.coverage-baseline.json
     key: coverage-baseline-${{ github.base_ref || 'main' }}
 
 - name: Compare coverage
   run: |
     uv run python scripts/coverage/compare_coverage.py \
       --current coverage.json \
-      --baseline .coverage-baseline.json \
+      --baseline coverage/.coverage-baseline.json \
       --threshold 1.0 \
       --format github-actions
   continue-on-error: true  # Never fail the build

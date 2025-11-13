@@ -4,6 +4,10 @@
 
 > Previous documentation for feature branch `127-enhance-benchmark-visual` – unified generation of plot & video artifacts for the *Full Classic Benchmark* with SimulationView rendering, synthetic fallback, schema validation, and performance instrumentation.
 
+> **Quickstart**: Run `examples/benchmarks/snqi_full_flow.py` for the complete
+> episodes → baseline → figures pipeline, or consult the Plotting & Analysis
+> category in [`examples/README.md`](../examples/README.md) for focused figure scripts.
+
 ## Table of Contents
 - [Table of Contents](#table-of-contents)
 - [Real Visualization Generation (Feature 133)](#real-visualization-generation-feature-133)

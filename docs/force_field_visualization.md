@@ -5,9 +5,9 @@ This guide shows how to generate reproducible force field figures for documentat
 ## Examples
 
 Two example scripts are available:
-- `examples/plot_force_field.py` — interactive demo using quiver (opens a window)
-- `examples/plot_force_field_save.py` — non-interactive, saves `docs/img/force_field_example.png`
-- `examples/plot_force_field_normalized.py` — normalized arrows with magnitude colormap; saves `docs/img/force_field_example_norm.png`
+- `examples/plotting/plot_force_field.py` — interactive demo using quiver (opens a window)
+- `examples/plotting/plot_force_field_save.py` — non-interactive, saves `docs/img/force_field_example.png`
+- `examples/plotting/plot_force_field_normalized.py` — normalized arrows with magnitude colormap; saves `docs/img/force_field_example_norm.png`
 
 The examples construct a small `pysocialforce.Simulator`, wrap it via `FastPysfWrapper`, sample a grid, and plot the vector field.
 
@@ -17,10 +17,10 @@ These scripts run headless by default when used non-interactively. To regenerate
 
 ```
 # Save standard quiver PNG
-uv run python examples/plot_force_field_save.py
+uv run python examples/plotting/plot_force_field_save.py
 
 # Save normalized quiver with magnitude colormap
-uv run python examples/plot_force_field_normalized.py
+uv run python examples/plotting/plot_force_field_normalized.py
 ```
 
 Outputs:

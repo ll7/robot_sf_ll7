@@ -6,6 +6,10 @@
 
 The RobotSF benchmark system uses a consolidated schema management approach to ensure consistency and prevent duplication across the codebase.
 
+> **Looking for runnable examples?** See `examples/benchmarks/demo_full_classic_benchmark.py`
+> for a programmatic walkthrough and consult [`examples/README.md`](../examples/README.md)
+> for the full benchmarks catalog.
+
 **See also**: [SNQI Weight Tools](./snqi-weight-tools/README.md) for weight recomputation and optimization, and [Distribution Plots](./distribution_plots.md) for visualization guidance.
 
 ### Canonical Schema Location

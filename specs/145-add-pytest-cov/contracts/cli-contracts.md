@@ -368,7 +368,7 @@ coverage:
       id: cache-baseline
       uses: actions/cache@v4
       with:
-        path: .coverage-baseline.json
+        path: coverage/.coverage-baseline.json
         key: coverage-baseline-${{ github.base_ref || 'main' }}
     
     - name: Compare coverage
@@ -376,7 +376,7 @@ coverage:
       run: |
         uv run python scripts/coverage/compare_coverage.py \
           --current coverage.json \
-          --baseline .coverage-baseline.json \
+          --baseline coverage/.coverage-baseline.json \
           --threshold 1.0 \
           --format github-actions
       continue-on-error: true  # Never fail the build
@@ -384,7 +384,8 @@ coverage:
     - name: Update baseline
       if: github.ref == 'refs/heads/main'
       run: |
-        cp coverage.json .coverage-baseline.json
+  mkdir -p coverage
+  cp coverage.json coverage/.coverage-baseline.json
     
     - name: Upload coverage HTML
       uses: actions/upload-artifact@v4

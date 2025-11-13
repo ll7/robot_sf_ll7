@@ -20,7 +20,7 @@ wrapper = FastPysfWrapper(sim)
 force = wrapper.get_forces_at((0.5, 0.0))
 print(force)  # [fx, fy]
 
-# Sample a grid and plot (see examples/plot_force_field.py for a ready example)
+# Sample a grid and plot (see examples/plotting/plot_force_field.py for a ready example)
 xs = np.linspace(-2, 6, 40)
 ys = np.linspace(-3, 3, 40)
 field = wrapper.get_force_field(xs, ys)
@@ -32,5 +32,5 @@ print(wrapper.interpolate_force(0.1, 0.2))
 
 ## Example script
 
-See `examples/plot_force_field.py` for a runnable example that builds a small scene,
+See `examples/plotting/plot_force_field.py` for a runnable example that builds a small scene,
 computes the force field and plots it using `matplotlib.quiver`.

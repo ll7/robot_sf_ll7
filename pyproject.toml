@@ -80,7 +80,17 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatchling.build.targets.wheel]
-packages = ["robot_sf"]
+packages = [
+    { include = "robot_sf" },
+    { include = "examples" },
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "robot_sf",
+    "examples",
+]
+include = ["examples/**"]
 
 [tool.hatchling.build.targets.wheel.shared-data]
 "robot_sf/maps" = "robot_sf/maps"
@@ -88,6 +98,7 @@ packages = ["robot_sf"]
 [tool.hatchling.build.targets.sdist]
 include = [
     "/robot_sf",
+    "/examples",
     "/README.md",
     "/LICENSE",
 ]

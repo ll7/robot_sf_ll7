@@ -129,7 +129,7 @@ GitHub Actions
   ↓
 1. Run tests (coverage collected automatically)
   ↓
-2. Restore .coverage-baseline.json from cache
+2. Restore coverage/.coverage-baseline.json from cache
   ↓
 3. Compare coverage (non-blocking, continue-on-error: true)
   ↓
@@ -324,7 +324,7 @@ All quality gates passing:
 - **Test runtime increase**: ~5-10% (measured locally)
 - **CI runtime increase**: Negligible (tests already slow dominators)
 - **Disk usage**: ~5-10 MB per run (htmlcov/ + coverage.json)
-- **Cache usage**: ~100 KB (.coverage-baseline.json)
+- **Cache usage**: ~100 KB (coverage/.coverage-baseline.json)
 
 ### Build Time
 - **Dependency installation**: +96 packages (pytest-cov + coverage)

@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.common.artifact_paths import resolve_artifact_path
+
 
 def test_recording_creates_mp4_when_enabled():
     mod = importlib.import_module("examples.classic_interactions_pygame")
@@ -32,9 +34,10 @@ def test_recording_creates_mp4_when_enabled():
     mod.DRY_RUN = False  # type: ignore
     mod.ENABLE_RECORDING = True  # type: ignore
     tmp_out = Path("tmp/recordings/test_recording_success")
-    if tmp_out.exists():
+    resolved_tmp_out = resolve_artifact_path(tmp_out)
+    if resolved_tmp_out.exists():
         # Clean stale artifacts
-        for p in tmp_out.glob("*.mp4"):
+        for p in resolved_tmp_out.glob("*.mp4"):
             with contextlib.suppress(Exception):
                 p.unlink()
     mod.OUTPUT_DIR = tmp_out  # type: ignore
@@ -53,7 +56,7 @@ def test_recording_creates_mp4_when_enabled():
         "Expected episodes for recording success test (TDD failing until implementation)."
     )
     # Expect at least one mp4 in tmp_out
-    mp4_files = list(tmp_out.glob("*.mp4"))
+    mp4_files = list(resolved_tmp_out.glob("*.mp4"))
     assert mp4_files, "Expected at least one MP4 recording file (TDD failing until implementation)."
 
     # Cleanup: remove generated mp4 artifacts to keep workspace clean.

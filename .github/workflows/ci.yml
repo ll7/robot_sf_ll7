@@ -97,7 +97,7 @@ jobs:
       - name: Restore coverage baseline
         uses: actions/cache@v4
         with:
-          path: .coverage-baseline.json
+          path: coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}
           restore-keys: |
             coverage-baseline-main
@@ -105,11 +105,11 @@ jobs:
       - name: Compare coverage with baseline
         continue-on-error: true
         run: |
-          if [ -f .coverage-baseline.json ]; then
+          if [ -f coverage/.coverage-baseline.json ]; then
             echo "Baseline found, comparing coverage..."
             uv run python scripts/coverage/compare_coverage.py \
               --current coverage.json \
-              --baseline .coverage-baseline.json \
+              --baseline coverage/.coverage-baseline.json \
               --format github \
               --threshold 1.0
           else
@@ -119,14 +119,15 @@ jobs:
       - name: Update coverage baseline (main branch only)
         if: github.ref == 'refs/heads/main' && success()
         run: |
-          cp coverage.json .coverage-baseline.json
+          mkdir -p coverage
+          cp coverage.json coverage/.coverage-baseline.json
           echo "Coverage baseline updated for main branch"
 
       - name: Save coverage baseline (main branch only)
         if: github.ref == 'refs/heads/main' && success()
         uses: actions/cache/save@v4
         with:
-          path: .coverage-baseline.json
+          path: coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
 
       - name: Upload coverage reports

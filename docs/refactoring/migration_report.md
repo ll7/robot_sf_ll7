@@ -196,8 +196,8 @@ Analyzed 57 Python files
 ## Files already up to date: 23
 - examples/interactive_playback_demo.py
 - examples/svg_map_example.py
-- examples/plot_pedestrian_position_kde.py
-- examples/data_analysis_example.py
+- examples/plotting/plot_pedestrian_position_kde.py
+- examples/plotting/data_analysis_example.py
 - tests/test_moviepy_setup.py
 - tests/navigation_test.py
 - tests/unicycle_drive_test.py

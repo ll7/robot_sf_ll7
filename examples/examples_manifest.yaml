@@ -1,0 +1,353 @@
+version: 0.1.0
+categories:
+  - slug: uncategorized
+    title: "Uncategorized Examples"
+    description: "Pending classification into the new tiered structure."
+    order: 0
+    ci_default: true
+  - slug: quickstart
+    title: "Quickstart"
+    description: "Foundational walkthroughs for first-time users."
+    order: 1
+    ci_default: true
+  - slug: advanced
+    title: "Advanced Features"
+    description: "Feature-focused demos for developers exploring capabilities."
+    order: 2
+    ci_default: true
+  - slug: benchmarks
+    title: "Benchmarks"
+    description: "Benchmark runners and evaluation workflows."
+    order: 3
+    ci_default: true
+  - slug: plotting
+    title: "Plotting & Analysis"
+    description: "Visualization and analysis scripts built atop benchmark outputs."
+    order: 4
+    ci_default: true
+  - slug: _archived
+    title: "Archived"
+    description: "Deprecated or interactive-only examples kept for reference."
+    order: 5
+    ci_default: false
+examples:
+  - path: _archived/classic_interactions_pygame.py
+    name: "Classic Interactions Pygame"
+    summary: "Archived: Classic interactions pygame demo (see benchmarks/demo_full_classic_benchmark.py)."
+    category_slug: _archived
+    prerequisites:
+      - model/run_043.zip
+      - configs/scenarios/classic_interactions.yaml
+    ci_enabled: false
+    ci_reason: "Interactive pygame session not reliable for CI."
+    doc_reference: examples/_archived/README.md
+    tags: [archived, interactive]
+  - path: plotting/coverage_example.py
+    name: "Coverage Example"
+    summary: "Coverage tools programmatic usage example."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [coverage, tooling]
+  - path: plotting/data_analysis_example.py
+    name: "Data Analysis Example"
+    summary: "Perform a showcase on how to use the data analysis module."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [analysis]
+  - path: benchmarks/demo_aggregate.py
+    name: "Demo Aggregate"
+    summary: "Aggregate episode metrics with optional bootstrap confidence intervals."
+    category_slug: benchmarks
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [benchmark, aggregation]
+  - path: advanced/01_backend_selection.py
+    name: "01 Backend Selection"
+    summary: "Switch Robot SF backends using unified config."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Dummy backend currently lacks map metadata and fails under automation."
+    doc_reference: docs/dev_guide.md#environment-factory
+    tags: [backend]
+  - path: advanced/09_defensive_policy.py
+    name: "09 Defensive Policy"
+    summary: "Replay defensive PPO policy with observation adapters."
+    category_slug: advanced
+    prerequisites:
+      - model/run_023
+    ci_enabled: false
+    ci_reason: "Requires offline PPO checkpoint (model/run_023)."
+    doc_reference: docs/dev_guide.md#baseline-policies
+    tags: [policy, ppo]
+  - path: advanced/02_factory_options.py
+    name: "02 Factory Options"
+    summary: "Compare environment factory options for rendering and recording."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev_guide.md#environment-factory
+    tags: [factory]
+  - path: advanced/04_feature_extractors.py
+    name: "04 Feature Extractors"
+    summary: "Run PPO demos with different feature extractors."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
+    ci_enabled: false
+    ci_reason: "Needs optional extras and lengthy PPO rollout; exceeds smoke timeout."
+    doc_reference: docs/dev_guide.md#feature-extractors
+    tags: [training, feature-extractor]
+  - path: benchmarks/demo_full_classic_benchmark.py
+    name: "Demo Full Classic Benchmark"
+    summary: "Run the full classic interaction benchmark via programmatic helper."
+    category_slug: benchmarks
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [benchmark]
+  - path: advanced/10_offensive_policy.py
+    name: "10 Offensive Policy"
+    summary: "Replay offensive PPO policy in the robot environment."
+    category_slug: advanced
+    prerequisites:
+      - model/run_043
+    ci_enabled: false
+    ci_reason: "Requires offline PPO checkpoint (model/run_043)."
+    doc_reference: docs/dev_guide.md#baseline-policies
+    tags: [policy, ppo]
+  - path: _archived/demo_pedestrian.py
+    name: "Demo Pedestrian"
+    summary: "Archived: Legacy pedestrian env demo (see advanced/06_pedestrian_env_factory.py)."
+    category_slug: _archived
+    prerequisites:
+      - maps/svg_maps/debug_06.svg
+      - model_ped/ppo_ped_02.zip
+      - model/run_043
+    ci_enabled: false
+    ci_reason: "Manual pygame demo with external models."
+    doc_reference: examples/_archived/README.md
+    tags: [archived, pedestrian]
+  - path: advanced/06_pedestrian_env_factory.py
+    name: "06 Pedestrian Env Factory"
+    summary: "Compare factory and legacy pedestrian environment creation."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/debug_06.svg
+      - model_ped/ppo_ped_02.zip
+      - model/run_043
+    ci_enabled: false
+    ci_reason: "Depends on external models (model/run_043, model_ped/ppo_ped_02.zip)."
+    doc_reference: docs/single_pedestrians.md
+    tags: [pedestrian, factory]
+  - path: quickstart/01_basic_robot.py
+    name: "01 Basic Robot Rollout"
+    summary: "Run a basic Robot SF environment with a random policy."
+    category_slug: quickstart
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev_guide.md#quickstart
+    tags: [quickstart]
+  - path: quickstart/02_trained_model.py
+    name: "02 Trained PPO Benchmark"
+    summary: "Run the Robot SF benchmark with the pre-trained PPO baseline."
+    category_slug: quickstart
+    prerequisites:
+      - configs/baselines/example_matrix.yaml
+      - configs/baselines/ppo.yaml
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/benchmark.md
+    tags: [quickstart, benchmark]
+  - path: benchmarks/demo_social_nav_scenarios.py
+    name: "Demo Social Nav Scenarios"
+    summary: "Run social navigation SVG scenarios sequentially."
+    category_slug: benchmarks
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [benchmark, scenario]
+  - path: advanced/05_fast_pysf_speed_fix.py
+    name: "05 Fast-pysf Speed Fix"
+    summary: "Inspect the fast-pysf pedestrian speed fix output."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/performance_notes.md#fast-pysf-speed-fix
+    tags: [analysis, fast-pysf]
+  - path: advanced/11_ego_pedestrian_policy.py
+    name: "11 Ego Pedestrian Policy"
+    summary: "Run ego pedestrian simulation with recording playback."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/narrow_corridor2.svg
+      - model/run_043
+    ci_enabled: false
+    ci_reason: "Requires external PPO checkpoint and long recording playback."
+    doc_reference: docs/single_pedestrians.md
+    tags: [pedestrian, recording]
+  - path: advanced/08_multi_pedestrian.py
+    name: "08 Multi-Pedestrian"
+    summary: "Build a multi-pedestrian scenario using map definitions."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/single_pedestrians.md
+    tags: [pedestrian]
+  - path: advanced/07_single_pedestrian.py
+    name: "07 Single Pedestrian"
+    summary: "Spawn and simulate single pedestrians with custom maps."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/single_pedestrians.md
+    tags: [pedestrian]
+  - path: advanced/03_image_observations.py
+    name: "03 Image Observations"
+    summary: "Enable image-based observations in the robot environment."
+    category_slug: advanced
+    prerequisites:
+      - None
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev_guide.md#environment-factory
+    tags: [image]
+  - path: _archived/interactive_playback_demo.py
+    name: "Interactive Playback Demo"
+    summary: "Archived: Interactive playback demo (prefer advanced/15_view_recording.py)."
+    category_slug: _archived
+    prerequisites:
+      - examples/recordings/<file>.pkl
+    ci_enabled: false
+    ci_reason: "Requires manual interaction and recording assets."
+    doc_reference: examples/_archived/README.md
+    tags: [archived, playback]
+  - path: plotting/plot_force_field.py
+    name: "Plot Force Field"
+    summary: "Plot a sampled social-force field using matplotlib."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [visualization, force-field]
+  - path: plotting/plot_force_field_normalized.py
+    name: "Plot Force Field Normalized"
+    summary: "Plot normalized force vectors with a magnitude colormap and save PNG+PDF."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [visualization, force-field]
+  - path: plotting/plot_force_field_save.py
+    name: "Plot Force Field Save"
+    summary: "Generate and save static images of the force field for documentation."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [visualization, force-field]
+  - path: plotting/plot_pareto.py
+    name: "Plot Pareto"
+    summary: "Generate Pareto front plots from benchmark episodes or synthetic data."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "CLI expects --in dataset argument; no default input for CI."
+    doc_reference: null
+    tags: [visualization, pareto]
+  - path: plotting/plot_pedestrian_position_kde.py
+    name: "Plot Pedestrian Position KDE"
+    summary: "Plot a KDE of pedestrian positions on top of the source map."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [visualization, pedestrian]
+  - path: advanced/12_social_force_planner_demo.py
+    name: "12 Social Force Planner"
+    summary: "Explore Social Force planner scenarios and options."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
+      - fast-pysf subtree (bundled)
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/baselines/social_force.md
+    tags: [planner, social-force]
+  - path: quickstart/03_custom_map.py
+    name: "03 Custom SVG Map"
+    summary: "Load an SVG map into Robot SF and simulate random navigation."
+    category_slug: quickstart
+    prerequisites:
+      - maps/svg_maps/debug_06.svg
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/SVG_MAP_EDITOR.md
+    tags: [quickstart, maps]
+  - path: plotting/snqi_figures_example.py
+    name: "SNQI Figures Example"
+    summary: "Generate publication-ready SNQI figures via the orchestrator script."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires --episodes CLI input and benchmark outputs."
+    doc_reference: null
+    tags: [visualization, snqi]
+  - path: benchmarks/snqi_full_flow.py
+    name: "SNQI Full Flow"
+    summary: "End-to-end SNQI figure generation flow."
+    category_slug: benchmarks
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Full CLI workflow expects episode/baseline JSON arguments."
+    doc_reference: null
+    tags: [benchmark, snqi]
+  - path: advanced/13_svg_map_validation.py
+    name: "13 SVG Map Validation"
+    summary: "Validate and summarize SVG maps from the repository."
+    category_slug: advanced
+    prerequisites:
+      - None
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/SVG_MAP_EDITOR.md
+    tags: [maps, tooling]
+  - path: advanced/14_trajectory_visualization.py
+    name: "14 Trajectory Visualization"
+    summary: "Visualize trajectories during interactive playback sessions."
+    category_slug: advanced
+    prerequisites:
+      - recordings/<file>.pkl
+    ci_enabled: false
+    ci_reason: "Interactive playback; requires user input to exit."
+    doc_reference: docs/SIM_VIEW.md
+    tags: [visualization, playback]
+  - path: advanced/15_view_recording.py
+    name: "15 View Recording"
+    summary: "Record a simulation from an SVG map and replay it."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/02_simple_maps.svg
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/SIM_VIEW.md
+    tags: [recording, maps]

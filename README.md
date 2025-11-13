@@ -76,6 +76,12 @@ source .venv/bin/activate
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
+### Examples Catalog
+
+Consult the curated [`examples/README.md`](./examples/README.md) for quickstart,
+advanced, benchmark, and plotting workflows. Each entry lists prerequisites,
+expected outputs, and CI status.
+
 ### Development Setup
 
 For development work with additional tools:
@@ -195,10 +201,10 @@ pytest test_pygame
 ### 5. Run Visual Debugging of Pre-Trained Demo Models
 
 ```sh
-python3 examples/demo_offensive.py
-python3 examples/demo_defensive.py
+uv run python examples/advanced/10_offensive_policy.py
+uv run python examples/advanced/09_defensive_policy.py
 # Classic interactions deterministic PPO visualization (Feature 128)
-python3 examples/classic_interactions_pygame.py
+uv run python examples/_archived/classic_interactions_pygame.py
 ```
 
 [Visualization](./docs/SIM_VIEW.md)
@@ -236,7 +242,7 @@ It is important to know that the pedestrian always spawns near the robot.
 ![demo_ped](./docs/video/demo_ped.gif)
 
 ```sh
-python3 examples/demo_pedestrian.py
+uv run python examples/advanced/06_pedestrian_env_factory.py
 ```
 
 [Visualization](./docs/SIM_VIEW.md)

@@ -64,6 +64,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 ### Getting Started
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+- **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 
 ### Benchmarking & Metrics
 - **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
@@ -122,7 +123,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Architectural Decoupling (Feature 149)](../specs/149-architectural-coupling-and/)** - Backend and sensor registry system for extensible simulation
   - [Quickstart Guide](../specs/149-architectural-coupling-and/quickstart.md) - Usage examples for backend selection and sensor registration
   - [Tasks & Progress](../specs/149-architectural-coupling-and/tasks.md) - Implementation task tracking
- - **[Agents & Contributor Onboarding](../AGENTS.md)** – High-level repository structure, coding/testing conventions, and workflow tips for new contributors
+- **[Agents & Contributor Onboarding](../AGENTS.md)** – High-level repository structure, coding/testing conventions, and workflow tips for new contributors
 
 ### 🎮 Simulation & Environment
 - [**Simulation View**](./SIM_VIEW.md) - Visualization and rendering system
@@ -130,13 +131,13 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - [**SVG Map Editor**](./SVG_MAP_EDITOR.md) - SVG-based map creation tools
 - [**Single Pedestrians**](./single_pedestrians.md) - Define individual pedestrians with goals or trajectories in SVG/JSON/code
 - [**Multi-Pedestrian Example**](../examples/example_multi_pedestrian.py) - Demonstrates multiple single pedestrians (goal, trajectory, static) in one scenario
- - **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
- - **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
+- **Classic Interaction Scenario Pack** (configs/scenarios/classic_interactions.yaml) – Canonical crossing, head‑on, overtaking, bottleneck, doorway, merging, T‑intersection, and group crossing archetypes for benchmark coverage.
+- **Classic Interactions PPO Visualization (Feature 128)** – Deterministic PPO policy demo with optional recording (docs: `docs/dev/issues/classic-interactions-ppo/` | spec+plan+tasks under `specs/128-classic-interactions-ppo/`).
 
 ### 📊 Analysis & Tools  
- - [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
- - [**SNQI Figures (orchestrator usage)**](../examples/README.md) - Generate SNQI-augmented figures from existing episodes
- - [**Full SNQI Flow (episodes → baseline → figures)**](../examples/snqi_full_flow.py) - End-to-end reproducible pipeline script
+- [**SNQI Weight Tooling**](./snqi-weight-tools/README.md) - User guide for recomputing, optimizing, and analyzing SNQI weights
+- [**SNQI Figures (orchestrator usage)**](../examples/README.md) - Generate SNQI-augmented figures from existing episodes
+- [**Full SNQI Flow (episodes → baseline → figures)**](../examples/benchmarks/snqi_full_flow.py) - End-to-end reproducible pipeline script
  - [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys, `_meta` warnings, and validation hooks
  - [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
  - [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches

@@ -482,7 +482,7 @@ uv run python -m robot_sf.benchmark.cli analyze-weight-sensitivity \
   --plot results/weight_sensitivity.png
 
 # 4. Generate ranking stability analysis (5 minutes)  
-uv run python examples/snqi_full_flow.py \
+uv run python examples/benchmarks/snqi_full_flow.py \
   --episodes results/snqi_base_episodes.jsonl \
   --ablation-results results/weight_ablation/ \
   --output results/ranking_stability.png

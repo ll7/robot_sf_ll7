@@ -464,7 +464,7 @@ Exit 0 (non-blocking)
 
 ### CoverageBaseline
 - **Format**: JSON
-- **Storage**: GitHub Actions cache (`.coverage-baseline.json`)
+- **Storage**: GitHub Actions cache (`coverage/.coverage-baseline.json`)
 - **Lifetime**: Cache invalidation on baseline branch update
 - **Key**: `coverage-baseline-${{ github.base_ref }}`
 

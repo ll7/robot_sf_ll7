@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: Robot SF Examples Registry API
+  version: 1.0.0
+  description: |
+    Contract that mirrors the planned example manifest and execution harness.
+    Provides read access to categorized examples and an execution entry point
+    used by automation (CI smoke tests, documentation generators).
+servers:
+  - url: https://robot-sf.local/api
+    description: Placeholder host for design purposes; implementation is file/CLI backed.
+paths:
+  /examples:
+    get:
+      summary: List categorized examples
+      description: Retrieve every active example grouped by category with metadata for documentation and CI.
+      tags: [Examples]
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    description: Manifest schema version.
+                  categories:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExampleCategory'
+                  examples:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExampleScript'
+  /examples/{path}/run:
+    post:
+      summary: Execute example script
+      description: Trigger execution of a specific example in headless mode.
+      tags: [Examples]
+      parameters:
+        - in: path
+          name: path
+          required: true
+          description: Relative path under `examples/` (e.g., `quickstart/01_basic_robot.py`).
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: When true, validate manifest entry without executing.
+      responses:
+        "200":
+          description: Example executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  duration_seconds:
+                    type: number
+                    format: float
+                  stdout_tail:
+                    type: string
+                    description: Last few lines of stdout captured for debugging.
+        "400":
+          description: Invalid example path or configuration
+        "409":
+          description: Example flagged with ci_enabled=false (manual intervention required)
+        "500":
+          description: Execution failure (exception raised)
+components:
+  schemas:
+    ExampleCategory:
+      type: object
+      required: [slug, title, description, order, ci_default]
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        order:
+          type: integer
+        ci_default:
+          type: boolean
+    ExampleScript:
+      type: object
+      required: [path, name, summary, category_slug, ci_enabled]
+      properties:
+        path:
+          type: string
+        name:
+          type: string
+        summary:
+          type: string
+        category_slug:
+          type: string
+        prerequisites:
+          type: array
+          items:
+            type: string
+        ci_enabled:
+          type: boolean
+        ci_reason:
+          type: string
+          nullable: true
+        doc_reference:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string

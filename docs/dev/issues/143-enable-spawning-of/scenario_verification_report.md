@@ -44,7 +44,7 @@ All four social navigation scenarios have been verified to work correctly with d
 ## Demo Script
 Run all scenarios with:
 ```bash
-python examples/demo_social_nav_scenarios.py
+uv run python examples/benchmarks/demo_social_nav_scenarios.py
 ```
 
 ## Scripts Created

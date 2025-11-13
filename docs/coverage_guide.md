@@ -36,7 +36,7 @@ uv run python scripts/coverage/open_coverage_report.py
 # Compare with baseline (local)
 uv run python scripts/coverage/compare_coverage.py \
   --current coverage.json \
-  --baseline .coverage-baseline.json \
+  --baseline coverage/.coverage-baseline.json \
   --format terminal
 ```
 
@@ -73,7 +73,8 @@ The baseline comparison system detects coverage regressions across commits/branc
 
 ```bash
 # Create baseline from current coverage
-cp coverage.json .coverage-baseline.json
+mkdir -p coverage
+cp coverage.json coverage/.coverage-baseline.json
 
 # Make changes, run tests
 uv run pytest tests
@@ -81,7 +82,7 @@ uv run pytest tests
 # Compare
 uv run python scripts/coverage/compare_coverage.py \
   --current coverage.json \
-  --baseline .coverage-baseline.json \
+  --baseline coverage/.coverage-baseline.json \
   --format terminal \
   --threshold 1.0
 
@@ -147,7 +148,7 @@ The CI workflow automatically:
 - name: Restore coverage baseline
   uses: actions/cache@v4
   with:
-    path: .coverage-baseline.json
+  path: coverage/.coverage-baseline.json
     key: coverage-baseline-${{ github.ref_name }}
 
 # 3. Compare (non-blocking)
@@ -156,13 +157,15 @@ The CI workflow automatically:
   run: |
     uv run python scripts/coverage/compare_coverage.py \
       --current coverage.json \
-      --baseline .coverage-baseline.json \
+  --baseline coverage/.coverage-baseline.json \
       --format github
 
 # 4. Update baseline on main
 - name: Update baseline
   if: github.ref == 'refs/heads/main'
-  run: cp coverage.json .coverage-baseline.json
+  run: |
+    mkdir -p coverage
+    cp coverage.json coverage/.coverage-baseline.json
 
 # 5. Upload artifacts
 - name: Upload coverage
@@ -303,11 +306,12 @@ uv run pytest tests  # Not: pytest tests (uses wrong Python)
 
 ### Baseline comparison fails
 
-**Symptom**: `FileNotFoundError: .coverage-baseline.json`
+**Symptom**: `FileNotFoundError: coverage/.coverage-baseline.json`
 **Solution**: Create baseline first
 ```bash
 uv run pytest tests
-cp coverage.json .coverage-baseline.json
+mkdir -p coverage
+cp coverage.json coverage/.coverage-baseline.json
 ```
 
 ### Coverage percentage seems wrong
@@ -410,7 +414,7 @@ current = CoverageSnapshot.from_coverage_json("coverage.json")
 # Compare with baseline
 delta = compare(
     current_path="coverage.json",
-    baseline_path=".coverage-baseline.json",
+  baseline_path="coverage/.coverage-baseline.json",
     threshold=1.0
 )
 

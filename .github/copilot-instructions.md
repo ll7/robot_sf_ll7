@@ -11,3 +11,11 @@ It is everyones guide on how to use this repository effectively.
   - Link new documentation (sub-)pages in the appropriate section.
 - For any changes that affect users, update the `CHANGELOG.md` file.
 - Source the environment before using python or uv `source .venv/bin/activate`.
+
+## Recent Changes
+- 243-clean-output-dirs: Added Python 3.11 (uv-managed virtual environment) + Python standard library (`pathlib`, `json`, `shutil`), Loguru, pytest, uv CLI
+- 243-clean-output-dirs: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+
+## Active Technologies
+- Python 3.11 (uv-managed virtual environment) + Python standard library (`pathlib`, `json`, `shutil`), Loguru, pytest, uv CLI (243-clean-output-dirs)
+- Local filesystem (repository-relative `output/` tree or overridden path) (243-clean-output-dirs)

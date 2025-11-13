@@ -27,6 +27,23 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.render.playback_recording import load_states_and_visualize
 
+
+def _fast_demo_enabled() -> bool:
+    return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
+
+
+def _step_budget(default: int) -> int:
+    override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:  # pragma: no cover - defensive guard
+            pass
+    if _fast_demo_enabled():
+        return min(default, 64)
+    return default
+
+
 logger.info("Recording a random policy rollout and replaying the results.")
 
 
@@ -39,8 +56,9 @@ def test_simulation(map_definition: MapDefinition):
 
     env.reset()
 
-    logger.info("Simulating the random policy.")
-    for _ in range(1000):
+    step_budget = _step_budget(1000)
+    logger.info("Simulating the random policy (steps=%s).", step_budget)
+    for _ in range(step_budget):
         action = env.action_space.sample()
         env.step(action)
         env.render()
@@ -77,7 +95,10 @@ def main():
     test_simulation(map_def)
 
     # Load the states from the file and view the recording
-    load_states_and_visualize(get_file())
+    if _fast_demo_enabled():
+        logger.info("Fast demo enabled: skipping playback visualization to keep runtime short.")
+    else:
+        load_states_and_visualize(get_file())
 
 
 if __name__ == "__main__":

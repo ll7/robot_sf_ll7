@@ -40,8 +40,8 @@ See also: docs/dev_guide.md performance section for rationale and tuning guidanc
 import os
 import sys
 import time
-from pathlib import Path
 
+from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 from robot_sf.gym_env.environment_factory import make_robot_env
 
 
@@ -142,8 +142,8 @@ def main() -> int:
     resets_per_sec = perf_metrics["resets_per_sec"]
 
     # Persist results
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
+    ensure_canonical_tree(categories=("benchmarks",))
+    results_dir = get_artifact_category_path("benchmarks")
     import json
 
     performance_log = results_dir / "performance_smoke_test.json"

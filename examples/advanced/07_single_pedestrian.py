@@ -13,7 +13,7 @@ Limitations:
     - Requires display or headless setup to render the simulation.
 
 References:
-    - docs/dev_guide.md#pedestrian-environments
+    - docs/single_pedestrians.md
 """
 
 from typing import TYPE_CHECKING

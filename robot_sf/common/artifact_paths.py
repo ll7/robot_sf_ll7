@@ -1,8 +1,8 @@
 """Canonical artifact root helpers and tooling integration support.
 
 This module centralizes knowledge about the repository's artifact layout while
-preserving the existing override behaviour relied upon by tests. All artifact
-producers should consult these helpers to resolve paths, honour
+preserving the existing override behavior relied upon by tests. All artifact
+producers should consult these helpers to resolve paths, honor
 ``ROBOT_SF_ARTIFACT_ROOT`` overrides, and keep the repository root clean.
 """
 
@@ -176,25 +176,34 @@ def get_legacy_migration_plan() -> dict[Path, Path]:
 
 
 def resolve_artifact_path(path: str | Path) -> Path:
-    """Resolve ``path`` to its on-disk location, honouring overrides when set."""
+    """Resolve ``path`` to its on-disk location, honoring overrides when set."""
 
     candidate = Path(path)
     override_root = get_artifact_override_root()
+    repo_root = _canonical_repository_root()
+    artifact_root = get_artifact_root()
 
     if candidate.is_absolute():
         if override_root is None:
             return candidate
         try:
-            relative = candidate.resolve().relative_to(_canonical_repository_root())
+            relative = candidate.resolve().relative_to(repo_root)
         except ValueError:
             # Path outside repository – leave untouched.
             return candidate
         return (override_root / relative).resolve()
 
     if override_root is not None:
-        return (override_root / candidate).resolve()
+        return (artifact_root / candidate).resolve()
 
-    return (_canonical_repository_root() / candidate).resolve()
+    if candidate in LEGACY_MIGRATION_TARGETS:
+        return (artifact_root / LEGACY_MIGRATION_TARGETS[candidate]).resolve()
+
+    parts = candidate.parts
+    if parts and parts[0] in DEFAULT_ARTIFACT_CATEGORIES:
+        return (artifact_root / candidate).resolve()
+
+    return (repo_root / candidate).resolve()
 
 
 def iter_artifact_categories() -> Iterable[ArtifactCategory]:

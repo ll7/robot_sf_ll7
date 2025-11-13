@@ -97,9 +97,9 @@
 
 **Purpose**: Final cleanup once all user stories are complete.
 
-- [ ] T024 [P] Add CHANGELOG entry in `CHANGELOG.md` summarizing the artifact root overhaul and migration guidance.
-- [ ] T025 Run `specs/243-clean-output-dirs/quickstart.md` end-to-end and capture adjustments in `docs/dev_guide.md` if discrepancies are found.
-- [ ] T026 Verify `.github/workflows/ci.yml` and scripts/tooling adhere to Loguru logging standards, adding notes where guard output needs structured logging.
+- [x] T024 [P] Add CHANGELOG entry in `CHANGELOG.md` summarizing the artifact root overhaul and migration guidance.
+- [x] T025 Run `specs/243-clean-output-dirs/quickstart.md` end-to-end and capture adjustments in `docs/dev_guide.md` if discrepancies are found.
+- [x] T026 Verify `.github/workflows/ci.yml` and scripts/tooling adhere to Loguru logging standards, adding notes where guard output needs structured logging.
 
 ---
 

@@ -42,7 +42,7 @@ uv run python examples/quickstart/03_custom_map.py
 
 - `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
 - `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
-  `results/episodes_demo_ppo.jsonl`.
+  `output/benchmarks/episodes_demo_ppo.jsonl`.
 - `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
   `RobotSimulationConfig.map_pool` for custom layouts.
 
@@ -201,11 +201,20 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
 - Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
 - Baselines/benchmarks: get planners with `robot_sf.baselines.get_baseline(...)`. Prefer programmatic runners; CLI exists at `robot_sf/benchmark/cli.py` for convenience.
-- Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `results/`.
+- Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `output/`.
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
 - Ensure that the documentation, docstrings, and comments are updated to reflect code changes.
 - Progress cadence: always keep tests and documentation up-to-date. As long as you document your chain of thought and what ran, you can report outcomes after finishing the work.
+
+### Artifact policy & tooling
+
+- Canonical outputs live under `output/` with stable subdirectories: `output/coverage/`, `output/benchmarks/`, `output/recordings/`, `output/wandb/`, and `output/tmp/`.
+- Run `uv run python scripts/tools/migrate_artifacts.py` (or the console entry point `uv run robot-sf-migrate-artifacts`) after pulling to consolidate any legacy `results/`, `recordings/`, `htmlcov/`, or `coverage.json` paths.
+- Enforce the policy locally and in CI with `uv run python scripts/tools/check_artifact_root.py`; the guard fails fast when new top-level artifacts appear.
+- Override the artifact destination by exporting `ROBOT_SF_ARTIFACT_ROOT=/path/to/custom/output` before invoking scripts; the helpers and guard honor the override consistently.
+- Canonical helpers in `robot_sf.common.artifact_paths` (e.g., `ensure_canonical_tree`) create the required layout for tests and tooling—prefer them over hard-coded paths.
+- Need a guided walkthrough? Follow the [artifact policy quickstart](../specs/243-clean-output-dirs/quickstart.md) for migration, guard usage, and override examples end to end.
 
 ### Testing strategy (UNIFIED test suite)
 
@@ -249,9 +258,9 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 
 The test harness sets the ``ROBOT_SF_ARTIFACT_ROOT`` environment variable so that
 example scripts and helpers write into a temporary directory instead of the
-repository tree. This keeps ``results/`` and ``docs/`` clean while preserving the
-examples' default behavior for normal runs. To opt-in manually, export the same
-variable before invoking scripts.
+repository tree. This keeps the canonical ``output/`` hierarchy clean while
+preserving the examples' default behavior for normal runs. To opt-in manually,
+export the same variable before invoking scripts.
 
 
 #### Quick start
@@ -259,8 +268,11 @@ variable before invoking scripts.
 # Run tests (coverage collected automatically)
 uv run pytest tests
 
-# View HTML report
-open htmlcov/index.html
+# View HTML report (preferred helper)
+uv run python scripts/coverage/open_coverage_report.py
+
+# Manual fallback
+open output/coverage/htmlcov/index.html
 
 # Or use VS Code task: "Run Tests with Coverage" → "Open Coverage Report"
 ```
@@ -270,8 +282,8 @@ open htmlcov/index.html
 - **Excluded**: Tests, examples, scripts, `fast-pysf/` subtree
 - **Output formats**: 
   - Terminal summary (printed after test run)
-  - HTML report (`htmlcov/index.html` - interactive, detailed)
-  - JSON data (`coverage.json` - for tooling)
+  - HTML report (`output/coverage/htmlcov/index.html` - interactive, detailed)
+  - JSON data (`output/coverage/coverage.json` - for tooling)
 
 #### Understanding coverage output
 ```
@@ -305,7 +317,7 @@ uv run pytest tests -n auto
 uv run pytest tests/test_gym_env.py -v
 
 # View coverage data programmatically
-python -c "import json; print(json.load(open('coverage.json'))['totals'])"
+python -c "import json; print(json.load(open('output/coverage/coverage.json'))['totals'])"
 ```
 
 For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
@@ -377,7 +389,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 
 - Configs: configs/<area>/<name>.yaml (single source of truth for all hyperparameters, seeds, envs).
 -	Scripts: scripts/<task>_<runner>.py (read config path, set up run dirs, log metadata, call library code).
--	Runs/outputs/results: results/<timestamp>_<shortname>/ (store config.yaml, git_meta.json, logs, metrics, artifacts).
+-	Runs/outputs/benchmarks: output/benchmarks/<timestamp>_<shortname>/ (store config.yaml, git_meta.json, logs, metrics, artifacts).
 -	Deterministic seed in both config and code
 
 ### Code reviews
@@ -518,13 +530,13 @@ All figures must be **reproducible from code** and directly **integratable into 
   - Always export **vector PDFs** (`.pdf`) for inclusion in LaTeX.
   - Optionally export `.png` (300 dpi) for slides/presentations.
 - **Reproducibility**
-  - Each figure = **one standalone script** in `results/figures/`.
+  - Each figure = **one standalone script** in `robot_sf/benchmark/figures/` or `scripts/figures/` (tracked under version control).
   - Script must read data, generate plot, and save into `docs/figures/`.
   - No manual edits in Illustrator, Inkscape, etc.
   - Clear and unique filenames: `fig-<short-description>.py` and `fig-<short-description>.pdf`.
 - **Version control**
   - Scripts and generated figures go into version control.
-  - Data files (if any) go into `results/`.
+  - Data files (if any) go into `output/figures/` (respecting the canonical artifact root).
 - **Consistent style**
   - Use Matplotlib with predefined `rcParams`:
     - `savefig.bbox = "tight"`
@@ -537,7 +549,7 @@ All figures must be **reproducible from code** and directly **integratable into 
   - Default: single-column width (`fraction=1.0`).
 - **File locations**
   - Figures go into `docs/figures/` (tracked).
-  - Data exports (if used) into `results/`.
+  - Data exports (if used) into `output/figures/`.
 
 
 ## Tooling and tasks (uv, Ruff, pytest, VS Code)
@@ -606,6 +618,7 @@ The CI pipeline includes integrated performance monitoring for system package in
 ./scripts/validation/test_complete_simulation.sh
 uv run python scripts/validation/run_examples_smoke.py --dry-run
 uv run python scripts/validation/run_examples_smoke.py
+uv run python scripts/tools/check_artifact_root.py
 
 # Performance baseline validation
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
@@ -616,6 +629,7 @@ Success criteria:
 - Model prediction: exits 0; logs model load and inference without errors.
 - Complete simulation: exits 0; simulation runs to completion without errors.
 - Example smoke harness: exits 0; all `ci_enabled` examples pass and archived entries are reported as skipped via manifest metadata.
+- Artifact guard: exits 0; repository root remains clean with all artifacts under `output/` (mirror of the CI enforcement step).
 - Performance smoke test: exits 0; meets baseline performance targets (see `docs/performance_notes.md`).
   - Threshold logic now includes soft vs hard tiers with environment overrides. Soft breaches on CI default to WARN (exit 0) unless `ROBOT_SF_PERF_ENFORCE=1`.
     - Environment variables:
@@ -664,11 +678,11 @@ Key points
 
 CLI usage
 - Run a batch with parallel workers and default resume behavior:
-  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output results/episodes.jsonl --workers 4
+  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output output/benchmarks/episodes.jsonl --workers 4
 - Force recomputation (disable resume):
-  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output results/episodes.jsonl --workers 4 --no-resume
+  - robot_sf_bench run --scenarios configs/baselines/example.yaml --output output/benchmarks/episodes.jsonl --workers 4 --no-resume
 - Baseline computation also accepts the same flags:
-  - robot_sf_bench baseline --episodes results/episodes.jsonl --output results/baseline.jsonl --workers 4
+  - robot_sf_bench baseline --episodes output/benchmarks/episodes.jsonl --output output/benchmarks/baseline.jsonl --workers 4
 
 Programmatic usage
 - Prefer factory functions and programmatic APIs in library code:
@@ -690,9 +704,9 @@ Once you have a JSONL of episodes, you can aggregate metrics by group and option
 CLI usage
 
 - Aggregate without CIs (default):
-  - robot_sf_bench aggregate --in results/episodes.jsonl --out results/summary.json
+  - robot_sf_bench aggregate --in output/benchmarks/episodes.jsonl --out output/benchmarks/summary.json
 - Aggregate with CIs (enable with >0 samples):
-  - robot_sf_bench aggregate --in results/episodes.jsonl --out results/summary_ci.json --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 123
+  - robot_sf_bench aggregate --in output/benchmarks/episodes.jsonl --out output/benchmarks/summary_ci.json --bootstrap-samples 1000 --bootstrap-confidence 0.95 --bootstrap-seed 123
 
 Options
 
@@ -713,7 +727,7 @@ Programmatic usage
 ```python
 from robot_sf.benchmark.aggregate import read_jsonl, compute_aggregates_with_ci
 
-records = read_jsonl("results/episodes.jsonl")
+records = read_jsonl("output/benchmarks/episodes.jsonl")
 summary = compute_aggregates_with_ci(
     records,
     group_by="scenario_params.algo",

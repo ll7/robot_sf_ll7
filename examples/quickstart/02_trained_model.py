@@ -39,7 +39,8 @@ def main() -> int:
     matrix = root / "configs/baselines/example_matrix.yaml"
     ppo_cfg = root / "configs/baselines/ppo.yaml"
     out = root / "results/episodes_demo_ppo.jsonl"
-    ensure_output_dir(out.parent)
+    out_dir = ensure_output_dir(out.parent)
+    out = out_dir / out.name
 
     print("[quickstart] Listing available benchmark algorithms...", flush=True)
     code = cli_main(["list-algorithms"])

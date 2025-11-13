@@ -14,7 +14,7 @@ Limitations:
     - Heavy interactive workflow retained for reference; prefer benchmark runner for CI.
 
 References:
-    - examples/demo_full_classic_benchmark.py
+    - examples/benchmarks/demo_full_classic_benchmark.py
 
 Classic Interaction Scenario Visualization with PPO (Feature 128).
 

@@ -31,7 +31,7 @@ from robot_sf.render.playback_recording import load_states_and_visualize
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
-logger.info("Running ego pedestrian policy rollout and recording playback.")
+logger.info("Running ego pedestrian simulation with random actions and recording playback.")
 
 
 def test_simulation(map_definition: MapDefinition):

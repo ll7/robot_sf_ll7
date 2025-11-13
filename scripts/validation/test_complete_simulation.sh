@@ -11,7 +11,7 @@ export MPLBACKEND=Agg
 export SDL_VIDEODRIVER=dummy
 
 # Run a short simulation to validate end-to-end functionality
-timeout 30 uv run python examples/demo_defensive.py
+timeout 30 uv run python examples/advanced/09_defensive_policy.py
 
 echo "✅ Complete simulation test passed"
 

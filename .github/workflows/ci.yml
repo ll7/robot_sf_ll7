@@ -249,5 +249,5 @@ jobs:
           path: output/benchmarks/reproducibility_check.json
 
       - name: Enforce artifact root policy
-        if: success()
+        if: always()
         run: uv run python scripts/tools/check_artifact_root.py

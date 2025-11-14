@@ -1,0 +1,150 @@
+openapi: 3.1.0
+info:
+  title: Artifact Governance Service
+  version: 0.1.0
+  description: |
+    Contract for tooling that enforces the canonical artifact root. The contract describes
+    two command surfaces that can be implemented via CLI wrappers or thin HTTP shims.
+servers:
+  - url: http://localhost:8080
+    description: Placeholder endpoint if exposed through an HTTP adapter.
+paths:
+  /migration:
+    post:
+      summary: Relocate legacy artifact directories into the canonical `output/` root.
+      description: |
+        Initiates the migration workflow. A corresponding CLI would translate the payload into
+        script arguments.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: Run migration without filesystem writes.
+                additional_categories:
+                  type: array
+                  items:
+                    type: string
+                  description: Extra subdirectories to create beyond the default set.
+      responses:
+        '200':
+          description: Migration succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationReport'
+        '409':
+          description: Migration aborted due to unresolved legacy paths.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationConflict'
+  /guard-check:
+    post:
+      summary: Validate that artifacts land inside the canonical root.
+      description: |
+        Runs the guard enforcement logic. CLI wrappers would invoke the guard script directly
+        and return the same payload.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                allowlist:
+                  type: array
+                  items:
+                    type: string
+                  description: Additional top-level paths permitted for this run.
+      responses:
+        '200':
+          description: Guard check passed with zero violations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardResult'
+        '422':
+          description: Violations detected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuardResult'
+components:
+  schemas:
+    MigrationReport:
+      type: object
+      properties:
+        relocated:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelocatedItem'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkippedItem'
+        warnings:
+          type: array
+          items:
+            type: string
+        artifact_root:
+          type: string
+          description: Absolute path used for the canonical root.
+      required: [relocated, skipped, warnings, artifact_root]
+    RelocatedItem:
+      type: object
+      properties:
+        legacy_path:
+          type: string
+        destination:
+          type: string
+        item_type:
+          type: string
+          enum: [directory, file]
+      required: [legacy_path, destination, item_type]
+    SkippedItem:
+      type: object
+      properties:
+        legacy_path:
+          type: string
+        reason:
+          type: string
+      required: [legacy_path, reason]
+    MigrationConflict:
+      type: object
+      properties:
+        blocking_paths:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+      required: [blocking_paths, message]
+    GuardResult:
+      type: object
+      properties:
+        violations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Violation'
+        exit_code:
+          type: integer
+          description: Zero when no violations occur.
+        artifact_root:
+          type: string
+      required: [violations, exit_code, artifact_root]
+    Violation:
+      type: object
+      properties:
+        path:
+          type: string
+        producer:
+          type: string
+        remediation:
+          type: string
+      required: [path, producer, remediation]

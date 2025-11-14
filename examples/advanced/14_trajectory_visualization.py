@@ -4,7 +4,7 @@ Usage:
     uv run python examples/advanced/14_trajectory_visualization.py <recording.pkl>
 
 Prerequisites:
-    - Recording generated under `recordings/` or `examples/recordings/`
+    - Recording generated under `output/recordings/` or `examples/recordings/`
 
 Expected Output:
     - Interactive playback window with trajectory overlays enabled by default.
@@ -21,6 +21,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.render.interactive_playback import InteractivePlayback, load_states
 
 
@@ -69,16 +70,22 @@ def main():
         recording_file = sys.argv[1]
     else:
         # Try to find a recording file in common locations
-        potential_files = [
-            "examples/recordings/2024-12-06_15-39-44.pkl",
-            "recordings/latest.pkl",
-            "test_pygame/recordings/demo.pkl",
+        recordings_dir = get_artifact_category_path("recordings")
+        generated_candidates = sorted(
+            recordings_dir.glob("*.pkl"),
+            key=lambda path: path.stat().st_ctime,
+            reverse=True,
+        )
+        potential_files = generated_candidates + [
+            recordings_dir / "latest.pkl",
+            Path("examples/recordings/2024-12-06_15-39-44.pkl"),
+            Path("test_pygame/recordings/demo.pkl"),
         ]
 
         recording_file = None
         for file_path in potential_files:
-            if Path(file_path).exists():
-                recording_file = file_path
+            if file_path.exists():
+                recording_file = str(file_path)
                 break
 
         if not recording_file:

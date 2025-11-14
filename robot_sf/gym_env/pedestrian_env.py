@@ -11,7 +11,6 @@ It also defines the action and observation spaces for the pedestrian.
 """
 
 import datetime
-import os
 import pickle
 from collections.abc import Callable
 from copy import deepcopy
@@ -19,6 +18,7 @@ from copy import deepcopy
 import loguru
 from gymnasium import Env
 
+from robot_sf.common.artifact_paths import get_artifact_category_path, resolve_artifact_path
 from robot_sf.gym_env._stub_robot_model import StubRobotModel
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.env_util import (
@@ -93,6 +93,7 @@ class PedestrianEnv(Env):
         # Initialize the list to store recorded states
         self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
+        self._recording_dir = get_artifact_category_path("recordings")
 
         # Initialize simulator with a random start position
         self.simulator = init_ped_simulators(
@@ -316,18 +317,20 @@ class PedestrianEnv(Env):
         """
         if filename is None:
             now = datetime.datetime.now()
-            filename = f"recordings/{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
+            target_path = self._recording_dir / f"{now.strftime('%Y-%m-%d_%H-%M-%S')}.pkl"
+        else:
+            target_path = resolve_artifact_path(filename)
 
         # only save if there are recorded states
         if len(self.recorded_states) == 0:
             logger.warning("No states recorded, skipping save")
             return
 
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(filename, "wb") as f:  # write binary
+        with target_path.open("wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
-            logger.info(f"Recording saved to {filename}")
+            logger.info(f"Recording saved to {target_path}")
             logger.info("Reset state list")
             self.recorded_states = []
 

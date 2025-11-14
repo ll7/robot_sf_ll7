@@ -329,6 +329,7 @@ omit = [
 ]
 parallel = true
 branch = false
+data_file = "output/coverage/.coverage"
 
 [tool.coverage.report]
 precision = 2
@@ -347,11 +348,11 @@ exclude_lines = [
 ]
 
 [tool.coverage.html]
-directory = "htmlcov"
+directory = "output/coverage/htmlcov"
 show_contexts = false
 
 [tool.coverage.json]
-output = "coverage.json"
+output = "output/coverage/coverage.json"
 show_contexts = false
 
 [tool.pytest.ini_options]
@@ -387,6 +388,7 @@ dev = [
 
 [project.scripts]
 robot_sf_bench = "robot_sf.benchmark.cli:main"
+robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
 

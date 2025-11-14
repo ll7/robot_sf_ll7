@@ -8,7 +8,7 @@ Prerequisites:
     - model/run_043
 
 Expected Output:
-    - Recording saved under `recordings/` and replayed via the playback viewer.
+    - Recording saved under `output/recordings/` and replayed via the playback viewer.
 
 Limitations:
     - Requires Stable-Baselines3 and an interactive display for playback.
@@ -17,12 +17,10 @@ References:
     - docs/dev_guide.md#pedestrian-environments
 """
 
-import os
-from pathlib import Path
-
 from loguru import logger
 from stable_baselines3 import PPO
 
+from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
@@ -71,11 +69,9 @@ def test_simulation(map_definition: MapDefinition):
 def get_file():
     """Get the latest recorded file."""
 
-    filename = max(
-        os.listdir("recordings"),
-        key=lambda x: os.path.getctime(os.path.join("recordings", x)),
-    )
-    return Path("recordings", filename)
+    recordings_dir = get_artifact_category_path("recordings")
+    latest_file = max(recordings_dir.iterdir(), key=lambda path: path.stat().st_ctime)
+    return latest_file
 
 
 def main():

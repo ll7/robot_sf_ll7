@@ -83,6 +83,9 @@ jobs:
       - name: Sync dependencies (locked)
         run: uv sync --all-extras --frozen
 
+      - name: Migrate legacy artifacts into canonical root
+        run: uv run python scripts/tools/migrate_artifacts.py
+
       - name: Lint
         run: |
           uv run ruff check .
@@ -97,7 +100,7 @@ jobs:
       - name: Restore coverage baseline
         uses: actions/cache@v4
         with:
-          path: coverage/.coverage-baseline.json
+          path: output/coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}
           restore-keys: |
             coverage-baseline-main
@@ -105,11 +108,11 @@ jobs:
       - name: Compare coverage with baseline
         continue-on-error: true
         run: |
-          if [ -f coverage/.coverage-baseline.json ]; then
+          if [ -f output/coverage/.coverage-baseline.json ]; then
             echo "Baseline found, comparing coverage..."
             uv run python scripts/coverage/compare_coverage.py \
-              --current coverage.json \
-              --baseline coverage/.coverage-baseline.json \
+              --current output/coverage/coverage.json \
+              --baseline output/coverage/.coverage-baseline.json \
               --format github \
               --threshold 1.0
           else
@@ -119,15 +122,15 @@ jobs:
       - name: Update coverage baseline (main branch only)
         if: github.ref == 'refs/heads/main' && success()
         run: |
-          mkdir -p coverage
-          cp coverage.json coverage/.coverage-baseline.json
+          mkdir -p output/coverage
+          cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
           echo "Coverage baseline updated for main branch"
 
       - name: Save coverage baseline (main branch only)
         if: github.ref == 'refs/heads/main' && success()
         uses: actions/cache/save@v4
         with:
-          path: coverage/.coverage-baseline.json
+          path: output/coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
 
       - name: Upload coverage reports
@@ -136,9 +139,25 @@ jobs:
         with:
           name: coverage-reports
           path: |
-            coverage.json
-            htmlcov/
-            .coverage
+            output/coverage/coverage.json
+            output/coverage/htmlcov/
+            output/coverage/.coverage
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-artifacts
+          path: output/benchmarks/
+          if-no-files-found: ignore
+
+      - name: Upload recording artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recording-artifacts
+          path: output/recordings/
+          if-no-files-found: ignore
 
       - name: Validation smoke tests
         run: |
@@ -191,19 +210,20 @@ jobs:
             robot_context: embedded
             repeats: 1
           YAML
+          mkdir -p output/benchmarks/ci_smoke
           uv run robot_sf_bench run \
             --matrix matrix.yaml \
-            --out episodes.jsonl \
+            --out output/benchmarks/ci_smoke/episodes.jsonl \
             --schema docs/dev/issues/social-navigation-benchmark/episode_schema.json \
             --horizon 3 --dt 0.1 --base-seed 0
-          test -s episodes.jsonl
+          test -s output/benchmarks/ci_smoke/episodes.jsonl
 
       - name: Validate JSONL (optional jq)
         run: |
           set -euo pipefail
           if command -v jq >/dev/null 2>&1; then
             echo "Validating first JSONL record with jq…"
-            head -n1 episodes.jsonl | jq type >/dev/null
+            head -n1 output/benchmarks/ci_smoke/episodes.jsonl | jq type >/dev/null
           else
             echo "jq not installed; skipping JSONL validation"
           fi
@@ -213,7 +233,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ci-smoke-episodes
-          path: episodes.jsonl
+          path: output/benchmarks/ci_smoke/episodes.jsonl
 
       - name: Reproducibility check (manual trigger only)
         if: github.event_name == 'workflow_dispatch'
@@ -226,4 +246,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: reproducibility-report
-          path: results/reproducibility_check.json
+          path: output/benchmarks/reproducibility_check.json
+
+      - name: Enforce artifact root policy
+        if: always()
+        run: uv run python scripts/tools/check_artifact_root.py

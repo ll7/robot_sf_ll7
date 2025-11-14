@@ -2,6 +2,7 @@ import json
 import platform
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -9,6 +10,7 @@ import psutil
 from loguru import logger
 
 from robot_sf.benchmark.helper_catalog import load_trained_policy
+from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 
@@ -160,9 +162,16 @@ def run_standardized_benchmark(
     )
 
 
+def _default_benchmark_results_path() -> Path:
+    """Return the canonical benchmark results path under the artifact tree."""
+
+    ensure_canonical_tree(categories=("benchmarks",))
+    return get_artifact_category_path("benchmarks") / "benchmark_results.json"
+
+
 def save_benchmark_results(
     results: BenchmarkMetrics,
-    json_file: str = "benchmark_results.json",
+    json_file: str | Path | None = None,
     append: bool = True,
 ):
     """
@@ -170,17 +179,19 @@ def save_benchmark_results(
 
     Parameters:
     results (BenchmarkMetrics): The benchmark metrics to save.
-    json_file (str): The path to the JSON file where results will be saved.
-        Defaults to "benchmark_results.json".
-    append (bool): If True, append the results to the existing file.
-        If False, overwrite the file. Defaults to True.
+    json_file (str | Path | None): Optional override path for the JSON output. When
+        omitted the canonical artifact location under ``output/benchmarks`` is used.
+    append (bool): If True, append the results to the existing file. If False,
+        overwrite the file. Defaults to True.
 
     Raises:
     FileNotFoundError: If the file does not exist and append is True, a new file will be created.
     """
+    target_path = Path(json_file) if json_file is not None else _default_benchmark_results_path()
+
     if append:
         try:
-            with open(json_file, "r+", encoding="utf-8") as f:
+            with target_path.open("r+", encoding="utf-8") as f:
                 data = json.load(f)
                 if not isinstance(data, list):
                     data = [data]
@@ -193,9 +204,9 @@ def save_benchmark_results(
                 f.seek(0)
                 json.dump(data, f, indent=2)
                 f.truncate()
-            logger.info(f"Appended results to {json_file}")
+            logger.info(f"Appended results to {target_path}")
         except FileNotFoundError:
-            with open(json_file, "w", encoding="utf-8") as f:
+            with target_path.open("w", encoding="utf-8") as f:
                 json.dump(
                     [
                         {
@@ -206,9 +217,9 @@ def save_benchmark_results(
                     f,
                     indent=2,
                 )
-            logger.warning(f"Appending failed. Created new file {json_file}")
+            logger.warning(f"Appending failed. Created new file {target_path}")
     else:
-        with open(json_file, "w", encoding="utf-8") as f:
+        with target_path.open("w", encoding="utf-8") as f:
             json.dump(
                 [
                     {
@@ -219,7 +230,7 @@ def save_benchmark_results(
                 f,
                 indent=2,
             )
-        logger.info(f"Saved results to {json_file}")
+        logger.info(f"Saved results to {target_path}")
 
 
 if __name__ == "__main__":

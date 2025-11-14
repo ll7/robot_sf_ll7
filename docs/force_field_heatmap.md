@@ -5,7 +5,7 @@ This figure shows the magnitude of the pedestrian social-force field as a heatma
 ## How to Generate
 
 ```
-uv run python results/figures/fig_force_field.py \
+uv run python -m robot_sf.benchmark.figures.force_field \
   --png docs/img/fig-force-field.png \
   --pdf docs/figures/fig-force-field.pdf
 ```

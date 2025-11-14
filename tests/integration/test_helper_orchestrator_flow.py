@@ -9,6 +9,7 @@ from robot_sf.benchmark.helper_catalog import (
     run_episodes_with_recording,
 )
 from robot_sf.benchmark.helper_registry import ExampleOrchestrator
+from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def test_quickstart_orchestrator_flow():
@@ -53,7 +54,7 @@ def test_quickstart_orchestrator_flow():
                         policy=policy,
                         seeds=seeds[:2],  # Use first 2 seeds
                         record=orchestrator.requires_recording,
-                        output_dir=Path("tmp/vis_runs"),
+                        output_dir=resolve_artifact_path("tmp/vis_runs"),
                     )
 
                     # 4. Verify results structure

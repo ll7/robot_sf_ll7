@@ -13,6 +13,8 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from robot_sf.common.artifact_paths import get_artifact_category_path
+
 
 def open_coverage_report(report_path: Path) -> int:
     """
@@ -59,12 +61,16 @@ def main() -> int:
     parser.add_argument(
         "--path",
         type=Path,
-        default=Path("htmlcov/index.html"),
-        help="Path to coverage report (default: htmlcov/index.html)",
+        default=None,
+        help=(
+            "Path to coverage report (default: output/coverage/htmlcov/index.html via artifact helper)"
+        ),
     )
 
     args = parser.parse_args()
-    return open_coverage_report(args.path)
+    default_path = get_artifact_category_path("coverage") / "htmlcov/index.html"
+    target = args.path or default_path
+    return open_coverage_report(target)
 
 
 if __name__ == "__main__":

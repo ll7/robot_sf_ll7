@@ -35,8 +35,8 @@ uv run python scripts/coverage/open_coverage_report.py
 
 # Compare with baseline (local)
 uv run python scripts/coverage/compare_coverage.py \
-  --current coverage.json \
-  --baseline coverage/.coverage-baseline.json \
+  --current output/coverage/coverage.json \
+  --baseline output/coverage/.coverage-baseline.json \
   --format terminal
 ```
 
@@ -58,10 +58,10 @@ addopts = [
 - All code in `robot_sf/` package
 - Excludes: tests, examples, scripts, fast-pysf submodule
 
-**Output artifacts**:
-- `.coverage` - SQLite database (raw data)
-- `coverage.json` - JSON export for tooling
-- `htmlcov/index.html` - Interactive HTML report
+**Output artifacts** (under the canonical `output/coverage/` root):
+- `output/coverage/.coverage` - SQLite database (raw data)
+- `output/coverage/coverage.json` - JSON export for tooling
+- `output/coverage/htmlcov/index.html` - Interactive HTML report
 
 All artifacts are gitignored and regenerated on each test run.
 
@@ -73,16 +73,16 @@ The baseline comparison system detects coverage regressions across commits/branc
 
 ```bash
 # Create baseline from current coverage
-mkdir -p coverage
-cp coverage.json coverage/.coverage-baseline.json
+mkdir -p output/coverage
+cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 
 # Make changes, run tests
 uv run pytest tests
 
 # Compare
 uv run python scripts/coverage/compare_coverage.py \
-  --current coverage.json \
-  --baseline coverage/.coverage-baseline.json \
+  --current output/coverage/coverage.json \
+  --baseline output/coverage/.coverage-baseline.json \
   --format terminal \
   --threshold 1.0
 
@@ -122,7 +122,7 @@ Files with decreased coverage:
       "file": "robot_sf/gym_env/environment.py",
       "before": 90.0,
       "after": 85.0,
-      "delta": -5.0
+      "change": -5.0
     }
   ]
 }
@@ -130,14 +130,7 @@ Files with decreased coverage:
 
 ## CI/CD Integration
 
-The CI workflow automatically:
-1. Collects coverage during test runs
-2. Restores previous baseline from cache
-3. Compares current vs baseline (non-blocking)
-4. Updates baseline on main branch merges
-5. Uploads reports as artifacts
-
-### Workflow Steps
+Coverage comparison and publishing run automatically in CI using a reusable sequence of steps:
 
 ```yaml
 # 1. Tests run with automatic coverage collection
@@ -148,7 +141,7 @@ The CI workflow automatically:
 - name: Restore coverage baseline
   uses: actions/cache@v4
   with:
-  path: coverage/.coverage-baseline.json
+    path: output/coverage/.coverage-baseline.json
     key: coverage-baseline-${{ github.ref_name }}
 
 # 3. Compare (non-blocking)
@@ -156,24 +149,25 @@ The CI workflow automatically:
   continue-on-error: true  # Warning only, doesn't fail CI
   run: |
     uv run python scripts/coverage/compare_coverage.py \
-      --current coverage.json \
-  --baseline coverage/.coverage-baseline.json \
+      --current output/coverage/coverage.json \
+      --baseline output/coverage/.coverage-baseline.json \
       --format github
 
 # 4. Update baseline on main
 - name: Update baseline
   if: github.ref == 'refs/heads/main'
   run: |
-    mkdir -p coverage
-    cp coverage.json coverage/.coverage-baseline.json
+    mkdir -p output/coverage
+    cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 
 # 5. Upload artifacts
 - name: Upload coverage
   uses: actions/upload-artifact@v4
   with:
     path: |
-      coverage.json
-      htmlcov/
+      output/coverage/coverage.json
+      output/coverage/htmlcov/
+      output/coverage/.coverage
 ```
 
 ### Cache Strategy
@@ -211,7 +205,7 @@ Interactive web interface with:
 - Branch coverage details
 - Sortable columns
 
-Access via: `open htmlcov/index.html` or VS Code task "Open Coverage Report"
+Access via: `uv run python scripts/coverage/open_coverage_report.py` (opens `output/coverage/htmlcov/index.html`) or use the VS Code task "Open Coverage Report".
 
 ### JSON Export
 
@@ -267,12 +261,11 @@ exclude_lines = [
 ]
 
 [tool.coverage.html]
-directory = "htmlcov"              # HTML output directory
+directory = "output/coverage/htmlcov"  # HTML output directory
 
 [tool.coverage.json]
-output = "coverage.json"           # JSON output file
-pretty_print = false               # Compact JSON
-show_contexts = false              # Don't include test names
+output = "output/coverage/coverage.json"  # JSON output file
+show_contexts = false                   # Don't include test names
 ```
 
 ### Customization
@@ -297,7 +290,7 @@ def debug_helper():  # pragma: no cover
 
 ### Coverage data not generated
 
-**Symptom**: No `coverage.json` or `htmlcov/` after tests
+**Symptom**: No `output/coverage/coverage.json` or `output/coverage/htmlcov/` after tests
 **Solution**: Ensure pytest runs from repository root with coverage enabled
 ```bash
 cd robot_sf_ll7
@@ -306,12 +299,12 @@ uv run pytest tests  # Not: pytest tests (uses wrong Python)
 
 ### Baseline comparison fails
 
-**Symptom**: `FileNotFoundError: coverage/.coverage-baseline.json`
+**Symptom**: `FileNotFoundError: output/coverage/.coverage-baseline.json`
 **Solution**: Create baseline first
 ```bash
 uv run pytest tests
-mkdir -p coverage
-cp coverage.json coverage/.coverage-baseline.json
+mkdir -p output/coverage
+cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 ```
 
 ### Coverage percentage seems wrong
@@ -409,13 +402,13 @@ from robot_sf.coverage_tools.baseline_comparator import (
 )
 
 # Load current coverage
-current = CoverageSnapshot.from_coverage_json("coverage.json")
+current = CoverageSnapshot.from_coverage_json("output/coverage/coverage.json")
 
 # Compare with baseline
 delta = compare(
-    current_path="coverage.json",
-  baseline_path="coverage/.coverage-baseline.json",
-    threshold=1.0
+    current_path="output/coverage/coverage.json",
+    baseline_path="output/coverage/.coverage-baseline.json",
+    threshold=1.0,
 )
 
 # Generate warning

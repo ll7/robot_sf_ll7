@@ -18,17 +18,25 @@ uv run pytest tests/test_snqi_schema.py -v -q 2>&1 | head -30
 echo ""
 echo "Step 2: Checking coverage outputs..."
 
-if [ -f "coverage.json" ]; then
+COVERAGE_ROOT=$(uv run python - <<'PY'
+from robot_sf.common.artifact_paths import get_artifact_category_path
+print(get_artifact_category_path("coverage"), end="")
+PY
+)
+
+echo "Using coverage root: $COVERAGE_ROOT"
+
+if [ -f "$COVERAGE_ROOT/coverage.json" ]; then
     echo "✓ coverage.json exists"
-    jq '.totals.percent_covered' coverage.json 2>/dev/null || echo "  (JSON format valid)"
+    jq '.totals.percent_covered' "$COVERAGE_ROOT/coverage.json" 2>/dev/null || echo "  (JSON format valid)"
 else
     echo "✗ coverage.json NOT found"
     exit 1
 fi
 
-if [ -d "htmlcov" ]; then
+if [ -d "$COVERAGE_ROOT/htmlcov" ]; then
     echo "✓ htmlcov/ directory exists"
-    if [ -f "htmlcov/index.html" ]; then
+    if [ -f "$COVERAGE_ROOT/htmlcov/index.html" ]; then
         echo "  ✓ index.html present"
     else
         echo "  ✗ index.html missing"
@@ -39,7 +47,7 @@ else
     exit 1
 fi
 
-if [ -f ".coverage" ]; then
+if [ -f "$COVERAGE_ROOT/.coverage" ]; then
     echo "✓ .coverage database exists"
 else
     echo "✗ .coverage database NOT found"
@@ -52,5 +60,5 @@ echo "✓ Coverage collection validated!"
 echo "==================================="
 echo ""
 echo "Next steps:"
-echo "  - Open htmlcov/index.html in a browser to view the report"
+echo "  - Open $COVERAGE_ROOT/htmlcov/index.html in a browser to view the report"
 echo "  - Run 'uv run pytest tests' to collect full coverage"

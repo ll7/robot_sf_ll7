@@ -11,8 +11,8 @@ It respects resume semantics by default (won't duplicate existing episodes)
 unless `--no-resume` is passed. By default uses the baseline `simple_policy`.
 
 Outputs:
-    results/classic_interactions/episodes.jsonl
-    results/classic_interactions/episodes.jsonl.manifest.json (resume manifest)
+    output/benchmarks/classic_interactions/episodes.jsonl
+    output/benchmarks/classic_interactions/episodes.jsonl.manifest.json (resume manifest)
 
 Optional flags:
     --algo <name>                 Baseline algorithm (default: simple_policy)
@@ -41,11 +41,15 @@ from loguru import logger
 
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.utils import load_optional_json
-from robot_sf.render.helper_catalog import ensure_output_dir
+from robot_sf.common.artifact_paths import (
+    ensure_canonical_tree,
+    get_artifact_category_path,
+    resolve_artifact_path,
+)
 
 SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
 SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
-DEFAULT_OUT = Path("tmp/results/classic_interactions/episodes.jsonl")
+DEFAULT_OUT = get_artifact_category_path("benchmarks") / "classic_interactions/episodes.jsonl"
 
 
 # Helper function moved to robot_sf.benchmark.utils.load_optional_json
@@ -64,7 +68,9 @@ def parse_args() -> argparse.Namespace:
         "--output",
         dest="output",
         default=str(DEFAULT_OUT),
-        help="Output JSONL path",
+        help=(
+            "Output JSONL path (defaults to output/benchmarks/classic_interactions/episodes.jsonl)"
+        ),
     )
     parser.add_argument("--workers", type=int, default=1, help="Parallel workers")
     parser.add_argument("--horizon", type=int, default=100, help="Episode horizon")
@@ -103,8 +109,9 @@ def main() -> int:
     snqi_weights = load_optional_json(args.snqi_weights)
     snqi_baseline = load_optional_json(args.snqi_baseline)
 
-    out_path = Path(args.output)
-    ensure_output_dir(out_path.parent)
+    ensure_canonical_tree(categories=("benchmarks",))
+    out_path = resolve_artifact_path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("Running classic interaction scenarios: {}", SCENARIO_MATRIX)
 

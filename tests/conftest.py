@@ -53,6 +53,9 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
     original = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
     override_dir = tmp_path_factory.mktemp("robot_sf_artifacts")
     os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(override_dir)
+    from robot_sf.common.artifact_paths import ensure_canonical_tree
+
+    ensure_canonical_tree(override_dir)
     try:
         yield
     finally:

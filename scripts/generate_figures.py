@@ -25,9 +25,9 @@ from datetime import (
 )
 from pathlib import Path
 
-from results.figures.fig_force_field import generate_force_field_figure
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
+from robot_sf.benchmark.figures.force_field import generate_force_field_figure
 from robot_sf.benchmark.figures.thumbnails import save_montage, save_scenario_thumbnails
 from robot_sf.benchmark.metrics import snqi as _snqi
 from robot_sf.benchmark.plots import save_pareto_png

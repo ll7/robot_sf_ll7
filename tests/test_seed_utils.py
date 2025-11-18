@@ -3,7 +3,43 @@ from __future__ import annotations
 import os
 import random
 
+import pytest
+
 from robot_sf.common.seed import _import_torch, get_seed_state_sample, set_global_seed
+
+
+@pytest.fixture(autouse=True)
+def restore_torch_determinism():
+    """Reset torch deterministic knobs after each test to avoid bleed-over."""
+
+    torch = _import_torch()
+    if torch is None:
+        yield
+        return
+
+    prev_algos = None
+    if hasattr(torch, "are_deterministic_algorithms_enabled"):
+        try:
+            prev_algos = bool(torch.are_deterministic_algorithms_enabled())
+        except Exception:  # pragma: no cover - defensive guard
+            prev_algos = None
+
+    prev_cudnn_det = getattr(getattr(torch, "backends", None), "cudnn", None)
+    prev_det_flag = getattr(prev_cudnn_det, "deterministic", None) if prev_cudnn_det else None
+    prev_bench_flag = getattr(prev_cudnn_det, "benchmark", None) if prev_cudnn_det else None
+
+    yield
+
+    try:
+        if prev_algos is not None and hasattr(torch, "use_deterministic_algorithms"):
+            torch.use_deterministic_algorithms(prev_algos)
+        if prev_cudnn_det is not None:
+            if prev_det_flag is not None:
+                prev_cudnn_det.deterministic = prev_det_flag
+            if prev_bench_flag is not None:
+                prev_cudnn_det.benchmark = prev_bench_flag
+    except Exception:  # pragma: no cover - best effort cleanup
+        pass
 
 
 def test_set_global_seed_determinism():

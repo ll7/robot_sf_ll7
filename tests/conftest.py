@@ -65,6 +65,51 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
             os.environ["ROBOT_SF_ARTIFACT_ROOT"] = original
 
 
+@pytest.fixture(scope="session", autouse=True)
+def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
+    """Ensure torch deterministic algorithms aren't forced across the suite."""
+
+    try:
+        import torch
+    except Exception:  # pragma: no cover - torch optional for some suites
+        yield
+        return
+
+    prev_algos: bool | None = None
+    if hasattr(torch, "are_deterministic_algorithms_enabled"):
+        try:
+            prev_algos = bool(torch.are_deterministic_algorithms_enabled())
+        except Exception:  # pragma: no cover - defensive
+            prev_algos = None
+
+    cudnn_backend = getattr(getattr(torch, "backends", None), "cudnn", None)
+    prev_cudnn_det = getattr(cudnn_backend, "deterministic", None) if cudnn_backend else None
+    prev_cudnn_bench = getattr(cudnn_backend, "benchmark", None) if cudnn_backend else None
+
+    try:
+        if hasattr(torch, "use_deterministic_algorithms"):
+            torch.use_deterministic_algorithms(False)
+        if cudnn_backend is not None:
+            cudnn_backend.deterministic = False  # type: ignore[attr-defined]
+            cudnn_backend.benchmark = True  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - best effort guard
+        pass
+
+    try:
+        yield
+    finally:
+        try:
+            if prev_algos is not None and hasattr(torch, "use_deterministic_algorithms"):
+                torch.use_deterministic_algorithms(prev_algos)
+            if cudnn_backend is not None:
+                if prev_cudnn_det is not None:
+                    cudnn_backend.deterministic = prev_cudnn_det  # type: ignore[attr-defined]
+                if prev_cudnn_bench is not None:
+                    cudnn_backend.benchmark = prev_cudnn_bench  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - best effort restore
+            pass
+
+
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
     try:

@@ -46,6 +46,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
 from loguru import logger
 
 
@@ -68,6 +69,24 @@ def _run_command(cmd: list[str], step_name: str) -> int:
 
     logger.success(f"{step_name} completed successfully")
     return 0
+
+
+def _load_policy_id_from_config(config_path: Path) -> str:
+    """Read the policy_id from the expert training YAML config."""
+
+    with config_path.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+
+    if not isinstance(data, dict) or "policy_id" not in data:
+        raise ValueError(
+            "expert_ppo.yaml must define a top-level 'policy_id' key to identify the checkpoint.",
+        )
+
+    policy_id = data["policy_id"]
+    if not isinstance(policy_id, str) or not policy_id.strip():
+        raise ValueError("policy_id in expert_ppo.yaml must be a non-empty string.")
+
+    return policy_id
 
 
 def main():  # noqa: C901 - Sequential workflow orchestration; complexity is intentional
@@ -97,19 +116,11 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
     )
     args = parser.parse_args()
 
-    # Use provided or default IDs
-    expert_policy_id = args.policy_id
     dataset_id = args.dataset_id
-    bc_policy_id = f"bc_{expert_policy_id}"
-    finetuned_policy_id = f"finetuned_{expert_policy_id}"
 
     logger.info("=" * 70)
     logger.info("IMITATION LEARNING PIPELINE - END-TO-END EXAMPLE")
     logger.info("=" * 70)
-    logger.info(f"Expert policy ID: {expert_policy_id}")
-    logger.info(f"Dataset ID: {dataset_id}")
-    logger.info(f"Demo mode: {args.demo_mode}")
-    logger.info("")
 
     # Configuration file path (only expert_ppo.yaml exists; others use CLI args)
     expert_config = Path("configs/training/ppo_imitation/expert_ppo.yaml")
@@ -119,6 +130,27 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.error(f"Configuration file not found: {expert_config}")
         logger.info("Please ensure you're running from repository root")
         return 1
+
+    configured_policy_id = _load_policy_id_from_config(expert_config)
+
+    if args.skip_expert:
+        expert_policy_id = args.policy_id
+    else:
+        expert_policy_id = configured_policy_id
+        if args.policy_id != expert_policy_id:
+            logger.warning(
+                "Ignoring --policy-id override (expert training uses policy_id={} from {})",
+                expert_policy_id,
+                expert_config,
+            )
+
+    bc_policy_id = f"bc_{expert_policy_id}"
+    finetuned_policy_id = f"finetuned_{expert_policy_id}"
+
+    logger.info(f"Expert policy ID: {expert_policy_id}")
+    logger.info(f"Dataset ID: {dataset_id}")
+    logger.info(f"Demo mode: {args.demo_mode}")
+    logger.info("")
 
     try:
         # Step 1: Train expert policy (or use existing)

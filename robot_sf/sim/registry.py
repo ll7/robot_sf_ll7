@@ -5,6 +5,7 @@ Provides register/get/list helpers and registers the default "fast-pysf" backend
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -13,6 +14,11 @@ if TYPE_CHECKING:  # avoid runtime imports
     from robot_sf.sim.facade import SimulatorFactory
 
 _REGISTRY: dict[str, SimulatorFactory] = {}
+_BACKEND_PERFORMANCE_ORDER = {
+    "fast-pysf": 0,
+    "dummy": 100,
+}
+_DEFAULT_PERFORMANCE_SCORE = 1000
 
 
 def register_backend(key: str, factory: SimulatorFactory, *, override: bool = False) -> None:
@@ -35,6 +41,45 @@ def get_backend(key: str) -> SimulatorFactory:
 
 def list_backends() -> list[str]:
     return sorted(_REGISTRY.keys())
+
+
+def select_best_backend(preferred: str | None = None) -> str:
+    """Return the best available backend, optionally honoring a preferred choice.
+
+    Args:
+        preferred: Explicit backend name to try first. If ``None`` the selector
+            also checks the ``ROBOT_SF_BACKEND`` environment variable before
+            evaluating the registry.
+
+    Returns:
+        The chosen backend key.
+
+    Raises:
+        RuntimeError: If no backends are registered.
+    """
+
+    available = list_backends()
+    if not available:
+        raise RuntimeError("No simulator backends are registered")
+
+    explicit_choice = preferred or os.environ.get("ROBOT_SF_BACKEND")
+    if explicit_choice:
+        explicit_choice = explicit_choice.strip()
+        if explicit_choice in available:
+            logger.info("Using explicitly requested backend: {}", explicit_choice)
+            return explicit_choice
+        logger.warning(
+            "Requested backend '{}' not available (known: {})",
+            explicit_choice,
+            ", ".join(available),
+        )
+
+    def _score(name: str) -> tuple[int, str]:
+        return (_BACKEND_PERFORMANCE_ORDER.get(name, _DEFAULT_PERFORMANCE_SCORE), name)
+
+    best = min(available, key=_score)
+    logger.info("Selected backend '{}' based on performance preference", best)
+    return best
 
 
 # Default backend registration (fast-pysf)

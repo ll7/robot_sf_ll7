@@ -33,7 +33,7 @@ def minimal_trajectory_dataset(tmp_path, monkeypatch):
         "dataset_id": dataset_id,
         "source_policy_id": "test_expert",
         "scenario_label": "test_scenario",
-        "coverage": {"test_scenario": 5},
+        "scenario_coverage": {"test_scenario": 5},
         "random_seeds": [42],
     }
 

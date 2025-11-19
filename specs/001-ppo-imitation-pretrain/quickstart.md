@@ -31,8 +31,8 @@ uv run python scripts/training/train_expert_ppo.py \
 **What happens:**
 - Trains PPO policy until convergence criteria are met
 - Evaluates performance against success rate and collision rate thresholds
-- Writes expert policy manifest to `output/models/expert/<policy_id>.json`
-- Saves checkpoint to `output/models/expert/<policy_id>.zip`
+- Writes expert policy manifest to `output/benchmarks/expert_policies/<policy_id>.json`
+- Saves checkpoint to `output/benchmarks/expert_policies/<policy_id>.zip`
 - Logs training run manifest to `output/imitation_reports/runs/<run_id>.json`
 
 ### Monitor Training (Optional)
@@ -44,7 +44,7 @@ uv run tensorboard --logdir output/wandb/
 ### Verify Expert Policy
 Check the manifest file to confirm metrics meet requirements:
 ```bash
-cat output/models/expert/<policy_id>.json
+cat output/benchmarks/expert_policies/<policy_id>.json
 # Look for: validation_state = "approved"
 # Verify metrics.success_rate >= target and metrics.collision_rate <= threshold
 ```
@@ -126,10 +126,10 @@ uv run python scripts/training/train_ppo_with_pretrained_policy.py \
 ```
 
 **What happens:**
-- Loads pre-trained policy from `output/models/expert/<pretrained_policy_id>.zip`
+- Loads pre-trained policy from `output/benchmarks/expert_policies/<pretrained_policy_id>.zip`
 - Continues training with PPO for configured timesteps
 - Tracks convergence timesteps for sample-efficiency metrics
-- Saves fine-tuned checkpoint to `output/models/expert/<run_id>_finetuned.zip`
+- Saves fine-tuned checkpoint to `output/benchmarks/expert_policies/<run_id>_finetuned.zip`
 - Writes training run manifest to `output/imitation_reports/runs/<run_id>.json`
 
 ### Example Fine-tuning Config (configs/training/ppo_imitation/ppo_finetune.yaml)
@@ -185,8 +185,8 @@ Target (≤0.70): ✓ PASS
 ## 4. Artifact Hygiene & Reporting
 
 ### Artifact Locations
-- **Expert policies**: `output/models/expert/<policy_id>.zip`
-- **Expert manifests**: `output/models/expert/<policy_id>.json`
+- **Expert policies**: `output/benchmarks/expert_policies/<policy_id>.zip`
+- **Expert manifests**: `output/benchmarks/expert_policies/<policy_id>.json`
 - **Trajectory datasets**: `output/benchmarks/expert_trajectories/<dataset_id>.npz`
 - **Dataset manifests**: `output/benchmarks/expert_trajectories/<dataset_id>.json`
 - **Training run manifests**: `output/imitation_reports/runs/<run_id>.json`

@@ -41,11 +41,15 @@ from robot_sf.benchmark.imitation_manifest import (
     write_training_run_manifest,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
+)
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    select_scenario,
 )
 
 MetricSamples = dict[str, list[float]]
@@ -78,6 +82,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     scenario_config = (
         (path.parent / scenario_raw).resolve() if not scenario_raw.is_absolute() else scenario_raw
     )
+    scenario_id = data.get("scenario_id")
 
     convergence_raw = data.get("convergence", {})
     evaluation_raw = data.get("evaluation", {})
@@ -95,6 +100,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
 
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
+        scenario_id=str(scenario_id) if scenario_id else None,
         seeds=common.ensure_seed_tuple(data.get("seeds", [])),
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
@@ -103,18 +109,29 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     )
 
 
-def _make_training_env(seed: int) -> Callable[[], Any]:
+def _make_training_env(
+    seed: int,
+    *,
+    scenario: Mapping[str, Any],
+    scenario_path: Path,
+) -> Callable[[], Any]:
     def _factory() -> Any:
-        config = RobotSimulationConfig()
-        env = make_robot_env(config=config, seed=seed)
-        return env
+        env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        return make_robot_env(config=env_config, seed=seed)
 
     return _factory
 
 
-def _train_model(config: ExpertTrainingConfig) -> tuple[PPO, DummyVecEnv]:
+def _train_model(
+    config: ExpertTrainingConfig,
+    *,
+    scenario: Mapping[str, Any],
+) -> tuple[PPO, DummyVecEnv]:
     seeds = config.seeds or (0,)
-    env_fns = [_make_training_env(int(seed)) for seed in seeds]
+    env_fns = [
+        _make_training_env(int(seed), scenario=scenario, scenario_path=config.scenario_config)
+        for seed in seeds
+    ]
     vec_env = DummyVecEnv(env_fns)
     policy_kwargs = {"net_arch": [64, 64]}
     model = PPO(
@@ -170,7 +187,10 @@ def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
 
 
 def _evaluate_policy(
-    model: PPO, config: ExpertTrainingConfig
+    model: PPO,
+    config: ExpertTrainingConfig,
+    *,
+    scenario: Mapping[str, Any],
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
@@ -184,12 +204,15 @@ def _evaluate_policy(
 
     for episode_idx in range(episodes):
         seed = int(config.seeds[episode_idx % len(config.seeds)] if config.seeds else episode_idx)
-        env = make_robot_env(config=RobotSimulationConfig(), seed=seed)
+        env_config = build_robot_config_from_scenario(
+            scenario, scenario_path=config.scenario_config
+        )
+        env = make_robot_env(config=env_config, seed=seed)
         obs, _ = env.reset()
         done = False
         info: Mapping[str, object] = {}
         steps = 0
-        max_steps = config.convergence.plateau_window or env.state.max_sim_steps  # type: ignore[attr-defined]
+        max_steps = env.state.max_sim_steps  # type: ignore[attr-defined]
 
         while not done and steps < max_steps:
             action, _ = model.predict(obs, deterministic=True)
@@ -303,6 +326,14 @@ def run_expert_training(
     if config.seeds:
         common.set_global_seed(int(config.seeds[0]))
 
+    scenario_definitions = load_scenarios(config.scenario_config)
+    selected_scenario = select_scenario(scenario_definitions, config.scenario_id)
+    scenario_label = (
+        config.scenario_id
+        or str(selected_scenario.get("name") or selected_scenario.get("scenario_id") or "")
+        or config.scenario_config.stem
+    )
+
     start_time = time.perf_counter()
     timestamp = datetime.now(UTC)
     run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
@@ -312,8 +343,12 @@ def run_expert_training(
         model = None
         vec_env = None
     else:
-        model, vec_env = _train_model(config)
-        metrics_raw, episode_records = _evaluate_policy(model, config)
+        model, vec_env = _train_model(config, scenario=selected_scenario)
+        metrics_raw, episode_records = _evaluate_policy(
+            model,
+            config,
+            scenario=selected_scenario,
+        )
 
     aggregates = _aggregate_metrics(metrics_raw)
 
@@ -333,7 +368,9 @@ def run_expert_training(
     else:  # pragma: no cover - defensive fallback
         config_manifest.write_text(f"policy_id: {config.policy_id}\n", encoding="utf-8")
 
-    scenario_name = config.scenario_config.name if config.scenario_config else "unknown"
+    scenario_name = scenario_label or (
+        config.scenario_config.name if config.scenario_config else "unknown"
+    )
     expert_artifact = common.ExpertPolicyArtifact(
         policy_id=config.policy_id,
         version=timestamp.strftime("%Y%m%d"),
@@ -360,7 +397,7 @@ def run_expert_training(
         episode_log_path=episode_log_path,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
-        notes=[f"dry_run={dry_run}"],
+        notes=[f"dry_run={dry_run}", f"scenario_id={scenario_label}"],
     )
 
     expert_manifest_path = write_expert_policy_manifest(expert_artifact)

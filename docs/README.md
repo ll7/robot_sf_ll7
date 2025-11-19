@@ -66,6 +66,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
 - **[Examples Catalog](../examples/README.md)** - Manifest-backed index of quickstart, advanced, benchmark, and plotting scripts with usage metadata
 - **[Artifact Policy Quickstart](../specs/243-clean-output-dirs/quickstart.md)** - Step-by-step migration, guard enforcement, and override instructions for the canonical `output/` tree
+- **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training with expert trajectories
+- **[Imitation Learning Quickstart](../specs/001-ppo-imitation-pretrain/quickstart.md)** - Step-by-step workflow for BC pre-training and PPO fine-tuning
 
 ### Benchmarking & Metrics
 - **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks

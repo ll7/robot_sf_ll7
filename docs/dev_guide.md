@@ -754,6 +754,31 @@ uv run python scripts/hparam_opt.py
 uv run python scripts/evaluate.py
 ```
 
+### Imitation Learning Pipeline (PPO Pre-training)
+
+The project supports accelerating PPO training via behavioral cloning pre-training from expert trajectories. This enables sample-efficient training by warm-starting agents with expert demonstrations.
+
+**Quick Overview:** Expert PPO Training → Trajectory Collection → BC Pre-training → PPO Fine-tuning → Comparison Analysis
+
+**For complete documentation, see [Imitation Learning Pipeline Guide](./imitation_learning_pipeline.md)** which includes:
+- Detailed step-by-step workflow
+- Configuration file examples
+- Validation and debugging tools
+- Artifact locations and manifest tracking
+- Sample-efficiency metrics (target: ≤70% of baseline timesteps)
+- Troubleshooting and best practices
+
+**Quick Start:**
+```bash
+# See docs/imitation_learning_pipeline.md for full pipeline
+uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
+uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
+```
+
+Also see: `specs/001-ppo-imitation-pretrain/quickstart.md` for detailed workflows and troubleshooting.
+
 ### Docker training (advanced)
 ```bash
 # Build and run GPU training (requires NVIDIA Docker)

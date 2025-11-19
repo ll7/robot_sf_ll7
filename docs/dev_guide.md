@@ -196,6 +196,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Avoid disabling linters, type checks, or tests unless absolutely necessary.
   - Whenever you have the chance, refactor to fix issues rather than suppressing them. Especially `# noqa: C901` (complexity) and `# type: ignore` (type hints).
 - Always document the purpose of documents at the top of the file. (e.g., Python files, README.md, design docs, issue folders)
+- Use American English.
 
 - Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.

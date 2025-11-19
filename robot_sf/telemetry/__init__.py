@@ -21,7 +21,9 @@ from .models import (
     TelemetrySnapshot,
 )
 from .progress import PipelineStepDefinition, ProgressTracker
+from .recommendations import RecommendationEngine, RecommendationRules
 from .run_registry import RunRegistry, generate_run_id
+from .sampler import TelemetrySampler
 
 __all__ = [
     "ManifestWriter",
@@ -32,12 +34,15 @@ __all__ = [
     "PipelineRunStatus",
     "PipelineStepDefinition",
     "ProgressTracker",
+    "RecommendationEngine",
+    "RecommendationRules",
     "RecommendationSeverity",
     "RunHistoryEntry",
     "RunRegistry",
     "RunTrackerConfig",
     "StepExecutionEntry",
     "StepStatus",
+    "TelemetrySampler",
     "TelemetrySnapshot",
     "generate_run_id",
     "list_runs",

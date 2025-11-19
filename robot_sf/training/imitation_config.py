@@ -31,6 +31,7 @@ class ExpertTrainingConfig:
     """Configuration inputs for training an expert PPO policy."""
 
     scenario_config: Path
+    scenario_id: str | None = None
     seeds: tuple[int, ...]
     total_timesteps: int
     policy_id: str
@@ -42,6 +43,7 @@ class ExpertTrainingConfig:
         cls,
         *,
         scenario_config: Path,
+        scenario_id: str | None = None,
         seeds: tuple[int, ...] | list[int],
         total_timesteps: int,
         policy_id: str,
@@ -52,6 +54,7 @@ class ExpertTrainingConfig:
 
         return cls(
             scenario_config=scenario_config,
+            scenario_id=scenario_id,
             seeds=ensure_seed_tuple(seeds),
             total_timesteps=total_timesteps,
             policy_id=policy_id,
@@ -68,6 +71,7 @@ class TrajectoryCollectionConfig:
     source_policy_id: str
     episodes: int
     scenario_config: Path
+    scenario_id: str | None = None
     scenario_overrides: tuple[str, ...]
     output_format: str
     random_seeds: tuple[int, ...]
@@ -80,6 +84,7 @@ class TrajectoryCollectionConfig:
         source_policy_id: str,
         episodes: int,
         scenario_config: Path | str,
+        scenario_id: str | None = None,
         scenario_overrides: tuple[str, ...] | list[str],
         output_format: str,
         random_seeds: tuple[int, ...] | list[int],
@@ -91,6 +96,7 @@ class TrajectoryCollectionConfig:
             source_policy_id=source_policy_id,
             episodes=episodes,
             scenario_config=Path(scenario_config).resolve(),
+            scenario_id=scenario_id,
             scenario_overrides=tuple(scenario_overrides),
             output_format=output_format,
             random_seeds=ensure_seed_tuple(random_seeds),

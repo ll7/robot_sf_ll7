@@ -2,6 +2,8 @@
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.
 
+<!-- This document should mainly serve as a navigation hub and overview for the various components and guides available within the Robot SF project. Refer to individual files for detailed information. -->
+
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
 **The Social Navigation Benchmark Platform is now fully operational!** 
@@ -33,6 +35,15 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
   - [Core Capabilities](#core-capabilities)
   - [Ready-to-Use Workflows](#ready-to-use-workflows)
 - [📚 Documentation Index](#-documentation-index)
+  - [Getting Started](#getting-started)
+  - [Benchmarking \& Metrics](#benchmarking--metrics)
+  - [Tooling](#tooling)
+  - [Architecture \& Refactoring](#architecture--refactoring)
+  - [Simulation \& UI](#simulation--ui)
+  - [Figures \& Visualization](#figures--visualization)
+  - [Performance \& CI](#performance--ci)
+  - [Hardware \& Environment](#hardware--environment)
+  - [Additional Resources (Legacy Structure)](#additional-resources-legacy-structure)
   - [🏗️ Architecture \& Development](#️-architecture--development)
   - [🎮 Simulation \& Environment](#-simulation--environment)
   - [📊 Analysis \& Tools](#-analysis--tools)
@@ -68,6 +79,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Artifact Policy Quickstart](../specs/243-clean-output-dirs/quickstart.md)** - Step-by-step migration, guard enforcement, and override instructions for the canonical `output/` tree
 - **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training with expert trajectories
 - **[Imitation Learning Quickstart](../specs/001-ppo-imitation-pretrain/quickstart.md)** - Step-by-step workflow for BC pre-training and PPO fine-tuning
+- **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, inspect live status/watch views, filter recent runs, and export Markdown summaries via `scripts/tools/run_tracker_cli.py`
 
 ### Benchmarking & Metrics
 - **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks

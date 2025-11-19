@@ -1,4 +1,7 @@
+# Docker build files
 Dockerfile
+# Application logs
+*.log*
 logs
 model
 # Git
@@ -14,12 +17,14 @@ venv/
 *.egg-info/
 dist/
 build/
+node_modules/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 output/
+coverage/
 
 # IDE
 .vscode/

@@ -78,7 +78,7 @@
 - [X] T026 [P] [US3] Add optional TensorBoard adapter in `robot_sf/telemetry/tensorboard_adapter.py` and CLI flag to enable mirroring.
 - [X] T027 [US3] Create performance-test wrapper in `scripts/telemetry/run_perf_tests.py` that calls `scripts/validation/performance_smoke_test.py` and records results via manifest writer.
 - [X] T028 [US3] Extend `scripts/validation/performance_smoke_test.py` to accept telemetry flags and emit recommendation-aware pass/fail statuses.
-- [ ] T029 [P] [US3] Add pytest coverage for sampler fallbacks + recommendation triggers in `tests/test_tracking/test_telemetry.py`.
+- [X] T029 [P] [US3] Add pytest coverage for sampler fallbacks + recommendation triggers in `tests/test_tracking/test_telemetry.py`.
 
 ---
 

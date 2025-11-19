@@ -28,8 +28,12 @@ from robot_sf import common
 from robot_sf.benchmark.imitation_manifest import write_trajectory_dataset_manifest
 from robot_sf.benchmark.validation.trajectory_dataset import TrajectoryDatasetValidator
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import TrajectoryCollectionConfig
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    select_scenario,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -116,6 +120,8 @@ def _record_dataset(
     policy: PPO | None,
     dry_run: bool,
     scenario_label: str,
+    scenario: Mapping[str, Any],
+    scenario_path: Path,
 ) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
     dataset: dict[str, list[np.ndarray]] = {
         "positions": [],
@@ -126,7 +132,8 @@ def _record_dataset(
 
     for episode in range(config.episodes):
         seed = int(config.random_seeds[episode % len(config.random_seeds)])
-        env = make_robot_env(config=RobotSimulationConfig(), seed=seed)
+        env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        env = make_robot_env(config=env_config, seed=seed)
         try:
             positions, actions, observations = _record_episode(env, policy=policy, dry_run=dry_run)
         finally:
@@ -190,7 +197,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--scenario-id",
         type=str,
         default=None,
-        help="Label used for scenario coverage metadata (defaults to scenario file stem).",
+        help="Scenario entry name to run (defaults to first entry in the file).",
     )
     parser.add_argument(
         "--output-format",
@@ -217,13 +224,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     scenario_path = _resolve_scenario_config(args.scenario_config, args.training_config)
-    scenario_label = args.scenario_id or scenario_path.stem
-    seed_values = tuple(args.seeds) if args.seeds else tuple(range(max(1, args.episodes)))
+    seeds_arg: Sequence[int] | None = args.seeds
+    if args.override_seed:
+        override = tuple(int(value) for value in args.override_seed)
+        if seeds_arg:
+            logger.warning("Ignoring --override-seed because --seeds was provided explicitly")
+        else:
+            seeds_arg = override
+    seed_values = tuple(seeds_arg) if seeds_arg else tuple(range(max(1, args.episodes)))
+
+    scenario_definitions = load_scenarios(scenario_path)
+    selected_scenario = select_scenario(scenario_definitions, args.scenario_id)
+    scenario_label = (
+        args.scenario_id
+        or str(selected_scenario.get("name") or selected_scenario.get("scenario_id") or "")
+        or scenario_path.stem
+    )
     collection_config = TrajectoryCollectionConfig.from_raw(
         dataset_id=str(args.dataset_id),
         source_policy_id=str(args.policy_id),
         episodes=int(args.episodes),
         scenario_config=scenario_path,
+        scenario_id=scenario_label,
         scenario_overrides=(),
         output_format=args.output_format,
         random_seeds=seed_values,
@@ -243,6 +265,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         policy=policy,
         dry_run=args.dry_run,
         scenario_label=scenario_label,
+        scenario=selected_scenario,
+        scenario_path=scenario_path,
     )
 
     dataset_path = common.get_trajectory_dataset_path(collection_config.dataset_id)
@@ -252,9 +276,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "source_policy_id": collection_config.source_policy_id,
         "scenario_config": str(collection_config.scenario_config),
         "scenario_label": scenario_label,
+        "scenario_id": collection_config.scenario_id,
         "scenario_overrides": list(collection_config.scenario_overrides),
         "random_seeds": list(collection_config.random_seeds),
-        "coverage": coverage,
+        "scenario_coverage": coverage,
         "command": _command_line(),
         "git_commit": _git_commit_hash(),
         "dry_run": args.dry_run,

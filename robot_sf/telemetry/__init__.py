@@ -7,6 +7,7 @@ reuse the same utilities without reimplementing artifact or locking logic.
 """
 
 from .config import RunTrackerConfig
+from .history import RunHistoryEntry, list_runs, load_run
 from .manifest_writer import ManifestWriter
 from .models import (
     PerformanceRecommendation,
@@ -32,10 +33,13 @@ __all__ = [
     "PipelineStepDefinition",
     "ProgressTracker",
     "RecommendationSeverity",
+    "RunHistoryEntry",
     "RunRegistry",
     "RunTrackerConfig",
     "StepExecutionEntry",
     "StepStatus",
     "TelemetrySnapshot",
     "generate_run_id",
+    "list_runs",
+    "load_run",
 ]

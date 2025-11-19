@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from robot_sf.common import ensure_seed_tuple
+from robot_sf.telemetry.progress import PipelineStepDefinition
 
 
 @dataclass(slots=True)
@@ -225,4 +226,39 @@ __all__ = [
     "PPOFineTuneConfig",
     "PPOFineTuningConfig",
     "TrajectoryCollectionConfig",
+    "build_imitation_pipeline_steps",
 ]
+
+
+_DEFAULT_PIPELINE_STEPS: tuple[tuple[str, str, float], ...] = (
+    ("train_expert", "Train Expert PPO Policy", 1800.0),
+    ("collect_trajectories", "Collect Expert Trajectories", 900.0),
+    ("bc_pretrain", "Behavioral Cloning Pre-training", 600.0),
+    ("ppo_finetune", "PPO Fine-tuning", 1200.0),
+    ("compare_runs", "Performance Comparison", 300.0),
+)
+
+
+def build_imitation_pipeline_steps(
+    *,
+    skip_expert: bool,
+    include_comparison: bool,
+) -> list[PipelineStepDefinition]:
+    """Return pipeline step definitions honoring CLI toggles."""
+
+    result: list[PipelineStepDefinition] = []
+    for step_id, display_name, expected in _DEFAULT_PIPELINE_STEPS:
+        if step_id == "train_expert" and skip_expert:
+            continue
+        if step_id == "compare_runs" and not include_comparison:
+            continue
+        result.append(
+            PipelineStepDefinition(
+                step_id=step_id,
+                display_name=display_name,
+                expected_duration_seconds=expected,
+            )
+        )
+    if not result:
+        raise ValueError("At least one pipeline step must remain enabled")
+    return result

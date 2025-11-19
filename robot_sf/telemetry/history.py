@@ -175,5 +175,24 @@ def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
     run_dir = config.run_tracker_root / run_hint
     if run_dir.is_dir():
         return run_dir
+    manifest_match = _match_run_directory_by_manifest(config, run_hint)
+    if manifest_match is not None:
+        return manifest_match
     msg = f"Unable to locate tracker artifacts for run: {run_hint}"
     raise FileNotFoundError(msg)
+
+
+def _match_run_directory_by_manifest(config: RunTrackerConfig, run_hint: str) -> Path | None:
+    """Fallback: scan manifests to match by recorded run_id."""
+
+    for run_dir in _iter_run_directories(config):
+        manifest_path = run_dir / config.manifest_filename
+        if not manifest_path.is_file():
+            continue
+        record = _load_manifest_tail(manifest_path)
+        if not record:
+            continue
+        recorded_id = str(record.get("run_id") or "").strip()
+        if recorded_id == run_hint:
+            return run_dir
+    return None

@@ -64,7 +64,9 @@ def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
 def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(
-        "summary", help="Print summary of a run, including recommendations"
+        "summary",
+        aliases=["show"],
+        help="Print summary of a run, including recommendations",
     )
     parser.add_argument("run_id")
     parser.add_argument(
@@ -121,6 +123,7 @@ def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
         "status": handle_status,
         "list": handle_list,
         "summary": handle_summary,
+        "show": handle_summary,
         "watch": handle_watch,
         "perf-tests": handle_placeholder,
         "enable-tensorboard": handle_placeholder,

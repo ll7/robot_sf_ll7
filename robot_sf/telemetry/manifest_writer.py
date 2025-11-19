@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import is_dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any, cast
 
 from robot_sf.telemetry.config import RunTrackerConfig
@@ -40,6 +41,7 @@ class ManifestWriter:
         self._manifest_path = self._run_dir / self._config.manifest_filename
         self._telemetry_path = self._run_dir / self._config.telemetry_filename
         self._steps_path = self._run_dir / self._config.steps_filename
+        self._lock = Lock()
 
     @property
     def run_directory(self) -> Path:
@@ -47,15 +49,18 @@ class ManifestWriter:
 
     def append_run_record(self, record: PipelineRunRecord | dict[str, object]) -> None:
         payload = self._prepare_payload(record)
-        self._append_json_line(self._manifest_path, payload)
+        with self._lock:
+            self._append_json_line(self._manifest_path, payload)
 
     def append_telemetry_snapshot(self, snapshot: TelemetrySnapshot | dict[str, object]) -> None:
         payload = self._prepare_payload(snapshot)
-        self._append_json_line(self._telemetry_path, payload)
+        with self._lock:
+            self._append_json_line(self._telemetry_path, payload)
 
     def write_step_index(self, entries: list[StepExecutionEntry]) -> Path:
         payload = serialize_many(entries)
-        self._steps_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        with self._lock:
+            self._steps_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return self._steps_path
 
     def append_recommendations(
@@ -63,12 +68,14 @@ class ManifestWriter:
         recommendations: list[PerformanceRecommendation] | list[dict[str, object]],
     ) -> None:
         serialized = [self._prepare_payload(item) for item in recommendations]
-        for recommendation in serialized:
-            self._append_json_line(self._manifest_path, {"recommendation": recommendation})
+        with self._lock:
+            for recommendation in serialized:
+                self._append_json_line(self._manifest_path, {"recommendation": recommendation})
 
     def append_performance_test(self, result: PerformanceTestResult | dict[str, object]) -> None:
         payload = self._prepare_payload(result)
-        self._append_json_line(self._manifest_path, {"perf_test": payload})
+        with self._lock:
+            self._append_json_line(self._manifest_path, {"perf_test": payload})
 
     def iter_run_records(self) -> list[dict[str, object]]:
         if not self._manifest_path.exists():

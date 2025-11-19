@@ -1,6 +1,14 @@
 """Training utilities shared across CLI workflows."""
 
 from .hardware_probe import collect_hardware_profile
+from .imitation_config import (
+    BehaviouralCloningConfig,
+    ConvergenceCriteria,
+    EvaluationSchedule,
+    ExpertTrainingConfig,
+    PPOFineTuneConfig,
+    TrajectoryCollectionConfig,
+)
 from .multi_extractor_models import (
     ExtractorConfigurationProfile,
     ExtractorRunRecord,
@@ -20,10 +28,16 @@ from .multi_extractor_summary import write_summary_artifacts
 __all__ = [
     "DEFAULT_TMP_ROOT",
     "ENV_TMP_OVERRIDE",
+    "BehaviouralCloningConfig",
+    "ConvergenceCriteria",
+    "EvaluationSchedule",
+    "ExpertTrainingConfig",
     "ExtractorConfigurationProfile",
     "ExtractorRunRecord",
     "HardwareProfile",
+    "PPOFineTuneConfig",
     "TrainingRunSummary",
+    "TrajectoryCollectionConfig",
     "collect_hardware_profile",
     "make_extractor_directory",
     "make_run_directory",

@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- PPO Imitation Learning Pipeline (Feature 001)
+  - Expert PPO training workflow with convergence criteria and evaluation schedules
+  - Trajectory dataset collection and validation utilities
+  - Behavioral cloning (BC) pre-training from expert demonstrations
+  - PPO fine-tuning with warm-start from pre-trained policies
+  - Comparative metrics CLI for sample-efficiency analysis
+  - Playback and inspection tool for trajectory datasets
+  - Bootstrap confidence intervals for metric aggregation
+  - Complete artifact lineage tracking (expert → dataset → pre-trained → fine-tuned)
+  - Configuration dataclasses for all imitation workflows
+  - Integration tests for end-to-end pipeline validation
+  - Sample-efficiency target: ≤70% of baseline timesteps to convergence
+  - Documentation in `docs/dev_guide.md` and `specs/001-ppo-imitation-pretrain/quickstart.md`
 - Canonical artifact root enforcement and tooling (Feature 243)
   - Introduced `output/` hierarchy as single destination for coverage, benchmark, recording, wandb, and tmp artifacts
   - Added migration helper (`scripts/tools/migrate_artifacts.py`) and guard (`scripts/tools/check_artifact_root.py`) with console entry point and regression tests

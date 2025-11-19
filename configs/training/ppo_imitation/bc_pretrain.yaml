@@ -1,0 +1,8 @@
+# Default behavioral cloning config for imitation pipeline quickstart
+run_id: bc_pretrain_run_001
+dataset_id: expert_traj_v1
+policy_output_id: bc_policy_v1
+bc_epochs: 10
+batch_size: 32
+learning_rate: 0.0003
+random_seeds: [42, 43, 44]

@@ -1,0 +1,6 @@
+# Default PPO fine-tuning config for imitation pipeline quickstart
+run_id: ppo_finetune_run_001
+pretrained_policy_id: bc_policy_v1
+total_timesteps: 100000
+learning_rate: 0.0001
+random_seeds: [42, 43, 44]

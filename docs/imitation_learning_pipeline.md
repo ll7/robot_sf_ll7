@@ -26,8 +26,8 @@ uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo
 **What happens:**
 - Trains PPO policy until convergence criteria are met
 - Evaluates performance against success rate and collision rate thresholds
-- Writes expert policy manifest to `output/models/expert/<policy_id>.json`
-- Saves checkpoint to `output/models/expert/<policy_id>.zip`
+- Writes expert policy manifest to `output/benchmarks/expert_policies/<policy_id>.json`
+- Saves checkpoint to `output/benchmarks/expert_policies/<policy_id>.zip`
 
 ---
 
@@ -149,8 +149,8 @@ Visual inspection tool for debugging and understanding expert behavior.
 
 All artifacts are stored under the canonical `output/` directory:
 
-- **Expert policies**: `output/models/expert/<policy_id>.zip`
-- **Expert manifests**: `output/models/expert/<policy_id>.json`
+- **Expert policies**: `output/benchmarks/expert_policies/<policy_id>.zip`
+- **Expert manifests**: `output/benchmarks/expert_policies/<policy_id>.json`
 - **Trajectory datasets**: `output/benchmarks/expert_trajectories/<dataset_id>.npz`
 - **Dataset manifests**: `output/benchmarks/expert_trajectories/<dataset_id>.json`
 - **Training run manifests**: `output/imitation_reports/runs/<run_id>.json`

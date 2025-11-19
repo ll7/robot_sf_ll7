@@ -770,14 +770,18 @@ The project supports accelerating PPO training via behavioral cloning pre-traini
 
 **Quick Start:**
 ```bash
-# See docs/imitation_learning_pipeline.md for full pipeline
+# End-to-end wrapper (recommended for new users)
+uv run python examples/advanced/16_imitation_learning_pipeline.py
+
+# Or run individual steps manually:
 uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
-uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
-uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
+# BC and fine-tuning steps use CLI arguments (no config files needed)
 ```
 
-Also see: `specs/001-ppo-imitation-pretrain/quickstart.md` for detailed workflows and troubleshooting.
+**Also see:**
+- End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
+- Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`
 
 ### Docker training (advanced)
 ```bash

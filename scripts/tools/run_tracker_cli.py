@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.telemetry import RunHistoryEntry, list_runs, load_run
 from robot_sf.telemetry.config import RunTrackerConfig
 
 
@@ -34,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_watch_parser(subparsers)
     add_perf_parser(subparsers)
     add_tensorboard_parser(subparsers)
+    add_export_parser(subparsers)
     return parser
 
 
@@ -52,6 +54,12 @@ def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "--status", choices=["pending", "running", "completed", "failed", "cancelled"]
     )
     parser.add_argument("--since", type=str, help="ISO timestamp filter (UTC)")
+    parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        help="Output format for the run list (default: table)",
+    )
 
 
 def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -59,6 +67,12 @@ def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
         "summary", help="Print summary of a run, including recommendations"
     )
     parser.add_argument("run_id")
+    parser.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="Choose between text, JSON, or Markdown output",
+    )
 
 
 def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -85,14 +99,32 @@ def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.Argum
     parser.add_argument("--logdir", type=Path, required=True)
 
 
+def add_export_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = subparsers.add_parser("export", help="Export a run summary to a file")
+    parser.add_argument("run_id")
+    parser.add_argument(
+        "--format",
+        choices=("json", "markdown"),
+        default="json",
+        help="Export format",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Destination file for the exported summary",
+    )
+
+
 def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
     handlers = {
         "status": handle_status,
-        "list": handle_placeholder,
-        "summary": handle_placeholder,
+        "list": handle_list,
+        "summary": handle_summary,
         "watch": handle_watch,
         "perf-tests": handle_placeholder,
         "enable-tensorboard": handle_placeholder,
+        "export": handle_export,
     }
     handler = handlers[args.command]
     return handler(context, args)
@@ -117,6 +149,54 @@ def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
         return 1
     summary = _summarize_steps(steps)
     _print_status(run_dir, summary)
+    return 0
+
+
+def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
+    since = _parse_since(args.since)
+    entries = list_runs(
+        context.config,
+        limit=args.limit,
+        status=args.status,
+        since=since,
+    )
+    if args.format == "json":
+        payload = [entry.to_dict() for entry in entries]
+        print(json.dumps(payload, indent=2))
+        return 0
+    _print_run_table(entries)
+    return 0
+
+
+def handle_summary(context: CommandContext, args: argparse.Namespace) -> int:
+    try:
+        entry = load_run(context.config, args.run_id)
+    except FileNotFoundError as exc:
+        print(f"Tracker assets not found: {exc}")
+        return 1
+    if args.format == "json":
+        print(json.dumps(entry.to_dict(), indent=2))
+        return 0
+    if args.format == "markdown":
+        print(_render_markdown(entry))
+        return 0
+    _print_run_summary(entry)
+    return 0
+
+
+def handle_export(context: CommandContext, args: argparse.Namespace) -> int:
+    try:
+        entry = load_run(context.config, args.run_id)
+    except FileNotFoundError as exc:
+        print(f"Tracker assets not found: {exc}")
+        return 1
+    if args.format == "json":
+        content = json.dumps(entry.to_dict(), indent=2)
+    else:
+        content = _render_markdown(entry)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(content, encoding="utf-8")
+    print(f"Exported run summary to {args.output}")
     return 0
 
 
@@ -212,6 +292,75 @@ def _print_status(run_dir: Path, summary: dict[str, Any]) -> None:
         )
 
 
+def _print_run_table(entries: list[RunHistoryEntry]) -> None:
+    if not entries:
+        print("No run tracker entries found.")
+        return
+    header = f"{'Run ID':<24} {'Status':<10} {'Started':<20} {'Completed':<20} Steps"
+    print(header)
+    print("-" * len(header))
+    for entry in entries:
+        created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
+        completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
+        steps_total = len(entry.steps)
+        steps_done = sum(1 for step in entry.steps if step.get("status") == "completed")
+        print(
+            f"{entry.run_id:<24} {entry.status.value:<10} {created:<20} "
+            f"{completed:<20} {steps_done}/{steps_total}"
+        )
+
+
+def _print_run_summary(entry: RunHistoryEntry) -> None:
+    created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
+    completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
+    print(f"Run: {entry.run_id}")
+    print(f"Status: {entry.status.value}")
+    print(f"Started: {created}")
+    print(f"Completed: {completed}")
+    print(f"Artifact dir: {entry.artifact_dir}")
+    if entry.summary:
+        print("Summary:")
+        for key, value in entry.summary.items():
+            print(f"  - {key}: {value}")
+    else:
+        print("Summary: (none)")
+    print("Steps:")
+    for step in entry.steps:
+        status = step.get("status", "unknown").upper()
+        name = step.get("display_name", step.get("step_id"))
+        order = step.get("order")
+        duration = _format_seconds(step.get("duration_seconds"))
+        print(f"  - [{status:9}] Step {order}: {name} (duration={duration})")
+
+
+def _render_markdown(entry: RunHistoryEntry) -> str:
+    created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
+    completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
+    lines = [
+        f"# Run {entry.run_id}",
+        "",
+        f"- **Status:** {entry.status.value}",
+        f"- **Started:** {created}",
+        f"- **Completed:** {completed}",
+        f"- **Artifact Dir:** `{entry.artifact_dir}`",
+        "",
+        "## Summary",
+    ]
+    if entry.summary:
+        for key, value in entry.summary.items():
+            lines.append(f"- **{key}:** {value}")
+    else:
+        lines.append("- _(none)_")
+    lines.append("")
+    lines.append("## Steps")
+    for step in entry.steps:
+        status = step.get("status", "unknown").upper()
+        name = step.get("display_name", step.get("step_id"))
+        duration = _format_seconds(step.get("duration_seconds"))
+        lines.append(f"- [{status}] Step {step.get('order')}: {name} (duration={duration})")
+    return "\n".join(lines)
+
+
 def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
     started_at = entry.get("started_at")
     if not started_at:
@@ -242,6 +391,15 @@ def _format_seconds(value: float | None) -> str:
     if minutes:
         return f"{minutes:d}m{secs:02d}s"
     return f"{secs:d}s"
+
+
+def _parse_since(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid ISO timestamp: {value}") from None
 
 
 def main(argv: list[str] | None = None) -> int:

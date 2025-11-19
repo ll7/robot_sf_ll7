@@ -66,10 +66,10 @@
 ### Implementation for User Story 2
 
 - [x] T014 [US2] Add trajectory dataset validation test in tests/integration/test_expert_trajectory_dataset.py
-- [ ] T015 [US2] Implement trajectory recorder with metadata capture in scripts/training/collect_expert_trajectories.py
+- [x] T015 [US2] Implement trajectory recorder with metadata capture in scripts/training/collect_expert_trajectories.py
 - [x] T016 [US2] Build trajectory dataset validator utilities in robot_sf/benchmark/validation/trajectory_dataset.py
-- [ ] T017 [US2] Create playback and inspection tool in scripts/validation/playback_trajectory.py
-- [ ] T018 [US2] Persist scenario coverage and integrity results in robot_sf/benchmark/imitation_manifest.py
+- [x] T017 [US2] Create playback and inspection tool in scripts/validation/playback_trajectory.py
+- [x] T018 [US2] Persist scenario coverage and integrity results in robot_sf/benchmark/imitation_manifest.py
 **Checkpoint**: Validated trajectory datasets with playback tooling and automated integrity checks.
 
 ---
@@ -82,11 +82,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Add pretraining pipeline integration test in tests/integration/test_ppo_pretraining_pipeline.py
-- [ ] T020 [US3] Implement behavioural cloning pretraining routine in scripts/training/pretrain_from_expert.py
-- [ ] T021 [US3] Implement PPO fine-tuning runner consuming pre-trained weights in scripts/training/train_ppo_with_pretrained_policy.py
-- [ ] T022 [US3] Generate comparative metrics CLI in scripts/tools/compare_training_runs.py
-- [ ] T023 [US3] Compute sample-efficiency deltas and bootstrap summaries in robot_sf/benchmark/summary.py
+- [x] T019 [US3] Add pretraining pipeline integration test in tests/integration/test_ppo_pretraining_pipeline.py
+- [x] T020 [US3] Implement behavioural cloning pretraining routine in scripts/training/pretrain_from_expert.py
+- [x] T021 [US3] Implement PPO fine-tuning runner consuming pre-trained weights in scripts/training/train_ppo_with_pretrained_policy.py
+- [x] T022 [US3] Generate comparative metrics CLI in scripts/tools/compare_training_runs.py
+- [x] T023 [US3] Compute sample-efficiency deltas and bootstrap summaries in robot_sf/benchmark/summary.py
 
 **Checkpoint**: Pre-trained PPO workflow delivers measurable sample-efficiency gains with comparative reporting.
 
@@ -96,10 +96,10 @@
 
 **Purpose**: Documentation, changelog, and quality improvements spanning all stories.
 
-- [ ] T024 Document imitation pipeline usage in docs/dev_guide.md
-- [ ] T025 Link new quickstart and scripts from docs/README.md
-- [ ] T026 Record feature summary in CHANGELOG.md
-- [ ] T027 Align quickstart instructions with final scripts in specs/001-ppo-imitation-pretrain/quickstart.md
+- [x] T024 Document imitation pipeline usage in docs/dev_guide.md
+- [x] T025 Link new quickstart and scripts from docs/README.md
+- [x] T026 Record feature summary in CHANGELOG.md
+- [x] T027 Align quickstart instructions with final scripts in specs/001-ppo-imitation-pretrain/quickstart.md
 
 ---
 

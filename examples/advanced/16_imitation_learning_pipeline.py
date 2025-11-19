@@ -42,6 +42,7 @@ the training scripts in sequence:
 """
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -49,8 +50,10 @@ from pathlib import Path
 import yaml
 from loguru import logger
 
+from robot_sf.sim.registry import select_best_backend
 
-def _run_command(cmd: list[str], step_name: str) -> int:
+
+def _run_command(cmd: list[str], step_name: str, env: dict[str, str] | None = None) -> int:
     """Run a subprocess command and log results.
 
     Args:
@@ -61,7 +64,7 @@ def _run_command(cmd: list[str], step_name: str) -> int:
         Exit code (0 for success)
     """
     logger.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, check=False)
+    result = subprocess.run(cmd, check=False, env=env)
 
     if result.returncode != 0:
         logger.error(f"{step_name} failed with exit code {result.returncode}")
@@ -114,7 +117,32 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         action="store_true",
         help="Quick demo mode (reduced timesteps/episodes)",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
+        help="Console log level (use DEBUG to see resolved config dumps)",
+    )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default=None,
+        help="Preferred simulation backend (auto-selects fastest if omitted)",
+    )
     args = parser.parse_args()
+
+    logger.remove()
+    logger.add(sys.stderr, level=args.log_level.upper())
+
+    try:
+        chosen_backend = select_best_backend(args.backend)
+    except RuntimeError as err:
+        logger.error(f"Unable to choose backend: {err}")
+        return 1
+
+    inherited_env = os.environ.copy()
+    inherited_env["ROBOT_SF_BACKEND"] = chosen_backend
 
     dataset_id = args.dataset_id
 
@@ -150,6 +178,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
     logger.info(f"Expert policy ID: {expert_policy_id}")
     logger.info(f"Dataset ID: {dataset_id}")
     logger.info(f"Demo mode: {args.demo_mode}")
+    logger.info(f"Simulation backend: {chosen_backend}")
     logger.info("")
 
     try:
@@ -185,7 +214,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             if args.demo_mode:
                 cmd.append("--dry-run")  # Use dry-run for quick demo
 
-            exit_code = _run_command(cmd, "Expert training")
+            exit_code = _run_command(cmd, "Expert training", env=inherited_env)
             if exit_code != 0:
                 return exit_code
 
@@ -209,7 +238,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             str(num_episodes),
         ]
 
-        exit_code = _run_command(cmd, "Trajectory collection")
+        exit_code = _run_command(cmd, "Trajectory collection", env=inherited_env)
         if exit_code != 0:
             return exit_code
 
@@ -233,7 +262,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         if args.demo_mode:
             cmd.extend(["--epochs", "5"])  # Reduced epochs for demo
 
-        exit_code = _run_command(cmd, "BC pre-training")
+        exit_code = _run_command(cmd, "BC pre-training", env=inherited_env)
         if exit_code != 0:
             return exit_code
 
@@ -258,7 +287,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             timesteps,
         ]
 
-        exit_code = _run_command(cmd, "PPO fine-tuning")
+        exit_code = _run_command(cmd, "PPO fine-tuning", env=inherited_env)
         if exit_code != 0:
             return exit_code
 
@@ -280,7 +309,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                 "--pretrained-id",
                 bc_policy_id,
             ]
-            _run_command(cmd, "Comparison generation")
+            _run_command(cmd, "Comparison generation", env=inherited_env)
         else:
             logger.warning(f"Comparison script not found: {comparison_script}")
             logger.info("Skipping comparison step")

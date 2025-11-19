@@ -777,10 +777,11 @@ uv run python examples/advanced/16_imitation_learning_pipeline.py
 # Or run individual steps manually:
 uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
 uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
-# BC and fine-tuning steps use CLI arguments (no config files needed)
+uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
 ```
 
-Set `--log-level DEBUG` if you need the full resolved-config dumps from the factory helpers (default is INFO to keep console noise down). Use `--backend <name>` to override the auto-selected simulator backend (defaults to the fastest available choice via `select_best_backend`).
+Set `--log-level DEBUG` if you need the full resolved-config dumps from the factory helpers (default is INFO to keep console noise down). Use `--backend <name>` to override the auto-selected simulator backend (defaults to the fastest available choice via `select_best_backend`). The end-to-end example auto-generates BC/ppo fine-tuning configs under `output/tmp/imitation_pipeline/`, so you only need to edit the YAML files when running the scripts manually.
 
 **Also see:**
 - End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`

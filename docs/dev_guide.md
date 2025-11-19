@@ -2,6 +2,9 @@
 
 [← Back to Documentation Index](./README.md)
 
+Welcome to the Robot SF Development Guide! This document serves as the central reference for contributors working on the Robot SF codebase. It covers setup instructions, architectural overviews, coding standards, and best practices to ensure a smooth development experience.
+<!-- This document should be kept as short as possible to maintain clarity and ease of navigation. Whenever possible, link out to more detailed documents or external resources. Refacotr this document regularly to be as concise as possible. -->
+
 ## Setup
 
 ### Installation and setup

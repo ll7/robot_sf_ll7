@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 _OVERRIDE_ENV = "ROBOT_SF_ARTIFACT_ROOT"
 _ARTIFACT_ROOT_NAME = "output"
+_RUN_TRACKER_CATEGORY = "run-tracker"
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,16 @@ DEFAULT_ARTIFACT_CATEGORIES: dict[str, ArtifactCategory] = {
         description="Short-lived scratch space for auxiliary tooling.",
         retention_hint="short-lived",
         producers=("misc tooling",),
+    ),
+    _RUN_TRACKER_CATEGORY: ArtifactCategory(
+        name=_RUN_TRACKER_CATEGORY,
+        relative_path=Path(_RUN_TRACKER_CATEGORY),
+        description="Run-tracking manifests, telemetry snapshots, and performance reports.",
+        retention_hint="keep-latest",
+        producers=(
+            "examples/advanced/16_imitation_learning_pipeline.py",
+            "scripts/tools/run_tracker_cli.py",
+        ),
     ),
 }
 
@@ -155,6 +166,23 @@ def ensure_canonical_tree(
         category = get_artifact_category(name)
         (target_root / category.relative_path).mkdir(parents=True, exist_ok=True)
     return target_root
+
+
+def ensure_run_tracker_tree(
+    run_id: str | None = None,
+    base_root: Path | None = None,
+) -> Path:
+    """Ensure the run-tracker directory exists and optionally create a child run folder."""
+
+    target_root = ensure_canonical_tree(root=base_root, categories=(_RUN_TRACKER_CATEGORY,))
+    tracker_category = get_artifact_category(_RUN_TRACKER_CATEGORY)
+    tracker_root = (target_root / tracker_category.relative_path).resolve()
+    tracker_root.mkdir(parents=True, exist_ok=True)
+    if run_id is None:
+        return tracker_root
+    run_dir = (tracker_root / run_id).resolve()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
 
 
 def find_legacy_artifact_paths(base_root: Path | None = None) -> list[Path]:

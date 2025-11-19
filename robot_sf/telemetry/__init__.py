@@ -19,6 +19,7 @@ from .models import (
     StepStatus,
     TelemetrySnapshot,
 )
+from .progress import PipelineStepDefinition, ProgressTracker
 from .run_registry import RunRegistry, generate_run_id
 
 __all__ = [
@@ -28,6 +29,8 @@ __all__ = [
     "PerformanceTestStatus",
     "PipelineRunRecord",
     "PipelineRunStatus",
+    "PipelineStepDefinition",
+    "ProgressTracker",
     "RecommendationSeverity",
     "RunRegistry",
     "RunTrackerConfig",

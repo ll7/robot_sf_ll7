@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integration tests for end-to-end pipeline validation
   - Sample-efficiency target: ≤70% of baseline timesteps to convergence
   - Documentation in `docs/dev_guide.md` and `specs/001-ppo-imitation-pretrain/quickstart.md`
+  - Default imitation configs for behavioral cloning and PPO fine-tuning (`configs/training/ppo_imitation/bc_pretrain.yaml`, `configs/training/ppo_imitation/ppo_finetune.yaml`)
 - Canonical artifact root enforcement and tooling (Feature 243)
   - Introduced `output/` hierarchy as single destination for coverage, benchmark, recording, wandb, and tmp artifacts
   - Added migration helper (`scripts/tools/migrate_artifacts.py`) and guard (`scripts/tools/check_artifact_root.py`) with console entry point and regression tests
@@ -45,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved benchmark and plotting scripts into dedicated `examples/benchmarks/` and `examples/plotting/` tiers
   - Regenerated manifest-backed `examples/README.md` and refreshed docs (`README.md`, `docs/README.md`, `docs/benchmark*.md`, `docs/distribution_plots.md`) to reference new paths
   - Updated `examples/examples_manifest.yaml` metadata (tags, CI flags, summaries) and added quick links from docs
+- Imitation pipeline example now auto-selects simulator backends and generates run-specific BC/PPO configs under `output/tmp/imitation_pipeline/` to keep CLI invocations aligned with script requirements
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

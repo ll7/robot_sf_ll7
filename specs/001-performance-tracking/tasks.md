@@ -70,14 +70,14 @@
 
 ### Implementation & Validation
 
-- [ ] T021 [P] [US3] Build psutil-based telemetry sampler with configurable interval in `robot_sf/telemetry/sampler.py`.
-- [ ] T022 [P] [US3] Implement GPU metrics helper using NVML (guarded import) in `robot_sf/telemetry/gpu.py`.
-- [ ] T023 [US3] Integrate sampler loop + telemetry snapshot persistence into `examples/advanced/16_imitation_learning_pipeline.py` and related helpers.
-- [ ] T024 [US3] Implement rule-based recommendation engine with severity + suggested actions in `robot_sf/telemetry/recommendations.py`.
-- [ ] T025 [US3] Surface telemetry + recommendation summaries via `scripts/tools/run_tracker_cli.py summary` subcommand.
-- [ ] T026 [P] [US3] Add optional TensorBoard adapter in `robot_sf/telemetry/tensorboard_adapter.py` and CLI flag to enable mirroring.
-- [ ] T027 [US3] Create performance-test wrapper in `scripts/telemetry/run_perf_tests.py` that calls `scripts/validation/performance_smoke_test.py` and records results via manifest writer.
-- [ ] T028 [US3] Extend `scripts/validation/performance_smoke_test.py` to accept telemetry flags and emit recommendation-aware pass/fail statuses.
+- [X] T021 [P] [US3] Build psutil-based telemetry sampler with configurable interval in `robot_sf/telemetry/sampler.py`.
+- [X] T022 [P] [US3] Implement GPU metrics helper using NVML (guarded import) in `robot_sf/telemetry/gpu.py`.
+- [X] T023 [US3] Integrate sampler loop + telemetry snapshot persistence into `examples/advanced/16_imitation_learning_pipeline.py` and related helpers.
+- [X] T024 [US3] Implement rule-based recommendation engine with severity + suggested actions in `robot_sf/telemetry/recommendations.py`.
+- [X] T025 [US3] Surface telemetry + recommendation summaries via `scripts/tools/run_tracker_cli.py summary` subcommand.
+- [X] T026 [P] [US3] Add optional TensorBoard adapter in `robot_sf/telemetry/tensorboard_adapter.py` and CLI flag to enable mirroring.
+- [X] T027 [US3] Create performance-test wrapper in `scripts/telemetry/run_perf_tests.py` that calls `scripts/validation/performance_smoke_test.py` and records results via manifest writer.
+- [X] T028 [US3] Extend `scripts/validation/performance_smoke_test.py` to accept telemetry flags and emit recommendation-aware pass/fail statuses.
 - [ ] T029 [P] [US3] Add pytest coverage for sampler fallbacks + recommendation triggers in `tests/test_tracking/test_telemetry.py`.
 
 ---

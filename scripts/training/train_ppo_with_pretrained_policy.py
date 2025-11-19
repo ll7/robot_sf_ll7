@@ -24,6 +24,7 @@ from robot_sf.benchmark.imitation_manifest import write_training_run_manifest
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import PPOFineTuningConfig
+from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -60,6 +61,7 @@ def run_ppo_finetuning(
 
     # Create environment
     env = make_robot_env(config=RobotSimulationConfig())
+    env = maybe_flatten_env_observations(env, context="PPO fine-tuning")
 
     if not dry_run:
         # Load pre-trained model

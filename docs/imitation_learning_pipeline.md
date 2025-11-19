@@ -63,6 +63,12 @@ uv run python scripts/training/pretrain_from_expert.py \
   --config configs/training/ppo_imitation/bc_pretrain.yaml
 ```
 
+The repository ships with `configs/training/ppo_imitation/bc_pretrain.yaml` as a
+starting point—update `dataset_id` and `policy_output_id` before running manual
+experiments. The automated example pipeline writes run-specific configs to
+`output/tmp/imitation_pipeline/` so you can keep the checked-in YAML focused on
+reusable defaults.
+
 **What happens:**
 - Loads trajectory dataset
 - Trains policy via behavioral cloning (supervised learning)
@@ -80,6 +86,11 @@ Continue training the pre-trained policy using PPO for online improvement:
 uv run python scripts/training/train_ppo_with_pretrained_policy.py \
   --config configs/training/ppo_imitation/ppo_finetune.yaml
 ```
+
+Like the BC step, a default `ppo_finetune.yaml` lives under
+`configs/training/ppo_imitation/`. Adjust `pretrained_policy_id` and
+`total_timesteps` for manual runs; the orchestration example generates a
+temporary config automatically.
 
 **What happens:**
 - Loads pre-trained policy checkpoint

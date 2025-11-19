@@ -109,6 +109,74 @@ class BehaviouralCloningConfig:
 
 
 @dataclass(slots=True)
+class BCPretrainingConfig:
+    """Configuration for behavioural cloning pre-training from expert trajectories."""
+
+    run_id: str
+    dataset_id: str
+    policy_output_id: str
+    bc_epochs: int
+    batch_size: int
+    learning_rate: float
+    random_seeds: tuple[int, ...]
+
+    @classmethod
+    def from_raw(
+        cls,
+        *,
+        run_id: str,
+        dataset_id: str,
+        policy_output_id: str,
+        bc_epochs: int,
+        batch_size: int,
+        learning_rate: float,
+        random_seeds: tuple[int, ...] | list[int],
+    ) -> BCPretrainingConfig:
+        """Create a config while coercing seeds to a canonical tuple."""
+
+        return cls(
+            run_id=run_id,
+            dataset_id=dataset_id,
+            policy_output_id=policy_output_id,
+            bc_epochs=bc_epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            random_seeds=ensure_seed_tuple(random_seeds),
+        )
+
+
+@dataclass(slots=True)
+class PPOFineTuningConfig:
+    """Configuration for PPO fine-tuning from a pre-trained policy."""
+
+    run_id: str
+    pretrained_policy_id: str
+    total_timesteps: int
+    random_seeds: tuple[int, ...]
+    learning_rate: float
+
+    @classmethod
+    def from_raw(
+        cls,
+        *,
+        run_id: str,
+        pretrained_policy_id: str,
+        total_timesteps: int,
+        random_seeds: tuple[int, ...] | list[int],
+        learning_rate: float = 0.0003,
+    ) -> PPOFineTuningConfig:
+        """Create a config while coercing seeds to a canonical tuple."""
+
+        return cls(
+            run_id=run_id,
+            pretrained_policy_id=pretrained_policy_id,
+            total_timesteps=total_timesteps,
+            random_seeds=ensure_seed_tuple(random_seeds),
+            learning_rate=learning_rate,
+        )
+
+
+@dataclass(slots=True)
 class PPOFineTuneConfig:
     """Parameters for PPO fine-tuning that starts from a pre-trained policy."""
 
@@ -143,10 +211,12 @@ class PPOFineTuneConfig:
 
 
 __all__ = [
+    "BCPretrainingConfig",
     "BehaviouralCloningConfig",
     "ConvergenceCriteria",
     "EvaluationSchedule",
     "ExpertTrainingConfig",
     "PPOFineTuneConfig",
+    "PPOFineTuningConfig",
     "TrajectoryCollectionConfig",
 ]

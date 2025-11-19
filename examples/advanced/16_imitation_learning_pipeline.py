@@ -61,7 +61,9 @@ from robot_sf.telemetry import (
     ManifestWriter,
     PipelineStepDefinition,
     ProgressTracker,
+    RecommendationEngine,
     RunTrackerConfig,
+    TelemetrySampler,
     generate_run_id,
 )
 from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus
@@ -81,6 +83,9 @@ class TrackerContext:
     enabled_steps: tuple[str, ...]
     initiator: str
     scenario_config: Path
+    telemetry_sampler: TelemetrySampler | None = None
+    recommendation_engine: RecommendationEngine | None = None
+    telemetry_samples: int = 0
 
 
 def _run_command(cmd: list[str], step_name: str, env: dict[str, str] | None = None) -> int:
@@ -201,6 +206,7 @@ def _create_tracker_context(
     tracker_output: str | None,
     initiator: str,
     scenario_config: Path,
+    telemetry_interval: float | None,
 ) -> TrackerContext:
     config, run_id = _resolve_tracker_destination(tracker_output)
     writer = ManifestWriter(config, run_id)
@@ -218,7 +224,67 @@ def _create_tracker_context(
     tracker.enable_failure_guard(
         heartbeat=lambda status: _append_run_snapshot(context, status),
     )
+    _start_tracker_telemetry(context, interval_seconds=telemetry_interval)
     return context
+
+
+def _start_tracker_telemetry(
+    context: TrackerContext,
+    *,
+    interval_seconds: float | None,
+) -> None:
+    if interval_seconds is None or interval_seconds <= 0:
+        return
+    engine = RecommendationEngine()
+    sampler = TelemetrySampler(
+        context.writer,
+        progress_tracker=context.tracker,
+        started_at=context.created_at,
+        interval_seconds=max(interval_seconds, 0.5),
+    )
+    sampler.add_consumer(engine.observe_snapshot)
+    sampler.start()
+    context.telemetry_sampler = sampler
+    context.recommendation_engine = engine
+
+
+def _stop_tracker_telemetry(context: TrackerContext) -> None:
+    sampler = context.telemetry_sampler
+    if sampler is None:
+        return
+    sampler.stop()
+    context.telemetry_samples = sampler.samples_written
+    context.telemetry_sampler = None
+
+
+def _build_tracker_summary(
+    context: TrackerContext,
+    base_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    summary = dict(base_summary or {})
+    telemetry_summary = _telemetry_summary(context)
+    if telemetry_summary:
+        summary.setdefault("telemetry", telemetry_summary)
+    if context.telemetry_samples:
+        summary.setdefault("telemetry_samples", context.telemetry_samples)
+    return summary
+
+
+def _telemetry_summary(context: TrackerContext) -> dict[str, Any]:
+    engine = context.recommendation_engine
+    if engine is None:
+        return {}
+    summary = engine.summary()
+    if context.telemetry_samples and "telemetry_samples" not in summary:
+        summary["telemetry_samples"] = context.telemetry_samples
+    return summary
+
+
+def _collect_recommendations(context: TrackerContext) -> list[dict[str, Any]]:
+    engine = context.recommendation_engine
+    if engine is None:
+        return []
+    return list(engine.generate_recommendations())
 
 
 def _append_run_snapshot(
@@ -251,7 +317,13 @@ def _finalize_tracker(
     if context is None:
         return
     context.tracker.disable_failure_guard()
-    _append_run_snapshot(context, status, summary=summary)
+    _stop_tracker_telemetry(context)
+    summary_payload = _build_tracker_summary(context, summary)
+    recommendations = _collect_recommendations(context)
+    if recommendations:
+        context.writer.append_recommendations(recommendations)
+        summary_payload.setdefault("recommendation_count", len(recommendations))
+    _append_run_snapshot(context, status, summary=summary_payload)
 
 
 def _run_tracked_step(
@@ -334,6 +406,12 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         help="Optional run identifier or output path for tracker artifacts",
     )
     parser.add_argument(
+        "--tracker-telemetry-interval",
+        type=float,
+        default=1.0,
+        help="Telemetry sampling interval in seconds when the tracker is enabled",
+    )
+    parser.add_argument(
         "--tracker-smoke",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -390,6 +468,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             tracker_output=tracker_output,
             initiator=" ".join(sys.argv),
             scenario_config=expert_config,
+            telemetry_interval=args.tracker_telemetry_interval,
         )
         logger.info(
             "Run tracker enabled (run_id={} dir={})",

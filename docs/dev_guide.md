@@ -779,6 +779,8 @@ uv run python scripts/training/collect_expert_trajectories.py --dataset-id exper
 # BC and fine-tuning steps use CLI arguments (no config files needed)
 ```
 
+Set `--log-level DEBUG` if you need the full resolved-config dumps from the factory helpers (default is INFO to keep console noise down).
+
 **Also see:**
 - End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
 - Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`

@@ -1,0 +1,21 @@
+# Default expert PPO training configuration generated for imitation workflows.
+# This file captures deterministic seeds, scenario configuration, and
+# convergence expectations so the expert pipeline can run reproducibly.
+policy_id: ppo_expert_reference
+scenario_config: ../../scenarios/classic_interactions.yaml
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+total_timesteps: 100000
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 2000
+evaluation:
+  frequency_episodes: 10
+  evaluation_episodes: 5
+  hold_out_scenarios:
+    - classic_interactions.medium
+    - classic_interactions.high_density

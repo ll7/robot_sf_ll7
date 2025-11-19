@@ -27,7 +27,8 @@ the training scripts in sequence:
     # Quick demo mode (reduced episodes/timesteps)
     uv run python examples/advanced/16_imitation_learning_pipeline.py --demo-mode
 
-**Note**: Only expert_ppo.yaml config exists. BC and fine-tuning steps use CLI arguments.
+**Note**: expert_ppo.yaml drives expert training. BC and PPO fine-tuning configs are
+generated automatically under output/tmp for each run, so no manual edits are needed.
 
 **Output**:
 - Expert policy: output/benchmarks/expert_policies/
@@ -46,11 +47,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 from loguru import logger
 
 from robot_sf.sim.registry import select_best_backend
+
+PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
 
 
 def _run_command(cmd: list[str], step_name: str, env: dict[str, str] | None = None) -> int:
@@ -90,6 +94,50 @@ def _load_policy_id_from_config(config_path: Path) -> str:
         raise ValueError("policy_id in expert_ppo.yaml must be a non-empty string.")
 
     return policy_id
+
+
+def _write_pipeline_config(filename: str, payload: dict[str, Any]) -> Path:
+    """Write a temporary YAML config under output/tmp for scripted steps."""
+
+    PIPELINE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config_path = PIPELINE_CONFIG_DIR / filename
+    config_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    logger.debug("Wrote pipeline config {}", config_path)
+    return config_path
+
+
+def _prepare_bc_config(dataset_id: str, bc_policy_id: str, demo_mode: bool) -> Path:
+    """Create a BC config tailored to the current pipeline run."""
+
+    bc_epochs = 5 if demo_mode else 20
+    payload = {
+        "run_id": f"bc_pretrain_{dataset_id}",
+        "dataset_id": dataset_id,
+        "policy_output_id": bc_policy_id,
+        "bc_epochs": bc_epochs,
+        "batch_size": 32,
+        "learning_rate": 0.0003,
+        "random_seeds": [42, 43, 44],
+    }
+    return _write_pipeline_config("bc_pretrain.yaml", payload)
+
+
+def _prepare_ppo_config(
+    bc_policy_id: str,
+    finetuned_policy_id: str,
+    total_timesteps: int,
+    demo_mode: bool,
+) -> Path:
+    """Create a PPO fine-tuning config tailored to the current pipeline run."""
+
+    payload = {
+        "run_id": f"ppo_finetune_{finetuned_policy_id}",
+        "pretrained_policy_id": bc_policy_id,
+        "total_timesteps": total_timesteps,
+        "learning_rate": 0.0001 if not demo_mode else 0.0003,
+        "random_seeds": [42, 43, 44],
+    }
+    return _write_pipeline_config("ppo_finetune.yaml", payload)
 
 
 def main():  # noqa: C901 - Sequential workflow orchestration; complexity is intentional
@@ -248,19 +296,16 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.info("STEP 3: Behavioral Cloning Pre-training")
         logger.info("=" * 70)
 
-        # BC script uses programmatic config (no YAML file needed)
+        bc_config_path = _prepare_bc_config(dataset_id, bc_policy_id, args.demo_mode)
+        logger.info("Using BC config: {}", bc_config_path)
         cmd = [
             "uv",
             "run",
             "python",
             "scripts/training/pretrain_from_expert.py",
-            "--dataset-id",
-            dataset_id,
-            "--policy-id",
-            bc_policy_id,
+            "--config",
+            str(bc_config_path),
         ]
-        if args.demo_mode:
-            cmd.extend(["--epochs", "5"])  # Reduced epochs for demo
 
         exit_code = _run_command(cmd, "BC pre-training", env=inherited_env)
         if exit_code != 0:
@@ -272,19 +317,21 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.info("STEP 4: PPO Fine-tuning")
         logger.info("=" * 70)
 
-        # Fine-tuning script uses programmatic config (no YAML file needed)
-        timesteps = "30000" if args.demo_mode else "200000"
+        timesteps = 30000 if args.demo_mode else 200000
+        ppo_config_path = _prepare_ppo_config(
+            bc_policy_id,
+            finetuned_policy_id,
+            timesteps,
+            args.demo_mode,
+        )
+        logger.info("Using PPO fine-tune config: {}", ppo_config_path)
         cmd = [
             "uv",
             "run",
             "python",
             "scripts/training/train_ppo_with_pretrained_policy.py",
-            "--pretrained-id",
-            bc_policy_id,
-            "--policy-id",
-            finetuned_policy_id,
-            "--timesteps",
-            timesteps,
+            "--config",
+            str(ppo_config_path),
         ]
 
         exit_code = _run_command(cmd, "PPO fine-tuning", env=inherited_env)

@@ -153,7 +153,11 @@ def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
-    since = _parse_since(args.since)
+    try:
+        since = _parse_since(args.since)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
     entries = list_runs(
         context.config,
         limit=args.limit,
@@ -397,9 +401,14 @@ def _parse_since(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"Invalid ISO timestamp: {value}") from None
+        raise ValueError(
+            "Invalid ISO timestamp for --since; expected ISO 8601 string with optional timezone"
+        ) from None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def main(argv: list[str] | None = None) -> int:

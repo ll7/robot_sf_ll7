@@ -15,11 +15,14 @@ import yaml
 from loguru import logger
 
 try:
+    from gymnasium import spaces as gym_spaces
+    from gymnasium.spaces.utils import flatten as flatten_space
+    from gymnasium.wrappers import FlattenObservation
     from imitation.data import types as im_types
     from stable_baselines3 import PPO
 except ImportError as exc:
     raise RuntimeError(
-        "This script requires 'imitation' and 'stable-baselines3' packages."
+        "This script requires 'gymnasium', 'imitation', and 'stable-baselines3' packages."
     ) from exc
 
 from robot_sf import common
@@ -30,6 +33,8 @@ from robot_sf.training.imitation_config import BCPretrainingConfig
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from gymnasium.spaces import Space
 
 
 def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
@@ -46,7 +51,34 @@ def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
     }
 
 
-def _convert_to_transitions(dataset: dict[str, Any]) -> list[im_types.Trajectory]:
+def _flatten_single_observation(obs: Any, observation_space: Space | None) -> np.ndarray:
+    """Flatten an observation dict/object into a 1-D numpy array."""
+
+    if observation_space is not None:
+        try:
+            return np.asarray(flatten_space(observation_space, obs), dtype=np.float32)
+        except (AssertionError, ValueError, TypeError) as exc:
+            logger.warning(
+                "Failed to flatten observation via observation_space: {}. Falling back to simplified conversion.",
+                exc,
+            )
+
+    if isinstance(obs, dict):
+        flattened_parts: list[np.ndarray] = []
+        for value in obs.values():
+            arr = np.asarray(value, dtype=np.float32).reshape(-1)
+            flattened_parts.append(arr)
+        if not flattened_parts:
+            return np.empty(0, dtype=np.float32)
+        return np.concatenate(flattened_parts).astype(np.float32)
+
+    return np.asarray(obs, dtype=np.float32).reshape(-1)
+
+
+def _convert_to_transitions(
+    dataset: dict[str, Any],
+    observation_space: Space | None = None,
+) -> list[im_types.Trajectory]:
     """Convert NPZ arrays to imitation-compatible trajectories."""
     trajectories = []
 
@@ -54,14 +86,10 @@ def _convert_to_transitions(dataset: dict[str, Any]) -> list[im_types.Trajectory
         obs_ep = dataset["observations"][ep_idx]
         acts_ep = dataset["actions"][ep_idx]
 
-        # Convert observations to numpy arrays if they're dicts
-        if isinstance(obs_ep[0], dict):
-            logger.warning("Dict observations detected - using simplified conversion")
-            obs_arrays = np.array([np.array(list(o.values())).flatten() for o in obs_ep])
-        else:
-            obs_arrays = np.array(obs_ep)
+        obs_arrays = np.stack([_flatten_single_observation(o, observation_space) for o in obs_ep])
 
-        acts_arrays = np.array(acts_ep)
+        acts_arrays = np.asarray(acts_ep, dtype=np.float32)
+        obs_arrays = _ensure_observation_history(obs_arrays, acts_arrays, ep_idx)
 
         # Create trajectory for this episode
         traj = im_types.Trajectory(
@@ -75,15 +103,54 @@ def _convert_to_transitions(dataset: dict[str, Any]) -> list[im_types.Trajectory
     return trajectories
 
 
+def _ensure_observation_history(
+    obs_arrays: np.ndarray,
+    acts_arrays: np.ndarray,
+    episode_index: int,
+) -> np.ndarray:
+    """Ensure len(obs) == len(actions) + 1 as required by imitation Trajectory."""
+
+    obs_steps = obs_arrays.shape[0]
+    act_steps = acts_arrays.shape[0]
+
+    if obs_steps == act_steps + 1:
+        return obs_arrays
+
+    if obs_steps == act_steps:
+        logger.warning(
+            "Episode {} missing terminal observation; duplicating last observation to satisfy len(obs) == len(actions) + 1.",
+            episode_index,
+        )
+        padding = obs_arrays[-1][None, :]
+        return np.vstack([obs_arrays, padding])
+
+    raise ValueError(
+        f"Episode {episode_index} has {obs_steps} observations and {act_steps} actions; "
+        "expected len(obs) == len(actions) + 1."
+    )
+
+
+def _maybe_flatten_env_observations(env: Any) -> Any:
+    """Wrap env with FlattenObservation if it exposes dict observations."""
+
+    if isinstance(env.observation_space, gym_spaces.Dict):
+        logger.info(
+            "Applying FlattenObservation wrapper for dict observation space during BC training."
+        )
+        return FlattenObservation(env)
+
+    return env
+
+
 def _create_bc_trainer(
     env: Any,
     trajectories: list[im_types.Trajectory],
     config: BCPretrainingConfig,
-) -> Any:
-    """Initialize BC trainer with policy architecture."""
+) -> tuple[Any, PPO]:
+    """Initialize BC trainer alongside the PPO container holding the policy."""
     from imitation.algorithms import bc
 
-    policy = PPO(
+    policy_model = PPO(
         "MlpPolicy",
         env,
         learning_rate=config.learning_rate,
@@ -94,12 +161,12 @@ def _create_bc_trainer(
         observation_space=env.observation_space,
         action_space=env.action_space,
         demonstrations=trajectories,
-        policy=policy.policy,
+        policy=policy_model.policy,
         batch_size=config.batch_size,
         rng=np.random.default_rng(int(config.random_seeds[0])),
     )
 
-    return trainer
+    return trainer, policy_model
 
 
 def run_bc_pretraining(
@@ -117,11 +184,13 @@ def run_bc_pretraining(
 
     # Create environment for BC
     env = make_robot_env(config=RobotSimulationConfig())
+    raw_observation_space = env.observation_space
+    env = _maybe_flatten_env_observations(env)
 
     # Prepare training
     if not dry_run:
-        trajectories = _convert_to_transitions(dataset)
-        trainer = _create_bc_trainer(env, trajectories, config)
+        trajectories = _convert_to_transitions(dataset, raw_observation_space)
+        trainer, policy_model = _create_bc_trainer(env, trajectories, config)
 
         # Train
         logger.info("Training BC for {} epochs", config.bc_epochs)
@@ -130,7 +199,7 @@ def run_bc_pretraining(
         # Save policy
         policy_path = common.get_expert_policy_dir() / f"{config.policy_output_id}.zip"
         policy_path.parent.mkdir(parents=True, exist_ok=True)
-        trainer.policy.save(str(policy_path))
+        policy_model.save(str(policy_path))
     else:
         # Dry run - create placeholder
         policy_path = common.get_expert_policy_dir() / f"{config.policy_output_id}.zip"

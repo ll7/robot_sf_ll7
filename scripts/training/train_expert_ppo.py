@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -395,12 +396,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip heavy PPO training and produce deterministic placeholder artefacts.",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
+        help="Console log level (default: INFO).",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+
+    logger.remove()
+    logger.add(sys.stderr, level=str(args.log_level).upper())
+
     config_path = Path(args.config).resolve()
     config = load_expert_training_config(config_path)
     run_expert_training(config, config_path=config_path, dry_run=bool(args.dry_run))

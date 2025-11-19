@@ -39,12 +39,12 @@
 
 ### Implementation & Validation
 
-- [ ] T010 [P] [US1] Implement `ProgressTracker` with step lifecycle + ETA smoothing in `robot_sf/telemetry/progress.py`.
-- [ ] T011 [US1] Emit step lifecycle events from `examples/advanced/16_imitation_learning_pipeline.py` using `ProgressTracker` hooks.
-- [ ] T012 [P] [US1] Add helper to derive enabled steps + ordinal metadata in `robot_sf/training/imitation_config.py` (or new runner module) for manifest consistency.
-- [ ] T013 [US1] Implement `status`/`watch` commands in `scripts/tools/run_tracker_cli.py` to display current step, elapsed time, and ETA from manifests.
-- [ ] T014 [P] [US1] Add ETA/progress pytest coverage in `tests/test_tracking/test_progress_tracker.py` (mock step durations + CLI rendering).
-- [ ] T015 [US1] Update `scripts/validation/run_examples_smoke.py` to toggle tracker mode and assert progress output so regressions surface in CI.
+- [X] T010 [P] [US1] Implement `ProgressTracker` with step lifecycle + ETA smoothing in `robot_sf/telemetry/progress.py`.
+- [X] T011 [US1] Emit step lifecycle events from `examples/advanced/16_imitation_learning_pipeline.py` using `ProgressTracker` hooks.
+- [X] T012 [P] [US1] Add helper to derive enabled steps + ordinal metadata in `robot_sf/training/imitation_config.py` (or new runner module) for manifest consistency.
+- [X] T013 [US1] Implement `status`/`watch` commands in `scripts/tools/run_tracker_cli.py` to display current step, elapsed time, and ETA from manifests.
+- [X] T014 [P] [US1] Add ETA/progress pytest coverage in `tests/test_tracking/test_progress_tracker.py` (mock step durations + CLI rendering).
+- [X] T015 [US1] Update `scripts/validation/run_examples_smoke.py` to toggle tracker mode and assert progress output so regressions surface in CI.
 
 ---
 

@@ -15,9 +15,7 @@ import yaml
 from loguru import logger
 
 try:
-    from gymnasium import spaces as gym_spaces
     from gymnasium.spaces.utils import flatten as flatten_space
-    from gymnasium.wrappers import FlattenObservation
     from imitation.data import types as im_types
     from stable_baselines3 import PPO
 except ImportError as exc:
@@ -30,6 +28,7 @@ from robot_sf.benchmark.imitation_manifest import write_training_run_manifest
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.training.imitation_config import BCPretrainingConfig
+from robot_sf.training.observation_wrappers import maybe_flatten_env_observations
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -130,18 +129,6 @@ def _ensure_observation_history(
     )
 
 
-def _maybe_flatten_env_observations(env: Any) -> Any:
-    """Wrap env with FlattenObservation if it exposes dict observations."""
-
-    if isinstance(env.observation_space, gym_spaces.Dict):
-        logger.info(
-            "Applying FlattenObservation wrapper for dict observation space during BC training."
-        )
-        return FlattenObservation(env)
-
-    return env
-
-
 def _create_bc_trainer(
     env: Any,
     trajectories: list[im_types.Trajectory],
@@ -185,7 +172,7 @@ def run_bc_pretraining(
     # Create environment for BC
     env = make_robot_env(config=RobotSimulationConfig())
     raw_observation_space = env.observation_space
-    env = _maybe_flatten_env_observations(env)
+    env = maybe_flatten_env_observations(env, context="BC pre-training")
 
     # Prepare training
     if not dry_run:

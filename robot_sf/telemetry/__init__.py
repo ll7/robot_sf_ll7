@@ -24,6 +24,7 @@ from .progress import PipelineStepDefinition, ProgressTracker
 from .recommendations import RecommendationEngine, RecommendationRules
 from .run_registry import RunRegistry, generate_run_id
 from .sampler import TelemetrySampler
+from .tensorboard_adapter import TensorBoardAdapter, iter_telemetry_snapshots
 
 __all__ = [
     "ManifestWriter",
@@ -44,7 +45,9 @@ __all__ = [
     "StepStatus",
     "TelemetrySampler",
     "TelemetrySnapshot",
+    "TensorBoardAdapter",
     "generate_run_id",
+    "iter_telemetry_snapshots",
     "list_runs",
     "load_run",
 ]

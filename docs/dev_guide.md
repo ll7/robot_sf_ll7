@@ -649,6 +649,29 @@ Success criteria:
   3. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
   4. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
 
+### Run tracker & history CLI
+
+- Enable the tracker with `--enable-tracker` on `examples/advanced/16_imitation_learning_pipeline.py`. A background guard now snapshots manifests roughly every five seconds and traps `SIGINT`/`SIGTERM`, so failed or cancelled runs emit a `failed` manifest entry automatically.
+- Inspect live progress with `status` or `watch`:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py status <run_id>
+  uv run python scripts/tools/run_tracker_cli.py watch <run_id> --interval 1.0
+  ```
+  Both commands read the latest manifest snapshot and show current step, elapsed time, ETA, and the last completed step.
+- Use `list` to review prior runs (defaults to the most recent 20). Helpful filters:
+  - `--status pending|running|completed|failed|cancelled`
+  - `--since 2025-01-15T00:00:00+00:00` (UTC ISO timestamps)
+  - `--format table|json` for human vs machine-readable output
+- `summary` (aliased as `show`) prints per-run breakdowns, with `--format text|json|markdown`. Markdown output intentionally mirrors the exported summaries so docs/changelogs can embed them verbatim.
+- `export` writes Markdown or JSON summaries directly to disk:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py export <run_id> \
+    --format markdown \
+    --output output/run-tracker/summaries/<run_id>.md
+  ```
+  Exports include per-step durations, artifact paths, and any failure context produced by the guard.
+- Because the guard writes manifests on a timer and on signals, partial runs survive restarts—`list`/`show` will always have at most a five-second gap between what ran and what was recorded.
+
 ### Performance benchmarking (optional)
 ```bash
 # Run benchmark when performance impact is suspected

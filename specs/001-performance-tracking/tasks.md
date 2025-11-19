@@ -55,11 +55,11 @@
 
 ### Implementation & Validation
 
-- [ ] T016 [P] [US2] Implement manifest index + filtering API (limit/status/since) in `robot_sf/telemetry/history.py`.
-- [ ] T017 [US2] Wire `list`/`show`/`export` commands in `scripts/tools/run_tracker_cli.py` to the history API with JSON + Markdown output support.
-- [ ] T018 [US2] Add failure-safe flush + signal handling in `robot_sf/telemetry/progress.py` so partial runs persist within 5s of abort.
-- [ ] T019 [P] [US2] Add pytest coverage for history filtering + failure flush in `tests/test_tracking/test_history.py` (use sample manifests in `tests/test_tracking/fixtures/`).
-- [ ] T020 [US2] Document run-summary workflow (filters, failure recovery) in `docs/dev_guide.md` and `docs/README.md`.
+- [X] T016 [P] [US2] Implement manifest index + filtering API (limit/status/since) in `robot_sf/telemetry/history.py`.
+- [X] T017 [US2] Wire `list`/`show`/`export` commands in `scripts/tools/run_tracker_cli.py` to the history API with JSON + Markdown output support.
+- [X] T018 [US2] Add failure-safe flush + signal handling in `robot_sf/telemetry/progress.py` so partial runs persist within 5s of abort.
+- [X] T019 [P] [US2] Add pytest coverage for history filtering + failure flush in `tests/test_tracking/test_history.py` (use sample manifests in `tests/test_tracking/fixtures/`).
+- [X] T020 [US2] Document run-summary workflow (filters, failure recovery) in `docs/dev_guide.md` and `docs/README.md`.
 
 ---
 

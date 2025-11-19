@@ -215,6 +215,9 @@ def _create_tracker_context(
         scenario_config=scenario_config,
     )
     _append_run_snapshot(context, PipelineRunStatus.RUNNING)
+    tracker.enable_failure_guard(
+        heartbeat=lambda status: _append_run_snapshot(context, status),
+    )
     return context
 
 
@@ -247,6 +250,7 @@ def _finalize_tracker(
 ) -> None:
     if context is None:
         return
+    context.tracker.disable_failure_guard()
     _append_run_snapshot(context, status, summary=summary)
 
 

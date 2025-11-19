@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from robot_sf.telemetry import RunHistoryEntry, list_runs, load_run
+from robot_sf.telemetry import RunHistoryEntry, TensorBoardAdapter, list_runs, load_run
 from robot_sf.telemetry.config import RunTrackerConfig
 
 
@@ -91,6 +91,17 @@ def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 def add_perf_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("perf-tests", help="Execute the telemetry performance wrapper")
     parser.add_argument("--scenario", help="Optional scenario config override")
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Optional run identifier or path for perf-test tracker artifacts",
+    )
+    parser.add_argument(
+        "--num-resets",
+        type=int,
+        default=5,
+        help="Number of environment resets to benchmark (default: 5)",
+    )
 
 
 def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -125,8 +136,8 @@ def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
         "summary": handle_summary,
         "show": handle_summary,
         "watch": handle_watch,
-        "perf-tests": handle_placeholder,
-        "enable-tensorboard": handle_placeholder,
+        "perf-tests": handle_perf_tests,
+        "enable-tensorboard": handle_enable_tensorboard,
         "export": handle_export,
     }
     handler = handlers[args.command]
@@ -140,6 +151,53 @@ def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> int
         f"for the remaining implementation steps (run={run_hint!r})."
     )
     print(message)
+    return 0
+
+
+def handle_perf_tests(context: CommandContext, args: argparse.Namespace) -> int:
+    try:
+        from scripts.telemetry.run_perf_tests import run_perf_tests
+    except ModuleNotFoundError as exc:  # pragma: no cover - dev only
+        print(f"Performance wrapper unavailable: {exc}")
+        return 2
+
+    try:
+        exit_code, run_dir = run_perf_tests(
+            scenario=args.scenario,
+            output_hint=args.output,
+            num_resets=args.num_resets,
+            artifact_root=context.config.artifact_root,
+        )
+    except (RuntimeError, ValueError) as exc:
+        print(f"Performance test failed: {exc}")
+        return 2
+    if run_dir is not None:
+        print(f"Perf test artifacts written to {run_dir}")
+    return exit_code
+
+
+def handle_enable_tensorboard(context: CommandContext, args: argparse.Namespace) -> int:
+    try:
+        run_dir = _resolve_run_directory(context.config, args.run_id)
+    except FileNotFoundError as exc:
+        print(f"Tracker assets not found: {exc}")
+        return 1
+    telemetry_path = run_dir / context.config.telemetry_filename
+    if not telemetry_path.is_file():
+        print(f"Telemetry log not found: {telemetry_path}")
+        return 1
+    adapter = TensorBoardAdapter(log_dir=args.logdir)
+    if not adapter.is_available:
+        print(
+            "TensorBoard SummaryWriter is unavailable. Install torch or tensorboardX to enable this command.",
+        )
+        return 2
+    try:
+        count = adapter.mirror_file(telemetry_path)
+    except RuntimeError as exc:
+        print(f"Unable to mirror telemetry to TensorBoard: {exc}")
+        return 2
+    print(f"Mirrored {count} telemetry samples to {adapter.log_dir}")
     return 0
 
 
@@ -318,54 +376,181 @@ def _print_run_table(entries: list[RunHistoryEntry]) -> None:
 
 
 def _print_run_summary(entry: RunHistoryEntry) -> None:
+    for line in _iter_run_summary_lines(entry):
+        print(line)
+
+
+def _iter_run_summary_lines(entry: RunHistoryEntry) -> list[str]:
+    header = _format_run_header(entry)
+    summary_section = _format_summary_section(entry.summary)
+    steps_section = _format_steps_section(entry.steps)
+    rec_section = _format_recommendation_section(entry.recommendations)
+    perf_section = _format_perf_section(entry.perf_tests)
+    return header + summary_section + steps_section + rec_section + perf_section
+
+
+def _format_run_header(entry: RunHistoryEntry) -> list[str]:
     created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
     completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
-    print(f"Run: {entry.run_id}")
-    print(f"Status: {entry.status.value}")
-    print(f"Started: {created}")
-    print(f"Completed: {completed}")
-    print(f"Artifact dir: {entry.artifact_dir}")
-    if entry.summary:
-        print("Summary:")
-        for key, value in entry.summary.items():
-            print(f"  - {key}: {value}")
-    else:
-        print("Summary: (none)")
-    print("Steps:")
-    for step in entry.steps:
+    return [
+        f"Run: {entry.run_id}",
+        f"Status: {entry.status.value}",
+        f"Started: {created}",
+        f"Completed: {completed}",
+        f"Artifact dir: {entry.artifact_dir}",
+    ]
+
+
+def _format_summary_section(summary: dict[str, Any] | None) -> list[str]:
+    if not summary:
+        return ["Summary: (none)"]
+    lines = ["Summary:"]
+    if isinstance(summary, dict):
+        for key, value in summary.items():
+            if key == "telemetry" and isinstance(value, dict):
+                lines.extend(_format_telemetry_lines(value))
+                continue
+            lines.append(f"  - {key}: {value}")
+    return lines
+
+
+def _format_telemetry_lines(values: dict[str, Any]) -> list[str]:
+    lines = ["  - Telemetry:"]
+    for key, value in values.items():
+        lines.append(f"      * {key}: {_format_summary_value(value)}")
+    return lines
+
+
+def _format_steps_section(steps: list[dict[str, Any]]) -> list[str]:
+    lines = ["Steps:"]
+    for step in steps:
         status = step.get("status", "unknown").upper()
         name = step.get("display_name", step.get("step_id"))
         order = step.get("order")
         duration = _format_seconds(step.get("duration_seconds"))
-        print(f"  - [{status:9}] Step {order}: {name} (duration={duration})")
+        lines.append(f"  - [{status:9}] Step {order}: {name} (duration={duration})")
+    return lines
+
+
+def _format_recommendation_section(recommendations: tuple[dict[str, Any], ...]) -> list[str]:
+    if not recommendations:
+        return []
+    lines = ["Recommendations:"]
+    for rec in recommendations:
+        severity = str(rec.get("severity", "")).upper() or "INFO"
+        message = rec.get("message", "(no message)")
+        lines.append(f"  - [{severity}] {message}")
+        for action in rec.get("suggested_actions", ()):
+            lines.append(f"      * {action}")
+    return lines
+
+
+def _format_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
+    if not perf_tests:
+        return []
+    lines = ["Performance tests:"]
+    for test in perf_tests:
+        test_id = test.get("test_id", "unknown")
+        status = test.get("status", "n/a")
+        throughput = _format_numeric(test.get("throughput_measured"))
+        baseline = _format_numeric(test.get("throughput_baseline"))
+        lines.append(f"  - {test_id} ({status}) throughput={throughput} baseline={baseline}")
+    return lines
+
+
+def _format_numeric(value: Any) -> str:
+    if isinstance(value, int | float):
+        return f"{value:.2f}"
+    return str(value)
 
 
 def _render_markdown(entry: RunHistoryEntry) -> str:
+    lines: list[str] = []
+    lines.extend(_markdown_header_lines(entry))
+    lines.extend(_markdown_summary_sections(entry))
+    lines.extend(_markdown_steps_section(entry.steps))
+    lines.extend(_markdown_recommendations_section(entry.recommendations))
+    lines.extend(_markdown_perf_section(entry.perf_tests))
+    return "\n".join(lines)
+
+
+def _markdown_header_lines(entry: RunHistoryEntry) -> list[str]:
     created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
     completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
-    lines = [
+    return [
         f"# Run {entry.run_id}",
         "",
         f"- **Status:** {entry.status.value}",
         f"- **Started:** {created}",
         f"- **Completed:** {completed}",
         f"- **Artifact Dir:** `{entry.artifact_dir}`",
-        "",
-        "## Summary",
     ]
-    if entry.summary:
-        for key, value in entry.summary.items():
-            lines.append(f"- **{key}:** {value}")
-    else:
-        lines.append("- _(none)_")
-    lines.append("")
-    lines.append("## Steps")
-    for step in entry.steps:
+
+
+def _markdown_summary_sections(entry: RunHistoryEntry) -> list[str]:
+    lines = ["", "## Summary"]
+    summary_lines = _markdown_summary_lines(entry.summary)
+    lines.extend(summary_lines or ["- _(none)_"])
+    telemetry = entry.summary.get("telemetry") if isinstance(entry.summary, dict) else None
+    if isinstance(telemetry, dict) and telemetry:
+        lines.append("")
+        lines.append("## Telemetry")
+        lines.extend(_markdown_telemetry_lines(telemetry))
+    return lines
+
+
+def _markdown_summary_lines(summary: dict[str, Any] | None) -> list[str]:
+    if not isinstance(summary, dict):
+        return []
+    lines: list[str] = []
+    for key, value in summary.items():
+        if key == "telemetry":
+            continue
+        lines.append(f"- **{key}:** {value}")
+    return lines
+
+
+def _markdown_telemetry_lines(values: dict[str, Any]) -> list[str]:
+    return [f"- **{key}:** {_format_summary_value(value)}" for key, value in values.items()]
+
+
+def _markdown_steps_section(steps: list[dict[str, Any]]) -> list[str]:
+    lines = ["", "## Steps"]
+    for step in steps:
         status = step.get("status", "unknown").upper()
         name = step.get("display_name", step.get("step_id"))
         duration = _format_seconds(step.get("duration_seconds"))
         lines.append(f"- [{status}] Step {step.get('order')}: {name} (duration={duration})")
-    return "\n".join(lines)
+    return lines
+
+
+def _markdown_recommendations_section(recommendations: tuple[dict[str, Any], ...]) -> list[str]:
+    if not recommendations:
+        return []
+    lines = ["", "## Recommendations"]
+    for rec in recommendations:
+        severity = str(rec.get("severity", "")).upper() or "INFO"
+        message = rec.get("message", "(no message)")
+        lines.append(f"- **{severity}:** {message}")
+        actions = rec.get("suggested_actions") or []
+        for action in actions:
+            lines.append(f"  - {action}")
+    return lines
+
+
+def _markdown_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
+    if not perf_tests:
+        return []
+    lines = ["", "## Performance Tests"]
+    for test in perf_tests:
+        test_id = test.get("test_id", "unknown")
+        status = test.get("status", "n/a")
+        throughput = _format_summary_value(test.get("throughput_measured"))
+        baseline = _format_summary_value(test.get("throughput_baseline"))
+        lines.append(
+            f"- **{test_id}:** status={status}, throughput={throughput}, baseline={baseline}"
+        )
+    return lines
 
 
 def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
@@ -398,6 +583,14 @@ def _format_seconds(value: float | None) -> str:
     if minutes:
         return f"{minutes:d}m{secs:02d}s"
     return f"{secs:d}s"
+
+
+def _format_summary_value(value: object) -> str:
+    if value is None:
+        return "--"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
 
 
 def _parse_since(value: str | None) -> datetime | None:

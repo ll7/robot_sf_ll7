@@ -46,6 +46,10 @@ import argparse
 import os
 import subprocess
 import sys
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -53,8 +57,30 @@ import yaml
 from loguru import logger
 
 from robot_sf.sim.registry import select_best_backend
+from robot_sf.telemetry import (
+    ManifestWriter,
+    PipelineStepDefinition,
+    ProgressTracker,
+    RunTrackerConfig,
+    generate_run_id,
+)
+from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus
+from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
 PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
+
+
+@dataclass(slots=True)
+class TrackerContext:
+    """Holds run-tracking handles for the pipeline."""
+
+    run_id: str
+    writer: ManifestWriter
+    tracker: ProgressTracker
+    created_at: datetime
+    enabled_steps: tuple[str, ...]
+    initiator: str
+    scenario_config: Path
 
 
 def _run_command(cmd: list[str], step_name: str, env: dict[str, str] | None = None) -> int:
@@ -140,6 +166,121 @@ def _prepare_ppo_config(
     return _write_pipeline_config("ppo_finetune.yaml", payload)
 
 
+def _env_flag(name: str) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_tracker_destination(hint: str | None) -> tuple[RunTrackerConfig, str]:
+    config = RunTrackerConfig()
+    run_id = generate_run_id("pipeline")
+    if not hint:
+        return config, run_id
+    candidate = Path(hint).expanduser()
+    parts = candidate.parts
+    if "run-tracker" in parts:
+        index = parts.index("run-tracker")
+        tracker_root = Path(*parts[: index + 1]) if index >= 0 else None
+        run_segment = Path(*parts[index + 1 :]) if index + 1 < len(parts) else None
+        if tracker_root is not None and run_segment and run_segment.name:
+            artifact_root = (
+                tracker_root.parent if tracker_root.parent != Path(".") else config.artifact_root
+            )
+            return RunTrackerConfig(artifact_root=artifact_root), run_segment.name
+    if candidate.parent != Path(".") or candidate.is_absolute():
+        artifact_root = candidate.parent if candidate.parent != Path(".") else config.artifact_root
+        return RunTrackerConfig(artifact_root=artifact_root), candidate.name or run_id
+    return config, candidate.name or run_id
+
+
+def _create_tracker_context(
+    step_definitions: list[PipelineStepDefinition],
+    *,
+    tracker_output: str | None,
+    initiator: str,
+    scenario_config: Path,
+) -> TrackerContext:
+    config, run_id = _resolve_tracker_destination(tracker_output)
+    writer = ManifestWriter(config, run_id)
+    tracker = ProgressTracker(step_definitions, writer=writer, log_fn=logger.info)
+    context = TrackerContext(
+        run_id=run_id,
+        writer=writer,
+        tracker=tracker,
+        created_at=datetime.now(UTC),
+        enabled_steps=tuple(step.step_id for step in step_definitions),
+        initiator=initiator,
+        scenario_config=scenario_config,
+    )
+    _append_run_snapshot(context, PipelineRunStatus.RUNNING)
+    return context
+
+
+def _append_run_snapshot(
+    context: TrackerContext,
+    status: PipelineRunStatus,
+    *,
+    summary: dict[str, Any] | None = None,
+) -> None:
+    record = PipelineRunRecord(
+        run_id=context.run_id,
+        created_at=context.created_at,
+        status=status,
+        enabled_steps=context.enabled_steps,
+        artifact_dir=context.writer.run_directory,
+        initiator=context.initiator,
+        scenario_config_path=context.scenario_config,
+        completed_at=datetime.now(UTC) if status != PipelineRunStatus.RUNNING else None,
+        summary=summary or {},
+        steps=context.tracker.clone_entries(),
+    )
+    context.writer.append_run_record(record)
+
+
+def _finalize_tracker(
+    context: TrackerContext | None,
+    status: PipelineRunStatus,
+    *,
+    summary: dict[str, Any] | None = None,
+) -> None:
+    if context is None:
+        return
+    _append_run_snapshot(context, status, summary=summary)
+
+
+def _run_tracked_step(
+    tracker_ctx: TrackerContext | None,
+    tracked_steps: set[str],
+    step_id: str,
+    func: Callable[[], Any],
+) -> Any:
+    if tracker_ctx is not None and step_id in tracked_steps:
+        tracker_ctx.tracker.start_step(step_id)
+    try:
+        result = func()
+    except Exception as exc:  # pragma: no cover - pipeline invoked externally
+        if tracker_ctx is not None and step_id in tracked_steps:
+            tracker_ctx.tracker.fail_step(step_id, reason=str(exc))
+        raise
+    if tracker_ctx is not None and step_id in tracked_steps:
+        tracker_ctx.tracker.complete_step(step_id)
+    return result
+
+
+def _run_tracker_smoke(
+    context: TrackerContext | None, step_definitions: list[PipelineStepDefinition]
+) -> None:
+    if context is None:
+        raise RuntimeError("Tracker smoke execution requires --enable-tracker")
+    for definition in step_definitions:
+        context.tracker.start_step(definition.step_id)
+        time.sleep(0.05)
+        context.tracker.complete_step(definition.step_id)
+    _finalize_tracker(context, PipelineRunStatus.COMPLETED, summary={"mode": "tracker-smoke"})
+
+
 def main():  # noqa: C901 - Sequential workflow orchestration; complexity is intentional
     """Run complete imitation learning pipeline by calling training scripts."""
     parser = argparse.ArgumentParser(description="Imitation Learning Pipeline - End-to-End Example")
@@ -178,10 +319,32 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         default=None,
         help="Preferred simulation backend (auto-selects fastest if omitted)",
     )
+    parser.add_argument(
+        "--enable-tracker",
+        action="store_true",
+        help="Enable progress tracking and telemetry output",
+    )
+    parser.add_argument(
+        "--tracker-output",
+        type=str,
+        help="Optional run identifier or output path for tracker artifacts",
+    )
+    parser.add_argument(
+        "--tracker-smoke",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     logger.remove()
     logger.add(sys.stderr, level=args.log_level.upper())
+
+    tracker_smoke_env = _env_flag("ROBOT_SF_TRACKER_SMOKE")
+    args.tracker_smoke = args.tracker_smoke or tracker_smoke_env
+    tracker_requested = (
+        args.enable_tracker or _env_flag("ROBOT_SF_ENABLE_PROGRESS_TRACKER") or args.tracker_smoke
+    )
+    tracker_output = args.tracker_output or os.environ.get("ROBOT_SF_TRACKER_OUTPUT")
 
     try:
         chosen_backend = select_best_backend(args.backend)
@@ -193,6 +356,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
     inherited_env["ROBOT_SF_BACKEND"] = chosen_backend
 
     dataset_id = args.dataset_id
+    comparison_script = Path("scripts/training/compare_training_runs.py")
 
     logger.info("=" * 70)
     logger.info("IMITATION LEARNING PIPELINE - END-TO-END EXAMPLE")
@@ -206,6 +370,40 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.error(f"Configuration file not found: {expert_config}")
         logger.info("Please ensure you're running from repository root")
         return 1
+
+    step_definitions = build_imitation_pipeline_steps(
+        skip_expert=args.skip_expert,
+        include_comparison=comparison_script.exists(),
+    )
+    tracked_step_ids = {step.step_id for step in step_definitions}
+    if "compare_runs" not in tracked_step_ids and not comparison_script.exists():
+        logger.warning("Comparison script not found: {}", comparison_script)
+        logger.info("Skipping comparison step")
+    tracker_context: TrackerContext | None = None
+    if tracker_requested:
+        tracker_context = _create_tracker_context(
+            step_definitions,
+            tracker_output=tracker_output,
+            initiator=" ".join(sys.argv),
+            scenario_config=expert_config,
+        )
+        logger.info(
+            "Run tracker enabled (run_id={} dir={})",
+            tracker_context.run_id,
+            tracker_context.writer.run_directory,
+        )
+
+    if args.tracker_smoke:
+        _run_tracker_smoke(tracker_context, step_definitions)
+        return 0
+
+    def fail_and_return(step_id: str, exit_code: int) -> int:
+        _finalize_tracker(
+            tracker_context,
+            PipelineRunStatus.FAILED,
+            summary={"failed_step": step_id, "exit_code": exit_code},
+        )
+        return exit_code
 
     configured_policy_id = _load_policy_id_from_config(expert_config)
 
@@ -237,16 +435,15 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             logger.info("=" * 70)
             logger.info(f"Policy ID: {expert_policy_id}")
 
-            # Verify policy exists
             from robot_sf import common
 
             policy_path = common.get_expert_policy_dir() / f"{expert_policy_id}.zip"
             if not policy_path.exists():
                 logger.error(f"Expert policy not found: {policy_path}")
                 logger.info("Run without --skip-expert to train a new policy")
-                return 1
+                return fail_and_return("train_expert", 1)
             logger.info(f"Found policy: {policy_path}")
-        else:
+        elif "train_expert" in tracked_step_ids:
             logger.info("=" * 70)
             logger.info("STEP 1: Training Expert PPO Policy")
             logger.info("=" * 70)
@@ -260,106 +457,136 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                 str(expert_config),
             ]
             if args.demo_mode:
-                cmd.append("--dry-run")  # Use dry-run for quick demo
+                cmd.append("--dry-run")
 
-            exit_code = _run_command(cmd, "Expert training", env=inherited_env)
+            exit_code = _run_tracked_step(
+                tracker_context,
+                tracked_step_ids,
+                "train_expert",
+                lambda: _run_command(cmd, "Expert training", env=inherited_env),
+            )
             if exit_code != 0:
-                return exit_code
+                return fail_and_return("train_expert", exit_code)
 
         # Step 2: Collect trajectories
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("STEP 2: Collecting Expert Trajectories")
-        logger.info("=" * 70)
+        if "collect_trajectories" in tracked_step_ids:
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("STEP 2: Collecting Expert Trajectories")
+            logger.info("=" * 70)
 
-        num_episodes = 20 if args.demo_mode else 100
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "scripts/training/collect_expert_trajectories.py",
-            "--dataset-id",
-            dataset_id,
-            "--policy-id",
-            expert_policy_id,
-            "--episodes",
-            str(num_episodes),
-        ]
-
-        exit_code = _run_command(cmd, "Trajectory collection", env=inherited_env)
-        if exit_code != 0:
-            return exit_code
-
-        # Step 3: BC pre-training
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("STEP 3: Behavioral Cloning Pre-training")
-        logger.info("=" * 70)
-
-        bc_config_path = _prepare_bc_config(dataset_id, bc_policy_id, args.demo_mode)
-        logger.info("Using BC config: {}", bc_config_path)
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "scripts/training/pretrain_from_expert.py",
-            "--config",
-            str(bc_config_path),
-        ]
-
-        exit_code = _run_command(cmd, "BC pre-training", env=inherited_env)
-        if exit_code != 0:
-            return exit_code
-
-        # Step 4: PPO fine-tuning
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("STEP 4: PPO Fine-tuning")
-        logger.info("=" * 70)
-
-        timesteps = 30000 if args.demo_mode else 200000
-        ppo_config_path = _prepare_ppo_config(
-            bc_policy_id,
-            finetuned_policy_id,
-            timesteps,
-            args.demo_mode,
-        )
-        logger.info("Using PPO fine-tune config: {}", ppo_config_path)
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "scripts/training/train_ppo_with_pretrained_policy.py",
-            "--config",
-            str(ppo_config_path),
-        ]
-
-        exit_code = _run_command(cmd, "PPO fine-tuning", env=inherited_env)
-        if exit_code != 0:
-            return exit_code
-
-        # Step 5: Generate comparison (optional - script may not exist yet)
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("STEP 5: Performance Comparison")
-        logger.info("=" * 70)
-
-        comparison_script = Path("scripts/training/compare_training_runs.py")
-        if comparison_script.exists():
+            num_episodes = 20 if args.demo_mode else 100
             cmd = [
                 "uv",
                 "run",
                 "python",
-                str(comparison_script),
-                "--baseline-id",
+                "scripts/training/collect_expert_trajectories.py",
+                "--dataset-id",
+                dataset_id,
+                "--policy-id",
                 expert_policy_id,
-                "--pretrained-id",
-                bc_policy_id,
+                "--episodes",
+                str(num_episodes),
             ]
-            _run_command(cmd, "Comparison generation", env=inherited_env)
-        else:
-            logger.warning(f"Comparison script not found: {comparison_script}")
-            logger.info("Skipping comparison step")
+
+            exit_code = _run_tracked_step(
+                tracker_context,
+                tracked_step_ids,
+                "collect_trajectories",
+                lambda: _run_command(cmd, "Trajectory collection", env=inherited_env),
+            )
+            if exit_code != 0:
+                return fail_and_return("collect_trajectories", exit_code)
+
+        # Step 3: BC pre-training
+        if "bc_pretrain" in tracked_step_ids:
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("STEP 3: Behavioral Cloning Pre-training")
+            logger.info("=" * 70)
+
+            bc_config_path = _prepare_bc_config(dataset_id, bc_policy_id, args.demo_mode)
+            logger.info("Using BC config: {}", bc_config_path)
+            cmd = [
+                "uv",
+                "run",
+                "python",
+                "scripts/training/pretrain_from_expert.py",
+                "--config",
+                str(bc_config_path),
+            ]
+
+            exit_code = _run_tracked_step(
+                tracker_context,
+                tracked_step_ids,
+                "bc_pretrain",
+                lambda: _run_command(cmd, "BC pre-training", env=inherited_env),
+            )
+            if exit_code != 0:
+                return fail_and_return("bc_pretrain", exit_code)
+
+        # Step 4: PPO fine-tuning
+        if "ppo_finetune" in tracked_step_ids:
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("STEP 4: PPO Fine-tuning")
+            logger.info("=" * 70)
+
+            timesteps = 30000 if args.demo_mode else 200000
+            ppo_config_path = _prepare_ppo_config(
+                bc_policy_id,
+                finetuned_policy_id,
+                timesteps,
+                args.demo_mode,
+            )
+            logger.info("Using PPO fine-tune config: {}", ppo_config_path)
+            cmd = [
+                "uv",
+                "run",
+                "python",
+                "scripts/training/train_ppo_with_pretrained_policy.py",
+                "--config",
+                str(ppo_config_path),
+            ]
+
+            exit_code = _run_tracked_step(
+                tracker_context,
+                tracked_step_ids,
+                "ppo_finetune",
+                lambda: _run_command(cmd, "PPO fine-tuning", env=inherited_env),
+            )
+            if exit_code != 0:
+                return fail_and_return("ppo_finetune", exit_code)
+
+        # Step 5: Generate comparison (optional - script may not exist yet)
+        if "compare_runs" in tracked_step_ids:
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("STEP 5: Performance Comparison")
+            logger.info("=" * 70)
+
+            if comparison_script.exists():
+                cmd = [
+                    "uv",
+                    "run",
+                    "python",
+                    str(comparison_script),
+                    "--baseline-id",
+                    expert_policy_id,
+                    "--pretrained-id",
+                    bc_policy_id,
+                ]
+                exit_code = _run_tracked_step(
+                    tracker_context,
+                    tracked_step_ids,
+                    "compare_runs",
+                    lambda: _run_command(cmd, "Comparison generation", env=inherited_env),
+                )
+                if exit_code != 0:
+                    return fail_and_return("compare_runs", exit_code)
+            else:
+                logger.warning(f"Comparison script not found: {comparison_script}")
+                logger.info("Skipping comparison step")
 
         # Success summary
         logger.info("")
@@ -379,11 +606,26 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.info("  - Full docs: docs/imitation_learning_pipeline.md")
         logger.info("  - Quickstart: specs/001-ppo-imitation-pretrain/quickstart.md")
 
+        _finalize_tracker(
+            tracker_context,
+            PipelineRunStatus.COMPLETED,
+            summary={
+                "completed_steps": len(tracked_step_ids),
+                "demo_mode": args.demo_mode,
+                "skip_expert": args.skip_expert,
+            },
+        )
+
         return 0
 
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
         logger.exception("Full traceback:")
+        _finalize_tracker(
+            tracker_context,
+            PipelineRunStatus.FAILED,
+            summary={"error": e.__class__.__name__},
+        )
         return 1
 
 

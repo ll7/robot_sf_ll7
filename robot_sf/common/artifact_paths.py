@@ -210,3 +210,39 @@ def iter_artifact_categories() -> Iterable[ArtifactCategory]:
     """Iterate over known artifact categories."""
 
     return DEFAULT_ARTIFACT_CATEGORIES.values()
+
+
+def get_expert_policy_dir() -> Path:
+    """Return the directory that stores expert policy manifests and checkpoints."""
+
+    base = get_artifact_category_path("benchmarks") / "expert_policies"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def get_expert_policy_manifest_path(policy_id: str, extension: str = ".json") -> Path:
+    """Return the manifest path for a given expert policy identifier."""
+
+    return get_expert_policy_dir() / f"{policy_id}{extension}"
+
+
+def get_trajectory_dataset_dir() -> Path:
+    """Return the directory that stores curated trajectory datasets."""
+
+    base = get_artifact_category_path("benchmarks") / "expert_trajectories"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def get_trajectory_dataset_path(dataset_id: str, extension: str = ".npz") -> Path:
+    """Return the storage path for a trajectory dataset identifier."""
+
+    return get_trajectory_dataset_dir() / f"{dataset_id}{extension}"
+
+
+def get_imitation_report_dir() -> Path:
+    """Return the directory for comparative imitation reports."""
+
+    base = get_artifact_category_path("benchmarks") / "ppo_imitation"
+    base.mkdir(parents=True, exist_ok=True)
+    return base

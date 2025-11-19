@@ -1,12 +1,19 @@
 """Execute the manifest-driven example smoke test via pytest.
 
 The script coordinates ``tests/examples/test_examples_run.py`` and exposes a
-``--dry-run`` flag to list the targeted examples without executing them.
+``--dry-run`` flag to list the targeted examples without executing them. It also
+contains a lightweight tracker-progress check that exercises the imitation
+pipeline in tracker smoke mode so regressions in the progress output surface in
+CI before the full suite runs.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,6 +22,9 @@ if TYPE_CHECKING:
 import pytest
 
 from robot_sf.examples.manifest_loader import load_manifest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PIPELINE_EXAMPLE = Path("examples/advanced/16_imitation_learning_pipeline.py")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -37,6 +47,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="PYTEST_ARGS",
         help="Additional arguments forwarded directly to pytest.",
     )
+    parser.add_argument(
+        "--skip-tracker-check",
+        action="store_true",
+        help="Skip the imitation pipeline tracker smoke check.",
+    )
+    parser.add_argument(
+        "--tracker-check-only",
+        action="store_true",
+        help="Run only the tracker progress check and skip pytest execution.",
+    )
     return parser.parse_args(argv)
 
 
@@ -44,6 +64,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     manifest = load_manifest(validate_paths=True)
     ci_examples = tuple(manifest.iter_ci_enabled_examples())
+
+    tracker_ok = _maybe_run_tracker_progress_check(args)
+    if not tracker_ok:
+        return 1
+    if args.tracker_check_only:
+        return 0
 
     if args.dry_run:
         if not ci_examples:
@@ -61,6 +87,99 @@ def main(argv: Sequence[str] | None = None) -> int:
         pytest_args.extend(args.pytest_args)
 
     return int(pytest.main(pytest_args))
+
+
+def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
+    if args.dry_run or args.skip_tracker_check:
+        return True
+    script_path = _resolve_pipeline_example()
+    if script_path is None:
+        print("Tracker progress check skipped: pipeline example not found.")
+        return True
+    env = _build_example_env()
+    env["ROBOT_SF_ENABLE_PROGRESS_TRACKER"] = "1"
+    env["ROBOT_SF_TRACKER_SMOKE"] = "1"
+    command = [sys.executable, str(script_path), "--enable-tracker", "--tracker-smoke"]
+    print("Running tracker progress check:", " ".join(command))
+    try:
+        completed = subprocess.run(  # noqa: PL subprocess-run-check
+            command,
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=90.0,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:  # pragma: no cover - defensive path
+        tail = _tail_output(exc.stdout, exc.stderr)
+        print("Tracker progress check timed out. Output tail:\n" + tail)
+        return False
+    if completed.returncode != 0:
+        tail = _tail_output(completed.stdout, completed.stderr)
+        print(
+            "Tracker progress check failed with exit code"
+            f" {completed.returncode}. Output tail:\n{tail}"
+        )
+        return False
+    try:
+        _assert_progress_output(completed.stdout, completed.stderr)
+    except AssertionError as exc:
+        tail = _tail_output(completed.stdout, completed.stderr)
+        print(f"{exc}\nOutput tail:\n{tail}")
+        return False
+    print("Tracker progress check passed.")
+    return True
+
+
+def _resolve_pipeline_example() -> Path | None:
+    candidate = REPO_ROOT / PIPELINE_EXAMPLE
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def _build_example_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("DISPLAY", "")
+    env.setdefault("MPLBACKEND", "Agg")
+    env.setdefault("SDL_VIDEODRIVER", "dummy")
+    env["PYTHONPATH"] = _merge_pythonpath(REPO_ROOT, env.get("PYTHONPATH"))
+    env.setdefault("ROBOT_SF_FAST_DEMO", "1")
+    env.setdefault("ROBOT_SF_EXAMPLES_MAX_STEPS", "64")
+    return env
+
+
+def _merge_pythonpath(root: Path, existing: str | None) -> str:
+    parts: list[str] = [str(root)]
+    if existing:
+        parts.extend(element for element in existing.split(os.pathsep) if element)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if part not in seen:
+            seen.add(part)
+            ordered.append(part)
+    return os.pathsep.join(ordered)
+
+
+def _assert_progress_output(stdout: str | None, stderr: str | None) -> None:
+    combined = "\n".join(part for part in (stdout, stderr) if part)
+    lowered = combined.lower()
+    if "step 1/" not in lowered or "eta=" not in lowered:
+        raise AssertionError(
+            "Progress tracker output missing expected 'Step 1/' or 'eta=' markers."
+        )
+
+
+def _tail_output(stdout: str | None, stderr: str | None, limit: int = 20) -> str:
+    combined = "\n".join(part for part in (stdout, stderr) if part)
+    lines = [line.rstrip() for line in combined.splitlines()]
+    if len(lines) <= limit:
+        return "\n".join(lines)
+    return "\n".join(lines[-limit:])
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point

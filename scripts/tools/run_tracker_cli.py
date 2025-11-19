@@ -1,16 +1,14 @@
-"""Command-line helper for the run-tracking telemetry subsystem.
-
-The full command surface will be implemented incrementally as tasks from
-`specs/001-performance-tracking/tasks.md` progress. For now, the CLI exposes the
-shape of the interface and provides actionable guidance so contributors can test
-parsers before wiring business logic.
-"""
+"""Command-line helper for the run-tracking telemetry subsystem."""
 
 from __future__ import annotations
 
 import argparse
+import json
+import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from robot_sf.telemetry.config import RunTrackerConfig
 
@@ -41,7 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def add_status_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("status", help="Show the latest state of a run")
-    parser.add_argument("run_id", help="Run identifier (directory name under output/run-tracker)")
+    parser.add_argument(
+        "run_id",
+        help="Run identifier or path (directory name under output/run-tracker)",
+    )
 
 
 def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -63,6 +64,12 @@ def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
 def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("watch", help="Tail manifest updates for a run")
     parser.add_argument("run_id")
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=2.0,
+        help="Refresh interval in seconds (default: 2.0)",
+    )
 
 
 def add_perf_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -80,31 +87,161 @@ def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.Argum
 
 def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
     handlers = {
-        "status": handle_placeholder,
+        "status": handle_status,
         "list": handle_placeholder,
         "summary": handle_placeholder,
-        "watch": handle_placeholder,
+        "watch": handle_watch,
         "perf-tests": handle_placeholder,
         "enable-tensorboard": handle_placeholder,
     }
     handler = handlers[args.command]
-    handler(context, args)
-    return 0
+    return handler(context, args)
 
 
-def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> None:
+def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> int:
     run_hint = getattr(args, "run_id", context.run_id)
     message = (
         "Command not implemented yet. Refer to specs/001-performance-tracking/tasks.md "
         f"for the remaining implementation steps (run={run_hint!r})."
     )
     print(message)
+    return 0
+
+
+def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
+    try:
+        run_dir = _resolve_run_directory(context.config, args.run_id)
+        steps = _load_step_entries(context.config, run_dir)
+    except FileNotFoundError as exc:
+        print(f"Tracker assets not found: {exc}")
+        return 1
+    summary = _summarize_steps(steps)
+    _print_status(run_dir, summary)
+    return 0
+
+
+def handle_watch(context: CommandContext, args: argparse.Namespace) -> int:
+    interval = max(args.interval, 0.5)
+    try:
+        while True:
+            result = handle_status(context, args)
+            if result != 0:
+                return result
+            print("-" * 60)
+            time.sleep(interval)
+    except KeyboardInterrupt:  # pragma: no cover - interactive command
+        return 0
 
 
 def build_context(args: argparse.Namespace) -> CommandContext:
     base_root = args.artifact_root if args.artifact_root else None
     config = RunTrackerConfig(artifact_root=base_root)
     return CommandContext(config=config)
+
+
+def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
+    candidate = Path(run_hint).expanduser()
+    if candidate.is_dir():
+        return candidate
+    tracker_root = config.run_tracker_root
+    run_dir = tracker_root / run_hint
+    if run_dir.is_dir():
+        return run_dir
+    raise FileNotFoundError(run_dir)
+
+
+def _load_step_entries(config: RunTrackerConfig, run_dir: Path) -> list[dict[str, Any]]:
+    steps_path = run_dir / config.steps_filename
+    if not steps_path.is_file():
+        raise FileNotFoundError(steps_path)
+    data = json.loads(steps_path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):  # pragma: no cover - defensive guard
+        raise ValueError(f"Unexpected step index format in {steps_path}")
+    return data
+
+
+def _summarize_steps(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    completed = 0
+    current = None
+    last_completed = None
+    for entry in entries:
+        status = entry.get("status")
+        if status == "running" and current is None:
+            current = entry
+        if status == "completed":
+            completed += 1
+            last_completed = entry
+    return {
+        "total": len(entries),
+        "completed": completed,
+        "current": current,
+        "last_completed": last_completed,
+        "entries": entries,
+    }
+
+
+def _print_status(run_dir: Path, summary: dict[str, Any]) -> None:
+    total = summary["total"]
+    completed = summary["completed"]
+    current = summary["current"]
+    print(f"Run directory: {run_dir}")
+    print(f"Steps: {completed}/{total}")
+    if current:
+        order = current.get("order")
+        name = current.get("display_name", current.get("step_id"))
+        elapsed = _format_seconds(_current_elapsed_seconds(current))
+        eta = _format_seconds(current.get("eta_snapshot_seconds"))
+        print(f"Current: Step {order}/{total} – {name} (elapsed={elapsed}, eta={eta})")
+    elif summary["last_completed"]:
+        last = summary["last_completed"]
+        name = last.get("display_name", last.get("step_id"))
+        duration = _format_seconds(last.get("duration_seconds"))
+        print(f"Last completed: Step {last.get('order')} – {name} (duration={duration})")
+    else:
+        print("No steps started yet.")
+
+    print("Step breakdown:")
+    for entry in summary["entries"]:
+        status = entry.get("status", "unknown")
+        name = entry.get("display_name", entry.get("step_id"))
+        duration = _format_seconds(entry.get("duration_seconds"))
+        if status == "running":
+            duration = _format_seconds(_current_elapsed_seconds(entry))
+        print(
+            f"  - [{status.upper():9}] Step {entry.get('order'):>2}: {name} (duration={duration})"
+        )
+
+
+def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
+    started_at = entry.get("started_at")
+    if not started_at:
+        return None
+    start_dt = _parse_timestamp(started_at)
+    if start_dt is None:
+        return None
+    return max(0.0, (datetime.now(UTC) - start_dt).total_seconds())
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:  # pragma: no cover - defensive
+        return None
+
+
+def _format_seconds(value: float | None) -> str:
+    if value is None:
+        return "--"
+    seconds = int(max(value, 0))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:d}h{minutes:02d}m"
+    if minutes:
+        return f"{minutes:d}m{secs:02d}s"
+    return f"{secs:d}s"
 
 
 def main(argv: list[str] | None = None) -> int:

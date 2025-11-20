@@ -70,6 +70,7 @@ from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus
 from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
 PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
+RUN_MANIFEST_DIR = Path("output/benchmarks/ppo_imitation/runs")
 
 
 @dataclass(slots=True)
@@ -169,6 +170,25 @@ def _prepare_ppo_config(
         "random_seeds": [42, 43, 44],
     }
     return _write_pipeline_config("ppo_finetune.yaml", payload)
+
+
+def _discover_latest_training_run_id(prefix: str) -> str | None:
+    """Return the newest training run identifier with the given prefix."""
+
+    if not RUN_MANIFEST_DIR.exists():
+        return None
+    candidates: list[tuple[float, str]] = []
+    pattern = f"{prefix}*.json"
+    for path in RUN_MANIFEST_DIR.glob(pattern):
+        try:
+            stat = path.stat()
+        except OSError:  # pragma: no cover - filesystem races
+            continue
+        candidates.append((stat.st_mtime, path.stem))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]
 
 
 def _env_flag(name: str) -> bool:
@@ -438,7 +458,18 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
     inherited_env["ROBOT_SF_BACKEND"] = chosen_backend
 
     dataset_id = args.dataset_id
-    comparison_script = Path("scripts/training/compare_training_runs.py")
+    baseline_run_id: str | None = None
+    pretrained_run_id: str | None = None
+    comparison_candidates = (
+        Path("scripts/tools/compare_training_runs.py"),
+        Path("scripts/training/compare_training_runs.py"),
+    )
+    for candidate in comparison_candidates:
+        if candidate.exists():
+            comparison_script = candidate
+            break
+    else:  # pragma: no cover - only hit when neither path exists locally
+        comparison_script = comparison_candidates[0]
 
     logger.info("=" * 70)
     logger.info("IMITATION LEARNING PIPELINE - END-TO-END EXAMPLE")
@@ -503,6 +534,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
 
     bc_policy_id = f"bc_{expert_policy_id}"
     finetuned_policy_id = f"finetuned_{expert_policy_id}"
+    pretrained_run_id = f"ppo_finetune_{finetuned_policy_id}"
 
     logger.info(f"Expert policy ID: {expert_policy_id}")
     logger.info(f"Dataset ID: {dataset_id}")
@@ -526,6 +558,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                 logger.info("Run without --skip-expert to train a new policy")
                 return fail_and_return("train_expert", 1)
             logger.info(f"Found policy: {policy_path}")
+            baseline_run_id = _discover_latest_training_run_id(f"{expert_policy_id}_")
         elif "train_expert" in tracked_step_ids:
             logger.info("=" * 70)
             logger.info("STEP 1: Training Expert PPO Policy")
@@ -550,6 +583,15 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             )
             if exit_code != 0:
                 return fail_and_return("train_expert", exit_code)
+            baseline_run_id = _discover_latest_training_run_id(f"{expert_policy_id}_")
+        else:
+            baseline_run_id = _discover_latest_training_run_id(f"{expert_policy_id}_")
+
+        if not baseline_run_id:
+            logger.warning(
+                "Failed to locate training run manifest for policy_id={}; comparison output may be unavailable.",
+                expert_policy_id,
+            )
 
         # Step 2: Collect trajectories
         if "collect_trajectories" in tracked_step_ids:
@@ -649,24 +691,38 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             logger.info("=" * 70)
 
             if comparison_script.exists():
-                cmd = [
-                    "uv",
-                    "run",
-                    "python",
-                    str(comparison_script),
-                    "--baseline-id",
-                    expert_policy_id,
-                    "--pretrained-id",
-                    bc_policy_id,
-                ]
-                exit_code = _run_tracked_step(
-                    tracker_context,
-                    tracked_step_ids,
-                    "compare_runs",
-                    lambda: _run_command(cmd, "Comparison generation", env=inherited_env),
-                )
-                if exit_code != 0:
-                    return fail_and_return("compare_runs", exit_code)
+                if not baseline_run_id:
+                    logger.warning(
+                        "Baseline training run id unavailable; skipping automatic comparison. Run scripts/tools/compare_training_runs.py manually."
+                    )
+                else:
+                    comparison_group_id = (
+                        f"{expert_policy_id}_vs_{finetuned_policy_id}_"
+                        f"{datetime.now(UTC).strftime('%Y%m%d%H%M')}"
+                    )
+                    effective_pretrained_run_id = (
+                        pretrained_run_id or f"ppo_finetune_{finetuned_policy_id}"
+                    )
+                    cmd = [
+                        "uv",
+                        "run",
+                        "python",
+                        str(comparison_script),
+                        "--group",
+                        comparison_group_id,
+                        "--baseline",
+                        baseline_run_id,
+                        "--pretrained",
+                        effective_pretrained_run_id,
+                    ]
+                    exit_code = _run_tracked_step(
+                        tracker_context,
+                        tracked_step_ids,
+                        "compare_runs",
+                        lambda: _run_command(cmd, "Comparison generation", env=inherited_env),
+                    )
+                    if exit_code != 0:
+                        return fail_and_return("compare_runs", exit_code)
             else:
                 logger.warning(f"Comparison script not found: {comparison_script}")
                 logger.info("Skipping comparison step")

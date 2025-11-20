@@ -28,6 +28,7 @@ from loguru import logger
 from robot_sf.maps.verification.context import VerificationContext
 from robot_sf.maps.verification.scope_resolver import resolve_scope
 from robot_sf.maps.verification.runner import verify_maps
+from robot_sf.maps.verification.manifest import write_manifest
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,13 +143,18 @@ def main() -> int:
     logger.info(f"  Warned: {warned}")
     logger.info("=" * 60)
     
+    # Write manifest
+    try:
+        manifest_path = write_manifest(results, context, output_path)
+        logger.info(f"Manifest written to: {manifest_path}")
+    except Exception as e:
+        logger.error(f"Failed to write manifest: {e}")
+        # Don't fail the entire run if manifest writing fails
+    
     # In CI mode, fail if any maps failed
     if context.is_ci_mode and failed > 0:
         logger.error(f"CI mode: {failed} maps failed verification")
         return 1
-    
-    # TODO: Write JSON manifest (Phase 5)
-    logger.info(f"Manifest output will be written to: {output_path}")
     
     return 0 if failed == 0 else 1
 

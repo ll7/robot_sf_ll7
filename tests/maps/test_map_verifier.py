@@ -279,6 +279,61 @@ class TestRunner:
                 assert result.status in ["pass", "fail", "warn"]
 
 
+class TestManifest:
+    """Tests for manifest writing."""
+    
+    def test_write_and_read_manifest(self):
+        """Test writing and reading a manifest."""
+        import tempfile
+        from robot_sf.maps.verification.runner import verify_maps
+        from robot_sf.maps.verification.map_inventory import load_map_inventory
+        from robot_sf.maps.verification.context import VerificationContext
+        from robot_sf.maps.verification.manifest import write_manifest, read_manifest
+        
+        maps = load_map_inventory()[:3]
+        if maps:
+            ctx = VerificationContext(mode="local")
+            results = verify_maps(maps, ctx)
+            
+            # Write manifest to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                temp_path = Path(f.name)
+            
+            try:
+                written_path = write_manifest(results, ctx, temp_path)
+                assert written_path.exists()
+                
+                # Read and verify
+                manifest = read_manifest(written_path)
+                assert "summary" in manifest
+                assert "results" in manifest
+                assert len(manifest["results"]) == len(results)
+                assert manifest["summary"]["total_maps"] == len(maps)
+                assert manifest["summary"]["run_id"] == ctx.run_id
+            finally:
+                # Clean up
+                if temp_path.exists():
+                    temp_path.unlink()
+    
+    def test_manifest_summary_counts(self):
+        """Test that manifest summary has correct counts."""
+        from robot_sf.maps.verification.runner import verify_maps
+        from robot_sf.maps.verification.map_inventory import load_map_inventory
+        from robot_sf.maps.verification.context import VerificationContext
+        from robot_sf.maps.verification.manifest import create_verification_summary
+        
+        maps = load_map_inventory()[:5]
+        if maps:
+            ctx = VerificationContext(mode="local")
+            results = verify_maps(maps, ctx)
+            
+            summary = create_verification_summary(results, ctx)
+            
+            # Verify counts add up
+            assert summary.total_maps == summary.passed + summary.failed + summary.warned
+            assert summary.total_maps == len(results)
+
+
 # Integration tests for CLI will be added here
 class TestCLI:
     """Tests for command-line interface (stub)."""

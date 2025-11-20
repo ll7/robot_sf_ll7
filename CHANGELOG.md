@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Map Verification Workflow (Feature 001-map-verification)
+  - Single-command map validation tool (`scripts/validation/verify_maps.py`) for SVG map quality checks
+  - Rule-based validation engine checking file readability, SVG syntax, file size, and layer organization
+  - Scope filtering supporting 'all', 'ci', 'changed', specific filenames, or glob patterns
+  - Structured JSON/JSONL manifest output for tooling and dashboard integration
+  - CI mode with strict exit codes for automated quality gates
+  - Loguru-based diagnostics with human-readable console output
+  - Map inventory system with tag-based classification and filtering
+  - Verification results include timing, rule violations, and remediation hints
+  - Documentation in `docs/SVG_MAP_EDITOR.md` and `specs/001-map-verification/quickstart.md`
+  - Sample manifest artifacts under `output/validation/`
 - Run tracking & telemetry for the imitation pipeline (Feature 001-performance-tracking)
   - Progress tracker with deterministic step ordinals, ETA smoothing, and manifest-backed step history
   - JSONL manifests enriched with telemetry snapshots, rule-based recommendations, and perf-test results stored under `output/run-tracker/`

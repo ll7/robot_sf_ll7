@@ -88,8 +88,14 @@ def list_runs(
             continue
         if since and entry.created_at and entry.created_at < since:
             continue
-        if scenario and record.get("scenario_id") != scenario:
-            continue
+        if scenario:
+            # Try scenario_config_path stem, then summary.scenario_id, then initiator
+            config_path = record.get("scenario_config_path")
+            scenario_stem = Path(config_path).stem if config_path else None
+            summary = record.get("summary") if isinstance(record.get("summary"), dict) else {}
+            scenario_id = summary.get("scenario_id") or summary.get("scenario")
+            if scenario not in (scenario_stem, scenario_id, record.get("scenario_id")):
+                continue
         entries.append(entry)
     entries.sort(key=_history_sort_key, reverse=True)
     if limit > 0:

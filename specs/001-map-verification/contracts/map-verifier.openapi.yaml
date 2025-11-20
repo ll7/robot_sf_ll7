@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: Map Verification CLI Contract
+  version: "0.1.0"
+paths:
+  /verify-maps:
+    post:
+      summary: Run map verification across selected SVG assets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  description: Glob or manifest tag filter ("all", "ci", "changed").
+                  default: "all"
+                output_path:
+                  type: string
+                  description: Optional override for JSON manifest path (defaults to `output/validation/map_verification.json`).
+                mode:
+                  type: string
+                  enum: [local, ci]
+                  description: '"local" prints verbose diagnostics; "ci" enforces performance budgets and exits non-zero on failure.'
+                fix:
+                  type: boolean
+                  description: Whether to auto-apply safe fixes (e.g., sorting layer IDs).
+                seed:
+                  type: integer
+                  description: Deterministic seed passed into environment factories.
+              required: [scope, mode]
+      responses:
+        "200":
+          description: Verification run completed with all maps passing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationRunSummary'
+        "207":
+          description: Mixed status (warnings present but no hard failures).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationRunSummary'
+        "422":
+          description: Invalid request payload (unknown scope, malformed manifest path, etc.).
+        "500":
+          description: Unexpected verifier failure (parsing error, factory crash) — logs and manifest reference included.
+components:
+  schemas:
+    VerificationRunSummary:
+      type: object
+      required: [run_id, git_sha, total_maps, passed, failed, warned, results]
+      properties:
+        run_id:
+          type: string
+        git_sha:
+          type: string
+        total_maps:
+          type: integer
+        passed:
+          type: integer
+        failed:
+          type: integer
+        warned:
+          type: integer
+        slow_maps:
+          type: array
+          items:
+            type: string
+        artifact_path:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationResult'
+    VerificationResult:
+      type: object
+      required: [map_id, status, duration_ms]
+      properties:
+        map_id:
+          type: string
+        status:
+          type: string
+          enum: [pass, fail, warn]
+        rule_ids:
+          type: array
+          items:
+            type: string
+        duration_ms:
+          type: number
+        factory_used:
+          type: string
+          enum: [robot, pedestrian]
+        message:
+          type: string

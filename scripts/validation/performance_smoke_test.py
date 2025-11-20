@@ -23,6 +23,7 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -32,14 +33,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.telemetry.models import (
     PerformanceRecommendation,
     RecommendationSeverity,
     serialize_payload,
+)
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios,
+    select_scenario,
 )
 
 
@@ -78,32 +83,18 @@ class SmokeTestResult:
 
 def measure_environment_performance(
     num_resets: int = 5,
-    scenario: str | None = None,
+    config: RobotSimulationConfig | None = None,
 ) -> dict[str, float]:
     """Measure environment reset performance (simplified test).
 
     Args:
         num_resets: Number of environment resets to benchmark
-        scenario: Optional path to scenario YAML file to configure the environment
+        config: Optional pre-loaded simulation config (scenario overrides applied)
     """
 
-    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    config = config or RobotSimulationConfig()
 
-    config = RobotSimulationConfig()
-
-    # Load scenario config if provided
-    if scenario:
-        scenario_path = Path(scenario)
-        if scenario_path.exists():
-            with scenario_path.open(encoding="utf-8") as f:
-                scenario_data = yaml.safe_load(f)
-                # Apply scenario parameters to config
-                if isinstance(scenario_data, dict):
-                    for key, value in scenario_data.items():
-                        if hasattr(config, key):
-                            setattr(config, key, value)
-
-    env = make_robot_env(config=config, debug=False)
+    env = make_robot_env(config=copy.deepcopy(config), debug=False)
 
     total_resets = 0
     total_time = 0.0
@@ -138,15 +129,12 @@ def measure_environment_performance(
     }
 
 
-def measure_environment_creation() -> float:
+def measure_environment_creation(config: RobotSimulationConfig | None = None) -> float:
     """Measure environment creation time."""
-
-    from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
     print("\n=== Environment Creation Performance ===")
     start_time = time.time()
-    config = RobotSimulationConfig()
-    env = make_robot_env(config=config, debug=False)
+    env = make_robot_env(config=copy.deepcopy(config or RobotSimulationConfig()), debug=False)
     creation_time = time.time() - start_time
     env.close()
     print(f"Environment creation time: {creation_time:.2f}s")
@@ -185,8 +173,9 @@ def run_performance_smoke_test(
         enforce if enforce is not None else os.environ.get("ROBOT_SF_PERF_ENFORCE", "0") == "1"
     )
     on_ci = on_ci if on_ci is not None else os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
-    creation_time = measure_environment_creation()
-    perf_metrics = measure_environment_performance(num_resets, scenario=scenario)
+    config, scenario_label = _load_scenario_config(scenario)
+    creation_time = measure_environment_creation(config)
+    perf_metrics = measure_environment_performance(num_resets, config=config)
     resets_per_sec = perf_metrics["resets_per_sec"]
 
     creation_soft_ok = creation_time <= creation_soft
@@ -239,7 +228,7 @@ def run_performance_smoke_test(
         thresholds=thresholds,
         statuses=statuses,
         recommendations=recommendations,
-        scenario=scenario,
+        scenario=scenario_label or scenario,
         exit_code=exit_code,
     )
 
@@ -265,7 +254,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scenario",
         type=str,
-        help="Optional scenario descriptor stored in the summary",
+        help="Optional scenario config (YAML) applied before measuring performance",
     )
     parser.add_argument(
         "--include-recommendations",
@@ -434,6 +423,30 @@ def _env_float(name: str, default: float) -> float:
     except ValueError:
         print(f"WARNING: Invalid float for {name}; using default {default}", file=sys.stderr)
         return default
+
+
+def _load_scenario_config(
+    scenario: str | None,
+) -> tuple[RobotSimulationConfig, str | None]:
+    """Load a scenario config if available and return config plus scenario id."""
+
+    if not scenario:
+        return RobotSimulationConfig(), None
+    scenario_path = Path(scenario)
+    if not scenario_path.exists():
+        print(f"Scenario file not found: {scenario_path} (using default config)")
+        return RobotSimulationConfig(), scenario
+    try:
+        scenarios = load_scenarios(scenario_path)
+        selected = select_scenario(scenarios, None)
+    except ValueError as exc:
+        print(f"Invalid scenario config '{scenario_path}': {exc} (using default config)")
+        return RobotSimulationConfig(), scenario_path.stem
+    config = build_robot_config_from_scenario(selected, scenario_path=scenario_path)
+    scenario_id = str(
+        selected.get("name") or selected.get("scenario_id") or scenario_path.stem,
+    )
+    return config, scenario_id
 
 
 if __name__ == "__main__":

@@ -17,5 +17,5 @@ evaluation:
   frequency_episodes: 10
   evaluation_episodes: 5
   hold_out_scenarios:
-    - classic_interactions.medium
-    - classic_interactions.high_density
+    - classic_crossing_medium
+    - classic_bottleneck_high

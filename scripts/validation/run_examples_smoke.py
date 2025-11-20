@@ -25,6 +25,7 @@ from robot_sf.examples.manifest_loader import load_manifest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_EXAMPLE = Path("examples/advanced/16_imitation_learning_pipeline.py")
+DEFAULT_PERF_SCENARIO = "configs/validation/minimal.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -57,6 +58,30 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run only the tracker progress check and skip pytest execution.",
     )
+    parser.add_argument(
+        "--skip-perf-tests",
+        action="store_true",
+        help="Skip the telemetry performance wrapper.",
+    )
+    parser.add_argument(
+        "--perf-tests-only",
+        action="store_true",
+        help="Run the telemetry performance wrapper (plus tracker check) and skip pytest execution.",
+    )
+    parser.add_argument(
+        "--perf-scenario",
+        default=DEFAULT_PERF_SCENARIO,
+        help=(
+            "Scenario config passed to the telemetry performance wrapper"
+            f" (default: {DEFAULT_PERF_SCENARIO})."
+        ),
+    )
+    parser.add_argument(
+        "--perf-num-resets",
+        type=int,
+        default=3,
+        help="Number of environment resets benchmarked by the telemetry performance wrapper (default: 3).",
+    )
     return parser.parse_args(argv)
 
 
@@ -69,6 +94,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not tracker_ok:
         return 1
     if args.tracker_check_only:
+        return 0
+
+    perf_ok = _maybe_run_perf_tests(args)
+    if not perf_ok:
+        return 1
+    if args.perf_tests_only:
         return 0
 
     if args.dry_run:
@@ -102,7 +133,7 @@ def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
     command = [sys.executable, str(script_path), "--enable-tracker", "--tracker-smoke"]
     print("Running tracker progress check:", " ".join(command))
     try:
-        completed = subprocess.run(  # noqa: PL subprocess-run-check
+        completed = subprocess.run(
             command,
             cwd=REPO_ROOT,
             env=env,
@@ -150,6 +181,38 @@ def _build_example_env() -> dict[str, str]:
     env.setdefault("ROBOT_SF_FAST_DEMO", "1")
     env.setdefault("ROBOT_SF_EXAMPLES_MAX_STEPS", "64")
     return env
+
+
+def _maybe_run_perf_tests(args: argparse.Namespace) -> bool:
+    if args.dry_run or args.skip_perf_tests:
+        return True
+    try:
+        from scripts.telemetry.run_perf_tests import run_perf_tests
+    except ModuleNotFoundError as exc:  # pragma: no cover - guard rail for partial installs
+        print(f"Telemetry perf wrapper unavailable: {exc}")
+        return False
+
+    scenario = args.perf_scenario or DEFAULT_PERF_SCENARIO
+    num_resets = max(1, args.perf_num_resets)
+    print(
+        f"Running telemetry perf wrapper (scenario={scenario}, num_resets={num_resets})",
+    )
+    try:
+        exit_code, run_dir = run_perf_tests(
+            scenario=scenario,
+            output_hint=None,
+            num_resets=num_resets,
+        )
+    except Exception as exc:
+        print(f"Telemetry perf wrapper failed: {exc}")
+        return False
+    if run_dir is not None:
+        print(f"Telemetry perf wrapper artifacts: {run_dir}")
+    if exit_code != 0:
+        print(f"Telemetry perf wrapper exited with {exit_code}")
+        return False
+    print("Telemetry perf wrapper passed.")
+    return True
 
 
 def _merge_pythonpath(root: Path, existing: str | None) -> str:

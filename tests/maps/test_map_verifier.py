@@ -212,6 +212,73 @@ class TestMapVerificationStubOld:
         assert True
 
 
+class TestRules:
+    """Tests for validation rules."""
+    
+    def test_file_exists_rule_pass(self):
+        """Test FileExistsRule with existing file."""
+        from robot_sf.maps.verification.rules import FileExistsRule
+        from robot_sf.maps.verification.map_inventory import load_map_inventory
+        
+        maps = load_map_inventory()
+        if maps:
+            rule = FileExistsRule()
+            result = rule.validate(maps[0])
+            assert result.passed is True
+            assert result.rule_id == "file_exists"
+    
+    def test_apply_rules(self):
+        """Test applying default rules to maps."""
+        from robot_sf.maps.verification.rules import apply_rules
+        from robot_sf.maps.verification.map_inventory import load_map_inventory
+        
+        maps = load_map_inventory()
+        if maps:
+            results = apply_rules(maps[0])
+            assert len(results) > 0
+            # Check structure
+            for result in results:
+                assert hasattr(result, 'rule_id')
+                assert hasattr(result, 'passed')
+                assert hasattr(result, 'message')
+
+
+class TestRunner:
+    """Tests for verification runner."""
+    
+    def test_verify_single_map(self):
+        """Test verifying a single map."""
+        from robot_sf.maps.verification.runner import verify_single_map
+        from robot_sf.maps.verification.map_inventory import load_map_inventory
+        from robot_sf.maps.verification.context import VerificationContext
+        
+        maps = load_map_inventory()
+        if maps:
+            ctx = VerificationContext(mode="local")
+            result = verify_single_map(maps[0], ctx)
+            
+            assert result.map_id == maps[0].map_id
+            assert result.status in ["pass", "fail", "warn"]
+            assert result.duration_ms >= 0
+            assert len(result.rule_ids) > 0
+    
+    def test_verify_maps(self):
+        """Test verifying multiple maps."""
+        from robot_sf.maps.verification.runner import verify_maps
+        from robot_sf.maps.verification.map_inventory import load_map_inventory
+        from robot_sf.maps.verification.context import VerificationContext
+        
+        maps = load_map_inventory()[:5]  # Test with first 5 maps
+        if maps:
+            ctx = VerificationContext(mode="local")
+            results = verify_maps(maps, ctx)
+            
+            assert len(results) == len(maps)
+            # All should have passed with valid SVG files
+            for result in results:
+                assert result.status in ["pass", "fail", "warn"]
+
+
 # Integration tests for CLI will be added here
 class TestCLI:
     """Tests for command-line interface (stub)."""

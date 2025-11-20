@@ -25,6 +25,10 @@ from pathlib import Path
 
 from loguru import logger
 
+from robot_sf.maps.verification.context import VerificationContext
+from robot_sf.maps.verification.scope_resolver import resolve_scope
+from robot_sf.maps.verification.runner import verify_maps
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -96,17 +100,57 @@ def main() -> int:
     logger.info("Map verification starting")
     logger.info(f"Scope: {args.scope}, Mode: {args.mode}")
     
-    # TODO: Implement verification logic
-    # This is a placeholder implementation
-    logger.warning("Verification logic not yet implemented")
-    logger.info("Map verification would execute here with the following configuration:")
-    logger.info(f"  - Scope: {args.scope}")
-    logger.info(f"  - Mode: {args.mode}")
-    logger.info(f"  - Output: {args.output or 'output/validation/map_verification.json'}")
-    logger.info(f"  - Seed: {args.seed or 'None (non-deterministic)'}")
-    logger.info(f"  - Fix mode: {args.fix}")
+    # Create verification context
+    output_path = args.output or Path("output/validation/map_verification.json")
+    context = VerificationContext(
+        mode=args.mode,
+        output_path=output_path,
+        fix_mode=args.fix,
+        seed=args.seed,
+    )
     
-    return 0
+    logger.info(f"Run ID: {context.run_id}, Git SHA: {context.git_sha[:8]}")
+    
+    # Resolve scope to get maps to verify
+    try:
+        maps = resolve_scope(args.scope)
+    except Exception as e:
+        logger.error(f"Failed to resolve scope: {e}")
+        return 1
+    
+    if not maps:
+        logger.warning("No maps found to verify")
+        return 0
+    
+    # Run verification
+    try:
+        results = verify_maps(maps, context)
+    except Exception as e:
+        logger.error(f"Verification failed: {e}")
+        return 1
+    
+    # Summarize results
+    passed = sum(1 for r in results if r.status == "pass")
+    failed = sum(1 for r in results if r.status == "fail")
+    warned = sum(1 for r in results if r.status == "warn")
+    
+    logger.info("=" * 60)
+    logger.info(f"VERIFICATION SUMMARY")
+    logger.info(f"  Total maps: {len(results)}")
+    logger.info(f"  Passed: {passed}")
+    logger.info(f"  Failed: {failed}")
+    logger.info(f"  Warned: {warned}")
+    logger.info("=" * 60)
+    
+    # In CI mode, fail if any maps failed
+    if context.is_ci_mode and failed > 0:
+        logger.error(f"CI mode: {failed} maps failed verification")
+        return 1
+    
+    # TODO: Write JSON manifest (Phase 5)
+    logger.info(f"Manifest output will be written to: {output_path}")
+    
+    return 0 if failed == 0 else 1
 
 
 if __name__ == "__main__":

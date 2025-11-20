@@ -54,6 +54,7 @@ def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "--status", choices=["pending", "running", "completed", "failed", "cancelled"]
     )
     parser.add_argument("--since", type=str, help="ISO timestamp filter (UTC)")
+    parser.add_argument("--scenario", type=str, help="Filter by scenario identifier")
     parser.add_argument(
         "--format",
         choices=("table", "json"),
@@ -224,6 +225,7 @@ def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
         limit=args.limit,
         status=args.status,
         since=since,
+        scenario=getattr(args, "scenario", None),
     )
     if args.format == "json":
         payload = [entry.to_dict() for entry in entries]

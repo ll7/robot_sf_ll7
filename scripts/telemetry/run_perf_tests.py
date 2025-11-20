@@ -52,25 +52,28 @@ def run_perf_tests(
         msg = f"Run tracker directory already exists for run_id={run_id}. Choose a new --output."
         raise RuntimeError(msg) from exc
 
+    scenario_path = Path(scenario) if scenario else None
+    scenario_config_path = scenario_path if scenario_path and scenario_path.exists() else None
     started_at = datetime.now(UTC)
     result = performance_smoke_test.run_performance_smoke_test(
         num_resets=num_resets,
         scenario=scenario,
         include_recommendations=True,
     )
+    scenario_label = result.scenario or scenario
 
     recommendations = list(result.recommendations)
     for index, recommendation in enumerate(recommendations):
         recommendation.evidence.setdefault("recommendation_index", index)
 
-    summary_path = _write_summary(writer.run_directory, run_id, scenario, result)
+    summary_path = _write_summary(writer.run_directory, run_id, scenario_label, result)
     perf_status = _map_test_status(result.statuses.get("overall", "FAIL"))
     recommendation_count = len(recommendations)
 
     summary = _build_manifest_summary(
         result,
         summary_path,
-        scenario,
+        scenario_label,
         num_resets,
         recommendation_count,
     )
@@ -79,8 +82,8 @@ def run_perf_tests(
         writer.append_recommendations(recommendations)
 
     perf_test = PerformanceTestResult(
-        test_id=scenario or PERF_STEP_ID,
-        matrix=scenario or "default",
+        test_id=scenario_label or PERF_STEP_ID,
+        matrix=scenario_label or "default",
         throughput_baseline=float(result.thresholds.get("reset_soft", 0.0)),
         throughput_measured=result.resets_per_sec,
         duration_seconds=result.total_time_sec,
@@ -96,6 +99,7 @@ def run_perf_tests(
         status=PipelineRunStatus.COMPLETED if result.exit_code == 0 else PipelineRunStatus.FAILED,
         enabled_steps=(PERF_STEP_ID,),
         artifact_dir=writer.run_directory,
+        scenario_config_path=scenario_config_path,
         summary=summary,
     )
     writer.append_run_record(record)
@@ -181,7 +185,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--scenario",
         type=str,
-        help="Optional scenario or matrix descriptor stored in the manifest",
+        help="Optional scenario config (YAML) applied to the perf smoke test",
     )
     parser.add_argument(
         "--output",

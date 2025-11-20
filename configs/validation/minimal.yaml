@@ -1,0 +1,10 @@
+# Minimal scenario matrix for telemetry performance smoke tests.
+# Keeps geometry simple and short to make perf checks quick and deterministic.
+scenarios:
+  - name: perf_minimal
+    map_file: "maps/svg_maps/debug_06.svg"
+    simulation_config:
+      max_episode_steps: 64
+      ped_density: 0.0
+    robot_config: {}
+    seeds: [1]

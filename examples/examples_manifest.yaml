@@ -351,3 +351,14 @@ examples:
     ci_reason: null
     doc_reference: docs/SIM_VIEW.md
     tags: [recording, maps]
+  - path: advanced/16_imitation_learning_pipeline.py
+    name: "16 Imitation Learning Pipeline"
+    summary: "End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
+      - configs/training/ppo_imitation/*.yaml
+    ci_enabled: false
+    ci_reason: "Long-running pipeline (30-60 min); requires extensive compute for full training cycles."
+    doc_reference: docs/imitation_learning_pipeline.md
+    tags: [training, imitation, ppo, behavioral-cloning]

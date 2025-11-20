@@ -1,0 +1,370 @@
+openapi: 3.1.0
+info:
+  title: PPO Expert Pipeline API
+  version: 0.1.0
+  description: |
+    Conceptual contract describing orchestration endpoints for managing expert PPO workflows,
+    trajectory datasets, and imitation-pretrained agents within the Robot SF research platform.
+servers:
+  - url: https://robot-sf.local/api
+paths:
+  /expert-policies:
+    post:
+      summary: Launch PPO expert training run
+      operationId: launchExpertPolicyTraining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpertTrainingRequest'
+      responses:
+        '202':
+          description: Training job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAcknowledgement'
+  /expert-policies/{policyId}:
+    get:
+      summary: Retrieve expert policy metadata and evaluation metrics
+      operationId: getExpertPolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        '200':
+          description: Expert policy details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpertPolicy'
+  /expert-policies/{policyId}/trajectories:
+    post:
+      summary: Collect trajectories using an approved expert policy
+      operationId: collectExpertTrajectories
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrajectoryCollectionRequest'
+      responses:
+        '202':
+          description: Trajectory collection job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAcknowledgement'
+  /trajectory-datasets/{datasetId}:
+    get:
+      summary: Fetch metadata and integrity report for a trajectory dataset
+      operationId: getTrajectoryDataset
+      parameters:
+        - $ref: '#/components/parameters/DatasetId'
+      responses:
+        '200':
+          description: Trajectory dataset metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrajectoryDataset'
+  /pretraining-runs:
+    post:
+      summary: Launch behavioural cloning pre-training followed by PPO fine-tuning
+      operationId: launchPretrainingRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PretrainingRequest'
+      responses:
+        '202':
+          description: Pre-training job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunAcknowledgement'
+  /comparison-reports/{runGroupId}:
+    get:
+      summary: Retrieve aggregated metrics comparing pre-trained PPO against baseline PPO
+      operationId: getComparisonReport
+      parameters:
+        - name: runGroupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Comparative metrics report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparisonReport'
+components:
+  parameters:
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema:
+        type: string
+    DatasetId:
+      name: datasetId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    ExpertTrainingRequest:
+      type: object
+      required:
+        - scenarioConfig
+        - seeds
+        - convergenceCriteria
+      properties:
+        scenarioConfig:
+          type: string
+          description: Path to unified scenario configuration file
+        seeds:
+          type: array
+          minItems: 3
+          items:
+            type: integer
+        convergenceCriteria:
+          type: object
+          required:
+            - successRate
+            - collisionRate
+          properties:
+            successRate:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+            collisionRate:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+            plateauWindow:
+              type: integer
+              description: Number of timesteps for moving-average stability check
+        notes:
+          type: string
+    RunAcknowledgement:
+      type: object
+      required:
+        - runId
+        - status
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+          enum: [accepted, rejected]
+        message:
+          type: string
+    ExpertPolicy:
+      type: object
+      required:
+        - policyId
+        - version
+        - seeds
+        - metrics
+        - checkpointPath
+        - validationState
+      properties:
+        policyId:
+          type: string
+        version:
+          type: string
+        seeds:
+          type: array
+          minItems: 3
+          items:
+            type: integer
+        scenarioProfile:
+          type: array
+          items:
+            type: string
+        metrics:
+          $ref: '#/components/schemas/MetricSummary'
+        checkpointPath:
+          type: string
+        configManifest:
+          type: string
+        validationState:
+          type: string
+          enum: [draft, approved, superseded]
+        createdAt:
+          type: string
+          format: date-time
+    TrajectoryCollectionRequest:
+      type: object
+      required:
+        - episodeBudget
+        - outputFormat
+      properties:
+        episodeBudget:
+          type: integer
+          minimum: 1
+        scenarioOverrides:
+          type: array
+          items:
+            type: string
+        outputFormat:
+          type: string
+          enum: [npz, jsonl_frames]
+        randomSeeds:
+          type: array
+          items:
+            type: integer
+        notes:
+          type: string
+    TrajectoryDataset:
+      type: object
+      required:
+        - datasetId
+        - sourcePolicyId
+        - episodeCount
+        - storagePath
+        - integrityReport
+        - qualityStatus
+      properties:
+        datasetId:
+          type: string
+        sourcePolicyId:
+          type: string
+        episodeCount:
+          type: integer
+          minimum: 0
+        storagePath:
+          type: string
+        format:
+          type: string
+          enum: [npz, jsonl_frames]
+        scenarioCoverage:
+          type: array
+          items:
+            type: object
+            required:
+              - scenarioId
+              - episodes
+            properties:
+              scenarioId:
+                type: string
+              episodes:
+                type: integer
+        integrityReport:
+          type: object
+        metadata:
+          type: object
+        qualityStatus:
+          type: string
+          enum: [draft, validated, quarantined]
+        createdAt:
+          type: string
+          format: date-time
+    PretrainingRequest:
+      type: object
+      required:
+        - datasetId
+        - seeds
+        - evaluationSchedule
+      properties:
+        datasetId:
+          type: string
+        seeds:
+          type: array
+          minItems: 3
+          items:
+            type: integer
+        evaluationSchedule:
+          type: object
+          required:
+            - frequencyEpisodes
+          properties:
+            frequencyEpisodes:
+              type: integer
+              minimum: 1
+            holdOutScenarios:
+              type: array
+              items:
+                type: string
+        trainingBudgetEpisodes:
+          type: integer
+        notes:
+          type: string
+    ComparisonReport:
+      type: object
+      required:
+        - runGroupId
+        - baselineRunId
+        - pretrainedRunId
+        - metrics
+      properties:
+        runGroupId:
+          type: string
+        baselineRunId:
+          type: string
+        pretrainedRunId:
+          type: string
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricComparison'
+    MetricSummary:
+      type: object
+      required:
+        - successRate
+        - collisionRate
+        - pathEfficiency
+        - comfortExposure
+        - snqi
+      properties:
+        successRate:
+          $ref: '#/components/schemas/MetricWithCI'
+        collisionRate:
+          $ref: '#/components/schemas/MetricWithCI'
+        pathEfficiency:
+          $ref: '#/components/schemas/MetricWithCI'
+        comfortExposure:
+          $ref: '#/components/schemas/MetricWithCI'
+        snqi:
+          $ref: '#/components/schemas/MetricWithCI'
+    MetricWithCI:
+      type: object
+      required:
+        - mean
+        - median
+        - p95
+      properties:
+        mean:
+          type: number
+        median:
+          type: number
+        p95:
+          type: number
+        ci95:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+    MetricComparison:
+      type: object
+      required:
+        - metricName
+        - baseline
+        - pretrained
+      properties:
+        metricName:
+          type: string
+        baseline:
+          $ref: '#/components/schemas/MetricWithCI'
+        pretrained:
+          $ref: '#/components/schemas/MetricWithCI'

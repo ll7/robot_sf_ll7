@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 _OVERRIDE_ENV = "ROBOT_SF_ARTIFACT_ROOT"
 _ARTIFACT_ROOT_NAME = "output"
+_RUN_TRACKER_CATEGORY = "run-tracker"
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,16 @@ DEFAULT_ARTIFACT_CATEGORIES: dict[str, ArtifactCategory] = {
         description="Short-lived scratch space for auxiliary tooling.",
         retention_hint="short-lived",
         producers=("misc tooling",),
+    ),
+    _RUN_TRACKER_CATEGORY: ArtifactCategory(
+        name=_RUN_TRACKER_CATEGORY,
+        relative_path=Path(_RUN_TRACKER_CATEGORY),
+        description="Run-tracking manifests, telemetry snapshots, and performance reports.",
+        retention_hint="keep-latest",
+        producers=(
+            "examples/advanced/16_imitation_learning_pipeline.py",
+            "scripts/tools/run_tracker_cli.py",
+        ),
     ),
 }
 
@@ -157,6 +168,23 @@ def ensure_canonical_tree(
     return target_root
 
 
+def ensure_run_tracker_tree(
+    run_id: str | None = None,
+    base_root: Path | None = None,
+) -> Path:
+    """Ensure the run-tracker directory exists and optionally create a child run folder."""
+
+    target_root = ensure_canonical_tree(root=base_root, categories=(_RUN_TRACKER_CATEGORY,))
+    tracker_category = get_artifact_category(_RUN_TRACKER_CATEGORY)
+    tracker_root = (target_root / tracker_category.relative_path).resolve()
+    tracker_root.mkdir(parents=True, exist_ok=True)
+    if run_id is None:
+        return tracker_root
+    run_dir = (tracker_root / run_id).resolve()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
 def find_legacy_artifact_paths(base_root: Path | None = None) -> list[Path]:
     """Return a list of legacy artifact paths that still exist under ``base_root``."""
 
@@ -210,3 +238,39 @@ def iter_artifact_categories() -> Iterable[ArtifactCategory]:
     """Iterate over known artifact categories."""
 
     return DEFAULT_ARTIFACT_CATEGORIES.values()
+
+
+def get_expert_policy_dir() -> Path:
+    """Return the directory that stores expert policy manifests and checkpoints."""
+
+    base = get_artifact_category_path("benchmarks") / "expert_policies"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def get_expert_policy_manifest_path(policy_id: str, extension: str = ".json") -> Path:
+    """Return the manifest path for a given expert policy identifier."""
+
+    return get_expert_policy_dir() / f"{policy_id}{extension}"
+
+
+def get_trajectory_dataset_dir() -> Path:
+    """Return the directory that stores curated trajectory datasets."""
+
+    base = get_artifact_category_path("benchmarks") / "expert_trajectories"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def get_trajectory_dataset_path(dataset_id: str, extension: str = ".npz") -> Path:
+    """Return the storage path for a trajectory dataset identifier."""
+
+    return get_trajectory_dataset_dir() / f"{dataset_id}{extension}"
+
+
+def get_imitation_report_dir() -> Path:
+    """Return the directory for comparative imitation reports."""
+
+    base = get_artifact_category_path("benchmarks") / "ppo_imitation"
+    base.mkdir(parents=True, exist_ok=True)
+    return base

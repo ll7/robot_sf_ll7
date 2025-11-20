@@ -2,6 +2,9 @@
 
 [← Back to Documentation Index](./README.md)
 
+Welcome to the Robot SF Development Guide! This document serves as the central reference for contributors working on the Robot SF codebase. It covers setup instructions, architectural overviews, coding standards, and best practices to ensure a smooth development experience.
+<!-- This document should be kept as short as possible to maintain clarity and ease of navigation. Whenever possible, link out to more detailed documents or external resources. Refacotr this document regularly to be as concise as possible. -->
+
 ## Setup
 
 ### Installation and setup
@@ -196,6 +199,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Avoid disabling linters, type checks, or tests unless absolutely necessary.
   - Whenever you have the chance, refactor to fix issues rather than suppressing them. Especially `# noqa: C901` (complexity) and `# type: ignore` (type hints).
 - Always document the purpose of documents at the top of the file. (e.g., Python files, README.md, design docs, issue folders)
+- Use American English.
 
 - Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
@@ -449,6 +453,7 @@ Quality gates to run locally before pushing:
 Shortcuts (optional shell):
 - Break down complex problems into smaller, manageable tasks
 - Research existing solutions and patterns before implementing new approaches
+- Use existing libraries and frameworks when possible to avoid reinventing the wheel
 - Consider the impact of changes on the entire system, not just the immediate problem
 - Document architectural decisions and trade-offs made during implementation
 - Think about edge cases, error handling, and potential failure modes
@@ -617,6 +622,7 @@ The CI pipeline includes integrated performance monitoring for system package in
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
 uv run python scripts/validation/run_examples_smoke.py --dry-run
+uv run python scripts/validation/run_examples_smoke.py --perf-tests-only
 uv run python scripts/validation/run_examples_smoke.py
 uv run python scripts/tools/check_artifact_root.py
 
@@ -645,8 +651,46 @@ Success criteria:
 
   1. **Validate catalog** – `uv run python scripts/validation/validate_examples_manifest.py` ensures the manifest enumerates every script and that docstrings stay aligned with summaries.
   2. **Review planned changes** – `uv run python scripts/validation/run_examples_smoke.py --dry-run` prints the `ci_enabled` set before executing pytest, making it easy to confirm archive decisions.
-  3. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
-  4. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
+  3. **Run tracker/perf gate** – `uv run python scripts/validation/run_examples_smoke.py --perf-tests-only --perf-num-resets 2` exercises the imitation pipeline tracker smoke plus telemetry perf wrapper without re-running the entire pytest suite.
+  4. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
+  5. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
+
+### Run tracker & history CLI
+
+- Enable the tracker with `--enable-tracker` on `examples/advanced/16_imitation_learning_pipeline.py`. A background guard now snapshots manifests roughly every five seconds and traps `SIGINT`/`SIGTERM`, so failed or cancelled runs emit a `failed` manifest entry automatically.
+- Inspect live progress with `status` or `watch`:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py status <run_id>
+  uv run python scripts/tools/run_tracker_cli.py watch <run_id> --interval 1.0
+  ```
+  Both commands read the latest manifest snapshot and show current step, elapsed time, ETA, and the last completed step.
+- Use `list` to review prior runs (defaults to the most recent 20). Helpful filters:
+  - `--status pending|running|completed|failed|cancelled`
+  - `--since 2025-01-15T00:00:00+00:00` (UTC ISO timestamps)
+  - `--format table|json` for human vs machine-readable output
+- `summary` (aliased as `show`) prints per-run breakdowns, with `--format text|json|markdown`. Markdown output intentionally mirrors the exported summaries so docs/changelogs can embed them verbatim.
+- `export` writes Markdown or JSON summaries directly to disk:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py export <run_id> \
+    --format markdown \
+    --output output/run-tracker/summaries/<run_id>.md
+  ```
+  Exports include per-step durations, artifact paths, and any failure context produced by the guard.
+- Mirror telemetry to TensorBoard when you need dashboards:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py enable-tensorboard <run_id> --logdir output/run-tracker/tb/<run_id>
+  uv run tensorboard --logdir output/run-tracker/tb
+  ```
+  The CLI replays `telemetry.jsonl` into SummaryWriter so you can inspect CPU/GPU trends without touching the canonical JSON artifacts.
+- Run the performance smoke wrapper straight from the CLI instead of calling scripts manually:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py perf-tests \
+    --scenario configs/validation/minimal.yaml \
+    --output output/run-tracker/perf-tests/latest \
+    --num-resets 5
+  ```
+  Results are persisted in `perf_test_results.json` with pass/soft-breach/fail classification plus any recommendations triggered by the telemetry rules.
+- Because the guard writes manifests on a timer and on signals, partial runs survive restarts—`list`/`show` will always have at most a five-second gap between what ran and what was recorded.
 
 ### Performance benchmarking (optional)
 ```bash
@@ -753,6 +797,38 @@ uv run python scripts/training_ppo.py
 uv run python scripts/hparam_opt.py
 uv run python scripts/evaluate.py
 ```
+
+### Imitation Learning Pipeline (PPO Pre-training)
+
+The project supports accelerating PPO training via behavioral cloning pre-training from expert trajectories. This enables sample-efficient training by warm-starting agents with expert demonstrations.
+
+**Quick Overview:** Expert PPO Training → Trajectory Collection → BC Pre-training → PPO Fine-tuning → Comparison Analysis
+
+**For complete documentation, see [Imitation Learning Pipeline Guide](./imitation_learning_pipeline.md)** which includes:
+- Detailed step-by-step workflow
+- Configuration file examples
+- Validation and debugging tools
+- Artifact locations and manifest tracking
+- Sample-efficiency metrics (target: ≤70% of baseline timesteps)
+- Troubleshooting and best practices
+
+**Quick Start:**
+```bash
+# End-to-end wrapper (recommended for new users)
+uv run python examples/advanced/16_imitation_learning_pipeline.py
+
+# Or run individual steps manually:
+uv run python scripts/training/train_expert_ppo.py --config configs/training/ppo_imitation/expert_ppo.yaml
+uv run python scripts/training/collect_expert_trajectories.py --dataset-id expert_v1 --policy-id ppo_expert_v1 --episodes 200
+uv run python scripts/training/pretrain_from_expert.py --config configs/training/ppo_imitation/bc_pretrain.yaml
+uv run python scripts/training/train_ppo_with_pretrained_policy.py --config configs/training/ppo_imitation/ppo_finetune.yaml
+```
+
+Set `--log-level DEBUG` if you need the full resolved-config dumps from the factory helpers (default is INFO to keep console noise down). Use `--backend <name>` to override the auto-selected simulator backend (defaults to the fastest available choice via `select_best_backend`). The end-to-end example auto-generates BC/ppo fine-tuning configs under `output/tmp/imitation_pipeline/`, so you only need to edit the YAML files when running the scripts manually.
+
+**Also see:**
+- End-to-end example: `examples/advanced/16_imitation_learning_pipeline.py`
+- Detailed workflows: `specs/001-ppo-imitation-pretrain/quickstart.md`
 
 ### Docker training (advanced)
 ```bash

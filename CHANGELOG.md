@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Run tracking & telemetry for the imitation pipeline (Feature 001-performance-tracking)
+  - Progress tracker with deterministic step ordinals, ETA smoothing, and manifest-backed step history
+  - JSONL manifests enriched with telemetry snapshots, rule-based recommendations, and perf-test results stored under `output/run-tracker/`
+  - CLI tooling (`scripts/tools/run_tracker_cli.py`) for status/watch/list/show/export/summary plus optional TensorBoard mirroring
+  - Performance smoke CLI (`scripts/telemetry/run_perf_tests.py`) that wraps the existing validation harness and records pass/soft-breach/fail statuses with remediation hints
+  - Documentation updates spanning quickstart, dev guide, and docs/README.md so teams can enable the tracker and interpret telemetry in CI or local runs
+  - CI guard step invoking `scripts/validation/run_examples_smoke.py --perf-tests-only` so the tracker smoke + telemetry perf wrapper fail fast before pytest
+- PPO Imitation Learning Pipeline (Feature 001)
+  - Expert PPO training workflow with convergence criteria and evaluation schedules
+  - Trajectory dataset collection and validation utilities
+  - Behavioral cloning (BC) pre-training from expert demonstrations
+  - PPO fine-tuning with warm-start from pre-trained policies
+  - Comparative metrics CLI for sample-efficiency analysis
+  - Playback and inspection tool for trajectory datasets
+  - Bootstrap confidence intervals for metric aggregation
+  - Complete artifact lineage tracking (expert → dataset → pre-trained → fine-tuned)
+  - Configuration dataclasses for all imitation workflows
+  - Integration tests for end-to-end pipeline validation
+  - Sample-efficiency target: ≤70% of baseline timesteps to convergence
+  - Documentation in `docs/dev_guide.md` and `specs/001-ppo-imitation-pretrain/quickstart.md`
+  - Default imitation configs for behavioral cloning and PPO fine-tuning (`configs/training/ppo_imitation/bc_pretrain.yaml`, `configs/training/ppo_imitation/ppo_finetune.yaml`)
 - Canonical artifact root enforcement and tooling (Feature 243)
   - Introduced `output/` hierarchy as single destination for coverage, benchmark, recording, wandb, and tmp artifacts
   - Added migration helper (`scripts/tools/migrate_artifacts.py`) and guard (`scripts/tools/check_artifact_root.py`) with console entry point and regression tests
@@ -23,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated example smoke harness (`scripts/validation/run_examples_smoke.py`, `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
 ### Changed
+- Expert PPO training and trajectory collection now honor scenario YAML entries, including map files, simulation overrides, and scenario identifiers, while publishing `scenario_coverage` metadata consistent with dataset validators.
 - **[BREAKING for internal imports]** Consolidated utility modules into single `robot_sf/common/` directory (#241)
   - Moved `robot_sf/util/types.py` → `robot_sf/common/types.py`
   - Moved `robot_sf/utils/seed_utils.py` → `robot_sf/common/seed.py` (renamed)
@@ -32,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved benchmark and plotting scripts into dedicated `examples/benchmarks/` and `examples/plotting/` tiers
   - Regenerated manifest-backed `examples/README.md` and refreshed docs (`README.md`, `docs/README.md`, `docs/benchmark*.md`, `docs/distribution_plots.md`) to reference new paths
   - Updated `examples/examples_manifest.yaml` metadata (tags, CI flags, summaries) and added quick links from docs
+- Imitation pipeline example now auto-selects simulator backends and generates run-specific BC/PPO configs under `output/tmp/imitation_pipeline/` to keep CLI invocations aligned with script requirements
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

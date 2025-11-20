@@ -137,8 +137,137 @@ def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | 
     return plot_histograms(mins, speeds, out_dir)
 
 
+def compute_sample_efficiency_delta(
+    baseline_timesteps: int,
+    pretrained_timesteps: int,
+) -> dict[str, float]:
+    """Compute sample-efficiency improvement metrics.
+
+    Returns:
+        Dictionary containing:
+        - ratio: pretrained/baseline timesteps (lower is better)
+        - reduction_timesteps: absolute timestep savings
+        - reduction_percentage: percentage reduction
+    """
+    if baseline_timesteps == 0:
+        return {
+            "ratio": 1.0,
+            "reduction_timesteps": 0,
+            "reduction_percentage": 0.0,
+        }
+
+    ratio = pretrained_timesteps / baseline_timesteps
+    reduction = baseline_timesteps - pretrained_timesteps
+    reduction_pct = 100.0 * (1.0 - ratio)
+
+    return {
+        "ratio": ratio,
+        "reduction_timesteps": reduction,
+        "reduction_percentage": reduction_pct,
+    }
+
+
+def bootstrap_metric_confidence(
+    values: Sequence[float],
+    *,
+    confidence: float = 0.95,
+    n_samples: int = 1000,
+    seed: int | None = None,
+) -> dict[str, float]:
+    """Compute bootstrap confidence intervals for metric aggregates.
+
+    Args:
+        values: Sequence of metric values
+        confidence: Confidence level (default 0.95 for 95% CI)
+        n_samples: Number of bootstrap resamples
+        seed: Optional random seed for reproducibility
+
+    Returns:
+        Dictionary with keys: mean, median, ci_low, ci_high
+    """
+    import numpy as np
+
+    if not values:
+        return {
+            "mean": 0.0,
+            "median": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+        }
+
+    arr = np.array(values)
+    rng = np.random.default_rng(seed)
+
+    # Bootstrap resampling
+    bootstrap_means = []
+    for _ in range(n_samples):
+        sample = rng.choice(arr, size=len(arr), replace=True)
+        bootstrap_means.append(float(np.mean(sample)))
+
+    # Compute percentiles for confidence interval
+    alpha = 1.0 - confidence
+    lower_percentile = 100 * (alpha / 2)
+    upper_percentile = 100 * (1 - alpha / 2)
+
+    ci_low = float(np.percentile(bootstrap_means, lower_percentile))
+    ci_high = float(np.percentile(bootstrap_means, upper_percentile))
+
+    return {
+        "mean": float(np.mean(arr)),
+        "median": float(np.median(arr)),
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+    }
+
+
+def aggregate_training_metrics_with_bootstrap(
+    records: Iterable[dict[str, Any]],
+    metric_keys: Sequence[str],
+    *,
+    confidence: float = 0.95,
+    n_samples: int = 1000,
+    seed: int | None = None,
+) -> dict[str, dict[str, float]]:
+    """Aggregate metrics from training records with bootstrap CIs.
+
+    Args:
+        records: Iterable of episode/metric records
+        metric_keys: List of metric paths to extract (e.g., "metrics.success_rate")
+        confidence: Bootstrap confidence level
+        n_samples: Number of bootstrap resamples
+        seed: Optional seed for reproducibility
+
+    Returns:
+        Dictionary mapping metric key to bootstrap summary dict
+    """
+    # Collect values for each metric
+    metric_values: dict[str, list[float]] = {key: [] for key in metric_keys}
+
+    for rec in records:
+        for key in metric_keys:
+            value = _get_nested(rec, key)
+            num_value = _safe_number(value)
+            if num_value is not None:
+                metric_values[key].append(num_value)
+
+    # Compute bootstrap summaries
+    results = {}
+    for key, values in metric_values.items():
+        results[key] = bootstrap_metric_confidence(
+            values,
+            confidence=confidence,
+            n_samples=n_samples,
+            seed=seed,
+        )
+
+    return results
+
+
 __all__ = [
+    "aggregate_training_metrics_with_bootstrap",
+    "bootstrap_metric_confidence",
     "collect_values",
+    "compute_sample_efficiency_delta",
     "plot_histograms",
     "summarize_to_plots",
 ]

@@ -622,6 +622,7 @@ The CI pipeline includes integrated performance monitoring for system package in
 ./scripts/validation/test_model_prediction.sh
 ./scripts/validation/test_complete_simulation.sh
 uv run python scripts/validation/run_examples_smoke.py --dry-run
+uv run python scripts/validation/run_examples_smoke.py --perf-tests-only
 uv run python scripts/validation/run_examples_smoke.py
 uv run python scripts/tools/check_artifact_root.py
 
@@ -650,8 +651,9 @@ Success criteria:
 
   1. **Validate catalog** – `uv run python scripts/validation/validate_examples_manifest.py` ensures the manifest enumerates every script and that docstrings stay aligned with summaries.
   2. **Review planned changes** – `uv run python scripts/validation/run_examples_smoke.py --dry-run` prints the `ci_enabled` set before executing pytest, making it easy to confirm archive decisions.
-  3. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
-  4. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
+  3. **Run tracker/perf gate** – `uv run python scripts/validation/run_examples_smoke.py --perf-tests-only --perf-num-resets 2` exercises the imitation pipeline tracker smoke plus telemetry perf wrapper without re-running the entire pytest suite.
+  4. **Execute smoke harness** – `uv run python scripts/validation/run_examples_smoke.py` runs all active examples headlessly; pytest fixtures already configure pygame for a dummy display.
+  5. **Archive responsibly** – whenever a script moves into `examples/_archived/`, update `examples/_archived/README.md`, set `ci_enabled: false` with a `ci_reason`, and point the module docstring at the maintained replacement.
 
 ### Run tracker & history CLI
 

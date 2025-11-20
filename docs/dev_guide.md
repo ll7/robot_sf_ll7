@@ -453,6 +453,7 @@ Quality gates to run locally before pushing:
 Shortcuts (optional shell):
 - Break down complex problems into smaller, manageable tasks
 - Research existing solutions and patterns before implementing new approaches
+- Use existing libraries and frameworks when possible to avoid reinventing the wheel
 - Consider the impact of changes on the entire system, not just the immediate problem
 - Document architectural decisions and trade-offs made during implementation
 - Think about edge cases, error handling, and potential failure modes

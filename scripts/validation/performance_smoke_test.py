@@ -32,6 +32,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.telemetry.models import (
@@ -74,12 +76,33 @@ class SmokeTestResult:
         return payload
 
 
-def measure_environment_performance(num_resets: int = 5) -> dict[str, float]:
-    """Measure environment reset performance (simplified test)."""
+def measure_environment_performance(
+    num_resets: int = 5,
+    scenario: str | None = None,
+) -> dict[str, float]:
+    """Measure environment reset performance (simplified test).
+
+    Args:
+        num_resets: Number of environment resets to benchmark
+        scenario: Optional path to scenario YAML file to configure the environment
+    """
 
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
     config = RobotSimulationConfig()
+
+    # Load scenario config if provided
+    if scenario:
+        scenario_path = Path(scenario)
+        if scenario_path.exists():
+            with scenario_path.open(encoding="utf-8") as f:
+                scenario_data = yaml.safe_load(f)
+                # Apply scenario parameters to config
+                if isinstance(scenario_data, dict):
+                    for key, value in scenario_data.items():
+                        if hasattr(config, key):
+                            setattr(config, key, value)
+
     env = make_robot_env(config=config, debug=False)
 
     total_resets = 0
@@ -163,7 +186,7 @@ def run_performance_smoke_test(
     )
     on_ci = on_ci if on_ci is not None else os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
     creation_time = measure_environment_creation()
-    perf_metrics = measure_environment_performance(num_resets)
+    perf_metrics = measure_environment_performance(num_resets, scenario=scenario)
     resets_per_sec = perf_metrics["resets_per_sec"]
 
     creation_soft_ok = creation_time <= creation_soft

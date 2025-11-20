@@ -115,3 +115,4 @@ Power users want live resource metrics (steps/sec, FPS, CPU/GPU/memory) and auto
 	- `list --limit 5` shows historical runs including the smoke entry.
 - Optional telemetry mirroring documented; TensorBoard adapter not exercised in this run (requires torch/tensorboardX).
 - Performance wrapper validated with `uv run python scripts/tools/run_tracker_cli.py perf-tests --scenario configs/validation/minimal.yaml --output output/run-tracker/perf-tests/latest --num-resets 3`, writing `perf_test_results.json` plus manifest lines under `output/run-tracker/perf-tests/latest/`.
+- CI harness validated with `uv run python scripts/validation/run_examples_smoke.py --perf-tests-only --perf-num-resets 1`, confirming tracker smoke + telemetry perf wrapper succeed via the new entry point that CI now calls.

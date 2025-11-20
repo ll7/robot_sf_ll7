@@ -86,10 +86,10 @@
 
 **Purpose**: Align docs/CI artifacts, changelog, and quickstart instructions once all stories are functional.
 
-- [ ] T030 Update `CHANGELOG.md` (Unreleased) with a summary of telemetry + run-tracking features.
-- [ ] T031 [P] Sync quickstart/docs with final CLI flags by revising `specs/001-performance-tracking/quickstart.md`, `docs/dev_guide.md`, and `docs/README.md`.
-- [ ] T032 Run quickstart validation end-to-end and capture artifact links in `specs/001-performance-tracking/spec.md` "Testing" notes.
-- [ ] T033 Wire tracker smoke/perf tests into CI by updating `scripts/validation/run_examples_smoke.py` and `.github/workflows/ci.yml` to call the new perf wrapper.
+- [X] T030 Update `CHANGELOG.md` (Unreleased) with a summary of telemetry + run-tracking features.
+- [X] T031 [P] Sync quickstart/docs with final CLI flags by revising `specs/001-performance-tracking/quickstart.md`, `docs/dev_guide.md`, and `docs/README.md`.
+- [X] T032 Run quickstart validation end-to-end and capture artifact links in `specs/001-performance-tracking/spec.md` "Testing" notes.
+- [X] T033 Wire tracker smoke/perf tests into CI by updating `scripts/validation/run_examples_smoke.py` and `.github/workflows/ci.yml` to call the new perf wrapper.
 
 ---
 

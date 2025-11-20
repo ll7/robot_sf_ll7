@@ -390,8 +390,10 @@ class MapDefinitionPool:
         Returns a random map definition from the pool.
     """
 
-    maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
-    """The directory where the **default** map files are located."""
+    maps_folder: str = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "maps", "metadata"
+    )
+    """The directory where the **default** map metadata JSON files are located (canonical location)."""
     map_defs: dict[str, MapDefinition] = field(default_factory=dict)
 
     def __post_init__(self):

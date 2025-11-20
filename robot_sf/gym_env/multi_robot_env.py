@@ -46,7 +46,10 @@ class MultiRobotEnv(MultiAgentEnv):
         self.sim_worker_pool: ThreadPool | None = None
         self.obs_worker_pool: ThreadPool | None = None
 
-        map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
+        # Use first available map from pool (backward compatible with single-map setups)
+        if not env_config.map_pool.map_defs:
+            raise ValueError("Map pool is empty! Cannot initialize environment.")
+        map_def = next(iter(env_config.map_pool.map_defs.values()))
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
 
         # Keep a reference to the per-agent spaces for later composition
@@ -175,8 +178,8 @@ class MultiRobotEnv(MultiAgentEnv):
         try:
             return self.single_action_space, self.single_observation_space
         except AttributeError:
-            # Fallback: compute from env_config
-            map_def = self.env_config.map_pool.map_defs["uni_campus_big"]
+            # Fallback: compute from env_config using first available map
+            map_def = next(iter(self.env_config.map_pool.map_defs.values()))
             action_space, observation_space, _ = init_spaces(self.env_config, map_def)
             return action_space, observation_space
 

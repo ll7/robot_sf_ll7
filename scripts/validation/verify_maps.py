@@ -106,21 +106,34 @@ def main():
     logger.info("Map verification starting")
     logger.info(f"Scope: {args.scope}, Mode: {args.mode}")
     
-    # TODO: Import and call verification runner
-    # from robot_sf.maps.verification.runner import verify_maps
-    # results = verify_maps(
-    #     scope=args.scope,
-    #     mode=args.mode,
-    #     output_path=args.output,
-    #     seed=args.seed,
-    #     fix=args.fix,
-    # )
+    # Import and call verification runner
+    from robot_sf.maps.verification.runner import verify_maps
     
-    logger.warning("Verification implementation not yet complete")
-    logger.info("Placeholder: would verify maps matching scope '{}'", args.scope)
+    try:
+        results = verify_maps(
+            scope=args.scope,
+            mode=args.mode,
+            output_path=args.output,
+            seed=args.seed,
+            fix=args.fix,
+        )
+        
+        # Determine exit code based on mode and results
+        if args.mode == "ci":
+            # CI mode: fail if any maps failed
+            if results.failed > 0:
+                logger.error(f"CI mode: {results.failed} map(s) failed validation")
+                sys.exit(1)
+            else:
+                logger.info("CI mode: All maps passed validation")
+                sys.exit(0)
+        else:
+            # Local mode: always exit 0 (informational)
+            sys.exit(0)
     
-    # Placeholder exit code
-    sys.exit(0)
+    except Exception as e:
+        logger.exception(f"Verification failed with exception: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

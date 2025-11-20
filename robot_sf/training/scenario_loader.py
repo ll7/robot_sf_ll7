@@ -94,6 +94,9 @@ def _apply_simulation_overrides(
     if "max_episode_steps" in overrides:
         steps = max(1, int(overrides["max_episode_steps"]))
         config.sim_config.sim_time_in_secs = steps * config.sim_config.time_per_step_in_secs
+    # Apply difficulty first so ped_density uses the correct index
+    if "difficulty" in overrides:
+        config.sim_config.difficulty = overrides["difficulty"]
     if "ped_density" in overrides:
         density = float(overrides["ped_density"])
         difficulty = min(
@@ -101,7 +104,7 @@ def _apply_simulation_overrides(
             len(config.sim_config.ped_density_by_difficulty) - 1,
         )
         config.sim_config.ped_density_by_difficulty[difficulty] = density
-    for attr in ("difficulty", "peds_speed_mult", "ped_radius", "goal_radius"):
+    for attr in ("peds_speed_mult", "ped_radius", "goal_radius"):
         if attr in overrides:
             setattr(config.sim_config, attr, overrides[attr])
 

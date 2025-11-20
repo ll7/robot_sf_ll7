@@ -122,3 +122,4 @@ As a tooling engineer, I want the verifier to emit a JSON manifest with per-map 
 ### Session 2025-11-20
 
 - Q: How should the verifier instantiate pedestrian-only maps? → A: Use the dedicated pedestrian factory when a map is tagged pedestrian-only, otherwise default to the robot factory.
+- Q: Should v1 support remote map bundles? → A: No; limit scope to local repository assets and treat remote bundles as future work.

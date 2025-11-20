@@ -13,12 +13,12 @@ It is everyones guide on how to use this repository effectively.
 - Source the environment before using python or uv `source .venv/bin/activate`.
 
 ## Recent Changes
+- 001-map-folder-merge: Added Python 3.11 (uv managed) + Standard library (`pathlib`, `json`, `shutil`), existing `robot_sf` modules (environment_factory, unified_config), logging via Loguru (no new deps)
 - 001-performance-tracking: Added Python 3.11 (uv-managed virtual environment) + `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo
 - 001-ppo-imitation-pretrain: Added Python 3.11 (uv-managed virtual environment) + Stable-Baselines3, imitation (HumanCompatibleAI), Gymnasium, Loguru, NumPy, PyTorch
 
-- 243-clean-output-dirs: Added Python 3.11 (uv-managed virtual environment) + Python standard library (`pathlib`, `json`, `shutil`), Loguru, pytest, uv CLI
 
 ## Active Technologies
-- Python 3.11 (uv-managed virtual environment) + `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo (001-performance-tracking)
-- Structured JSON/Markdown manifests in `output/` (respecting `ROBOT_SF_ARTIFACT_ROOT`), optional TensorBoard log directory (001-performance-tracking)
+- Python 3.11 (uv managed) + Standard library (`pathlib`, `json`, `shutil`), existing `robot_sf` modules (environment_factory, unified_config), logging via Loguru (no new deps) (001-map-folder-merge)
+- File system (SVG + JSON assets); no DB changes (001-map-folder-merge)
 

@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: Map Registry Internal API
+  version: 0.1.0
+  description: >-
+    Conceptual contract representing map registry operations. Implemented as Python
+    functions, not an actual HTTP service. This schema documents stable behaviors
+    for tooling and potential future service extraction.
+servers:
+  - url: http://internal.placeholder
+paths:
+  /maps:
+    get:
+      summary: List available map IDs
+      operationId: listMaps
+      responses:
+        '200':
+          description: Map IDs returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  map_ids:
+                    type: array
+                    items:
+                      type: string
+  /maps/{id}:
+    get:
+      summary: Retrieve map asset + metadata by ID
+      operationId: getMap
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Map record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  svg_path:
+                    type: string
+                  metadata:
+                    type: object
+        '404':
+          description: Unknown map ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  available_ids:
+                    type: array
+                    items:
+                      type: string
+components:
+  schemas:
+    MapRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        svg_path:
+          type: string
+        metadata:
+          type: object
+      required: [id, svg_path, metadata]

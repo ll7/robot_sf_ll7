@@ -673,6 +673,20 @@ Success criteria:
     --output output/run-tracker/summaries/<run_id>.md
   ```
   Exports include per-step durations, artifact paths, and any failure context produced by the guard.
+- Mirror telemetry to TensorBoard when you need dashboards:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py enable-tensorboard <run_id> --logdir output/run-tracker/tb/<run_id>
+  uv run tensorboard --logdir output/run-tracker/tb
+  ```
+  The CLI replays `telemetry.jsonl` into SummaryWriter so you can inspect CPU/GPU trends without touching the canonical JSON artifacts.
+- Run the performance smoke wrapper straight from the CLI instead of calling scripts manually:
+  ```bash
+  uv run python scripts/tools/run_tracker_cli.py perf-tests \
+    --scenario configs/validation/minimal.yaml \
+    --output output/run-tracker/perf-tests/latest \
+    --num-resets 5
+  ```
+  Results are persisted in `perf_test_results.json` with pass/soft-breach/fail classification plus any recommendations triggered by the telemetry rules.
 - Because the guard writes manifests on a timer and on signals, partial runs survive restarts—`list`/`show` will always have at most a five-second gap between what ran and what was recorded.
 
 ### Performance benchmarking (optional)

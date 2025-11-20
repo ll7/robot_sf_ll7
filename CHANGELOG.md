@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Run tracking & telemetry for the imitation pipeline (Feature 001-performance-tracking)
+  - Progress tracker with deterministic step ordinals, ETA smoothing, and manifest-backed step history
+  - JSONL manifests enriched with telemetry snapshots, rule-based recommendations, and perf-test results stored under `output/run-tracker/`
+  - CLI tooling (`scripts/tools/run_tracker_cli.py`) for status/watch/list/show/export/summary plus optional TensorBoard mirroring
+  - Performance smoke CLI (`scripts/telemetry/run_perf_tests.py`) that wraps the existing validation harness and records pass/soft-breach/fail statuses with remediation hints
+  - Documentation updates spanning quickstart, dev guide, and docs/README.md so teams can enable the tracker and interpret telemetry in CI or local runs
 - PPO Imitation Learning Pipeline (Feature 001)
   - Expert PPO training workflow with convergence criteria and evaluation schedules
   - Trajectory dataset collection and validation utilities

@@ -173,6 +173,11 @@ jobs:
             echo "Skipping full performance smoke test on PR branch"
           fi
 
+      - name: Telemetry tracker/perf smoke
+        run: |
+          echo "Running telemetry tracker smoke + perf wrapper"
+          uv run python scripts/validation/run_examples_smoke.py --perf-tests-only
+
       - name: Preflight for Tiny batch smoke
         run: |
           set -euo pipefail

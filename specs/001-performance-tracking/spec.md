@@ -105,3 +105,13 @@ Power users want live resource metrics (steps/sec, FPS, CPU/GPU/memory) and auto
 - **SC-002**: Run manifests persist for at least the most recent 20 executions without manual intervention, with zero data loss even if a run is aborted mid-step (verified via kill-test).
 - **SC-003**: Telemetry snapshots capture CPU and memory usage on 95% of supported hosts and add no more than 5% overhead to total runtime as measured by the new performance tests.
 - **SC-004**: Whenever throughput drops ≥25% below the documented baseline, the system surfaces at least one actionable recommendation and records it in the run summary; performance smoke tests fail fast (under 10 minutes) when regressions exceed that threshold.
+
+## Testing Notes (2025-11-20)
+
+- Tracker quickstart smoke executed via `uv run python examples/advanced/16_imitation_learning_pipeline.py --demo-mode --enable-tracker --tracker-output output/run-tracker/quickstart_demo --tracker-smoke`, producing manifests + telemetry under `output/run-tracker/quickstart_demo/`.
+- Verified CLI workflows:
+	- `status` and `watch` confirm per-step ETA/duration updates.
+	- `summary --format json` and `export --format markdown --output output/run-tracker/quickstart_demo/summary.md` capture telemetry aggregates, recommendations, and artifact links.
+	- `list --limit 5` shows historical runs including the smoke entry.
+- Optional telemetry mirroring documented; TensorBoard adapter not exercised in this run (requires torch/tensorboardX).
+- Performance wrapper validated with `uv run python scripts/tools/run_tracker_cli.py perf-tests --scenario configs/validation/minimal.yaml --output output/run-tracker/perf-tests/latest --num-resets 3`, writing `perf_test_results.json` plus manifest lines under `output/run-tracker/perf-tests/latest/`.

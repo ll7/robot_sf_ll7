@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Map folder consolidation and registry (Feature 001-map-folder-merge)
+  - Centralized map registry (`robot_sf/maps/registry.py`) for canonical map asset management
+  - Audit tool (`robot_sf/maps/audit.py`) for detecting stray assets and hard-coded references
+  - Canonical map hierarchy: SVG layouts in `maps/svg_maps/`, JSON metadata in `maps/metadata/`
+  - Registry functions: `build_registry()`, `list_ids()`, `get()`, `validate_map_id()`
+  - Clear error messages listing available map IDs when validation fails
+  - Comprehensive tests for map registry (`tests/test_maps_registry.py`)
+  - Backward compatibility: all existing map IDs preserved
+  - Quickstart guide for adding new maps in <5 minutes (`specs/001-map-folder-merge/quickstart.md`)
 - Run tracking & telemetry for the imitation pipeline (Feature 001-performance-tracking)
   - Progress tracker with deterministic step ordinals, ETA smoothing, and manifest-backed step history
   - JSONL manifests enriched with telemetry snapshots, rule-based recommendations, and perf-test results stored under `output/run-tracker/`
@@ -44,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automated example smoke harness (`scripts/validation/run_examples_smoke.py`, `tests/examples/test_examples_run.py`) wired into validation workflow (#245)
 
 ### Changed
+- **MapDefinitionPool now loads from canonical location** (Feature 001-map-folder-merge)
+  - Default `maps_folder` changed from `robot_sf/maps` to `maps/metadata/`
+  - Hard-coded map references replaced with dynamic first-map selection
+  - `multi_robot_env.py` and `empty_robot_env.py` now use `next(iter(map_defs.values()))` instead of `map_defs["uni_campus_big"]`
+  - Zero hard-coded map ID literals in environment classes
 - Expert PPO training and trajectory collection now honor scenario YAML entries, including map files, simulation overrides, and scenario identifiers, while publishing `scenario_coverage` metadata consistent with dataset validators.
 - **[BREAKING for internal imports]** Consolidated utility modules into single `robot_sf/common/` directory (#241)
   - Moved `robot_sf/util/types.py` → `robot_sf/common/types.py`

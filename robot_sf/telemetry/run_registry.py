@@ -55,15 +55,19 @@ class RunRegistry:
         run_dirs = [Path(item) for item in self.base_dir.iterdir() if item.is_dir()]
         if len(run_dirs) <= max_runs:
             return
-        run_dirs.sort(key=lambda item: item.stat().st_mtime)
+        # Order by recorded creation time in lock file; fallback to mtime
+        run_dirs.sort(key=_run_created_order_key)
         for doomed in run_dirs[:-max_runs]:
             shutil.rmtree(doomed, ignore_errors=True)
 
     def list_run_directories(self) -> list[Path]:
-        """Return currently materialized run directories (newest last)."""
+        """Return currently materialized run directories in chronological order.
+
+        Oldest first, newest last (stable across filesystems with coarse mtimes).
+        """
 
         run_dirs = [Path(item) for item in self.base_dir.iterdir() if item.is_dir()]
-        run_dirs.sort(key=lambda item: item.stat().st_mtime)
+        run_dirs.sort(key=_run_created_order_key)
         return run_dirs
 
 
@@ -71,3 +75,28 @@ def generate_run_id(prefix: str = "run") -> str:
     """Return a deterministic-by-prefix UUID-backed identifier."""
 
     return f"{prefix}-{uuid.uuid4().hex}"
+
+
+def _run_created_order_key(path: Path) -> tuple[float, str]:
+    """Return a sort key for run directories: (created_at_ts, name).
+
+    Prefer the ISO timestamp from the lock file; fallback to directory mtime.
+    """
+
+    lock_path = path / "run.lock"
+    if lock_path.is_file():
+        try:
+            data = json.loads(lock_path.read_text(encoding="utf-8"))
+            created = data.get("created_at")
+            if isinstance(created, str):
+                # Accept seconds precision; ignore tz errors by fromisoformat
+                dt = datetime.fromisoformat(created)
+                return (dt.timestamp(), path.name)
+        except (json.JSONDecodeError, OSError, ValueError):
+            pass
+    # Fallback: filesystem mtime (may be coarse), second key = name for stability
+    try:
+        ts = path.stat().st_mtime
+    except OSError:
+        ts = 0.0
+    return (ts, path.name)

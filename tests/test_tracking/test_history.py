@@ -47,6 +47,34 @@ def test_history_filters_runs(tmp_path: Path) -> None:
     assert len(alpha.steps) == 2
 
 
+def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> None:
+    config = RunTrackerConfig(artifact_root=tmp_path)
+    _copy_history_fixtures(config.run_tracker_root)
+
+    nested_dir = config.run_tracker_root / "perf-tests" / "latest"
+    nested_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = nested_dir / config.manifest_filename
+    manifest_record = {
+        "run_id": "perf-latest",
+        "status": "completed",
+        "created_at": "2025-02-01T00:00:00+00:00",
+        "completed_at": "2025-02-01T00:05:00+00:00",
+        "enabled_steps": ["performance_smoke_test"],
+        "artifact_dir": str(nested_dir),
+        "scenario_config_path": "configs/validation/minimal.yaml",
+        "summary": {"scenario_id": "perf_minimal"},
+        "steps": [],
+    }
+    manifest_path.write_text(json.dumps(manifest_record), encoding="utf-8")
+
+    entries = list_runs(config, limit=0)
+    run_ids = {entry.run_id for entry in entries}
+    assert "perf-latest" in run_ids
+
+    filtered = list_runs(config, scenario="perf_minimal")
+    assert [entry.run_id for entry in filtered] == ["perf-latest"]
+
+
 def test_failure_guard_marks_failed_steps(run_tracker_config: RunTrackerConfig) -> None:
     writer = ManifestWriter(run_tracker_config, run_id="guard-demo")
     tracker = ProgressTracker(

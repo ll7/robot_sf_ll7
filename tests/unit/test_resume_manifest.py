@@ -17,6 +17,7 @@ Invalidation conditions (each yields load_manifest -> None):
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import TYPE_CHECKING
 
@@ -63,8 +64,9 @@ def test_invalidate_on_mtime_change(tmp_path: Path):
     _write_jsonl(out, lines)
     save_manifest(out, ["sc1--0"], identity_hash="h1")
     # Touch the file without size change (rewrite same content but ensure mtime differs)
-    time.sleep(0.001)  # ensure mtime_ns delta on fast filesystems
-    _write_jsonl(out, lines)  # same size, updated mtime
+    time.sleep(0.01)  # buffer for coarse filesystems
+    _write_jsonl(out, lines)  # same size, updated mtime via rewrite
+    os.utime(out, None)  # explicitly bump mtime to guarantee stat change
     assert load_manifest(out, expected_identity_hash="h1") is None
 
 

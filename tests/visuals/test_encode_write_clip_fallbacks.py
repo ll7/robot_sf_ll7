@@ -51,6 +51,7 @@ class AlwaysFailClip(_BaseClip):
 )
 def test_write_clip_fallback_success(monkeypatch, tmp_path, clip_cls, expected_bytes):
     monkeypatch.setattr(encode_mod, "ImageSequenceClip", clip_cls)
+    monkeypatch.setattr(encode_mod, "moviepy_ready", lambda: True)
     frames = [np.zeros((2, 2, 3), dtype=np.uint8) for _ in range(2)]
     out = tmp_path / "out.mp4"
     res = encode_mod.encode_frames(
@@ -68,6 +69,7 @@ def test_write_clip_fallback_success(monkeypatch, tmp_path, clip_cls, expected_b
 def test_write_clip_all_fail(monkeypatch, tmp_path):
     # Force all attempts to raise, expecting failed note encode-error:RuntimeError
     monkeypatch.setattr(encode_mod, "ImageSequenceClip", AlwaysFailClip)
+    monkeypatch.setattr(encode_mod, "moviepy_ready", lambda: True)
     frames = [np.zeros((2, 2, 3), dtype=np.uint8) for _ in range(2)]
     out = tmp_path / "out.mp4"
     res = encode_mod.encode_frames(frames, out, sample_memory=False)

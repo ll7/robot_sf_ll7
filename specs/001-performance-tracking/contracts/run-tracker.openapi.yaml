@@ -1,0 +1,228 @@
+openapi: 3.0.3
+info:
+  title: Robot SF Run Tracker API
+  version: 0.1.0
+  description: >-
+    Contract for the telemetry/run-tracking service that records imitation-learning pipeline
+    executions, exposes historical manifests, and captures performance telemetry.
+servers:
+  - url: https://localhost/run-tracker
+    description: Placeholder; actual implementation is an in-process module/CLI.
+components:
+  schemas:
+    PipelineRun:
+      type: object
+      required:
+        - run_id
+        - created_at
+        - status
+        - enabled_steps
+        - artifact_dir
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        initiator:
+          type: string
+        scenario_config_path:
+          type: string
+        enabled_steps:
+          type: array
+          items:
+            type: string
+        artifact_dir:
+          type: string
+        summary:
+          type: object
+    StepExecution:
+      type: object
+      required: [step_id, order, status]
+      properties:
+        step_id: { type: string }
+        display_name: { type: string }
+        order: { type: integer, minimum: 1 }
+        status: { type: string, enum: [pending, running, completed, failed, skipped] }
+        started_at: { type: string, format: date-time, nullable: true }
+        ended_at: { type: string, format: date-time, nullable: true }
+        duration_seconds: { type: number, format: float, nullable: true }
+        eta_snapshot_seconds: { type: number, format: float, nullable: true }
+    TelemetrySnapshot:
+      type: object
+      required: [timestamp_ms]
+      properties:
+        timestamp_ms: { type: integer, format: int64 }
+        step_id: { type: string }
+        steps_per_sec: { type: number, format: float, nullable: true }
+        fps: { type: number, format: float, nullable: true }
+        cpu_percent_process: { type: number, format: float, nullable: true }
+        cpu_percent_system: { type: number, format: float, nullable: true }
+        memory_rss_mb: { type: number, format: float, nullable: true }
+        gpu_util_percent: { type: number, format: float, nullable: true }
+        gpu_mem_used_mb: { type: number, format: float, nullable: true }
+        notes: { type: string, nullable: true }
+    PerformanceRecommendation:
+      type: object
+      required: [trigger, severity, message, suggested_actions]
+      properties:
+        trigger: { type: string }
+        severity: { type: string, enum: [info, warning, critical] }
+        message: { type: string }
+        evidence: { type: object }
+        suggested_actions:
+          type: array
+          minItems: 1
+          items: { type: string }
+        timestamp_ms: { type: integer, format: int64 }
+    PerformanceTestResult:
+      type: object
+      required: [test_id, throughput_baseline, throughput_measured, status]
+      properties:
+        test_id: { type: string }
+        matrix: { type: string }
+        throughput_baseline: { type: number, format: float }
+        throughput_measured: { type: number, format: float }
+        duration_seconds: { type: number, format: float }
+        status: { type: string, enum: [passed, soft-breach, failed] }
+        recommendations_ref:
+          type: array
+          items: { type: integer }
+paths:
+  /runs:
+    get:
+      summary: List recent pipeline runs
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Recent runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineRun'
+  /runs/start:
+    post:
+      summary: Register the start of a pipeline run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [run_id, enabled_steps, initiator]
+              properties:
+                run_id: { type: string, format: uuid }
+                initiator: { type: string }
+                scenario_config_path: { type: string }
+                enabled_steps:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201': { description: Run registered, returns PipelineRun, content: { application/json: { schema: { $ref: '#/components/schemas/PipelineRun' } } } }
+  /runs/{runId}:
+    get:
+      summary: Fetch manifest for a single run
+      parameters:
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Pipeline run overview
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineRun' }
+    patch:
+      summary: Update overall run status/summary
+      parameters:
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                summary: { type: object }
+      responses:
+        '200': { description: Updated run }
+  /runs/{runId}/steps/{stepId}:
+    patch:
+      summary: Update a step execution entry
+      parameters:
+        - { in: path, name: runId, required: true, schema: { type: string } }
+        - { in: path, name: stepId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepExecution'
+      responses:
+        '200': { description: Step updated }
+  /runs/{runId}/telemetry:
+    post:
+      summary: Append telemetry snapshots
+      parameters:
+        - { in: path, name: runId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TelemetrySnapshot'
+      responses:
+        '202': { description: Telemetry accepted }
+  /runs/{runId}/recommendations:
+    post:
+      summary: Append recommendations
+      parameters:
+        - { in: path, name: runId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PerformanceRecommendation'
+      responses:
+        '202': { description: Recommendations accepted }
+  /runs/{runId}/perf-tests:
+    post:
+      summary: Record a performance smoke test result
+      parameters:
+        - { in: path, name: runId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerformanceTestResult'
+      responses:
+        '201': { description: Perf test recorded }

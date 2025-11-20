@@ -2,6 +2,8 @@
 
 > 2025-09-16 Under Development. See <https://github.com/ll7/robot_sf_ll7/issues>.
 
+<!-- This document is the first touchpoint for users and developers of the robot-sf project. Keep it very concise and focused on essential information. -->
+
 ## About
 
 This project provides a training environment for the simulation of a robot moving
@@ -23,13 +25,15 @@ map data from OpenStreetMap.
 - [Development and Intallation](#development-and-intallation)
   - [Prerequisites](#prerequisites)
   - [Quick Start](#quick-start)
+  - [Examples Catalog](#examples-catalog)
   - [Development Setup](#development-setup)
+  - [Artifact Outputs](#artifact-outputs)
   - [Alternative Installation Methods](#alternative-installation-methods)
     - [Manual dependency installation](#manual-dependency-installation)
     - [Docker Installation (Advanced)](#docker-installation-advanced)
   - [System Dependencies](#system-dependencies)
   - [Tests](#tests)
-    - [PySocialForce Tests](#pysocialforce-tests)
+    - [Unified Test Suite](#unified-test-suite)
     - [Run Linter / Tests](#run-linter--tests)
     - [GUI Tests](#gui-tests)
   - [5. Run Visual Debugging of Pre-Trained Demo Models](#5-run-visual-debugging-of-pre-trained-demo-models)

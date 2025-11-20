@@ -46,7 +46,7 @@ Foundational walkthroughs for first-time users.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [01 Basic Robot Rollout](./quickstart/01_basic_robot.py) | Run a basic Robot SF environment with a random policy. | None | quickstart | ✅ |
+| [01 Basic Robot Rollout](./quickstart/01_basic_robot.py) | Run a basic Robot SF environment with a random policy. | _None_ | quickstart | ✅ |
 | [02 Trained PPO Benchmark](./quickstart/02_trained_model.py) | Run the Robot SF benchmark with the pre-trained PPO baseline. | configs/baselines/example_matrix.yaml<br>configs/baselines/ppo.yaml | quickstart, benchmark | ✅ |
 | [03 Custom SVG Map](./quickstart/03_custom_map.py) | Load an SVG map into Robot SF and simulate random navigation. | maps/svg_maps/debug_06.svg | quickstart, maps | ✅ |
 
@@ -56,14 +56,14 @@ Feature-focused demos for developers exploring capabilities.
 
 | Example | Summary | Prerequisites | Tags | CI |
 | --- | --- | --- | --- | --- |
-| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | None | backend | ⚠️ Dummy backend currently lacks map metadata and fails under automation. |
-| [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | None | factory | ✅ |
+| [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | _None_ | backend | ⚠️ Dummy backend currently lacks map metadata and fails under automation. |
+| [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | _None_ | factory | ✅ |
 | [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
 | [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ⚠️ Needs optional extras and lengthy PPO rollout; exceeds smoke timeout. |
-| [05 Fast-pysf Speed Fix](./advanced/05_fast_pysf_speed_fix.py) | Inspect the fast-pysf pedestrian speed fix output. | None | analysis, fast-pysf | ✅ |
+| [05 Fast-pysf Speed Fix](./advanced/05_fast_pysf_speed_fix.py) | Inspect the fast-pysf pedestrian speed fix output. | _None_ | analysis, fast-pysf | ✅ |
 | [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model_ped/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ⚠️ Depends on external models (model/run_043, model_ped/ppo_ped_02.zip). |
-| [07 Single Pedestrian](./advanced/07_single_pedestrian.py) | Spawn and simulate single pedestrians with custom maps. | None | pedestrian | ✅ |
-| [08 Multi-Pedestrian](./advanced/08_multi_pedestrian.py) | Build a multi-pedestrian scenario using map definitions. | None | pedestrian | ✅ |
+| [07 Single Pedestrian](./advanced/07_single_pedestrian.py) | Spawn and simulate single pedestrians with custom maps. | _None_ | pedestrian | ✅ |
+| [08 Multi-Pedestrian](./advanced/08_multi_pedestrian.py) | Build a multi-pedestrian scenario using map definitions. | _None_ | pedestrian | ✅ |
 | [09 Defensive Policy](./advanced/09_defensive_policy.py) | Replay defensive PPO policy with observation adapters. | model/run_023 | policy, ppo | ⚠️ Requires offline PPO checkpoint (model/run_023). |
 | [10 Offensive Policy](./advanced/10_offensive_policy.py) | Replay offensive PPO policy in the robot environment. | model/run_043 | policy, ppo | ⚠️ Requires offline PPO checkpoint (model/run_043). |
 | [11 Ego Pedestrian Policy](./advanced/11_ego_pedestrian_policy.py) | Run ego pedestrian simulation with recording playback. | maps/svg_maps/narrow_corridor2.svg<br>model/run_043 | pedestrian, recording | ⚠️ Requires external PPO checkpoint and long recording playback. |
@@ -71,6 +71,7 @@ Feature-focused demos for developers exploring capabilities.
 | [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | None | maps, tooling | ✅ |
 | [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
+| [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
 
 ## Benchmarks
 

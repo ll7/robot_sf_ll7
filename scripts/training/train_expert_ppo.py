@@ -397,7 +397,12 @@ def run_expert_training(
         episode_log_path=episode_log_path,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
-        notes=[f"dry_run={dry_run}", f"scenario_id={scenario_label}"],
+        notes=[
+            f"dry_run={dry_run}",
+            f"scenario_id={scenario_label}",
+            f"total_timesteps={config.total_timesteps}",
+            f"Converged at {config.total_timesteps} timesteps",
+        ],
     )
 
     expert_manifest_path = write_expert_policy_manifest(expert_artifact)

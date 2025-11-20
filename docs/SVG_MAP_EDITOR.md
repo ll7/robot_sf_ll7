@@ -75,6 +75,43 @@ Colours used in the example map:
 
 The colours for the simulation can be found here: [sim_view.py](../robot_sf/render/sim_view.py)
 
+### Validating Your Map
+
+After creating or modifying a map, you can validate it using the map verification tool. This ensures your map is structurally sound and compatible with the simulation.
+
+#### Running the Verifier
+
+Validate a specific map:
+```bash
+python scripts/validation/verify_maps.py --scope your_map.svg --mode local
+```
+
+Validate all maps:
+```bash
+python scripts/validation/verify_maps.py --scope all --mode local
+```
+
+Validate with structured output:
+```bash
+python scripts/validation/verify_maps.py --scope all --output output/validation/map_verification.json
+```
+
+#### What Gets Checked
+
+The verifier performs the following checks:
+- **File Readability**: Ensures the SVG file exists and is accessible
+- **Valid SVG**: Validates XML/SVG syntax
+- **File Size**: Warns if map exceeds 5 MB (may impact performance)
+- **Layer Organization**: Recommends using Inkscape labels for better organization
+
+#### Interpreting Results
+
+- **✓ PASS**: All checks passed - map is ready to use
+- **✗ WARN**: Map works but has non-critical issues (e.g., missing labels)
+- **✗ FAIL**: Map has critical issues that must be fixed
+
+For detailed information about the verification workflow, see [specs/001-map-verification/quickstart.md](../specs/001-map-verification/quickstart.md).
+
 ### New Features
 
 If you want to implement new features: [svg_map_parser.py](../robot_sf/nav/svg_map_parser.py)

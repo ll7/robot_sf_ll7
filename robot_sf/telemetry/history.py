@@ -56,8 +56,17 @@ def list_runs(
     limit: int = 20,
     status: str | PipelineRunStatus | None = None,
     since: datetime | None = None,
+    scenario: str | None = None,
 ) -> list[RunHistoryEntry]:
-    """Return the most recent run entries honoring optional filters."""
+    """Return the most recent run entries honoring optional filters.
+
+    Args:
+        config: Run tracker configuration
+        limit: Maximum number of entries to return (0 for all)
+        status: Filter by run status
+        since: Filter runs created after this datetime
+        scenario: Filter by scenario identifier (matches record.scenario_id)
+    """
 
     desired_status = _normalize_status(status)
     entries: list[RunHistoryEntry] = []
@@ -78,6 +87,8 @@ def list_runs(
         if desired_status and entry.status is not desired_status:
             continue
         if since and entry.created_at and entry.created_at < since:
+            continue
+        if scenario and record.get("scenario_id") != scenario:
             continue
         entries.append(entry)
     entries.sort(key=_history_sort_key, reverse=True)
@@ -105,10 +116,23 @@ def load_run(config: RunTrackerConfig, run_hint: str) -> RunHistoryEntry:
 
 
 def _iter_run_directories(config: RunTrackerConfig) -> list[Path]:
+    """Recursively discover all run directories under the tracker root.
+
+    Scans both direct children and nested subdirectories (e.g., perf-tests/latest)
+    to ensure runs written with nested output hints are discoverable.
+    """
     root = config.run_tracker_root
     if not root.exists():
         return []
-    return [child for child in root.iterdir() if child.is_dir()]
+
+    directories = []
+    # Use rglob to recursively find all directories that contain manifest files
+    manifest_pattern = f"**/{config.manifest_filename}"
+    for manifest_path in root.glob(manifest_pattern):
+        run_dir = manifest_path.parent
+        directories.append(run_dir)
+
+    return directories
 
 
 def _history_sort_key(entry: RunHistoryEntry) -> tuple[datetime, str]:

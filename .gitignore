@@ -43,3 +43,4 @@ dist/
 .env
 .env.*
 !.env.example
+.vscode/mcp.json

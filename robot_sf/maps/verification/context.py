@@ -19,6 +19,7 @@ from typing import Literal
 
 class VerificationStatus(str, Enum):
     """Verification outcome status."""
+
     PASS = "pass"
     FAIL = "fail"
     WARN = "warn"
@@ -26,6 +27,7 @@ class VerificationStatus(str, Enum):
 
 class FactoryType(str, Enum):
     """Environment factory type used during instantiation."""
+
     ROBOT = "robot"
     PEDESTRIAN = "pedestrian"
 
@@ -33,7 +35,7 @@ class FactoryType(str, Enum):
 @dataclass
 class VerificationResult:
     """Structured outcome for a single map verification.
-    
+
     Attributes
     ----------
     map_id : str
@@ -51,6 +53,7 @@ class VerificationResult:
     timestamp : datetime
         When this verification completed
     """
+
     map_id: str
     status: VerificationStatus
     rule_ids: list[str]
@@ -58,13 +61,13 @@ class VerificationResult:
     factory_used: FactoryType
     message: str
     timestamp: datetime = field(default_factory=datetime.now)
-    
+
     def __post_init__(self):
         """Validate invariants from data-model.md."""
         # Ensure status aligns with rule_ids
         if self.status != VerificationStatus.PASS and not self.rule_ids:
             raise ValueError(f"Status {self.status} requires non-empty rule_ids")
-        
+
         # Ensure duration is positive
         if self.duration_ms <= 0:
             raise ValueError(f"duration_ms must be > 0, got {self.duration_ms}")
@@ -73,7 +76,7 @@ class VerificationResult:
 @dataclass
 class VerificationRunSummary:
     """Aggregated verification run metadata and results.
-    
+
     Attributes
     ----------
     run_id : str
@@ -99,6 +102,7 @@ class VerificationRunSummary:
     results : list[VerificationResult]
         Individual per-map results
     """
+
     run_id: str
     git_sha: str | None
     total_maps: int
@@ -110,7 +114,7 @@ class VerificationRunSummary:
     started_at: datetime
     finished_at: datetime | None = None
     results: list[VerificationResult] = field(default_factory=list)
-    
+
     def __post_init__(self):
         """Validate invariants from data-model.md."""
         # Ensure counts add up
@@ -119,7 +123,7 @@ class VerificationRunSummary:
                 f"passed ({self.passed}) + failed ({self.failed}) + warned ({self.warned}) "
                 f"!= total_maps ({self.total_maps})"
             )
-        
+
         # Ensure timestamps are monotonic
         if self.finished_at is not None and self.finished_at < self.started_at:
             raise ValueError("finished_at must be >= started_at")
@@ -128,7 +132,7 @@ class VerificationRunSummary:
 @dataclass
 class VerificationContext:
     """Runtime configuration for verification execution.
-    
+
     Attributes
     ----------
     mode : Literal["local", "ci"]
@@ -144,18 +148,19 @@ class VerificationContext:
     hard_timeout_s : float
         Hard timeout for entire run (seconds)
     """
+
     mode: Literal["local", "ci"]
     artifact_root: Path
     seed: int | None = None
     fix_enabled: bool = False
     soft_timeout_s: float = 20.0
     hard_timeout_s: float = 60.0
-    
+
     @property
     def is_ci_mode(self) -> bool:
         """Check if running in CI mode."""
         return self.mode == "ci"
-    
+
     def get_validation_output_dir(self) -> Path:
         """Get the validation artifact directory."""
         validation_dir = self.artifact_root / "validation"

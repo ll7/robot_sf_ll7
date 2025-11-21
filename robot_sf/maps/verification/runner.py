@@ -16,7 +16,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Literal
+from typing import Literal
 
 from loguru import logger
 
@@ -29,7 +29,7 @@ from robot_sf.maps.verification.context import (
     VerificationStatus,
 )
 from robot_sf.maps.verification.map_inventory import MapInventory, MapRecord
-from robot_sf.maps.verification.rules import apply_all_rules, RuleSeverity
+from robot_sf.maps.verification.rules import RuleSeverity, apply_all_rules
 from robot_sf.maps.verification.scope_resolver import ScopeResolver
 
 
@@ -38,14 +38,14 @@ def verify_single_map(
     context: VerificationContext,
 ) -> VerificationResult:
     """Verify a single map.
-    
+
     Parameters
     ----------
     map_record : MapRecord
         Map to verify
     context : VerificationContext
         Verification runtime context
-    
+
     Returns
     -------
     VerificationResult
@@ -53,10 +53,10 @@ def verify_single_map(
     """
     logger.info(f"Verifying map: {map_record.map_id}")
     start_time = time.perf_counter()
-    
+
     # Apply validation rules
     violations = apply_all_rules(map_record.file_path)
-    
+
     # Determine overall status
     if any(v.severity == RuleSeverity.ERROR for v in violations):
         status = VerificationStatus.FAIL
@@ -64,17 +64,17 @@ def verify_single_map(
         status = VerificationStatus.WARN
     else:
         status = VerificationStatus.PASS
-    
+
     # Extract rule IDs
     rule_ids = [v.rule_id for v in violations]
-    
+
     # Build message
     if status == VerificationStatus.PASS:
         message = "All checks passed"
     else:
         violation_msgs = [f"{v.rule_id}: {v.message}" for v in violations]
         message = "; ".join(violation_msgs)
-    
+
     # Attempt environment instantiation if rules passed
     factory_used = FactoryType.ROBOT
     if status == VerificationStatus.PASS:
@@ -84,11 +84,13 @@ def verify_single_map(
                 factory_used = FactoryType.PEDESTRIAN
             else:
                 factory_used = FactoryType.ROBOT
-            
+
             # TODO: Actually instantiate environment
             # For now, just log what we would do
-            logger.debug(f"Would instantiate {factory_used.value} environment for {map_record.map_id}")
-            
+            logger.debug(
+                f"Would instantiate {factory_used.value} environment for {map_record.map_id}"
+            )
+
             # Placeholder: successful instantiation
             # from robot_sf.gym_env.environment_factory import make_robot_env, make_pedestrian_env
             # if factory_used == FactoryType.ROBOT:
@@ -96,23 +98,23 @@ def verify_single_map(
             # else:
             #     env = make_pedestrian_env(...)
             # env.close()
-            
-        except Exception as e:
+
+        except Exception as e:  # noqa: BLE001 - environment instantiation may raise many implementation-specific errors
             logger.error(f"Environment instantiation failed for {map_record.map_id}: {e}")
             status = VerificationStatus.FAIL
             rule_ids.append("R999")
             message += f"; Environment instantiation failed: {e}"
-    
+
     # Calculate duration
     duration_ms = (time.perf_counter() - start_time) * 1000
-    
+
     # Check soft timeout
     if duration_ms > context.soft_timeout_s * 1000:
         logger.warning(
             f"Map {map_record.map_id} exceeded soft timeout: "
             f"{duration_ms:.0f}ms > {context.soft_timeout_s * 1000:.0f}ms"
         )
-    
+
     result = VerificationResult(
         map_id=map_record.map_id,
         status=status,
@@ -122,16 +124,14 @@ def verify_single_map(
         message=message,
         timestamp=datetime.now(),
     )
-    
+
     # Log result
     status_symbol = "✓" if status == VerificationStatus.PASS else "✗"
-    logger.info(
-        f"{status_symbol} {map_record.map_id}: {status.value} ({duration_ms:.0f}ms)"
-    )
-    
+    logger.info(f"{status_symbol} {map_record.map_id}: {status.value} ({duration_ms:.0f}ms)")
+
     if status != VerificationStatus.PASS:
         logger.warning(f"  {message}")
-    
+
     return result
 
 
@@ -143,7 +143,7 @@ def verify_maps(
     fix: bool = False,
 ) -> VerificationRunSummary:
     """Main verification orchestrator.
-    
+
     Parameters
     ----------
     scope : str
@@ -156,7 +156,7 @@ def verify_maps(
         Random seed for deterministic environment instantiation
     fix : bool
         Whether to attempt automatic remediation
-    
+
     Returns
     -------
     VerificationRunSummary
@@ -170,21 +170,21 @@ def verify_maps(
         seed=seed,
         fix_enabled=fix,
     )
-    
+
     # Generate run ID
     run_id = f"map_verification_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-    
+
     logger.info("=" * 60)
     logger.info(f"Map Verification Run: {run_id}")
     logger.info(f"Mode: {mode}, Scope: {scope}")
     logger.info("=" * 60)
-    
+
     started_at = datetime.now()
-    
+
     # Load inventory and resolve scope
     inventory = MapInventory()
     resolver = ScopeResolver(inventory)
-    
+
     try:
         maps_to_verify = resolver.resolve(scope)
     except ValueError as e:
@@ -203,7 +203,7 @@ def verify_maps(
             finished_at=datetime.now(),
             results=[],
         )
-    
+
     if not maps_to_verify:
         logger.warning("No maps to verify")
         return VerificationRunSummary(
@@ -219,29 +219,26 @@ def verify_maps(
             finished_at=datetime.now(),
             results=[],
         )
-    
+
     # Verify each map
-    results: List[VerificationResult] = []
+    results: list[VerificationResult] = []
     for map_record in maps_to_verify:
         result = verify_single_map(map_record, context)
         results.append(result)
-    
+
     # Aggregate results
     passed = sum(1 for r in results if r.status == VerificationStatus.PASS)
     failed = sum(1 for r in results if r.status == VerificationStatus.FAIL)
     warned = sum(1 for r in results if r.status == VerificationStatus.WARN)
-    
+
     # Find slow maps
-    slow_maps = [
-        r.map_id
-        for r in results
-        if r.duration_ms > context.soft_timeout_s * 1000
-    ]
-    
+    slow_maps = [r.map_id for r in results if r.duration_ms > context.soft_timeout_s * 1000]
+
     # Get git SHA if available
     git_sha = None
     try:
         import subprocess
+
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             capture_output=True,
@@ -249,11 +246,11 @@ def verify_maps(
             check=True,
         )
         git_sha = result.stdout.strip()
-    except Exception:
+    except Exception:  # noqa: BLE001 - git may be unavailable (shallow clone or no repo)
         pass
-    
+
     finished_at = datetime.now()
-    
+
     # Create summary
     summary = VerificationRunSummary(
         run_id=run_id,
@@ -268,7 +265,7 @@ def verify_maps(
         finished_at=finished_at,
         results=results,
     )
-    
+
     # Log summary
     logger.info("=" * 60)
     logger.info("Verification Summary:")
@@ -279,14 +276,15 @@ def verify_maps(
     if summary.slow_maps:
         logger.warning(f"  Slow maps: {', '.join(summary.slow_maps)}")
     logger.info("=" * 60)
-    
+
     # Write manifest if requested
     if output_path:
         try:
             from robot_sf.maps.verification.manifest import write_manifest
+
             write_manifest(summary, output_path)
             logger.info(f"Manifest written to: {output_path}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - manifest write failure should not abort run
             logger.error(f"Failed to write manifest: {e}")
-    
+
     return summary

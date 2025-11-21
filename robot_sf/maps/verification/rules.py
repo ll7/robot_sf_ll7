@@ -11,10 +11,10 @@ Rule Categories
 - Instantiation: Runtime environment creation compatibility
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import List, Callable
 
 from loguru import logger
 
@@ -23,19 +23,21 @@ from robot_sf.maps.verification.context import VerificationStatus
 
 class RuleSeverity(str, Enum):
     """Rule violation severity levels."""
-    ERROR = "error"    # Must fix - causes FAIL
+
+    ERROR = "error"  # Must fix - causes FAIL
     WARNING = "warning"  # Should fix - causes WARN
-    INFO = "info"      # Informational only
+    INFO = "info"  # Informational only
 
 
 @dataclass
 class RuleViolation:
     """Represents a single rule violation."""
+
     rule_id: str
     severity: RuleSeverity
     message: str
     remediation: str
-    
+
     @property
     def status(self) -> VerificationStatus:
         """Map severity to verification status."""
@@ -50,20 +52,21 @@ class RuleViolation:
 @dataclass
 class ValidationRule:
     """Definition of a validation rule."""
+
     rule_id: str
     name: str
     description: str
     severity: RuleSeverity
-    check_func: Callable[[Path], List[RuleViolation]]
-    
-    def apply(self, map_path: Path) -> List[RuleViolation]:
+    check_func: Callable[[Path], list[RuleViolation]]
+
+    def apply(self, map_path: Path) -> list[RuleViolation]:
         """Apply this rule to a map.
-        
+
         Parameters
         ----------
         map_path : Path
             Path to the SVG map file
-        
+
         Returns
         -------
         list[RuleViolation]
@@ -71,7 +74,7 @@ class ValidationRule:
         """
         try:
             return self.check_func(map_path)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - broad catch converts arbitrary rule errors into violations
             logger.error(f"Rule {self.rule_id} failed: {e}")
             return [
                 RuleViolation(
@@ -85,10 +88,11 @@ class ValidationRule:
 
 # Rule check functions
 
-def check_file_readable(map_path: Path) -> List[RuleViolation]:
+
+def check_file_readable(map_path: Path) -> list[RuleViolation]:
     """Check that the SVG file is readable."""
     violations = []
-    
+
     if not map_path.exists():
         violations.append(
             RuleViolation(
@@ -107,16 +111,16 @@ def check_file_readable(map_path: Path) -> List[RuleViolation]:
                 remediation="Provide path to SVG file, not directory",
             )
         )
-    
+
     return violations
 
 
-def check_valid_svg(map_path: Path) -> List[RuleViolation]:
+def check_valid_svg(map_path: Path) -> list[RuleViolation]:
     """Check that the file is valid XML/SVG."""
     import xml.etree.ElementTree as ET
-    
+
     violations = []
-    
+
     try:
         ET.parse(map_path)
     except ET.ParseError as e:
@@ -128,7 +132,7 @@ def check_valid_svg(map_path: Path) -> List[RuleViolation]:
                 remediation="Fix XML syntax errors; validate with Inkscape or XML linter",
             )
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - broad catch to prevent verification crash on unexpected parse issues
         violations.append(
             RuleViolation(
                 rule_id="R002",
@@ -137,17 +141,17 @@ def check_valid_svg(map_path: Path) -> List[RuleViolation]:
                 remediation="Check file encoding and XML structure",
             )
         )
-    
+
     return violations
 
 
-def check_file_size(map_path: Path) -> List[RuleViolation]:
+def check_file_size(map_path: Path) -> list[RuleViolation]:
     """Check that file size is within reasonable limits."""
     violations = []
-    
+
     MAX_SIZE_MB = 5
     file_size_mb = map_path.stat().st_size / (1024 * 1024)
-    
+
     if file_size_mb > MAX_SIZE_MB:
         violations.append(
             RuleViolation(
@@ -157,28 +161,28 @@ def check_file_size(map_path: Path) -> List[RuleViolation]:
                 remediation="Optimize SVG, remove unused layers, or simplify geometry",
             )
         )
-    
+
     return violations
 
 
-def check_required_layers(map_path: Path) -> List[RuleViolation]:
+def check_required_layers(map_path: Path) -> list[RuleViolation]:
     """Check for presence of required SVG layers.
-    
+
     Note: This is a simplified check. Full implementation would parse
     SVG structure and validate layer naming/organization.
     """
     import xml.etree.ElementTree as ET
-    
+
     violations = []
-    
+
     try:
         tree = ET.parse(map_path)
         root = tree.getroot()
-        
+
         # Look for groups (layers) with Inkscape labels
-        ns = {'inkscape': 'http://www.inkscape.org/namespaces/inkscape'}
-        groups = root.findall('.//g[@inkscape:label]', ns)
-        
+        ns = {"inkscape": "http://www.inkscape.org/namespaces/inkscape"}
+        groups = root.findall(".//g[@inkscape:label]", ns)
+
         if not groups:
             violations.append(
                 RuleViolation(
@@ -188,17 +192,17 @@ def check_required_layers(map_path: Path) -> List[RuleViolation]:
                     remediation="Add layer labels in Inkscape for better organization",
                 )
             )
-    
-    except Exception as e:
+
+    except Exception as e:  # noqa: BLE001 - layer inspection errors are non-critical
         logger.debug(f"Could not check layers: {e}")
         # Don't fail on layer checks - they're informational
-    
+
     return violations
 
 
 # Rule registry
 
-VALIDATION_RULES: List[ValidationRule] = [
+VALIDATION_RULES: list[ValidationRule] = [
     ValidationRule(
         rule_id="R001",
         name="File Readable",
@@ -238,23 +242,23 @@ def get_rule_by_id(rule_id: str) -> ValidationRule | None:
     return None
 
 
-def apply_all_rules(map_path: Path) -> List[RuleViolation]:
+def apply_all_rules(map_path: Path) -> list[RuleViolation]:
     """Apply all validation rules to a map.
-    
+
     Parameters
     ----------
     map_path : Path
         Path to the SVG map file
-    
+
     Returns
     -------
     list[RuleViolation]
         All violations found across all rules
     """
     all_violations = []
-    
+
     for rule in VALIDATION_RULES:
         violations = rule.apply(map_path)
         all_violations.extend(violations)
-    
+
     return all_violations

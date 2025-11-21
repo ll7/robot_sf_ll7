@@ -21,7 +21,7 @@ from robot_sf.maps.verification.context import VerificationRunSummary
 
 def write_manifest(summary: VerificationRunSummary, output_path: Path) -> None:
     """Write verification summary to JSON manifest.
-    
+
     Parameters
     ----------
     summary : VerificationRunSummary
@@ -31,7 +31,7 @@ def write_manifest(summary: VerificationRunSummary, output_path: Path) -> None:
     """
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Convert summary to dict
     manifest_data = {
         "run_id": summary.run_id,
@@ -58,17 +58,17 @@ def write_manifest(summary: VerificationRunSummary, output_path: Path) -> None:
             for result in summary.results
         ],
     }
-    
+
     # Write JSON
     with open(output_path, "w") as f:
         json.dump(manifest_data, f, indent=2)
-    
+
     logger.debug(f"Wrote manifest to {output_path}")
 
 
 def write_jsonl_manifest(summary: VerificationRunSummary, output_path: Path) -> None:
     """Write verification summary to JSONL format (one result per line).
-    
+
     Parameters
     ----------
     summary : VerificationRunSummary
@@ -78,7 +78,7 @@ def write_jsonl_manifest(summary: VerificationRunSummary, output_path: Path) -> 
     """
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(output_path, "w") as f:
         # Write header with run metadata
         header = {
@@ -93,7 +93,7 @@ def write_jsonl_manifest(summary: VerificationRunSummary, output_path: Path) -> 
             "warned": summary.warned,
         }
         f.write(json.dumps(header) + "\n")
-        
+
         # Write each result
         for result in summary.results:
             result_data = {
@@ -108,5 +108,5 @@ def write_jsonl_manifest(summary: VerificationRunSummary, output_path: Path) -> 
                 "timestamp": result.timestamp.isoformat(),
             }
             f.write(json.dumps(result_data) + "\n")
-    
+
     logger.debug(f"Wrote JSONL manifest to {output_path}")

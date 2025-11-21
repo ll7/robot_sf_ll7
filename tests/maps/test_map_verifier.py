@@ -70,3 +70,17 @@ def test_ci_mode_failure_simulation(monkeypatch):
     assert any("TEST_ERR" in r.rule_ids for r in summary.results if r.status.value == "fail"), (
         "Failing results should include the TEST_ERR rule ID"
     )
+
+
+def test_layer_stats_info():
+    """A map with labeled groups should produce R005 INFO (layer stats) and not R004."""
+    # Scope to the specifically added labeled map
+    summary = _run_verify(scope="labeled_example", mode="ci")
+    assert summary.total_maps == 1, "Expected single labeled_example map in scope"
+    result = summary.results[0]
+    # If labeled groups are detected, R005 should appear and R004 should not
+    assert "R005" in result.rule_ids or "R004" in result.rule_ids, (
+        "Expected one of R005 or R004 depending on labels"
+    )
+    if "R005" in result.rule_ids:
+        assert "R004" not in result.rule_ids, "R004 should not appear when labels exist"

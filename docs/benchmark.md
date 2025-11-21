@@ -80,22 +80,65 @@ Schema loading is optimized with caching:
 
 ### Migration Notes
 
-- **Before**: Multiple duplicate schema files across the repository
-- **After**: Single canonical schema with runtime resolution
-- **Compatibility**: All existing code continues to work unchanged
-- **Prevention**: Git hooks block future duplication attempts
 
 ## Algorithm Grouping & Aggregation Diagnostics
 
 The classic benchmark aggregates metrics **per algorithm**. To guarantee separation:
 
-- Episode writers (classic orchestrator, CLI resume path, smoke scripts) **must** populate both the top-level `algo` field and the nested mirror `scenario_params["algo"]`. The orchestrator now enforces this contract and raises `robot_sf.benchmark.AggregationMetadataError` when the metadata is missing or malformed.
-- Aggregation utilities (`compute_aggregates`, `compute_aggregates_with_ci`) prefer the nested key, fall back to the top-level `algo`, and fail fast if both are absent. When an expected baseline never appears, aggregation continues but
   - emits a Loguru warning with `event="aggregation_missing_algorithms"`, and
   - annotates the JSON summary with `_meta.missing_algorithms`, `_meta.group_by`, and `_meta.effective_group_key` (`"scenario_params.algo | algo | scenario_id"`).
-- Episode injection logs expose observability hooks:
   - `event="episode_metadata_injection"` (nested value added) and
   - `event="episode_metadata_mismatch"` (nested value corrected to match top-level `algo`).
+
+## Map Verification (CI Quality Gate)
+
+The benchmark pipeline includes a Map Verification step that validates SVG assets before metrics aggregation. It guards against malformed or poorly organized maps that could skew navigation performance results.
+
+### Why It Matters
+Maps encode obstacles, corridors, and spawn semantics. Structural issues (invalid XML, unreadable files, oversized geometry, missing labeled layer groups) silently degrade benchmark comparability. Early detection preserves data integrity.
+
+### Running Verification
+CI invocation (excerpt):
+```yaml
+  - name: Map verification (CI mode)
+    run: uv run python scripts/validation/verify_maps.py --scope ci --mode ci --output output/benchmarks/map_verification_manifest.json
+```
+
+Local smoke test:
+```bash
+uv run python scripts/validation/verify_maps.py --scope ci --mode ci --output output/tmp/verify_manifest.json
+```
+
+### Rule Set
+| Rule | Severity | Description | Remediation |
+|------|----------|-------------|-------------|
+| R001 | ERROR | File must exist & be readable | Fix path/permissions |
+| R002 | ERROR | Must parse as valid XML/SVG | Correct XML syntax, encoding |
+| R003 | WARNING | File size > 5 MB | Simplify geometry, remove unused defs |
+| R004 | WARNING | No Inkscape-labeled groups found | Add `inkscape:label` to semantic `<g>` groups |
+| R005 | INFO | Layer stats (labeled vs total) | Ensure critical semantics have labels |
+
+### Manifest Structure (excerpt)
+```jsonc
+{
+  "run_id": "map_verification_20251120_220354_bb7cc5f6",
+  "mode": "ci",
+  "scope": "ci",
+  "results": [
+    {"map_id": "classic_corridor", "status": "warn", "rule_ids": ["R004"], "message": "No labeled layers found"},
+    {"map_id": "classic_overtaking", "status": "warn", "rule_ids": ["R004"], "message": "No labeled layers found"}
+  ],
+  "summary": {"total": 25, "passed": 0, "failed": 0, "warned": 25}
+}
+```
+
+### Usage Guidance
+1. ERROR: Block merge; fix immediately.
+2. WARNING: Schedule asset hygiene improvement; does not block benchmarks.
+3. INFO: Iterative refinement hints; label more semantic groups over time.
+
+### Extending Rules
+Add new checks in `robot_sf/maps/verification/rules.py` (follow existing pattern). Prefer INFO or WARNING unless correctness is compromised.
 
 ### Validation Checklist
 

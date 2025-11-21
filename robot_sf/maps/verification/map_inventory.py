@@ -76,8 +76,11 @@ class MapInventory:
         self._inventory: dict[str, MapRecord] = {}
         self._load_inventory()
 
-    def _load_inventory(self):
-        """Load all SVG maps from maps_root."""
+    def _load_inventory(self) -> None:
+        """Load all SVG maps from maps_root.
+
+        Populates internal inventory mapping of map_id -> MapRecord.
+        """
         if not self.maps_root.exists():
             logger.warning(f"Cannot load inventory: {self.maps_root} does not exist")
             return

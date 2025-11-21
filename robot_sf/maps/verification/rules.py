@@ -166,36 +166,48 @@ def check_file_size(map_path: Path) -> list[RuleViolation]:
 
 
 def check_required_layers(map_path: Path) -> list[RuleViolation]:
-    """Check for presence of required SVG layers.
+    """Inspect SVG for labeled layers and provide guidance.
 
-    Note: This is a simplified check. Full implementation would parse
-    SVG structure and validate layer naming/organization.
+    Enhancement:
+    - Adds layer statistics (labeled vs total groups).
+    - Emits INFO rule R005 when labels exist to surface improvement hints.
+    - Warns (R004) only when there are zero labeled groups.
     """
     import xml.etree.ElementTree as ET
 
-    violations = []
+    violations: list[RuleViolation] = []
 
     try:
         tree = ET.parse(map_path)
         root = tree.getroot()
 
-        # Look for groups (layers) with Inkscape labels
         ns = {"inkscape": "http://www.inkscape.org/namespaces/inkscape"}
-        groups = root.findall(".//g[@inkscape:label]", ns)
+        labeled_groups = root.findall(".//g[@inkscape:label]", ns)
+        all_groups = root.findall(".//g")
 
-        if not groups:
+        labeled_count = len(labeled_groups)
+        total_groups = len(all_groups)
+
+        if labeled_count == 0:
             violations.append(
                 RuleViolation(
                     rule_id="R004",
                     severity=RuleSeverity.WARNING,
-                    message="No labeled layers found (Inkscape labels)",
-                    remediation="Add layer labels in Inkscape for better organization",
+                    message="No labeled layers found (missing Inkscape 'label' attributes)",
+                    remediation="Open the SVG in Inkscape and assign descriptive layer labels (e.g. obstacles, spawns, waypoints) to <g> elements.",
                 )
             )
-
+        else:
+            violations.append(
+                RuleViolation(
+                    rule_id="R005",
+                    severity=RuleSeverity.INFO,
+                    message=f"Layer stats: {labeled_count} labeled / {total_groups} total <g> groups",
+                    remediation="Ensure critical semantics (obstacles, spawns, waypoints) have clear labels; split overly large generic groups.",
+                )
+            )
     except Exception as e:  # noqa: BLE001 - layer inspection errors are non-critical
         logger.debug(f"Could not check layers: {e}")
-        # Don't fail on layer checks - they're informational
 
     return violations
 
@@ -227,7 +239,7 @@ VALIDATION_RULES: list[ValidationRule] = [
     ValidationRule(
         rule_id="R004",
         name="Required Layers",
-        description="Map should have labeled layers for organization",
+        description="Warn when no Inkscape-labeled layer groups (<g @inkscape:label>) are present",
         severity=RuleSeverity.WARNING,
         check_func=check_required_layers,
     ),

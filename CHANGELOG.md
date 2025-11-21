@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Map Verification Workflow (Feature 001-map-verification)
+  - Single-command map validation tool (`scripts/validation/verify_maps.py`) for SVG map quality checks
+  - Rule-based validation engine checking file readability, SVG syntax, file size, and layer organization
+  - Scope filtering supporting 'all', 'ci', 'changed', specific filenames, or glob patterns
+  - Structured JSON/JSONL manifest output for tooling and dashboard integration
+  - CI mode with strict exit codes for automated quality gates
+  - Loguru-based diagnostics with human-readable console output
+  - Map inventory system with tag-based classification and filtering
+  - Verification results include timing, rule violations, and remediation hints
+  - Documentation in `docs/SVG_MAP_EDITOR.md` and `specs/001-map-verification/quickstart.md`
+  - Sample manifest artifacts under `output/validation/`
 - Run tracking & telemetry for the imitation pipeline (Feature 001-performance-tracking)
   - Progress tracker with deterministic step ordinals, ETA smoothing, and manifest-backed step history
   - JSONL manifests enriched with telemetry snapshots, rule-based recommendations, and perf-test results stored under `output/run-tracker/`
@@ -102,6 +113,14 @@ If your project imports from `robot_sf.util` or `robot_sf.utils`, update your im
 - **Architecture Decoupling (Feature 149)**: Introduced simulator facade and backend/sensor registries scaffolding behind the existing factory pattern. Default backend is "fast-pysf" with future backend selection via unified config.
 - Backend registry integrated into environment initialization: `BaseEnv` now resolves the simulator via a backend key (`env_config.backend`, default "fast-pysf") using `robot_sf.sim.registry`, with a safe fallback to legacy `init_simulators()` for full backward compatibility.
 - **fast-pysf Integration Improvements (Feature 148)**: Enhanced fast-pysf integration with comprehensive testing and quality tooling
+  - **Map Verification Enhancements (001-map-verification)**
+    - Added informational rule `R005` (layer statistics) emitted when Inkscape-labeled groups (`<g inkscape:label="…">`) are present
+    - Enhanced `R004` message and remediation guidance (descriptive labeling for obstacles/spawns/waypoints)
+    - Inserted Map Verification section into `docs/benchmark.md` (CI invocation, rule table, manifest structure, extension guidance)
+    - Added labeled example SVG (`maps/svg_maps/labeled_example.svg`) for demonstrating layer labeling and future semantic tagging
+    - Improved internal type hints (`_load_inventory` return type, expanded docstrings) for verification modules
+    - Test coverage extended (`test_layer_stats_info`) validating scope resolution and future R005 visibility
+
   - **Unified Test Suite**: Single `uv run pytest` command now executes both robot_sf (881 tests) and fast-pysf (12 tests) for total 893 tests
   - **Quality Tooling Extension**: Extended ruff linting, ty type checking, and coverage reporting to include fast-pysf subtree
   - **Type Annotations**: Added comprehensive type hints to fast-pysf public APIs (map_loader, forces, simulator, scene modules)

@@ -13,12 +13,12 @@ It is everyones guide on how to use this repository effectively.
 - Source the environment before using python or uv `source .venv/bin/activate`.
 
 ## Recent Changes
+- 001-map-verification: Added Python 3.11 (uv-managed virtual environment) + `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely)
 - 001-performance-tracking: Added Python 3.11 (uv-managed virtual environment) + `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo
 - 001-ppo-imitation-pretrain: Added Python 3.11 (uv-managed virtual environment) + Stable-Baselines3, imitation (HumanCompatibleAI), Gymnasium, Loguru, NumPy, PyTorch
 
-- 243-clean-output-dirs: Added Python 3.11 (uv-managed virtual environment) + Python standard library (`pathlib`, `json`, `shutil`), Loguru, pytest, uv CLI
 
 ## Active Technologies
-- Python 3.11 (uv-managed virtual environment) + `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo (001-performance-tracking)
-- Structured JSON/Markdown manifests in `output/` (respecting `ROBOT_SF_ARTIFACT_ROOT`), optional TensorBoard log directory (001-performance-tracking)
+- Python 3.11 (uv-managed virtual environment) + `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely) (001-map-verification)
+- File-based inputs/outputs (SVG maps under `maps/svg_maps/`, JSON/JSONL manifests under `output/validation/`) (001-map-verification)
 

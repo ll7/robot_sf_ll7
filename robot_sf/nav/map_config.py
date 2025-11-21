@@ -425,10 +425,20 @@ class MapDefinitionPool:
             with open(path, encoding="utf-8") as file:
                 return json.load(file)
 
-        # Get the list of map files
-        map_files = [os.path.join(maps_folder, f) for f in os.listdir(maps_folder)]
+        # Get only JSON files (skip directories and non-json entries)
+        map_files = [
+            os.path.join(maps_folder, f)
+            for f in os.listdir(maps_folder)
+            if f.lower().endswith(".json") and os.path.isfile(os.path.join(maps_folder, f))
+        ]
 
-        # Load the map definitions from the files
+        if not map_files:
+            logger.debug(
+                "No JSON map definition files found in '%s'; returning empty map_defs", maps_folder
+            )
+            return {}
+
+        # Load the map definitions from the JSON files
         map_defs = {
             os.path.splitext(os.path.basename(f))[0]: serialize_map(load_json(f)) for f in map_files
         }

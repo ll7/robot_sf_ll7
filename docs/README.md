@@ -101,6 +101,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Simulation & UI
 - **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
 - **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
+- **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
 
 ### Figures & Visualization
 - **[Trajectory Visualization](./trajectory_visualization.md)** - Generate trajectory plots

@@ -71,26 +71,26 @@ Following existing robot_sf structure:
 
 ### Implementation for User Story 1
 
-- [ ] T016 [P] [US1] Implement metric aggregation engine in `robot_sf/research/aggregation.py` (aggregate_metrics, bootstrap_ci)
-- [ ] T017 [P] [US1] Implement statistical analyzer in `robot_sf/research/statistics.py` (paired_t_test, cohen_d, evaluate_hypothesis)
-- [ ] T018 [P] [US1] Implement figure generator in `robot_sf/research/figures.py` (learning_curve, sample_efficiency_bar, distribution_plots)
-- [ ] T019 [P] [US1] Create report template renderer in `robot_sf/research/report_template.py` (MarkdownReportRenderer class)
-- [ ] T020 [US1] Implement orchestrator in `robot_sf/research/orchestrator.py` (ReportOrchestrator.generate_report method)
-- [ ] T021 [US1] Create CLI script at `scripts/research/generate_report.py` with argparse interface
-- [ ] T022 [US1] Add LaTeX export support in `robot_sf/research/report_template.py` (export_latex method)
-- [ ] T023 [US1] Implement JSON/CSV data export in `robot_sf/research/aggregation.py` (export_metrics_json, export_metrics_csv)
-- [ ] T024 [US1] Add auto-populated Abstract section logic in `robot_sf/research/report_template.py` (_render_abstract method)
-- [ ] T025 [US1] Implement figure caption generator in `robot_sf/research/figures.py` (_generate_caption method)
-- [ ] T026 [US1] Add reproducibility metadata integration in `robot_sf/research/orchestrator.py` (collect_metadata step)
-- [ ] T027 [US1] Create validation script at `scripts/tools/validate_report.py` (check schema, files, completeness)
+- [X] T016 [P] [US1] Implement metric aggregation engine in `robot_sf/research/aggregation.py` (aggregate_metrics, bootstrap_ci)
+- [X] T017 [P] [US1] Implement statistical analyzer in `robot_sf/research/statistics.py` (paired_t_test, cohen_d, evaluate_hypothesis)
+- [X] T018 [P] [US1] Implement figure generator in `robot_sf/research/figures.py` (learning_curve, sample_efficiency_bar, distribution_plots)
+- [X] T019 [P] [US1] Create report template renderer in `robot_sf/research/report_template.py` (MarkdownReportRenderer class)
+- [X] T020 [US1] Implement orchestrator in `robot_sf/research/orchestrator.py` (ReportOrchestrator.generate_report method)
+- [X] T021 [US1] Create CLI script at `scripts/research/generate_report.py` with argparse interface
+- [X] T022 [US1] Add LaTeX export support in `robot_sf/research/report_template.py` (export_latex method)
+- [X] T023 [US1] Implement JSON/CSV data export in `robot_sf/research/aggregation.py` (export_metrics_json, export_metrics_csv)
+- [X] T024 [US1] Add auto-populated Abstract section logic in `robot_sf/research/report_template.py` (_render_abstract method)
+- [X] T025 [US1] Implement figure caption generator in `robot_sf/research/figures.py` (_generate_caption method)
+- [X] T026 [US1] Add reproducibility metadata integration in `robot_sf/research/orchestrator.py` (collect_metadata step)
+- [X] T027 [US1] Create validation script at `scripts/tools/validate_report.py` (check schema, files, completeness)
 
 ### Tests for User Story 1
 
-- [ ] T028 [P] [US1] Unit test metric aggregation in `tests/research/test_aggregation.py` (test_aggregate_metrics, test_bootstrap_ci)
-- [ ] T029 [P] [US1] Unit test statistical analysis in `tests/research/test_statistics.py` (test_paired_t_test, test_cohen_d, test_hypothesis_eval)
-- [ ] T030 [P] [US1] Unit test figure generation in `tests/research/test_figures.py` (test_learning_curve, test_sample_efficiency)
-- [ ] T031 [US1] Integration test end-to-end report in `tests/research/test_integration_report.py` (test_generate_full_report)
-- [ ] T032 [US1] Smoke test CLI invocation in `tests/research/test_cli.py` (test_generate_report_cli)
+- [X] T028 [P] [US1] Unit test metric aggregation in `tests/research/test_aggregation.py` (test_aggregate_metrics, test_bootstrap_ci)
+- [X] T029 [P] [US1] Unit test statistical analysis in `tests/research/test_statistics.py` (test_paired_t_test, test_cohen_d, test_hypothesis_eval)
+- [X] T030 [P] [US1] Unit test figure generation in `tests/research/test_figures.py` (test_learning_curve, test_sample_efficiency)
+- [X] T031 [US1] Integration test end-to-end report in `tests/research/test_integration_report.py` (test_generate_full_report)
+- [X] T032 [US1] Smoke test CLI invocation in `tests/research/test_cli.py` (test_generate_report_cli)
 
 **Checkpoint**: User Story 1 complete - can generate research reports from pipeline runs
 

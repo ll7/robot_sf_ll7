@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://robot-sf.dev/specs/270-imitation-report/aggregated-metrics.schema.v1.json",
+  "title": "AggregatedMetrics",
+  "description": "Statistical summaries with bootstrap confidence intervals for multi-seed metrics",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.\\d+$"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/metricSummary"
+      }
+    }
+  },
+  "definitions": {
+    "metricSummary": {
+      "type": "object",
+      "required": ["metric_name", "condition", "mean", "median", "p95", "std", "sample_size"],
+      "properties": {
+        "metric_name": {
+          "type": "string",
+          "description": "Name of the metric (e.g., success_rate, timesteps_to_convergence)"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Experimental condition: baseline, pretrained, or variant_id"
+        },
+        "mean": {
+          "type": "number",
+          "description": "Arithmetic mean across seeds"
+        },
+        "median": {
+          "type": "number",
+          "description": "50th percentile"
+        },
+        "p95": {
+          "type": "number",
+          "description": "95th percentile"
+        },
+        "std": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Standard deviation"
+        },
+        "ci_low": {
+          "type": ["number", "null"],
+          "description": "Lower bound of bootstrap confidence interval"
+        },
+        "ci_high": {
+          "type": ["number", "null"],
+          "description": "Upper bound of bootstrap confidence interval"
+        },
+        "ci_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence level (e.g., 0.95 for 95%)"
+        },
+        "sample_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of seeds contributing to aggregation"
+        },
+        "effect_size": {
+          "type": ["number", "null"],
+          "description": "Cohen's d when comparing two conditions"
+        }
+      }
+    }
+  }
+}

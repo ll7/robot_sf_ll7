@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://robot-sf.dev/specs/270-imitation-report/hypothesis-result.schema.v1.json",
+  "title": "HypothesisResult",
+  "description": "Hypothesis evaluation outcome with measured improvement and decision",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "hypotheses"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.\\d+$"
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/hypothesisDefinition"
+      }
+    }
+  },
+  "definitions": {
+    "hypothesisDefinition": {
+      "type": "object",
+      "required": ["description", "metric", "threshold_value", "threshold_type", "decision"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Full hypothesis statement"
+        },
+        "metric": {
+          "type": "string",
+          "description": "Target metric name (e.g., timesteps_to_convergence)"
+        },
+        "threshold_value": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Required improvement percentage or absolute value"
+        },
+        "threshold_type": {
+          "type": "string",
+          "enum": ["min", "max"],
+          "description": "Direction of improvement (min for reduction, max for increase)"
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "INCOMPLETE"],
+          "description": "Evaluation outcome"
+        },
+        "measured_value": {
+          "type": ["number", "null"],
+          "description": "Actual improvement observed (percentage or absolute)"
+        },
+        "ci_low": {
+          "type": ["number", "null"],
+          "description": "Confidence interval lower bound for measured value"
+        },
+        "ci_high": {
+          "type": ["number", "null"],
+          "description": "Confidence interval upper bound for measured value"
+        },
+        "p_value": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Statistical significance p-value from paired t-test"
+        },
+        "effect_size": {
+          "type": ["number", "null"],
+          "description": "Cohen's d effect size"
+        },
+        "note": {
+          "type": "string",
+          "description": "Explanatory text (required for INCOMPLETE status)"
+        }
+      }
+    }
+  }
+}

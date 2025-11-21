@@ -3,7 +3,7 @@ Statistical analyzer for research reporting (User Story 1)
 Implements: paired_t_test, cohen_d, evaluate_hypothesis
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -20,7 +20,7 @@ def paired_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
     return {"t_stat": float(t_stat), "p_value": float(p_value), "n": len(x)}
 
 
-def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
+def cohen_d(x: list[float], y: list[float]) -> float | None:
     """
     Compute Cohen's d effect size for paired samples.
     """

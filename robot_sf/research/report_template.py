@@ -5,7 +5,7 @@ Implements: MarkdownReportRenderer, export_latex, _render_abstract
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class MarkdownReportRenderer:
@@ -182,7 +182,7 @@ class MarkdownReportRenderer:
 
         return section + "\n"
 
-    def export_latex(self, markdown_path: Path) -> Optional[Path]:
+    def export_latex(self, markdown_path: Path) -> Path | None:
         """
         Export Markdown report to LaTeX format.
         Returns path to .tex file, or None if conversion fails.

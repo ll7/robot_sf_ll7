@@ -9,7 +9,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -126,10 +126,10 @@ class ReportOrchestrator:
         metric_records: list[dict[str, Any]],
         run_id: str,
         seeds: list[int],
-        baseline_timesteps: Optional[list[float]] = None,
-        pretrained_timesteps: Optional[list[float]] = None,
-        baseline_rewards: Optional[list[list[float]]] = None,
-        pretrained_rewards: Optional[list[list[float]]] = None,
+        baseline_timesteps: list[float] | None = None,
+        pretrained_timesteps: list[float] | None = None,
+        baseline_rewards: list[list[float]] | None = None,
+        pretrained_rewards: list[list[float]] | None = None,
         threshold: float = 40.0,
     ) -> Path:
         """

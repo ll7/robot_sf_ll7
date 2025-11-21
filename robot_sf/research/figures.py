@@ -4,7 +4,7 @@ Implements: learning_curve, sample_efficiency_bar, distribution_plots, _generate
 """
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -55,7 +55,7 @@ def plot_learning_curve(
     rewards_baseline: list[list[float]],
     rewards_pretrained: list[list[float]],
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generate learning curve plot comparing baseline vs pretrained.
@@ -118,7 +118,7 @@ def plot_sample_efficiency(
     baseline_timesteps: list[float],
     pretrained_timesteps: list[float],
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generate bar chart comparing sample efficiency (timesteps to convergence).
@@ -162,7 +162,7 @@ def plot_distributions(
     pretrained_values: list[float],
     metric_name: str,
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generate distribution comparison plot (histograms/violin) for a metric.

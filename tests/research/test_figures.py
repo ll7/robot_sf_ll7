@@ -18,7 +18,7 @@ def output_dir(tmp_path):
 def test_configure_matplotlib_backend():
     """Test matplotlib backend configuration."""
     configure_matplotlib_backend()
-    assert matplotlib.get_backend() == "Agg"
+    assert matplotlib.get_backend().lower() == "agg"
 
 
 def test_save_figure_dual_export(output_dir):

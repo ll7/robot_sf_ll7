@@ -10,6 +10,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
+from robot_sf.research.aggregation import bootstrap_ci
+
 
 def configure_matplotlib_backend(headless: bool = False) -> None:
     """Configure matplotlib backend for headless or interactive rendering."""
@@ -130,8 +132,6 @@ def plot_sample_efficiency(
     mean_pretrained = np.mean(pretrained_timesteps)
 
     # Bootstrap CI
-    from robot_sf.research.aggregation import bootstrap_ci
-
     ci_low_b, ci_high_b = bootstrap_ci(baseline_timesteps) or (mean_baseline, mean_baseline)
     ci_low_p, ci_high_p = bootstrap_ci(pretrained_timesteps) or (mean_pretrained, mean_pretrained)
 

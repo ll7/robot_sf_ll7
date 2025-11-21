@@ -11,7 +11,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import psutil
 from loguru import logger
+
+try:
+    import matplotlib
+except ImportError:
+    matplotlib = None  # type: ignore[assignment]
+
+try:
+    import numpy
+except ImportError:
+    numpy = None  # type: ignore[assignment]
+
+try:
+    import pynvml  # type: ignore[import-not-found]
+except ImportError:
+    pynvml = None  # type: ignore[assignment]
+
+try:
+    import scipy
+except ImportError:
+    scipy = None  # type: ignore[assignment]
 
 from robot_sf.research.aggregation import (
     aggregate_metrics,
@@ -69,29 +90,16 @@ class ReportOrchestrator:
 
         # Key packages (subset for brevity)
         key_packages = {}
-        try:
-            import numpy
-
+        if numpy is not None:
             key_packages["numpy"] = numpy.__version__
-        except ImportError:
-            pass
-        try:
-            import scipy
-
+        if scipy is not None:
             key_packages["scipy"] = scipy.__version__
-        except ImportError:
-            pass
-        try:
-            import matplotlib
-
+        if matplotlib is not None:
             key_packages["matplotlib"] = matplotlib.__version__
-        except ImportError:
-            pass
 
         metadata["key_packages"] = key_packages
 
         # Hardware
-        import psutil
 
         hardware = {
             "cpu_model": platform.processor() or "Unknown",
@@ -102,18 +110,17 @@ class ReportOrchestrator:
         }
 
         # Try to detect GPU (optional)
-        try:
-            import pynvml  # type: ignore  # Optional dependency
-
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            hardware["gpu_model"] = pynvml.nvmlDeviceGetName(handle)
-            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            hardware["gpu_memory_gb"] = int(mem_info.total / (1024**3))
-            pynvml.nvmlShutdown()
-        except (ImportError, RuntimeError):
-            # pynvml not installed or GPU not available
-            pass
+        if pynvml is not None:
+            try:
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                hardware["gpu_model"] = pynvml.nvmlDeviceGetName(handle)
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                hardware["gpu_memory_gb"] = int(mem_info.total / (1024**3))
+                pynvml.nvmlShutdown()
+            except RuntimeError:
+                # GPU not available
+                pass
 
         metadata["hardware"] = hardware
         metadata["timestamp"] = datetime.now().isoformat()

@@ -7,6 +7,7 @@ Usage: scripts/research/generate_report.py --tracker-run <run_id> --experiment-n
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -104,8 +105,6 @@ def main() -> None:
     if args.output:
         output_dir = Path(args.output)
     else:
-        from datetime import datetime
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_name = args.experiment_name.lower().replace(" ", "_")
         output_dir = Path("output/research_reports") / f"{timestamp}_{safe_name}"

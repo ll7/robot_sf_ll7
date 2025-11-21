@@ -3,6 +3,7 @@ Metric aggregation engine for research reporting (User Story 1)
 Implements: aggregate_metrics, bootstrap_ci, export_metrics_json, export_metrics_csv
 """
 
+import json
 from typing import Any
 
 import numpy as np
@@ -78,8 +79,6 @@ def aggregate_metrics(
 
 def export_metrics_json(aggregated_metrics: list[dict[str, Any]], path: str) -> None:
     """Export aggregated metrics to JSON file."""
-    import json
-
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"schema_version": "1.0.0", "metrics": aggregated_metrics}, f, indent=2)
 

@@ -1,5 +1,7 @@
 """Unit tests for figure generation module."""
 
+import matplotlib
+import matplotlib.pyplot as plt
 import pytest
 
 from robot_sf.research.figures import configure_matplotlib_backend, save_figure
@@ -16,15 +18,11 @@ def output_dir(tmp_path):
 def test_configure_matplotlib_backend():
     """Test matplotlib backend configuration."""
     configure_matplotlib_backend()
-    import matplotlib
-
     assert matplotlib.get_backend() == "Agg"
 
 
 def test_save_figure_dual_export(output_dir):
     """Test save_figure creates both PDF and PNG."""
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots()
     ax.plot([1, 2, 3], [1, 2, 3])
 

@@ -50,14 +50,14 @@ Following existing robot_sf structure:
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T008 Implement base exception classes in `robot_sf/research/exceptions.py` (ReportGenerationError, ValidationError)
-- [ ] T009 [P] Create reproducibility metadata collector in `robot_sf/research/metadata.py` (git hash, packages, hardware)
-- [ ] T010 [P] Implement artifact path helpers in `robot_sf/research/artifact_paths.py` (ensure_report_tree, get_output_paths)
-- [ ] T011 Create base logger configuration in `robot_sf/research/logging_config.py` using Loguru
-- [ ] T012 Implement schema loader utility in `robot_sf/research/schema_loader.py` for JSON schema validation
-- [ ] T013 [P] Create test fixture generator in `tests/fixtures/minimal_manifests/generator.py` (baseline + pretrained manifests)
-- [ ] T014 Add schema to `robot_sf/benchmark/schemas/report_metadata.schema.v1.json` from contracts/
-- [ ] T015 Document report output structure in `docs/research_reporting.md` with examples
+- [X] T008 Implement base exception classes in `robot_sf/research/exceptions.py` (ReportGenerationError, ValidationError)
+- [X] T009 [P] Create reproducibility metadata collector in `robot_sf/research/metadata.py` (git hash, packages, hardware)
+- [X] T010 [P] Implement artifact path helpers in `robot_sf/research/artifact_paths.py` (ensure_report_tree, get_output_paths)
+- [X] T011 Create base logger configuration in `robot_sf/research/logging_config.py` using Loguru
+- [X] T012 Implement schema loader utility in `robot_sf/research/schema_loader.py` for JSON schema validation
+- [X] T013 [P] Create test fixture generator in `tests/fixtures/minimal_manifests/generator.py` (baseline + pretrained manifests)
+- [X] T014 Add schema to `robot_sf/benchmark/schemas/report_metadata.schema.v1.json` from contracts/
+- [X] T015 Document report output structure in `docs/research_reporting.md` with examples
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

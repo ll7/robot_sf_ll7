@@ -1,5 +1,7 @@
 """Integration test for end-to-end report generation."""
 
+import json
+
 import pytest
 
 from robot_sf.research.orchestrator import ReportOrchestrator
@@ -130,8 +132,6 @@ def test_generate_report_pass_hypothesis(
     )
 
     # Check hypothesis result
-    import json
-
     with open(output_dir / "data" / "hypothesis.json", encoding="utf-8") as f:
         hypothesis_data = json.load(f)
 
@@ -158,8 +158,6 @@ def test_generate_report_fail_hypothesis(
         threshold=90.0,
     )
 
-    import json
-
     with open(output_dir / "data" / "hypothesis.json", encoding="utf-8") as f:
         hypothesis_data = json.load(f)
 
@@ -181,8 +179,6 @@ def test_generate_report_incomplete_data(sample_metric_records, output_dir):
         seeds=[42],
         threshold=40.0,
     )
-
-    import json
 
     with open(output_dir / "data" / "hypothesis.json", encoding="utf-8") as f:
         hypothesis_data = json.load(f)

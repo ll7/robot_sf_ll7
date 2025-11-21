@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import importlib.metadata
 import platform
 import subprocess
 import sys
@@ -28,6 +29,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import psutil
+
+try:
+    import torch
+except ImportError:
+    torch = None  # type: ignore[assignment]
 
 from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.logging_config import get_logger
@@ -156,8 +162,6 @@ def get_package_versions() -> dict[str, str]:
         Only includes packages relevant to research reporting:
         scipy, matplotlib, pandas, numpy, stable-baselines3, torch
     """
-    import importlib.metadata
-
     packages = [
         "scipy",
         "matplotlib",
@@ -191,17 +195,16 @@ def get_hardware_profile() -> HardwareProfile:
 
     # Attempt to collect GPU info (optional)
     gpu_info = None
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            gpu_info = {
-                "model": torch.cuda.get_device_name(0),
-                "count": torch.cuda.device_count(),
-                "memory_gb": torch.cuda.get_device_properties(0).total_memory / (1024**3),
-            }
-    except (ImportError, RuntimeError):
-        pass  # GPU info optional
+    if torch is not None:
+        try:
+            if torch.cuda.is_available():
+                gpu_info = {
+                    "model": torch.cuda.get_device_name(0),
+                    "count": torch.cuda.device_count(),
+                    "memory_gb": torch.cuda.get_device_properties(0).total_memory / (1024**3),
+                }
+        except RuntimeError:
+            pass  # GPU info optional
 
     logger.debug(
         "Collected hardware profile",

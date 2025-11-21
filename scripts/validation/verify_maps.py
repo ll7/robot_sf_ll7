@@ -30,13 +30,7 @@ from pathlib import Path
 
 from loguru import logger
 
-# Configure Loguru for structured output
-logger.remove()  # Remove default handler
-logger.add(
-    sys.stderr,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-    level="INFO",
-)
+from robot_sf.maps.verification.logging import configure_logging
 
 
 def parse_args():
@@ -46,14 +40,14 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    
+
     parser.add_argument(
         "--scope",
         type=str,
         default="all",
         help="Scope of maps to verify: 'all', 'ci', 'changed', or specific filename (default: all)",
     )
-    
+
     parser.add_argument(
         "--mode",
         type=str,
@@ -61,54 +55,48 @@ def parse_args():
         default="local",
         help="Verification mode: 'local' (informative) or 'ci' (strict, enforces timeouts)",
     )
-    
+
     parser.add_argument(
         "--output",
         type=Path,
         help="Path to write JSON verification manifest (default: none)",
     )
-    
+
     parser.add_argument(
         "--seed",
         type=int,
         help="Random seed for deterministic environment instantiation (default: none)",
     )
-    
+
     parser.add_argument(
         "--fix",
         action="store_true",
         help="Attempt automatic remediation for auto-fixable issues",
     )
-    
+
     parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
         help="Enable verbose logging output",
     )
-    
+
     return parser.parse_args()
 
 
 def main():
     """Main CLI entry point."""
     args = parse_args()
-    
-    # Adjust logging level if verbose
-    if args.verbose:
-        logger.remove()
-        logger.add(
-            sys.stderr,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> | <level>{message}</level>",
-            level="DEBUG",
-        )
-    
+
+    # Configure logging
+    configure_logging(verbose=args.verbose)
+
     logger.info("Map verification starting")
     logger.info(f"Scope: {args.scope}, Mode: {args.mode}")
-    
+
     # Import and call verification runner
     from robot_sf.maps.verification.runner import verify_maps
-    
+
     try:
         results = verify_maps(
             scope=args.scope,
@@ -117,7 +105,7 @@ def main():
             seed=args.seed,
             fix=args.fix,
         )
-        
+
         # Determine exit code based on mode and results
         if args.mode == "ci":
             # CI mode: fail if any maps failed
@@ -130,7 +118,7 @@ def main():
         else:
             # Local mode: always exit 0 (informational)
             sys.exit(0)
-    
+
     except Exception as e:
         logger.exception(f"Verification failed with exception: {e}")
         sys.exit(1)

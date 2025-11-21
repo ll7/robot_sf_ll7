@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="10"
+    height="10" viewBox="0 0 10 10">
+    <g inkscape:label="obstacles">
+        <rect x="1" y="1" width="8" height="8" fill="none" stroke="black" stroke-width="0.2" />
+    </g>
+</svg>

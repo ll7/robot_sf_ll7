@@ -135,6 +135,28 @@ def verify_single_map(
     return result
 
 
+def _write_summary_manifest(summary: VerificationRunSummary, output_path: Path | None) -> None:
+    """Write verification summary manifest if output path provided.
+
+    Parameters
+    ----------
+    summary : VerificationRunSummary
+        Summary to write
+    output_path : Path | None
+        Optional output path
+    """
+    if not output_path:
+        return
+
+    try:
+        from robot_sf.maps.verification.manifest import write_manifest
+
+        write_manifest(summary, output_path)
+        logger.debug(f"Manifest written to: {output_path}")
+    except Exception as write_err:  # noqa: BLE001 - manifest write failure should not abort reporting
+        logger.warning(f"Failed to write manifest: {write_err}")
+
+
 def verify_maps(
     scope: str = "all",
     mode: Literal["local", "ci"] = "local",
@@ -188,9 +210,11 @@ def verify_maps(
     try:
         maps_to_verify = resolver.resolve(scope)
     except ValueError as e:
-        logger.error(f"Failed to resolve scope: {e}")
-        # Return empty summary
-        return VerificationRunSummary(
+        error_msg = f"Failed to resolve scope '{scope}': {e}"
+        logger.error(error_msg)
+        # Return summary with error captured for programmatic access
+        finished_at = datetime.now()
+        summary = VerificationRunSummary(
             run_id=run_id,
             git_sha=None,
             total_maps=0,
@@ -200,13 +224,16 @@ def verify_maps(
             slow_maps=[],
             artifact_path=output_path,
             started_at=started_at,
-            finished_at=datetime.now(),
+            finished_at=finished_at,
             results=[],
         )
+        _write_summary_manifest(summary, output_path)
+        return summary
 
     if not maps_to_verify:
-        logger.warning("No maps to verify")
-        return VerificationRunSummary(
+        logger.warning(f"No maps to verify in scope '{scope}'")
+        finished_at = datetime.now()
+        summary = VerificationRunSummary(
             run_id=run_id,
             git_sha=None,
             total_maps=0,
@@ -216,9 +243,11 @@ def verify_maps(
             slow_maps=[],
             artifact_path=output_path,
             started_at=started_at,
-            finished_at=datetime.now(),
+            finished_at=finished_at,
             results=[],
         )
+        _write_summary_manifest(summary, output_path)
+        return summary
 
     # Verify each map
     results: list[VerificationResult] = []
@@ -278,13 +307,8 @@ def verify_maps(
     logger.info("=" * 60)
 
     # Write manifest if requested
-    if output_path:
-        try:
-            from robot_sf.maps.verification.manifest import write_manifest
-
-            write_manifest(summary, output_path)
-            logger.info(f"Manifest written to: {output_path}")
-        except Exception as e:  # noqa: BLE001 - manifest write failure should not abort run
-            logger.error(f"Failed to write manifest: {e}")
+    _write_summary_manifest(summary, output_path)
+    if output_path and output_path.exists():
+        logger.info(f"Manifest written to: {output_path}")
 
     return summary

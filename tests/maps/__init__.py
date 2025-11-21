@@ -20,7 +20,6 @@ See Also
 """
 
 import pytest
-from pathlib import Path
 
 
 # Placeholder fixtures - to be implemented
@@ -47,15 +46,15 @@ def synthetic_missing_metadata_map(tmp_path):
 
 class TestMapInventory:
     """Test map inventory loading and enumeration."""
-    
+
     def test_load_all_maps(self):
         """Test loading all maps from svg_maps directory."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_filter_ci_enabled_maps(self):
         """Test filtering maps by ci_enabled flag."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_scope_resolver_all(self):
         """Test scope resolver with 'all' scope."""
         pytest.skip("Test not yet implemented")
@@ -63,15 +62,15 @@ class TestMapInventory:
 
 class TestRuleValidation:
     """Test individual validation rules."""
-    
+
     def test_geometry_closed_polygons(self, synthetic_valid_map):
         """Test validation of closed polygon geometries."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_metadata_required_fields(self, synthetic_missing_metadata_map):
         """Test detection of missing required metadata."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_spawn_point_coverage(self, synthetic_valid_map):
         """Test validation of spawn point definitions."""
         pytest.skip("Test not yet implemented")
@@ -79,15 +78,15 @@ class TestRuleValidation:
 
 class TestEnvironmentInstantiation:
     """Test environment instantiation during verification."""
-    
+
     def test_robot_env_instantiation(self, synthetic_valid_map):
         """Test instantiating robot environment for standard maps."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_pedestrian_env_instantiation(self, synthetic_valid_map):
         """Test instantiating pedestrian environment for ped-only maps."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_timing_budget_warning(self, synthetic_valid_map):
         """Test that slow maps trigger performance warnings."""
         pytest.skip("Test not yet implemented")
@@ -95,15 +94,15 @@ class TestEnvironmentInstantiation:
 
 class TestCLIIntegration:
     """Test CLI entry point behavior."""
-    
+
     def test_cli_help(self):
         """Test CLI help output."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_cli_local_mode(self):
         """Test CLI in local mode."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_cli_ci_mode_exit_codes(self):
         """Test CLI exit codes in CI mode."""
         pytest.skip("Test not yet implemented")
@@ -111,11 +110,11 @@ class TestCLIIntegration:
 
 class TestManifestOutput:
     """Test structured manifest generation."""
-    
+
     def test_manifest_schema_compliance(self):
         """Test that generated manifest matches schema."""
         pytest.skip("Test not yet implemented")
-    
+
     def test_manifest_filtering(self):
         """Test filtering manifest by status."""
         pytest.skip("Test not yet implemented")
@@ -126,6 +125,7 @@ def test_module_imports():
     """Test that verification module can be imported."""
     try:
         from robot_sf.maps import verification
+
         assert verification is not None
     except ImportError as e:
         pytest.fail(f"Failed to import verification module: {e}")

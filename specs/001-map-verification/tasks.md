@@ -47,9 +47,9 @@ Goal: CI jobs fail with actionable logs when verification fails.
 Independent Test Criteria: Running the CI task (or `uv run python scripts/validation/verify_maps.py --scope ci --mode ci`) on a branch with a broken SVG exits non-zero and prints remediation hints; green branch stays under perf budget.
 
 - [X] T012 [US2] Add `--mode ci` behaviors in `scripts/validation/verify_maps.py` to enforce perf/timeouts and zero-exit only on full pass.
-- [ ] T013 [US2] Integrate verifier into `.github/workflows/ci.yml` (or dedicated script) ensuring artifacts upload and respecting `ROBOT_SF_PERF_*` env vars.
-- [ ] T014 [P] [US2] Add VS Code task entry (`.vscode/tasks.json`) mirroring the CI command for local smoke usage.
-- [ ] T015 [US2] Extend tests in `tests/maps/test_map_verifier.py` to simulate CI mode (mock perf thresholds, assert exit codes/log text).
+- [X] T013 [US2] Integrate verifier into `.github/workflows/ci.yml` (or dedicated script) ensuring artifacts upload and respecting `ROBOT_SF_PERF_*` env vars.
+- [X] T014 [P] [US2] Add VS Code task entry (`.vscode/tasks.json`) mirroring the CI command for local smoke usage.
+- [X] T015 [US2] Extend tests in `tests/maps/test_map_verifier.py` to simulate CI mode (mock perf thresholds, assert exit codes/log text).
 
 ## Phase 5 – User Story 3 (Machine-readable verification manifest)
 Goal: write structured JSON manifest for tooling/dashboards.

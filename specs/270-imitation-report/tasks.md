@@ -34,13 +34,13 @@ Following existing robot_sf structure:
 
 **Purpose**: Project initialization and module structure
 
-- [ ] T001 Create research module directory structure at `robot_sf/research/`
-- [ ] T002 Create `robot_sf/research/__init__.py` with public API exports
-- [ ] T003 [P] Create scripts directory at `scripts/research/`
-- [ ] T004 [P] Create tests directory at `tests/research/`
-- [ ] T005 [P] Create test fixtures directory at `tests/fixtures/minimal_manifests/`
-- [ ] T006 Add scipy, matplotlib, pandas to pyproject.toml dependencies if missing
-- [ ] T007 Update `docs/README.md` to link to research reporting documentation
+- [X] T001 Create research module directory structure at `robot_sf/research/`
+- [X] T002 Create `robot_sf/research/__init__.py` with public API exports
+- [X] T003 [P] Create scripts directory at `scripts/research/`
+- [X] T004 [P] Create tests directory at `tests/research/`
+- [X] T005 [P] Create test fixtures directory at `tests/fixtures/minimal_manifests/`
+- [X] T006 Add scipy, matplotlib, pandas to pyproject.toml dependencies if missing
+- [X] T007 Update `docs/README.md` to link to research reporting documentation
 
 ---
 

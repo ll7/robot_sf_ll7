@@ -97,6 +97,19 @@ jobs:
       - name: Unit tests
         run: uv run pytest -q -n auto --max-worker-restart=0
 
+      - name: Map verification (CI mode)
+        run: |
+          echo "Running map verification in CI mode (scope=ci)"
+          uv run python scripts/validation/verify_maps.py --scope ci --mode ci --output output/validation/map_verification.json
+
+      - name: Upload map verification manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: map-verification-manifest
+          path: output/validation/map_verification.json
+          if-no-files-found: warn
+
       - name: Restore coverage baseline
         uses: actions/cache@v4
         with:

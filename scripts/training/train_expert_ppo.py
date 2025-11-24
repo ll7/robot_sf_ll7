@@ -371,6 +371,16 @@ def run_expert_training(
     scenario_name = scenario_label or (
         config.scenario_config.name if config.scenario_config else "unknown"
     )
+
+    # Surface convergence timesteps as a metric for downstream summaries
+    conv_timesteps = float(config.total_timesteps)
+    aggregates["timesteps_to_convergence"] = common.MetricAggregate(
+        mean=conv_timesteps,
+        median=conv_timesteps,
+        p95=conv_timesteps,
+        ci95=(conv_timesteps, conv_timesteps),
+    )
+
     expert_artifact = common.ExpertPolicyArtifact(
         policy_id=config.policy_id,
         version=timestamp.strftime("%Y%m%d"),

@@ -15,11 +15,14 @@ def _sniff(file: str | bytes | IO[bytes], h: bytes | None) -> tuple[bytes, str |
     if h is not None:
         return h, filename_hint
     if isinstance(file, str):
+        # File path: open and read header bytes
         with open(file, "rb") as handle:
             return handle.read(32), filename_hint
     if isinstance(file, bytes | bytearray):
+        # Raw bytes: convert to bytes object
         payload = bytes(file)
         return payload, filename_hint
+    # File-like object: read directly (caller handles exceptions)
     data = file.read(32)
     return data, filename_hint
 

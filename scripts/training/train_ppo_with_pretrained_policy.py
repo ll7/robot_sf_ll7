@@ -122,6 +122,7 @@ def run_ppo_finetuning(
             success = False
 
             while not done:
+                # model.predict returns (action, _state) - we only need action for deterministic eval
                 action, _ = model.predict(obs, deterministic=True)
                 obs, reward, terminated, truncated, info = eval_env.step(action)
                 done = terminated or truncated

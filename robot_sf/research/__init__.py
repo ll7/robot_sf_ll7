@@ -26,7 +26,8 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-# Core components
+# Eager imports: All components imported immediately for API availability
+# (All names in __all__ are defined via direct imports below)
 from robot_sf.research.aggregation import (
     aggregate_metrics,
     bootstrap_ci,

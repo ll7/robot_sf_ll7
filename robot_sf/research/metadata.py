@@ -173,6 +173,7 @@ def get_package_versions() -> dict[str, str]:
         try:
             versions[pkg] = importlib.metadata.version(pkg)
         except importlib.metadata.PackageNotFoundError:
+            # Package not installed - record as unavailable for reproducibility tracking
             versions[pkg] = "not installed"
 
     logger.debug("Collected package versions", count=len(versions))

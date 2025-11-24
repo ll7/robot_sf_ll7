@@ -218,7 +218,8 @@ class MarkdownReportRenderer:
             metric = m.get("metric_name", "N/A").replace("_", " ").title()
             cond = m.get("condition", "N/A")
             d = m.get("effect_size")
-            # Interpret Cohen's d
+            # Interpret Cohen's d using established thresholds (Cohen 1988)
+            # Label assignment follows standard effect size conventions
             if d is None:
                 label = "N/A"
             else:

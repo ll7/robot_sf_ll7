@@ -10,7 +10,6 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import numpy as np
 import yaml
 from loguru import logger
 
@@ -104,6 +103,65 @@ def run_ppo_finetuning(
         convergence_timesteps,
     )
 
+    # Compute real metrics from the trained model by running evaluation episodes
+    # This replaces the previous synthetic random data approach
+    if not dry_run:
+        # Run evaluation episodes to get real metrics
+        eval_env = make_robot_env(config=RobotSimulationConfig())
+        eval_env = maybe_flatten_env_observations(eval_env, context="PPO evaluation")
+
+        eval_episodes = []
+        num_eval_episodes = 10  # Small number for quick evaluation
+
+        for _ in range(num_eval_episodes):
+            obs, _ = eval_env.reset()
+            done = False
+            episode_reward = 0.0
+            episode_steps = 0
+            collision_occurred = False
+            success = False
+
+            while not done:
+                action, _ = model.predict(obs, deterministic=True)
+                obs, reward, terminated, truncated, info = eval_env.step(action)
+                done = terminated or truncated
+                episode_reward += reward
+                episode_steps += 1
+
+                # Track collision and success from info dict
+                if info.get("collision", False):
+                    collision_occurred = True
+                if info.get("is_success", False):
+                    success = True
+
+            eval_episodes.append(
+                {
+                    "reward": episode_reward,
+                    "steps": episode_steps,
+                    "collision": collision_occurred,
+                    "success": success,
+                }
+            )
+
+        eval_env.close()
+
+        # Aggregate real metrics
+        success_rate = float(sum(ep["success"] for ep in eval_episodes) / len(eval_episodes))
+        collision_rate = float(sum(ep["collision"] for ep in eval_episodes) / len(eval_episodes))
+        avg_steps = float(sum(ep["steps"] for ep in eval_episodes) / len(eval_episodes))
+
+        # Calculate derived metrics
+        snqi = success_rate - 0.5 * collision_rate
+        path_efficiency = success_rate / max(avg_steps, 1.0)  # Avoid division by zero
+        comfort_exposure = collision_rate  # Proxy metric
+    else:
+        # Dry run: use placeholder metrics
+        success_rate = 0.85
+        collision_rate = 0.08
+        snqi = success_rate - 0.5 * collision_rate
+        path_efficiency = 0.85
+        comfort_exposure = collision_rate
+
     # Minimal metrics to surface convergence information and basic quality signals
     convergence_metric = common.MetricAggregate(
         mean=float(convergence_timesteps),
@@ -111,13 +169,6 @@ def run_ppo_finetuning(
         p95=float(convergence_timesteps),
         ci95=(float(convergence_timesteps), float(convergence_timesteps)),
     )
-    # Provide synthetic-but-plausible aggregates so reports are populated in demo/quick runs
-    rng = np.random.default_rng(321)
-    success_rate = float(rng.uniform(0.82, 0.90))
-    collision_rate = float(rng.uniform(0.06, 0.10))
-    path_efficiency = float(rng.uniform(0.80, 0.88))
-    snqi = success_rate - 0.5 * collision_rate
-    comfort_exposure = float(rng.uniform(0.03, 0.06))
 
     def _metric(val: float) -> common.MetricAggregate:
         return common.MetricAggregate(mean=val, median=val, p95=val, ci95=(val, val))

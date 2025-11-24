@@ -168,19 +168,25 @@ def _run_command(cmd: list[str], step_name: str, env: dict[str, str] | None = No
 def _load_policy_id_from_config(config_path: Path) -> str:
     """Read the policy_id from the expert training YAML config."""
 
-    with config_path.open(encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
-
-    if not isinstance(data, dict) or "policy_id" not in data:
+    data = _load_yaml_config(config_path)
+    policy_id = data.get("policy_id")
+    if not isinstance(policy_id, str) or not policy_id.strip():
         raise ValueError(
             "expert_ppo.yaml must define a top-level 'policy_id' key to identify the checkpoint.",
         )
 
-    policy_id = data["policy_id"]
-    if not isinstance(policy_id, str) or not policy_id.strip():
-        raise ValueError("policy_id in expert_ppo.yaml must be a non-empty string.")
-
     return policy_id
+
+
+def _load_yaml_config(config_path: Path) -> dict[str, Any]:
+    """Load a YAML config and require a mapping."""
+
+    with config_path.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"{config_path} must contain a mapping at the top level.")
+    return data
 
 
 def _write_pipeline_config(filename: str, payload: dict[str, Any]) -> Path:
@@ -225,6 +231,16 @@ def _prepare_ppo_config(
         "random_seeds": [42, 43, 44],
     }
     return _write_pipeline_config("ppo_finetune.yaml", payload)
+
+
+def _override_expert_config_policy_id(config_path: Path, policy_id: str) -> Path:
+    """Write a temp expert config with an overridden policy_id for this run."""
+
+    data = _load_yaml_config(config_path)
+    data["policy_id"] = policy_id
+    filename = f"{config_path.stem}__policy_override.yaml"
+    logger.info("Applying policy_id override -> {}", policy_id)
+    return _write_pipeline_config(filename, data)
 
 
 def _discover_latest_training_run_id(prefix: str) -> str | None:
@@ -407,16 +423,20 @@ def _run_tracked_step(
     step_id: str,
     func: Callable[[], Any],
 ) -> Any:
-    if tracker_ctx is not None and step_id in tracked_steps:
+    is_tracked = tracker_ctx is not None and step_id in tracked_steps
+    if is_tracked:
         tracker_ctx.tracker.start_step(step_id)
     try:
         result = func()
     except Exception as exc:  # pragma: no cover - pipeline invoked externally
-        if tracker_ctx is not None and step_id in tracked_steps:
+        if is_tracked:
             tracker_ctx.tracker.fail_step(step_id, reason=str(exc))
         raise
-    if tracker_ctx is not None and step_id in tracked_steps:
-        tracker_ctx.tracker.complete_step(step_id)
+    if is_tracked:
+        if isinstance(result, int) and result != 0:
+            tracker_ctx.tracker.fail_step(step_id, reason=f"exit code {result}")
+        else:
+            tracker_ctx.tracker.complete_step(step_id)
     return result
 
 
@@ -541,6 +561,22 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.info("Please ensure you're running from repository root")
         return 1
 
+    configured_policy_id = _load_policy_id_from_config(expert_config)
+    expert_config_path = expert_config
+
+    if args.skip_expert:
+        expert_policy_id = args.policy_id
+    else:
+        expert_policy_id = configured_policy_id
+        if args.policy_id and args.policy_id != configured_policy_id:
+            expert_config_path = _override_expert_config_policy_id(expert_config, args.policy_id)
+            expert_policy_id = args.policy_id
+            logger.info(
+                "Applying policy_id override (--policy-id): using {} with policy_id={}",
+                expert_config_path,
+                expert_policy_id,
+            )
+
     step_definitions = build_imitation_pipeline_steps(
         skip_expert=args.skip_expert,
         include_comparison=comparison_script.exists(),
@@ -555,7 +591,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             step_definitions,
             tracker_output=tracker_output,
             initiator=" ".join(sys.argv),
-            scenario_config=expert_config,
+            scenario_config=expert_config_path,
             telemetry_interval=args.tracker_telemetry_interval,
         )
         logger.info(
@@ -575,19 +611,6 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             summary={"failed_step": step_id, "exit_code": exit_code},
         )
         return exit_code
-
-    configured_policy_id = _load_policy_id_from_config(expert_config)
-
-    if args.skip_expert:
-        expert_policy_id = args.policy_id
-    else:
-        expert_policy_id = configured_policy_id
-        if args.policy_id != expert_policy_id:
-            logger.warning(
-                "Ignoring --policy-id override (expert training uses policy_id={} from {})",
-                expert_policy_id,
-                expert_config,
-            )
 
     bc_policy_id = f"bc_{expert_policy_id}"
     finetuned_policy_id = f"finetuned_{expert_policy_id}"
@@ -627,7 +650,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                 "python",
                 "scripts/training/train_expert_ppo.py",
                 "--config",
-                str(expert_config),
+                str(expert_config_path),
             ]
             if args.demo_mode:
                 cmd.append("--dry-run")

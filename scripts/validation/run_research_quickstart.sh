@@ -19,6 +19,7 @@ fi
 
 echo "[Quickstart] Step 1/3: running imitation pipeline with tracker..."
 uv run python examples/advanced/16_imitation_learning_pipeline.py \
+  --log-level INFO \
   --enable-tracker \
   --tracker-output "${RUN_ID}"
 

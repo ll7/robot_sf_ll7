@@ -1,3 +1,5 @@
-"""Advanced example scripts showcasing extended robot_sf capabilities."""
+"""Advanced example scripts showcasing extended robot_sf capabilities.
 
-__all__: tuple[str, ...] = ()
+This package contains runnable example scripts demonstrating advanced features.
+No public API is exposed - import and run scripts directly.
+"""

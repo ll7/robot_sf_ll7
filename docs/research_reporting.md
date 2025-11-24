@@ -17,6 +17,23 @@ The research reporting system automates the generation of comprehensive research
 - Markdown and LaTeX report rendering
 - Reproducibility metadata tracking (git hash, packages, hardware)
 - Ablation study support (BC epochs, dataset sizes)
+ - Telemetry section (optional) for runtime performance metrics
+
+### High-Level Flow
+
+```mermaid
+flowchart LR
+  M[Tracker Manifests] --> A[extract_seed_metrics]
+  A --> C[aggregate_metrics]
+  C --> H[hypothesis evaluation]
+  C --> F[figure generation]
+  H --> R[report_template.render]
+  F --> R
+  R --> O[(report + figures + data)]
+```
+
+`ReportOrchestrator` coordinates aggregation, hypothesis evaluation, figure generation,
+and rendering. `AblationOrchestrator` reuses the evaluator + figures for variant sweeps.
 
 ## Quick Start
 

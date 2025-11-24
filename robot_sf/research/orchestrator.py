@@ -150,7 +150,7 @@ class ReportOrchestrator:
 
         if baseline_rewards and pretrained_rewards:
             try:
-                timesteps = list(range(len(baseline_rewards[0])))
+                timesteps = [float(i) for i in range(len(baseline_rewards[0]))]
                 figure = plot_learning_curve(
                     timesteps, baseline_rewards, pretrained_rewards, figures_dir
                 )
@@ -300,11 +300,18 @@ class ReportOrchestrator:
                 logger.warning(f"Manifest parse failed: {path} error={exc}")
                 return None
 
+        # Load manifests once and filter None values
+        baseline_loaded = [(_load(p), p) for p in baseline_manifests]
         baseline_map = {
-            int(_load(p)["seed"]): _load(p) for p in baseline_manifests if _load(p) is not None
+            int(manifest["seed"]): manifest
+            for manifest, _ in baseline_loaded
+            if manifest is not None
         }
+        pretrained_loaded = [(_load(p), p) for p in pretrained_manifests]
         pretrained_map = {
-            int(_load(p)["seed"]): _load(p) for p in pretrained_manifests if _load(p) is not None
+            int(manifest["seed"]): manifest
+            for manifest, _ in pretrained_loaded
+            if manifest is not None
         }
 
         for seed in expected_seeds:

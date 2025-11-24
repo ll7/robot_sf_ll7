@@ -99,13 +99,29 @@ def aggregate_metrics(
 
 
 def export_metrics_json(aggregated_metrics: list[dict[str, Any]], path: str) -> None:
-    """Export aggregated metrics to JSON file."""
+    """Export aggregated metrics to JSON file.
+
+    Args:
+        aggregated_metrics: List of aggregated metric dictionaries from aggregate_metrics()
+        path: Output file path (will be created with parent directories)
+
+    Note:
+        Output includes schema_version key for validation compatibility.
+    """
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"schema_version": "1.0.0", "metrics": aggregated_metrics}, f, indent=2)
 
 
 def export_metrics_csv(aggregated_metrics: list[dict[str, Any]], path: str) -> None:
-    """Export aggregated metrics to CSV file."""
+    """Export aggregated metrics to CSV file for external analysis tools.
+
+    Args:
+        aggregated_metrics: List of aggregated metric dictionaries from aggregate_metrics()
+        path: Output CSV file path
+
+    Note:
+        Output is tab-delimited with header row. Compatible with pandas.read_csv().
+    """
     df = pd.DataFrame(aggregated_metrics)
     df.to_csv(path, index=False)
 
@@ -116,7 +132,20 @@ def bootstrap_ci(
     ci_confidence: float = 0.95,
     seed: Optional[int] = None,
 ) -> tuple[Optional[float], Optional[float]]:
-    """Compute bootstrap confidence interval for a list of values."""
+    """Compute bootstrap confidence interval for a list of values.
+
+    Args:
+        values: Numeric values to compute CI from (must have len >= 2)
+        ci_samples: Number of bootstrap resamples (default: 1000)
+        ci_confidence: Confidence level (default: 0.95 for 95% CI)
+        seed: Optional random seed for reproducibility
+
+    Returns:
+        Tuple of (ci_low, ci_high) or (None, None) if insufficient data
+
+    Note:
+        Uses percentile method. Returns None for single-value inputs.
+    """
     np.random.seed(seed)
     if len(values) < 2:
         return None, None
@@ -130,10 +159,20 @@ def bootstrap_ci(
 
 
 def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
-    """Load a manifest that may be JSON or JSONL.
+    """Load a manifest that may be JSON or JSONL format.
 
     For JSONL inputs we take the last non-empty line to reflect the most recent
-    tracker record.
+    tracker record. This supports both single-shot manifests and append-mode logs.
+
+    Args:
+        manifest_path: Path to manifest file (.json or .jsonl extension)
+
+    Returns:
+        Parsed manifest payload as dictionary
+
+    Raises:
+        ValueError: If file is empty or unparseable
+        json.JSONDecodeError: If JSON is malformed
     """
 
     text = manifest_path.read_text(encoding="utf-8")

@@ -123,10 +123,12 @@ class ScopeResolver:
             return changed_maps
 
         except subprocess.CalledProcessError as e:
+            # Git command failed (e.g., not a git repo or git error) - fall back to all maps
             logger.warning(f"Failed to query git for changed files: {e}")
             logger.info("Falling back to 'all' scope")
             return self._resolve_all()
         except FileNotFoundError:
+            # Git executable not found on system - fall back to all maps
             logger.warning("git command not found; cannot resolve 'changed' scope")
             logger.info("Falling back to 'all' scope")
             return self._resolve_all()

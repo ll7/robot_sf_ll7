@@ -174,8 +174,6 @@ class HypothesisEvaluator:
         return result
 
     def export_hypothesis_json(self, path: str | Path, results: list[dict[str, Any]]) -> Path:
-        from pathlib import Path
-
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:

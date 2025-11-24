@@ -1,12 +1,34 @@
-"""
-Metric aggregation engine for research reporting (User Story 1)
-Implements: aggregate_metrics, bootstrap_ci, export_metrics_json, export_metrics_csv
+"""Aggregation utilities for research reporting.
+
+Functions:
+- ``aggregate_metrics``: compute mean/median/p95/std and bootstrap CIs per metric & condition.
+- ``bootstrap_ci`` helper (internal) for non-parametric confidence intervals.
+- ``extract_seed_metrics``: parse tracker manifests into per-seed records.
+- ``compute_completeness_score``: derive completeness % for multi-seed experiments.
+- ``export_metrics_json`` / ``export_metrics_csv``: persistent artifacts for downstream analysis.
+
+Design notes:
+All functions are pure (except exports) to keep unit tests deterministic. They are
+invoked by ``ReportOrchestrator`` and ablation workflows. Avoid adding large
+dependencies or side effects here.
 """
 
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # Performance: only needed for type checking
+    from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
+
+from robot_sf.research.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def aggregate_metrics(
@@ -78,8 +100,6 @@ def aggregate_metrics(
 
 def export_metrics_json(aggregated_metrics: list[dict[str, Any]], path: str) -> None:
     """Export aggregated metrics to JSON file."""
-    import json
-
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"schema_version": "1.0.0", "metrics": aggregated_metrics}, f, indent=2)
 
@@ -107,3 +127,134 @@ def bootstrap_ci(
     ci_low = float(np.percentile(boot_samples, 100 * alpha / 2))
     ci_high = float(np.percentile(boot_samples, 100 * (1 - alpha / 2)))
     return ci_low, ci_high
+
+
+def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
+    """Load a manifest that may be JSON or JSONL.
+
+    For JSONL inputs we take the last non-empty line to reflect the most recent
+    tracker record.
+    """
+
+    text = manifest_path.read_text(encoding="utf-8")
+    if manifest_path.suffix == ".jsonl":
+        lines = [line for line in text.splitlines() if line.strip()]
+        if not lines:
+            raise ValueError(f"Empty manifest file: {manifest_path}")
+        return json.loads(lines[-1])
+    return json.loads(text)
+
+
+def extract_seed_metrics(
+    manifest_paths: Sequence[str | Path],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Extract per-seed metrics from tracker manifests.
+
+    Args:
+        manifest_paths: Paths to manifest files. Supports JSON or JSONL files.
+
+    Returns:
+        Tuple of (metric_records, failures). Failures contain seed/policy metadata
+        and the reason parsing was skipped.
+    """
+
+    records: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+
+    for raw_path in manifest_paths:
+        manifest_path = Path(raw_path)
+        try:
+            payload = _load_manifest_payload(manifest_path)
+            seed = int(payload.get("seed")) if payload.get("seed") is not None else None
+            metrics = payload.get("metrics") or payload.get("summary", {}).get("metrics")
+            if metrics is None:
+                raise KeyError("metrics not found")
+
+            policy_type = payload.get("policy_type", "unknown")
+            record: dict[str, Any] = {
+                "seed": seed,
+                "policy_type": policy_type,
+                "variant_id": payload.get("variant_id"),
+            }
+
+            if "success_rate" in metrics:
+                record["success_rate"] = float(metrics["success_rate"])
+            if "collision_rate" in metrics:
+                record["collision_rate"] = float(metrics["collision_rate"])
+
+            timesteps = metrics.get("timesteps_to_convergence")
+            timesteps = timesteps or metrics.get("avg_timesteps")
+            timesteps = timesteps or metrics.get("total_timesteps")
+            if timesteps is not None:
+                record["timesteps_to_convergence"] = float(timesteps)
+
+            if "final_reward_mean" in metrics:
+                record["final_reward_mean"] = float(metrics["final_reward_mean"])
+            if "run_duration_seconds" in metrics:
+                record["run_duration_seconds"] = float(metrics["run_duration_seconds"])
+
+            if len(record.keys() - {"seed", "policy_type", "variant_id"}) == 0:
+                raise ValueError("no numeric metrics found")
+
+            records.append(record)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            failure = {
+                "seed": payload.get("seed") if "payload" in locals() else None,
+                "policy_type": payload.get("policy_type") if "payload" in locals() else None,
+                "path": str(manifest_path),
+                "reason": str(exc),
+            }
+            failures.append(failure)
+            logger.warning(
+                "Skipping manifest due to parse failure",
+                seed=failure["seed"],
+                policy_type=failure["policy_type"],
+                path=failure["path"],
+                error=failure["reason"],
+            )
+
+    return records, failures
+
+
+def compute_completeness_score(
+    expected_seeds: Sequence[int | str],
+    completed_seeds: Sequence[int | str],
+    *,
+    failed_seeds: Sequence[int | str] | None = None,
+) -> dict[str, Any]:
+    """Compute completeness as percentage of expected seeds that completed.
+
+    Args:
+        expected_seeds: Declared/target seed list.
+        completed_seeds: Seeds with usable metrics.
+        failed_seeds: Optional seeds that explicitly failed (logged separately).
+
+    Returns:
+        Dict with score (0-100), completed/missing counts, and seed lists.
+    """
+
+    def _seed_sort_key(value: str) -> tuple[int, str]:
+        try:
+            return (0, str(int(value)))
+        except ValueError:
+            return (1, value)
+
+    expected_set = {str(seed) for seed in expected_seeds}
+    completed_set = {str(seed) for seed in completed_seeds} & expected_set
+    failed_set = {str(seed) for seed in failed_seeds} if failed_seeds else set()
+    missing_set = expected_set - completed_set
+
+    score = 0.0
+    if expected_set:
+        score = round(len(completed_set) / len(expected_set) * 100, 1)
+
+    status = "PASS" if not missing_set and not failed_set else "PARTIAL"
+
+    return {
+        "score": score,
+        "expected": len(expected_set),
+        "completed": len(completed_set),
+        "missing_seeds": sorted(missing_set, key=_seed_sort_key),
+        "failed_seeds": sorted(failed_set, key=_seed_sort_key) if failed_set else [],
+        "status": status,
+    }

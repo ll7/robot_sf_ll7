@@ -20,20 +20,20 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import platform
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import psutil
 
+from robot_sf.research.aggregation import compute_completeness_score
 from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.logging_config import get_logger
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = get_logger(__name__)
 
@@ -266,3 +266,66 @@ def collect_reproducibility_metadata(
     )
 
     return metadata
+
+
+def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
+    """Parse a run-tracker manifest (JSON or JSONL) into a structured dict.
+
+    The parser is intentionally tolerant: it accepts both JSON and JSONL files,
+    returning the most recent record for JSONL inputs. Steps are summarized so
+    completeness can be calculated for the execution flow.
+    """
+
+    path = Path(manifest_path)
+    if not path.exists():
+        msg = f"Tracker manifest does not exist: {path}"
+        logger.warning(msg)
+        raise ValidationError(msg)
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".jsonl":
+            lines = [json.loads(line) for line in text.splitlines() if line.strip()]
+            if not lines:
+                raise ValidationError(f"Tracker manifest empty: {path}")
+            payload = lines[-1]
+        else:
+            payload = json.loads(text)
+    except (OSError, json.JSONDecodeError) as exc:
+        msg = f"Failed to parse tracker manifest at {path}"
+        logger.warning(msg, error=str(exc))
+        raise ValidationError(msg) from exc
+
+    steps = payload.get("steps") or []
+    enabled_steps = payload.get("enabled_steps") or [
+        s.get("step_id") for s in steps if s.get("step_id")
+    ]
+    completed_steps = [
+        s.get("step_id")
+        for s in steps
+        if s.get("step_id") and s.get("status") in {"completed", "success", "succeeded"}
+    ]
+    failed_steps = [
+        s.get("step_id")
+        for s in steps
+        if s.get("step_id") and s.get("status") in {"failed", "error", "timeout"}
+    ]
+
+    completeness = None
+    if enabled_steps:
+        completeness = compute_completeness_score(
+            expected_seeds=enabled_steps,
+            completed_seeds=completed_steps,
+            failed_seeds=failed_steps,
+        )
+
+    return {
+        "run_id": payload.get("run_id"),
+        "status": payload.get("status"),
+        "enabled_steps": enabled_steps,
+        "completed_steps": completed_steps,
+        "failed_steps": failed_steps,
+        "seeds": payload.get("seeds") or payload.get("summary", {}).get("seeds", []),
+        "summary": payload.get("summary", {}),
+        "completeness": completeness,
+    }

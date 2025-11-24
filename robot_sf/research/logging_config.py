@@ -68,5 +68,16 @@ def get_logger(name: str) -> Any:
     return logger.bind(module=name)
 
 
+def log_seed_failure(seed: int | str | None, policy_type: str | None, reason: str) -> None:
+    """Emit a standardized warning for seed-level failures."""
+
+    logger.warning(
+        "Seed run failed or missing",
+        seed=seed,
+        policy_type=policy_type or "unknown",
+        reason=reason,
+    )
+
+
 # Default configuration on module import
 configure_research_logging()

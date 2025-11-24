@@ -22,6 +22,10 @@ class MarkdownReportRenderer:
         aggregated_metrics: list[dict[str, Any]],
         figures: list[dict[str, Any]],
         metadata: dict[str, Any],
+        seed_status: Optional[list[dict[str, Any]]] = None,
+        completeness: Optional[dict[str, Any]] = None,
+        ablation_variants: Optional[list[dict[str, Any]]] = None,
+        telemetry: Optional[dict[str, Any]] = None,
     ) -> Path:
         """
         Render full Markdown report.
@@ -39,6 +43,19 @@ class MarkdownReportRenderer:
 
         # Hypothesis Evaluation
         sections.append(self._render_hypothesis_section(hypothesis_result))
+
+        # Ablation table (optional)
+        if ablation_variants:
+            sections.append(self._render_ablation_table(ablation_variants))
+
+        # Seed summary/completeness
+        seed_summary_section = self._render_seed_summary(seed_status, completeness)
+        if seed_summary_section:
+            sections.append(seed_summary_section)
+
+        # Telemetry (Phase 7)
+        if telemetry:
+            sections.append(self._render_telemetry(telemetry))
 
         # Results
         sections.append(self._render_results_section(aggregated_metrics))
@@ -111,9 +128,54 @@ class MarkdownReportRenderer:
 
         return section + "\n"
 
+    def _render_seed_summary(
+        self,
+        seed_status: Optional[list[dict[str, Any]]],
+        completeness: Optional[dict[str, Any]],
+    ) -> str:
+        """Render seed completeness table.
+
+        Returns empty string when no seed data is provided to avoid spurious
+        sections in reports that do not orchestrate multiple seeds.
+        """
+
+        if not seed_status and not completeness:
+            return ""
+
+        section = "## Seed Summary\n\n"
+        if completeness:
+            section += (
+                f"**Completeness**: {completeness.get('score', 0)}% "
+                f"({completeness.get('completed', 0)}/"
+                f"{completeness.get('expected', 0)} seeds)\n\n"
+            )
+            missing = completeness.get("missing_seeds") or []
+            failed = completeness.get("failed_seeds") or []
+            if missing:
+                section += f"Missing seeds: {', '.join(map(str, missing))}\n\n"
+            if failed:
+                section += f"Failed seeds: {', '.join(map(str, failed))}\n\n"
+
+        if seed_status:
+            section += "| Seed | Baseline | Pretrained | Notes |\n"
+            section += "|------|----------|------------|-------|\n"
+            for entry in seed_status:
+                notes = entry.get("note") or "-"
+                section += (
+                    f"| {entry.get('seed', 'N/A')} | "
+                    f"{entry.get('baseline_status', 'N/A')} | "
+                    f"{entry.get('pretrained_status', 'N/A')} | {notes} |\n"
+                )
+
+        return section + "\n"
+
     def _render_results_section(self, aggregated_metrics: list[dict[str, Any]]) -> str:
         """Render aggregated metrics as table."""
         section = "## Results\n\n"
+        # Optional stats table if effect sizes present
+        stats_table = self._render_stats_table(aggregated_metrics)
+        if stats_table:
+            section += stats_table + "\n"
         section += "### Aggregated Metrics\n\n"
         section += "| Condition | Metric | Mean | Median | P95 | CI (95%) |\n"
         section += "|-----------|--------|------|--------|-----|----------|\n"
@@ -135,6 +197,46 @@ class MarkdownReportRenderer:
             section += f"| {condition} | {metric_name} | {mean:.2f} | {median:.2f} | {p95:.2f} | {ci_str} |\n"
 
         return section + "\n"
+
+    def _render_stats_table(self, aggregated_metrics: list[dict[str, Any]]) -> str:
+        """Render statistical summary table if any entries contain effect_size.
+
+        Expects aggregated_metrics entries possibly containing keys:
+        - metric_name
+        - condition
+        - effect_size (optional)
+        - mean, ci_low, ci_high (optional)
+        Returns empty string if no effect sizes present.
+        """
+        effect_entries = [m for m in aggregated_metrics if m.get("effect_size") is not None]
+        if not effect_entries:
+            return ""
+        table = "### Statistical Summary (Effect Sizes)\n\n"
+        table += "| Metric | Condition | Effect Size (d) | Interpretation |\n"
+        table += "|--------|-----------|-----------------|----------------|\n"
+        for m in effect_entries:
+            metric = m.get("metric_name", "N/A").replace("_", " ").title()
+            cond = m.get("condition", "N/A")
+            d = m.get("effect_size")
+            # Interpret Cohen's d
+            if d is None:
+                label = "N/A"
+            else:
+                ad = abs(d)
+                if ad < 0.2:
+                    label = "negligible"
+                elif ad < 0.5:
+                    label = "small"
+                elif ad < 0.8:
+                    label = "medium"
+                else:
+                    label = "large"
+            table += (
+                f"| {metric} | {cond} | {d:.2f} | {label} |\n"
+                if d is not None
+                else f"| {metric} | {cond} | N/A | N/A |\n"
+            )
+        return table
 
     def _render_figures_section(self, figures: list[dict[str, Any]]) -> str:
         """Render figures section with captions and links."""
@@ -180,6 +282,40 @@ class MarkdownReportRenderer:
                     f"- **GPU**: {gpu_model} ({hardware.get('gpu_memory_gb', 'N/A')} GB VRAM)\n"
                 )
 
+        return section + "\n"
+
+    def _render_ablation_table(self, variants: list[dict[str, Any]]) -> str:
+        """Render ablation comparison table.
+
+        Expected variant dict keys: variant_id, improvement_pct, decision (PASS/FAIL/INCOMPLETE),
+        bc_epochs (optional), dataset_size (optional).
+        """
+        if not variants:
+            return ""
+        section = "## Ablation Matrix\n\n"
+        section += "| Variant | BC Epochs | Dataset Size | Improvement (%) | Decision |\n"
+        section += "|---------|-----------|--------------|------------------|----------|\n"
+        for v in variants:
+            imp = v.get("improvement_pct")
+            imp_str = f"{imp:.1f}" if isinstance(imp, int | float) else "N/A"
+            section += (
+                f"| {v.get('variant_id', 'N/A')} | {v.get('bc_epochs', '-')} | {v.get('dataset_size', '-')} | "
+                f"{imp_str} | {v.get('decision', 'N/A')} |\n"
+            )
+        return section + "\n"
+
+    def _render_telemetry(self, telemetry: dict[str, Any]) -> str:
+        """Render telemetry metrics collected during runs (Phase 7 T078).
+
+        Expects a flat dict of key→value pairs (already aggregated). Missing
+        telemetry data returns an empty section upstream.
+        """
+        if not telemetry:
+            return ""
+        section = "## Telemetry\n\n"
+        section += "| Metric | Value |\n|--------|-------|\n"
+        for k, v in telemetry.items():
+            section += f"| {k} | {v} |\n"
         return section + "\n"
 
     def export_latex(self, markdown_path: Path) -> Optional[Path]:

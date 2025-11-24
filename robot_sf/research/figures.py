@@ -11,8 +11,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def configure_matplotlib_backend(headless: bool = False) -> None:
-    """Configure matplotlib backend for headless or interactive rendering."""
+def configure_matplotlib_backend(headless: bool = True) -> None:
+    """Configure matplotlib backend for headless or interactive rendering.
+
+    Default is headless (Agg) to align with CI/test expectations.
+    Pass headless=False only for local interactive exploration.
+    """
     if headless:
         matplotlib.use("Agg")
     # Apply dev_guide.md figure guidelines
@@ -192,3 +196,139 @@ def plot_distributions(
     caption = _generate_caption(figure_type, metadata)
 
     return {"paths": paths, "caption": caption, "figure_type": figure_type}
+
+
+def plot_effect_sizes(
+    effect_sizes: dict[str, float],
+    output_dir: Path,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Plot effect sizes (Cohen's d) as horizontal bar chart.
+
+    Args:
+        effect_sizes: Mapping metric_name -> effect size (Cohen's d)
+        output_dir: Directory to save figure
+        metadata: Optional metadata (n_seeds etc.)
+    Returns:
+        Dict with paths, caption, figure_type
+    """
+    if not effect_sizes:
+        return {"paths": {}, "caption": "No effect sizes available", "figure_type": "effect_sizes"}
+    configure_matplotlib_backend(headless=True)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    metrics = list(effect_sizes.keys())
+    values = [effect_sizes[m] for m in metrics]
+    y_pos = np.arange(len(metrics))
+    ax.barh(y_pos, values, color="C2", alpha=0.7)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels([m.replace("_", " ").title() for m in metrics])
+    ax.set_xlabel("Effect Size (Cohen's d)")
+    ax.set_title("Effect Size Summary")
+    ax.axvline(0.0, color="black", linewidth=0.8)
+    for i, v in enumerate(values):
+        ax.text(v, i, f" {v:.2f}", va="center", fontsize=8)
+    ax.grid(axis="x", alpha=0.3)
+    paths = save_figure(fig, output_dir, "fig-effect-sizes")
+    plt.close(fig)
+    metadata = metadata or {}
+    caption = _generate_caption("improvement_summary", metadata)
+    return {"paths": paths, "caption": caption, "figure_type": "effect_sizes"}
+
+
+def plot_improvement_summary(
+    baseline_metrics: dict[str, float],
+    pretrained_metrics: dict[str, float],
+    output_dir: Path,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Plot percentage improvements for selected metrics.
+
+    Improvement is defined as ((baseline - pretrained)/baseline)*100 for metrics where
+    lower is better (e.g., timesteps_to_convergence) and (pretrained - baseline)/baseline*100
+    where higher is better (e.g., success_rate). Heuristic: metrics containing 'timesteps' or
+    'collision' treated as lower-is-better, otherwise higher-is-better.
+    """
+    if not baseline_metrics or not pretrained_metrics:
+        return {
+            "paths": {},
+            "caption": "No metrics available",
+            "figure_type": "improvement_summary",
+        }
+    configure_matplotlib_backend(headless=True)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    improvements: list[float] = []
+    labels: list[str] = []
+    for name, base_val in baseline_metrics.items():
+        if name not in pretrained_metrics:
+            continue
+        treat_val = pretrained_metrics[name]
+        if base_val is None or treat_val is None:
+            continue
+        lower_is_better = any(k in name for k in ["timesteps", "collision"])
+        if base_val == 0:
+            continue
+        if lower_is_better:
+            imp = 100.0 * (base_val - treat_val) / base_val
+        else:
+            imp = 100.0 * (treat_val - base_val) / base_val
+        improvements.append(imp)
+        labels.append(name.replace("_", " ").title())
+    if not improvements:
+        return {
+            "paths": {},
+            "caption": "No comparable metric pairs",
+            "figure_type": "improvement_summary",
+        }
+    x_pos = np.arange(len(labels))
+    ax.bar(x_pos, improvements, color="C3", alpha=0.7)
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(labels, rotation=20, ha="right")
+    ax.set_ylabel("Improvement (%)")
+    ax.set_title("Improvement Summary")
+    for i, v in enumerate(improvements):
+        ax.text(i, v, f"{v:.1f}%", ha="center", va="bottom", fontsize=8)
+    ax.axhline(0.0, color="black", linewidth=0.8)
+    ax.grid(axis="y", alpha=0.3)
+    paths = save_figure(fig, output_dir, "fig-improvement-summary")
+    plt.close(fig)
+    metadata = metadata or {}
+    caption = _generate_caption("improvement_summary", metadata)
+    return {"paths": paths, "caption": caption, "figure_type": "improvement_summary"}
+
+
+def plot_sensitivity(
+    variants: list[dict[str, Any]],
+    param_name: str,
+    output_dir: Path,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Plot sensitivity of a single parameter against improvement percentage.
+
+    variants: list of variant dicts having keys param_name and improvement_pct.
+    """
+    if not variants:
+        return {"paths": {}, "caption": "No variants", "figure_type": "sensitivity"}
+    configure_matplotlib_backend(headless=True)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    xs: list[float] = []
+    ys: list[float] = []
+    for v in variants:
+        if v.get("improvement_pct") is None:
+            continue
+        if param_name not in v:
+            continue
+        xs.append(float(v[param_name]))
+        ys.append(float(v["improvement_pct"]))
+    if not xs:
+        return {"paths": {}, "caption": "No complete variants", "figure_type": "sensitivity"}
+    ax.plot(xs, ys, marker="o", color="C4")
+    ax.set_xlabel(param_name.replace("_", " ").title())
+    ax.set_ylabel("Improvement (%)")
+    ax.set_title(f"Sensitivity: {param_name} vs Improvement")
+    for x, y in zip(xs, ys, strict=False):
+        ax.text(x, y, f"{y:.1f}%", ha="center", va="bottom", fontsize=8)
+    ax.grid(alpha=0.3)
+    paths = save_figure(fig, output_dir, f"fig-sensitivity-{param_name}")
+    plt.close(fig)
+    caption = _generate_caption("improvement_summary", metadata or {})
+    return {"paths": paths, "caption": caption, "figure_type": "sensitivity"}

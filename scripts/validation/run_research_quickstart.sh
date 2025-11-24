@@ -34,7 +34,7 @@ uv run python scripts/research/generate_report.py \
   --output "${REPORT_DIR}"
 
 echo "[Quickstart] Step 3/3: validating report artifacts..."
-uv run python scripts/tools/validate_report.py "${REPORT_DIR}"
+uv run python scripts/tools/validate_report.py --report-dir "${REPORT_DIR}"
 
 echo "[Quickstart] Success!"
 echo "[Quickstart] Tracker artifacts: ${TRACKER_DIR}"

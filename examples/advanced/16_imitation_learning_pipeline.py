@@ -43,6 +43,7 @@ generated automatically under output/tmp for each run, so no manual edits are ne
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -56,6 +57,8 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
+from robot_sf.common.artifact_paths import get_imitation_report_dir
 from robot_sf.sim.registry import select_best_backend
 from robot_sf.telemetry import (
     ManifestWriter,
@@ -71,6 +74,58 @@ from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
 PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
 RUN_MANIFEST_DIR = Path("output/benchmarks/ppo_imitation/runs")
+
+
+def _load_training_manifest(run_id: str) -> dict[str, Any]:
+    """Best-effort load of a training run manifest; returns {} if missing or invalid."""
+
+    path = get_training_run_manifest_path(run_id)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:  # pragma: no cover - defensive fallback
+        return {}
+
+
+def _build_comparison_summary(
+    group_id: str, baseline_run_id: str, pretrained_run_id: str
+) -> dict[str, Any]:
+    """Assemble a tracker-friendly summary from the comparison report."""
+
+    comparison_path = get_imitation_report_dir() / "comparisons" / f"{group_id}_comparison.json"
+    if not comparison_path.exists():
+        return {}
+
+    try:
+        comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:  # pragma: no cover - defensive
+        return {}
+
+    summary: dict[str, Any] = {
+        "baseline_run_id": baseline_run_id,
+        "pretrained_run_id": pretrained_run_id,
+        "comparison_path": str(comparison_path),
+        "comparison": comparison,
+    }
+
+    timesteps = comparison.get("timesteps_to_convergence") or {}
+    if "baseline" in timesteps:
+        summary["baseline_timesteps"] = [timesteps["baseline"]]
+    if "pretrained" in timesteps:
+        summary["pretrained_timesteps"] = [timesteps["pretrained"]]
+
+    seeds: list[int] = []
+    for run_id in (baseline_run_id, pretrained_run_id):
+        manifest = _load_training_manifest(run_id)
+        if isinstance(manifest.get("seeds"), list):
+            try:
+                seeds.extend(int(s) for s in manifest["seeds"])
+            except (TypeError, ValueError):
+                pass
+    if seeds:
+        summary["seeds"] = sorted({int(s) for s in seeds})
+    return summary
 
 
 @dataclass(slots=True)
@@ -460,6 +515,8 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
     dataset_id = args.dataset_id
     baseline_run_id: str | None = None
     pretrained_run_id: str | None = None
+    comparison_group_id: str | None = None
+    comparison_summary: dict[str, Any] = {}
     comparison_candidates = (
         Path("scripts/tools/compare_training_runs.py"),
         Path("scripts/training/compare_training_runs.py"),
@@ -723,6 +780,9 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                     )
                     if exit_code != 0:
                         return fail_and_return("compare_runs", exit_code)
+                    comparison_summary = _build_comparison_summary(
+                        comparison_group_id, baseline_run_id, effective_pretrained_run_id
+                    )
             else:
                 logger.warning(f"Comparison script not found: {comparison_script}")
                 logger.info("Skipping comparison step")
@@ -745,14 +805,16 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         logger.info("  - Full docs: docs/imitation_learning_pipeline.md")
         logger.info("  - Quickstart: specs/001-ppo-imitation-pretrain/quickstart.md")
 
+        tracker_summary = {
+            "completed_steps": len(tracked_step_ids),
+            "demo_mode": args.demo_mode,
+            "skip_expert": args.skip_expert,
+        }
+        tracker_summary.update(comparison_summary)
         _finalize_tracker(
             tracker_context,
             PipelineRunStatus.COMPLETED,
-            summary={
-                "completed_steps": len(tracked_step_ids),
-                "demo_mode": args.demo_mode,
-                "skip_expert": args.skip_expert,
-            },
+            summary=tracker_summary,
         )
 
         return 0

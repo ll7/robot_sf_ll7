@@ -37,9 +37,17 @@ def save_figure(fig, base_path: Path, name: str) -> dict[str, Path]:
     """Save figure as both PDF (vector) and PNG (raster) for publication.
 
     Args:
-        fig: Matplotlib figure object
-        base_path: Directory to save figure files
-        name: Base name for output files (without extension)
+        fig: Matplotlib figure object to save
+        base_path: Directory where figure files will be saved (created if missing)
+        name: Base filename without extension (e.g., "fig-learning-curve")
+
+    Returns:
+        Dictionary with 'pdf' and 'png' keys mapping to Path objects
+
+    Note:
+        PDF uses fonttype 42 for LaTeX compatibility.
+        PNG exports at 300 DPI for print quality.
+        Both formats use bbox_inches='tight' to minimize whitespace.
     """
     pdf_path = base_path / f"{name}.pdf"
     png_path = base_path / f"{name}.png"
@@ -49,7 +57,22 @@ def save_figure(fig, base_path: Path, name: str) -> dict[str, Path]:
 
 
 def _generate_caption(figure_type: str, metadata: dict[str, Any]) -> str:
-    """Generate descriptive caption for a figure."""
+    """Generate descriptive caption for a figure matching publication standards.
+
+    Args:
+        figure_type: Type identifier (e.g., 'learning_curve', 'sample_efficiency')
+        metadata: Dictionary containing caption metadata (e.g., n_seeds)
+
+    Returns:
+        Publication-ready caption string with sample size and confidence level noted
+
+    Note:
+        Captions follow dev_guide.md figure guidelines:
+            - Descriptive title
+            - Axis labels explained
+            - Sample size noted (e.g., "n=3 seeds")
+            - Confidence level specified where applicable
+    """
     captions = {
         "learning_curve": f"Learning curve showing episode rewards over training timesteps. Aggregated across {metadata.get('n_seeds', 'N')} seeds with 95% confidence intervals.",
         "sample_efficiency": f"Sample efficiency comparison: PPO timesteps to convergence for baseline vs. pretrained policies. Bars show mean across {metadata.get('n_seeds', 'N')} seeds; error bars indicate 95% bootstrap CI.",
@@ -130,8 +153,23 @@ def plot_sample_efficiency(
     output_dir: Path,
     metadata: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """
-    Generate bar chart comparing sample efficiency (timesteps to convergence).
+    """Generate bar chart comparing sample efficiency (timesteps to convergence).
+
+    Args:
+        baseline_timesteps: Per-seed timesteps to convergence for baseline policy
+        pretrained_timesteps: Per-seed timesteps to convergence for pretrained policy
+        output_dir: Directory to save output figures
+        metadata: Optional metadata dict for caption generation
+
+    Returns:
+        Dictionary containing:
+            - paths: Dict with 'pdf' and 'png' Path objects
+            - caption: Publication-ready caption string
+            - figure_type: Always 'sample_efficiency'
+
+    Note:
+        Error bars show 95% bootstrap confidence intervals.
+        Bars are colored C0 (baseline) and C1 (pretrained) from matplotlib cycle.
     """
     configure_matplotlib_backend(headless=True)
     fig, ax = plt.subplots(figsize=(5, 4))

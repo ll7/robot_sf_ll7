@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`, `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
+- Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`, `scripts/validation/performance_research_report.py`, `tests/research/test_performance_smoke.py`, `tests/research/test_schemas.py`).
 
 ### Added
 - Map Verification Workflow (Feature 001-map-verification)
@@ -158,6 +161,15 @@ If your project imports from `robot_sf.util` or `robot_sf.utils`, update your im
 - Helper Catalog Consolidation (Feature 140): Extracted reusable helper logic from examples and scripts into organized library modules:
   - `robot_sf.benchmark.helper_catalog`: Policy loading (`load_trained_policy`), environment preparation (`prepare_classic_env`), and episode execution (`run_episodes_with_recording`) helpers.
   - `robot_sf.render.helper_catalog`: Directory management (`ensure_output_dir`) and frame capture utilities (`capture_frames`).
+- Automated Research Reporting: Multi-seed aggregation & completeness (Feature 270-imitation-report)
+  - Seed orchestration (`orchestrate_multi_seed`) combining baseline/pretrained manifests
+  - Per-seed manifest parsing (`extract_seed_metrics`) tolerant of JSON/JSONL tracker outputs
+  - Completeness scoring (`compute_completeness_score`) with PASS/PARTIAL classification
+  - Standardized seed failure logging (`log_seed_failure`) and graceful missing-manifest handling
+  - Seed summary table & completeness JSON artifact (`completeness.json`) rendered into `report.md`
+  - Tracker manifest parsing (`parse_tracker_manifest`) for run-level status integration
+  - Extended aggregation exports (JSON + CSV) and hypothesis evaluation incorporated in multi-seed flow
+  - All US2 tasks (T033–T043) implemented with unit & integration test coverage
   - `robot_sf.docs.helper_catalog`: Documentation index management (`register_helper`) for automated helper catalog updates.
   - Complete refactoring of all maintained examples (`examples/demo_*.py`) and scripts (`scripts/*.py`) to use helper catalog functions instead of duplicate logic.
   - Helper registry data structures with typed interfaces for discoverable, testable helper capabilities.

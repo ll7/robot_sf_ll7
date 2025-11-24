@@ -12,7 +12,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.research.schema_loader import load_schema
+from robot_sf.research.exceptions import ValidationError
+from robot_sf.research.schema_loader import load_schema, validate_data
 
 
 def validate_report_structure(report_dir: Path) -> bool:
@@ -63,24 +64,15 @@ def validate_metadata_schema(report_dir: Path) -> bool:
     with open(metadata_path, encoding="utf-8") as f:
         metadata = json.load(f)
 
-    schema_path = Path("robot_sf/benchmark/schemas/report_metadata.schema.v1.json")
-    if not schema_path.exists():
-        logger.warning(f"Schema file not found: {schema_path} - skipping schema validation")
-        return True
-
     try:
-        schema = load_schema(str(schema_path))
-        import jsonschema
+        schema = load_schema("report_metadata.schema.v1.json")
+        validate_data(metadata, schema)
+    except ValidationError as exc:
+        logger.error(f"Schema validation failed: {exc}")
+        return False
 
-        jsonschema.validate(metadata, schema)
-        logger.info("metadata.json validates against schema")
-        return True
-    except jsonschema.ValidationError as e:
-        logger.error(f"Schema validation failed: {e.message}")
-        return False
-    except Exception as e:
-        logger.error(f"Unexpected error during validation: {e}")
-        return False
+    logger.info("metadata.json validates against schema")
+    return True
 
 
 def validate_figures(report_dir: Path) -> bool:

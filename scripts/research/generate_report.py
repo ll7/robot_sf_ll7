@@ -15,53 +15,50 @@ from robot_sf.research.orchestrator import ReportOrchestrator
 
 
 def load_tracker_manifest(tracker_run_id: str) -> dict:
-    """Load tracker manifest JSON from run ID."""
-    manifest_path = Path("output/run-tracker") / tracker_run_id / "manifest.json"
-    if not manifest_path.exists():
-        logger.error(f"Tracker manifest not found: {manifest_path}")
-        sys.exit(1)
+    """Load tracker manifest from run ID (supports jsonl + json)."""
 
-    with open(manifest_path, encoding="utf-8") as f:
-        return json.load(f)
+    base_dir = Path("output/run-tracker") / tracker_run_id
+    json_path = base_dir / "manifest.json"
+    jsonl_path = base_dir / "manifest.jsonl"
+
+    if jsonl_path.exists():
+        lines = [line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line]
+        if not lines:
+            logger.error(f"Tracker manifest is empty: {jsonl_path}")
+            sys.exit(1)
+        return json.loads(lines[-1])
+
+    if json_path.exists():
+        with json_path.open(encoding="utf-8") as f:
+            return json.load(f)
+
+    logger.error(f"Tracker manifest not found: {jsonl_path} or {json_path}")
+    sys.exit(1)
 
 
-def extract_metric_records_from_manifest(_manifest: dict) -> list[dict]:
-    """Extract metric records from tracker manifest (placeholder implementation)."""
-    # Placeholder: would parse telemetry.jsonl or steps data
-    # For now, create synthetic data for demonstration
-    logger.warning("Using synthetic metric records - integrate with actual tracker data")
+def extract_metric_records_from_manifest(manifest: dict) -> tuple[list[dict], list[int]]:
+    """Extract per-seed metric records from tracker manifest (best effort, no fabrication)."""
 
-    seeds = [42, 123, 456]
-    metric_records = []
+    summary = manifest.get("summary") or {}
+    seeds: list[int] = []
+    if isinstance(summary.get("seeds"), list):
+        try:
+            seeds = [int(s) for s in summary["seeds"]]
+        except (TypeError, ValueError):
+            seeds = []
 
-    for seed in seeds:
-        # Baseline
-        metric_records.append(
-            {
-                "seed": seed,
-                "policy_type": "baseline",
-                "success_rate": 0.70 + (seed % 10) * 0.01,
-                "collision_rate": 0.15 + (seed % 10) * 0.01,
-                "timesteps_to_convergence": 500000 + (seed % 10) * 10000,
-                "final_reward_mean": 45.0 + (seed % 10) * 0.5,
-                "run_duration_seconds": 3600.0,
-            }
+    metrics = summary.get("metrics") or {}
+    records: list[dict] = []
+    if metrics:
+        # If aggregated metrics are present, keep them at the aggregated level to avoid inventing per-seed data.
+        logger.warning(
+            "Tracker manifest contains aggregated metrics only; per-seed records unavailable."
         )
-
-        # Pretrained
-        metric_records.append(
-            {
-                "seed": seed,
-                "policy_type": "pretrained",
-                "success_rate": 0.85 + (seed % 10) * 0.01,
-                "collision_rate": 0.08 + (seed % 10) * 0.01,
-                "timesteps_to_convergence": 280000 + (seed % 10) * 5000,
-                "final_reward_mean": 52.0 + (seed % 10) * 0.5,
-                "run_duration_seconds": 2100.0,
-            }
+    else:
+        logger.warning(
+            "No metrics found in tracker manifest; report will mark metrics as incomplete instead of fabricating data."
         )
-
-    return metric_records
+    return records, seeds
 
 
 def main() -> None:
@@ -117,23 +114,18 @@ def main() -> None:
     manifest = load_tracker_manifest(args.tracker_run)
     run_id = manifest.get("run_id", args.tracker_run)
 
-    # Extract metric records
-    metric_records = extract_metric_records_from_manifest(manifest)
+    # Extract metric records (no fabrication) and seeds
+    metric_records, seeds = extract_metric_records_from_manifest(manifest)
+    seeds = sorted(seeds)
 
-    # Extract seeds
-    seeds = sorted({r["seed"] for r in metric_records})
+    # Extract timesteps for hypothesis evaluation if present in summary
+    summary = manifest.get("summary") or {}
+    baseline_timesteps = summary.get("baseline_timesteps") or []
+    pretrained_timesteps = summary.get("pretrained_timesteps") or []
 
-    # Extract timesteps for hypothesis evaluation
-    baseline_timesteps = [
-        r["timesteps_to_convergence"] for r in metric_records if r["policy_type"] == "baseline"
-    ]
-    pretrained_timesteps = [
-        r["timesteps_to_convergence"] for r in metric_records if r["policy_type"] == "pretrained"
-    ]
-
-    # Placeholder learning curves (would come from tracker telemetry)
-    baseline_rewards = [[i * 0.1 for i in range(100)] for _ in seeds]
-    pretrained_rewards = [[i * 0.15 for i in range(100)] for _ in seeds]
+    # No synthetic reward curves; skip figure generation unless metrics are present
+    baseline_rewards: list[list[float]] | None = None
+    pretrained_rewards: list[list[float]] | None = None
 
     # Generate report
     orchestrator = ReportOrchestrator(output_dir)

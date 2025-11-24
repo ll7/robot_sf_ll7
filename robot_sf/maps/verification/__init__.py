@@ -25,6 +25,8 @@ See Also
 - specs/001-map-verification : Feature specification
 """
 
+# Names in __all__ are provided via lazy imports in __getattr__ below
+# This avoids heavy module loading at import time
 __all__ = [
     "MapRecord",
     "VerificationResult",

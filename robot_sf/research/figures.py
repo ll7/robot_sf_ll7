@@ -138,6 +138,11 @@ def plot_sample_efficiency(
 
     ci_low_b, ci_high_b = bootstrap_ci(baseline_timesteps) or (mean_baseline, mean_baseline)
     ci_low_p, ci_high_p = bootstrap_ci(pretrained_timesteps) or (mean_pretrained, mean_pretrained)
+    # Normalize None outputs to means
+    ci_low_b = ci_low_b if ci_low_b is not None else mean_baseline
+    ci_high_b = ci_high_b if ci_high_b is not None else mean_baseline
+    ci_low_p = ci_low_p if ci_low_p is not None else mean_pretrained
+    ci_high_p = ci_high_p if ci_high_p is not None else mean_pretrained
 
     labels = ["Baseline", "Pretrained"]
     means = [mean_baseline, mean_pretrained]

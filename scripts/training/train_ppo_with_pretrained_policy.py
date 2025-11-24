@@ -103,13 +103,21 @@ def run_ppo_finetuning(
         convergence_timesteps,
     )
 
+    # Minimal metrics to surface convergence information in downstream summaries
+    convergence_metric = common.MetricAggregate(
+        mean=float(convergence_timesteps),
+        median=float(convergence_timesteps),
+        p95=float(convergence_timesteps),
+        ci95=(float(convergence_timesteps), float(convergence_timesteps)),
+    )
+
     # Write training run manifest
     training_artifact = common.TrainingRunArtifact(
         run_id=config.run_id,
         run_type=common.TrainingRunType.PPO_FINETUNE,
         input_artefacts=(config.pretrained_policy_id,),
         seeds=config.random_seeds,
-        metrics={},  # Metrics would be collected during training in production
+        metrics={"timesteps_to_convergence": convergence_metric},
         episode_log_path=Path(""),  # Episode logs would be generated in production
         wall_clock_hours=0.0,  # Would track actual time in production
         status=common.TrainingRunStatus.COMPLETED,

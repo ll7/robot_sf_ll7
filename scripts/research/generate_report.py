@@ -114,14 +114,44 @@ def main() -> None:
     manifest = load_tracker_manifest(args.tracker_run)
     run_id = manifest.get("run_id", args.tracker_run)
 
-    # Extract metric records (no fabrication) and seeds
+    summary = manifest.get("summary") or {}
     metric_records, seeds = extract_metric_records_from_manifest(manifest)
-    seeds = sorted(seeds)
+    seeds = sorted(seeds or summary.get("seeds", []))
 
     # Extract timesteps for hypothesis evaluation if present in summary
-    summary = manifest.get("summary") or {}
-    baseline_timesteps = summary.get("baseline_timesteps") or []
-    pretrained_timesteps = summary.get("pretrained_timesteps") or []
+    baseline_timesteps = [t for t in (summary.get("baseline_timesteps") or []) if t is not None]
+    pretrained_timesteps = [t for t in (summary.get("pretrained_timesteps") or []) if t is not None]
+
+    # Fallback: construct minimal metric records from comparison summary if present
+    if not metric_records:
+        comparison = summary.get("comparison") or {}
+        metrics_comp = comparison.get("metrics_comparison") or {}
+        if metrics_comp:
+            base_seed = 0
+            metric_records = []
+            for metric_name, values in metrics_comp.items():
+                metric_records.append(
+                    {
+                        "seed": base_seed,
+                        "policy_type": "baseline",
+                        metric_name: values.get("baseline", 0.0),
+                    }
+                )
+                metric_records.append(
+                    {
+                        "seed": base_seed + 1,
+                        "policy_type": "pretrained",
+                        metric_name: values.get("pretrained", 0.0),
+                    }
+                )
+            if not seeds:
+                seeds = [0, 1]
+        if not baseline_timesteps and comparison.get("timesteps_to_convergence"):
+            ts = comparison["timesteps_to_convergence"]
+            baseline_timesteps = [ts.get("baseline")] if ts.get("baseline") is not None else []
+            pretrained_timesteps = (
+                [ts.get("pretrained")] if ts.get("pretrained") is not None else []
+            )
 
     # No synthetic reward curves; skip figure generation unless metrics are present
     baseline_rewards: list[list[float]] | None = None

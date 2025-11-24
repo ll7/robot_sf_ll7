@@ -8,6 +8,20 @@ This file explains how to build a map for robot-sf using a svg-editor.
 All examples are made with [inkscape](https://inkscape.org/).
 ![example](./img/inkscape_example.png)
 
+### Map File Organization
+
+**Canonical Map Hierarchy** (as of Feature 001-map-folder-merge):
+- **SVG Layout Files**: `maps/svg_maps/<map_id>.svg` - Contains the visual map layout
+- **JSON Metadata**: `maps/metadata/<map_id>.json` - Contains zones, dimensions, and semantic information
+- **Registry Access**: Use `robot_sf.maps.registry` to load maps programmatically
+
+**Quick Add Workflow**:
+1. Save your SVG file to `maps/svg_maps/<map_id>.svg`
+2. Create matching JSON metadata at `maps/metadata/<map_id>.json`
+3. The map will be automatically discovered by the registry
+
+For a complete guide on adding new maps, see `specs/001-map-folder-merge/quickstart.md`.
+
 ### Setup
 
 These settings should be checked before building a map.

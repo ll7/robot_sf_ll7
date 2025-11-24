@@ -52,8 +52,10 @@ class EmptyRobotEnv(Env):
         # Environment configuration details
         self.env_config = env_config
 
-        # Extract first map definition; currently only supports using the first map
-        map_def = env_config.map_pool.map_defs["uni_campus_big"]
+        # Extract first map definition from pool; currently only supports using the first map
+        if not env_config.map_pool.map_defs:
+            raise ValueError("Map pool is empty! Cannot initialize environment.")
+        map_def = next(iter(env_config.map_pool.map_defs.values()))
 
         # Initialize spaces based on the environment configuration and map
         self.action_space, self.observation_space, orig_obs_space = init_spaces(env_config, map_def)

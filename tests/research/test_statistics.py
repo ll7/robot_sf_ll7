@@ -2,7 +2,15 @@
 
 import pytest
 
-from robot_sf.research.statistics import cohen_d, evaluate_hypothesis, paired_t_test
+from robot_sf.research.statistics import (
+    HypothesisEvaluator,
+    cohen_d,
+    compare_to_threshold,
+    evaluate_hypothesis,
+    format_test_results,
+    paired_t_test,
+    validate_sample_size,
+)
 
 
 def test_paired_t_test_basic():
@@ -19,6 +27,14 @@ def test_paired_t_test_basic():
     assert result["t_stat"] is not None
     assert result["p_value"] is not None
     assert 0 <= result["p_value"] <= 1
+    # Validate sample size helper
+    size_validation = validate_sample_size(x, y)
+    assert size_validation["valid"] is True
+    # Format test results
+    effect = cohen_d(x, y)
+    formatted = format_test_results(result, effect)
+    assert "interpretation" in formatted
+    assert formatted["n"] == 5
 
 
 def test_paired_t_test_insufficient_data():
@@ -31,6 +47,8 @@ def test_paired_t_test_insufficient_data():
     assert result["t_stat"] is None
     assert result["p_value"] is None
     assert result["n"] == 1
+    size_validation = validate_sample_size(x, y)
+    assert size_validation["valid"] is False
 
 
 def test_paired_t_test_mismatched_lengths():
@@ -43,6 +61,8 @@ def test_paired_t_test_mismatched_lengths():
     assert result["t_stat"] is None
     assert result["p_value"] is None
     assert result["n"] == 2
+    size_validation = validate_sample_size(x, y)
+    assert size_validation["valid"] is False
 
 
 def test_cohen_d_basic():
@@ -92,6 +112,26 @@ def test_evaluate_hypothesis_pass():
     assert result["measured_value"] >= 40.0
     assert result["threshold_value"] == 40.0
     assert "note" in result
+
+
+def test_hypothesis_evaluator_variant():
+    """Test HypothesisEvaluator evaluate_variant (T070)."""
+    baseline = [500000, 510000, 520000]
+    pretrained = [300000, 310000, 305000]
+    evaluator = HypothesisEvaluator(threshold=40.0)
+    variant_result = evaluator.evaluate_variant(baseline, pretrained, "bc10_ds200")
+    assert variant_result["decision"] == "PASS"
+    assert variant_result["variant_id"] == "bc10_ds200"
+    assert variant_result["improvement_pct"] >= 40.0
+
+
+def test_compare_to_threshold_fail():
+    """Test compare_to_threshold returns FAIL when below threshold."""
+    baseline = [500000, 510000, 520000]
+    pretrained = [450000, 455000, 460000]  # small improvement
+    result = compare_to_threshold(baseline, pretrained, threshold=40.0)
+    assert result["decision"] == "FAIL"
+    assert result["improvement_pct"] < 40.0
 
 
 def test_evaluate_hypothesis_fail_insufficient_improvement():

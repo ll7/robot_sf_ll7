@@ -3,7 +3,11 @@
 import numpy as np
 import pytest
 
-from robot_sf.research.aggregation import aggregate_metrics, bootstrap_ci
+from robot_sf.research.aggregation import (
+    aggregate_metrics,
+    bootstrap_ci,
+    compute_completeness_score,
+)
 
 
 def test_aggregate_metrics_basic():
@@ -122,3 +126,16 @@ def test_aggregate_metrics_missing_values():
     )
     assert baseline_collision["sample_size"] == 1
     assert baseline_collision["mean"] == 0.1
+
+
+def test_completeness_score():
+    """Completeness scoring tracks missing and failed seeds."""
+
+    completeness = compute_completeness_score(
+        expected_seeds=[1, 2, 3], completed_seeds=[1, 2], failed_seeds=[3]
+    )
+
+    assert completeness["score"] == pytest.approx(66.7, rel=1e-2)
+    assert completeness["missing_seeds"] == ["3"]
+    assert completeness["failed_seeds"] == ["3"]
+    assert completeness["status"] == "PARTIAL"

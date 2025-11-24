@@ -3,6 +3,7 @@
 import pytest
 
 from robot_sf.research.orchestrator import ReportOrchestrator
+from tests.fixtures.minimal_manifests.generator import create_seed_set
 
 
 @pytest.fixture
@@ -190,6 +191,50 @@ def test_generate_report_incomplete_data(sample_metric_records, output_dir):
     # Should mark incomplete
     hypothesis = hypothesis_data["hypotheses"][0]
     assert hypothesis["decision"] == "INCOMPLETE"
+
+
+def test_multi_seed_report(tmp_path):
+    """Integration test covering seed completeness rendering."""
+
+    baseline_manifests = create_seed_set("baseline", [5, 6], tmp_path / "baseline")
+    pretrained_manifests = create_seed_set("pretrained", [5, 6], tmp_path / "pretrained")
+
+    orchestrator = ReportOrchestrator(output_dir=tmp_path / "multi_seed_report")
+    metric_records, completeness, seed_status = orchestrator.orchestrate_multi_seed(
+        baseline_manifests,
+        pretrained_manifests,
+        expected_seeds=[5, 6],
+    )
+
+    baseline_timesteps = [
+        rec["timesteps_to_convergence"]
+        for rec in metric_records
+        if rec.get("policy_type") == "baseline"
+    ]
+    pretrained_timesteps = [
+        rec["timesteps_to_convergence"]
+        for rec in metric_records
+        if rec.get("policy_type") == "pretrained"
+    ]
+
+    report_path = orchestrator.generate_report(
+        experiment_name="Multi Seed Report",
+        metric_records=metric_records,
+        run_id="multi_seed_run",
+        seeds=[5, 6],
+        baseline_timesteps=baseline_timesteps,
+        pretrained_timesteps=pretrained_timesteps,
+        seed_status=seed_status,
+        completeness=completeness,
+    )
+
+    assert report_path.exists()
+    report_content = report_path.read_text()
+    assert "Seed Summary" in report_content
+    assert "Completeness" in report_content
+
+    data_dir = report_path.parent / "data"
+    assert (data_dir / "completeness.json").exists()
 
 
 def test_metadata_collection(output_dir):

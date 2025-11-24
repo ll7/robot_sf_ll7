@@ -33,8 +33,14 @@ def configure_matplotlib_backend(headless: bool = True) -> None:
     )
 
 
-def save_figure(fig: matplotlib.figure.Figure, base_path: Path, name: str) -> dict[str, Path]:
-    """Save figure as both PDF (vector) and PNG (raster) for publication."""
+def save_figure(fig, base_path: Path, name: str) -> dict[str, Path]:
+    """Save figure as both PDF (vector) and PNG (raster) for publication.
+
+    Args:
+        fig: Matplotlib figure object
+        base_path: Directory to save figure files
+        name: Base name for output files (without extension)
+    """
     pdf_path = base_path / f"{name}.pdf"
     png_path = base_path / f"{name}.png"
     fig.savefig(pdf_path, format="pdf", bbox_inches="tight")

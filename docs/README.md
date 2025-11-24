@@ -79,6 +79,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Artifact Policy Quickstart](../specs/243-clean-output-dirs/quickstart.md)** - Step-by-step migration, guard enforcement, and override instructions for the canonical `output/` tree
 - **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training with expert trajectories
 - **[Imitation Learning Quickstart](../specs/001-ppo-imitation-pretrain/quickstart.md)** - Step-by-step workflow for BC pre-training and PPO fine-tuning
+- **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 - **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 
 ### Benchmarking & Metrics

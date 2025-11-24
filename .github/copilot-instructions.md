@@ -13,12 +13,14 @@ It is everyones guide on how to use this repository effectively.
 - Source the environment before using python or uv `source .venv/bin/activate`.
 
 ## Recent Changes
+
+- 270-imitation-report: Added Python 3.11 (existing uv-managed environment)
 - 001-map-verification: Added Python 3.11 (uv-managed virtual environment) + `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely)
 - 001-performance-tracking: Added Python 3.11 (uv-managed virtual environment) + `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo
-- 001-ppo-imitation-pretrain: Added Python 3.11 (uv-managed virtual environment) + Stable-Baselines3, imitation (HumanCompatibleAI), Gymnasium, Loguru, NumPy, PyTorch
-
+- 270-imitation-report (expanded): Research reporting pipeline with multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figures (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation orchestration, telemetry section, CLI tooling (`generate_report.py`, `compare_ablations.py`), demo script `examples/advanced/17_research_report_demo.py` and success criteria tests.
+- 270-imitation-report (polish): Schema-validated research report artifacts (metadata, metrics, hypothesis), smoke/performance harnesses under `scripts/validation`, and pytest coverage for schema/performance checks.
 
 ## Active Technologies
-- Python 3.11 (uv-managed virtual environment) + `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely) (001-map-verification)
-- File-based inputs/outputs (SVG maps under `maps/svg_maps/`, JSON/JSONL manifests under `output/validation/`) (001-map-verification)
 
+- Python 3.11 (existing uv-managed environment) (270-imitation-report)
+- File-based (JSONL episode records, JSON manifests, YAML configs, NPZ trajectories, ZIP model checkpoints) (270-imitation-report)

@@ -12,7 +12,7 @@ repos:
     hooks:
       - id: prevent-schema-duplicates
         name: Prevent Schema Duplicates
-        entry: python hooks/prevent_schema_duplicates.py
+        entry: uv run python hooks/prevent_schema_duplicates.py
         language: system
         files: \.schema\.v[0-9]+\.json$
         pass_filenames: true

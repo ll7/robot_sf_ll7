@@ -730,6 +730,8 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                 "--config",
                 str(ppo_config_path),
             ]
+            if args.demo_mode:
+                cmd.append("--dry-run")
 
             exit_code = _run_tracked_step(
                 tracker_context,

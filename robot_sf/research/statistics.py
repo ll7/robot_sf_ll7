@@ -13,9 +13,21 @@ from scipy import stats
 
 
 def paired_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
-    """
-    Perform a paired t-test between two related samples.
-    Returns dict with t_stat, p_value, n.
+    """Perform a paired t-test between two related samples.
+
+    Args:
+        x: First sample (baseline measurements)
+        y: Second sample (treatment measurements, must match length of x)
+
+    Returns:
+        Dictionary containing:
+            - t_stat: Test statistic (None if insufficient data)
+            - p_value: Two-tailed p-value (None if insufficient data)
+            - n: Sample size (minimum of len(x), len(y))
+
+    Note:
+        Requires len(x) == len(y) >= 2 for valid results.
+        Uses scipy.stats.ttest_rel for computation.
     """
     if len(x) != len(y) or len(x) < 2:
         return {"t_stat": None, "p_value": None, "n": min(len(x), len(y))}
@@ -24,8 +36,24 @@ def paired_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
 
 
 def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
-    """
-    Compute Cohen's d effect size for paired samples.
+    """Compute Cohen's d effect size for paired samples.
+
+    Args:
+        x: First sample (baseline measurements)
+        y: Second sample (treatment measurements, must match length of x)
+
+    Returns:
+        Cohen's d value (standardized mean difference) or None if:
+            - Samples have different lengths
+            - Sample size < 2
+            - Standard deviation of differences is zero
+
+    Note:
+        Effect size interpretation (Cohen 1988):
+            - |d| < 0.2: negligible
+            - 0.2 <= |d| < 0.5: small
+            - 0.5 <= |d| < 0.8: medium
+            - |d| >= 0.8: large
     """
     if len(x) != len(y) or len(x) < 2:
         return None
@@ -36,9 +64,27 @@ def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
 def evaluate_hypothesis(
     baseline: list[float], pretrained: list[float], threshold: float = 40.0
 ) -> dict[str, Any]:
-    """
-    Evaluate the hypothesis that pre-training reduces PPO timesteps by >= threshold percent.
-    Returns a dict matching HypothesisDefinition in the data model.
+    """Evaluate the hypothesis that pre-training reduces PPO timesteps by >= threshold percent.
+
+    Args:
+        baseline: Baseline timesteps to convergence (list of floats)
+        pretrained: Pre-trained timesteps to convergence (list of floats)
+        threshold: Minimum improvement percentage for hypothesis to pass (default: 40.0)
+
+    Returns:
+        Dictionary matching HypothesisDefinition schema with keys:
+            - description: Hypothesis statement
+            - metric: Metric name being evaluated
+            - threshold_value: Threshold percentage
+            - threshold_type: Always "min" for this metric
+            - decision: "PASS", "FAIL", or "INCOMPLETE"
+            - measured_value: Actual improvement percentage (may be None)
+            - note: Explanation of decision
+
+    Decision Logic:
+        - PASS: improvement_pct >= threshold
+        - FAIL: improvement_pct < threshold or negative (degradation)
+        - INCOMPLETE: Insufficient data or zero baseline mean
     """
     if not baseline or not pretrained or min(len(baseline), len(pretrained)) < 1:
         return {"decision": "INCOMPLETE", "note": "Insufficient data for hypothesis evaluation"}

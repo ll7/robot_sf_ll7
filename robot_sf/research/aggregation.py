@@ -108,6 +108,7 @@ def export_metrics_json(aggregated_metrics: list[dict[str, Any]], path: str) -> 
     Note:
         Output includes schema_version key for validation compatibility.
     """
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"schema_version": "1.0.0", "metrics": aggregated_metrics}, f, indent=2)
 
@@ -122,8 +123,9 @@ def export_metrics_csv(aggregated_metrics: list[dict[str, Any]], path: str) -> N
     Note:
         Output is tab-delimited with header row. Compatible with pandas.read_csv().
     """
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(aggregated_metrics)
-    df.to_csv(path, index=False)
+    df.to_csv(path, index=False, sep="\t")
 
 
 def bootstrap_ci(

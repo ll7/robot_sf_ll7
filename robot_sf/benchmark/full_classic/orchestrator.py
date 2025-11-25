@@ -514,6 +514,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
             record["replay_peds"] = [[] for _ in replay]
             record["replay_actions"] = [(0.05, 0.0) for _ in replay]
             record["replay_dt"] = 0.1
+            record["replay_map_path"] = getattr(getattr(job, "scenario", None), "map_path", "")
         _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
         return record
     scenario = getattr(job, "scenario", None)

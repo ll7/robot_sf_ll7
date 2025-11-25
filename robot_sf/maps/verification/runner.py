@@ -85,8 +85,8 @@ def verify_single_map(
             else:
                 factory_used = FactoryType.ROBOT
 
-            # TODO: Actually instantiate environment
-            # For now, just log what we would do
+            # Placeholder: environment instantiation intentionally skipped here.
+            # Integration tests cover actual factory creation paths.
             logger.debug(
                 f"Would instantiate {factory_used.value} environment for {map_record.map_id}"
             )

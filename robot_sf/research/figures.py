@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -51,6 +50,7 @@ def save_figure(fig, base_path: Path, name: str) -> dict[str, Path]:
     """
     pdf_path = base_path / f"{name}.pdf"
     png_path = base_path / f"{name}.png"
+    base_path.mkdir(parents=True, exist_ok=True)
     fig.savefig(pdf_path, format="pdf", bbox_inches="tight")
     fig.savefig(png_path, format="png", dpi=300, bbox_inches="tight")
     return {"pdf": pdf_path, "png": png_path}
@@ -102,35 +102,49 @@ def plot_learning_curve(
         Dict with paths and caption
     """
     configure_matplotlib_backend(headless=True)
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 4))
 
     # Compute mean and CI for baseline
     rewards_baseline_array = np.array(rewards_baseline)
+    baseline_seed_count = rewards_baseline_array.shape[0]
     mean_baseline = np.mean(rewards_baseline_array, axis=0)
-    std_baseline = np.std(rewards_baseline_array, axis=0, ddof=1)
+    std_baseline = (
+        np.std(rewards_baseline_array, axis=0, ddof=1)
+        if baseline_seed_count > 1
+        else np.zeros_like(mean_baseline)
+    )
 
     # Compute mean and CI for pretrained
     rewards_pretrained_array = np.array(rewards_pretrained)
+    pretrained_seed_count = rewards_pretrained_array.shape[0]
     mean_pretrained = np.mean(rewards_pretrained_array, axis=0)
-    std_pretrained = np.std(rewards_pretrained_array, axis=0, ddof=1)
+    std_pretrained = (
+        np.std(rewards_pretrained_array, axis=0, ddof=1)
+        if pretrained_seed_count > 1
+        else np.zeros_like(mean_pretrained)
+    )
 
     ax.plot(timesteps, mean_baseline, label="Baseline", color="C0")
-    ax.fill_between(
-        timesteps,
-        mean_baseline - 1.96 * std_baseline,
-        mean_baseline + 1.96 * std_baseline,
-        alpha=0.3,
-        color="C0",
-    )
+    if baseline_seed_count > 1:
+        ax.fill_between(
+            timesteps,
+            mean_baseline - 1.96 * std_baseline,
+            mean_baseline + 1.96 * std_baseline,
+            alpha=0.3,
+            color="C0",
+        )
 
     ax.plot(timesteps, mean_pretrained, label="Pretrained", color="C1")
-    ax.fill_between(
-        timesteps,
-        mean_pretrained - 1.96 * std_pretrained,
-        mean_pretrained + 1.96 * std_pretrained,
-        alpha=0.3,
-        color="C1",
-    )
+    if pretrained_seed_count > 1:
+        ax.fill_between(
+            timesteps,
+            mean_pretrained - 1.96 * std_pretrained,
+            mean_pretrained + 1.96 * std_pretrained,
+            alpha=0.3,
+            color="C1",
+        )
 
     ax.set_xlabel("Training Timesteps")
     ax.set_ylabel("Episode Reward")
@@ -141,7 +155,8 @@ def plot_learning_curve(
     plt.close(fig)
 
     metadata = metadata or {}
-    metadata["n_seeds"] = len(rewards_baseline)
+    metadata["n_seeds"] = baseline_seed_count
+    metadata["n_seeds_pretrained"] = pretrained_seed_count
     caption = _generate_caption("learning_curve", metadata)
 
     return {"paths": paths, "caption": caption, "figure_type": "learning_curve"}
@@ -172,6 +187,8 @@ def plot_sample_efficiency(
         Bars are colored C0 (baseline) and C1 (pretrained) from matplotlib cycle.
     """
     configure_matplotlib_backend(headless=True)
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(5, 4))
 
     mean_baseline = np.mean(baseline_timesteps)
@@ -221,6 +238,8 @@ def plot_distributions(
     Generate distribution comparison plot (histograms/violin) for a metric.
     """
     configure_matplotlib_backend(headless=True)
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 4))
 
     ax.hist(baseline_values, bins=10, alpha=0.5, label="Baseline", color="C0")
@@ -264,6 +283,8 @@ def plot_effect_sizes(
     if not effect_sizes:
         return {"paths": {}, "caption": "No effect sizes available", "figure_type": "effect_sizes"}
     configure_matplotlib_backend(headless=True)
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 4))
     metrics = list(effect_sizes.keys())
     values = [effect_sizes[m] for m in metrics]
@@ -304,6 +325,8 @@ def plot_improvement_summary(
             "figure_type": "improvement_summary",
         }
     configure_matplotlib_backend(headless=True)
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 4))
     improvements: list[float] = []
     labels: list[str] = []
@@ -358,6 +381,8 @@ def plot_sensitivity(
     if not variants:
         return {"paths": {}, "caption": "No variants", "figure_type": "sensitivity"}
     configure_matplotlib_backend(headless=True)
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(figsize=(6, 4))
     xs: list[float] = []
     ys: list[float] = []

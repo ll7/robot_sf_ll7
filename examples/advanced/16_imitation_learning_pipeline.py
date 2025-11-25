@@ -241,6 +241,10 @@ def _override_expert_config_policy_id(config_path: Path, policy_id: str) -> Path
 
     data = _load_yaml_config(config_path)
     data["policy_id"] = policy_id
+    scenario_cfg = data.get("scenario_config")
+    if isinstance(scenario_cfg, str):
+        # Normalize to absolute path so downstream copies do not break relative references
+        data["scenario_config"] = str((config_path.parent / scenario_cfg).resolve())
     filename = f"{config_path.stem}__policy_override.yaml"
     logger.info("Applying policy_id override -> {}", policy_id)
     return _write_pipeline_config(filename, data)

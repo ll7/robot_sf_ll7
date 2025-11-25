@@ -118,7 +118,7 @@ def verify_single_map(
     result = VerificationResult(
         map_id=map_record.map_id,
         status=status,
-        rule_ids=rule_ids if rule_ids else ["PASS"],
+        rule_ids=rule_ids,
         duration_ms=duration_ms,
         factory_used=factory_used,
         message=message,

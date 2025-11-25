@@ -21,6 +21,7 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
     output_root: str
     scenario_matrix_path: str
     fast_stub: bool = True
+    disable_videos: bool = True
     bootstrap_samples: int = 1000
     bootstrap_confidence: float = 0.95
     master_seed: int = 123

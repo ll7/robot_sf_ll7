@@ -5,6 +5,7 @@ Rewritten to purge legacy pytest_sessionfinish hook with invalid signature.
 
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 import time
@@ -13,6 +14,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.common.artifact_paths import ensure_canonical_tree
+
+try:
+    from tests.perf_utils.policy import PerformanceBudgetPolicy
+    from tests.perf_utils.reporting import SlowTestSample, format_report, generate_report
+except Exception:  # pragma: no cover - perf utils optional in some contexts
+    PerformanceBudgetPolicy = None  # type: ignore[assignment]
+    SlowTestSample = None  # type: ignore[assignment]
+    format_report = None  # type: ignore[assignment]
+    generate_report = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     from collections.abc import Generator
 
@@ -20,6 +32,61 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 root_str = str(PROJECT_ROOT)
 if root_str not in sys.path:
     sys.path.insert(0, root_str)
+
+
+def _import_torch_optional():
+    try:
+        return importlib.import_module("torch")  # type: ignore
+    except Exception:  # pragma: no cover - torch optional in some envs
+        return None
+
+
+def _snapshot_torch_determinism(torch_module):
+    state: dict[str, object | None] = {
+        "algos": None,
+        "cudnn_backend": None,
+        "cudnn_det": None,
+        "cudnn_bench": None,
+    }
+    if hasattr(torch_module, "are_deterministic_algorithms_enabled"):
+        try:
+            state["algos"] = bool(torch_module.are_deterministic_algorithms_enabled())
+        except Exception:  # pragma: no cover - defensive capture
+            state["algos"] = None
+    cudnn_backend = getattr(getattr(torch_module, "backends", None), "cudnn", None)
+    state["cudnn_backend"] = cudnn_backend
+    if cudnn_backend is not None:
+        state["cudnn_det"] = getattr(cudnn_backend, "deterministic", None)
+        state["cudnn_bench"] = getattr(cudnn_backend, "benchmark", None)
+    return state
+
+
+def _apply_nondeterministic(torch_module, cudnn_backend):
+    try:
+        if hasattr(torch_module, "use_deterministic_algorithms"):
+            torch_module.use_deterministic_algorithms(False)
+        if cudnn_backend is not None:
+            cudnn_backend.deterministic = False  # type: ignore[attr-defined]
+            cudnn_backend.benchmark = True  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - best effort guard
+        pass
+
+
+def _restore_torch_determinism(torch_module, state):
+    try:
+        prev_algos = state.get("algos")
+        cudnn_backend = state.get("cudnn_backend")
+        if prev_algos is not None and hasattr(torch_module, "use_deterministic_algorithms"):
+            torch_module.use_deterministic_algorithms(prev_algos)
+        if cudnn_backend is not None:
+            prev_det = state.get("cudnn_det")
+            prev_bench = state.get("cudnn_bench")
+            if prev_det is not None:
+                cudnn_backend.deterministic = prev_det  # type: ignore[attr-defined]
+            if prev_bench is not None:
+                cudnn_backend.benchmark = prev_bench  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - best effort restore
+        pass
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -53,8 +120,6 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
     original = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
     override_dir = tmp_path_factory.mktemp("robot_sf_artifacts")
     os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(override_dir)
-    from robot_sf.common.artifact_paths import ensure_canonical_tree
-
     ensure_canonical_tree(override_dir)
     try:
         yield
@@ -65,28 +130,46 @@ def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator
             os.environ["ROBOT_SF_ARTIFACT_ROOT"] = original
 
 
+@pytest.fixture(scope="session", autouse=True)
+def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
+    """Ensure torch deterministic algorithms aren't forced across the suite."""
+
+    torch_module = _import_torch_optional()
+    if torch_module is None:
+        yield
+        return
+
+    state = _snapshot_torch_determinism(torch_module)
+    _apply_nondeterministic(torch_module, state.get("cudnn_backend"))
+
+    try:
+        yield
+    finally:
+        _restore_torch_determinism(torch_module, state)
+
+
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
-    try:
-        from tests.perf_utils.policy import PerformanceBudgetPolicy
+    if PerformanceBudgetPolicy is not None:
+        try:
+            return PerformanceBudgetPolicy()
+        except Exception:  # pragma: no cover
+            pass
 
-        return PerformanceBudgetPolicy()
-    except Exception:  # pragma: no cover
+    class _Fallback:  # pragma: no cover - only used when perf utils missing
+        soft_threshold_seconds = 20.0
+        hard_timeout_seconds = 60.0
+        report_count = 10
+        relax_env_var = "ROBOT_SF_PERF_RELAX"
 
-        class _Fallback:
-            soft_threshold_seconds = 20.0
-            hard_timeout_seconds = 60.0
-            report_count = 10
-            relax_env_var = "ROBOT_SF_PERF_RELAX"
+        def classify(self, duration_seconds: float):
+            if duration_seconds >= self.hard_timeout_seconds:
+                return "hard"
+            if duration_seconds >= self.soft_threshold_seconds:
+                return "soft"
+            return "none"
 
-            def classify(self, duration_seconds: float):
-                if duration_seconds >= self.hard_timeout_seconds:
-                    return "hard"
-                if duration_seconds >= self.soft_threshold_seconds:
-                    return "soft"
-                return "none"
-
-        return _Fallback()
+    return _Fallback()
 
 
 _SLOW_SAMPLES: list[tuple[str, float]] = []
@@ -114,10 +197,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # type: igno
     del exitstatus, config
     if not _SLOW_SAMPLES:
         return
-    try:
-        from tests.perf_utils.policy import PerformanceBudgetPolicy
-        from tests.perf_utils.reporting import SlowTestSample, format_report, generate_report
-    except Exception:  # pragma: no cover
+    if PerformanceBudgetPolicy is None or SlowTestSample is None:
         return
     policy = PerformanceBudgetPolicy()
     # Optional environment overrides (not part of public API; used for enforcement test)

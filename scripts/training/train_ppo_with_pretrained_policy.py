@@ -48,7 +48,7 @@ class TimestepTracker(BaseCallback):
 
 
 def _evaluate_policy_metrics(
-    model: PPO,
+    model: PPO | None,
     config: PPOFineTuningConfig,
     *,
     dry_run: bool,
@@ -58,6 +58,8 @@ def _evaluate_policy_metrics(
     if dry_run:
         logger.warning("Dry run mode: using placeholder metrics for evaluation")
         return [0.85], [0.08], [0.85 - 0.5 * 0.08]
+    if model is None:
+        raise ValueError("Model must be provided for evaluation when not in dry-run mode")
 
     eval_seed = config.random_seeds[0] if config.random_seeds else None
     eval_env = make_robot_env(config=RobotSimulationConfig(), seed=eval_seed)
@@ -180,7 +182,9 @@ def run_ppo_finetuning(
 
     # Compute real metrics from the trained model by running evaluation episodes
     # This replaces the previous synthetic random data approach
-    successes, collisions, snqi_values = _evaluate_policy_metrics(model, config, dry_run=dry_run)
+    successes, collisions, snqi_values = _evaluate_policy_metrics(
+        model if not dry_run else None, config, dry_run=dry_run
+    )
     success_rate = float(np.mean(successes)) if successes else 0.0
     collision_rate = float(np.mean(collisions)) if collisions else 0.0
     snqi = float(np.mean(snqi_values)) if snqi_values else 0.0

@@ -404,7 +404,7 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
         seed=int(job.seed),
         debug=False,
         recording_enabled=capture_replay,
-        record_video=False,
+        record_video=bool(getattr(cfg, "record_video", False)),
         video_fps=float(getattr(cfg, "video_fps", 10) or 10),
         use_jsonl_recording=False,
         recording_dir=str(replays_dir),
@@ -665,6 +665,8 @@ def _execute_parallel(
 ) -> Iterator[dict]:
     logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
     cfg_payload = vars(cfg).copy() if hasattr(cfg, "__dict__") else {}
+    if "disable_videos" not in cfg_payload:
+        cfg_payload["disable_videos"] = True
     results_map: dict[str, dict] = {}
     with ProcessPoolExecutor(max_workers=workers) as ex:
         future_map = {ex.submit(_worker_job_wrapper, j, cfg_payload): j for j in job_list}

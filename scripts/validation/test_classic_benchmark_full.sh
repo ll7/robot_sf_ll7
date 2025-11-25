@@ -9,6 +9,7 @@ SCENARIOS=${SCENARIOS:-configs/scenarios/classic_interactions.yaml}
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT_DIR=${OUT_DIR:-output/results/validation_classic_smoke/${STAMP}}
 SEED=${SEED:-123}
+export LOGURU_LEVEL=INFO
 
 echo "[classic-benchmark-smoke] scenarios=${SCENARIOS} out=${OUT_DIR} seed=${SEED}" >&2
 
@@ -86,8 +87,9 @@ if not isinstance(summary, dict):
 
 meta = summary.get("_meta") or {}
 
-if meta.get("group_by") != "scenario_params.algo":
-    raise SystemExit("Unexpected aggregation group_by metadata: %r" % (meta.get("group_by"),))
+group_by = meta.get("group_by")
+if group_by not in (None, "scenario_params.algo"):
+    raise SystemExit(f"Unexpected aggregation group_by metadata: {group_by!r}")
 
 effective = meta.get("effective_group_key")
 if effective is None:

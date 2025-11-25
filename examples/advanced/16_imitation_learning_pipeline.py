@@ -428,14 +428,17 @@ def _run_tracked_step(
 ) -> Any:
     is_tracked = tracker_ctx is not None and step_id in tracked_steps
     if is_tracked:
+        assert tracker_ctx is not None  # type narrowing for static analysis
         tracker_ctx.tracker.start_step(step_id)
     try:
         result = func()
     except Exception as exc:  # pragma: no cover - pipeline invoked externally
         if is_tracked:
+            assert tracker_ctx is not None
             tracker_ctx.tracker.fail_step(step_id, reason=str(exc))
         raise
     if is_tracked:
+        assert tracker_ctx is not None
         if isinstance(result, int) and result != 0:
             tracker_ctx.tracker.fail_step(step_id, reason=f"exit code {result}")
         else:

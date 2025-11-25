@@ -184,7 +184,7 @@ def check_required_layers(map_path: Path) -> list[RuleViolation]:
         ns = {"inkscape": "http://www.inkscape.org/namespaces/inkscape"}
         # Use attribute wildcard search to avoid default-namespace tag matching issues
         labeled_groups = root.findall(".//*[@inkscape:label]", ns)
-        all_groups = root.findall(".//*")
+        all_groups = root.findall(".//{*}g")
 
         labeled_count = len(labeled_groups)
         total_groups = len(all_groups)

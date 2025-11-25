@@ -471,7 +471,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
         )
         _write_json(reports_dir / "performance_visuals.json", perf_meta)
         logger.info(
-            "Visual artifacts (smoke fast-path): plots=%d videos=%d (smoke=%s)",
+            "Visual artifacts (smoke fast-path): plots={} videos={} (smoke={})",
             len(plot_artifacts),
             len(video_artifacts),
             True,
@@ -564,7 +564,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
             raise
 
     logger.info(
-        "Visual artifacts generated: plots=%d videos=%d (disable_videos=%s smoke=%s mode=%s)",
+        "Visual artifacts generated: plots={} videos={} (disable_videos={} smoke={} mode={})",
         len(plot_artifacts),
         len(video_artifacts),
         bool(getattr(cfg, "disable_videos", False)),

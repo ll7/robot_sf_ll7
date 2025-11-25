@@ -384,6 +384,13 @@ def run_expert_training(
     # Fallback: if all primary metrics are zero (common in stub/demo runs), seed with
     # deterministic demo values so downstream reports are populated.
     primary_keys = ("success_rate", "collision_rate", "path_efficiency", "snqi", "comfort_exposure")
+    notes: list[str] = [
+        f"dry_run={dry_run}",
+        f"scenario_id={scenario_label}",
+        f"total_timesteps={config.total_timesteps}",
+        f"Converged at {config.total_timesteps} timesteps",
+    ]
+    metrics_synthetic = False
     if all(
         aggregates.get(key, common.MetricAggregate(0.0, 0.0, 0.0, (0.0, 0.0))).mean == 0.0
         for key in primary_keys
@@ -404,6 +411,19 @@ def run_expert_training(
                 p95=mean_val,
                 ci95=(mean_val, mean_val),
             )
+        metrics_synthetic = True
+        seeded_keys = ", ".join(demo_metrics.keys())
+        logger.warning(
+            "All primary metrics were zero; seeding synthetic demo metrics for keys: {}",
+            seeded_keys,
+        )
+        notes.append("Synthetic demo metrics used due to zero primary metrics")
+
+    validation_state = (
+        common.ExpertValidationState.SYNTHETIC
+        if metrics_synthetic and hasattr(common.ExpertValidationState, "SYNTHETIC")
+        else common.ExpertValidationState.DRAFT
+    )
 
     expert_artifact = common.ExpertPolicyArtifact(
         policy_id=config.policy_id,
@@ -413,8 +433,12 @@ def run_expert_training(
         metrics=aggregates,
         checkpoint_path=checkpoint_path,
         config_manifest=config_manifest,
-        validation_state=common.ExpertValidationState.DRAFT,
+        validation_state=validation_state,
         created_at=timestamp,
+        metrics_synthetic=metrics_synthetic
+        if "metrics_synthetic" in common.ExpertPolicyArtifact.__dataclass_fields__  # type: ignore[attr-defined]
+        else None,
+        notes=tuple(notes),
     )
 
     episode_log_path = common.get_imitation_report_dir() / "episodes" / f"{run_id}.jsonl"
@@ -431,12 +455,7 @@ def run_expert_training(
         episode_log_path=episode_log_path,
         wall_clock_hours=wall_clock_hours,
         status=common.TrainingRunStatus.COMPLETED,
-        notes=[
-            f"dry_run={dry_run}",
-            f"scenario_id={scenario_label}",
-            f"total_timesteps={config.total_timesteps}",
-            f"Converged at {config.total_timesteps} timesteps",
-        ],
+        notes=notes,
     )
 
     expert_manifest_path = write_expert_policy_manifest(expert_artifact)

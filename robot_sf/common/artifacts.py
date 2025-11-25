@@ -17,6 +17,7 @@ class ExpertValidationState(str, Enum):
     DRAFT = "draft"
     APPROVED = "approved"
     SUPERSEDED = "superseded"
+    SYNTHETIC = "synthetic"
 
 
 class TrajectoryQuality(str, Enum):

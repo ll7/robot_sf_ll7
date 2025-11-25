@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-2020-12/schema",
+  "$id": "https://robot-sf.dev/specs/270-imitation-report/report-metadata.schema.v1.json",
+  "title": "ResearchReportMetadata",
+  "description": "Complete metadata for a research report including experiment context, reproducibility, and artifact locations",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at",
+    "experiment_name",
+    "seeds",
+    "reproducibility",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.\\d+$",
+      "description": "Schema version following semver"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^\\d{8}_\\d{6}_[a-z0-9_-]+$",
+      "description": "Unique run identifier: timestamp_experimentname"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp of experiment initiation"
+    },
+    "experiment_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable experiment label"
+    },
+    "seeds": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "minItems": 1,
+      "description": "Random seeds used across all conditions"
+    },
+    "baseline_run_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Training run identifiers for baseline policies"
+    },
+    "pretrained_run_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Training run identifiers for pre-trained policies"
+    },
+    "configs": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Paths to captured configuration files"
+    },
+    "reproducibility": {
+      "$ref": "#/$defs/reproducibilityMetadata"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reportArtifact"
+      },
+      "description": "List of all generated artifacts for this report"
+    }
+  },
+  "$defs": {
+    "reproducibilityMetadata": {
+      "type": "object",
+      "required": ["git_commit", "git_branch", "git_dirty", "python_version", "key_packages", "hardware", "timestamp"],
+      "properties": {
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full Git commit hash"
+        },
+        "git_branch": {
+          "type": "string",
+          "description": "Git branch name"
+        },
+        "git_dirty": {
+          "type": "boolean",
+          "description": "Whether uncommitted changes were present"
+        },
+        "python_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Python version (semver)"
+        },
+        "key_packages": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Package name to version mapping"
+        },
+        "hardware": {
+          "$ref": "#/$defs/hardwareProfile"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp of metadata capture"
+        }
+      }
+    },
+    "hardwareProfile": {
+      "type": "object",
+      "required": ["cpu_model", "cpu_cores", "memory_gb"],
+      "properties": {
+        "cpu_model": {
+          "type": "string",
+          "description": "Processor model name"
+        },
+        "cpu_cores": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total CPU cores (physical + logical)"
+        },
+        "memory_gb": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "RAM in gigabytes"
+        },
+        "gpu_model": {
+          "type": ["string", "null"],
+          "description": "GPU model if present"
+        },
+        "gpu_memory_gb": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "VRAM in gigabytes if GPU present"
+        }
+      }
+    },
+    "reportArtifact": {
+      "type": "object",
+      "required": ["path", "artifact_type", "generated_at"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path to artifact from report root"
+        },
+        "artifact_type": {
+          "type": "string",
+          "enum": ["figure", "markdown", "latex", "json", "csv"],
+          "description": "Type of artifact"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp of artifact creation"
+        },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hash for integrity verification"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes"
+        }
+      }
+    }
+  }
+}

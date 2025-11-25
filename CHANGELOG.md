@@ -6,8 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`, `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
+- Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`, `scripts/validation/performance_research_report.py`, `tests/research/test_performance_smoke.py`, `tests/research/test_schemas.py`).
 
 ### Added
+- Map Verification Workflow (Feature 001-map-verification)
+  - Single-command map validation tool (`scripts/validation/verify_maps.py`) for SVG map quality checks
+  - Rule-based validation engine checking file readability, SVG syntax, file size, and layer organization
+  - Scope filtering supporting 'all', 'ci', 'changed', specific filenames, or glob patterns
+  - Structured JSON/JSONL manifest output for tooling and dashboard integration
+  - CI mode with strict exit codes for automated quality gates
+  - Loguru-based diagnostics with human-readable console output
+  - Map inventory system with tag-based classification and filtering
+  - Verification results include timing, rule violations, and remediation hints
+  - Documentation in `docs/SVG_MAP_EDITOR.md` and `specs/001-map-verification/quickstart.md`
+  - Sample manifest artifacts under `output/validation/`
 - Run tracking & telemetry for the imitation pipeline (Feature 001-performance-tracking)
   - Progress tracker with deterministic step ordinals, ETA smoothing, and manifest-backed step history
   - JSONL manifests enriched with telemetry snapshots, rule-based recommendations, and perf-test results stored under `output/run-tracker/`
@@ -102,6 +116,14 @@ If your project imports from `robot_sf.util` or `robot_sf.utils`, update your im
 - **Architecture Decoupling (Feature 149)**: Introduced simulator facade and backend/sensor registries scaffolding behind the existing factory pattern. Default backend is "fast-pysf" with future backend selection via unified config.
 - Backend registry integrated into environment initialization: `BaseEnv` now resolves the simulator via a backend key (`env_config.backend`, default "fast-pysf") using `robot_sf.sim.registry`, with a safe fallback to legacy `init_simulators()` for full backward compatibility.
 - **fast-pysf Integration Improvements (Feature 148)**: Enhanced fast-pysf integration with comprehensive testing and quality tooling
+  - **Map Verification Enhancements (001-map-verification)**
+    - Added informational rule `R005` (layer statistics) emitted when Inkscape-labeled groups (`<g inkscape:label="…">`) are present
+    - Enhanced `R004` message and remediation guidance (descriptive labeling for obstacles/spawns/waypoints)
+    - Inserted Map Verification section into `docs/benchmark.md` (CI invocation, rule table, manifest structure, extension guidance)
+    - Added labeled example SVG (`maps/svg_maps/labeled_example.svg`) for demonstrating layer labeling and future semantic tagging
+    - Improved internal type hints (`_load_inventory` return type, expanded docstrings) for verification modules
+    - Test coverage extended (`test_layer_stats_info`) validating scope resolution and future R005 visibility
+
   - **Unified Test Suite**: Single `uv run pytest` command now executes both robot_sf (881 tests) and fast-pysf (12 tests) for total 893 tests
   - **Quality Tooling Extension**: Extended ruff linting, ty type checking, and coverage reporting to include fast-pysf subtree
   - **Type Annotations**: Added comprehensive type hints to fast-pysf public APIs (map_loader, forces, simulator, scene modules)
@@ -139,6 +161,15 @@ If your project imports from `robot_sf.util` or `robot_sf.utils`, update your im
 - Helper Catalog Consolidation (Feature 140): Extracted reusable helper logic from examples and scripts into organized library modules:
   - `robot_sf.benchmark.helper_catalog`: Policy loading (`load_trained_policy`), environment preparation (`prepare_classic_env`), and episode execution (`run_episodes_with_recording`) helpers.
   - `robot_sf.render.helper_catalog`: Directory management (`ensure_output_dir`) and frame capture utilities (`capture_frames`).
+- Automated Research Reporting: Multi-seed aggregation & completeness (Feature 270-imitation-report)
+  - Seed orchestration (`orchestrate_multi_seed`) combining baseline/pretrained manifests
+  - Per-seed manifest parsing (`extract_seed_metrics`) tolerant of JSON/JSONL tracker outputs
+  - Completeness scoring (`compute_completeness_score`) with PASS/PARTIAL classification
+  - Standardized seed failure logging (`log_seed_failure`) and graceful missing-manifest handling
+  - Seed summary table & completeness JSON artifact (`completeness.json`) rendered into `report.md`
+  - Tracker manifest parsing (`parse_tracker_manifest`) for run-level status integration
+  - Extended aggregation exports (JSON + CSV) and hypothesis evaluation incorporated in multi-seed flow
+  - All US2 tasks (T033–T043) implemented with unit & integration test coverage
   - `robot_sf.docs.helper_catalog`: Documentation index management (`register_helper`) for automated helper catalog updates.
   - Complete refactoring of all maintained examples (`examples/demo_*.py`) and scripts (`scripts/*.py`) to use helper catalog functions instead of duplicate logic.
   - Helper registry data structures with typed interfaces for discoverable, testable helper capabilities.

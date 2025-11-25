@@ -1,0 +1,5 @@
+ablation_params:
+  bc_epochs: [5, 10, 15]
+  dataset_size: [100, 200]
+threshold: 40.0
+description: "Example ablation config for imitation learning pre-training impact."

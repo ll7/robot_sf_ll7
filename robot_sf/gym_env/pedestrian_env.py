@@ -27,6 +27,7 @@ from robot_sf.gym_env.env_util import (
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.reward import simple_ped_reward
+from robot_sf.gym_env.robot_env import _build_step_info
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
@@ -202,7 +203,8 @@ class PedestrianEnv(Env):
         if self.recording_enabled:
             self.record()
         truncated = False
-        return obs_ped, reward, term, truncated, {"step": meta["step"], "meta": meta}
+        info = _build_step_info(meta)
+        return obs_ped, reward, term, truncated, info
 
     def reset(self, seed=None, options=None):
         """

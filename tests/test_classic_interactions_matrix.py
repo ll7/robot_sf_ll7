@@ -56,7 +56,8 @@ def test_each_scenario_structure_and_files() -> None:
     for scenario in data["scenarios"]:
         missing = REQUIRED_SCENARIO_KEYS - scenario.keys()
         assert not missing, f"Scenario {scenario.get('name')} missing keys: {missing}"
-        map_file = ROOT / scenario["map_file"]
+        # Resolve map_file relative to the scenario file's directory
+        map_file = (SCENARIO_FILE.parent / scenario["map_file"]).resolve()
         assert map_file.exists(), f"Map file does not exist: {map_file}"
         # simulation_config density check
         sim_cfg = scenario["simulation_config"]

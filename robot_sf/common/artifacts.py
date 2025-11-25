@@ -17,6 +17,7 @@ class ExpertValidationState(str, Enum):
     DRAFT = "draft"
     APPROVED = "approved"
     SUPERSEDED = "superseded"
+    SYNTHETIC = "synthetic"
 
 
 class TrajectoryQuality(str, Enum):
@@ -68,6 +69,8 @@ class ExpertPolicyArtifact:
     config_manifest: Path
     validation_state: ExpertValidationState
     created_at: datetime
+    metrics_synthetic: bool = False
+    notes: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(slots=True)

@@ -79,6 +79,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Artifact Policy Quickstart](../specs/243-clean-output-dirs/quickstart.md)** - Step-by-step migration, guard enforcement, and override instructions for the canonical `output/` tree
 - **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training with expert trajectories
 - **[Imitation Learning Quickstart](../specs/001-ppo-imitation-pretrain/quickstart.md)** - Step-by-step workflow for BC pre-training and PPO fine-tuning
+- **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 - **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 
 ### Benchmarking & Metrics
@@ -101,6 +102,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 ### Simulation & UI
 - **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
 - **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
+- **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
 
 ### Figures & Visualization
 - **[Trajectory Visualization](./trajectory_visualization.md)** - Generate trajectory plots

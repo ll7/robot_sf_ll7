@@ -6,7 +6,8 @@
 set -euo pipefail
 
 SCENARIOS=${SCENARIOS:-configs/scenarios/classic_interactions.yaml}
-OUT_DIR=${OUT_DIR:-results/validation_classic_smoke}
+STAMP="$(date +%Y%m%d_%H%M%S)"
+OUT_DIR=${OUT_DIR:-output/results/validation_classic_smoke/${STAMP}}
 SEED=${SEED:-123}
 
 echo "[classic-benchmark-smoke] scenarios=${SCENARIOS} out=${OUT_DIR} seed=${SEED}" >&2
@@ -78,9 +79,12 @@ if not algo_top or algo_top != algo_nested:
     raise SystemExit("Algorithm metadata not mirrored into scenario_params.algo")
 
 summary = json.loads(summary_path.read_text(encoding="utf-8"))
-meta = summary.get("_meta")
-if not isinstance(meta, dict):
+if isinstance(summary, list):
+    summary = summary[0] if summary and isinstance(summary[0], dict) else {}
+if not isinstance(summary, dict):
     raise SystemExit("Aggregation summary missing _meta diagnostics")
+
+meta = summary.get("_meta")
 
 if meta.get("group_by") != "scenario_params.algo":
     raise SystemExit("Unexpected aggregation group_by metadata: %r" % (meta.get("group_by"),))

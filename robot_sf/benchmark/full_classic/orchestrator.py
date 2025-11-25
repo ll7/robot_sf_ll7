@@ -477,6 +477,45 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     """Execute a real episode using the environment factory and compute metrics."""
 
     episode_id = _episode_id_from_job(job)
+    if bool(getattr(cfg, "fast_stub", False)):
+        now = time.time()
+        horizon = _resolve_horizon(job, cfg)
+        record: dict[str, Any] = {
+            "version": "v1",
+            "episode_id": episode_id,
+            "scenario_id": job.scenario_id,
+            "seed": job.seed,
+            "archetype": job.archetype,
+            "density": job.density,
+            "status": "success",
+            "metrics": {
+                "collision_rate": 0.0,
+                "success_rate": 1.0,
+                "time_to_goal": float(horizon) * 0.1,
+                "path_efficiency": 0.9,
+                "average_speed": 1.0,
+            },
+            "steps": min(horizon, 5),
+            "horizon": horizon,
+            "wall_time_sec": 0.0,
+            "created_at": now,
+            "scenario_params": {
+                "archetype": job.archetype,
+                "density": job.density,
+                "max_episode_steps": horizon,
+                "scenario_id": job.scenario_id,
+                "hash_fragment": getattr(getattr(job, "scenario", None), "hash_fragment", ""),
+            },
+            "timing": {"steps_per_second": 0.0},
+        }
+        if bool(getattr(cfg, "capture_replay", False)):
+            replay = [(i * 0.1, 0.05 * i, 0.0, 0.0) for i in range(record["steps"])]
+            record["replay_steps"] = replay
+            record["replay_peds"] = [[] for _ in replay]
+            record["replay_actions"] = [(0.05, 0.0) for _ in replay]
+            record["replay_dt"] = 0.1
+        _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
+        return record
     scenario = getattr(job, "scenario", None)
     if scenario is None:
         raise AggregationMetadataError(

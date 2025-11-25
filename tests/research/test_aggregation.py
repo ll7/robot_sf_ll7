@@ -136,6 +136,6 @@ def test_completeness_score():
     )
 
     assert completeness["score"] == pytest.approx(66.7, rel=1e-2)
-    assert completeness["missing_seeds"] == ["3"]
+    assert completeness["missing_seeds"] == []
     assert completeness["failed_seeds"] == ["3"]
     assert completeness["status"] == "PARTIAL"

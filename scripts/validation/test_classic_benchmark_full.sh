@@ -84,13 +84,19 @@ if isinstance(summary, list):
 if not isinstance(summary, dict):
     raise SystemExit("Aggregation summary missing _meta diagnostics")
 
-meta = summary.get("_meta")
+meta = summary.get("_meta") or {}
 
 if meta.get("group_by") != "scenario_params.algo":
     raise SystemExit("Unexpected aggregation group_by metadata: %r" % (meta.get("group_by"),))
 
-if "effective_group_key" not in meta:
+effective = meta.get("effective_group_key")
+if effective is None:
     raise SystemExit("effective_group_key missing from aggregation metadata")
+overall = summary.get("overall")
+if overall is None:
+    raise SystemExit("overall section missing from aggregation summary")
+if not isinstance(overall, dict) or not overall.get("metrics"):
+    raise SystemExit("overall summary missing metrics section")
 
 print("Aggregation metadata validation OK")
 PY

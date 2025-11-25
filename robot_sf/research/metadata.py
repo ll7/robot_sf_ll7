@@ -162,7 +162,7 @@ def get_package_versions() -> dict[str, str]:
         "numpy",
         "stable-baselines3",
         "torch",
-        "robot-sf",  # Self-reference
+        "robot_sf",  # Self-reference
     ]
 
     versions = {}

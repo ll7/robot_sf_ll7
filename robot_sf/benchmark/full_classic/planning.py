@@ -58,6 +58,7 @@ class ScenarioDescriptor:  # duplicated light form; real version will live centr
     density: str
     map_path: str
     params: dict[str, object]
+    raw: dict
     planned_seeds: list[int]
     max_episode_steps: int
     hash_fragment: str
@@ -71,6 +72,7 @@ class EpisodeJob:  # lightweight form for planning layer
     archetype: str
     density: str
     horizon: int
+    scenario: ScenarioDescriptor
 
 
 def load_scenario_matrix(path: str) -> list[dict]:  # T022
@@ -163,7 +165,15 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
         ):  # likely real file expected
             raise ValueError(f"Map file not found for scenario '{name}': {map_path}")
         # Seed planning - deterministic unique seeds per scenario
-        planned_seeds = _plan_unique_seeds(rng, int(cfg.initial_episodes))
+        cfg_seeds = getattr(cfg, "seeds", None)
+        seeds_from_matrix = sc.get("seeds")
+        planned_seeds = None
+        if isinstance(cfg_seeds, list) and cfg_seeds:
+            planned_seeds = [int(s) for s in cfg_seeds]
+        elif isinstance(seeds_from_matrix, list) and seeds_from_matrix:
+            planned_seeds = [int(s) for s in seeds_from_matrix]
+        else:
+            planned_seeds = _plan_unique_seeds(rng, int(cfg.initial_episodes))
 
         # Hash fragment: stable SHA1 over JSON canonical representation of key fields
         hash_payload = {
@@ -193,6 +203,7 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
                 density=density,
                 map_path=str(map_path),
                 params=params_source,
+                raw=sc,
                 planned_seeds=planned_seeds,
                 max_episode_steps=max_steps,
                 hash_fragment=hash_fragment,
@@ -227,6 +238,7 @@ def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg) -> list[Episod
                     archetype=sc.archetype,
                     density=sc.density,
                     horizon=horizon,
+                    scenario=sc,
                 ),
             )
     return jobs

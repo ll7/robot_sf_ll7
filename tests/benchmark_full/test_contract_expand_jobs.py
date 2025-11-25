@@ -27,6 +27,7 @@ def _scenario_descriptor(seed_count: int = 3):
         density="low",
         map_path="maps/svg_maps/simple_crossing.svg",
         params={},
+        raw={},
         planned_seeds=list(range(seed_count)),
         max_episode_steps=500,
         hash_fragment="abc123",

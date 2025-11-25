@@ -65,7 +65,7 @@ def _run_minimal_benchmark(
     logic across benchmark tests. This keeps semantic focus (ordering + hash)
     while minimizing runtime.
     """
-    cfg = config_factory(smoke=True, master_seed=seeds[0])
+    cfg = config_factory(smoke=False, master_seed=seeds[0])
     base_root = Path(cfg.output_root) if base_root_override is None else base_root_override
     run_root = base_root / f"repro_{run_label}"
     run_root.mkdir(parents=True, exist_ok=True)
@@ -77,6 +77,7 @@ def _run_minimal_benchmark(
         ("initial_episodes", 2),
         ("batch_size", 2),
         ("max_episodes", 2),
+        ("disable_videos", True),
         ("bootstrap_samples", 0),
         ("horizon_override", 12),
         ("collision_ci", 1.0),

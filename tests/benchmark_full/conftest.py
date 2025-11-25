@@ -23,16 +23,22 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
     bootstrap_samples: int = 1000
     bootstrap_confidence: float = 0.95
     master_seed: int = 123
-    initial_episodes: int = 5  # small default for tests
-    batch_size: int = 5
-    max_episodes: int = 10
+    initial_episodes: int = 1  # keep smoke-fast for real execution
+    batch_size: int = 1
+    max_episodes: int = 2
     workers: int = 1
     smoke: bool = True
+    capture_replay: bool = True
+    disable_videos: bool = False
+    max_videos: int = 1
     force_continue: bool = False
     snqi_weights_path: str | None = None
     algo: str = "ppo"
     horizon_override: int | None = None
     effect_size_reference_density: str = "low"
+    video_renderer: str = "auto"
+    video_fps: int = 10
+    smoke_horizon_cap: int = 40
 
 
 @pytest.fixture()

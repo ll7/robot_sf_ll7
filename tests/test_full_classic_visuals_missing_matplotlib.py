@@ -11,12 +11,13 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
     def __init__(self, tmp_path: Path):
         self.output_root = str(tmp_path)
-        self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
+        self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
         self.initial_episodes = 1
         self.max_episodes = 1
         self.batch_size = 1
@@ -26,6 +27,7 @@ class _Cfg:
         self.smoke = True  # ensure videos skipped
         self.disable_videos = False
         self.max_videos = 1
+        self.capture_replay = True
         self.target_collision_half_width = 0.05
         self.target_success_half_width = 0.05
         self.target_snqi_half_width = 0.05

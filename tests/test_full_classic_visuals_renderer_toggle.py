@@ -14,12 +14,20 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
-    def __init__(self, tmp_path: Path, video_renderer: str, capture_replay: bool = True):
+    def __init__(
+        self,
+        tmp_path: Path,
+        video_renderer: str,
+        capture_replay: bool = True,
+        scenario_path: Path | None = None,
+    ):
         self.output_root = str(tmp_path)
-        self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
+        scenario_file = scenario_path or write_minimal_matrix(tmp_path)
+        self.scenario_matrix_path = str(scenario_file)
         self.initial_episodes = 1
         self.max_episodes = 1
         self.batch_size = 1

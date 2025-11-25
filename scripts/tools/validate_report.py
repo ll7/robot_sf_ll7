@@ -61,8 +61,12 @@ def validate_metadata_schema(report_dir: Path) -> bool:
         logger.error("metadata.json not found")
         return False
 
-    with open(metadata_path, encoding="utf-8") as f:
-        metadata = json.load(f)
+    try:
+        with open(metadata_path, encoding="utf-8") as f:
+            metadata = json.load(f)
+    except json.JSONDecodeError as exc:
+        logger.error(f"Failed to parse metadata.json: {exc}")
+        return False
 
     try:
         schema = load_schema("report_metadata.schema.v1.json")

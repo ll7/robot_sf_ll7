@@ -101,8 +101,8 @@ class ScopeResolver:
             changed_files = result.stdout.strip().split("\n")
             changed_files = [f for f in changed_files if f]  # Remove empty
 
-            # Filter for SVG maps
-            maps_dir = self.repo_root / "maps" / "svg_maps"
+            # Filter for SVG maps using the inventory's configured root
+            maps_dir = self.inventory.maps_root
             changed_maps = []
 
             for file_path in changed_files:
@@ -181,7 +181,7 @@ class ScopeResolver:
         ValueError
             If no maps match
         """
-        maps_dir = self.repo_root / "maps" / "svg_maps"
+        maps_dir = self.inventory.maps_root
         matched_files = list(maps_dir.glob(pattern))
 
         matched_maps = []

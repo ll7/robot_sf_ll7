@@ -15,6 +15,7 @@ import json
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
+from typing import Any
 
 from loguru import logger
 
@@ -47,6 +48,24 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         payload = repr(cfg)
     return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest()
+
+
+def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
+    """Construct the info dict with collision/success flags for downstream consumers."""
+
+    collision = bool(
+        meta.get("is_pedestrian_collision")
+        or meta.get("is_obstacle_collision")
+        or meta.get("is_robot_collision")
+    )
+    success = bool(meta.get("is_route_complete") or meta.get("is_robot_at_goal"))
+    return {
+        "step": meta.get("step"),
+        "meta": meta,
+        "collision": collision,
+        "success": success,
+        "is_success": success,  # backward-compat key used by some scripts
+    }
 
 
 class RobotEnv(BaseEnv):
@@ -178,12 +197,13 @@ class RobotEnv(BaseEnv):
             self.record()
 
         # observation, reward, terminal, truncated,info
+        info = _build_step_info(reward_dict)
         return (
             obs,
             reward,
             term,
             False,
-            {"step": reward_dict["step"], "meta": reward_dict},
+            info,
         )
 
     def reset(self, seed=None, options=None):

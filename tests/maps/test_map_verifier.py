@@ -23,12 +23,13 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.maps.verification.runner as runner_module
+
 
 def _run_verify(scope: str = "ci", mode: str = "ci", output: Path | None = None):
     """Helper to invoke verification runner directly for tests."""
-    from robot_sf.maps.verification.runner import verify_maps
 
-    return verify_maps(scope=scope, mode=mode, output_path=output)
+    return runner_module.verify_maps(scope=scope, mode=mode, output_path=output)
 
 
 # Placeholder test to ensure module imports
@@ -50,7 +51,6 @@ def test_ci_mode_pass():
 
 def test_ci_mode_failure_simulation(monkeypatch):
     """Simulate a failure by monkeypatching the runner's apply_all_rules symbol."""
-    import robot_sf.maps.verification.runner as runner_module
     from robot_sf.maps.verification.rules import RuleSeverity, RuleViolation
 
     def fake_apply_all_rules(_map_path: Path):  # force one error per map

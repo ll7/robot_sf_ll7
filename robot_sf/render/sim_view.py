@@ -214,7 +214,7 @@ class SimulationView:
 
     def __post_init__(self):
         """Initialize PyGame components."""
-        logger.info("Initializing the simulation view.")
+        logger.debug("Initializing the simulation view.")
         # Environment variable override for max_frames (e.g., runtime tuning / CI scenarios)
         env_cap = os.environ.get("ROBOT_SF_MAX_VIDEO_FRAMES")
         if env_cap is not None:
@@ -258,9 +258,9 @@ class SimulationView:
             self._use_display = False
             self.screen = pygame.Surface((int(self.width), int(self.height)))
             if self.record_video:
-                logger.info("Created offscreen surface for video recording")
+                logger.debug("Created offscreen surface for video recording")
             else:
-                logger.info("Created offscreen surface for headless mode")
+                logger.debug("Created offscreen surface for headless mode")
         else:
             # Create window for display
             self._use_display = True

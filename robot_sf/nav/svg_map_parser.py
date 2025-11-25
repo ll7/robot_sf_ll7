@@ -167,11 +167,11 @@ class SvgMapConverter:
         }
 
         paths = self.svg_root.findall(".//svg:path", namespaces)
-        logger.info(f"Found {len(paths)} paths in the SVG file")
+        logger.debug(f"Found {len(paths)} paths in the SVG file")
         rects = self.svg_root.findall(".//svg:rect", namespaces)
-        logger.info(f"Found {len(rects)} rects in the SVG file")
+        logger.debug(f"Found {len(rects)} rects in the SVG file")
         circles = self.svg_root.findall(".//svg:circle", namespaces)
-        logger.info(f"Found {len(circles)} circles in the SVG file")
+        logger.debug(f"Found {len(circles)} circles in the SVG file")
 
         coordinate_pattern = re.compile(r"([+-]?[0-9]*\.?[0-9]+)[, ]([+-]?[0-9]*\.?[0-9]+)")
 
@@ -181,11 +181,11 @@ class SvgMapConverter:
         rect_info = [self._parse_rect_element(rect) for rect in rects]
         circle_info = [c for circle in circles if (c := self._parse_circle_element(circle))]
 
-        logger.info(f"Parsed {len(path_info)} paths in the SVG file")
+        logger.debug(f"Parsed {len(path_info)} paths in the SVG file")
         self.path_info = path_info
-        logger.info(f"Parsed {len(rect_info)} rects in the SVG file")
+        logger.debug(f"Parsed {len(rect_info)} rects in the SVG file")
         self.rect_info = rect_info
-        logger.info(f"Parsed {len(circle_info)} circles in the SVG file")
+        logger.debug(f"Parsed {len(circle_info)} circles in the SVG file")
         self.circle_info = circle_info
 
     def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
@@ -309,7 +309,7 @@ class SvgMapConverter:
             )
 
         if single_pedestrians:
-            logger.info(f"Parsed {len(single_pedestrians)} single pedestrian(s) from circles")
+            logger.debug(f"Parsed {len(single_pedestrians)} single pedestrian(s) from circles")
 
         return single_pedestrians
 
@@ -463,7 +463,7 @@ class SvgMapConverter:
         if not ped_routes:
             logger.warning("No pedestrian routes found in the SVG file")
         if not ped_crowded_zones:
-            logger.info("No crowded zones found in the SVG file (optional)")
+            logger.debug("No crowded zones found in the SVG file (optional)")
 
         if not robot_routes:
             # Hard validation: we cannot produce robot start positions => downstream division by zero.
@@ -521,7 +521,7 @@ def convert_map(svg_file: str):
     so callers can decide to fallback to a default map pool.
     """
 
-    logger.info("Converting SVG map to MapDefinition object.")
+    logger.debug("Converting SVG map to MapDefinition object.")
     logger.info(f"SVG file: {svg_file}")
 
     try:

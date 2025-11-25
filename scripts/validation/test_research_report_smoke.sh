@@ -7,6 +7,18 @@ mkdir -p "$(dirname "${OUT_DIR}")"
 rm -rf "${OUT_DIR}"
 export RESEARCH_SMOKE_OUT_DIR="${OUT_DIR}"
 
+# Activate virtualenv to ensure dependencies are available for uv
+ACTIVATE_SCRIPT=".venv/bin/activate"
+if [[ ! -f "${ACTIVATE_SCRIPT}" ]]; then
+    ACTIVATE_SCRIPT="venv/bin/activate"
+fi
+if [[ ! -f "${ACTIVATE_SCRIPT}" ]]; then
+    echo "❌ Could not find virtualenv activation script (.venv/bin/activate or venv/bin/activate)."
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "${ACTIVATE_SCRIPT}"
+
 uv run python - <<'PY'
 from pathlib import Path
 import os

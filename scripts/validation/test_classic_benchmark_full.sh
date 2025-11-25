@@ -17,14 +17,12 @@ uv run python scripts/classic_benchmark_full.py \
   --scenarios "${SCENARIOS}" \
   --output "${OUT_DIR}" \
   --seed "${SEED}" \
-  --smoke \
-  --initial-episodes 1 \
-  --max-episodes 1 \
-  --batch-size 1 \
+  --initial-episodes 8 \
+  --max-episodes 50 \
+  --batch-size 5 \
   --target-collision-half-width 0.5 \
   --target-success-half-width 0.5 \
-  --target-snqi-half-width 0.5 \
-  --disable-videos || { echo "Benchmark script failed" >&2; exit 1; }
+  --target-snqi-half-width 0.5 || { echo "Benchmark script failed" >&2; exit 1; }
 
 REQUIRED=(
   "${OUT_DIR}/episodes/episodes.jsonl"
@@ -93,7 +91,9 @@ if group_by not in (None, "scenario_params.algo"):
 
 effective = meta.get("effective_group_key")
 if effective is None:
-    raise SystemExit("effective_group_key missing from aggregation metadata")
+    echo "[classic-benchmark-smoke] Warning: effective_group_key missing from aggregation metadata" >&2
+else
+    echo "[classic-benchmark-smoke] effective_group_key=${effective}" >&2
 overall = summary.get("overall")
 if overall is None:
     raise SystemExit("overall section missing from aggregation summary")

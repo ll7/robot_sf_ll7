@@ -40,6 +40,9 @@ class ReplayStep:
         - speed: scalar robot speed
         - ped_positions: list of (x,y) pedestrian positions
         - action: (ax, ay) or (vx, vy) tuple representing last action
+        - ray_vecs: list of ray vectors for lidar visualization
+        - ped_actions: per-pedestrian action vectors (if available)
+        - robot_goal: optional goal for action visualization
     """
 
     t: float
@@ -49,6 +52,9 @@ class ReplayStep:
     speed: float | None = None
     ped_positions: list[tuple[float, float]] | None = None
     action: tuple[float, float] | None = None
+    ray_vecs: list[tuple[float, float]] | None = None
+    ped_actions: list[tuple[float, float]] | None = None
+    robot_goal: tuple[float, float] | None = None
 
 
 @dataclass(slots=True)
@@ -95,6 +101,9 @@ class ReplayCapture:
         speed: float | None = None,
         ped_positions: list[tuple[float, float]] | None = None,
         action: tuple[float, float] | None = None,
+        ray_vecs: list[tuple[float, float]] | None = None,
+        ped_actions: list[tuple[float, float]] | None = None,
+        robot_goal: tuple[float, float] | None = None,
     ) -> None:
         self._steps.append(
             ReplayStep(
@@ -105,6 +114,9 @@ class ReplayCapture:
                 speed=speed,
                 ped_positions=ped_positions,
                 action=action,
+                ray_vecs=ray_vecs,
+                ped_actions=ped_actions,
+                robot_goal=robot_goal,
             ),
         )
 
@@ -143,6 +155,9 @@ def build_replay_episode(
     seq: Sequence[tuple[float, float, float, float]],
     ped_seq: Sequence[list[tuple[float, float]] | None] | None = None,
     action_seq: Sequence[tuple[float, float] | None] | None = None,
+    ray_seq: Sequence[list[tuple[float, float]] | None] | None = None,
+    ped_action_seq: Sequence[list[tuple[float, float]] | None] | None = None,
+    goal_seq: Sequence[tuple[float, float] | None] | None = None,
     *,
     dt: float | None = None,
     map_path: str | None = None,
@@ -155,12 +170,30 @@ def build_replay_episode(
         Core robot kinematic samples.
     ped_seq : optional sequence parallel to seq with pedestrian position lists.
     action_seq : optional sequence parallel to seq with action tuples.
+    ray_seq : optional sequence parallel to seq with ray vectors for lidar.
+    ped_action_seq : optional sequence parallel to seq with ped action vectors.
+    goal_seq : optional sequence parallel to seq with robot goal tuples.
     """
     steps: list[ReplayStep] = []
     for i, (t, x, y, h) in enumerate(seq):
         peds = ped_seq[i] if ped_seq and i < len(ped_seq) else None
         act = action_seq[i] if action_seq and i < len(action_seq) else None
-        steps.append(ReplayStep(t=t, x=x, y=y, heading=h, ped_positions=peds, action=act))
+        rays = ray_seq[i] if ray_seq and i < len(ray_seq) else None
+        ped_act = ped_action_seq[i] if ped_action_seq and i < len(ped_action_seq) else None
+        goal = goal_seq[i] if goal_seq and i < len(goal_seq) else None
+        steps.append(
+            ReplayStep(
+                t=t,
+                x=x,
+                y=y,
+                heading=h,
+                ped_positions=peds,
+                action=act,
+                ray_vecs=rays,
+                ped_actions=ped_act,
+                robot_goal=goal,
+            ),
+        )
     return ReplayEpisode(
         episode_id=episode_id, scenario_id=scenario_id, steps=steps, dt=dt, map_path=map_path
     )
@@ -189,6 +222,9 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
         steps_raw = rec.get("replay_steps")
         ped_raw = rec.get("replay_peds")  # parallel list of lists or None
         action_raw = rec.get("replay_actions")  # parallel list of tuples or None
+        ray_raw = rec.get("replay_rays")
+        ped_action_raw = rec.get("replay_ped_actions")
+        goal_raw = rec.get("replay_goals")
         if not isinstance(ep_id, str) or not isinstance(steps_raw, list):
             continue
         try:
@@ -211,6 +247,9 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
             seq,
             ped_seq=ped_seq,
             action_seq=action_seq,
+            ray_seq=ray_raw if isinstance(ray_raw, list) else None,
+            ped_action_seq=ped_action_raw if isinstance(ped_action_raw, list) else None,
+            goal_seq=goal_raw if isinstance(goal_raw, list) else None,
             dt=dt,
             map_path=map_path if isinstance(map_path, str) else None,
         )

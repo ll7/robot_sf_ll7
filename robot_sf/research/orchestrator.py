@@ -495,7 +495,8 @@ class AblationOrchestrator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def parse_ablation_config(self, config_path: Path | str) -> dict[str, list[Any]]:
+    @staticmethod
+    def parse_ablation_config(config_path: Path | str) -> dict[str, list[Any]]:
         """Parse an ablation YAML config into the parameter grid structure.
 
         The config may contain a top-level ``ablation_params`` mapping or directly

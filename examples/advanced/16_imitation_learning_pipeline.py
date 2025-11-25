@@ -69,7 +69,7 @@ from robot_sf.telemetry import (
     TelemetrySampler,
     generate_run_id,
 )
-from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus
+from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus, serialize_many
 from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
 PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
@@ -378,7 +378,7 @@ def _collect_recommendations(context: TrackerContext) -> list[dict[str, Any]]:
     engine = context.recommendation_engine
     if engine is None:
         return []
-    return list(engine.generate_recommendations())
+    return serialize_many(engine.generate_recommendations())
 
 
 def _append_run_snapshot(

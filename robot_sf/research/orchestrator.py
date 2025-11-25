@@ -277,7 +277,8 @@ class ReportOrchestrator:
             "gpu_model": repro.hardware.gpu_info.get("model") if repro.hardware.gpu_info else None,
             "gpu_memory_gb": (
                 int(repro.hardware.gpu_info.get("memory_gb"))
-                if repro.hardware.gpu_info and repro.hardware.gpu_info.get("memory_gb")
+                if repro.hardware.gpu_info
+                and isinstance(repro.hardware.gpu_info.get("memory_gb"), (int, float))
                 else None
             ),
         }
@@ -297,6 +298,38 @@ class ReportOrchestrator:
     # ------------------------------------------------------------------
     # Multi-seed orchestration
     # ------------------------------------------------------------------
+    def _load_manifest_map(
+        self, manifests: Sequence[Path], label: str
+    ) -> dict[int, dict[str, Any]]:
+        """Load manifests into a seed→payload map, skipping invalid entries."""
+
+        def _load(path: Path) -> dict[str, Any] | None:
+            try:
+                with path.open(encoding="utf-8") as f:
+                    return json.load(f)
+            except (
+                OSError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:  # pragma: no cover (defensive)
+                logger.warning(f"{label} manifest parse failed: {path} error={exc}")
+                return None
+
+        loaded = [(_load(p), p) for p in manifests]
+        manifest_map: dict[int, dict[str, Any]] = {}
+        for manifest, _ in loaded:
+            if manifest is None or "seed" not in manifest:
+                continue
+            try:
+                seed_val = int(manifest["seed"])
+            except (ValueError, TypeError):
+                logger.warning(
+                    "Skipping %s manifest with non-integer seed: %s", label, manifest.get("seed")
+                )
+                continue
+            manifest_map[seed_val] = manifest
+        return manifest_map
+
     def orchestrate_multi_seed(
         self,
         baseline_manifests: Sequence[Path],
@@ -308,32 +341,8 @@ class ReportOrchestrator:
         records: list[dict[str, Any]] = []
         seed_summaries: list[SeedSummary] = []
 
-        # Load manifests
-        def _load(path: Path) -> dict[str, Any] | None:
-            try:
-                with path.open(encoding="utf-8") as f:
-                    return json.load(f)
-            except (
-                OSError,
-                json.JSONDecodeError,
-                ValueError,
-            ) as exc:  # pragma: no cover (defensive)
-                logger.warning(f"Manifest parse failed: {path} error={exc}")
-                return None
-
-        # Load manifests once and filter None values
-        baseline_loaded = [(_load(p), p) for p in baseline_manifests]
-        baseline_map = {
-            int(manifest["seed"]): manifest
-            for manifest, _ in baseline_loaded
-            if manifest is not None
-        }
-        pretrained_loaded = [(_load(p), p) for p in pretrained_manifests]
-        pretrained_map = {
-            int(manifest["seed"]): manifest
-            for manifest, _ in pretrained_loaded
-            if manifest is not None
-        }
+        baseline_map = self._load_manifest_map(baseline_manifests, "baseline")
+        pretrained_map = self._load_manifest_map(pretrained_manifests, "pretrained")
 
         for seed in expected_seeds:
             b_payload = baseline_map.get(seed)
@@ -343,7 +352,7 @@ class ReportOrchestrator:
             note: str | None = None
 
             if b_payload:
-                m = b_payload["metrics"]
+                m = b_payload.get("metrics") or {}
                 records.append(
                     {
                         "policy_type": "baseline",
@@ -354,7 +363,7 @@ class ReportOrchestrator:
                     }
                 )
             if p_payload:
-                m = p_payload["metrics"]
+                m = p_payload.get("metrics") or {}
                 records.append(
                     {
                         "policy_type": "pretrained",
@@ -457,10 +466,14 @@ class ReportOrchestrator:
             baseline_manifests, pretrained_manifests, expected_seeds=expected_seeds
         )
         baseline_ts = [
-            r["timesteps_to_convergence"] for r in records if r["policy_type"] == "baseline"
+            float(r["timesteps_to_convergence"])
+            for r in records
+            if r["policy_type"] == "baseline" and r.get("timesteps_to_convergence") is not None
         ]
         pretrained_ts = [
-            r["timesteps_to_convergence"] for r in records if r["policy_type"] == "pretrained"
+            float(r["timesteps_to_convergence"])
+            for r in records
+            if r["policy_type"] == "pretrained" and r.get("timesteps_to_convergence") is not None
         ]
         return self.generate_report(
             experiment_name=experiment_name,
@@ -584,12 +597,13 @@ class AblationOrchestrator:
         figures_dir.mkdir(exist_ok=True)
         figures: list[dict[str, Any]] = []
         safe_exceptions = (OSError, RuntimeError, ValueError)
-        first_param = (
-            "bc_epochs"
-            if "bc_epochs" in variants[0]
-            else ("dataset_size" if "dataset_size" in variants[0] else None)
-        )
-        if first_param:
+        first_param = None
+        if variants:
+            if "bc_epochs" in variants[0]:
+                first_param = "bc_epochs"
+            elif "dataset_size" in variants[0]:
+                first_param = "dataset_size"
+        if first_param and variants:
             try:
                 sens = plot_sensitivity(variants, first_param, figures_dir)
                 if sens.get("paths"):

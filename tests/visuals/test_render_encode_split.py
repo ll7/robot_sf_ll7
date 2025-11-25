@@ -15,12 +15,13 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
+from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:  # minimal inline config mirroring other tests
     def __init__(self, tmp_path: Path, renderer: str = "synthetic"):
         self.output_root = str(tmp_path)
-        self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
+        self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
         self.initial_episodes = 1
         self.max_episodes = 1
         self.batch_size = 1

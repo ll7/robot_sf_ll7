@@ -52,6 +52,11 @@ from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.report_template import MarkdownReportRenderer
 from robot_sf.research.statistics import evaluate_hypothesis
 
+try:
+    import yaml  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    yaml = None  # type: ignore[assignment]
+
 
 def _iso() -> str:  # small helper
     """Return current UTC timestamp in ISO format."""
@@ -489,6 +494,34 @@ class AblationOrchestrator:
         self.threshold = threshold
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def parse_ablation_config(self, config_path: Path | str) -> dict[str, list[Any]]:
+        """Parse an ablation YAML config into the parameter grid structure.
+
+        The config may contain a top-level ``ablation_params`` mapping or directly
+        provide the parameter name → list of values mapping.
+        """
+
+        if yaml is None:  # pragma: no cover - optional dependency guard
+            raise ImportError("PyYAML is required to parse ablation configs")
+
+        path = Path(config_path)
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            raise ValueError(f"Ablation config must be a mapping, got {type(payload).__name__}")
+
+        params = payload.get("ablation_params", payload)
+        if not isinstance(params, dict):
+            raise ValueError("ablation_params must be a mapping of parameter -> list")
+
+        parsed: dict[str, list[Any]] = {}
+        for name, values in params.items():
+            if values is None:
+                continue
+            if not isinstance(values, (list, tuple)):
+                raise ValueError(f"Values for '{name}' must be a list/tuple, got {type(values)}")
+            parsed[name] = list(values)
+        return parsed
 
     def run_ablation_matrix(self) -> list[dict[str, Any]]:
         """Evaluate ablation matrix deterministically based on configured params."""

@@ -25,6 +25,7 @@ class _Cfg:
         capture_replay: bool = True,
         scenario_path: Path | None = None,
     ):
+        tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         scenario_file = scenario_path or write_minimal_matrix(tmp_path)
         self.scenario_matrix_path = str(scenario_file)

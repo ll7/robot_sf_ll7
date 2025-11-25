@@ -16,6 +16,7 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 class _Cfg:
     def __init__(self, tmp_path: Path):
+        tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
         self.initial_episodes = 1

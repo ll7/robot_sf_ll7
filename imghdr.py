@@ -7,7 +7,7 @@ from typing import IO
 
 __all__ = ["tests", "what"]
 
-TestFunc = Callable[[bytes, str | None], str | None]
+TestFunc = Callable[[bytes], str | None] | Callable[[bytes, str | None], str | None]
 
 
 def _sniff(file: str | bytes | IO[bytes], h: bytes | None) -> tuple[bytes, str | None]:
@@ -113,7 +113,7 @@ def _test_data_uri(header: bytes, _f: str | None = None) -> str | None:
     return None
 
 
-tests: list[tuple[TestFunc, str | None]] = [
+tests: list[TestFunc | tuple[TestFunc, str | None]] = [
     (_test_jpeg, None),
     (_test_png, None),
     (_test_gif, None),
@@ -135,8 +135,16 @@ def what(file: str | bytes | IO[bytes], h: bytes | None = None) -> str | None:
     """Guess the type of an image file by sniffing its header."""
 
     header, filename_hint = _sniff(file, h)
-    for test, declared in tests:
-        outcome = test(header, filename_hint)
+    for entry in tests:
+        if isinstance(entry, tuple):
+            test, declared = entry
+        else:
+            test, declared = entry, None
+        try:
+            outcome = test(header, filename_hint)  # type: ignore[arg-type]
+        except TypeError:
+            # Fall back to legacy single-arg signature
+            outcome = test(header)  # type: ignore[call-arg]
         if outcome:
             return outcome if declared is None else declared
     return None

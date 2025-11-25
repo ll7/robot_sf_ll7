@@ -37,6 +37,7 @@ class BenchmarkCLIConfig:
     master_seed: int = 123
     smoke: bool = False
     algo: str = "unknown"
+    capture_replay: bool = True
     # Episode planning
     initial_episodes: int = 1
     horizon_override: int | None = None
@@ -49,6 +50,8 @@ class BenchmarkCLIConfig:
     # Video / plots toggles
     disable_videos: bool = False
     max_videos: int = 1
+    video_renderer: str = "auto"
+    video_fps: int = 10
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -102,6 +105,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Smoke mode (fast placeholders, minimal output)",
     )
+    parser.add_argument(
+        "--capture-replay",
+        dest="capture_replay",
+        action="store_true",
+        help="Capture per-step replay data for videos/plots (default: on)",
+    )
+    parser.add_argument(
+        "--no-capture-replay",
+        dest="capture_replay",
+        action="store_false",
+        help="Disable replay capture (faster, no videos)",
+    )
+    parser.set_defaults(capture_replay=True)
     # Precision thresholds (half-width targets)
     parser.add_argument(
         "--target-collision-half-width",
@@ -139,6 +155,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=1,
         help="Maximum number of representative videos to render",
     )
+    parser.add_argument(
+        "--video-renderer",
+        default="auto",
+        choices=("auto", "synthetic", "sim-view"),
+        help="Video renderer backend preference",
+    )
+    parser.add_argument(
+        "--video-fps",
+        type=int,
+        default=10,
+        help="Target FPS for rendered videos",
+    )
     return parser
 
 
@@ -151,6 +179,7 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
         master_seed=ns.seed,
         smoke=ns.smoke,
         algo=ns.algo,
+        capture_replay=ns.capture_replay,
         initial_episodes=ns.initial_episodes,
         horizon_override=horizon_override,
         max_episodes=ns.max_episodes,
@@ -160,6 +189,8 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
         target_snqi_half_width=ns.target_snqi_half_width,
         disable_videos=ns.disable_videos,
         max_videos=ns.max_videos,
+        video_renderer=ns.video_renderer,
+        video_fps=ns.video_fps,
     )
 
 

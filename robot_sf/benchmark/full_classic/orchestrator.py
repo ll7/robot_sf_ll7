@@ -8,16 +8,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 from .aggregation import aggregate_metrics
 from .effects import compute_effect_sizes
@@ -231,77 +237,337 @@ def _scan_existing_episode_ids(path: Path) -> set[str]:
     return ids
 
 
-def _make_episode_record(job, cfg) -> dict[str, Any]:  # minimal synthetic execution
-    """Produce a placeholder EpisodeRecord structure matching contract fixtures.
+_DEFAULT_SNQI_WEIGHTS = {
+    "w_success": 1.0,
+    "w_time": 0.7,
+    "w_collisions": 1.0,
+    "w_near": 0.5,
+    "w_comfort": 0.25,
+    "w_force_exceed": 0.25,
+    "w_jerk": 0.25,
+    "w_curvature": 0.25,
+}
 
-    Real implementation (post T026) will execute simulation & compute metrics. For now
-    we populate required structural fields with synthetic values to allow downstream
-    aggregation/effects tasks to proceed under TDD.
-    """
+
+@lru_cache(maxsize=4)
+def _load_snqi_weights(path: str | None):
+    if not path:
+        return dict(_DEFAULT_SNQI_WEIGHTS)
+    p = Path(path)
+    if not p.exists():
+        logger.warning("SNQI weights path not found: {}", path)
+        return dict(_DEFAULT_SNQI_WEIGHTS)
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - defensive
+        logger.warning("Failed to load SNQI weights from %s: %s", path, exc)
+        return dict(_DEFAULT_SNQI_WEIGHTS)
+
+
+def _resolve_horizon(job, cfg) -> int:
+    horizon = int(getattr(job, "horizon", 0) or 0)
+    if getattr(cfg, "smoke", False):
+        cap = int(getattr(cfg, "smoke_horizon_cap", 40) or 40)
+        horizon = min(horizon, cap)
+    return max(1, horizon if horizon > 0 else 1)
+
+
+def _build_env_config(scenario, cfg, horizon: int):
+    raw = dict(getattr(scenario, "raw", {}))
+    matrix_path = Path(cfg.scenario_matrix_path)
+    matrix_dir = matrix_path.parent
+    map_value = raw.get("map_file")
+    candidate = Path(map_value) if map_value else None
+    if candidate is not None and not candidate.is_absolute():
+        candidate = (matrix_dir / candidate).resolve()
+    if candidate is None or not candidate.exists():
+        fallback = (
+            Path(__file__).resolve().parents[3] / "maps" / "svg_maps" / "classic_crossing.svg"
+        )
+        if fallback.exists():
+            raw["map_file"] = str(fallback)
+    config = build_robot_config_from_scenario(
+        raw,
+        scenario_path=matrix_path,
+    )
+    try:
+        dt = float(config.sim_config.time_per_step_in_secs)
+    except Exception:  # pragma: no cover - defensive
+        dt = 0.1
+    # Ensure sim horizon matches requested horizon
+    config.sim_config.sim_time_in_secs = horizon * dt
+    return config
+
+
+def _simple_goal_policy(simulator) -> np.ndarray:
+    robot_pos = np.asarray(simulator.robot_pos[0], dtype=float)
+    goal = np.asarray(simulator.goal_pos[0], dtype=float)
+    heading = float(simulator.robot_poses[0][1])
+    vec = goal - robot_pos
+    dist = float(np.linalg.norm(vec))
+    if dist < 1e-9:
+        return np.array([0.0, 0.0], dtype=float)
+    desired_heading = math.atan2(vec[1], vec[0])
+    heading_err = (desired_heading - heading + math.pi) % (2 * math.pi) - math.pi
+    linear = min(1.0, dist)
+    angular = max(min(heading_err, 1.0), -1.0)
+    return np.array([linear, angular], dtype=float)
+
+
+def _stack_ped_positions(series: list[np.ndarray]) -> np.ndarray:
+    max_len = max((len(p) for p in series), default=0)
+    if max_len == 0:
+        return np.zeros((len(series), 0, 2), dtype=float)
+    out = np.zeros((len(series), max_len, 2), dtype=float)
+    for idx, p in enumerate(series):
+        if len(p) == 0:
+            continue
+        arr = np.asarray(p, dtype=float)
+        out[idx, : arr.shape[0], :] = arr
+    return out
+
+
+def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+    if len(pos) == 0:
+        return np.zeros((0, 2), dtype=float), np.zeros((0, 2), dtype=float)
+    if len(pos) == 1 or dt <= 0:
+        zeros = np.zeros((len(pos), 2), dtype=float)
+        return zeros, zeros
+    vel = np.diff(pos, axis=0) / dt
+    vel = np.vstack([vel[0], vel])
+    if len(vel) == 1:
+        acc = np.zeros_like(vel)
+    else:
+        acc = np.diff(vel, axis=0) / dt
+        acc = np.vstack([acc[0], acc])
+    return vel, acc
+
+
+def _compute_episode_metrics(
+    job,
+    scenario,
+    cfg,
+    *,
+    robot_pos: np.ndarray,
+    robot_vel: np.ndarray,
+    robot_acc: np.ndarray,
+    ped_pos: np.ndarray,
+    dt: float,
+    reached_goal_step: int | None,
+    goal: np.ndarray,
+    horizon: int,
+) -> dict[str, float]:
+    shortest_path = float(np.linalg.norm(robot_pos[0] - goal)) if len(robot_pos) else float("nan")
+    ep = EpisodeData(
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+        robot_acc=robot_acc,
+        peds_pos=ped_pos,
+        ped_forces=np.zeros_like(ped_pos),
+        goal=goal,
+        dt=dt,
+        reached_goal_step=reached_goal_step,
+    )
+    metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
+    time_to_goal = (
+        dt * float(reached_goal_step)
+        if reached_goal_step is not None
+        else dt * float(horizon if horizon > 0 else len(robot_pos))
+    )
+    metrics_raw["time_to_goal"] = time_to_goal
+    metrics = dict(metrics_raw)
+    metrics["success_rate"] = float(metrics_raw.get("success", 0.0))
+    metrics["collision_rate"] = 1.0 if metrics_raw.get("collisions", 0.0) else 0.0
+    metrics["average_speed"] = float(metrics_raw.get("avg_speed", float("nan")))
+    weights = _load_snqi_weights(getattr(cfg, "snqi_weights_path", None))
+    try:
+        metrics["snqi"] = snqi(metrics_raw, weights, baseline_stats=None)
+    except Exception:  # pragma: no cover - defensive
+        metrics["snqi"] = float("nan")
+    serializable: dict[str, float] = {}
+    for key, value in metrics.items():
+        if isinstance(value, (np.floating, np.integer)):
+            serializable[key] = float(value)
+        else:
+            serializable[key] = value
+    return serializable
+
+
+def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
+    config = _build_env_config(scenario, cfg, horizon)
+    capture_replay = bool(getattr(cfg, "capture_replay", False))
+    record_dir = Path(cfg.output_root)
+    replays_dir = record_dir / "replays"
+    replays_dir.mkdir(parents=True, exist_ok=True)
+    env = make_robot_env(
+        config=config,
+        seed=int(job.seed),
+        debug=False,
+        recording_enabled=capture_replay,
+        record_video=False,
+        video_fps=float(getattr(cfg, "video_fps", 10) or 10),
+        use_jsonl_recording=False,
+        recording_dir=str(replays_dir),
+        suite_name="classic_full",
+        scenario_name=job.scenario_id,
+        algorithm_name=str(getattr(cfg, "algo", "unknown")),
+        recording_seed=int(job.seed),
+    )
+    dt = float(getattr(config.sim_config, "time_per_step_in_secs", 0.1))
+    replay_cap = (
+        ReplayCapture(episode_id=episode_id, scenario_id=job.scenario_id)
+        if capture_replay
+        else None
+    )
+    if replay_cap is not None:
+        replay_cap.dt = dt
+    goal_vec = np.zeros(2, dtype=float)
+    sim = getattr(env, "simulator", None)
+    if sim is not None:
+        try:
+            goal_vec = np.asarray(sim.goal_pos[0], dtype=float)
+        except Exception:  # pragma: no cover - defensive fallback
+            goal_vec = np.zeros(2, dtype=float)
+    return env, dt, replay_cap, goal_vec
+
+
+def _rollout_episode(env, horizon: int, dt: float, replay_cap):
+    robot_positions: list[np.ndarray] = []
+    ped_positions: list[np.ndarray] = []
+    reached_goal_step: int | None = None
+    for step_idx in range(horizon):
+        action_arr = _simple_goal_policy(env.simulator)
+        obs, _reward, terminated, truncated, info = env.step(action_arr)
+        _ = obs
+        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        heading = float(env.simulator.robot_poses[0][1])
+        peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        robot_positions.append(robot_pos)
+        ped_positions.append(peds)
+        if replay_cap is not None:
+            ped_list = [tuple(map(float, row)) for row in peds.tolist()] if peds.size else []
+            replay_cap.record(
+                t=step_idx * dt,
+                x=float(robot_pos[0]),
+                y=float(robot_pos[1]),
+                heading=heading,
+                speed=float(np.linalg.norm(action_arr)),
+                ped_positions=ped_list,
+                action=(float(action_arr[0]), float(action_arr[1])),
+            )
+        if reached_goal_step is None and bool(info.get("success")):
+            reached_goal_step = step_idx
+        if terminated or truncated:
+            break
+    return robot_positions, ped_positions, reached_goal_step
+
+
+def _close_env(env):
+    try:
+        env.exit()
+    except Exception:  # pragma: no cover
+        pass
+    try:
+        env.close()
+    except Exception:  # pragma: no cover - gym close best-effort
+        pass
+
+
+def _make_episode_record(job, cfg) -> dict[str, Any]:
+    """Execute a real episode using the environment factory and compute metrics."""
+
     episode_id = _episode_id_from_job(job)
-    now = time.time()
-    algo_value = getattr(cfg, "algo", None)
+    scenario = getattr(job, "scenario", None)
+    if scenario is None:
+        raise AggregationMetadataError(
+            "Episode job missing scenario descriptor.",
+            episode_id=episode_id,
+            missing_fields=("scenario",),
+            advice="Regenerate jobs via plan_scenarios/expand_episode_jobs.",
+        )
+    horizon = _resolve_horizon(job, cfg)
+    start_time = time.time()
+    env, dt, replay_cap, goal_vec = _init_env_for_job(
+        job,
+        cfg,
+        horizon,
+        episode_id=episode_id,
+        scenario=scenario,
+    )
+    try:
+        env.reset(seed=int(job.seed))
+        robot_positions, ped_positions, reached_goal_step = _rollout_episode(
+            env,
+            horizon,
+            dt,
+            replay_cap,
+        )
+    finally:
+        _close_env(env)
+
+    steps_taken = len(robot_positions)
+    robot_pos_arr = np.asarray(robot_positions, dtype=float)
+    robot_vel_arr, robot_acc_arr = _vel_and_acc(robot_pos_arr, dt)
+    ped_pos_arr = _stack_ped_positions(ped_positions)
+    metrics = _compute_episode_metrics(
+        job,
+        scenario,
+        cfg,
+        robot_pos=robot_pos_arr,
+        robot_vel=robot_vel_arr,
+        robot_acc=robot_acc_arr,
+        ped_pos=ped_pos_arr,
+        dt=dt,
+        reached_goal_step=reached_goal_step,
+        goal=goal_vec,
+        horizon=horizon,
+    )
+    for key, value in list(metrics.items()):
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            metrics[key] = None
+    status = "success" if metrics.get("success_rate", 0.0) >= 1.0 else "failure"
+    if metrics.get("collision_rate"):
+        status = "collision"
+    wall_time = time.time() - start_time
     record: dict[str, Any] = {
+        "version": "v1",
         "episode_id": episode_id,
         "scenario_id": job.scenario_id,
         "seed": job.seed,
         "archetype": job.archetype,
         "density": job.density,
-        "status": "success",
-        "metrics": {
-            # Placeholder metric values (kept deterministic)
-            "collision_rate": 0.0,
-            "success_rate": 1.0,
-            "time_to_goal": 10.0,
-            "path_efficiency": 0.9,
-            "average_speed": 1.0,
-            "snqi": 0.75,
+        "status": status,
+        "metrics": metrics,
+        "steps": steps_taken,
+        "horizon": horizon,
+        "wall_time_sec": wall_time,
+        "created_at": start_time,
+        "timing": {
+            "steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0,
         },
-        "steps": min(job.horizon, 120),  # bounded placeholder
-        # Basic timing placeholders updated by caller for sequential path
-        "wall_time_sec": 0.0,
-        "created_at": now,
+        "scenario_params": {
+            "archetype": job.archetype,
+            "density": job.density,
+            "max_episode_steps": horizon,
+            "scenario_id": job.scenario_id,
+            "map_file": getattr(scenario, "map_path", ""),
+            "simulation_config": getattr(scenario, "raw", {}).get("simulation_config", {}),
+            "metadata": getattr(scenario, "raw", {}).get("metadata", {}),
+            "hash_fragment": getattr(scenario, "hash_fragment", ""),
+        },
     }
-    record["scenario_params"] = {
-        "archetype": job.archetype,
-        "density": job.density,
-        "max_episode_steps": job.horizon,
-        "scenario_id": job.scenario_id,
-    }
-    # Optional: attach placeholder replay steps when capture enabled (T021)
-    if getattr(cfg, "capture_replay", False):
-        # Build a tiny deterministic trajectory: straight line x increasing, heading fixed.
-        horizon = min(job.horizon, 20)
-        cap = ReplayCapture(episode_id=episode_id, scenario_id=job.scenario_id)
-        ped_positions_series: list[list[tuple[float, float]]] = []
-        actions_series: list[tuple[float, float]] = []
-        for i in range(horizon):
-            t_rel = float(i) * 0.1
-            # Simple oscillating lateral motion for pedestrians & dummy action vector
-            ped_positions = (
-                [(float(i) * 0.05, 0.2), (float(i) * 0.05, -0.2)]
-                if i % 2 == 0
-                else [(float(i) * 0.05, 0.25)]
-            )
-            action = (0.05, 0.0)
-            ped_positions_series.append(ped_positions)
-            actions_series.append(action)
-            cap.record(
-                t=t_rel,
-                x=float(i) * 0.05,
-                y=0.0,
-                heading=0.0,
-                speed=0.5,
-                ped_positions=ped_positions,
-                action=action,
-            )
-        finalized = cap.finalize().steps
+    if bool(getattr(cfg, "capture_replay", False)) and replay_cap is not None:
+        episode = replay_cap.finalize()
+        episode.map_path = getattr(scenario, "map_path", "")
+        finalized = episode.steps
         record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
-        record["replay_peds"] = ped_positions_series
-        record["replay_actions"] = actions_series
+        record["replay_peds"] = [s.ped_positions or [] for s in finalized]
+        record["replay_actions"] = [s.action for s in finalized]
+        record["replay_dt"] = episode.dt
+        record["replay_map_path"] = episode.map_path
     _ensure_algo_metadata(
         record,
-        algo=algo_value,
+        algo=getattr(cfg, "algo", None),
         episode_id=episode_id,
     )
     return record
@@ -337,13 +603,14 @@ def _execute_seq(
         yield rec
 
 
-def _worker_job_wrapper(job, algo):  # top-level for pickling on spawn
+def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
     class _TempCfg:
-        def __init__(self, a):
-            self.algo = a
+        def __init__(self, payload):
+            for k, v in payload.items():
+                setattr(self, k, v)
 
     start = time.time()
-    rec = _make_episode_record(job, _TempCfg(algo))
+    rec = _make_episode_record(job, _TempCfg(cfg_payload))
     rec["wall_time_sec"] = time.time() - start
     return rec
 
@@ -357,10 +624,10 @@ def _execute_parallel(
     workers: int,
 ) -> Iterator[dict]:
     logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
-    algo = getattr(cfg, "algo", "unknown")
+    cfg_payload = vars(cfg).copy() if hasattr(cfg, "__dict__") else {}
     results_map: dict[str, dict] = {}
     with ProcessPoolExecutor(max_workers=workers) as ex:
-        future_map = {ex.submit(_worker_job_wrapper, j, algo): j for j in job_list}
+        future_map = {ex.submit(_worker_job_wrapper, j, cfg_payload): j for j in job_list}
         for fut in as_completed(future_map):
             rec = fut.result()
             results_map[rec["episode_id"]] = rec
@@ -456,6 +723,7 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
         job.archetype = getattr(target_sc, "archetype", "unknown")
         job.density = getattr(target_sc, "density", "unknown")
         job.horizon = horizon
+        job.scenario = target_sc
         jobs.append(job)
 
     done_flag = False  # more iterations likely needed until max reached
@@ -483,11 +751,24 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     rng = random.Random(int(getattr(cfg, "master_seed", 123)))
     scenarios = plan_scenarios(raw, cfg, rng=rng)
     jobs = expand_episode_jobs(scenarios, cfg)
+    scenarios_list = list(scenarios)
+    smoke_limit = bool(getattr(cfg, "smoke_limit_jobs", False))
+    if getattr(cfg, "smoke", False) and scenarios_list and smoke_limit:
+        scenarios_list = scenarios_list[:1]
+        allowed = {sc.scenario_id for sc in scenarios_list}
+        jobs = [jb for jb in jobs if jb.scenario_id in allowed]
+        jobs = jobs[: max(1, int(getattr(cfg, "smoke_episodes", 1) or 1))]
+    if getattr(cfg, "smoke", False):
+        horizon_cap = int(getattr(cfg, "smoke_horizon_cap", 40) or 40)
+        for jb in jobs:
+            try:
+                jb.horizon = min(int(getattr(jb, "horizon", horizon_cap)), horizon_cap)
+            except Exception:
+                jb.horizon = horizon_cap
 
     # Manifest & initial execution
     manifest = _init_manifest(root, episodes_path, cfg, scenario_matrix_hash)
     all_records = list(run_episode_jobs(jobs, cfg, manifest))
-    scenarios_list = list(scenarios)
     max_episodes = int(getattr(cfg, "max_episodes", 0) or 0)
 
     # Adaptive loop (iteration guard for smoke / tiny budgets)

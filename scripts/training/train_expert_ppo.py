@@ -372,14 +372,16 @@ def run_expert_training(
         config.scenario_config.name if config.scenario_config else "unknown"
     )
 
-    # Surface convergence timesteps as a metric for downstream summaries
+    # Surface executed timesteps; convergence tracking not implemented here yet.
     conv_timesteps = float(config.total_timesteps)
-    aggregates["timesteps_to_convergence"] = common.MetricAggregate(
+    aggregates["total_timesteps_executed"] = common.MetricAggregate(
         mean=conv_timesteps,
         median=conv_timesteps,
         p95=conv_timesteps,
         ci95=(conv_timesteps, conv_timesteps),
     )
+    # Backward-compat: keep timesteps_to_convergence but note it mirrors executed timesteps.
+    aggregates["timesteps_to_convergence"] = aggregates["total_timesteps_executed"]
 
     # Fallback: if all primary metrics are zero (common in stub/demo runs), seed with
     # deterministic demo values so downstream reports are populated.
@@ -421,7 +423,7 @@ def run_expert_training(
 
     validation_state = (
         common.ExpertValidationState.SYNTHETIC
-        if metrics_synthetic and hasattr(common.ExpertValidationState, "SYNTHETIC")
+        if metrics_synthetic
         else common.ExpertValidationState.DRAFT
     )
 

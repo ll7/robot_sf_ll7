@@ -24,9 +24,8 @@ from typing import cast as _cast
 
 from loguru import logger
 
-from .encode import encode_frames
 from .plots import generate_plots
-from .render_sim_view import generate_frames
+from .render_sim_view import generate_video_file
 from .render_synthetic import generate_fallback_videos
 from .replay import extract_replay_episodes, validate_replay_episode
 from .validation import validate_visual_manifests
@@ -133,24 +132,12 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             )
             continue
         try:
-            # Prefer calling with keywords; if the monkeypatched generate_frames
-            # doesn't accept keywords, fall back to a positional call.
-            try:
-                frame_iter = generate_frames(
-                    ep,
-                    fps=fps,
-                    max_frames=(10 if smoke and max_frames is None else max_frames),
-                )
-            except TypeError:
-                # Some tests provide a fake with signature (ep, fps, max_frames).
-                max_frames_arg = 10 if smoke and max_frames is None else max_frames
-                frame_iter = _cast(Any, generate_frames).__call__(ep, fps, max_frames_arg)
-
-            try:
-                enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
-            except TypeError:
-                # Some tests/mocks provide a legacy signature without keyword names.
-                enc = _cast(Any, encode_frames).__call__(frame_iter, mp4_path, fps, True)
+            result = generate_video_file(
+                ep,
+                str(mp4_path),
+                fps=fps,
+                max_frames=(10 if smoke and max_frames is None else max_frames),
+            )
         except (RuntimeError, OSError, ValueError) as exc:
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:
@@ -172,11 +159,10 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             )
             moviepy_missing_all = False
             continue
-        if enc.status == "skipped" and enc.note == NOTE_MOVIEPY_MISSING:
-            # Previously this silently dropped the episode from the manifest unless
-            # ALL episodes were missing moviepy. That prevented downstream tooling
-            # from understanding per-episode degradation. Emit an explicit skipped
-            # artifact so artifact count always matches selected records.
+        note = _cast(str | None, result.get("note"))
+        status = _cast(str, result.get("status", "failed"))
+        encode_time_s = _cast(float | None, result.get("encode_time"))
+        if status == "skipped" and note == "moviepy-missing":
             artifacts.append(
                 VideoArtifact(
                     artifact_id=f"video_{ep_id}",
@@ -188,6 +174,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
                     note=NOTE_MOVIEPY_MISSING,
                 ),
             )
+            moviepy_missing_all = False
             continue
         moviepy_missing_all = False
         artifacts.append(
@@ -196,11 +183,11 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
                 scenario_id=sc_id,
                 episode_id=ep_id,
                 path_mp4=str(mp4_path),
-                status=enc.status,
+                status=status,
                 renderer=RENDERER_SIM_VIEW,
-                note=enc.note,
-                encode_time_s=enc.encode_time_s,
-                peak_rss_mb=enc.peak_rss_mb,
+                note=note,
+                encode_time_s=encode_time_s,
+                peak_rss_mb=None,
             ),
         )
     if moviepy_missing_all and not artifacts:

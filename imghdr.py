@@ -146,5 +146,7 @@ def what(file: str | bytes | IO[bytes], h: bytes | None = None) -> str | None:
             # Fall back to legacy single-arg signature
             outcome = test(header)  # type: ignore[call-arg]
         if outcome:
-            return outcome if declared is None else declared
+            if declared is None:
+                return outcome
+            return declared
     return None

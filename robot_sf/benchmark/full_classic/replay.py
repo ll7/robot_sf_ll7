@@ -62,6 +62,8 @@ class ReplayEpisode:
     episode_id: str
     scenario_id: str
     steps: list[ReplayStep] = field(default_factory=list)
+    dt: float | None = None
+    map_path: str | None = None
 
     def __len__(self) -> int:  # pragma: no cover - trivial
         return len(self.steps)
@@ -81,6 +83,7 @@ class ReplayCapture:
 
     episode_id: str
     scenario_id: str
+    dt: float | None = None
     _steps: list[ReplayStep] = field(default_factory=list)
 
     def record(
@@ -110,6 +113,7 @@ class ReplayCapture:
             episode_id=self.episode_id,
             scenario_id=self.scenario_id,
             steps=list(self._steps),
+            dt=self.dt,
         )
 
 
@@ -139,6 +143,9 @@ def build_replay_episode(
     seq: Sequence[tuple[float, float, float, float]],
     ped_seq: Sequence[list[tuple[float, float]] | None] | None = None,
     action_seq: Sequence[tuple[float, float] | None] | None = None,
+    *,
+    dt: float | None = None,
+    map_path: str | None = None,
 ) -> ReplayEpisode:
     """Convenience constructor from basic sequences.
 
@@ -154,7 +161,9 @@ def build_replay_episode(
         peds = ped_seq[i] if ped_seq and i < len(ped_seq) else None
         act = action_seq[i] if action_seq and i < len(action_seq) else None
         steps.append(ReplayStep(t=t, x=x, y=y, heading=h, ped_positions=peds, action=act))
-    return ReplayEpisode(episode_id=episode_id, scenario_id=scenario_id, steps=steps)
+    return ReplayEpisode(
+        episode_id=episode_id, scenario_id=scenario_id, steps=steps, dt=dt, map_path=map_path
+    )
 
 
 __all__ = [
@@ -194,7 +203,17 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
             action_seq = action_raw if isinstance(action_raw, list) else None
         except (ValueError, TypeError):
             continue
-        ep = build_replay_episode(ep_id, sc_id, seq, ped_seq=ped_seq, action_seq=action_seq)
+        dt = float(rec.get("replay_dt")) if "replay_dt" in rec else None
+        map_path = rec.get("replay_map_path")
+        ep = build_replay_episode(
+            ep_id,
+            sc_id,
+            seq,
+            ped_seq=ped_seq,
+            action_seq=action_seq,
+            dt=dt,
+            map_path=map_path if isinstance(map_path, str) else None,
+        )
         if validate_replay_episode(ep, min_length=min_length):
             out[ep_id] = ep
     return out

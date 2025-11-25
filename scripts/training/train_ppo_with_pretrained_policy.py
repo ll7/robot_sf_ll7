@@ -149,19 +149,15 @@ def run_ppo_finetuning(
         # Aggregate real metrics
         success_rate = float(sum(ep["success"] for ep in eval_episodes) / len(eval_episodes))
         collision_rate = float(sum(ep["collision"] for ep in eval_episodes) / len(eval_episodes))
-        avg_steps = float(sum(ep["steps"] for ep in eval_episodes) / len(eval_episodes))
+        _avg_steps = float(sum(ep["steps"] for ep in eval_episodes) / len(eval_episodes))
 
-        # Calculate derived metrics
+        # Calculate derived metrics (limited to what we actually measure here)
         snqi = success_rate - 0.5 * collision_rate
-        path_efficiency = success_rate / max(avg_steps, 1.0)  # Avoid division by zero
-        comfort_exposure = collision_rate  # Proxy metric
     else:
         # Dry run: use placeholder metrics
         success_rate = 0.85
         collision_rate = 0.08
         snqi = success_rate - 0.5 * collision_rate
-        path_efficiency = 0.85
-        comfort_exposure = collision_rate
 
     # Minimal metrics to surface convergence information and basic quality signals
     convergence_metric = common.MetricAggregate(
@@ -184,9 +180,9 @@ def run_ppo_finetuning(
             "timesteps_to_convergence": convergence_metric,
             "success_rate": _metric(success_rate),
             "collision_rate": _metric(collision_rate),
-            "path_efficiency": _metric(path_efficiency),
             "snqi": _metric(snqi),
-            "comfort_exposure": _metric(comfort_exposure),
+            # path_efficiency and comfort_exposure intentionally omitted until trajectory-based
+            # calculations are wired in (needs per-step positions and contact stats).
         },
         episode_log_path=Path(""),  # Episode logs would be generated in production
         wall_clock_hours=0.0,  # Would track actual time in production

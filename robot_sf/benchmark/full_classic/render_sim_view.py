@@ -31,6 +31,8 @@ from .visual_deps import has_pygame, simulation_view_ready
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from robot_sf.nav.map_config import MapDefinition
+
     from .replay import ReplayEpisode
 
 try:  # lightweight import gate
@@ -153,24 +155,53 @@ __all__ = ["generate_frames"]
 
 def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
     ped_positions = np.asarray(step.ped_positions or [], dtype=float)
+    ray_vecs = (
+        np.asarray(step.ray_vecs, dtype=float) if step.ray_vecs is not None else np.zeros((0, 2))
+    )
+    ped_actions = (
+        np.asarray(step.ped_actions, dtype=float)
+        if step.ped_actions is not None
+        else np.zeros_like(ped_positions)
+    )
+    from robot_sf.render.sim_view import VisualizableAction
+
+    robot_action = None
+    if step.robot_goal is not None and step.action is not None:
+        robot_action = VisualizableAction(
+            ((step.x, step.y), step.heading),
+            step.action,
+            step.robot_goal,
+        )
     return VisualizableSimState(
         timestep=idx,
-        robot_action=None,
+        robot_action=robot_action,
         robot_pose=((step.x, step.y), step.heading),
         pedestrian_positions=ped_positions,
-        ray_vecs=np.zeros((0, 2)),
-        ped_actions=np.zeros_like(ped_positions),
+        ray_vecs=ray_vecs,
+        ped_actions=ped_actions,
         time_per_step_in_secs=dt,
     )
 
 
-def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
+def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
+    # Try to reuse already converted map from episode if present
+    if hasattr(ep, "_map_def_cache"):
+        return ep._map_def_cache
     map_def = None
-    if getattr(episode, "map_path", None):
+    if getattr(ep, "map_path", None):
         try:
-            map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
+            map_def = convert_map(str(ep.map_path))  # type: ignore[arg-type]
         except Exception:  # pragma: no cover - fallback
             map_def = None
+    try:
+        ep._map_def_cache = map_def
+    except Exception:
+        pass
+    return map_def
+
+
+def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
+    map_def = _load_map_def(episode)
     view_kwargs: dict = {
         "record_video": True,
         "video_path": video_path,

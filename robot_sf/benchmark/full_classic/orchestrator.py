@@ -880,11 +880,19 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
 
                 # Generate real plots from episode data
                 plot_artifacts = generate_benchmark_plots(all_records, str(plots_dir))
-                logger.info("Generated {} real plots", len(plot_artifacts))
+                logger.info(
+                    "Generated {} real plots into {}",
+                    len(plot_artifacts),
+                    plots_dir,
+                )
 
                 # Generate real videos from episode data
                 video_artifacts = generate_benchmark_videos(all_records, str(videos_dir))
-                logger.info("Generated {} real videos", len(video_artifacts))
+                logger.info(
+                    "Generated {} real videos into {}",
+                    len(video_artifacts),
+                    videos_dir,
+                )
 
                 # Validate all generated artifacts
                 all_artifacts = plot_artifacts + video_artifacts

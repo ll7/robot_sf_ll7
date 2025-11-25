@@ -18,7 +18,7 @@ def _sniff(file: str | bytes | IO[bytes], h: bytes | None) -> tuple[bytes, str |
         # File path: open and read header bytes
         with open(file, "rb") as handle:
             return handle.read(32), filename_hint
-    if isinstance(file, bytes | bytearray):
+    if isinstance(file, (bytes, bytearray)):
         # Raw bytes: convert to bytes object
         payload = bytes(file)
         return payload, filename_hint

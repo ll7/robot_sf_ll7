@@ -283,13 +283,18 @@ def compute_completeness_score(
     expected_set = {str(seed) for seed in expected_seeds}
     completed_set = {str(seed) for seed in completed_seeds} & expected_set
     failed_set = {str(seed) for seed in failed_seeds} if failed_seeds else set()
-    missing_set = expected_set - completed_set
+    missing_set = expected_set - completed_set - failed_set
 
     score = 0.0
     if expected_set:
         score = round(len(completed_set) / len(expected_set) * 100, 1)
 
-    status = "PASS" if not missing_set and not failed_set else "PARTIAL"
+    if not missing_set and not failed_set:
+        status = "PASS"
+    elif completed_set:
+        status = "PARTIAL"
+    else:
+        status = "FAIL"
 
     return {
         "score": score,

@@ -34,23 +34,6 @@ __all__ = [
     "verify_maps",
 ]
 
-
-# Lazy imports to avoid heavy module loading
-def __getattr__(name: str):
-    if name == "verify_maps":
-        from robot_sf.maps.verification.runner import verify_maps
-
-        return verify_maps
-    elif name == "MapRecord":
-        from robot_sf.maps.verification.map_inventory import MapRecord
-
-        return MapRecord
-    elif name == "VerificationResult":
-        from robot_sf.maps.verification.context import VerificationResult
-
-        return VerificationResult
-    elif name == "VerificationRunSummary":
-        from robot_sf.maps.verification.context import VerificationRunSummary
-
-        return VerificationRunSummary
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+from robot_sf.maps.verification.context import VerificationResult, VerificationRunSummary
+from robot_sf.maps.verification.map_inventory import MapRecord
+from robot_sf.maps.verification.runner import verify_maps

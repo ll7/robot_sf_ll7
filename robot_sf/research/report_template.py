@@ -248,11 +248,25 @@ class MarkdownReportRenderer:
             png_path = fig["paths"].get("png")
 
             if png_path:
-                # Relative path for markdown embedding
-                rel_path = Path(png_path).relative_to(self.output_dir)
-                section += f"![{caption}]({rel_path})\n\n"
+                png = Path(png_path)
+                pdf = Path(pdf_path) if pdf_path else None
+
+                def _rel_safe(path: Path) -> str:
+                    if not path.is_absolute():
+                        return path.as_posix()
+                    try:
+                        return path.relative_to(self.output_dir).as_posix()
+                    except ValueError:
+                        # Fallback to basename if outside output_dir
+                        return path.name
+
+                rel_png = _rel_safe(png)
+                rel_pdf = _rel_safe(pdf) if pdf else None
+
+                section += f"![{caption}]({rel_png})\n\n"
                 section += f"*{caption}*\n\n"
-                section += f"[PDF version]({Path(pdf_path).relative_to(self.output_dir)})\n\n"
+                if rel_pdf:
+                    section += f"[PDF version]({rel_pdf})\n\n"
 
         return section
 

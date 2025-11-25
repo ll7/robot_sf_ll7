@@ -18,11 +18,13 @@ Future extensions (not in T031 scope):
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.render.sim_view import MOVIEPY_AVAILABLE, VisualizableSimState
 
 from .visual_deps import has_pygame, simulation_view_ready
 
@@ -147,3 +149,80 @@ def generate_frames(
 
 
 __all__ = ["generate_frames"]
+
+
+def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
+    ped_positions = np.asarray(step.ped_positions or [], dtype=float)
+    return VisualizableSimState(
+        timestep=idx,
+        robot_action=None,
+        robot_pose=((step.x, step.y), step.heading),
+        pedestrian_positions=ped_positions,
+        ray_vecs=np.zeros((0, 2)),
+        ped_actions=np.zeros_like(ped_positions),
+        time_per_step_in_secs=dt,
+    )
+
+
+def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
+    map_def = None
+    if getattr(episode, "map_path", None):
+        try:
+            map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
+        except Exception:  # pragma: no cover - fallback
+            map_def = None
+    view_kwargs: dict = {
+        "record_video": True,
+        "video_path": video_path,
+        "video_fps": fps,
+        "width": 640,
+        "height": 360,
+    }
+    if map_def is not None:
+        view_kwargs["map_def"] = map_def
+        view_kwargs["obstacles"] = getattr(map_def, "obstacles", [])
+    return SimulationView(**view_kwargs)  # type: ignore[arg-type]
+
+
+def generate_video_file(
+    episode: ReplayEpisode,
+    video_path: str,
+    *,
+    fps: int = 10,
+    max_frames: int | None = None,
+) -> dict[str, object]:
+    """Render a ReplayEpisode via SimulationView's native recorder and write mp4."""
+    _assert_ready()
+    dt = episode.dt if episode.dt is not None else (1.0 / fps if fps > 0 else 0.1)
+    view = _build_view(episode, fps, video_path)
+    produced = 0
+    status = "failed"
+    note: str | None = None
+    encode_time = None
+    try:
+        for idx, step in enumerate(episode.steps):
+            state = _build_state(step, idx, dt)
+            view.render(state)  # type: ignore[arg-type]
+            produced += 1
+            if max_frames is not None and produced >= max_frames:
+                break
+        import time as _time
+
+        t0 = _time.perf_counter()
+        view.exit_simulation()  # writes video when record_video=True
+        encode_time = _time.perf_counter() - t0
+        size = Path(video_path).stat().st_size if Path(video_path).exists() else 0
+        status = "success" if size > 0 else "skipped"
+        if size == 0:
+            note = "moviepy-missing" if not MOVIEPY_AVAILABLE else "encode-empty"
+    except Exception as exc:  # pragma: no cover - defensive
+        try:
+            view.exit_simulation()
+        except Exception:
+            pass
+        status = "failed"
+        note = f"render-error:{exc.__class__.__name__}"
+    return {"status": status, "note": note, "encode_time": encode_time}
+
+
+__all__.append("generate_video_file")

@@ -121,8 +121,11 @@ def _build_comparison_summary(
         if isinstance(manifest.get("seeds"), list):
             try:
                 seeds.extend(int(s) for s in manifest["seeds"])
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as e:
+                logger.warning(
+                    "Could not convert some seeds to int in manifest",
+                    f"for run_id={run_id}: {manifest.get('seeds')!r} ({e})",
+                )
     if seeds:
         summary["seeds"] = sorted({int(s) for s in seeds})
     return summary

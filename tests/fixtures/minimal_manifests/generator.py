@@ -47,6 +47,8 @@ def create_minimal_manifest(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> Path:
+    if not isinstance(episode_count, int) or episode_count <= 0:
+        raise ValueError("episode_count must be a positive integer")
     if policy_type not in {"baseline", "pretrained"}:
         raise ValueError(f"Unsupported policy_type: {policy_type}")
 

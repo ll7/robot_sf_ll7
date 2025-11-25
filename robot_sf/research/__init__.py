@@ -9,17 +9,22 @@ multi-seed imitation learning experiments, including:
 - Reproducibility metadata tracking
 
 Public API:
-    MetricAggregator: Aggregate metrics across seeds with bootstrap CIs
-    StatisticalAnalyzer: Perform statistical tests and hypothesis evaluation
-    FigureGenerator: Generate publication-quality figures (PDF + PNG)
-    ReportRenderer: Render Markdown/LaTeX reports from templates
+    aggregate_metrics / bootstrap_ci: Metric aggregation utilities with bootstrap CIs
+    evaluate_hypothesis / paired_t_test / cohen_d: Statistical helpers
+    plot_learning_curve / plot_sample_efficiency / plot_distributions: Figure utilities
+    MarkdownReportRenderer: Render Markdown/LaTeX reports from templates
     ReportOrchestrator: End-to-end report generation coordinator
     AblationOrchestrator: Ablation study analysis coordinator
 
 Example:
     >>> from robot_sf.research import ReportOrchestrator
-    >>> orchestrator = ReportOrchestrator(experiment_name="Demo")
-    >>> orchestrator.generate_report(tracker_run_id="20251121_demo")
+    >>> orchestrator = ReportOrchestrator()
+    >>> orchestrator.generate_report(
+    ...     experiment_name="Demo",
+    ...     metric_records=[],
+    ...     run_id="demo_run",
+    ...     seeds=[],
+    ... )
 """
 
 from __future__ import annotations
@@ -40,11 +45,12 @@ from robot_sf.research.figures import (
     plot_learning_curve,
     plot_sample_efficiency,
 )
-from robot_sf.research.orchestrator import ReportOrchestrator
+from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestrator
 from robot_sf.research.report_template import MarkdownReportRenderer
 from robot_sf.research.statistics import cohen_d, evaluate_hypothesis, paired_t_test
 
 __all__ = [
+    "AblationOrchestrator",
     "MarkdownReportRenderer",
     "ReportOrchestrator",
     "aggregate_metrics",

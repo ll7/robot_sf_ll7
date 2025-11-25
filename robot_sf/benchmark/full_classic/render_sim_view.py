@@ -22,7 +22,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .state_builder import iter_states  # T037
+from robot_sf.nav.svg_map_parser import convert_map
+
 from .visual_deps import has_pygame, simulation_view_ready
 
 if TYPE_CHECKING:
@@ -70,23 +71,45 @@ def generate_frames(
         after producing at most this many frames.
     """
     _assert_ready()
-    # Create SimulationView primarily for future integration & to validate that
-    # dependencies are functioning. We don't yet render real state, so the
-    # instance is intentionally unused beyond lifecycle side effects.
-    _sim_view = SimulationView(record_video=False, video_fps=fps, width=640, height=360)  # type: ignore
+    map_def = None
+    if getattr(episode, "map_path", None):
+        try:
+            map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
+        except Exception as exc:  # pragma: no cover - fallback path
+            try:
+                from loguru import logger
+
+                logger.debug("convert_map failed for %s: %s", episode.map_path, exc)
+            except Exception:
+                pass
+            map_def = None
+    view_kwargs: dict = {"record_video": False, "video_fps": fps, "width": 640, "height": 360}
+    if map_def is not None:
+        view_kwargs["map_def"] = map_def
+        view_kwargs["obstacles"] = getattr(map_def, "obstacles", [])
+    _sim_view = SimulationView(**view_kwargs)  # type: ignore[arg-type]
     produced = 0
+    dt = episode.dt if episode.dt is not None else (1.0 / fps if fps > 0 else 0.1)
     try:
-        for st in iter_states(episode):
-            # Placeholder gradient fallback (will be replaced when real capture succeeds)
-            frame = np.zeros((360, 640, 3), dtype=np.uint8)
-            shade = int(min(255, (produced / max(1, len(episode.steps) - 1)) * 255))
-            frame[:, :, 0] = shade
-            frame[:, :, 1] = 20
-            frame[:, :, 2] = 255 - shade
+        for idx, step in enumerate(episode.steps):
+            ped_positions = np.asarray(step.ped_positions or [], dtype=float)
+            try:
+                from robot_sf.render.sim_view import VisualizableSimState
+
+                state = VisualizableSimState(  # type: ignore[call-arg]
+                    timestep=idx,
+                    robot_action=None,
+                    robot_pose=((step.x, step.y), step.heading),
+                    pedestrian_positions=ped_positions,
+                    ray_vecs=np.zeros((0, 2)),
+                    ped_actions=np.zeros_like(ped_positions),
+                    time_per_step_in_secs=dt,
+                )
+            except Exception:
+                state = step  # fallback to replay step if construction fails
             try:
                 if hasattr(_sim_view, "render"):
-                    _sim_view.render(st)  # type: ignore[arg-type]
-                    # Attempt to grab pixel buffer from pygame surface
+                    _sim_view.render(state)  # type: ignore[arg-type]
                     import pygame  # type: ignore
 
                     if hasattr(_sim_view, "screen") and isinstance(
@@ -94,25 +117,22 @@ def generate_frames(
                         pygame.Surface,
                     ):  # type: ignore[attr-defined]
                         surf = _sim_view.screen  # type: ignore[attr-defined]
-                        # Ensure consistent size (H,W) = (surface.get_height(), surface.get_width())
                         arr = pygame.surfarray.array3d(surf)  # (W,H,3)
-                        arr = np.transpose(arr, (1, 0, 2))  # to (H,W,3)
-                        frame_h, frame_w = frame.shape[:2]
-                        if arr.shape[0] == frame_h and arr.shape[1] == frame_w:
-                            frame = arr
+                        frame = np.transpose(arr, (1, 0, 2))  # to (H,W,3)
+                    else:
+                        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+                else:
+                    frame = np.zeros((360, 640, 3), dtype=np.uint8)
             except (AttributeError, RuntimeError, ImportError):
-                # Ignore and keep synthetic frame
-                pass
+                frame = np.zeros((360, 640, 3), dtype=np.uint8)
             except Exception as exc:  # pragma: no cover - defensive
-                # Log if possible, otherwise ignore. Limit the scope of what we catch
-                # when trying to import the logger to avoid swallowing unrelated errors.
                 try:
                     from loguru import logger
 
                     logger.debug("generate_frames render capture failed: %s", exc)
                 except ImportError:
-                    # No logger available; ignore
                     pass
+                frame = np.zeros((360, 640, 3), dtype=np.uint8)
             produced += 1
             yield frame
             if max_frames is not None and produced >= max_frames:

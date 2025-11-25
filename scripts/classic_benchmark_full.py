@@ -121,6 +121,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=0.05,
         help="Target CI half-width for snqi metric",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
+        help="Log level for benchmark run (default: INFO)",
+    )
     # Visualization toggles
     parser.add_argument(
         "--disable-videos",
@@ -160,6 +166,14 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    # Configure loguru level early
+    try:
+        from loguru import logger
+
+        logger.remove()
+        logger.add(sys.stderr, level=args.log_level.upper())
+    except Exception:
+        pass
     cfg = _args_to_config(args)
     print("[classic_benchmark_full] Configuration:", cfg)
     run_full_benchmark(cfg)

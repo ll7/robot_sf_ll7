@@ -239,8 +239,8 @@ class ReportOrchestrator:
             """Execute git command safely, returning 'unknown' if not in a git repo."""
             try:
                 return subprocess.check_output(cmd, text=True).strip()
-            except subprocess.CalledProcessError:  # pragma: no cover
-                # Not a git repository or git command failed - return fallback
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError):  # pragma: no cover
+                # Not a git repository, git missing, or git command failed - return fallback
                 return "unknown"
 
         git_commit = _safe(["git", "rev-parse", "HEAD"])
@@ -249,8 +249,8 @@ class ReportOrchestrator:
             git_dirty = bool(
                 subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
             )
-        except subprocess.CalledProcessError:  # pragma: no cover
-            # Git status failed - assume clean for safety
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):  # pragma: no cover
+            # Git status failed or git unavailable - assume clean for safety
             git_dirty = False
 
         hardware = {

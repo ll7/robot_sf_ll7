@@ -110,9 +110,6 @@ def get_git_metadata() -> tuple[str, str, bool]:
 
     Returns:
         Tuple of (commit_hash, branch_name, is_dirty)
-
-    Raises:
-        ValidationError: If git metadata cannot be retrieved
     """
     try:
         # Get commit hash
@@ -140,10 +137,10 @@ def get_git_metadata() -> tuple[str, str, bool]:
         logger.debug("Collected git metadata", commit=commit[:8], branch=branch, dirty=is_dirty)
         return commit, branch, is_dirty
 
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         msg = "Failed to retrieve git metadata. Ensure repository is initialized."
         logger.warning(msg, error=str(e))
-        raise ValidationError(msg) from e
+        return "unknown", "unknown", False
 
 
 def get_package_versions() -> dict[str, str]:
@@ -232,9 +229,6 @@ def collect_reproducibility_metadata(
 
     Returns:
         ReproducibilityMetadata instance
-
-    Raises:
-        ValidationError: If git metadata cannot be retrieved
     """
     timestamp = datetime.now(tz=UTC).isoformat()
     git_commit, git_branch, git_dirty = get_git_metadata()

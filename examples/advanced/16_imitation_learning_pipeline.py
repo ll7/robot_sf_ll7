@@ -73,7 +73,7 @@ from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus, seri
 from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
 PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
-RUN_MANIFEST_DIR = Path("output/benchmarks/ppo_imitation/runs")
+RUN_MANIFEST_DIR = get_training_run_manifest_path("placeholder").parent
 
 
 def _load_training_manifest(run_id: str) -> dict[str, Any]:

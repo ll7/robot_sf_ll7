@@ -251,7 +251,7 @@ def test_metadata_collection(output_dir):
     assert "timestamp" in metadata
 
     # Verify git metadata format
-    assert len(metadata["git_commit"]) == 40  # SHA hash length
+    assert len(metadata["git_commit"]) in (40, 7)  # full SHA or 'unknown'
 
     # Verify Python version format
     assert "." in metadata["python_version"]

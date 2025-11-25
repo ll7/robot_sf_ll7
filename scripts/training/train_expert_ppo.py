@@ -437,9 +437,7 @@ def run_expert_training(
         config_manifest=config_manifest,
         validation_state=validation_state,
         created_at=timestamp,
-        metrics_synthetic=metrics_synthetic
-        if "metrics_synthetic" in common.ExpertPolicyArtifact.__dataclass_fields__  # type: ignore[attr-defined]
-        else None,
+        metrics_synthetic=metrics_synthetic,
         notes=tuple(notes),
     )
 

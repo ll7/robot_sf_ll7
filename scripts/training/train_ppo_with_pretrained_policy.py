@@ -10,6 +10,7 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import yaml
 from loguru import logger
 
@@ -105,59 +106,10 @@ def run_ppo_finetuning(
 
     # Compute real metrics from the trained model by running evaluation episodes
     # This replaces the previous synthetic random data approach
-    if not dry_run:
-        # Run evaluation episodes to get real metrics
-        eval_env = make_robot_env(config=RobotSimulationConfig())
-        eval_env = maybe_flatten_env_observations(eval_env, context="PPO evaluation")
-
-        eval_episodes = []
-        num_eval_episodes = 10  # Small number for quick evaluation
-
-        for _ in range(num_eval_episodes):
-            obs, _ = eval_env.reset()
-            done = False
-            episode_reward = 0.0
-            episode_steps = 0
-            collision_occurred = False
-            success = False
-
-            while not done:
-                # model.predict returns (action, _state) - we only need action for deterministic eval
-                action, _ = model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = eval_env.step(action)
-                done = terminated or truncated
-                episode_reward += reward
-                episode_steps += 1
-
-                # Track collision and success from info dict
-                if info.get("collision", False):
-                    collision_occurred = True
-                if info.get("is_success", False):
-                    success = True
-
-            eval_episodes.append(
-                {
-                    "reward": episode_reward,
-                    "steps": episode_steps,
-                    "collision": collision_occurred,
-                    "success": success,
-                }
-            )
-
-        eval_env.close()
-
-        # Aggregate real metrics
-        success_rate = float(sum(ep["success"] for ep in eval_episodes) / len(eval_episodes))
-        collision_rate = float(sum(ep["collision"] for ep in eval_episodes) / len(eval_episodes))
-        _avg_steps = float(sum(ep["steps"] for ep in eval_episodes) / len(eval_episodes))
-
-        # Calculate derived metrics (limited to what we actually measure here)
-        snqi = success_rate - 0.5 * collision_rate
-    else:
-        # Dry run: use placeholder metrics
-        success_rate = 0.85
-        collision_rate = 0.08
-        snqi = success_rate - 0.5 * collision_rate
+    successes, collisions, snqi_values = _evaluate_policy_metrics(model, config, dry_run=dry_run)
+    success_rate = float(np.mean(successes)) if successes else 0.0
+    collision_rate = float(np.mean(collisions)) if collisions else 0.0
+    snqi = float(np.mean(snqi_values)) if snqi_values else 0.0
 
     # Minimal metrics to surface convergence information and basic quality signals
     convergence_metric = common.MetricAggregate(
@@ -167,8 +119,19 @@ def run_ppo_finetuning(
         ci95=(float(convergence_timesteps), float(convergence_timesteps)),
     )
 
-    def _metric(val: float) -> common.MetricAggregate:
-        return common.MetricAggregate(mean=val, median=val, p95=val, ci95=(val, val))
+    def _metric(values: list[float]) -> common.MetricAggregate:
+        if not values:
+            return common.MetricAggregate(mean=0.0, median=0.0, p95=0.0, ci95=(0.0, 0.0))
+        arr = np.asarray(values, dtype=float)
+        mean = float(np.mean(arr))
+        median = float(np.median(arr))
+        p95 = float(np.percentile(arr, 95))
+        if len(arr) > 1:
+            se = float(np.std(arr, ddof=1) / np.sqrt(len(arr)))
+            ci = (mean - 1.96 * se, mean + 1.96 * se)
+        else:
+            ci = (mean, mean)
+        return common.MetricAggregate(mean=mean, median=median, p95=p95, ci95=ci)
 
     # Write training run manifest
     training_artifact = common.TrainingRunArtifact(
@@ -178,9 +141,9 @@ def run_ppo_finetuning(
         seeds=config.random_seeds,
         metrics={
             "timesteps_to_convergence": convergence_metric,
-            "success_rate": _metric(success_rate),
-            "collision_rate": _metric(collision_rate),
-            "snqi": _metric(snqi),
+            "success_rate": _metric(successes if not dry_run else [success_rate]),
+            "collision_rate": _metric(collisions if not dry_run else [collision_rate]),
+            "snqi": _metric(snqi_values if not dry_run else [snqi]),
             # path_efficiency and comfort_exposure intentionally omitted until trajectory-based
             # calculations are wired in (needs per-step positions and contact stats).
         },
@@ -245,3 +208,77 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - CLI guard
     raise SystemExit(main())
+
+
+def _evaluate_policy_metrics(
+    model: PPO,
+    config: PPOFineTuningConfig,
+    *,
+    dry_run: bool,
+) -> tuple[list[float], list[float], list[float]]:
+    """Run short evaluation episodes and return per-episode samples for metrics."""
+
+    if dry_run:
+        logger.warning("Dry run mode: using placeholder metrics for evaluation")
+        return [0.85], [0.08], [0.85 - 0.5 * 0.08]
+
+    eval_seed = config.random_seeds[0] if config.random_seeds else None
+    eval_env = make_robot_env(config=RobotSimulationConfig(), seed=eval_seed)
+    eval_env = maybe_flatten_env_observations(eval_env, context="PPO evaluation")
+
+    successes: list[float] = []
+    collisions: list[float] = []
+    snqi_values: list[float] = []
+    steps_list: list[float] = []
+    num_eval_episodes = 10  # Small number for quick evaluation
+
+    from robot_sf.benchmark.metrics import snqi as compute_snqi
+
+    default_weights = {
+        "w_success": 1.0,
+        "w_time": 0.8,
+        "w_collisions": 2.0,
+        "w_near": 1.0,
+        "w_comfort": 0.5,
+        "w_force_exceed": 1.5,
+        "w_jerk": 0.3,
+    }
+
+    for _ in range(num_eval_episodes):
+        obs, _ = eval_env.reset()
+        done = False
+        episode_steps = 0
+        collision_occurred = False
+        success = False
+
+        while not done:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, _reward, terminated, truncated, info = eval_env.step(action)
+            done = terminated or truncated
+            episode_steps += 1
+
+            if info.get("collision", False):
+                collision_occurred = True
+            if info.get("is_success", False):
+                success = True
+
+        successes.append(1.0 if success else 0.0)
+        collisions.append(1.0 if collision_occurred else 0.0)
+        steps_list.append(float(episode_steps))
+
+    eval_env.close()
+    max_steps = max(steps_list) if steps_list else 1.0
+    for success_flag, collision_flag, steps in zip(successes, collisions, steps_list, strict=False):
+        metric_values = {
+            "success": success_flag,
+            "time_to_goal_norm": steps / max_steps if max_steps else 1.0,
+            "collisions": collision_flag,
+            "near_misses": 0.0,
+            "comfort_exposure": 0.0,
+            "force_exceed_events": 0.0,
+            "jerk_mean": 0.0,
+            "curvature_mean": 0.0,
+        }
+        snqi_values.append(float(compute_snqi(metric_values, default_weights)))
+
+    return successes, collisions, snqi_values

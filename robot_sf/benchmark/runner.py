@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -896,7 +897,23 @@ def _post_process_metrics(
                 metrics[count_key] = int(metrics[count_key])
             except Exception:  # pragma: no cover
                 pass
-    return metrics
+    return _sanitize_metrics(metrics)
+
+
+def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Remove NaN/inf metric entries to keep JSON serialization clean."""
+
+    clean: dict[str, Any] = {}
+    for key, val in metrics.items():
+        if isinstance(val, dict):
+            nested = _sanitize_metrics(val)
+            if nested:
+                clean[key] = nested
+            continue
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+            continue
+        clean[key] = val
+    return clean
 
 
 def _expand_jobs(

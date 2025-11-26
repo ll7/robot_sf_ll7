@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+from loguru import logger
 
 # Centralized constants imported from benchmark.constants to avoid drift.
 from robot_sf.benchmark.constants import (
@@ -66,6 +67,23 @@ class EpisodeData:
     # Optional fields for paper metrics (2306.16740v4)
     obstacles: np.ndarray | None = None
     other_agents_pos: np.ndarray | None = None
+
+
+def has_force_data(data: EpisodeData) -> bool:
+    """Return True when pedestrian force data is present and non-trivial.
+
+    Force-based metrics are meaningless when the episode contains pedestrians
+    but ``ped_forces`` is either missing, all zeros, or entirely non-finite.
+    The helper treats the K=0 case as valid (no force data expected).
+    """
+
+    if data.peds_pos.shape[1] == 0:
+        return True
+    if data.ped_forces.shape != data.peds_pos.shape:
+        return False
+    if not np.isfinite(data.ped_forces).any():
+        return False
+    return not np.allclose(data.ped_forces, 0.0)
 
 
 # --- Internal helper functions for paper metrics ---
@@ -246,12 +264,14 @@ def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -
     Returns NaN for each quantile if there are no pedestrians or timesteps.
     """
     K = data.peds_pos.shape[1]
-    T = data.ped_forces.shape[0]
+    T = data.peds_pos.shape[0]
     if K == 0 or T == 0:
+        return {f"force_q{int(q * 100)}": float("nan") for q in qs}
+    if not has_force_data(data):
         return {f"force_q{int(q * 100)}": float("nan") for q in qs}
     mags = np.linalg.norm(data.ped_forces, axis=2)  # (T,K)
     flat = mags.ravel()
-    return {f"force_q{int(q * 100)}": float(np.quantile(flat, q)) for q in qs}
+    return {f"force_q{int(q * 100)}": float(np.nanquantile(flat, q)) for q in qs}
 
 
 def per_ped_force_quantiles(
@@ -290,10 +310,13 @@ def per_ped_force_quantiles(
     >>> # Aggregated median (force_q50): 1.0 (6 samples of 1, 3 samples of 10)
     """
     K = data.peds_pos.shape[1]
-    T = data.ped_forces.shape[0]
+    T = data.peds_pos.shape[0]
 
     # Handle edge cases: no pedestrians or no timesteps
     if K == 0 or T == 0:
+        return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
+
+    if not has_force_data(data):
         return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
 
     # Compute force magnitudes: (T,K)
@@ -317,6 +340,8 @@ def force_exceed_events(data: EpisodeData, threshold: float = COMFORT_FORCE_THRE
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
+    if not has_force_data(data):
+        return float("nan")
     mags = np.linalg.norm(data.ped_forces, axis=2)
     return float(np.count_nonzero(mags > threshold))
 
@@ -330,6 +355,8 @@ def comfort_exposure(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHO
     T = data.peds_pos.shape[0]
     if K == 0 or T == 0:
         return 0.0
+    if not has_force_data(data):
+        return float("nan")
     events = force_exceed_events(data, threshold=threshold)
     return float(events / (K * T))
 
@@ -1678,6 +1705,12 @@ def compute_all_metrics(
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
 
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    if ped_count > 0 and not has_force_data(data):
+        logger.bind(pedestrians=ped_count, steps=int(data.peds_pos.shape[0])).warning(
+            "Missing pedestrian force data; force-based metrics will be NaN.",
+        )
+
     values: dict[str, float] = {}
     values["success"] = success(data, horizon=horizon)
     values["time_to_goal_norm"] = time_to_goal_norm(data, horizon)
@@ -1720,6 +1753,7 @@ __all__ = [
     "force_exceed_events",
     "force_gradient_norm_mean",
     "force_quantiles",
+    "has_force_data",
     "human_collisions",
     "jerk_avg",
     "jerk_max",

@@ -62,7 +62,7 @@
   - Change from `[ ] Force magnitude quantiles (per ped & aggregated) (aggregated implemented; per-ped pending)`
   - To: `[x] Force magnitude quantiles (per ped & aggregated) (both implemented 2025-10-24)`
 
-- [ ] T014 [P] Add example usage to `examples/` or `scripts/validation/`
+- [x] T014 [P] Add example usage to `examples/` or `scripts/validation/`
   - Create short script demonstrating per-ped vs aggregated quantile comparison
   - Show scenario where they differ (optional, nice-to-have)
 
@@ -74,12 +74,12 @@
 
 **Purpose**: Ensure robustness and comprehensive documentation
 
-- [ ] T015 [P] Add edge case test for pedestrian appearing mid-episode (if applicable to data model)
-- [ ] T016 [P] Add performance smoke test: verify T=1000, K=50 completes < 50ms
-- [ ] T017 Verify JSON schema compatibility - run benchmark subset and validate output
+- [x] T015 [P] Add edge case test for pedestrian appearing mid-episode (if applicable to data model)
+- [x] T016 [P] Add performance smoke test: verify T=1000, K=50 completes < 50ms
+- [x] T017 Verify JSON schema compatibility - run benchmark subset and validate output
   - `uv run python -c "from robot_sf.benchmark.runner import run_batch; ..."`  (quick 5-episode smoke test)
 
-- [ ] T018 Update central docs index `docs/README.md` if metrics_spec.md link needs refresh
+- [x] T018 Update central docs index `docs/README.md` if metrics_spec.md link needs refresh
 - [x] T019 Final verification: run complete quality gate pipeline
   - Ruff format & check
   - Type check: `uvx ty check robot_sf/benchmark/metrics.py --exit-zero`
@@ -100,8 +100,4 @@
 **Definition of Done**: ✅ **COMPLETE** - All checkboxes in Phases 1-2 are complete (2025-10-24). The feature meets the specification requirements and is ready to merge.
 
 **Outstanding Optional Tasks**:
-- T014: Example usage demonstration (nice-to-have)
-- T015: Edge case test for mid-episode pedestrian appearance (edge case)
-- T016: Performance smoke test (robustness)
-- T017: JSON schema compatibility verification (integration validation)
-- T018: Central docs index update (documentation polish)
+- None (T014–T018 completed; optional items closed)

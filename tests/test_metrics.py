@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import math
+import time
+from pathlib import Path
 
 import numpy as np
+import pytest
 
 from robot_sf.benchmark import metrics as metrics_mod
 from robot_sf.benchmark.metrics import (
@@ -288,6 +291,60 @@ def test_per_ped_force_quantiles_in_compute_all():
     assert np.isfinite(vals["ped_force_q50"]), "ped_force_q50 should be finite with K>0"
     assert np.isfinite(vals["ped_force_q90"]), "ped_force_q90 should be finite with K>0"
     assert np.isfinite(vals["ped_force_q95"]), "ped_force_q95 should be finite with K>0"
+
+
+def test_per_ped_force_quantiles_handles_missing_timesteps():
+    """T015: Pedestrian appears mid-episode; NaNs for missing timesteps are ignored."""
+
+    T, K = 4, 1
+    ep = _make_episode(T=T, K=K)
+    ep.ped_forces[:] = np.nan
+    ep.ped_forces[2, 0] = np.array([5.0, 0.0])
+    ep.ped_forces[3, 0] = np.array([7.0, 0.0])
+
+    vals = compute_all_metrics(ep, horizon=10)
+    # Quantiles should ignore NaNs from early timesteps and use the available samples.
+    assert np.isclose(vals["ped_force_q50"], 6.0)
+    assert np.isfinite(vals["ped_force_q90"])
+
+
+def test_per_ped_force_quantiles_perf_smoke():
+    """T016: Performance smoke for large (T=1000, K=50) array."""
+
+    T, K = 1000, 50
+    ep = _make_episode(T=T, K=K)
+    rng = np.random.default_rng(0)
+    ep.ped_forces = rng.standard_normal((T, K, 2))
+
+    start = time.perf_counter()
+    out = metrics_mod.per_ped_force_quantiles(ep)
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 0.05, f"per_ped_force_quantiles too slow: {elapsed:.4f}s"
+    assert all(np.isfinite(v) for v in out.values())
+
+
+def test_episode_schema_accepts_ped_force_metrics():
+    """T017: Episode schema validation with ped_force_* metrics present."""
+
+    pytest.importorskip("jsonschema")
+    from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
+
+    ep = _make_episode(T=3, K=1)
+    ep.ped_forces[..., 0] = 2.0  # ensure finite force data
+    metrics = compute_all_metrics(ep, horizon=5)
+    record = {
+        "version": "v1",
+        "episode_id": "demo-1",
+        "scenario_id": "sc-demo",
+        "seed": 123,
+        "metrics": metrics,
+        "timing": {"steps_per_second": 1.0},
+    }
+    schema_path = (
+        Path(__file__).parents[1] / "robot_sf" / "benchmark" / "schemas" / "episode.schema.v1.json"
+    )
+    EpisodeSchema(schema_path).validate_episode_data(record)
 
 
 def test_force_metrics_missing_force_data_flagged():

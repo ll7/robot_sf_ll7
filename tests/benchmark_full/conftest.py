@@ -21,7 +21,6 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
     output_root: str
     scenario_matrix_path: str
     fast_stub: bool = True
-    disable_videos: bool = True
     bootstrap_samples: int = 1000
     bootstrap_confidence: float = 0.95
     master_seed: int = 123
@@ -31,7 +30,7 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
     workers: int = 1
     smoke: bool = True
     capture_replay: bool = True
-    disable_videos: bool = False
+    disable_videos: bool = True
     max_videos: int = 1
     force_continue: bool = False
     snqi_weights_path: str | None = None

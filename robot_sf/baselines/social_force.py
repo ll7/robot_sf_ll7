@@ -128,7 +128,7 @@ class SocialForcePlanner(BasePolicy):
         ):
             return self._gen.normal(loc, scale, size)
 
-    def __init__(self, config: dict | SFPlannerConfig, *, seed: int | None = None):
+    def __init__(self, config: dict[str, Any] | SFPlannerConfig, *, seed: int | None = None):
         self.config = self._parse_config(config)
         self._rng = self._RNGCompat(seed)
         self._sim: Any | None = None
@@ -137,9 +137,9 @@ class SocialForcePlanner(BasePolicy):
         self._last_velocity: np.ndarray | None = None
         self._robot_state: dict[str, Any] | None = None
 
-    def _parse_config(self, config: dict | SFPlannerConfig) -> SFPlannerConfig:
+    def _parse_config(self, config: dict[str, Any] | SFPlannerConfig) -> SFPlannerConfig:
         if isinstance(config, dict):
-            return SFPlannerConfig(**config)
+            return SFPlannerConfig(**config)  # type: ignore[arg-type]
         if isinstance(config, SFPlannerConfig):
             return config
         raise TypeError(f"Invalid config type: {type(config)}")
@@ -153,7 +153,7 @@ class SocialForcePlanner(BasePolicy):
         self._last_velocity = None
         self._robot_state = None
 
-    def configure(self, config: dict | SFPlannerConfig) -> None:
+    def configure(self, config: dict[str, Any] | SFPlannerConfig) -> None:
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict) -> dict[str, float]:
@@ -269,8 +269,9 @@ class SocialForcePlanner(BasePolicy):
         desired = (v_des - robot_vel) / max(self.config.tau, 1e-6)
 
         # Interaction forces (exclude desired to prevent double counting)
+        assert self._wrapper is not None, "Wrapper must be initialized"
         interactions = self._wrapper.get_forces_at(
-            robot_pos,
+            robot_pos,  # type: ignore[arg-type]  # ndarray is a Sequence
             include_desired=False,
             include_robot=False,
         )

@@ -41,7 +41,6 @@ try:
     from robot_sf.benchmark.visualization import (
         VisualizationError,
         generate_benchmark_plots,
-        generate_benchmark_videos,
         validate_visual_artifacts,
     )
 
@@ -935,20 +934,19 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
                 videos_dir.mkdir(exist_ok=True)
 
                 # Generate real plots from episode data
-                plot_artifacts = generate_benchmark_plots(all_records, str(plots_dir))
+                plot_artifacts = generate_benchmark_plots(all_records, str(root))
                 logger.info(
                     "Generated {} real plots into {}",
                     len(plot_artifacts),
                     plots_dir,
                 )
 
-                # Generate real videos from episode data
-                video_artifacts = generate_benchmark_videos(all_records, str(videos_dir))
-                logger.info(
-                    "Generated {} real videos into {}",
-                    len(video_artifacts),
-                    videos_dir,
+                # Skip legacy episode_*.mp4 generation when SimulationView videos are available
+                video_artifacts = []
+                logger.debug(
+                    "Skipping legacy episode video generation (sim-view videos already produced)"
                 )
+                logger.info("Generated sim_view videos into {}", videos_dir)
 
                 # Validate all generated artifacts
                 all_artifacts = plot_artifacts + video_artifacts

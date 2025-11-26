@@ -114,9 +114,20 @@ Determinism hinges on two persisted identifiers:
 
 If these two values plus `master_seed` and the scenario matrix file content are the same, the benchmark will produce deterministic episode IDs and replay-driven outputs. The manifest stores all three, enabling downstream verification scripts to compare runs.
 
-## Plots & Videos
-- Plots always created (placeholders if data limited) unless matplotlib missing.
-- Videos require matplotlib + moviepy; gracefully skipped otherwise. Smoke mode always skips.
+## Visual Artifacts (plots + videos)
+- Generated once after the adaptive loop; outputs live under `plots/`, `videos/`, and
+  `reports/plot_artifacts.json`, `reports/video_artifacts.json`, `reports/performance_visuals.json`.
+- SimulationView-first: enable `--capture-replay` to record `(t,x,y,heading)` steps; auto mode
+  tries SimulationView with those replay traces, falls back to synthetic when unavailable or
+  empty, and marks missing traces with `insufficient-replay-state`.
+- Dependencies: SimulationView path needs pygame + moviepy + ffmpeg; missing stacks are recorded
+  via `simulation-view-missing` or `moviepy-missing` notes instead of crashing. Use
+  `--video-renderer {auto,sim-view,synthetic}` to select renderer; `--disable-videos` or
+  `--smoke` skip encoding entirely.
+- Schema validation: set `ROBOT_SF_VALIDATE_VISUALS=1` to validate manifests against
+  `specs/127-enhance-benchmark-visual/contracts/`; failures raise to surface drift in CI.
+- Performance meta (`performance_visuals.json`) records encode timings and budget flags (plots
+  <2s, first video encode <5s, memory <100MB).
 
 ## Extensibility Roadmap
 | Area | Next Step |

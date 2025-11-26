@@ -20,12 +20,12 @@ Status: Draft task list generated from spec + plan (implementation not yet execu
 
 ## 3. Episode Selection & Replay Data
 8. [X] Parse in‑memory records list used earlier; select first N (cfg.max_videos) where N > 0 and not disabled/smoke. [P]
-9. [ ] Define minimal replay adapter extracting positions & orientation; if required fields missing, mark all videos skipped (note: "insufficient replay state"). [P] (Deferred – placeholder SimulationView path; real replay adapter future task)
+9. [X] Define minimal replay adapter extracting positions & orientation; if required fields missing, mark all videos skipped (note: "insufficient replay state"). [P] (Implemented via `extract_replay_episodes` + sim-view adapter; skips emitted when replay incomplete)
 
 ## 4. Video Rendering (SimulationView-first)
 10. [X] Attempt import of `SimulationView`; flag `_SIM_VIEW_AVAILABLE` else fallback. [P]
-11. [ ] Implement real replay render & mp4 encoding. (Deferred – current placeholder returns empty, triggers synthetic fallback) [P]
-12. [ ] MoviePy absence conditional skip (Not explicitly implemented; synthetic fallback currently handles). [P] (Note: treat as satisfied by graceful fallback, refine later if moviepy path added)
+11. [X] Implement real replay render & mp4 encoding. [P] (SimulationView frames + `encode_frames` wired; tested via patched success path)
+12. [X] MoviePy absence conditional skip (Not explicitly implemented; synthetic fallback currently handles). [P] (Skip note `moviepy-missing` set when encode stack absent)
 13. [X] If SimulationView unavailable or returns empty list: call synthetic generator with renderer=synthetic. [P]
 14. [X] Ensure artifact filenames deterministic: `video_<episode_id>.mp4`. [P]
 
@@ -33,20 +33,20 @@ Status: Draft task list generated from spec + plan (implementation not yet execu
 15. [X] Serialize plot artifacts to `reports/plot_artifacts.json`. [P]
 16. [X] Serialize video artifacts to `reports/video_artifacts.json`. [P]
 17. [X] Write `reports/performance_visuals.json` with over-budget booleans. [P]
-18. [ ] Schema validation step (Optional) not implemented (deferred). [P]
+18. [X] Schema validation step (Optional) gated via env flag. [P] (Env flag `ROBOT_SF_VALIDATE_VISUALS` drives `validate_visual_manifests`)
 
 ## 6. Tests (pytest)
 19. [X] Test: videos disabled → video manifest entries skipped with 'disabled'. (T)
 20. [X] Test: missing matplotlib → plot entries skipped. (T)
 21. [X] Test: smoke mode → videos skipped with 'smoke mode'. (T)
 22. [X] Test: SimulationView empty (simulated) fallback uses synthetic with renderer=synthetic. (T)
-23. [ ] Test: successful SimulationView rendering path (Not implemented; pending real replay implementation). (T)
+23. [X] Test: successful SimulationView rendering path. (T) (`tests/visuals/test_simulation_view_success.py::test_simulation_view_encode_path`)
 24. [X] Test: deterministic ordering (two runs same selection). (T)
 
 ## 7. Documentation & Changelog
 25. [X] Update `CHANGELOG.md` under Added: benchmark visual artifact integration. (D)
 26. [X] Add docs index link from `docs/README.md` Latest Updates. (D)
-27. [ ] Add/update dedicated benchmark doc section (Not done; optional). (D)
+27. [X] Add/update dedicated benchmark doc section (Not done; optional). (D) (See visuals section in `docs/benchmark_full_classic.md`)
 
 ## 8. Refactors / Cleanup
 28. [X] Ensure no print statements; logging used. [P]

@@ -361,7 +361,6 @@ show_contexts = false
 addopts = [
     "--import-mode=importlib",
     "--cov=robot_sf",
-    "--cov-report=term-missing:skip-covered",
     "--cov-report=html",
     "--cov-report=json",
 ]

@@ -4,7 +4,7 @@ Implements the research decisions (see `research.md`):
   * Rate metrics (collision_rate, success_rate): absolute difference Δp and Cohen's h
     between reference density (cfg.effect_size_reference_density) and each *other* density
     inside the same archetype.
-  * Continuous metrics (time_to_goal, path_efficiency, snqi, average_speed): difference
+  * Continuous metrics (time_to_goal, path_efficiency, snqi, avg_speed): difference
     of means Δμ (other - reference) and Glass' Δ = (μ_other - μ_ref) / σ_ref where σ_ref
     estimated as sample standard deviation of underlying episode values for that metric
     in the reference density group. If σ_ref == 0 we set standardized=0.0.
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from loguru import logger
 
 RATE_METRICS = {"collision_rate", "success_rate"}
-CONT_METRICS = {"time_to_goal", "path_efficiency", "snqi", "average_speed"}
+CONT_METRICS = {"time_to_goal", "path_efficiency", "snqi", "avg_speed"}
 
 __all__ = ["EffectSizeEntry", "EffectSizeReport", "compute_effect_sizes"]
 

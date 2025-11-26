@@ -58,6 +58,7 @@ class ScenarioDescriptor:  # duplicated light form; real version will live centr
     density: str
     map_path: str
     params: dict[str, object]
+    raw: dict
     planned_seeds: list[int]
     max_episode_steps: int
     hash_fragment: str
@@ -71,6 +72,7 @@ class EpisodeJob:  # lightweight form for planning layer
     archetype: str
     density: str
     horizon: int
+    scenario: ScenarioDescriptor
 
 
 def load_scenario_matrix(path: str) -> list[dict]:  # T022
@@ -124,6 +126,44 @@ def _plan_unique_seeds(rng, count: int) -> list[int]:  # small helper for clarit
     return seeds
 
 
+def _resolve_map_path(map_file: str, cfg, name: str) -> Path:
+    matrix_dir = Path(cfg.scenario_matrix_path).parent
+    map_path = Path(map_file)
+    if not map_path.is_absolute():
+        map_path = (matrix_dir / map_file).resolve()
+    if not map_path.exists() and map_path.parent.name == "svg_maps" and map_path.parent.exists():
+        raise ValueError(f"Map file not found for scenario '{name}': {map_path}")
+    return map_path
+
+
+def _plan_seeds(sc: dict, cfg, rng) -> list[int]:
+    cfg_seeds = getattr(cfg, "seeds", None)
+    seeds_from_matrix = sc.get("seeds")
+    planned: list[int] = []
+    if isinstance(cfg_seeds, list) and cfg_seeds:
+        planned = [int(s) for s in cfg_seeds]
+    elif isinstance(seeds_from_matrix, list) and seeds_from_matrix:
+        planned = [int(s) for s in seeds_from_matrix]
+    target = int(getattr(cfg, "initial_episodes", 0) or 0)
+    while len(planned) < target:
+        next_seed = _plan_unique_seeds(rng, 1)[0]
+        if next_seed not in planned:
+            planned.append(next_seed)
+    return planned
+
+
+def _scenario_id(archetype: str, density: str, name: str) -> str:
+    def _san(s: str) -> str:
+        return "".join(c if c.isalnum() or c in {"-", "_"} else "_" for c in s.lower())
+
+    return f"{_san(archetype)}__{_san(density)}__{_san(name)}"
+
+
+def _hash_fragment(payload: dict) -> str:
+    hash_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha1(hash_bytes).hexdigest()[:10]
+
+
 def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  # T023
     """Expand raw scenario dicts into `ScenarioDescriptor` objects.
 
@@ -150,38 +190,19 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
             sc,
         )
 
-        # Map path validation (relative resolution)
-        matrix_dir = Path(cfg.scenario_matrix_path).parent
-        map_path = Path(map_file)
-        if not map_path.is_absolute():
-            map_path = (matrix_dir / map_file).resolve()
-        # For early contract tests we allow non-existent map files (synthetic inputs)
-        # Full integration later will validate via environment factory. Only raise if
-        # parent 'svg_maps' directory exists (indicating mis-typed filename) but file missing.
-        if not map_path.exists() and (
-            map_path.parent.name == "svg_maps" and map_path.parent.exists()
-        ):  # likely real file expected
-            raise ValueError(f"Map file not found for scenario '{name}': {map_path}")
-        # Seed planning - deterministic unique seeds per scenario
-        planned_seeds = _plan_unique_seeds(rng, int(cfg.initial_episodes))
-
-        # Hash fragment: stable SHA1 over JSON canonical representation of key fields
-        hash_payload = {
-            "name": name,
-            "archetype": archetype,
-            "density": density,
-            "map": str(map_path),
-            "max_episode_steps": max_steps,
-            "params": params_source,
-        }
-        hash_bytes = json.dumps(hash_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        hash_fragment = hashlib.sha1(hash_bytes).hexdigest()[:10]
-
-        # Scenario ID (ensure filesystem safe, uniqueness)
-        def _san(s: str) -> str:
-            return "".join(c if c.isalnum() or c in {"-", "_"} else "_" for c in s.lower())
-
-        scenario_id = f"{_san(archetype)}__{_san(density)}__{_san(name)}"
+        map_path = _resolve_map_path(map_file, cfg, name)
+        planned_seeds = _plan_seeds(sc, cfg, rng)
+        hash_fragment = _hash_fragment(
+            {
+                "name": name,
+                "archetype": archetype,
+                "density": density,
+                "map": str(map_path),
+                "max_episode_steps": max_steps,
+                "params": params_source,
+            },
+        )
+        scenario_id = _scenario_id(archetype, density, name)
         if scenario_id in seen_ids:
             raise ValueError(f"Duplicate scenario id generated: {scenario_id}")
         seen_ids.add(scenario_id)
@@ -193,6 +214,7 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
                 density=density,
                 map_path=str(map_path),
                 params=params_source,
+                raw=sc,
                 planned_seeds=planned_seeds,
                 max_episode_steps=max_steps,
                 hash_fragment=hash_fragment,
@@ -227,6 +249,7 @@ def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg) -> list[Episod
                     archetype=sc.archetype,
                     density=sc.density,
                     horizon=horizon,
+                    scenario=sc,
                 ),
             )
     return jobs

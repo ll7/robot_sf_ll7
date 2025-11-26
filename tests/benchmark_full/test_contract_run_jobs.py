@@ -15,6 +15,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import robot_sf.benchmark.full_classic.orchestrator as orch
 from robot_sf.benchmark.full_classic.orchestrator import run_episode_jobs
 
 
@@ -26,6 +27,7 @@ class _Job:
     archetype: str
     density: str
     horizon: int
+    scenario: object | None = None
 
 
 @dataclass
@@ -37,7 +39,7 @@ def _episode_id(job: _Job) -> str:  # simplistic deterministic id for test
     return f"{job.scenario_id}-{job.seed}"
 
 
-def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record):
+def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, monkeypatch):
     episodes_dir = Path(temp_results_dir) / "episodes"
     episodes_dir.mkdir()
     episodes_file = episodes_dir / "episodes.jsonl"
@@ -59,6 +61,20 @@ def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record):
     cfg.smoke = True
     cfg.workers = 1
     cfg.algo = "ppo"
+    cfg.capture_replay = False
+    cfg.output_root = str(temp_results_dir)
+    cfg.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
+
+    def _stub_make_episode(job, _cfg):
+        return synthetic_episode_record(
+            episode_id=_episode_id(job),
+            scenario_id=job.scenario_id,
+            seed=job.seed,
+            archetype=job.archetype,
+            density=job.density,
+        )
+
+    monkeypatch.setattr(orch, "_make_episode_record", _stub_make_episode)
 
     jobs = [existing_job, new_job]
     # Execute run_episode_jobs; should skip existing (seed=1) and yield only new (seed=2)

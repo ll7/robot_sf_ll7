@@ -14,13 +14,13 @@ class DummyEnc:
         self.peak_rss_mb = None
 
 
-def fake_generate_frames(_ep, _fps: int, _max_frames=None):
+def fake_generate_frames(_ep, *, fps: int = 10, max_frames=None, **_kwargs):
     # Yield minimal frames; encoder result will mark skipped/moviepy-missing.
     for _ in range(2):
         yield None
 
 
-def fake_encode_frames(_frame_iter, _path, _fps: int, _sample_memory: bool):
+def fake_encode_frames(_frame_iter, _path, *, fps: int = 10, sample_memory: bool = False, **_kw):
     return DummyEnc(status="skipped", note=NOTE_MOVIEPY_MISSING)
 
 

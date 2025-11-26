@@ -30,12 +30,12 @@
 #
 # 5. Multi-Agent Support
 #    - Handles agent-specific file paths and naming conventions
-#    - Supports: Claude, Gemini, Copilot, Cursor, Qwen, opencode, Codex, Windsurf, Kilo Code, Auggie CLI, Roo Code, CodeBuddy CLI, Amp, or Amazon Q Developer CLI
+#    - Supports: Claude, Gemini, Copilot, Cursor, Qwen, opencode, Codex, Windsurf, Kilo Code, Auggie CLI, Roo Code, CodeBuddy CLI, Amp, SHAI, or Amazon Q Developer CLI
 #    - Can update single agents or all existing agent files
 #    - Creates default Claude file if no agent files exist
 #
 # Usage: ./update-agent-context.sh [agent_type]
-# Agent types: claude|gemini|copilot|cursor-agent|qwen|opencode|codex|windsurf|kilocode|auggie|roo|codebuddy|amp|q
+# Agent types: claude|gemini|copilot|cursor-agent|qwen|opencode|codex|windsurf|kilocode|auggie|shai|q
 # Leave empty to update all existing agent files
 
 set -e
@@ -49,7 +49,7 @@ set -o pipefail
 #==============================================================================
 
 # Get script directory and load common functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 # Get all paths and variables from common functions
@@ -71,6 +71,7 @@ AUGGIE_FILE="$REPO_ROOT/.augment/rules/specify-rules.md"
 ROO_FILE="$REPO_ROOT/.roo/rules/specify-rules.md"
 CODEBUDDY_FILE="$REPO_ROOT/CODEBUDDY.md"
 AMP_FILE="$REPO_ROOT/AGENTS.md"
+SHAI_FILE="$REPO_ROOT/SHAI.md"
 Q_FILE="$REPO_ROOT/AGENTS.md"
 
 # Template file
@@ -407,8 +408,7 @@ update_existing_agent_file() {
     local in_tech_section=false
     local in_changes_section=false
     local tech_entries_added=false
-    local existing_changes_count=0
-    
+    local existing_changes_count=0    
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Handle Active Technologies section
         if [[ "$line" == "## Active Technologies" ]]; then
@@ -614,12 +614,15 @@ update_specific_agent() {
         amp)
             update_agent_file "$AMP_FILE" "Amp"
             ;;
+        shai)
+            update_agent_file "$SHAI_FILE" "SHAI"
+            ;;
         q)
             update_agent_file "$Q_FILE" "Amazon Q Developer CLI"
             ;;
         *)
             log_error "Unknown agent type '$agent_type'"
-            log_error "Expected: claude|gemini|copilot|cursor-agent|qwen|opencode|codex|windsurf|kilocode|auggie|roo|amp|q"
+            log_error "Expected: claude|gemini|copilot|cursor-agent|qwen|opencode|codex|windsurf|kilocode|auggie|roo|amp|shai|q"
             exit 1
             ;;
     esac
@@ -684,6 +687,11 @@ update_all_existing_agents() {
         found_agent=true
     fi
 
+    if [[ -f "$SHAI_FILE" ]]; then
+        update_agent_file "$SHAI_FILE" "SHAI"
+        found_agent=true
+    fi
+
     if [[ -f "$Q_FILE" ]]; then
         update_agent_file "$Q_FILE" "Amazon Q Developer CLI"
         found_agent=true
@@ -713,7 +721,7 @@ print_summary() {
     
     echo
 
-    log_info "Usage: $0 [claude|gemini|copilot|cursor-agent|qwen|opencode|codex|windsurf|kilocode|auggie|roo|codebuddy|amp|q]"
+    log_info "Usage: $0 [claude|gemini|copilot|cursor-agent|qwen|opencode|codex|windsurf|kilocode|auggie|codebuddy|shai|q]"
 }
 
 #==============================================================================

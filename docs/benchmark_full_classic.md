@@ -10,8 +10,8 @@ The Full Classic Interaction Benchmark provides a reproducible evaluation harnes
 - Aggregated metric summaries with bootstrap/Wilson CIs (`aggregates/summary.json`)
 - Effect size reports (`reports/effect_sizes.json`)
 - Statistical precision report with per‑metric CI half‑widths (`reports/statistical_sufficiency.json`)
-- Plot artifacts (distribution, trajectory, KDE placeholder, Pareto placeholder, force heatmap placeholder) under `plots/`
-- Optional annotated videos of representative episodes under `videos/`
+- Plot artifacts (distributions, trajectories, path efficiency, success/collision scatter, episode length histogram) under `plots/`
+- Optional annotated videos of representative episodes under `videos/` (SimulationView-first with replay-driven frames)
 - A manifest capturing configuration, git hash, scenario matrix hash, timing & scaling efficiency (`manifest.json`)
 
 All outputs are deterministic given the scenario matrix file and master seed.
@@ -53,6 +53,9 @@ uv run python scripts/classic_benchmark_full.py \
 | `--target-snqi-half-width F` | CI half-width target for snqi (placeholder until SNQI integrated) |
 | `--disable-videos` | Skip video artifact generation |
 | `--max-videos N` | Max representative videos to render |
+| `--capture-replay/--no-capture-replay` | Enable/disable per-step replay capture for videos/plots |
+| `--video-renderer {auto,synthetic,sim-view}` | Renderer preference (auto tries sim-view then synthetic) |
+| `--video-fps N` | FPS used for rendered videos |
 
 ## Adaptive Precision Loop
 Each iteration performs:
@@ -73,7 +76,8 @@ Episodes are added via `adaptive_sampling_iteration` in batches (default 1) unti
   "archetype": "crossing",
   "density": "low",
   "status": "success",
-  "metrics": {"collision_rate": 0.0, "success_rate": 1.0, ...},
+  "metrics": {"collision_rate": 0.0, "success_rate": 1.0, "time_to_goal": 4.3, ...},
+  "replay_steps": [[0.0, 0.1, 0.1, 0.0], ...],
   "steps": 110,
   "wall_time_sec": 0.0021,
   "algo": "ppo",
@@ -108,7 +112,7 @@ Determinism hinges on two persisted identifiers:
 - `git_hash`: Short commit hash captured at run start for exact code provenance.
 - `scenario_matrix_hash`: SHA1 (first 12 chars) of a canonical JSON dump of the scenario matrix file.
 
-If these two values plus `master_seed` and the scenario matrix file content are the same, the benchmark will produce identical episode IDs and (with the current synthetic metrics path) identical aggregates/effect sizes. The manifest stores all three, enabling downstream verification scripts to compare runs. Future extensions integrating real simulations must retain these fields to preserve this guarantee.
+If these two values plus `master_seed` and the scenario matrix file content are the same, the benchmark will produce deterministic episode IDs and replay-driven outputs. The manifest stores all three, enabling downstream verification scripts to compare runs.
 
 ## Plots & Videos
 - Plots always created (placeholders if data limited) unless matplotlib missing.
@@ -117,8 +121,8 @@ If these two values plus `master_seed` and the scenario matrix file content are 
 ## Extensibility Roadmap
 | Area | Next Step |
 |------|-----------|
-| Episode Execution | Replace synthetic record generator with real simulation integration |
-| Metrics | Integrate SNQI weights + additional continuous metrics |
+| Episode Execution | Tune policy/backends for faster replay capture + richer traces |
+| Metrics | Integrate SNQI baselines + additional continuous metrics |
 | Effect Sizes | Include confidence intervals via bootstrap on standardized metrics |
 | Precision | Relative half‑width targets for continuous metrics |
 | Scaling | True parallel efficiency (compare against timed sequential baseline) |

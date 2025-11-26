@@ -1,14 +1,16 @@
 <!--
 Sync Impact Report
-Previous Version: 1.3.0 -> New Version: 1.3.1 (PATCH bump)
-Rationale: Updated governance dates and validated template consistency. No structural changes to principles or contracts.
+Previous Version: 1.3.1 -> New Version: 1.4.0 (MINOR bump)
+Rationale: Added new Principle XIII on test value verification and maintenance discipline. This principle adds governance scope for evaluating test significance and pruning low-value tests.
 Modified Principles: None
-Added Sections: None
+Added Sections: Principle XIII - Test Value Verification & Maintenance Discipline
 Removed Sections: None
 Templates Updated:
  - ✅ plan-template.md: Verified constitution version reference alignment
  - ✅ spec-template.md: Verified template compatibility
  - ✅ tasks-template.md: Verified template compatibility
+ - ✅ dev_guide.md: Added test significance verification guidance
+ - ✅ copilot-instructions.md: Added test review guidance
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -76,6 +78,41 @@ Non-compliance Handling:
  - Existing stray prints: create an issue referencing this Principle XII and replace with `logger.info`/`logger.warning` within a maintenance cycle.
 
 This principle adds governance scope (hence MINOR bump) but does not change public API or schema contracts; no migration guide required beyond updating contributing/dev documentation.
+
+### XIII. Test Value Verification & Maintenance Discipline
+Before accepting test failures or implementing fixes, developers MUST verify the significance and necessity of the failing test. Not all tests provide equal value; some may be outdated, overly brittle, or testing non-critical behavior. Test suite health requires both coverage and relevance.
+
+Verification Criteria (evaluate in order):
+1. **Core Feature Coverage**: Does the test verify a public contract (factory behavior, schema compliance, metric correctness, deterministic reproducibility)? If yes → high priority.
+2. **User Impact**: Would failure in production affect users (incorrect metrics, broken benchmarks, environment crashes)? If yes → high priority.
+3. **Regression Prevention**: Does the test catch known past bugs or validate recent fixes? If yes → medium priority.
+4. **Edge Case vs. Common Path**: Does it test rare edge cases with low real-world occurrence? If yes and no documented incident → consider low priority.
+5. **Brittleness vs. Signal**: Does the test fail frequently due to environmental factors (timing, display, non-deterministic setup) without indicating real bugs? If yes → candidate for refactoring or removal.
+6. **Redundancy**: Is the same behavior covered by other tests at a different level (e.g., both unit and integration tests for identical logic)? If yes → consider consolidation.
+
+Decision Tree:
+- **High Priority Tests** (Core Feature, User Impact, Schema/Contract): Fix immediately; these protect critical invariants.
+- **Medium Priority Tests** (Regression, Important Edge Cases): Fix or update within sprint; document if deferred.
+- **Low Priority Tests** (Rare edges, redundant coverage): Consider archiving or marking as optional; reassess value before investing fix effort.
+- **Flaky/Brittle Tests**: Stabilize with retries/mocks if valuable; otherwise remove and document rationale.
+
+Maintenance Actions:
+- When removing tests, document reason in commit message and update test coverage report.
+- For deferred low-priority failures, create tracking issue with "test-debt" label and explicit value assessment.
+- Periodically review test runtime and failure rates; tests consuming >5% of suite time without proportional signal are candidates for optimization or removal.
+- New tests MUST include docstring stating: (1) what contract/behavior is verified, (2) why it matters (link to requirement/spec if non-obvious).
+
+Rationale: Test suites grow over time but not all tests age well. Without explicit value verification, teams spend time fixing low-signal tests while ignoring coverage gaps. This principle ensures test effort aligns with actual risk and user impact.
+
+Implementation Guidance:
+- On test failure in CI/PR: reviewer asks "Is this test worth fixing?" before assigning work.
+- Quarterly test audit: sort tests by runtime and failure frequency; challenge bottom 10% on value.
+- Documentation: `tests/README.md` or test module docstrings should explain test categories and priority tiers.
+
+Non-compliance Handling:
+- Fixing every test failure without questioning value violates this principle (wasted effort).
+- Removing tests without documented rationale violates transparency (forbidden).
+- Accumulating >20% of suite as flaky/skipped without remediation violates maintenance discipline.
 
 ## Domain Scope & Deliverables
 
@@ -145,9 +182,12 @@ Quality Gates (Presence Requirements):
 - Lint report clean (style conformance required as a repository invariant).
 - Type analysis performed with zero unreviewed errors.
 - Test suite executes successfully in headless mode where appropriate.
+- Test failures are evaluated for significance before fix work is assigned (see Principle XIII).
 
 Documentation State Requirements:
 - Central docs index references any newly added guide.
+
+**Version**: 1.4.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2025-11-26
 - Figures generated by new scripts stored under tracked directory with reproducible script committed.
 
 Traceability Requirements:

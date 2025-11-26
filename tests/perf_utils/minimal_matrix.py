@@ -32,5 +32,6 @@ scenarios:
 def write_minimal_matrix(directory: Path) -> Path:
     """Write the minimal matrix YAML into directory and return its path."""
     path = directory / "mini_matrix.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(MINIMAL_MATRIX_YAML)
     return path

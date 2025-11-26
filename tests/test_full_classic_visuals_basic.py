@@ -16,7 +16,7 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 class _Cfg:
-    def __init__(self, tmp_path: Path, smoke: bool = False, disable_videos: bool = False):
+    def __init__(self, tmp_path: Path, smoke: bool = True, disable_videos: bool = False):
         # Minimal fields used by orchestrator & video/plot logic
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"  # assuming exists
@@ -29,6 +29,7 @@ class _Cfg:
         self.smoke = smoke
         self.disable_videos = disable_videos
         self.max_videos = 1
+        self.capture_replay = True
         # Targets (unused placeholder for precision)
         self.target_collision_half_width = 0.05
         self.target_success_half_width = 0.05

@@ -20,7 +20,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from typing import cast as _cast
 
 from loguru import logger
 
@@ -113,7 +112,6 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
     smoke = bool(getattr(cfg, "smoke", False))
     max_frames = int(getattr(cfg, "sim_view_max_frames", 0)) or None
     artifacts: list[VideoArtifact] = []
-    moviepy_missing_all = True
     for rec in records:
         ep_id = rec.get("episode_id", "unknown")
         sc_id = rec.get("scenario_id", "unknown")
@@ -133,25 +131,16 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             )
             continue
         try:
-            # Prefer calling with keywords; if the monkeypatched generate_frames
-            # doesn't accept keywords, fall back to a positional call.
-            try:
-                frame_iter = generate_frames(
-                    ep,
-                    fps=fps,
-                    max_frames=(10 if smoke and max_frames is None else max_frames),
-                )
-            except TypeError:
-                # Some tests provide a fake with signature (ep, fps, max_frames).
-                max_frames_arg = 10 if smoke and max_frames is None else max_frames
-                frame_iter = _cast(Any, generate_frames).__call__(ep, fps, max_frames_arg)
-
-            try:
-                enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=True)
-            except TypeError:
-                # Some tests/mocks provide a legacy signature without keyword names.
-                enc = _cast(Any, encode_frames).__call__(frame_iter, mp4_path, fps, True)
-        except (RuntimeError, OSError, ValueError) as exc:
+            frame_iter = generate_frames(
+                ep,
+                fps=fps,
+                max_frames=(10 if smoke and max_frames is None else max_frames),
+            )
+            enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=False)
+            status = enc.status
+            note = enc.note
+            encode_time = enc.encode_time_s
+        except (RuntimeError, OSError, ValueError, AttributeError) as exc:
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:
                     mp4_path.unlink()
@@ -170,43 +159,20 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
                     note=f"render-error:{exc.__class__.__name__}",
                 ),
             )
-            moviepy_missing_all = False
             continue
-        if enc.status == "skipped" and enc.note == NOTE_MOVIEPY_MISSING:
-            # Previously this silently dropped the episode from the manifest unless
-            # ALL episodes were missing moviepy. That prevented downstream tooling
-            # from understanding per-episode degradation. Emit an explicit skipped
-            # artifact so artifact count always matches selected records.
-            artifacts.append(
-                VideoArtifact(
-                    artifact_id=f"video_{ep_id}",
-                    scenario_id=sc_id,
-                    episode_id=ep_id,
-                    path_mp4=str(mp4_path),
-                    status="skipped",
-                    renderer=RENDERER_SIM_VIEW,
-                    note=NOTE_MOVIEPY_MISSING,
-                ),
-            )
-            continue
-        moviepy_missing_all = False
         artifacts.append(
             VideoArtifact(
                 artifact_id=f"video_{ep_id}",
                 scenario_id=sc_id,
                 episode_id=ep_id,
                 path_mp4=str(mp4_path),
-                status=enc.status,
+                status=status,
                 renderer=RENDERER_SIM_VIEW,
-                note=enc.note,
-                encode_time_s=enc.encode_time_s,
-                peak_rss_mb=enc.peak_rss_mb,
+                note=note if note is not None else None,
+                encode_time_s=encode_time,
+                peak_rss_mb=None,
             ),
         )
-    if moviepy_missing_all and not artifacts:
-        # Signal to caller that SimulationView path attempted but moviepy missing
-        # Caller (sim-view forced) will interpret empty attempt as NOTE_MOVIEPY_MISSING.
-        return []
     return artifacts
 
 
@@ -324,16 +290,17 @@ def _build_video_artifacts(
     def _build_auto() -> list[VideoArtifact]:
         """Adaptive path preferring sim-view then synthetic fallback.
 
-        Tries sim-view first; on failure (no encodes) falls back to synthetic
-        placeholder videos. Replay insufficiency normalization (marking skipped)
-        is postponed to a later pass so this function stays focused on source
-        selection rather than edge-case annotation.
+        Tries sim-view; if unavailable or replay insufficient, fall back to
+        synthetic renderer. If both paths produce nothing, emit skipped artifacts
+        so manifests remain informative.
         """
         sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if sim_attempt:
             return sim_attempt
-        # Use synthetic; insufficient replay normalization is deferred to _final_normalize_insufficient
-        return _synthetic_fallback_videos(records, videos_dir, cfg)
+        synthetic_attempt = _synthetic_fallback_videos(records, videos_dir, cfg)
+        if synthetic_attempt:
+            return synthetic_attempt
+        return _build_skipped(NOTE_SIM_VIEW_MISSING)
 
     # --- Main logic -----------------------------------------------------
     if not records:
@@ -471,7 +438,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
         )
         _write_json(reports_dir / "performance_visuals.json", perf_meta)
         logger.info(
-            "Visual artifacts (smoke fast-path): plots=%d videos=%d (smoke=%s)",
+            "Visual artifacts (smoke fast-path): plots={} videos={} (smoke={})",
             len(plot_artifacts),
             len(video_artifacts),
             True,
@@ -564,7 +531,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
             raise
 
     logger.info(
-        "Visual artifacts generated: plots=%d videos=%d (disable_videos=%s smoke=%s mode=%s)",
+        "Visual artifacts generated: plots={} videos={} (disable_videos={} smoke={} mode={})",
         len(plot_artifacts),
         len(video_artifacts),
         bool(getattr(cfg, "disable_videos", False)),

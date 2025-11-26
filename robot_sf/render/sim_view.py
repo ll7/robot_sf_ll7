@@ -173,9 +173,9 @@ class SimulationView:
         clear(): Clears the screen and updates the display.
     """
 
-    width: float = 1920
-    height: float = 1080
-    scaling: float = 15
+    width: float = 1280
+    height: float = 720
+    scaling: float = 10
     robot_radius: float = 1.0
     ego_ped_radius: float = 0.4
     ped_radius: float = 0.4
@@ -214,7 +214,7 @@ class SimulationView:
 
     def __post_init__(self):
         """Initialize PyGame components."""
-        logger.info("Initializing the simulation view.")
+        logger.debug("Initializing the simulation view.")
         # Environment variable override for max_frames (e.g., runtime tuning / CI scenarios)
         env_cap = os.environ.get("ROBOT_SF_MAX_VIDEO_FRAMES")
         if env_cap is not None:
@@ -258,9 +258,9 @@ class SimulationView:
             self._use_display = False
             self.screen = pygame.Surface((int(self.width), int(self.height)))
             if self.record_video:
-                logger.info("Created offscreen surface for video recording")
+                logger.debug("Created offscreen surface for video recording")
             else:
-                logger.info("Created offscreen surface for headless mode")
+                logger.debug("Created offscreen surface for headless mode")
         else:
             # Create window for display
             self._use_display = True

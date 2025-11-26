@@ -53,6 +53,7 @@ NOTE:
 from __future__ import annotations
 
 import datetime as _dt
+import os
 from pathlib import Path
 
 from robot_sf.render.helper_catalog import ensure_output_dir
@@ -76,22 +77,34 @@ def main() -> int:
     out_dir = root / f"results/demo_full_classic_{ts}"
     out_dir = ensure_output_dir(out_dir)
 
+    fast_mode = os.getenv("ROBOT_SF_FAST_DEMO", "0") == "1"
+    max_steps_env = os.getenv("ROBOT_SF_EXAMPLES_MAX_STEPS")
+    horizon_override = int(max_steps_env) if max_steps_env and max_steps_env.isdigit() else None
+    capture_replay = not fast_mode
+    fast_stub = fast_mode
+    smoke_horizon_cap = (horizon_override or 40) if fast_mode else 40
+
     cfg = BenchmarkCLIConfig(
         scenario_matrix_path=str(matrix),
         output_root=str(out_dir),
         workers=1,
         master_seed=123,
-        smoke=False,  # Set True for even faster placeholder run
+        smoke=fast_mode,
         algo="ppo",  # Label stored in scenario_params.algo for grouping
-        initial_episodes=2,
-        max_episodes=4,  # Stop after max episodes (small demo) or earlier if precision hit
-        batch_size=2,
-        horizon_override=None,  # Set to an int to force shorter episodes globally
+        capture_replay=capture_replay,
+        fast_stub=fast_stub,
+        initial_episodes=1 if fast_mode else 2,
+        max_episodes=1
+        if fast_mode
+        else 4,  # Stop after max episodes (small demo) or earlier if precision hit
+        batch_size=1 if fast_mode else 2,
+        horizon_override=horizon_override,
+        smoke_horizon_cap=smoke_horizon_cap,
         target_collision_half_width=0.05,
         target_success_half_width=0.05,
         target_snqi_half_width=0.05,
-        disable_videos=False,  # Set True to suppress video artifacts
-        max_videos=1,  # Keep runtime small; increase for more examples
+        disable_videos=fast_mode,
+        max_videos=0 if fast_mode else 1,  # Keep runtime small; increase for more examples
     )
 
     print("[demo_full_classic] Running benchmark...", flush=True)

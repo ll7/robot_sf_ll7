@@ -6,7 +6,7 @@ Implemented across tasks T035 (basic), T036 (extended plots).
 from __future__ import annotations
 
 import contextlib
-import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -83,82 +83,163 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "distributions_basic.pdf"
     if plt is None:
         return _PlotArtifact("distribution", str(pdf_path), "skipped", note="matplotlib missing")
-    lines: list[str] = ["Distribution Summary (placeholder)"]
+    status = "failed"
+    note = None
+    labels: list[str] = []
+    success_vals: list[float] = []
+    collision_vals: list[float] = []
     for g in groups:
-        # Include a minimal metric summary line
+        suc = g.metrics.get("success_rate")
         col = g.metrics.get("collision_rate")
-        if col:
-            lines.append(f"{g.archetype}/{g.density}: collision_mean={col.mean:.3f}")
-    generated = _write_placeholder_text(pdf_path, "Distributions", lines)
-    return _PlotArtifact("distribution", str(pdf_path), "generated" if generated else "skipped")
+        if suc is None and col is None:
+            continue
+        labels.append(f"{g.archetype}-{g.density}")
+        success_vals.append(suc.mean if suc else 0.0)
+        collision_vals.append(col.mean if col else 0.0)
+    if not labels:
+        return _PlotArtifact("distribution", str(pdf_path), "skipped", note="no-metrics")
+    fig, ax = plt.subplots(figsize=(6, 4))
+    x = range(len(labels))
+    ax.bar(x, success_vals, width=0.4, label="success_rate", color="tab:green")
+    ax.bar([v + 0.4 for v in x], collision_vals, width=0.4, label="collision_rate", color="tab:red")
+    ax.set_xticks([v + 0.2 for v in x])
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_ylabel("rate")
+    ax.set_title("Success vs Collision Rates")
+    ax.legend()
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    try:
+        fig.savefig(pdf_path, bbox_inches="tight")
+        status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
+    finally:
+        _safe_fig_close(fig)
+    return _PlotArtifact("distribution", str(pdf_path), status, note=note)
 
 
 def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "trajectories_basic.pdf"
     if plt is None:
         return _PlotArtifact("trajectory", str(pdf_path), "skipped", note="matplotlib missing")
-    # Create a trivial scatter of synthetic path (placeholder) derived from seed to ensure determinism
-    fig, ax = plt.subplots(figsize=(4, 4)) if plt else (None, None)
-    if plt:
-        for rec in records:
-            seed = int(rec.get("seed", 0))
-            xs = [math.sin((seed + i) * 0.1) for i in range(10)]
-            ys = [math.cos((seed + i) * 0.1) for i in range(10)]
-            ax.plot(xs, ys, marker="o", linewidth=1, markersize=2)
-        ax.set_title("Trajectory Overlay (placeholder)")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        pdf_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            fig.savefig(pdf_path, bbox_inches="tight")
-        finally:
-            _safe_fig_close(fig)
-        return _PlotArtifact("trajectory", str(pdf_path), "generated")
-    return _PlotArtifact("trajectory", str(pdf_path), "skipped")
+    status = "failed"
+    note = None
+    fig, ax = plt.subplots(figsize=(5, 5))
+    plotted = False
+    for rec in records:
+        steps = rec.get("replay_steps")
+        if not isinstance(steps, list) or len(steps) < 2:
+            continue
+        xs = [float(t[1]) for t in steps]
+        ys = [float(t[2]) for t in steps]
+        ax.plot(
+            xs, ys, linewidth=1.2, marker=".", markersize=3, label=rec.get("scenario_id", "episode")
+        )
+        plotted = True
+    if not plotted:
+        _safe_fig_close(fig)
+        return _PlotArtifact("trajectory", str(pdf_path), "skipped", note="no-replay")
+    ax.set_title("Robot Trajectories")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.legend(fontsize=7)
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fig.savefig(pdf_path, bbox_inches="tight")
+        status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
+    finally:
+        _safe_fig_close(fig)
+    return _PlotArtifact("trajectory", str(pdf_path), status, note=note)
 
 
 def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
-    pdf_path = out_dir / "kde_placeholder.pdf"
+    pdf_path = out_dir / "path_efficiency.pdf"
     if plt is None:
         return _PlotArtifact("kde", str(pdf_path), "skipped", note="matplotlib missing")
-    # Placeholder text figure; real implementation would compute spatial density KDE
-    generated = _write_placeholder_text(
-        pdf_path,
-        "KDE Spatial Density (placeholder)",
-        ["Not yet implemented: spatial sampling"],
-    )
-    return _PlotArtifact("kde", str(pdf_path), "generated" if generated else "skipped")
+    status = "failed"
+    note = None
+    vals: list[float] = []
+    for g in groups:
+        pe = g.metrics.get("path_efficiency")
+        if pe:
+            vals.append(float(pe.mean))
+    if not vals:
+        return _PlotArtifact("kde", str(pdf_path), "skipped", note="no-path-efficiency")
+    fig, ax = plt.subplots(figsize=(5, 3))
+    ax.hist(vals, bins=min(10, len(vals)), color="tab:blue", alpha=0.8)
+    ax.set_title("Path Efficiency Distribution")
+    ax.set_xlabel("path_efficiency (mean)")
+    ax.set_ylabel("count")
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fig.savefig(pdf_path, bbox_inches="tight")
+        status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
+    finally:
+        _safe_fig_close(fig)
+    return _PlotArtifact("kde", str(pdf_path), status, note=note)
 
 
 def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "pareto_placeholder.pdf"
     if plt is None:
         return _PlotArtifact("pareto", str(pdf_path), "skipped", note="matplotlib missing")
-    lines = ["Pareto Frontier (placeholder)"]
+    status = "failed"
+    note = None
+    fig, ax = plt.subplots(figsize=(5, 4))
+    plotted = False
     for g in groups:
         suc = g.metrics.get("success_rate")
         col = g.metrics.get("collision_rate")
-        if suc and col:
-            lines.append(f"{g.archetype}/{g.density}: S={suc.mean:.2f} C={col.mean:.2f}")
-    generated = _write_placeholder_text(pdf_path, "Pareto", lines)
-    return _PlotArtifact("pareto", str(pdf_path), "generated" if generated else "skipped")
+        if suc is None or col is None:
+            continue
+        ax.scatter(col.mean, suc.mean, label=f"{g.archetype}-{g.density}", s=40)
+        plotted = True
+    if not plotted:
+        _safe_fig_close(fig)
+        return _PlotArtifact("pareto", str(pdf_path), "skipped", note="no-metrics")
+    ax.set_xlabel("collision_rate")
+    ax.set_ylabel("success_rate")
+    ax.set_title("Success vs Collision")
+    ax.legend(fontsize=7)
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fig.savefig(pdf_path, bbox_inches="tight")
+        status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
+    finally:
+        _safe_fig_close(fig)
+    return _PlotArtifact("pareto", str(pdf_path), status, note=note)
 
 
-def _force_heatmap_placeholder(out_dir: Path) -> _PlotArtifact:
-    pdf_path = out_dir / "force_heatmap_placeholder.pdf"
+def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
+    pdf_path = out_dir / "episode_lengths.pdf"
     if plt is None:
         return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="matplotlib missing")
-    generated = _write_placeholder_text(
-        pdf_path,
-        "Force Interaction Heatmap (placeholder)",
-        ["No force data provided; skipped"],
-    )
-    return _PlotArtifact(
-        "force_heatmap",
-        str(pdf_path),
-        "generated" if generated else "skipped",
-        note="placeholder",
-    )
+    status = "failed"
+    note = None
+    step_counts = [int(r.get("steps", 0)) for r in records if r.get("steps") is not None]
+    if not step_counts:
+        return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="no-steps")
+    fig, ax = plt.subplots(figsize=(5, 3))
+    ax.hist(step_counts, bins=min(10, len(step_counts)), color="tab:purple", alpha=0.8)
+    ax.set_xlabel("steps")
+    ax.set_ylabel("episodes")
+    ax.set_title("Episode Lengths")
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fig.savefig(pdf_path, bbox_inches="tight")
+        status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
+    finally:
+        _safe_fig_close(fig)
+    return _PlotArtifact("force_heatmap", str(pdf_path), status, note=note)
 
 
 def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended placeholders
@@ -178,6 +259,6 @@ def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended
     artifacts.append(_trajectory_plot(records, out_path))
     artifacts.append(_kde_plot_placeholder(groups, out_path))
     artifacts.append(_pareto_plot_placeholder(groups, out_path))
-    artifacts.append(_force_heatmap_placeholder(out_path))
+    artifacts.append(_force_heatmap_placeholder(out_path, records))
 
     return artifacts

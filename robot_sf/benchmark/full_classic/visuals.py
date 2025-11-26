@@ -311,13 +311,16 @@ def _build_video_artifacts(
     def _build_auto() -> list[VideoArtifact]:
         """Adaptive path preferring sim-view then synthetic fallback.
 
-        Tries sim-view; if unavailable or replay insufficient, emit skipped
-        sim-view artifacts (no synthetic fallback). This enforces SimulationView
-        as the sole renderer for the auto mode per request.
+        Tries sim-view; if unavailable or replay insufficient, fall back to
+        synthetic renderer. If both paths produce nothing, emit skipped artifacts
+        so manifests remain informative.
         """
         sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if sim_attempt:
             return sim_attempt
+        synthetic_attempt = _synthetic_fallback_videos(records, videos_dir, cfg)
+        if synthetic_attempt:
+            return synthetic_attempt
         return _build_skipped(NOTE_SIM_VIEW_MISSING)
 
     # --- Main logic -----------------------------------------------------

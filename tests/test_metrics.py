@@ -1,13 +1,4 @@
-"""Tests for metrics stubs ensuring interface stability and basic behaviors.
-
-We synthesize tiny episodes for three edge cases:
-1. Empty crowd (K=0) -> collisions, near_misses should stay NaN (stub) but keys exist.
-2. All collisions scenario (robot overlapping pedestrians every step) -> still returns NaNs (stub) but keys exist.
-3. Partial success (goal not reached) -> success key present.
-
-Once metrics are implemented these tests can be adapted to assert numeric values;
-for now they guard against accidental signature/key regressions.
-"""
+"""Tests for benchmark metrics behavior and edge-case handling."""
 
 from __future__ import annotations
 
@@ -15,11 +6,13 @@ import math
 
 import numpy as np
 
+from robot_sf.benchmark import metrics as metrics_mod
 from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
     compute_all_metrics,
     snqi,
+    time_to_goal,
 )
 
 
@@ -40,6 +33,12 @@ def _make_episode(T: int, K: int) -> EpisodeData:
         dt=0.1,
         reached_goal_step=None,
     )
+
+
+def test_metrics_docstring_marks_implemented_and_not_stubbed():
+    doc = (metrics_mod.__doc__ or "").lower()
+    assert "stub" not in doc, "Docstring should not advertise implemented metrics as stubs"
+    assert "implemented" in doc, "Docstring should describe implementation status"
 
 
 def test_metrics_keys_empty_crowd():
@@ -119,6 +118,12 @@ def test_success_and_time_to_goal_norm_success_case():
     assert np.isclose(vals["time_to_goal_norm"], 5 / 10)
     # path_efficiency should be 1 for straight line
     assert np.isclose(vals["path_efficiency"], 1.0)
+
+
+def test_time_to_goal_nan_when_goal_not_reached():
+    ep = _make_episode(T=4, K=0)
+    ep.reached_goal_step = None
+    assert math.isnan(time_to_goal(ep))
 
 
 def test_success_failure_due_to_collision():
@@ -385,6 +390,12 @@ def test_curvature_mean_invalid_dt_nan():
     ep.robot_pos[:, 0] = np.linspace(0, 1.0, T)
     vals = compute_all_metrics(ep, horizon=10)
     assert vals["curvature_mean"] == 0.0
+
+
+def test_force_gradient_requires_grid():
+    ep = _make_episode(T=3, K=1)
+    vals = compute_all_metrics(ep, horizon=10)
+    assert math.isnan(vals["force_gradient_norm_mean"])
 
 
 def test_force_gradient_norm_mean():

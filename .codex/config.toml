@@ -1,0 +1,4 @@
+model = "gpt-5-codex"
+model_reasoning_effort = "high"
+[projects."/Users/lennart/git/robot_sf_ll7"]
+trust_level = "trusted"

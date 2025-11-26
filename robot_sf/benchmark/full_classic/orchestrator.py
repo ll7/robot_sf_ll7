@@ -350,7 +350,7 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
 
     out = np.full_like(ped_pos, np.nan)
     copy_len = min(arr.shape[0], ped_pos.shape[0])
-    dim = min(arr.shape[1], out.shape[2]) if arr.ndim >= 2 else 0
+    dim = min(arr.shape[1], out.shape[1]) if arr.ndim >= 2 else 0
     if arr.ndim >= 2 and copy_len > 0 and dim > 0:
         out[:copy_len, :dim] = arr[:copy_len, :dim]
     return out

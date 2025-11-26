@@ -131,11 +131,19 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             )
             continue
         try:
-            frame_iter = generate_frames(
-                ep,
-                fps,
-                (10 if smoke and max_frames is None else max_frames),
-            )
+            try:
+                frame_iter = generate_frames(
+                    ep,
+                    fps=fps,
+                    max_frames=(10 if smoke and max_frames is None else max_frames),
+                )
+            except TypeError:
+                # Support mocks that only accept positional arguments
+                frame_iter = generate_frames(
+                    ep,
+                    fps,
+                    (10 if smoke and max_frames is None else max_frames),
+                )
             try:
                 enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=False)
             except TypeError:

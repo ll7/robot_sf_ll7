@@ -645,6 +645,12 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     robot_vel_arr, robot_acc_arr = _vel_and_acc(robot_pos_arr, dt)
     ped_pos_arr = _stack_ped_positions(ped_positions)
     ped_forces_arr = _stack_ped_positions(ped_forces, fill_value=np.nan)
+    if ped_pos_arr.size and np.isnan(ped_forces_arr).all():
+        logger.bind(
+            event="ped_forces_missing",
+            episode_id=episode_id,
+            scenario_id=job.scenario_id,
+        ).warning("Pedestrian forces unavailable; force-based metrics will be NaN.")
     metrics_raw = _compute_episode_metrics(
         job,
         scenario,

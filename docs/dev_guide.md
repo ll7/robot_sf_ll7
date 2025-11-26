@@ -255,6 +255,55 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 
 **Note**: The unified test command (`uv run pytest`) automatically discovers and runs tests from both `tests/` and `fast-pysf/tests/` directories. Test count increased from ~43 (legacy documentation) to 893 tests after fast-pysf integration.
 
+#### Test Significance Verification
+
+**Before fixing or investigating test failures, verify the test's value and necessity.** Not all tests provide equal value; some may be outdated, overly brittle, or testing non-critical behavior.
+
+**Evaluation Questions** (ask before investing fix effort):
+
+1. **Core Feature Coverage**: Does this test verify a public contract?
+   - Factory behavior, schema compliance, metric correctness, deterministic reproducibility
+   - **If YES** → High priority, fix immediately
+
+2. **User Impact**: Would failure in production affect users?
+   - Incorrect metrics, broken benchmarks, environment crashes
+   - **If YES** → High priority, fix immediately
+
+3. **Regression Prevention**: Does it catch known past bugs?
+   - Validates recent fixes, prevents known failure modes
+   - **If YES** → Medium priority, fix within sprint
+
+4. **Edge Case vs. Common Path**: Does it test rare scenarios?
+   - Low real-world occurrence, no documented incidents
+   - **If YES and no incidents** → Low priority, consider archiving
+
+5. **Brittleness**: Does it fail frequently without indicating real bugs?
+   - Timing issues, display dependencies, environmental flakiness
+   - **If YES** → Candidate for refactoring or removal
+
+6. **Redundancy**: Is the same behavior tested elsewhere?
+   - Identical logic covered by unit and integration tests
+   - **If YES** → Consider consolidation
+
+**Decision Actions**:
+- **High Priority** (Core/User Impact): Fix immediately, these protect critical invariants
+- **Medium Priority** (Regression/Important Edges): Fix or update within sprint; document if deferred
+- **Low Priority** (Rare edges, redundant): Consider archiving; reassess value before fix effort
+- **Flaky/Brittle**: Stabilize with retries/mocks if valuable; otherwise remove with documented rationale
+
+**Maintenance Discipline**:
+- Removing tests requires documented reason in commit message
+- Deferred low-priority failures need tracking issue with "test-debt" label
+- New tests MUST include docstring stating: (1) what contract/behavior is verified, (2) why it matters
+- Quarterly audit: review tests by runtime and failure frequency; challenge bottom 10% on value
+
+**Example**: If a test for an obscure edge case in trajectory smoothing fails but:
+- No user has ever reported this scenario
+- The edge case requires artificial setup unlikely in real usage
+- Core smoothing is covered by other tests
+
+→ Consider documenting the edge case in code comments and archiving the test, rather than spending hours debugging environmental setup issues.
+
 ### Coverage workflow (automatic collection)
 
 **Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
@@ -378,6 +427,7 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Avoid duplication; prefer composition and reuse.
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
+- **Verify test value before investing fix effort** (see Test Significance Verification in Testing Strategy section).
 
 ### Design decisions
 - Favor readability and maintainability over micro‑optimizations.

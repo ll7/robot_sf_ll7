@@ -404,6 +404,24 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
                     )
                 )
 
+        success_count = sum(1 for v in video_artifacts if getattr(v, "status", "") == "success")
+        status_note = None
+        if video_artifacts and success_count == 0:
+            notes = sorted(
+                {
+                    getattr(v, "note", None)
+                    for v in video_artifacts
+                    if getattr(v, "note", None) is not None
+                },
+            )
+            statuses = sorted({getattr(v, "status", None) for v in video_artifacts if v.status})
+            parts = ["no-successful-videos"]
+            if statuses:
+                parts.append(f"statuses={','.join(str(s) for s in statuses)}")
+            if notes:
+                parts.append(f"notes={','.join(str(n) for n in notes)}")
+            status_note = ";".join(parts)
+
         perf_meta = {
             "plots_time_s": round(t1 - t0, 4),
             "videos_time_s": 0.0,
@@ -416,6 +434,8 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
             "plots_runtime_sec": round(t1 - t0, 4),
             "videos_runtime_sec": 0.0,
             "first_video_encode_time_s": None,
+            "video_success_count": success_count,
+            "video_status_note": status_note,
         }
 
         _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)
@@ -480,6 +500,17 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
             first_video_render_time = round(total_video_phase - enc_time, 4)
     plots_time_s = round(t1 - t0, 4)
     videos_time_s = round(video_end - video_start, 4)
+    success_count = sum(1 for v in video_artifacts if getattr(v, "status", "") == "success")
+    status_note = None
+    if video_artifacts and success_count == 0:
+        notes = sorted({v.note for v in video_artifacts if getattr(v, "note", None) is not None})
+        statuses = sorted({v.status for v in video_artifacts if getattr(v, "status", None)})
+        parts = ["no-successful-videos"]
+        if statuses:
+            parts.append(f"statuses={','.join(statuses)}")
+        if notes:
+            parts.append(f"notes={','.join(str(n) for n in notes)}")
+        status_note = ";".join(parts)
     perf_meta = {
         "plots_time_s": plots_time_s,
         "videos_time_s": videos_time_s,
@@ -497,6 +528,8 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
         "plots_runtime_sec": plots_time_s,
         "videos_runtime_sec": videos_time_s,
         "first_video_encode_time_s": first_video_time,
+        "video_success_count": success_count,
+        "video_status_note": status_note,
     }
 
     _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)

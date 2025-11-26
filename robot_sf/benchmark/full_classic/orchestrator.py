@@ -384,6 +384,15 @@ def _compute_episode_metrics(
     horizon: int,
 ) -> dict[str, float]:
     shortest_path = float(np.linalg.norm(robot_pos[0] - goal)) if len(robot_pos) else float("nan")
+    if not math.isfinite(shortest_path):
+        logger.bind(
+            event="metrics_shortest_path_nan",
+            job_id=getattr(job, "job_id", None),
+            scenario_id=getattr(job, "scenario_id", None),
+            seed=getattr(job, "seed", None),
+        ).warning(
+            "Shortest path is NaN because the robot trajectory is empty; downstream aggregation may propagate NaN.",
+        )
     ep = EpisodeData(
         robot_pos=robot_pos,
         robot_vel=robot_vel,

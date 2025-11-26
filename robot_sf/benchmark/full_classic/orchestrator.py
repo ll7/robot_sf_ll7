@@ -610,7 +610,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     robot_pos_arr = np.asarray(robot_positions, dtype=float)
     robot_vel_arr, robot_acc_arr = _vel_and_acc(robot_pos_arr, dt)
     ped_pos_arr = _stack_ped_positions(ped_positions)
-    metrics = _compute_episode_metrics(
+    metrics_raw = _compute_episode_metrics(
         job,
         scenario,
         cfg,
@@ -623,11 +623,16 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         goal=goal_vec,
         horizon=horizon,
     )
-    for key, value in list(metrics.items()):
+    metrics: dict[str, float | None] = {}
+    for key, value in metrics_raw.items():
         if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
             metrics[key] = None
-    status = "success" if metrics.get("success_rate", 0.0) >= 1.0 else "failure"
-    if metrics.get("collision_rate"):
+        else:
+            metrics[key] = value
+    success_rate = float(metrics.get("success_rate") or 0.0)
+    collision_rate = metrics.get("collision_rate")
+    status = "success" if success_rate >= 1.0 else "failure"
+    if collision_rate:
         status = "collision"
     wall_time = time.time() - start_time
     record: dict[str, Any] = {

@@ -7,11 +7,11 @@ See Helbing and Molnár 1998 and Moussaïd et al. 2010
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Protocol
 from warnings import warn
 
 import numpy as np
 
-import pysocialforce as pysf
 from pysocialforce import forces
 from pysocialforce.config import SimulatorConfig
 from pysocialforce.map_config import MapDefinition
@@ -29,18 +29,31 @@ SimPopulator = Callable[
 ]
 
 
-def make_forces(sim: pysf.Simulator, config: SimulatorConfig) -> list[pysf.forces.Force]:
+class ForceContext(Protocol):
+    """Protocol for simulators compatible with force construction."""
+
+    peds: PedState
+
+    def get_obstacles(self) -> list[np.ndarray]: ...
+
+    def get_raw_obstacles(self) -> np.ndarray: ...
+
+
+ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
+
+
+def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force]:
     """Initialize forces required for simulation."""
     enable_group = config.scene_config.enable_group
     force_list = [
-        pysf.forces.DesiredForce(config.desired_force_config, sim.peds),
-        pysf.forces.SocialForce(config.social_force_config, sim.peds),
-        pysf.forces.ObstacleForce(config.obstacle_force_config, sim),
+        forces.DesiredForce(config.desired_force_config, sim.peds),
+        forces.SocialForce(config.social_force_config, sim.peds),
+        forces.ObstacleForce(config.obstacle_force_config, sim),
     ]
     group_forces = [
-        pysf.forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
-        pysf.forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
-        pysf.forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
+        forces.GroupCoherenceForceAlt(config.group_coherence_force_config, sim.peds),
+        forces.GroupRepulsiveForce(config.group_repulsive_force_config, sim.peds),
+        forces.GroupGazeForceAlt(config.group_gaze_force_config, sim.peds),
     ]
     return force_list + group_forces if enable_group else force_list
 
@@ -50,7 +63,7 @@ class Simulator_v2:
         self,
         map_definition: MapDefinition = EMPTY_MAP,
         config: SimulatorConfig = SimulatorConfig(),
-        make_forces: Callable[[Simulator, SimulatorConfig], list[forces.Force]] = make_forces,
+        make_forces: ForceFactory = make_forces,
         populate: SimPopulator = lambda s, m: populate_simulation(
             s.scene_config.tau, s.ped_spawn_config, m.routes, m.crowded_zones
         ),
@@ -62,7 +75,7 @@ class Simulator_v2:
         Args:
             map_definition (MapDefinition, optional): The definition of the map. Defaults to EMPTY_MAP.
             config (SimulatorConfig, optional): The configuration for the simulator. Defaults to SimulatorConfig().
-            make_forces (Callable[[Simulator, SimulatorConfig], List[forces.Force]], optional): A function that creates a list of forces. Defaults to make_forces.
+            make_forces (ForceFactory, optional): A function that creates a list of forces. Defaults to make_forces.
             populate (SimPopulator, optional): A function that populates the simulation with initial states, groupings, and behaviors. Defaults to a lambda function.
             on_step (Callable[[SimState], None], optional): A function that is called after each step. Defaults to a lambda function.
         """
@@ -75,10 +88,10 @@ class Simulator_v2:
             else []
         )
         self.env = EnvState(obstacles, self.config.scene_config.resolution)
-        self.peds = PedState(
+        self.peds: PedState = PedState(
             self.states.raw_states, self.groupings.groups_as_lists, self.config.scene_config
         )
-        self.forces = make_forces(self, config)  # type: ignore[arg-type]
+        self.forces = make_forces(self, config)
         self.t = 0
 
     @property
@@ -92,7 +105,7 @@ class Simulator_v2:
         return self.peds.state, self.peds.groups
 
     @property
-    def obstacles(self):
+    def obstacles(self) -> list[np.ndarray]:
         """
         Returns the obstacles in the environment.
 
@@ -102,7 +115,7 @@ class Simulator_v2:
         return self.env.obstacles
 
     @property
-    def raw_obstacles(self):
+    def raw_obstacles(self) -> np.ndarray:
         """
         Returns the raw obstacles in the environment.
 
@@ -111,7 +124,7 @@ class Simulator_v2:
         """
         return self.env.obstacles_raw
 
-    def get_obstacles(self):
+    def get_obstacles(self) -> list[np.ndarray]:
         """
         Returns the obstacles in the environment.
 
@@ -120,7 +133,7 @@ class Simulator_v2:
         """
         return self.env.obstacles
 
-    def get_raw_obstacles(self):
+    def get_raw_obstacles(self) -> np.ndarray:
         """
         Returns the raw obstacles in the environment.
 
@@ -158,15 +171,15 @@ class Simulator:
         groups: list[list[int]] | None = None,
         obstacles: list[Line2D] | None = None,
         config: SimulatorConfig = SimulatorConfig(),
-        make_forces: Callable[[Simulator, SimulatorConfig], list[forces.Force]] = make_forces,
+        make_forces: ForceFactory = make_forces,
         on_step: Callable[[int, SimState], None] = lambda t, s: None,
     ):
         self.config = config
         self.on_step = on_step
         resolution = self.config.scene_config.resolution
         self.env = EnvState(obstacles or [], resolution)
-        self.peds = PedState(state, groups or [], self.config.scene_config)
-        self.forces = make_forces(self, config)  # type: ignore[arg-type]
+        self.peds: PedState = PedState(state, groups or [], self.config.scene_config)
+        self.forces = make_forces(self, config)
         self.t = 0
 
     def compute_forces(self):
@@ -191,10 +204,10 @@ class Simulator:
         """Get simulation length"""
         return len(self.get_states()[0])
 
-    def get_obstacles(self):
+    def get_obstacles(self) -> list[np.ndarray]:
         return self.env.obstacles
 
-    def get_raw_obstacles(self):
+    def get_raw_obstacles(self) -> np.ndarray:
         return self.env.obstacles_raw
 
     def step_once(self) -> None:

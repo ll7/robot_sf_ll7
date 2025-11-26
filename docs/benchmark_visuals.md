@@ -243,6 +243,7 @@ File: `performance_visuals.json`
 - `first_video_render_time_s` – (approx) total video phase minus encode time for SimulationView (render overhead).
 - `first_video_peak_rss_mb` – peak RSS sampled during encode (if psutil present).
 - `plots_over_budget` (>2.0s), `video_over_budget` (encode >5.0s), `memory_over_budget` (>100MB).
+- `video_success_count` / `video_status_note` – success tally and downgrade summary when all videos are failed/skipped.
 
 ## Dependency Matrix
 | Capability | pygame | moviepy | ffmpeg bin | jsonschema | psutil |

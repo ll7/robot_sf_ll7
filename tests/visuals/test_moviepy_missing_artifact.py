@@ -70,3 +70,8 @@ def test_moviepy_missing_yields_skipped_artifact(tmp_path: Path, monkeypatch):
         assert a.status in {"skipped", "failed"}
         assert a.renderer == RENDERER_SIM_VIEW
         assert a.note is not None
+
+    perf = out["performance"]
+    assert perf.get("video_success_count") == 0
+    note = perf.get("video_status_note")
+    assert isinstance(note, str) and note.startswith("no-successful-videos")

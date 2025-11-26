@@ -41,6 +41,16 @@
                 "boolean",
                 "null"
             ]
+        },
+        "video_success_count": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "video_status_note": {
+            "type": [
+                "string",
+                "null"
+            ]
         }
     },
     "required": [

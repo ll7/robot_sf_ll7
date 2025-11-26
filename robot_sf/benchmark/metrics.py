@@ -11,6 +11,7 @@ stable allows other components (runner, aggregation, CI) to proceed.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -593,14 +594,18 @@ def snqi(
             norm = 1.0
         return float(norm)
 
-    succ = metric_values.get("success", 0.0)
-    time_norm = metric_values.get("time_to_goal_norm", 1.0)
-    coll = _norm("collisions", metric_values.get("collisions", 0.0))
-    near = _norm("near_misses", metric_values.get("near_misses", 0.0))
-    comfort = metric_values.get("comfort_exposure", 0.0)
-    force_ex = _norm("force_exceed_events", metric_values.get("force_exceed_events", 0.0))
-    jerk_n = _norm("jerk_mean", metric_values.get("jerk_mean", 0.0))
-    curvature_n = _norm("curvature_mean", metric_values.get("curvature_mean", 0.0))
+    def _safe(val: float | None, default: float = 0.0) -> float:
+        v = float(val) if val is not None else default
+        return v if math.isfinite(v) else default
+
+    succ = _safe(metric_values.get("success", 0.0))
+    time_norm = _safe(metric_values.get("time_to_goal_norm", 1.0), default=1.0)
+    coll = _norm("collisions", _safe(metric_values.get("collisions", 0.0)))
+    near = _norm("near_misses", _safe(metric_values.get("near_misses", 0.0)))
+    comfort = _safe(metric_values.get("comfort_exposure", 0.0))
+    force_ex = _norm("force_exceed_events", _safe(metric_values.get("force_exceed_events", 0.0)))
+    jerk_n = _norm("jerk_mean", _safe(metric_values.get("jerk_mean", 0.0)))
+    curvature_n = _norm("curvature_mean", _safe(metric_values.get("curvature_mean", 0.0)))
 
     w_success = weights.get("w_success", 1.0)
     w_time = weights.get("w_time", 1.0)

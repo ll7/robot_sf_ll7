@@ -38,6 +38,8 @@ class BenchmarkCLIConfig:
     smoke: bool = False
     algo: str = "unknown"
     capture_replay: bool = True
+    fast_stub: bool = False
+    smoke_horizon_cap: int = 40
     # Episode planning
     initial_episodes: int = 1
     horizon_override: int | None = None

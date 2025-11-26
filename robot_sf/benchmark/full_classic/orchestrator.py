@@ -259,7 +259,7 @@ def _load_snqi_weights(path: str | None):
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - defensive
-        logger.warning("Failed to load SNQI weights from %s: %s", path, exc)
+        logger.warning("Failed to load SNQI weights from {}: {}", path, exc)
         return dict(_DEFAULT_SNQI_WEIGHTS)
 
 

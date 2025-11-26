@@ -188,7 +188,16 @@ class RoutePointsGenerator:
         # It assumes that the area per route is approximated by multiplying
         # the total length of the route with the sidewalk width.
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
-        self._route_probs = [r.total_length / self.total_length for r in self.routes]
+        lengths = [r.total_length for r in self.routes]
+        total_len = sum(lengths)
+        if total_len > 0:
+            self._route_probs = [length / total_len for length in lengths]
+        else:
+            # Fallback to uniform sampling when lengths are zero/missing to avoid ZeroDivisionError.
+            if not lengths:
+                raise ValueError("RoutePointsGenerator requires at least one route.")
+            uniform = 1.0 / len(lengths)
+            self._route_probs = [uniform for _ in lengths]
 
     @property
     def total_length(self) -> float:

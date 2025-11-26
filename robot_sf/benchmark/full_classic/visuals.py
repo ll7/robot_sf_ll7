@@ -103,6 +103,28 @@ def _convert_plot_artifacts(raw_list) -> list[dict]:
     return out
 
 
+def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int, str | None]:
+    """Return (success_count, status_note) for video artifacts."""
+
+    def _get(item, key):
+        if isinstance(item, dict):
+            return item.get(key)
+        return getattr(item, key, None)
+
+    success_count = sum(1 for v in video_artifacts if _get(v, "status") == "success")
+    status_note = None
+    if video_artifacts and success_count == 0:
+        notes = sorted({_get(v, "note") for v in video_artifacts if _get(v, "note") is not None})
+        statuses = sorted({_get(v, "status") for v in video_artifacts if _get(v, "status")})
+        parts = ["no-successful-videos"]
+        if statuses:
+            parts.append(f"statuses={','.join(str(s) for s in statuses)}")
+        if notes:
+            parts.append(f"notes={','.join(str(n) for n in notes)}")
+        status_note = ";".join(parts)
+    return success_count, status_note
+
+
 def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[VideoArtifact]:
     if not _SIM_VIEW_AVAILABLE or not simulation_view_ready():
         return []
@@ -404,23 +426,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
                     )
                 )
 
-        success_count = sum(1 for v in video_artifacts if getattr(v, "status", "") == "success")
-        status_note = None
-        if video_artifacts and success_count == 0:
-            notes = sorted(
-                {
-                    getattr(v, "note", None)
-                    for v in video_artifacts
-                    if getattr(v, "note", None) is not None
-                },
-            )
-            statuses = sorted({getattr(v, "status", None) for v in video_artifacts if v.status})
-            parts = ["no-successful-videos"]
-            if statuses:
-                parts.append(f"statuses={','.join(str(s) for s in statuses)}")
-            if notes:
-                parts.append(f"notes={','.join(str(n) for n in notes)}")
-            status_note = ";".join(parts)
+        success_count, status_note = _summarize_video_outcomes(video_artifacts)
 
         perf_meta = {
             "plots_time_s": round(t1 - t0, 4),
@@ -500,17 +506,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
             first_video_render_time = round(total_video_phase - enc_time, 4)
     plots_time_s = round(t1 - t0, 4)
     videos_time_s = round(video_end - video_start, 4)
-    success_count = sum(1 for v in video_artifacts if getattr(v, "status", "") == "success")
-    status_note = None
-    if video_artifacts and success_count == 0:
-        notes = sorted({v.note for v in video_artifacts if getattr(v, "note", None) is not None})
-        statuses = sorted({v.status for v in video_artifacts if getattr(v, "status", None)})
-        parts = ["no-successful-videos"]
-        if statuses:
-            parts.append(f"statuses={','.join(statuses)}")
-        if notes:
-            parts.append(f"notes={','.join(str(n) for n in notes)}")
-        status_note = ";".join(parts)
+    success_count, status_note = _summarize_video_outcomes(video_artifacts)
     perf_meta = {
         "plots_time_s": plots_time_s,
         "videos_time_s": videos_time_s,

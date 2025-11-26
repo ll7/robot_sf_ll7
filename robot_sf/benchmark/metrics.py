@@ -1,12 +1,33 @@
-"""Metric stubs for the Social Navigation Benchmark.
+"""Social navigation benchmark metrics (implemented).
 
-Each metric is exposed as a pure function accepting a structured
-`EpisodeData` container. For now these return ``np.nan`` placeholders
-with TODO notes referencing the formal definitions in
-`docs/dev/issues/social-navigation-benchmark/metrics_spec.md`.
+The functions in this module follow the definitions in
+`docs/dev/issues/social-navigation-benchmark/metrics_spec.md`. Core,
+comfort, smoothness, and paper metrics are implemented; a few optional
+metrics intentionally return ``NaN`` when their required inputs are not
+provided (for example, ``force_gradient_norm_mean`` needs a sampled force
+field grid, and ``time_to_goal`` is undefined when the goal is never
+reached).
 
-Implementations will be filled in incrementally; keeping the signatures
-stable allows other components (runner, aggregation, CI) to proceed.
+Implemented categories:
+- Core navigation: success, time_to_goal_norm, collisions, near_misses, min_distance,
+  mean_distance, path_efficiency, avg_speed.
+- Comfort/force: force_quantiles, per_ped_force_quantiles, force_exceed_events,
+  comfort_exposure, force_gradient_norm_mean.
+- Smoothness/energy: jerk_mean, curvature_mean, energy.
+- Paper Table 1 metrics: success_rate, collision_count, wall_collisions,
+  agent_collisions, human_collisions, timeout, failure_to_progress,
+  stalled_time, time_to_goal, path_length, success_path_length,
+  velocity_* / acceleration_* / jerk_* extrema, clearing_distance_*,
+  space_compliance, distance_to_human_min, time_to_collision_min,
+  aggregated_time.
+
+Missing/optional data handling:
+- Empty pedestrian sets (K=0) return 0.0 for collision counts and ``NaN`` for distances where
+  undefined.
+- Force-based metrics return ``NaN`` when force arrays are missing, all zeros, or contain no
+  finite values; comfort metrics fall back to ``NaN`` in the same cases.
+- Metrics that require goal attainment (e.g., ``time_to_goal``) return ``NaN`` if the goal was
+  not reached; timeout is encoded separately.
 """
 
 from __future__ import annotations

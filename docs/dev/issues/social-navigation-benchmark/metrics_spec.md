@@ -50,6 +50,12 @@ Normalization: $\text{norm}_x = \frac{x - b_{\text{med}}}{b_{p95} - b_{\text{med
 - Implemented & documented: success, time_to_goal_norm, collisions, near_misses, min_distance, mean_distance, path_efficiency, force_quantiles (q50/q90/q95), per_ped_force_quantiles (q50/q90/q95), force_exceed_events, comfort_exposure, jerk_mean, curvature_mean, energy, force_gradient_norm_mean, avg_speed (diagnostic).
 - Documented but partially specified/optional: mean interpersonal distance (pending), force field divergence (pending).
 
+### Missing data handling (runtime semantics)
+- K=0 pedestrians → collisions/near_misses=0; distance metrics return NaN when undefined.
+- Force-based metrics return NaN when force arrays are missing, all zeros, or non-finite.
+- force_gradient_norm_mean returns NaN unless `force_field_grid` (X,Y,Fx,Fy) is provided.
+- time_to_goal returns NaN if the goal is not reached; timeout is recorded separately.
+
 ## Validation & Tests
 - Empty crowd: collisions=0, near_misses=0, comfort_exposure=0
 - Single pedestrian static: force_exceed_events=0 for low density

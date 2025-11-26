@@ -19,7 +19,7 @@ Purpose: Resolve open clarifications, define statistical and operational methodo
 
 ### 2.1 Metrics Categories
 - Binary rates: success_rate, collision_rate.
-- Continuous: time_to_goal, path_efficiency, average_speed, snqi.
+- Continuous: time_to_goal, path_efficiency, avg_speed, snqi.
 
 ### 2.2 Confidence Intervals
 - Binary: Wilson interval (p ± range) at 95%.

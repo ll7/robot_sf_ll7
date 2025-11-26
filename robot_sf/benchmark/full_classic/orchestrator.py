@@ -343,6 +343,33 @@ def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
     return vel, acc
 
 
+def _capture_visual_state(env):
+    if not hasattr(env, "_prepare_visualizable_state"):
+        return None, None, None
+    try:
+        vis_state = env._prepare_visualizable_state()  # type: ignore[attr-defined]
+        ray_vecs = (
+            [tuple(map(float, r)) for r in np.asarray(vis_state.ray_vecs).reshape(-1, 2)]
+            if getattr(vis_state, "ray_vecs", None) is not None
+            else None
+        )
+        ped_actions = (
+            [tuple(map(float, r)) for r in np.asarray(vis_state.ped_actions).reshape(-1, 2)]
+            if getattr(vis_state, "ped_actions", None) is not None
+            else None
+        )
+        robot_goal = None
+        if getattr(vis_state, "robot_action", None) is not None:
+            try:
+                goal_val = vis_state.robot_action.goal  # type: ignore[attr-defined]
+                robot_goal = (float(goal_val[0]), float(goal_val[1]))
+            except Exception:
+                robot_goal = None
+        return ray_vecs, ped_actions, robot_goal
+    except Exception:
+        return None, None, None
+
+
 def _compute_episode_metrics(
     job,
     scenario,
@@ -399,12 +426,25 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
     record_dir = Path(cfg.output_root)
     replays_dir = record_dir / "replays"
     replays_dir.mkdir(parents=True, exist_ok=True)
+    videos_dir = record_dir / "videos"
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    # Only enable native video recording when not in fast stub/smoke modes.
+    record_video_flag = bool(
+        getattr(cfg, "record_video", False)
+        or (
+            capture_replay
+            and not getattr(cfg, "fast_stub", False)
+            and not getattr(cfg, "smoke", False)
+        )
+    )
+    video_path = videos_dir / f"simview_{episode_id}.mp4" if record_video_flag else None
     env = make_robot_env(
         config=config,
         seed=int(job.seed),
-        debug=False,
+        debug=record_video_flag,
         recording_enabled=capture_replay,
-        record_video=bool(getattr(cfg, "record_video", False)),
+        record_video=record_video_flag,
+        video_path=str(video_path) if video_path else None,
         video_fps=float(getattr(cfg, "video_fps", 10) or 10),
         use_jsonl_recording=False,
         recording_dir=str(replays_dir),
@@ -445,6 +485,7 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         robot_positions.append(robot_pos)
         ped_positions.append(peds)
         if replay_cap is not None:
+            ray_vecs, ped_actions, robot_goal = _capture_visual_state(env)
             ped_list = [tuple(map(float, row)) for row in peds.tolist()] if peds.size else []
             replay_cap.record(
                 t=step_idx * dt,
@@ -454,7 +495,19 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
                 speed=float(np.linalg.norm(action_arr)),
                 ped_positions=ped_list,
                 action=(float(action_arr[0]), float(action_arr[1])),
+                ray_vecs=ray_vecs,
+                ped_actions=ped_actions,
+                robot_goal=robot_goal,
             )
+        # Render frame if SimulationView recording is active
+        try:
+            if getattr(env, "sim_ui", None) is not None and getattr(
+                env.sim_ui, "record_video", False
+            ):
+                env.render()
+        except Exception:
+            # Rendering is best-effort; ignore to keep rollout running
+            pass
         if reached_goal_step is None and bool(info.get("success")):
             reached_goal_step = step_idx
         if terminated or truncated:
@@ -603,6 +656,9 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         record["replay_steps"] = [(s.t, s.x, s.y, s.heading) for s in finalized]
         record["replay_peds"] = [s.ped_positions or [] for s in finalized]
         record["replay_actions"] = [s.action for s in finalized]
+        record["replay_rays"] = [s.ray_vecs or [] for s in finalized]
+        record["replay_ped_actions"] = [s.ped_actions or [] for s in finalized]
+        record["replay_goals"] = [s.robot_goal for s in finalized]
         record["replay_dt"] = episode.dt
         record["replay_map_path"] = episode.map_path
     _ensure_algo_metadata(

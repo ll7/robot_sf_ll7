@@ -47,7 +47,7 @@ class RandomPlanner:
         config: dict[str, Any] | RandomPlannerConfig,
     ) -> RandomPlannerConfig:
         if isinstance(config, dict):
-            return RandomPlannerConfig(**config)
+            return RandomPlannerConfig(**config)  # type: ignore[arg-type]
         if isinstance(config, RandomPlannerConfig):
             return config
         raise TypeError(f"Invalid config type: {type(config)}")

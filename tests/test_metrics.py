@@ -11,6 +11,8 @@ for now they guard against accidental signature/key regressions.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from robot_sf.benchmark.metrics import (
@@ -267,6 +269,9 @@ def test_per_ped_force_quantiles_in_compute_all():
     T, K = 3, 2
     ep = _make_episode(T=T, K=K)
 
+    # Populate forces to ensure metrics treat data as present
+    ep.ped_forces[..., 0] = 1.0
+
     vals = compute_all_metrics(ep, horizon=10)
 
     # Verify all three keys are present
@@ -278,6 +283,18 @@ def test_per_ped_force_quantiles_in_compute_all():
     assert np.isfinite(vals["ped_force_q50"]), "ped_force_q50 should be finite with K>0"
     assert np.isfinite(vals["ped_force_q90"]), "ped_force_q90 should be finite with K>0"
     assert np.isfinite(vals["ped_force_q95"]), "ped_force_q95 should be finite with K>0"
+
+
+def test_force_metrics_missing_force_data_flagged():
+    """Force metrics return NaN when pedestrian force data is absent."""
+
+    ep = _make_episode(T=4, K=2)  # ped_forces default to zeros (treated as missing)
+    vals = compute_all_metrics(ep, horizon=10)
+
+    assert math.isnan(vals["force_q50"])
+    assert math.isnan(vals["ped_force_q50"])
+    assert math.isnan(vals["force_exceed_events"])
+    assert math.isnan(vals["comfort_exposure"])
 
 
 def test_energy_and_jerk_mean():

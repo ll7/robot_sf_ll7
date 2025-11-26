@@ -177,7 +177,7 @@ class EnvState:
         def unit_vec(orient):
             return cos(orient), sin(orient)
 
-        if obs_lines is None:
+        if obs_lines is None or len(obs_lines) == 0:
             return np.array([])
 
         line_orients = np.array([orient(line) for line in obs_lines])

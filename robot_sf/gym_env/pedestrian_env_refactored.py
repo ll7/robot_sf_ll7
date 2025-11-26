@@ -7,6 +7,7 @@ and unified configuration system.
 
 from collections.abc import Callable
 from copy import deepcopy
+from typing import Any
 
 import loguru
 
@@ -18,6 +19,7 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
+from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_ego.pedestrian_state import PedestrianState
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import (
@@ -27,7 +29,7 @@ from robot_sf.render.sim_view import (
 )
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
-from robot_sf.sim.simulator import init_ped_simulators
+from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
 
 logger = loguru.logger
 
@@ -39,6 +41,20 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
     This environment trains an adversarial pedestrian against a pre-trained robot.
     Demonstrates the new consistent interface and reduced code duplication.
     """
+
+    # Type annotations for attributes to help type checker
+    config: PedestrianSimulationConfig
+    map_def: MapDefinition
+    simulator: PedSimulator
+    action_space: Any
+    observation_space: Any
+    orig_obs_space: Any
+    robot_state: RobotState
+    ped_state: PedestrianState
+    state: PedestrianState
+    last_obs_robot: Any
+    last_action_robot: Any
+    last_action_ped: Any
 
     def __init__(
         self,

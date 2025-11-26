@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -889,14 +890,31 @@ def _post_process_metrics(
         for k in list(fq.keys()):
             metrics.pop(k, None)
     if snqi_weights is not None:
-        metrics["snqi"] = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+        snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+        metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
     for count_key in ("collisions", "near_misses", "force_exceed_events"):
         if count_key in metrics and metrics[count_key] is not None:
             try:
                 metrics[count_key] = int(metrics[count_key])
             except Exception:  # pragma: no cover
                 pass
-    return metrics
+    return _sanitize_metrics(metrics)
+
+
+def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Remove NaN/inf metric entries to keep JSON serialization clean."""
+
+    clean: dict[str, Any] = {}
+    for key, val in metrics.items():
+        if isinstance(val, dict):
+            nested = _sanitize_metrics(val)
+            if nested:
+                clean[key] = nested
+            continue
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+            continue
+        clean[key] = val
+    return clean
 
 
 def _expand_jobs(

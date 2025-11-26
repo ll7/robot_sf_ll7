@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from math import ceil, cos, pi, sin
 from random import sample, uniform
 
+import numpy as np
 from loguru import logger
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.config import SimulatorConfig as PySFSimConfig
@@ -9,7 +10,7 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
-from robot_sf.common.types import RobotAction, RobotPose, Vec2D
+from robot_sf.common.types import PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -57,6 +58,8 @@ class Simulator:
     groups: PedestrianGroupings = field(init=False)
     peds_behaviors: list[PedestrianBehavior] = field(init=False)
     peds_have_obstacle_forces: bool
+    # Last pedestrian force vectors used to step the simulation (K,2)
+    last_ped_forces: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
         """
@@ -114,6 +117,8 @@ class Simulator:
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
         ]
+
+        self.last_ped_forces = np.zeros((0, 2), dtype=float)
 
         self.reset_state()
         for behavior in self.peds_behaviors:
@@ -177,6 +182,7 @@ class Simulator:
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
+        self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):
@@ -271,7 +277,7 @@ class PedSimulator(Simulator):
         return self.ego_ped.pos
 
     @property
-    def ego_ped_pose(self) -> Vec2D:
+    def ego_ped_pose(self) -> PedPose:
         return self.ego_ped.pose
 
     @property
@@ -295,6 +301,7 @@ class PedSimulator(Simulator):
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
+        self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
         self.pysf_sim.peds.step(ped_forces, groups)
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=False):

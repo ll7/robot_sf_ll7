@@ -35,7 +35,7 @@ def test_replay_and_metrics_present(config_factory, tmp_path):
     assert len(replay_steps) >= 1
     metrics = record.get("metrics") or {}
     assert "time_to_goal" in metrics
-    assert "average_speed" in metrics
+    assert "avg_speed" in metrics
     assert metrics.get("success_rate") is not None
     assert "collision_rate" in metrics
     assert record.get("replay_dt") is not None

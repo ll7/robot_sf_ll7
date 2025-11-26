@@ -45,7 +45,7 @@ def test_aggregate_metrics_structure(synthetic_episode_record):
         "success_rate",
         "time_to_goal",
         "path_efficiency",
-        "average_speed",
+        "avg_speed",
         "snqi",
     ]:
         assert key in g.metrics

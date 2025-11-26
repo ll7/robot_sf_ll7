@@ -81,7 +81,7 @@ def synthetic_episode_record():
                     "success_rate": 1.0,
                     "time_to_goal": 12.3,
                     "path_efficiency": 0.93,
-                    "average_speed": 1.1,
+                    "avg_speed": 1.1,
                     "snqi": 0.75,
                 },
             ),

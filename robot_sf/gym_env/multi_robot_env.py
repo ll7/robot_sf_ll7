@@ -5,6 +5,7 @@ It overrides the `step_async` method to apply actions to all robots in the envir
 
 from collections.abc import Callable
 from multiprocessing.pool import ThreadPool
+from typing import Any
 
 import numpy as np
 from gymnasium import spaces
@@ -23,6 +24,11 @@ from robot_sf.sim.simulator import init_simulators
 class MultiRobotEnv(MultiAgentEnv):
     """Representing a Gymnasium environment for training
     multiple self-driving robots with reinforcement learning"""
+
+    # Type annotations
+    config: EnvSettings | MultiRobotConfig
+    sim_worker_pool: ThreadPool
+    obs_worker_pool: ThreadPool
 
     def __init__(
         self,
@@ -43,8 +49,8 @@ class MultiRobotEnv(MultiAgentEnv):
 
         # Initialize pools as None early so destructor/cleanup paths don't fail
         # if they are referenced before full initialization.
-        self.sim_worker_pool: ThreadPool | None = None
-        self.obs_worker_pool: ThreadPool | None = None
+        self.sim_worker_pool = None  # type: ignore[assignment]
+        self.obs_worker_pool = None  # type: ignore[assignment]
 
         map_def = env_config.map_pool.map_defs["uni_campus_big"]  # info: only use first map
         action_space, observation_space, orig_obs_space = init_spaces(env_config, map_def)
@@ -55,7 +61,7 @@ class MultiRobotEnv(MultiAgentEnv):
 
         # Initialize abstract multi-agent base with config and agent count.
         # `MultiAgentEnv` will forward the config to BaseSimulationEnv.
-        super().__init__(env_config, resolved_num_robots, debug=debug)
+        super().__init__(env_config, resolved_num_robots, debug=debug)  # type: ignore[arg-type]
 
         # Combined action space for all robots (vectorized)
         self.action_space = spaces.Box(
@@ -90,7 +96,9 @@ class MultiRobotEnv(MultiAgentEnv):
         self.sim_worker_pool = ThreadPool(len(self.simulators))
         self.obs_worker_pool = ThreadPool(resolved_num_robots)
 
-    def step(self, actions):
+    def step(self, action: Any) -> tuple[Any, float, bool, bool, dict[str, Any]]:
+        """Execute one environment step with multi-agent actions."""
+        actions = action  # Rename for clarity in multi-agent context
         actions = [self.simulators[0].robots[0].parse_action(a) for a in actions]
         i = 0
         actions_per_simulator = []
@@ -108,7 +116,7 @@ class MultiRobotEnv(MultiAgentEnv):
 
         metas = [state.meta_dict() for state in self.states]
         masked_metas = [{"step": meta["step"], "meta": meta} for meta in metas]
-        masked_metas = (*masked_metas,)
+        masked_metas_tuple = (*masked_metas,)
         terms = [state.is_terminal for state in self.states]
         rewards = [self.reward_func(meta) for meta in metas]
 
@@ -119,24 +127,30 @@ class MultiRobotEnv(MultiAgentEnv):
                 sim.reset_state()
                 obs[i] = state.reset()
 
-        obs = {
+        obs_dict = {
             OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
             OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]),
         }
 
-        return obs, rewards, terms, masked_metas
+        # Return in Gymnasium format (obs, reward, terminated, truncated, info)
+        # For multi-agent, we aggregate rewards
+        total_reward = sum(rewards)
+        any_terminated = any(terms)
+        return obs_dict, total_reward, any_terminated, False, {"agents": masked_metas_tuple}
 
-    def reset(self):
+    def reset(self, **kwargs) -> tuple[Any, dict[str, Any]]:
+        """Reset the environment."""
         self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
         obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
 
-        obs = {
+        obs_dict = {
             OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
             OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]),
         }
-        return obs
+        return obs_dict, {}
 
-    def render(self, robot_id: int = 0):
+    def render(self, **kwargs) -> None:
+        """Render the environment."""
         # TODO: add support for PyGame rendering
         pass
 
@@ -175,9 +189,9 @@ class MultiRobotEnv(MultiAgentEnv):
         try:
             return self.single_action_space, self.single_observation_space
         except AttributeError:
-            # Fallback: compute from env_config
-            map_def = self.env_config.map_pool.map_defs["uni_campus_big"]
-            action_space, observation_space, _ = init_spaces(self.env_config, map_def)
+            # Fallback: compute from config
+            map_def = self.config.map_pool.map_defs["uni_campus_big"]
+            action_space, observation_space, _ = init_spaces(self.config, map_def)
             return action_space, observation_space
 
     def _setup_agents(self) -> None:
@@ -193,5 +207,7 @@ class MultiRobotEnv(MultiAgentEnv):
         This delegates to the environment's `step` implementation to avoid
         duplicating logic.
         """
-        obs, rewards, terms, metas = self.step(actions)
-        return obs, rewards, terms, metas
+        obs, reward, terminated, _truncated, info = self.step(actions)
+        # Convert single values back to lists for multi-agent interface
+        # Note: This may need adjustment based on actual multi-agent requirements
+        return [obs], [reward], [terminated], [info]

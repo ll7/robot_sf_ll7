@@ -80,6 +80,9 @@ def main() -> int:
     fast_mode = os.getenv("ROBOT_SF_FAST_DEMO", "0") == "1"
     max_steps_env = os.getenv("ROBOT_SF_EXAMPLES_MAX_STEPS")
     horizon_override = int(max_steps_env) if max_steps_env and max_steps_env.isdigit() else None
+    capture_replay = not fast_mode
+    fast_stub = fast_mode
+    smoke_horizon_cap = (horizon_override or 40) if fast_mode else 40
 
     cfg = BenchmarkCLIConfig(
         scenario_matrix_path=str(matrix),
@@ -88,23 +91,21 @@ def main() -> int:
         master_seed=123,
         smoke=fast_mode,
         algo="ppo",  # Label stored in scenario_params.algo for grouping
+        capture_replay=capture_replay,
+        fast_stub=fast_stub,
         initial_episodes=1 if fast_mode else 2,
         max_episodes=1
         if fast_mode
         else 4,  # Stop after max episodes (small demo) or earlier if precision hit
         batch_size=1 if fast_mode else 2,
         horizon_override=horizon_override,
+        smoke_horizon_cap=smoke_horizon_cap,
         target_collision_half_width=0.05,
         target_success_half_width=0.05,
         target_snqi_half_width=0.05,
         disable_videos=fast_mode,
         max_videos=0 if fast_mode else 1,  # Keep runtime small; increase for more examples
     )
-    # Extra fast-path toggles honored by orchestrator
-    if fast_mode:
-        cfg.capture_replay = False  # type: ignore[attr-defined]
-        cfg.fast_stub = True  # type: ignore[attr-defined]
-        cfg.smoke_horizon_cap = horizon_override or 40  # type: ignore[attr-defined]
 
     print("[demo_full_classic] Running benchmark...", flush=True)
     run_full_benchmark(cfg)

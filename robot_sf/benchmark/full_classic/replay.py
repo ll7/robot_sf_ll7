@@ -239,7 +239,11 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
             action_seq = action_raw if isinstance(action_raw, list) else None
         except (ValueError, TypeError):
             continue
-        dt = float(rec.get("replay_dt")) if "replay_dt" in rec else None
+
+        try:
+            dt = float(rec.get("replay_dt")) if "replay_dt" in rec else None
+        except (ValueError, TypeError):
+            dt = None
         map_path = rec.get("replay_map_path")
         ep = build_replay_episode(
             ep_id,

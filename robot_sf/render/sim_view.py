@@ -71,7 +71,7 @@ def _empty_map_definition() -> MapDefinition:
         robot_spawn_zones=[rect],
         ped_spawn_zones=[rect],
         robot_goal_zones=[rect],
-        bounds=bounds,
+        bounds=bounds,  # type: ignore[arg-type]  # bounds format compatible at runtime
         robot_routes=[],
         ped_goal_zones=[rect],
         ped_crowded_zones=[],
@@ -111,7 +111,7 @@ class VisualizableSimState:
     ped_actions: np.ndarray
     """The actions taken by pedestrians at this timestep."""
 
-    ego_ped_pose: PedPose = None
+    ego_ped_pose: PedPose | None = None
     """The pose of the ego pedestrian at this timestep. Defaults to None."""
 
     ego_ped_ray_vecs: np.ndarray | None = None
@@ -575,7 +575,7 @@ class SimulationView:
             for e in pygame.event.get():
                 handler = event_handler_map.get(e.type)
                 if handler:
-                    handler(e)
+                    handler(e)  # type: ignore[call-arg]  # handler signature varies
 
             # Limit this loop to 30 event checks per second (sufficient for UI interaction)
             self.clock.tick(30)
@@ -799,7 +799,9 @@ class SimulationView:
     def _get_pedestrian_info_lines(self, state: VisualizableSimState) -> list[str]:
         """Get pedestrian information lines for display."""
         if self._has_pedestrian_data(state):
+            assert state.ego_ped_pose is not None, "ego_ped_pose must be set"
             distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
+            assert state.ego_ped_action is not None, "ego_ped_action must be set"
             return [
                 f"PedestrianPose: {state.ego_ped_pose}",
                 f"PedestrianAction: {state.ego_ped_action.action}",
@@ -812,7 +814,7 @@ class SimulationView:
 
     def _has_pedestrian_data(self, state: VisualizableSimState) -> bool:
         """Check if the state has complete pedestrian data."""
-        return (
+        return bool(
             hasattr(state, "ego_ped_pose")
             and state.ego_ped_pose
             and hasattr(state, "ego_ped_action")
@@ -956,7 +958,7 @@ class SimulationView:
         font = pygame.font.Font(None, 24)
         # draw the vertical lines
         start_x = ((-self.offset[0]) // scaled_grid_size) * scaled_grid_size
-        for x in range(start_x, self.width - self.offset[0], scaled_grid_size):
+        for x in range(int(start_x), int(self.width - self.offset[0]), int(scaled_grid_size)):
             pygame.draw.line(
                 self.screen,
                 grid_color,
@@ -968,7 +970,7 @@ class SimulationView:
 
         # draw the horizontal lines
         start_y = ((-self.offset[1]) // scaled_grid_size) * scaled_grid_size
-        for y in range(start_y, self.height - self.offset[1], scaled_grid_size):
+        for y in range(int(start_y), int(self.height - self.offset[1]), int(scaled_grid_size)):
             pygame.draw.line(
                 self.screen,
                 grid_color,

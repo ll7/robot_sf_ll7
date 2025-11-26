@@ -313,16 +313,46 @@ def _simple_goal_policy(simulator) -> np.ndarray:
     return np.array([linear, angular], dtype=float)
 
 
-def _stack_ped_positions(series: list[np.ndarray]) -> np.ndarray:
+def _stack_ped_positions(series: list[np.ndarray], fill_value: float = 0.0) -> np.ndarray:
     max_len = max((len(p) for p in series), default=0)
     if max_len == 0:
         return np.zeros((len(series), 0, 2), dtype=float)
-    out = np.zeros((len(series), max_len, 2), dtype=float)
+    out = np.full((len(series), max_len, 2), fill_value, dtype=float)
     for idx, p in enumerate(series):
         if len(p) == 0:
             continue
         arr = np.asarray(p, dtype=float)
-        out[idx, : arr.shape[0], :] = arr
+        copy_len = min(arr.shape[0], max_len)
+        dim = min(arr.shape[1], out.shape[2]) if arr.ndim >= 2 else 0
+        if copy_len > 0 and dim > 0:
+            out[idx, :copy_len, :dim] = arr[:copy_len, :dim]
+    return out
+
+
+def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
+    """Best-effort retrieval of per-pedestrian forces for the current step.
+
+    Returns an array shaped like ``ped_pos``. Missing or mismatched force data is
+    filled with NaNs so downstream metrics can flag absent samples instead of
+    silently reporting zeros.
+    """
+
+    forces = getattr(simulator, "last_ped_forces", None)
+    if forces is None:
+        return np.full_like(ped_pos, np.nan)
+    try:
+        arr = np.asarray(forces, dtype=float)
+    except Exception:
+        return np.full_like(ped_pos, np.nan)
+
+    if arr.shape == ped_pos.shape:
+        return arr
+
+    out = np.full_like(ped_pos, np.nan)
+    copy_len = min(arr.shape[0], ped_pos.shape[0])
+    dim = min(arr.shape[1], out.shape[2]) if arr.ndim >= 2 else 0
+    if arr.ndim >= 2 and copy_len > 0 and dim > 0:
+        out[:copy_len, :dim] = arr[:copy_len, :dim]
     return out
 
 
@@ -378,6 +408,7 @@ def _compute_episode_metrics(
     robot_vel: np.ndarray,
     robot_acc: np.ndarray,
     ped_pos: np.ndarray,
+    ped_forces: np.ndarray,
     dt: float,
     reached_goal_step: int | None,
     goal: np.ndarray,
@@ -398,7 +429,7 @@ def _compute_episode_metrics(
         robot_vel=robot_vel,
         robot_acc=robot_acc,
         peds_pos=ped_pos,
-        ped_forces=np.zeros_like(ped_pos),
+        ped_forces=ped_forces,
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
@@ -482,6 +513,7 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
 def _rollout_episode(env, horizon: int, dt: float, replay_cap):
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
+    ped_forces: list[np.ndarray] = []
     reached_goal_step: int | None = None
     for step_idx in range(horizon):
         action_arr = _simple_goal_policy(env.simulator)
@@ -490,8 +522,10 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
         heading = float(env.simulator.robot_poses[0][1])
         peds = np.asarray(env.simulator.ped_pos, dtype=float)
+        forces = _extract_ped_forces(env.simulator, peds)
         robot_positions.append(robot_pos)
         ped_positions.append(peds)
+        ped_forces.append(forces)
         if replay_cap is not None:
             ray_vecs, ped_actions, robot_goal = _capture_visual_state(env)
             ped_list = [tuple(map(float, row)) for row in peds.tolist()] if peds.size else []
@@ -520,7 +554,7 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
             reached_goal_step = step_idx
         if terminated or truncated:
             break
-    return robot_positions, ped_positions, reached_goal_step
+    return robot_positions, ped_positions, ped_forces, reached_goal_step
 
 
 def _close_env(env):
@@ -597,7 +631,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     )
     try:
         env.reset(seed=int(job.seed))
-        robot_positions, ped_positions, reached_goal_step = _rollout_episode(
+        robot_positions, ped_positions, ped_forces, reached_goal_step = _rollout_episode(
             env,
             horizon,
             dt,
@@ -610,6 +644,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     robot_pos_arr = np.asarray(robot_positions, dtype=float)
     robot_vel_arr, robot_acc_arr = _vel_and_acc(robot_pos_arr, dt)
     ped_pos_arr = _stack_ped_positions(ped_positions)
+    ped_forces_arr = _stack_ped_positions(ped_forces, fill_value=np.nan)
     metrics_raw = _compute_episode_metrics(
         job,
         scenario,
@@ -618,6 +653,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
         robot_vel=robot_vel_arr,
         robot_acc=robot_acc_arr,
         ped_pos=ped_pos_arr,
+        ped_forces=ped_forces_arr,
         dt=dt,
         reached_goal_step=reached_goal_step,
         goal=goal_vec,
@@ -626,9 +662,8 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
     metrics: dict[str, float | None] = {}
     for key, value in metrics_raw.items():
         if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-            metrics[key] = None
-        else:
-            metrics[key] = value
+            continue
+        metrics[key] = value
     success_rate = float(metrics.get("success_rate") or 0.0)
     collision_rate = metrics.get("collision_rate")
     status = "success" if success_rate >= 1.0 else "failure"

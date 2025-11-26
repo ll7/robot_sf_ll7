@@ -444,7 +444,6 @@ def _compute_episode_metrics(
     metrics = dict(metrics_raw)
     metrics["success_rate"] = float(metrics_raw.get("success", 0.0))
     metrics["collision_rate"] = 1.0 if metrics_raw.get("collisions", 0.0) else 0.0
-    metrics["average_speed"] = float(metrics_raw.get("avg_speed", float("nan")))
     weights = _load_snqi_weights(getattr(cfg, "snqi_weights_path", None))
     try:
         metrics["snqi"] = snqi(metrics_raw, weights, baseline_stats=None)
@@ -588,7 +587,7 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
                 "success_rate": 1.0,
                 "time_to_goal": float(horizon) * 0.1,
                 "path_efficiency": 0.9,
-                "average_speed": 1.0,
+                "avg_speed": 1.0,
             },
             "steps": min(horizon, 5),
             "horizon": horizon,

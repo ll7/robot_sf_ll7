@@ -167,10 +167,12 @@ def _bootstrap_params(cfg) -> tuple[int, float, int]:
 
 def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
     vals: dict[str, list[float]] = {}
+    alias = {"average_speed": "avg_speed"}
     for r in recs:
         for k, v in r.get("metrics", {}).items():
             if isinstance(v, int | float):
-                vals.setdefault(k, []).append(float(v))
+                key = alias.get(k, k)
+                vals.setdefault(key, []).append(float(v))
     return vals
 
 

@@ -20,12 +20,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from typing import cast as _cast
 
 from loguru import logger
 
+from .encode import encode_frames
 from .plots import generate_plots
-from .render_sim_view import generate_video_file
+from .render_sim_view import generate_frames
 from .render_synthetic import generate_fallback_videos
 from .replay import extract_replay_episodes, validate_replay_episode
 from .validation import validate_visual_manifests
@@ -112,7 +112,6 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
     smoke = bool(getattr(cfg, "smoke", False))
     max_frames = int(getattr(cfg, "sim_view_max_frames", 0)) or None
     artifacts: list[VideoArtifact] = []
-    moviepy_missing_all = True
     for rec in records:
         ep_id = rec.get("episode_id", "unknown")
         sc_id = rec.get("scenario_id", "unknown")
@@ -132,13 +131,16 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             )
             continue
         try:
-            result = generate_video_file(
+            frame_iter = generate_frames(
                 ep,
-                str(mp4_path),
                 fps=fps,
                 max_frames=(10 if smoke and max_frames is None else max_frames),
             )
-        except (RuntimeError, OSError, ValueError) as exc:
+            enc = encode_frames(frame_iter, mp4_path, fps=fps, sample_memory=False)
+            status = enc.status
+            note = enc.note
+            encode_time = enc.encode_time_s
+        except (RuntimeError, OSError, ValueError, AttributeError) as exc:
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:
                     mp4_path.unlink()
@@ -157,26 +159,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
                     note=f"render-error:{exc.__class__.__name__}",
                 ),
             )
-            moviepy_missing_all = False
             continue
-        note = _cast(str | None, result.get("note"))
-        status = _cast(str, result.get("status", "failed"))
-        encode_time_s = _cast(float | None, result.get("encode_time"))
-        if status == "skipped" and note == "moviepy-missing":
-            artifacts.append(
-                VideoArtifact(
-                    artifact_id=f"video_{ep_id}",
-                    scenario_id=sc_id,
-                    episode_id=ep_id,
-                    path_mp4=str(mp4_path),
-                    status="skipped",
-                    renderer=RENDERER_SIM_VIEW,
-                    note=NOTE_MOVIEPY_MISSING,
-                ),
-            )
-            moviepy_missing_all = False
-            continue
-        moviepy_missing_all = False
         artifacts.append(
             VideoArtifact(
                 artifact_id=f"video_{ep_id}",
@@ -185,15 +168,11 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
                 path_mp4=str(mp4_path),
                 status=status,
                 renderer=RENDERER_SIM_VIEW,
-                note=note,
-                encode_time_s=encode_time_s,
+                note=note if note is not None else None,
+                encode_time_s=encode_time,
                 peak_rss_mb=None,
             ),
         )
-    if moviepy_missing_all and not artifacts:
-        # Signal to caller that SimulationView path attempted but moviepy missing
-        # Caller (sim-view forced) will interpret empty attempt as NOTE_MOVIEPY_MISSING.
-        return []
     return artifacts
 
 

@@ -72,13 +72,13 @@ class Simulator_v2:
         obstacles = (
             [line for o in map_definition.obstacles for line in o.lines]
             if map_definition.obstacles
-            else None
+            else []
         )
         self.env = EnvState(obstacles, self.config.scene_config.resolution)
         self.peds = PedState(
             self.states.raw_states, self.groupings.groups_as_lists, self.config.scene_config
         )
-        self.forces = make_forces(self, config)
+        self.forces = make_forces(self, config)  # type: ignore[arg-type]
         self.t = 0
 
     @property
@@ -164,9 +164,9 @@ class Simulator:
         self.config = config
         self.on_step = on_step
         resolution = self.config.scene_config.resolution
-        self.env = EnvState(obstacles, resolution)
-        self.peds = PedState(state, groups, self.config.scene_config)
-        self.forces = make_forces(self, config)
+        self.env = EnvState(obstacles or [], resolution)
+        self.peds = PedState(state, groups or [], self.config.scene_config)
+        self.forces = make_forces(self, config)  # type: ignore[arg-type]
         self.t = 0
 
     def compute_forces(self):

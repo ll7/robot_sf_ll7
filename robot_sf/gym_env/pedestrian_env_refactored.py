@@ -55,12 +55,6 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
     last_obs_robot: Any
     last_action_robot: Any
     last_action_ped: Any
-    """
-    Refactored Pedestrian Environment using new architecture.
-
-    This environment trains an adversarial pedestrian against a pre-trained robot.
-    Demonstrates the new consistent interface and reduced code duplication.
-    """
 
     def __init__(
         self,

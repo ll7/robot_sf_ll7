@@ -104,7 +104,12 @@ def check_schema_completeness(schema: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Dict with completeness analysis and recommendations
     """
-    analysis = {"score": 0, "max_score": 10, "issues": [], "recommendations": []}
+    analysis: dict[str, Any] = {
+        "score": 0,
+        "max_score": 10,
+        "issues": [],
+        "recommendations": [],
+    }
 
     # Check for title
     if "title" not in schema:
@@ -178,12 +183,13 @@ def extract_schema_metadata(schema: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Dict with extracted metadata
     """
-    metadata = {
+    required_properties: list[str] = schema.get("required", [])
+    metadata: dict[str, Any] = {
         "schema_version": schema.get("$schema", "unknown"),
         "title": schema.get("title", "untitled"),
         "description": schema.get("description", ""),
         "type": schema.get("type", "unknown"),
-        "required_properties": schema.get("required", []),
+        "required_properties": required_properties,
         "optional_properties": [],
         "total_properties": 0,
     }
@@ -192,7 +198,7 @@ def extract_schema_metadata(schema: dict[str, Any]) -> dict[str, Any]:
     properties = schema.get("properties", {})
     metadata["total_properties"] = len(properties)
 
-    required_set = set(metadata["required_properties"])
+    required_set = set(required_properties)
     for prop_name in properties:
         if prop_name not in required_set:
             metadata["optional_properties"].append(prop_name)

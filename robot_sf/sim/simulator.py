@@ -10,7 +10,7 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
-from robot_sf.common.types import RobotAction, RobotPose, Vec2D
+from robot_sf.common.types import PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -277,7 +277,7 @@ class PedSimulator(Simulator):
         return self.ego_ped.pos
 
     @property
-    def ego_ped_pose(self) -> Vec2D:
+    def ego_ped_pose(self) -> PedPose:
         return self.ego_ped.pose
 
     @property

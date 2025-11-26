@@ -22,7 +22,7 @@ ARGS=(
   --initial-episodes 1
   --max-episodes 1
   --batch-size 1
-  --horizon 80
+  --horizon 0
   --target-collision-half-width 0.25
   --target-success-half-width 0.25
   --target-snqi-half-width 0.25

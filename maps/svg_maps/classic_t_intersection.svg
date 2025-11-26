@@ -1,25 +1,173 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Classical Interaction Map: T-Intersection -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="44"
-    height="40" viewBox="0 0 44 40">
-    <g id="obstacles" inkscape:label="Obstacles">
-        <rect x="0" y="0" width="44" height="1" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="39" width="44" height="1" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="0" width="1" height="40" fill="#000" inkscape:label="obstacle" />
-        <rect x="43" y="0" width="1" height="40" fill="#000" inkscape:label="obstacle" />
-        <!-- Vertical stem blocker shaping turn (scaled) -->
-        <rect x="20" y="12" width="4" height="16" fill="#000" inkscape:label="obstacle" />
-    </g>
-    <g id="robot" inkscape:label="Robot">
-        <rect x="6" y="32" width="4" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" />
-        <rect x="34" y="6" width="4" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
-    </g>
-    <g id="pedestrians" inkscape:label="Pedestrians">
-        <rect x="6" y="6" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" />
-        <rect x="34" y="32" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" />
-    </g>
-    <g id="routes" inkscape:label="Routes">
-        <path d="M 8 34 L 36 8" stroke="#0300d5" stroke-width="1" fill="none" inkscape:label="robot_route_0_0" />
-        <path d="M 8 8 L 36 34" stroke="#c40202" stroke-width="1" fill="none" inkscape:label="ped_route_0_0" />
-    </g>
+
+<svg
+   width="44"
+   height="40"
+   viewBox="0 0 44 40"
+   version="1.1"
+   id="svg10"
+   sodipodi:docname="classic_t_intersection.svg"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs10" />
+  <sodipodi:namedview
+     id="namedview10"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="19.101833"
+     inkscape:cx="41.933148"
+     inkscape:cy="22.03977"
+     inkscape:window-width="3440"
+     inkscape:window-height="1353"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg10" />
+  <g
+     id="obstacles"
+     inkscape:label="Obstacles">
+    <rect
+       x="0"
+       y="0"
+       width="44"
+       height="1"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect1" />
+    <rect
+       x="0"
+       y="39"
+       width="44"
+       height="1"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect2" />
+    <rect
+       x="0"
+       y="0"
+       width="1"
+       height="40"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect3" />
+    <rect
+       x="43"
+       y="0"
+       width="1"
+       height="40"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect4" />
+    <!-- Vertical stem blocker shaping turn (scaled) -->
+    <rect
+       x="25.392153"
+       y="21.475531"
+       width="1.8012581"
+       height="18.460497"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect5" />
+    <rect
+       x="17.896257"
+       y="21.351423"
+       width="1.8012581"
+       height="18.460497"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect5-0" />
+    <rect
+       x="0.52542931"
+       y="13.880264"
+       width="43.106194"
+       height="2.4410915"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect5-2" />
+    <rect
+       x="0.11536412"
+       y="21.334471"
+       width="19.548244"
+       height="2.0746346"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect5-2-8" />
+    <rect
+       x="25.391193"
+       y="21.377119"
+       width="18.553576"
+       height="2.0746346"
+       fill="#000000"
+       inkscape:label="obstacle"
+       id="rect5-2-8-3" />
+  </g>
+  <g
+     id="robot"
+     inkscape:label="Robot">
+    <rect
+       x="20.605928"
+       y="31.842947"
+       width="4"
+       height="4"
+       fill="#ffd800"
+       inkscape:label="robot_spawn_zone"
+       id="rect6" />
+    <rect
+       x="34.889965"
+       y="16.784306"
+       width="4"
+       height="4"
+       fill="#ff7f2a"
+       inkscape:label="robot_goal_zone"
+       id="rect7" />
+  </g>
+  <g
+     id="pedestrians"
+     inkscape:label="Pedestrians">
+    <rect
+       x="9.1410599"
+       y="16.836657"
+       width="4"
+       height="4"
+       fill="#23ff00"
+       inkscape:label="ped_spawn_zone"
+       id="rect8" />
+    <rect
+       x="39.025696"
+       y="16.870562"
+       width="4"
+       height="4"
+       fill="#107400"
+       inkscape:label="ped_goal_zone"
+       id="rect9" />
+  </g>
+  <g
+     id="routes"
+     inkscape:label="Routes">
+    <path
+       d="M 22.291822,31.068344 22.402615,20.727105 32.701887,18.417848"
+       stroke="#0300d5"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="robot_route_0_0"
+       id="path9"
+       sodipodi:nodetypes="ccc" />
+    <path
+       d="M 18.627252,18.731954 31.550165,20.755198"
+       stroke="#c40202"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="ped_route_0_0"
+       id="path10"
+       sodipodi:nodetypes="cc" />
+  </g>
 </svg>

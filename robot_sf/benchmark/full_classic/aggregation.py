@@ -34,6 +34,9 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+# Map legacy/alias metric names to the canonical ones used in aggregation.
+_METRIC_ALIASES = {"average_speed": "avg_speed"}
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -170,7 +173,8 @@ def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
     for r in recs:
         for k, v in r.get("metrics", {}).items():
             if isinstance(v, int | float):
-                vals.setdefault(k, []).append(float(v))
+                key = _METRIC_ALIASES.get(k, k)
+                vals.setdefault(key, []).append(float(v))
     return vals
 
 

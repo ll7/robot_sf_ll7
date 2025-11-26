@@ -890,7 +890,8 @@ def _post_process_metrics(
         for k in list(fq.keys()):
             metrics.pop(k, None)
     if snqi_weights is not None:
-        metrics["snqi"] = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+        snqi_val = snqi(metrics, snqi_weights, baseline_stats=snqi_baseline)
+        metrics["snqi"] = float(snqi_val) if math.isfinite(snqi_val) else 0.0
     for count_key in ("collisions", "near_misses", "force_exceed_events"):
         if count_key in metrics and metrics[count_key] is not None:
             try:

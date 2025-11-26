@@ -83,6 +83,8 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "distributions_basic.pdf"
     if plt is None:
         return _PlotArtifact("distribution", str(pdf_path), "skipped", note="matplotlib missing")
+    status = "failed"
+    note = None
     labels: list[str] = []
     success_vals: list[float] = []
     collision_vals: list[float] = []
@@ -110,15 +112,19 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("distribution", str(pdf_path), status)
+    return _PlotArtifact("distribution", str(pdf_path), status, note=note)
 
 
 def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "trajectories_basic.pdf"
     if plt is None:
         return _PlotArtifact("trajectory", str(pdf_path), "skipped", note="matplotlib missing")
+    status = "failed"
+    note = None
     fig, ax = plt.subplots(figsize=(5, 5))
     plotted = False
     for rec in records:
@@ -142,15 +148,19 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("trajectory", str(pdf_path), status)
+    return _PlotArtifact("trajectory", str(pdf_path), status, note=note)
 
 
 def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "path_efficiency.pdf"
     if plt is None:
         return _PlotArtifact("kde", str(pdf_path), "skipped", note="matplotlib missing")
+    status = "failed"
+    note = None
     vals: list[float] = []
     for g in groups:
         pe = g.metrics.get("path_efficiency")
@@ -167,15 +177,19 @@ def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("kde", str(pdf_path), status)
+    return _PlotArtifact("kde", str(pdf_path), status, note=note)
 
 
 def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     pdf_path = out_dir / "pareto_placeholder.pdf"
     if plt is None:
         return _PlotArtifact("pareto", str(pdf_path), "skipped", note="matplotlib missing")
+    status = "failed"
+    note = None
     fig, ax = plt.subplots(figsize=(5, 4))
     plotted = False
     for g in groups:
@@ -196,15 +210,19 @@ def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("pareto", str(pdf_path), status)
+    return _PlotArtifact("pareto", str(pdf_path), status, note=note)
 
 
 def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
     pdf_path = out_dir / "episode_lengths.pdf"
     if plt is None:
         return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="matplotlib missing")
+    status = "failed"
+    note = None
     step_counts = [int(r.get("steps", 0)) for r in records if r.get("steps") is not None]
     if not step_counts:
         return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="no-steps")
@@ -217,9 +235,11 @@ def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotA
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
+    except Exception as exc:  # pragma: no cover - defensive
+        note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
-    return _PlotArtifact("force_heatmap", str(pdf_path), status, note=None)
+    return _PlotArtifact("force_heatmap", str(pdf_path), status, note=note)
 
 
 def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended placeholders

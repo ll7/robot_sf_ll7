@@ -632,7 +632,13 @@ def compute_aggregate_metrics(
     baseline_convergence: float,
 ) -> dict[str, float]:
     total_time = sum(record.duration_seconds or 0.0 for record in records)
-    best_rewards = [record.metrics.get("best_mean_reward") for record in records if record.metrics]
+    best_rewards = [
+        float(v)
+        for record in records
+        if record.metrics
+        for v in [record.metrics.get("best_mean_reward")]
+        if isinstance(v, (int, float))
+    ]
     completed = sum(1 for record in records if record.status == "success")
     skipped = sum(1 for record in records if record.status == "skipped")
     failed = sum(1 for record in records if record.status == "failed")

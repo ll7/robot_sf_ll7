@@ -41,35 +41,47 @@
 
 ## Real Visualization Generation (Feature 133)
 
-As of feature `133-all-generated-plots`, the benchmark system now generates **real visualizations** instead of placeholder outputs:
+As of feature `133-all-generated-plots`, the benchmark system now generates **real visualizations** instead of placeholder outputs. Ownership is split:
 
-### Plot Generation
-- **Function**: `robot_sf.benchmark.visualization.generate_benchmark_plots()`
-- **Output**: Statistical PDF plots showing actual metric distributions from episode data
-- **Types**: Metrics distribution plots, scenario comparison plots
-- **Format**: Vector PDFs for publication-quality figures
-- **Data Source**: Episode metrics (collisions, success rates, SNQI scores, etc.)
+- **Canonical stack (Full Classic benchmark)**: `robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts()` is invoked by `run_full_benchmark` and writes manifest files alongside artifacts (`plot_artifacts.json`, `video_artifacts.json`, `performance_visuals.json`). These schemas are the source of truth for CI validation and downstream analysis.
+- **Legacy helper (backward compatibility)**: `robot_sf.benchmark.visualization.*` remains for ad-hoc plotting/replay from JSONL files. It does not emit manifests and is deprecated for benchmark runs; migrate callers to the Full Classic pipeline before removal.
 
-### Video Generation  
-- **Function**: `robot_sf.benchmark.visualization.generate_benchmark_videos()`
-- **Output**: MP4 videos replaying actual simulation episodes
-- **Content**: Robot navigation trajectories with pedestrian interactions
-- **Fallback**: Placeholder videos when trajectory data unavailable
-- **Data Source**: Episode trajectory data (robot/pedestrian positions over time)
+### Plot Generation (Full Classic)
+- **Entry**: `robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts()` → `generate_plots()`
+- **Output**: Real PDF plots written to `plots/` plus manifest entries in `reports/plot_artifacts.json` with fields `{kind, path_pdf, status, note}`.
+- **Data Source**: Episode metrics grouped/validated during aggregation.
+
+### Video Generation (Full Classic)
+- **Entry**: `robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts()` → renderer-specific path (SimulationView first, synthetic fallback).
+- **Output**: MP4s written to `videos/` plus manifest entries in `reports/video_artifacts.json` with fields `{artifact_id, scenario_id, episode_id, path_mp4, status, renderer, note, encode_time_s, peak_rss_mb}`.
+- **Schema validation**: Optional `ROBOT_SF_VALIDATE_VISUALS=1` validates manifests against `specs/127-enhance-benchmark-visual/contracts/`.
+- **Performance meta**: `reports/performance_visuals.json` captures timings (`plots_time_s`, `videos_time_s`, `first_video_time_s`, `first_video_render_time_s`) and budget flags.
+
+### Legacy API (limited use)
+- **Functions**: `robot_sf.benchmark.visualization.generate_benchmark_plots()` / `generate_benchmark_videos()`.
+- **Scope**: Ad-hoc JSONL analysis where manifests are not required; avoid for production benchmark outputs.
+- **Deprecation**: Schedule migration to the canonical Full Classic pipeline to keep schemas aligned and avoid divergence.
 
 ### Validation
-- **Function**: `robot_sf.benchmark.visualization.validate_visual_artifacts()`
-- **Purpose**: Ensures generated artifacts contain real data, not placeholders
-- **Checks**: File existence, non-zero size, content validation
+- **Canonical**: `robot_sf.benchmark.full_classic.validation.validate_visual_manifests()` checks `plot_artifacts.json`, `video_artifacts.json`, and `performance_visuals.json` when `ROBOT_SF_VALIDATE_VISUALS=1` is set.
+- **Legacy**: `robot_sf.benchmark.visualization.validate_visual_artifacts()` remains for list-based validation when using the deprecated helper API.
 
 ### Integration
-The visualization functions are automatically called during benchmark execution:
+Full Classic benchmark orchestration calls the canonical stack automatically:
 ```python
-# In benchmark orchestrator
-plots = generate_benchmark_plots(episodes_path, output_dir)
-videos = generate_benchmark_videos(episodes_path, output_dir)  
-validation = validate_visual_artifacts(plots + videos)
+from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
+
+artifacts = generate_visual_artifacts(
+    output_dir,
+    cfg,
+    groups,   # aggregated metrics groups from aggregation.py
+    records,  # raw episode records
+)
+# artifacts["plots"], artifacts["videos"], artifacts["performance"] are also written
+# to reports/ as JSON manifests for downstream checks.
 ```
+Legacy ad-hoc usage (no manifests) can still call `robot_sf.benchmark.visualization.*`,
+but new code should migrate to the Full Classic pipeline.
 
 ### Performance
 - Plot generation: < 30 seconds for typical benchmark sizes
@@ -117,7 +129,7 @@ print('Trajectory data:', 'trajectory_data' in ep)
 ```
 
 #### Validation Failures
-**Symptoms**: `validate_visual_artifacts()` returns failed artifacts
+**Symptoms**: Manifest validation fails (`ROBOT_SF_VALIDATE_VISUALS=1`) or `validate_visual_artifacts()` returns failed artifacts
 **Causes**:
 - Files corrupted during generation
 - Insufficient disk space
@@ -125,11 +137,19 @@ print('Trajectory data:', 'trajectory_data' in ep)
 
 **Solutions**:
 ```python
-from robot_sf.benchmark.visualization import validate_visual_artifacts
+# Canonical manifest validator
+from pathlib import Path
+from robot_sf.benchmark.full_classic.validation import validate_visual_manifests
 
-result = validate_visual_artifacts(artifacts)
-for failed in result.failed_artifacts:
-    print(f"Failed: {failed.filename} - {failed.error_message}")
+reports_dir = Path("results/full_classic_run/reports")
+contracts = Path("specs/127-enhance-benchmark-visual/contracts")
+validate_visual_manifests(reports_dir, contracts)
+
+# Legacy list-based validator (deprecated)
+# from robot_sf.benchmark.visualization import validate_visual_artifacts
+# result = validate_visual_artifacts(artifacts)
+# for failed in result.failed_artifacts:
+#     print(f"Failed: {failed.filename} - {failed.error_message}")
 ```
 
 #### Performance Issues

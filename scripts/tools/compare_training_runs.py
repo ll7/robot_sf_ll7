@@ -25,8 +25,27 @@ if TYPE_CHECKING:
 def _load_training_run(run_id: str) -> dict[str, Any]:
     """Load training run manifest from disk."""
     manifest_path = get_training_run_manifest_path(run_id)
+    base_runs_dir = manifest_path.parent
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Training run manifest not found: {manifest_path}")
+        # Fallback: try timestamped variants (run_id*) or summary.json inside a run folder.
+        candidates = sorted(
+            base_runs_dir.glob(f"{run_id}*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
+        if candidates:
+            manifest_path = candidates[0]
+            logger.warning("Canonical manifest missing; using closest match {}", manifest_path.name)
+        else:
+            alt_dir = get_imitation_report_dir() / run_id
+            alt_manifest = alt_dir / "summary.json"
+            if alt_manifest.exists():
+                manifest_path = alt_manifest
+                logger.warning("Canonical manifest missing; using {}", manifest_path)
+            else:
+                available = sorted(p.name for p in base_runs_dir.glob("*.json"))
+                raise FileNotFoundError(
+                    f"Training run manifest not found: {manifest_path}. "
+                    f"Available run_ids: {available}"
+                )
 
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 

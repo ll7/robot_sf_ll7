@@ -258,6 +258,8 @@ def populate_ped_routes(
             - A dictionary mapping group indices to their corresponding `GlobalRoute` objects.
             - A list of initial section indices for each pedestrian group.
     """
+    if not routes:
+        return np.zeros((0, 6)), [], {}, []
     # Initialize a route points generator with the provided routes and sidewalk width
     proportional_spawn_gen = RoutePointsGenerator(routes, config.sidewalk_width)
     total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)

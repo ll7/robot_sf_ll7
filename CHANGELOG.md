@@ -189,6 +189,7 @@ If your project imports from `robot_sf.util` or `robot_sf.utils`, update your im
 ### Fixed
 - Normalized obstacle vertices to tuples to prevent ambiguous NumPy truth-value error during SVG path obstacle conversion in large map (`map3_1350_buildings_inkscape.svg`).
 - Preserved per-algorithm benchmark aggregation (Feature 142): classic orchestrator now mirrors `algo` into `scenario_params`, aggregation raises on missing metadata, and summary outputs emit `_meta` diagnostics plus warnings when expected baselines are absent.
+- Full Classic visuals: auto video renderer now falls back to synthetic when all SimulationView encodes fail, recording the downgrade in `performance_visuals`.
 
 ### Migration Notes
 - No code changes required; existing Loguru usage already compliant. Any remaining incidental `print()` in library modules should be migrated opportunistically (PATCH) unless tied to user-facing CLI UX.

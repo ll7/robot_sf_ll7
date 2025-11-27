@@ -40,6 +40,19 @@ def records():
             },
         },
         {
+            "episode_id": "low2",
+            "archetype": "crossing",
+            "density": "low",
+            "metrics": {
+                "collision_rate": 0.15,
+                "success_rate": 0.85,
+                "time_to_goal": 11.0,
+                "path_efficiency": 0.75,
+                "avg_speed": 1.1,
+                "snqi": 0.75,
+            },
+        },
+        {
             "episode_id": "high1",
             "archetype": "crossing",
             "density": "high",
@@ -50,6 +63,19 @@ def records():
                 "path_efficiency": 0.6,
                 "avg_speed": 0.9,
                 "snqi": 0.5,
+            },
+        },
+        {
+            "episode_id": "high2",
+            "archetype": "crossing",
+            "density": "high",
+            "metrics": {
+                "collision_rate": 0.35,
+                "success_rate": 0.65,
+                "time_to_goal": 13.0,
+                "path_efficiency": 0.55,
+                "avg_speed": 0.8,
+                "snqi": 0.45,
             },
         },
     ]
@@ -78,6 +104,6 @@ def test_aggregate_then_effect_sizes(records):
     assert math.isfinite(comps["collision_rate"].standardized)
     assert comps["time_to_goal"].diff == pytest.approx(2.0)
     assert comps["path_efficiency"].diff == pytest.approx(-0.2)
-    assert comps["avg_speed"].diff == pytest.approx(-0.1)
-    assert comps["snqi"].diff == pytest.approx(-0.2)
-    assert all(math.isfinite(c.standardized) or c.standardized == 0.0 for c in comps.values())
+    assert comps["avg_speed"].diff == pytest.approx(-0.2)
+    assert comps["snqi"].diff == pytest.approx(-0.25)
+    assert all(math.isfinite(c.standardized) for c in comps.values())

@@ -184,6 +184,8 @@ class RoutePointsGenerator:
         """
         Initialize calculated fields and compute route probabilities.
         """
+        if not self.routes:
+            raise ValueError("RoutePointsGenerator requires at least one route.")
         # Calculate the probability for each route based on its length.
         # It assumes that the area per route is approximated by multiplying
         # the total length of the route with the sidewalk width.
@@ -193,9 +195,7 @@ class RoutePointsGenerator:
         if total_len > 0:
             self._route_probs = [length / total_len for length in lengths]
         else:
-            # Fallback to uniform sampling when lengths are zero/missing to avoid ZeroDivisionError.
-            if not lengths:
-                raise ValueError("RoutePointsGenerator requires at least one route.")
+            # Fallback to uniform sampling when all routes have zero length to avoid ZeroDivisionError.
             uniform = 1.0 / len(lengths)
             self._route_probs = [uniform for _ in lengths]
 

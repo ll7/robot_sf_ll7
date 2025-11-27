@@ -184,11 +184,20 @@ class RoutePointsGenerator:
         """
         Initialize calculated fields and compute route probabilities.
         """
+        if not self.routes:
+            raise ValueError("RoutePointsGenerator requires at least one route.")
         # Calculate the probability for each route based on its length.
         # It assumes that the area per route is approximated by multiplying
         # the total length of the route with the sidewalk width.
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
-        self._route_probs = [r.total_length / self.total_length for r in self.routes]
+        lengths = [r.total_length for r in self.routes]
+        total_len = sum(lengths)
+        if total_len > 0:
+            self._route_probs = [length / total_len for length in lengths]
+        else:
+            # Fallback to uniform sampling when all routes have zero length to avoid ZeroDivisionError.
+            uniform = 1.0 / len(lengths)
+            self._route_probs = [uniform for _ in lengths]
 
     @property
     def total_length(self) -> float:
@@ -249,6 +258,8 @@ def populate_ped_routes(
             - A dictionary mapping group indices to their corresponding `GlobalRoute` objects.
             - A list of initial section indices for each pedestrian group.
     """
+    if not routes:
+        return np.zeros((0, 6)), [], {}, []
     # Initialize a route points generator with the provided routes and sidewalk width
     proportional_spawn_gen = RoutePointsGenerator(routes, config.sidewalk_width)
     total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)

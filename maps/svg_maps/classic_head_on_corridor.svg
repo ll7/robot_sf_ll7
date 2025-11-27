@@ -1,24 +1,133 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Classical Interaction Map: Head-On Corridor Passing -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="32"
-    height="40" viewBox="0 0 32 40">
-    <g id="obstacles" inkscape:label="Obstacles">
-        <rect x="0" y="0" width="32" height="2" fill="#000" inkscape:label="obstacle" />
-        <rect x="0" y="38" width="32" height="2" fill="#000" inkscape:label="obstacle" />
-        <!-- Narrow corridor side walls (scaled) -->
-        <rect x="0" y="2" width="2" height="36" fill="#000" inkscape:label="obstacle" />
-        <rect x="30" y="2" width="2" height="36" fill="#000" inkscape:label="obstacle" />
-    </g>
-    <g id="robot" inkscape:label="Robot">
-        <rect x="4" y="6" width="4" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" />
-        <rect x="24" y="30" width="4" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" />
-    </g>
-    <g id="pedestrians" inkscape:label="Pedestrians">
-        <rect x="4" y="30" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" />
-        <rect x="24" y="6" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" />
-    </g>
-    <g id="routes" inkscape:label="Routes">
-        <path d="M 6 8 L 26 32" stroke="#0300d5" stroke-width="1" fill="none" inkscape:label="robot_route_0_0" />
-        <path d="M 6 32 L 26 8" stroke="#c40202" stroke-width="1" fill="none" inkscape:label="ped_route_0_0" />
-    </g>
+
+<svg
+   width="32"
+   height="40"
+   viewBox="0 0 32 40"
+   version="1.1"
+   id="svg9"
+   sodipodi:docname="classic_head_on_corridor.svg"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs9" />
+  <sodipodi:namedview
+     id="namedview9"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="28.588929"
+     inkscape:cx="10.703444"
+     inkscape:cy="20.112681"
+     inkscape:window-width="3440"
+     inkscape:window-height="1353"
+     inkscape:window-x="0"
+     inkscape:window-y="31"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg9" />
+  <g
+     id="obstacles"
+     inkscape:label="Obstacles">
+    <rect
+       x="0"
+       y="0"
+       width="32"
+       height="2"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect1" />
+    <rect
+       x="0"
+       y="38"
+       width="32"
+       height="2"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect2" />
+    <!-- Narrow corridor side walls (scaled) -->
+    <rect
+       x="0"
+       y="2"
+       width="2"
+       height="36"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect3" />
+    <rect
+       x="30"
+       y="2"
+       width="2"
+       height="36"
+       fill="#000"
+       inkscape:label="obstacle"
+       id="rect4" />
+  </g>
+  <g
+     id="robot"
+     inkscape:label="Robot">
+    <rect
+       x="12.324901"
+       y="2.8169494"
+       width="4"
+       height="4"
+       fill="#ffd800"
+       inkscape:label="robot_spawn_zone"
+       id="rect5" />
+    <rect
+       x="17.109221"
+       y="33.043137"
+       width="4"
+       height="4"
+       fill="#ff7f2a"
+       inkscape:label="robot_goal_zone"
+       id="rect6" />
+  </g>
+  <g
+     id="pedestrians"
+     inkscape:label="Pedestrians">
+    <rect
+       x="11.8352"
+       y="33.008156"
+       width="4"
+       height="4"
+       fill="#23ff00"
+       inkscape:label="ped_spawn_zone"
+       id="rect7" />
+    <rect
+       x="17.249134"
+       y="2.9218853"
+       width="4"
+       height="4"
+       fill="#107400"
+       inkscape:label="ped_goal_zone"
+       id="rect8" />
+  </g>
+  <g
+     id="routes"
+     inkscape:label="Routes">
+    <path
+       d="M 14.254944,8.2798287 19.179178,31.825107"
+       stroke="#0300d5"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="robot_route_0_0"
+       id="path8"
+       sodipodi:nodetypes="cc" />
+    <path
+       d="M 13.870179,31.965021 19.389049,8.6645927"
+       stroke="#c40202"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="ped_route_0_0"
+       id="path9"
+       sodipodi:nodetypes="cc" />
+  </g>
 </svg>

@@ -51,14 +51,26 @@ def _load_training_run(run_id: str) -> dict[str, Any]:
                     manifest_path = alt_manifest
                     logger.warning("Canonical manifest missing; using {}", manifest_path)
                 else:
-                    available = sorted(
-                        {p.name for p in base_runs_dir.glob("*.json")}
-                        | {p.name for p in artifact_root.glob("**/ppo_imitation/runs/*.json")}
+                    all_manifests = sorted(
+                        artifact_root.glob("**/ppo_imitation/runs/*.json"),
+                        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                        reverse=True,
                     )
-                    raise FileNotFoundError(
-                        f"Training run manifest not found: {manifest_path}. "
-                        f"Available run_ids: {available}"
-                    )
+                    if all_manifests:
+                        manifest_path = all_manifests[0]
+                        logger.warning(
+                            "Canonical manifest missing; using newest available run {}",
+                            manifest_path.name,
+                        )
+                    else:
+                        available = sorted(
+                            {p.name for p in base_runs_dir.glob("*.json")}
+                            | {p.name for p in artifact_root.glob("**/ppo_imitation/runs/*.json")}
+                        )
+                        raise FileNotFoundError(
+                            f"Training run manifest not found: {manifest_path}. "
+                            f"Available run_ids: {available}"
+                        )
 
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 

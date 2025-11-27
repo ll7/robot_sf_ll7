@@ -36,3 +36,16 @@ def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkey
     loaded = ctr._load_training_run("runB")
     assert loaded["run_id"] == "runB"
     assert loaded["metrics"]["bar"]["mean"] == 2
+
+
+def test_load_training_run_falls_back_to_newest_when_missing(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
+    runs_dir = tmp_path / "benchmarks" / "ppo_imitation" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    manifest = runs_dir / "other_run.json"
+    manifest.write_text(
+        json.dumps({"run_id": "other_run", "metrics": {"baz": {"mean": 3}}}), encoding="utf-8"
+    )
+
+    loaded = ctr._load_training_run("nonexistent_run")
+    assert loaded["run_id"] == "other_run"

@@ -26,7 +26,7 @@ def test_load_training_run_falls_back_to_prefixed_manifest(tmp_path: Path, monke
 
 def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
-    nested = tmp_path / "benchmarks" / "ts123" / "ppo_imitation" / "runs"
+    nested = tmp_path / "benchmarks" / "ts123" / "benchmarks" / "ppo_imitation" / "runs"
     nested.mkdir(parents=True, exist_ok=True)
     manifest = nested / "runB.json"
     manifest.write_text(

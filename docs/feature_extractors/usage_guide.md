@@ -161,6 +161,23 @@ analysis.
   - Learning curves and reward distributions under `<run>/extractors/<name>/figures/`.
   - Legacy `complete_results.json` for downstream scripts.
 
+### Research Report Generation
+Convert a completed multi-extractor run into a research-ready report:
+
+```bash
+uv run python scripts/research/generate_extractor_report.py \
+  --summary tmp/multi_extractor_training/<timestamp-run-id>/summary.json \
+  --experiment-name imitation-study \
+  --hypothesis "Pretraining improves reward" \
+  --export-latex
+```
+
+Outputs under `output/research_reports/<experiment-name>_<run-id>/`:
+- `report.md` (+ optional `report.tex`)
+- `figures/` (final performance, sample efficiency)
+- `data/summary.json`
+- `metadata.json` with git/hardware/package info
+
 ### 2. Custom Comparison
 
 ```python

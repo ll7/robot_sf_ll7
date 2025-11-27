@@ -22,3 +22,17 @@ def test_load_training_run_falls_back_to_prefixed_manifest(tmp_path: Path, monke
     loaded = ctr._load_training_run("runA")
     assert loaded["run_id"] == "runA"
     assert loaded["metrics"]["foo"]["mean"] == 1
+
+
+def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
+    nested = tmp_path / "benchmarks" / "ts123" / "ppo_imitation" / "runs"
+    nested.mkdir(parents=True, exist_ok=True)
+    manifest = nested / "runB.json"
+    manifest.write_text(
+        json.dumps({"run_id": "runB", "metrics": {"bar": {"mean": 2}}}), encoding="utf-8"
+    )
+
+    loaded = ctr._load_training_run("runB")
+    assert loaded["run_id"] == "runB"
+    assert loaded["metrics"]["bar"]["mean"] == 2

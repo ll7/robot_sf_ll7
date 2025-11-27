@@ -112,7 +112,10 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
         return getattr(item, key, None)
 
     success_count = sum(1 for v in video_artifacts if _get(v, "status") == "success")
-    status_note = None
+    fallback_present = any(
+        "fallback-from-sim-view" in str(_get(v, "note") or "") for v in video_artifacts
+    )
+    status_note = "fallback-from-sim-view" if fallback_present else None
     if video_artifacts and success_count == 0:
         notes = sorted({_get(v, "note") for v in video_artifacts if _get(v, "note") is not None})
         statuses = sorted({_get(v, "status") for v in video_artifacts if _get(v, "status")})
@@ -121,7 +124,8 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
             parts.append(f"statuses={','.join(str(s) for s in statuses)}")
         if notes:
             parts.append(f"notes={','.join(str(n) for n in notes)}")
-        status_note = ";".join(parts)
+        failure_note = ";".join(parts)
+        status_note = ";".join([p for p in (status_note, failure_note) if p])
     return success_count, status_note
 
 
@@ -318,6 +322,16 @@ def _build_video_artifacts(
         """
         sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if sim_attempt:
+            has_success = any(v.status == "success" for v in sim_attempt)
+            if has_success:
+                return sim_attempt
+            synthetic_attempt = _synthetic_fallback_videos(records, videos_dir, cfg)
+            if synthetic_attempt:
+                for v in synthetic_attempt:
+                    note = getattr(v, "note", None)
+                    fallback_note = "fallback-from-sim-view"
+                    v.note = fallback_note if note is None else f"{note};{fallback_note}"
+                return synthetic_attempt
             return sim_attempt
         synthetic_attempt = _synthetic_fallback_videos(records, videos_dir, cfg)
         if synthetic_attempt:

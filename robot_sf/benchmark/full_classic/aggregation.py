@@ -187,7 +187,8 @@ def _aggregate_single_metric(
     bootstrap_samples: int,
     conf: float,
 ) -> AggregateMetric:
-    non_finite = sum(1 for v in values if not math.isfinite(v))
+    finite_values = [v for v in values if math.isfinite(v)]
+    non_finite = len(values) - len(finite_values)
     if non_finite:
         logger.bind(
             event="aggregation_non_finite_metric",
@@ -195,10 +196,11 @@ def _aggregate_single_metric(
             density=dens,
             metric=metric_name,
         ).warning(
-            "Encountered {} non-finite values while aggregating metric; aggregated stats may be NaN.",
+            "Dropped {} non-finite metric values; computing stats from {} finite samples.",
             non_finite,
+            len(finite_values),
         )
-    sorted_vals = sorted(values)
+    sorted_vals = sorted(finite_values)
     m_mean = mean(sorted_vals) if sorted_vals else math.nan
     m_median = median(sorted_vals) if sorted_vals else math.nan
     m_p95 = _percentile(sorted_vals, 95.0) if sorted_vals else math.nan

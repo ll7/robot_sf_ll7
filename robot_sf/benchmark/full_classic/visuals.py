@@ -31,6 +31,7 @@ from .replay import extract_replay_episodes, validate_replay_episode
 from .validation import validate_visual_manifests
 from .visual_constants import (
     NOTE_DISABLED,
+    NOTE_FALLBACK_FROM_SIM_VIEW,
     NOTE_INSUFFICIENT_REPLAY,
     NOTE_MOVIEPY_MISSING,
     NOTE_SIM_VIEW_MISSING,
@@ -113,9 +114,9 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
 
     success_count = sum(1 for v in video_artifacts if _get(v, "status") == "success")
     fallback_present = any(
-        "fallback-from-sim-view" in str(_get(v, "note") or "") for v in video_artifacts
+        NOTE_FALLBACK_FROM_SIM_VIEW in str(_get(v, "note") or "") for v in video_artifacts
     )
-    status_note = "fallback-from-sim-view" if fallback_present else None
+    status_note = NOTE_FALLBACK_FROM_SIM_VIEW if fallback_present else None
     if video_artifacts and success_count == 0:
         notes = sorted({_get(v, "note") for v in video_artifacts if _get(v, "note") is not None})
         statuses = sorted({_get(v, "status") for v in video_artifacts if _get(v, "status")})
@@ -329,7 +330,7 @@ def _build_video_artifacts(
             if synthetic_attempt:
                 for v in synthetic_attempt:
                     note = getattr(v, "note", None)
-                    fallback_note = "fallback-from-sim-view"
+                    fallback_note = NOTE_FALLBACK_FROM_SIM_VIEW
                     v.note = fallback_note if note is None else f"{note};{fallback_note}"
                 return synthetic_attempt
             return sim_attempt

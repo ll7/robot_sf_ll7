@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from robot_sf.benchmark.full_classic import visuals as visuals_mod
 from robot_sf.benchmark.full_classic.visuals import (
+    NOTE_FALLBACK_FROM_SIM_VIEW,
     RENDERER_SIM_VIEW,
     RENDERER_SYNTHETIC,
     VideoArtifact,
@@ -71,7 +72,7 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
     artifact = videos[0]
     assert artifact.renderer == RENDERER_SYNTHETIC
     assert artifact.status == "success"
-    assert artifact.note and "fallback-from-sim-view" in artifact.note
+    assert artifact.note and NOTE_FALLBACK_FROM_SIM_VIEW in artifact.note
 
     perf = out["performance"]
-    assert perf["video_status_note"] == "fallback-from-sim-view"
+    assert perf["video_status_note"] == NOTE_FALLBACK_FROM_SIM_VIEW

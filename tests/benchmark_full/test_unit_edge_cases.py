@@ -101,3 +101,29 @@ def test_nan_metric_samples_are_filtered():
     assert path_eff.p95 == 0.5
     assert path_eff.mean_ci == (0.5, 0.5)
     assert path_eff.median_ci == (0.5, 0.5)
+
+
+def test_all_nan_metric_samples_produces_nan_stats():
+    """Aggregation with only non-finite samples should result in NaN stats."""
+    records = [
+        {
+            "episode_id": "ep_nan",
+            "archetype": "crossing",
+            "density": "low",
+            "metrics": {"path_efficiency": float("nan")},
+        },
+        {
+            "episode_id": "ep_inf",
+            "archetype": "crossing",
+            "density": "low",
+            "metrics": {"path_efficiency": float("inf")},
+        },
+    ]
+    groups = aggregate_metrics(records, _Cfg())
+    assert groups
+    path_eff = groups[0].metrics["path_efficiency"]
+    assert math.isnan(path_eff.mean)
+    assert math.isnan(path_eff.median)
+    assert math.isnan(path_eff.p95)
+    assert all(math.isnan(v) for v in path_eff.mean_ci)
+    assert all(math.isnan(v) for v in path_eff.median_ci)

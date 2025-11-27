@@ -129,6 +129,17 @@ If these two values plus `master_seed` and the scenario matrix file content are 
 - Performance meta (`performance_visuals.json`) records encode timings and budget flags (plots
   <2s, first video encode <5s, memory <100MB).
 
+## Quickstart & Reference
+- Primary quickstart: `specs/122-full-classic-interaction/quickstart.md` (commands, flags, smoke/full guidance).
+- Script entrypoint: `scripts/classic_benchmark_full.py` (or `examples/benchmarks/demo_full_classic_benchmark.py` for a guided example).
+- Aggregation/effect-size design: `specs/122-full-classic-interaction/data-model.md`.
+
+## Targeted Tests
+- Aggregation contract: `uv run pytest tests/benchmark_full/test_contract_aggregate_metrics.py`
+- Effect sizes contract: `uv run pytest tests/benchmark_full/test_contract_effect_sizes.py`
+- Aggregation edge cases & NaN handling: `uv run pytest tests/benchmark_full/test_unit_edge_cases.py`
+- Aggregation → effect sizes integration: `uv run pytest tests/benchmark_full/test_integration_aggregate_effect_sizes.py`
+
 ## Extensibility Roadmap
 | Area | Next Step |
 |------|-----------|

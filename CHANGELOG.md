@@ -68,7 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved benchmark and plotting scripts into dedicated `examples/benchmarks/` and `examples/plotting/` tiers
   - Regenerated manifest-backed `examples/README.md` and refreshed docs (`README.md`, `docs/README.md`, `docs/benchmark*.md`, `docs/distribution_plots.md`) to reference new paths
   - Updated `examples/examples_manifest.yaml` metadata (tags, CI flags, summaries) and added quick links from docs
-- Imitation pipeline example now auto-selects simulator backends and generates run-specific BC/PPO configs under `output/tmp/imitation_pipeline/` to keep CLI invocations aligned with script requirements
+  - Imitation pipeline example now auto-selects simulator backends and generates run-specific BC/PPO configs under `output/tmp/imitation_pipeline/` to keep CLI invocations aligned with script requirements
+- Visualization stack ownership clarified: the Full Classic pipeline (`robot_sf.benchmark.full_classic.visuals.generate_visual_artifacts`) is now the canonical path that emits manifest-backed plot/video artifacts; the legacy helper API (`robot_sf.benchmark.visualization.*`) is deprecated for benchmark runs and retained only for ad-hoc JSONL plotting.
 
 ### Documentation
 - Reorganized documentation index with categorized sections (#242)

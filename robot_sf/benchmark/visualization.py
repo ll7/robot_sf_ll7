@@ -1,7 +1,11 @@
-"""Visualization helpers moved from examples/classic_interactions_pygame.py.
+"""Legacy visualization helpers moved from examples/classic_interactions_pygame.py.
 
-This module contains small, well-documented helpers intended to be
-pure and testable. Heavy optional dependencies must be lazily imported.
+This module is kept for backward compatibility with pre–Full Classic flows that
+directly called ``generate_benchmark_plots/videos``. The canonical benchmark
+visualization pipeline now lives in ``robot_sf.benchmark.full_classic.visuals``
+and is invoked by ``run_full_benchmark`` to produce manifest files. Prefer that
+pipeline for new work; this module does not emit manifests and will be retired
+once downstream consumers migrate.
 """
 
 from __future__ import annotations

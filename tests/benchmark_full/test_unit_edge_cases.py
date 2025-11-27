@@ -10,6 +10,8 @@ These are focused fast tests using the existing aggregation & effects modules.
 
 from __future__ import annotations
 
+import math
+
 from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
 from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
@@ -72,3 +74,30 @@ def test_glass_delta_zero_when_ci_missing():
     for e in entries:
         assert e.diff == 0.0
         assert e.standardized == 0.0
+
+
+def test_nan_metric_samples_are_filtered():
+    """Aggregation drops non-finite samples so empty trajectories do not poison stats."""
+    records = [
+        {
+            "episode_id": "ep_nan",
+            "archetype": "crossing",
+            "density": "low",
+            "metrics": {"path_efficiency": float("nan"), "avg_speed": 1.0},
+        },
+        {
+            "episode_id": "ep_ok",
+            "archetype": "crossing",
+            "density": "low",
+            "metrics": {"path_efficiency": 0.5, "avg_speed": 1.2},
+        },
+    ]
+    groups = aggregate_metrics(records, _Cfg())
+    assert groups, "Expected aggregate group to be created"
+    path_eff = groups[0].metrics["path_efficiency"]
+    assert math.isfinite(path_eff.mean)
+    assert path_eff.mean == 0.5
+    assert path_eff.median == 0.5
+    assert path_eff.p95 == 0.5
+    assert path_eff.mean_ci == (0.5, 0.5)
+    assert path_eff.median_ci == (0.5, 0.5)

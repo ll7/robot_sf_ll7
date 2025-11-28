@@ -160,17 +160,20 @@ def _build_record(
     )
 
 
-def _generate_figures(
-    *,
-    baseline_metrics: dict[str, float],
-    pretrained_metrics: dict[str, float],
-    output_dir: Path,
-) -> dict[str, Path]:
-    """Generate comparison figures (timesteps + performance bars) for the analysis."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    paths: dict[str, Path] = {}
+def _metric_samples(manifest: dict[str, Any], key: str) -> list[float]:
+    """Return a list of float samples for a metric, if available."""
 
-    # Timesteps comparison
+    metrics = manifest.get("metrics") or {}
+    samples = metrics.get(f"{key}_samples") or metrics.get(key)
+    if isinstance(samples, list):
+        return [float(v) for v in samples if isinstance(v, (int, float))]
+    return []
+
+
+def _plot_timesteps_bar(
+    baseline_metrics: dict[str, Any], pretrained_metrics: dict[str, Any], out: Path
+) -> Path:
+    """Plot a simple bar chart comparing timesteps to convergence."""
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.bar(
         ["baseline", "pretrained"],
@@ -183,12 +186,15 @@ def _generate_figures(
     ax.set_ylabel("Timesteps to convergence")
     ax.set_title("Convergence comparison")
     plt.tight_layout()
-    path = output_dir / "timesteps_comparison.png"
-    fig.savefig(path, dpi=150)
+    fig.savefig(out, dpi=150)
     plt.close(fig)
-    paths["timesteps_comparison"] = path
+    return out
 
-    # Performance metrics
+
+def _plot_performance_bars(
+    baseline_metrics: dict[str, Any], pretrained_metrics: dict[str, Any], out: Path
+) -> Path:
+    """Plot success, collision, and SNQI bars for baseline vs pretrained."""
     fig, ax = plt.subplots(figsize=(6, 4))
     metrics = ["success_rate", "collision_rate", "snqi"]
     baseline_vals = [baseline_metrics.get(m, 0.0) for m in metrics]
@@ -202,10 +208,130 @@ def _generate_figures(
     ax.set_title("Performance metrics")
     ax.legend()
     plt.tight_layout()
-    perf_path = output_dir / "performance_metrics.png"
-    fig.savefig(perf_path, dpi=150)
+    fig.savefig(out, dpi=150)
     plt.close(fig)
-    paths["performance_metrics"] = perf_path
+    return out
+
+
+def _plot_learning_curve(
+    base_samples: list[float], pre_samples: list[float], out: Path
+) -> Path | None:
+    """Plot a line-based learning curve from timesteps samples."""
+    if not base_samples and not pre_samples:
+        return None
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if base_samples:
+        ax.plot(range(len(base_samples)), base_samples, marker="o", label="baseline")
+    if pre_samples:
+        ax.plot(range(len(pre_samples)), pre_samples, marker="o", label="pretrained")
+    ax.set_xlabel("Sample index")
+    ax.set_ylabel("Timesteps to convergence")
+    ax.set_title("Learning curve (timesteps samples)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
+def _plot_success_collision_over_time(
+    success_base: list[float],
+    success_pre: list[float],
+    coll_base: list[float],
+    coll_pre: list[float],
+    out: Path,
+) -> Path | None:
+    """Plot success and collision rates across samples for both runs."""
+    if not (success_base or success_pre or coll_base or coll_pre):
+        return None
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if success_base:
+        ax.plot(range(len(success_base)), success_base, label="baseline success", marker="o")
+    if success_pre:
+        ax.plot(range(len(success_pre)), success_pre, label="pretrained success", marker="o")
+    if coll_base:
+        ax.plot(range(len(coll_base)), coll_base, label="baseline collisions", marker="x")
+    if coll_pre:
+        ax.plot(range(len(coll_pre)), coll_pre, label="pretrained collisions", marker="x")
+    ax.set_xlabel("Sample index")
+    ax.set_ylabel("Rate")
+    ax.set_title("Success/Collision rates over samples")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
+def _plot_snqi_distribution(
+    snqi_base: list[float], snqi_pre: list[float], out: Path
+) -> Path | None:
+    """Plot histograms of SNQI distributions for baseline and pretrained runs."""
+    if not (snqi_base or snqi_pre):
+        return None
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if snqi_base:
+        ax.hist(snqi_base, bins=min(20, max(5, len(snqi_base))), alpha=0.6, label="baseline")
+    if snqi_pre:
+        ax.hist(snqi_pre, bins=min(20, max(5, len(snqi_pre))), alpha=0.6, label="pretrained")
+    ax.set_xlabel("SNQI")
+    ax.set_ylabel("Frequency")
+    ax.set_title("Performance distribution (SNQI)")
+    ax.legend()
+    plt.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    return out
+
+
+def _generate_figures(
+    *,
+    baseline_metrics: dict[str, Any],
+    pretrained_metrics: dict[str, Any],
+    output_dir: Path,
+) -> dict[str, Path]:
+    """Generate comparison figures (timesteps, performance, distributions) for the analysis."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths: dict[str, Path] = {}
+
+    paths["timesteps_comparison"] = _plot_timesteps_bar(
+        baseline_metrics, pretrained_metrics, output_dir / "timesteps_comparison.png"
+    )
+    paths["performance_metrics"] = _plot_performance_bars(
+        baseline_metrics, pretrained_metrics, output_dir / "performance_metrics.png"
+    )
+
+    lc_path = _plot_learning_curve(
+        baseline_metrics.get("timesteps_samples") or [],
+        pretrained_metrics.get("timesteps_samples") or [],
+        output_dir / "learning_curve.png",
+    )
+    if lc_path:
+        paths["learning_curve"] = lc_path
+
+    paths["sample_efficiency"] = _plot_timesteps_bar(
+        baseline_metrics, pretrained_metrics, output_dir / "sample_efficiency.png"
+    )
+
+    sc_path = _plot_success_collision_over_time(
+        baseline_metrics.get("success_rate_samples") or [],
+        pretrained_metrics.get("success_rate_samples") or [],
+        baseline_metrics.get("collision_rate_samples") or [],
+        pretrained_metrics.get("collision_rate_samples") or [],
+        output_dir / "success_collision_over_time.png",
+    )
+    if sc_path:
+        paths["success_collision_over_time"] = sc_path
+
+    dist_path = _plot_snqi_distribution(
+        baseline_metrics.get("snqi_samples") or [],
+        pretrained_metrics.get("snqi_samples") or [],
+        output_dir / "performance_distribution.png",
+    )
+    if dist_path:
+        paths["performance_distribution"] = dist_path
 
     return paths
 
@@ -223,15 +349,23 @@ def analyze_imitation_results(
 
     baseline_metrics = {
         "timesteps_to_convergence": _metric_mean(baseline_manifest, "timesteps_to_convergence"),
+        "timesteps_samples": _metric_samples(baseline_manifest, "timesteps_to_convergence"),
         "success_rate": _metric_mean(baseline_manifest, "success_rate"),
+        "success_rate_samples": _metric_samples(baseline_manifest, "success_rate"),
         "collision_rate": _metric_mean(baseline_manifest, "collision_rate"),
+        "collision_rate_samples": _metric_samples(baseline_manifest, "collision_rate"),
         "snqi": _metric_mean(baseline_manifest, "snqi"),
+        "snqi_samples": _metric_samples(baseline_manifest, "snqi"),
     }
     pretrained_metrics = {
         "timesteps_to_convergence": _metric_mean(pretrained_manifest, "timesteps_to_convergence"),
+        "timesteps_samples": _metric_samples(pretrained_manifest, "timesteps_to_convergence"),
         "success_rate": _metric_mean(pretrained_manifest, "success_rate"),
+        "success_rate_samples": _metric_samples(pretrained_manifest, "success_rate"),
         "collision_rate": _metric_mean(pretrained_manifest, "collision_rate"),
+        "collision_rate_samples": _metric_samples(pretrained_manifest, "collision_rate"),
         "snqi": _metric_mean(pretrained_manifest, "snqi"),
+        "snqi_samples": _metric_samples(pretrained_manifest, "snqi"),
     }
 
     if not output_dir:

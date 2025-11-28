@@ -12,8 +12,10 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from robot_sf.research.figures import configure_matplotlib_backend
 from robot_sf.research.metadata import collect_reproducibility_metadata
@@ -260,7 +262,7 @@ def generate_extractor_report(
     output_root: Path,
     config: ReportConfig,
     config_path: Path | None = None,
-) -> dict[str, Path]:
+) -> dict[str, Path | None]:
     summary = _load_summary(summary_path)
     run_id = summary.get("run_id", "unknown")
     output_dir = output_root / f"{config.experiment_name}_{run_id}"
@@ -344,5 +346,5 @@ def generate_extractor_report(
         "metadata": metadata_path,
         "figures_dir": figures_dir,
         "data_dir": data_dir,
-        "latex": latex_path if latex_path else Path(),
+        "latex": latex_path,
     }

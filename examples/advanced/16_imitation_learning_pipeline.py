@@ -272,6 +272,12 @@ def _run_manifest_dir() -> Path:
     return get_training_run_manifest_path("placeholder").parent
 
 
+def _training_manifest_exists(run_id: str) -> bool:
+    """Return True when a canonical manifest is present for run_id."""
+
+    return get_training_run_manifest_path(run_id).exists()
+
+
 def _discover_latest_training_run_id(prefix: str) -> str | None:
     """Return the newest training run identifier with the given prefix."""
 
@@ -648,7 +654,8 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
 
     bc_policy_id = f"bc_{expert_policy_id}"
     finetuned_policy_id = f"finetuned_{expert_policy_id}"
-    pretrained_run_id = f"ppo_finetune_{finetuned_policy_id}"
+    pretrained_run_id_hint = f"ppo_finetune_{finetuned_policy_id}"
+    pretrained_run_id: str | None = None
 
     logger.info(f"Expert policy ID: {expert_policy_id}")
     logger.info(f"Dataset ID: {dataset_id}")
@@ -798,6 +805,13 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             )
             if exit_code != 0:
                 return fail_and_return("ppo_finetune", exit_code)
+            pretrained_run_id = _discover_latest_training_run_id(pretrained_run_id_hint)
+            if not pretrained_run_id and _training_manifest_exists(pretrained_run_id_hint):
+                pretrained_run_id = pretrained_run_id_hint
+        else:
+            pretrained_run_id = _discover_latest_training_run_id(pretrained_run_id_hint)
+            if not pretrained_run_id and _training_manifest_exists(pretrained_run_id_hint):
+                pretrained_run_id = pretrained_run_id_hint
 
         # Step 5: Generate comparison (optional - script may not exist yet)
         if "compare_runs" in tracked_step_ids:
@@ -811,13 +825,15 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                     logger.warning(
                         "Baseline training run id unavailable; skipping automatic comparison. Run scripts/tools/compare_training_runs.py manually."
                     )
+                elif not pretrained_run_id:
+                    logger.warning(
+                        "Pretrained training run id unavailable; skipping automatic comparison. "
+                        "Verify PPO fine-tuning completed successfully."
+                    )
                 else:
                     comparison_group_id = (
                         f"{expert_policy_id}_vs_{finetuned_policy_id}_"
                         f"{datetime.now(UTC).strftime('%Y%m%d%H%M')}"
-                    )
-                    effective_pretrained_run_id = (
-                        pretrained_run_id or f"ppo_finetune_{finetuned_policy_id}"
                     )
                     cmd = [
                         "uv",
@@ -829,7 +845,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                         "--baseline",
                         baseline_run_id,
                         "--pretrained",
-                        effective_pretrained_run_id,
+                        pretrained_run_id,
                     ]
                     exit_code = _run_tracked_step(
                         tracker_context,
@@ -840,7 +856,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                     if exit_code != 0:
                         return fail_and_return("compare_runs", exit_code)
                     comparison_summary = _build_comparison_summary(
-                        comparison_group_id, baseline_run_id, effective_pretrained_run_id
+                        comparison_group_id, baseline_run_id, pretrained_run_id
                     )
             else:
                 logger.warning(f"Comparison script not found: {comparison_script}")

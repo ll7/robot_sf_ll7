@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
-from scipy.stats import t
+from scipy.stats import mannwhitneyu, t
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -184,6 +184,7 @@ def _render_markdown(
         [
             "",
             "## Statistical Test (timesteps to convergence)",
+            f"- Test: {stats.get('test', 'unknown')}",
             f"- p-value: {_fmt_stat(stats['p_value'])}",
             f"- Cohen's d: {_fmt_stat(stats['effect_size'])}",
             f"- Significance: {stats['significance']}",
@@ -285,6 +286,7 @@ def _render_latex(
         [
             r"\end{tabular}",
             r"\section*{Statistical Test (timesteps to convergence)}",
+            rf"Test: {_latex_escape(str(stats.get('test', 'unknown')))}\\",
             p_line,
             d_line,
             sig_line,
@@ -396,8 +398,16 @@ def generate_imitation_report(
         }
         effect = None
     stats = format_test_results(t_res, effect, alpha=config.alpha)
+    stats["test"] = "paired_t_test" if t_res.get("p_value") is not None else "unknown"
     stats["baseline_ci"] = baseline_ci
     stats["pretrained_ci"] = pretrained_ci
+
+    # Fallback to Mann-Whitney when paired test is unavailable but we have samples
+    if stats["test"] == "unknown" and baseline_samples and pretrained_samples:
+        mw = mannwhitneyu(baseline_samples, pretrained_samples, alternative="two-sided")
+        stats["p_value"] = float(mw.pvalue)
+        stats["t_stat"] = None
+        stats["test"] = "mannwhitneyu"
 
     improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts else [])
     improvement_pretrained = pretrained_samples or ([pretrained_ts] if pretrained_ts else [])

@@ -317,7 +317,7 @@ def generate_imitation_report(
 
     metadata = collect_reproducibility_metadata(
         seeds=[],
-        config_paths={k: str(v) for k, v in (config.config_paths or {}).items()},
+        config_paths=config.config_paths,
     )
     metadata_path = output_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata.to_dict(), indent=2), encoding="utf-8")

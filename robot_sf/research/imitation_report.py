@@ -151,20 +151,30 @@ def _render_markdown(
     run_id = summary.get("run_id", "unknown")
     baseline_id = baseline.get("config_name", "baseline")
     pretrained_id = pretrained.get("config_name", "pretrained")
+    sample_ratio = _metric(pretrained, "sample_efficiency_ratio")
+    abstract_note = (
+        f"Pre-training achieved a sample efficiency ratio of {sample_ratio:.2f}, "
+        f"reducing timesteps relative to `{baseline_id}`."
+        if sample_ratio
+        else "Pre-training comparison completed; see detailed results below."
+    )
     lines = [
         f"# {config.experiment_name} Report",
         "",
+        "## Abstract",
+        abstract_note,
+        "",
+        "## Experimental Setup",
         f"- Run ID: `{run_id}`",
         f"- Generated: {_timestamp()}",
-        f"- Baseline: `{baseline_id}`",
-        f"- Pre-trained: `{pretrained_id}`",
-        f"- Ablation: {config.ablation_label or 'N/A'}",
-        f"- Num seeds: {config.num_seeds or 'N/A'}",
-        f"- Hypothesis: {config.hypothesis or 'N/A'}",
-        f"- Significance level: {config.alpha}",
-        f"- Metadata: `{metadata_path.name}`",
+        f"- Environment: see configs (`{metadata_path.name}` → `configs/`)",
+        f"- Baseline: `{baseline_id}` (PPO from scratch)",
+        f"- Treatment: `{pretrained_id}` (BC pre-training + PPO fine-tuning)",
+        "- Metrics: timesteps to convergence, success rate, collision rate, SNQI",
+        f"- Seeds: {', '.join(str(s) for s in seeds)}" if seeds else "- Seeds: N/A",
         "",
-        "## Metric Comparison",
+        "## Results",
+        "### Sample Efficiency",
         "| Metric | Baseline | Pre-trained | Delta |",
         "| --- | --- | --- | --- |",
     ]
@@ -184,32 +194,39 @@ def _render_markdown(
     lines.extend(
         [
             "",
-            "## Statistical Test (timesteps to convergence)",
+            "### Final Performance",
+            "See table above for success/collision/SNQI; refer to figures for visual trends.",
+            "",
+            "### Statistical Analysis",
             f"- Test: {stats.get('test', 'unknown')}",
             f"- p-value: {_fmt_stat(stats['p_value'])}",
             f"- Cohen's d: {_fmt_stat(stats['effect_size'])}",
             f"- Significance: {stats['significance']}",
             f"- Interpretation: {stats['interpretation']}",
-            f"- Baseline timesteps CI (95%): "
-            f"{_fmt_ci(stats.get('baseline_ci')) if stats.get('baseline_ci') is not None else 'n/a (need ≥2 samples)'}",
-            f"- Pre-trained timesteps CI (95%): "
-            f"{_fmt_ci(stats.get('pretrained_ci')) if stats.get('pretrained_ci') is not None else 'n/a (need ≥2 samples)'}",
+            f"- Baseline timesteps CI (95%): {_fmt_ci(stats.get('baseline_ci'))}",
+            f"- Pre-trained timesteps CI (95%): {_fmt_ci(stats.get('pretrained_ci'))}",
             "",
-            "## Hypothesis Evaluation",
-            f"- Decision: {hypothesis_result.get('decision')}",
-            (
-                f"- Improvement: {hypothesis_result.get('measured_value'):.2f}% "
-                f"(threshold ≥ {config.improvement_threshold_pct}%)"
-            )
-            if hypothesis_result.get("measured_value") is not None
-            else "- Improvement: (insufficient data for improvement calculation)",
-            f"- Note: {hypothesis_result.get('note', '')}",
-            "",
-            "## Figures",
+            "### Figures",
         ]
     )
     for label, path in figures.items():
         lines.append(f"![{label}]({path.name})")
+    lines.append("")
+    lines.append("## Conclusion")
+    if (
+        hypothesis_result
+        and (decision := hypothesis_result.get("decision"))
+        and (note := hypothesis_result.get("note"))
+    ):
+        if decision == "PASS":
+            conclusion_text = f"The primary hypothesis was **supported**. {note}."
+        elif decision == "FAIL":
+            conclusion_text = f"The primary hypothesis was **not supported**. {note}."
+        else:  # INCOMPLETE
+            conclusion_text = f"The hypothesis evaluation was **incomplete**: {note}."
+        lines.append(conclusion_text)
+    else:
+        lines.append("Conclusion unavailable.")
     lines.append("")
     lines.append("## Reproducibility")
     lines.append(f"- Metadata: `{metadata_path.name}` (git, hardware, packages, configs)")

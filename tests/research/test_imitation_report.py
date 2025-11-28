@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from typing import TYPE_CHECKING
 
@@ -76,8 +77,11 @@ def test_generate_imitation_report(tmp_path: Path):
 
     fig_dir = summary_path.parent / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
-    (fig_dir / "timesteps_comparison.png").write_bytes(b"png")
-    (fig_dir / "performance_metrics.png").write_bytes(b"png")
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    )
+    (fig_dir / "timesteps_comparison.png").write_bytes(png_bytes)
+    (fig_dir / "performance_metrics.png").write_bytes(png_bytes)
 
     cfg = ImitationReportConfig(
         experiment_name="imitation-demo",

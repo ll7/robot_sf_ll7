@@ -38,11 +38,11 @@ def test_generate_figures_creates_all_expected_files(tmp_path: Path):
     )
 
     expected = {
-        "timesteps_comparison",
-        "performance_metrics",
-        "learning_curve",
-        "success_collision_over_time",
-        "performance_distribution",
+        "fig-sample-efficiency",
+        "fig-success_rate-distribution",
+        "fig-collision_rate-distribution",
+        "fig-snqi-distribution",
+        "fig-improvement-summary",
     }
     assert set(paths.keys()) == expected
     for name in expected:

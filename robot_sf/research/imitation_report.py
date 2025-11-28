@@ -159,7 +159,7 @@ def _render_markdown(
         else "Pre-training comparison completed; see detailed results below."
     )
     lines = [
-        f"# {config.experiment_name} Report",
+        "# Imitation Learning for Robot Navigation: Experimental Report",
         "",
         "## Abstract",
         abstract_note,
@@ -172,6 +172,7 @@ def _render_markdown(
         f"- Treatment: `{pretrained_id}` (BC pre-training + PPO fine-tuning)",
         "- Metrics: timesteps to convergence, success rate, collision rate, SNQI",
         f"- Seeds: {', '.join(str(s) for s in seeds)}" if seeds else "- Seeds: N/A",
+        f"- Ablation: {config.ablation_label}" if config.ablation_label else "- Ablation: N/A",
         "",
         "## Results",
         "### Sample Efficiency",
@@ -280,6 +281,7 @@ def _render_latex(
         rf"\textbf{{Baseline}}: \texttt{{{baseline_id}}}\\",
         rf"\textbf{{Pre-trained}}: \texttt{{{pretrained_id}}}\\",
         rf"\textbf{{Num seeds}}: {_latex_escape(str(config.num_seeds or 'N/A'))}\\",
+        rf"\textbf{{Ablation}}: {_latex_escape(config.ablation_label or 'N/A')}\\",
         rf"\textbf{{Hypothesis}}: {_latex_escape(config.hypothesis or 'N/A')}\\",
         rf"\textbf{{Significance level}}: {config.alpha}\\",
         rf"\textbf{{Metadata}}: \texttt{{{_latex_escape(metadata_path.name)}}}\\",
@@ -358,13 +360,19 @@ def _figure_paths(summary_path: Path) -> dict[str, Path]:
     if not fig_dir.exists():
         return {}
     figures: dict[str, Path] = {}
-    for candidate in (
+    candidates = (
         "timesteps_comparison.png",
         "performance_metrics.png",
         "learning_curve.png",
         "success_collision_over_time.png",
         "performance_distribution.png",
-    ):
+        "fig-sample-efficiency.png",
+        "fig-success_rate-distribution.png",
+        "fig-collision_rate-distribution.png",
+        "fig-snqi-distribution.png",
+        "fig-improvement-summary.png",
+    )
+    for candidate in candidates:
         path = fig_dir / candidate
         if path.exists():
             figures[path.stem] = path

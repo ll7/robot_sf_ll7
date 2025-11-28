@@ -10,10 +10,12 @@ from __future__ import annotations
 import json
 import math
 import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+import matplotlib.pyplot as plt
 from scipy.stats import t
 
 if TYPE_CHECKING:
@@ -52,6 +54,17 @@ def _load_summary(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
     return payload
+
+
+def _copy_configs(configs: dict[str, Path] | None, target_dir: Path) -> None:
+    """Copy config files into the report configs/ directory."""
+
+    if not configs:
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for cfg_path in configs.values():
+        if cfg_path and cfg_path.exists():
+            shutil.copy2(cfg_path, target_dir / cfg_path.name)
 
 
 def _select_records(
@@ -323,6 +336,30 @@ def _figure_paths(summary_path: Path) -> dict[str, Path]:
     return figures
 
 
+def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path]:
+    """Copy figure files into the report figures/ directory and render PDF copies."""
+
+    destination.mkdir(parents=True, exist_ok=True)
+    copied: dict[str, Path] = {}
+    for label, path in figures.items():
+        dest_png = destination / path.name
+        shutil.copy2(path, dest_png)
+        copied[label] = dest_png
+
+        # Create a PDF copy for archival if possible
+        try:
+            img = plt.imread(path)
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.imshow(img)
+            ax.axis("off")
+            fig.savefig(destination / f"{label}.pdf", bbox_inches="tight")
+            plt.close(fig)
+        except (OSError, ValueError):  # pragma: no cover - best effort
+            plt.close("all")
+            continue
+    return copied
+
+
 def generate_imitation_report(
     *,
     summary_path: Path,
@@ -365,11 +402,14 @@ def generate_imitation_report(
         improvement_baseline, improvement_pretrained, threshold=config.improvement_threshold_pct
     )
 
-    run_id = summary.get("run_id", "unknown")
-    output_dir = output_root / f"{config.experiment_name}_{run_id}"
+    output_dir = output_root / f"imitation_{_timestamp()}"
     data_dir = output_dir / "data"
+    configs_dir = output_dir / "configs"
+    figures_dir = output_dir / "figures"
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
+    configs_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy summary for traceability
     shutil.copy2(summary_path, data_dir / "summary.json")
@@ -380,6 +420,7 @@ def generate_imitation_report(
     )
     metadata_path = output_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata.to_dict(), indent=2), encoding="utf-8")
+    _copy_configs(config.config_paths, configs_dir)
 
     report_md = _render_markdown(
         config=config,
@@ -393,6 +434,8 @@ def generate_imitation_report(
     )
     report_path = output_dir / "report.md"
     report_path.write_text(report_md, encoding="utf-8")
+
+    _copy_figures(figures, figures_dir)
 
     latex_path: Path | None = None
     if config.export_latex:
@@ -409,10 +452,25 @@ def generate_imitation_report(
             output_path=latex_path,
         )
 
+    pdf_path: Path | None = None
+    if latex_path and shutil.which("pdflatex"):
+        try:
+            subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode", latex_path.name],
+                cwd=latex_path.parent,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            pdf_path = latex_path.with_suffix(".pdf")
+        except subprocess.CalledProcessError:  # pragma: no cover - optional
+            pdf_path = None
+
     return {
         "report": report_path,
+        "report_pdf": pdf_path,
         "metadata": metadata_path,
-        "figures_dir": summary_path.parent / "figures",
+        "figures_dir": figures_dir,
         "data_dir": data_dir,
         "latex": latex_path,
     }

@@ -8,10 +8,13 @@ figures, and reproducibility metadata.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+from scipy.stats import t
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -96,21 +99,25 @@ def _metric_samples(record: dict[str, Any], key: str) -> list[float]:
     return []
 
 
-def _ci_from_samples(samples: list[float]) -> tuple[float, float] | None:
-    """Return mean +/- 1.96 * SE as a simple confidence interval."""
-    import math
+def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
+    """Return mean +/- critical * SE; t-distribution for small n, z for large n.
 
-    if len(samples) < 2:
-        return None
-    mean_val = sum(samples) / len(samples)
-    variance = sum((x - mean_val) ** 2 for x in samples) / (len(samples) - 1)
-    se = math.sqrt(variance) / math.sqrt(len(samples))
-    delta = 1.96 * se
+    Returns "n/a" when fewer than 2 samples are available.
+    """
+
+    n = len(samples)
+    if n < 2:
+        return "n/a"
+    mean_val = sum(samples) / n
+    variance = sum((x - mean_val) ** 2 for x in samples) / (n - 1)
+    se = math.sqrt(variance) / math.sqrt(n)
+    critical = t.ppf(0.975, df=n - 1) if n < 30 else 1.96
+    delta = critical * se
     return (mean_val - delta, mean_val + delta)
 
 
-def _fmt_stat(value: float | None) -> str:
-    return "n/a" if value is None else f"{value:.4f}"
+def _fmt_stat(value: float | None | str) -> str:
+    return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
 
 def _render_markdown(

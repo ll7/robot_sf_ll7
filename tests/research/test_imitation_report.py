@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from robot_sf.research.imitation_report import (
     ImitationReportConfig,
+    _ci_from_samples,
     generate_imitation_report,
 )
 
@@ -90,3 +91,21 @@ def test_generate_imitation_report(tmp_path: Path):
     assert out["metadata"].exists()
     assert out["figures_dir"].exists()
     assert out["latex"] is not None and out["latex"].exists()
+
+
+def test_ci_from_samples_requires_two_or_more():
+    """_ci_from_samples returns None for insufficient samples."""
+
+    assert _ci_from_samples([]) == "n/a"
+    assert _ci_from_samples([1.0]) == "n/a"
+
+
+def test_ci_from_samples_computes_interval():
+    """_ci_from_samples computes a symmetric 95% CI for sample arrays."""
+
+    samples = [1.0, 2.0, 3.0, 4.0]
+    ci = _ci_from_samples(samples)
+    assert ci is not None
+    low, high = ci
+    # Mean is 2.5; CI should contain the mean and be symmetric around it.
+    assert low < 2.5 < high

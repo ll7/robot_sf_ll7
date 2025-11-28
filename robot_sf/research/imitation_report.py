@@ -319,7 +319,14 @@ def _figure_paths(summary_path: Path) -> dict[str, Path]:
     if not fig_dir.exists():
         return {}
     figures: dict[str, Path] = {}
-    for candidate in ("timesteps_comparison.png", "performance_metrics.png"):
+    for candidate in (
+        "timesteps_comparison.png",
+        "performance_metrics.png",
+        "learning_curve.png",
+        "sample_efficiency.png",
+        "success_collision_over_time.png",
+        "performance_distribution.png",
+    ):
         path = fig_dir / candidate
         if path.exists():
             figures[path.stem] = path

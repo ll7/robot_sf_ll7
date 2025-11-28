@@ -189,9 +189,10 @@ def _render_latex(report_md: str, figures: dict[str, Path], output_path: Path) -
 def _stats_against_baseline(
     baseline_vals: list[float],
     candidate_vals: list[float],
-) -> tuple[float | None, float]:
+) -> tuple[float | None, float | None]:
     if len(baseline_vals) == len(candidate_vals) and len(baseline_vals) >= 2:
-        p_val = paired_t_test(baseline_vals, candidate_vals)
+        p_val_dict = paired_t_test(baseline_vals, candidate_vals)
+        p_val = p_val_dict.get("p_value")
     else:
         p_val = None
     effect = cohen_d(baseline_vals, candidate_vals)

@@ -476,14 +476,13 @@ def generate_imitation_report(
         config_paths=config.config_paths,
     )
     total_duration, per_run_duration = _extract_timings(summary)
-    meta_dict = metadata.to_dict()
     if total_duration is not None:
-        meta_dict["timing"] = {
+        metadata.timing = {
             "total_duration_seconds": total_duration,
             "per_run_duration_seconds": per_run_duration,
         }
     metadata_path = output_dir / "metadata.json"
-    metadata_path.write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(metadata.to_dict(), indent=2), encoding="utf-8")
     _copy_configs(config.config_paths, configs_dir)
 
     report_md = _render_markdown(

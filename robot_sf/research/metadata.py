@@ -80,10 +80,11 @@ class ReproducibilityMetadata:
     hardware: HardwareProfile
     seeds: list[int] = field(default_factory=list)
     config_paths: dict[str, str] = field(default_factory=dict)
+    timing: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        data = {
             "timestamp": self.timestamp,
             "git": {
                 "commit": self.git_commit,
@@ -103,6 +104,9 @@ class ReproducibilityMetadata:
                 "configs": self.config_paths,
             },
         }
+        if self.timing:
+            data["timing"] = self.timing
+        return data
 
 
 def get_git_metadata() -> tuple[str, str, bool]:

@@ -19,7 +19,7 @@ from loguru import logger
 from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
 from robot_sf.common.artifact_paths import get_imitation_report_dir
 from robot_sf.common.metrics_utils import metric_samples
-from robot_sf.research.aggregation import export_metrics_json
+from robot_sf.research.aggregation import aggregate_metrics, export_metrics_json
 from robot_sf.research.figures import (
     plot_distributions,
     plot_improvement_summary,
@@ -309,7 +309,7 @@ def analyze_imitation_results(
         sample_efficiency_ratio=sample_efficiency_ratio,
     )
 
-    aggregate_metrics = {
+    aggregate_summary = {
         "sample_efficiency_ratio": sample_efficiency_ratio,
         "baseline_timesteps_to_convergence": baseline_ts,
         "pretrained_timesteps_to_convergence": pretrained_ts,
@@ -325,7 +325,7 @@ def analyze_imitation_results(
         output_root=str(output_dir),
         hardware_overview=[baseline_hardware, pretrained_hardware],
         extractor_results=[baseline_record, pretrained_record],
-        aggregate_metrics=aggregate_metrics,
+        aggregate_metrics=aggregate_summary,
         notes=None,
     )
 
@@ -346,6 +346,6 @@ def analyze_imitation_results(
         "summary_markdown": artifacts["markdown"],
         "figures_dir": figures_dir,
         "aggregated_metrics_json": aggregated_json,
-        "aggregate_metrics": aggregate_metrics,
+        "aggregate_metrics": aggregate_summary,
         "figures": figures,
     }

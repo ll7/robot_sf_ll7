@@ -1,3 +1,5 @@
+"""Tests for imitation report generation (Markdown + LaTeX)."""
+
 from __future__ import annotations
 
 import json
@@ -6,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+
 from robot_sf.research.imitation_report import (
     ImitationReportConfig,
     generate_imitation_report,
@@ -13,6 +16,8 @@ from robot_sf.research.imitation_report import (
 
 
 def _minimal_record(name: str, timesteps: float, success: float, collision: float, snqi: float):
+    """Build a minimal extractor record with multi-sample metrics for testing."""
+
     return {
         "config_name": name,
         "status": "success",
@@ -48,6 +53,8 @@ def _minimal_record(name: str, timesteps: float, success: float, collision: floa
 
 
 def test_generate_imitation_report(tmp_path: Path):
+    """Generate an imitation report and assert artifacts and stats are present."""
+
     summary = {
         "run_id": "demo",
         "created_at": "2025-01-01T00:00:00Z",

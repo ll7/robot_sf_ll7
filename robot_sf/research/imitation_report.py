@@ -53,6 +53,8 @@ def _select_records(
     baseline_id: str | None,
     pretrained_id: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Choose baseline and pretrained records, validating ambiguity."""
+
     records = summary.get("extractor_results") or []
     if not records or not isinstance(records, list):
         raise ValueError("summary.extractor_results must contain at least two entries")
@@ -107,6 +109,8 @@ def _render_markdown(
     figures: dict[str, Path],
     metadata_path: Path,
 ) -> str:
+    """Render a Markdown report from summary + stats."""
+
     run_id = summary.get("run_id", "unknown")
     baseline_id = baseline.get("config_name", "baseline")
     pretrained_id = pretrained.get("config_name", "pretrained")
@@ -192,6 +196,8 @@ def _render_latex(
     metadata_path: Path,
     output_path: Path,
 ) -> None:
+    """Render a LaTeX report from summary + stats."""
+
     baseline_id = _latex_escape(str(baseline.get("config_name", "baseline")))
     pretrained_id = _latex_escape(str(pretrained.get("config_name", "pretrained")))
     lines = [
@@ -259,6 +265,8 @@ def _render_latex(
 
 
 def _figure_paths(summary_path: Path) -> dict[str, Path]:
+    """Collect available analysis figures relative to summary path."""
+
     fig_dir = summary_path.parent / "figures"
     if not fig_dir.exists():
         return {}
@@ -276,6 +284,8 @@ def generate_imitation_report(
     output_root: Path,
     config: ImitationReportConfig,
 ) -> dict[str, Path | None]:
+    """Generate Markdown/optional LaTeX imitation report from a training summary."""
+
     summary = _load_summary(summary_path)
     baseline_rec, pretrained_rec = _select_records(
         summary, config.baseline_run_id, config.pretrained_run_id

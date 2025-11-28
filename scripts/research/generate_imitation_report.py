@@ -11,6 +11,7 @@ from robot_sf.research.imitation_report import ImitationReportConfig, generate_i
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for imitation report generation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--summary",
@@ -69,6 +70,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Entrypoint: generate imitation report artifacts from a summary JSON."""
     args = parse_args(argv)
     cfg = ImitationReportConfig(
         experiment_name=args.experiment_name,

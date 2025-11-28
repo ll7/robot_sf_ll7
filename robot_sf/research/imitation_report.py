@@ -20,7 +20,6 @@ from scipy.stats import mannwhitneyu, t
 
 if TYPE_CHECKING:
     from pathlib import Path
-
 from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.statistics import (
@@ -144,6 +143,8 @@ def _render_markdown(
     hypothesis_result: dict[str, Any],
     figures: dict[str, Path],
     metadata_path: Path,
+    seeds: list[int] | None = None,
+    total_duration: float | None = None,
 ) -> str:
     """Render a Markdown report from summary + stats."""
 
@@ -212,6 +213,10 @@ def _render_markdown(
     lines.append("")
     lines.append("## Reproducibility")
     lines.append(f"- Metadata: `{metadata_path.name}` (git, hardware, packages, configs)")
+    if seeds:
+        lines.append(f"- Seeds: {', '.join(str(s) for s in seeds)}")
+    if total_duration is not None:
+        lines.append(f"- Total duration (s): {total_duration:.2f}")
     if config.hyperparameters:
         lines.append("## Hyperparameters")
         for key, value in sorted(config.hyperparameters.items()):
@@ -242,6 +247,8 @@ def _render_latex(
     figures: dict[str, Path],
     metadata_path: Path,
     output_path: Path,
+    seeds: list[int] | None = None,
+    total_duration: float | None = None,
 ) -> None:
     """Render a LaTeX report from summary + stats."""
 
@@ -317,6 +324,12 @@ def _render_latex(
         lines.append(r"\section*{Hyperparameters}")
         for key, value in sorted(config.hyperparameters.items()):
             lines.append(rf"{_latex_escape(key)}: {_latex_escape(str(value))}\\")
+    if seeds:
+        lines.append(r"\section*{Seeds}")
+        lines.append(_latex_escape(", ".join(str(s) for s in seeds)))
+    if total_duration is not None:
+        lines.append(r"\section*{Timing}")
+        lines.append(rf"Total duration (s): {total_duration:.2f}\\")
     lines.append(r"\end{document}")
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -363,6 +376,36 @@ def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path
             plt.close("all")
             continue
     return copied
+
+
+def _extract_seeds(summary: dict[str, Any]) -> list[int]:
+    """Extract seed values from summary if present."""
+
+    seeds_raw = summary.get("seeds")
+    seeds: list[int] = []
+    if isinstance(seeds_raw, list):
+        for val in seeds_raw:
+            try:
+                seeds.append(int(val))
+            except (TypeError, ValueError):
+                continue
+    return seeds
+
+
+def _extract_timings(summary: dict[str, Any]) -> tuple[float | None, dict[str, float]]:
+    """Extract total and per-run duration from extractor records if available."""
+
+    total = 0.0
+    per_run: dict[str, float] = {}
+    for record in summary.get("extractor_results") or []:
+        name = record.get("config_name", "run")
+        duration = record.get("duration_seconds")
+        if isinstance(duration, (int, float)):
+            per_run[name] = float(duration)
+            total += float(duration)
+    if not per_run:
+        return None, {}
+    return total, per_run
 
 
 def generate_imitation_report(
@@ -427,12 +470,20 @@ def generate_imitation_report(
     # Copy summary for traceability
     shutil.copy2(summary_path, data_dir / "summary.json")
 
+    seeds = _extract_seeds(summary)
     metadata = collect_reproducibility_metadata(
-        seeds=[],
+        seeds=seeds,
         config_paths=config.config_paths,
     )
+    total_duration, per_run_duration = _extract_timings(summary)
+    meta_dict = metadata.to_dict()
+    if total_duration is not None:
+        meta_dict["timing"] = {
+            "total_duration_seconds": total_duration,
+            "per_run_duration_seconds": per_run_duration,
+        }
     metadata_path = output_dir / "metadata.json"
-    metadata_path.write_text(json.dumps(metadata.to_dict(), indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
     _copy_configs(config.config_paths, configs_dir)
 
     report_md = _render_markdown(
@@ -444,6 +495,8 @@ def generate_imitation_report(
         hypothesis_result=hypothesis_result,
         figures=figures,
         metadata_path=metadata_path,
+        seeds=seeds,
+        total_duration=total_duration,
     )
     report_path = output_dir / "report.md"
     report_path.write_text(report_md, encoding="utf-8")
@@ -463,6 +516,8 @@ def generate_imitation_report(
             figures=figures,
             metadata_path=metadata_path,
             output_path=latex_path,
+            seeds=seeds,
+            total_duration=total_duration,
         )
 
     pdf_path: Path | None = None

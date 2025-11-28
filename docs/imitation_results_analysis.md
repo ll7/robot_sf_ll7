@@ -46,6 +46,8 @@ After analysis, render a publication-ready report (Markdown + optional LaTeX):
 uv run python scripts/research/generate_imitation_report.py \
   --summary output/benchmarks/ppo_imitation/analysis/demo-comparison/summary.json \
   --experiment-name imitation-study \
+  --ablation-label "bc_epochs=5" \
+  --hparam bc_epochs=5 --hparam dataset_size=5000 \
   --export-latex
 ```
 
@@ -54,3 +56,8 @@ Outputs under `output/imitation_reports/<experiment-name>_<run-id>/`:
 - `figures/` (reuses analysis figures)
 - `data/summary.json`
 - `metadata.json` with git/hardware/package info
+- Optional ablation label and hyperparameters recorded when passed via CLI (`--ablation-label`, `--hparam key=value`)
+
+### CLI flags (reports)
+- `--ablation-label`: Free-form label to tag an ablation condition (e.g., dataset size, BC epochs).
+- `--hparam key=value`: Repeatable; records hyperparameters in the report (Markdown + LaTeX).

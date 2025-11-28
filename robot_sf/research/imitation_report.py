@@ -159,7 +159,7 @@ def _render_markdown(
         else "Pre-training comparison completed; see detailed results below."
     )
     lines = [
-        "# Imitation Learning for Robot Navigation: Experimental Report",
+        f"# {config.experiment_name} Report",
         "",
         "## Abstract",
         abstract_note,
@@ -213,8 +213,18 @@ def _render_markdown(
         lines.append(f"![{label}]({path.name})")
     lines.append("")
     lines.append("## Conclusion")
-    if hypothesis_result and hypothesis_result.get("note"):
-        lines.append(hypothesis_result["note"])
+    if (
+        hypothesis_result
+        and (decision := hypothesis_result.get("decision"))
+        and (note := hypothesis_result.get("note"))
+    ):
+        if decision == "PASS":
+            conclusion_text = f"The primary hypothesis was **supported**. {note}."
+        elif decision == "FAIL":
+            conclusion_text = f"The primary hypothesis was **not supported**. {note}."
+        else:  # INCOMPLETE
+            conclusion_text = f"The hypothesis evaluation was **incomplete**: {note}."
+        lines.append(conclusion_text)
     else:
         lines.append("Conclusion unavailable.")
     lines.append("")

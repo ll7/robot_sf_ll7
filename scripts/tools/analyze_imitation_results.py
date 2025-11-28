@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 from loguru import logger
 
+from robot_sf.research.cli_args import add_imitation_report_common_args
 from robot_sf.training import analyze_imitation_results
 
 
@@ -43,6 +44,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional output directory (defaults under imitation report root).",
     )
+    add_imitation_report_common_args(
+        parser,
+        alpha_flag="--significance-level",
+        alpha_dest="significance_level",
+        include_threshold=False,
+    )
+    parser.add_argument(
+        "--generate-report",
+        action="store_true",
+        help="Generate Markdown/LaTeX report after analysis.",
+    )
+    parser.add_argument(
+        "--report-output-root",
+        type=Path,
+        default=Path("output/research_reports"),
+        help="Output root for generated reports (when --generate-report is used).",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
@@ -56,6 +74,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_dir=args.output,
     )
     logger.success("Analysis complete", summary=str(artifacts["summary_json"]))
+
+    if args.generate_report:
+        from robot_sf.research.imitation_report import (
+            ImitationReportConfig,
+            generate_imitation_report,
+        )
+
+        cfg = ImitationReportConfig(
+            experiment_name=args.experiment_name,
+            hypothesis=args.hypothesis,
+            alpha=args.significance_level,
+            export_latex=args.export_latex,
+            baseline_run_id=args.baseline,
+            pretrained_run_id=args.pretrained,
+            num_seeds=args.num_seeds,
+        )
+        report_paths = generate_imitation_report(
+            summary_path=artifacts["summary_json"],
+            output_root=args.report_output_root,
+            config=cfg,
+        )
+        logger.success("Report generated", report=str(report_paths["report"]))
     return 0
 
 

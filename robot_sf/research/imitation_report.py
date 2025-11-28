@@ -33,6 +33,7 @@ class ImitationReportConfig:
     improvement_threshold_pct: float = 30.0
     export_latex: bool = False
     baseline_run_id: str | None = None
+    pretrained_run_id: str | None = None
     config_paths: dict[str, Path] | None = None
 
 
@@ -48,19 +49,29 @@ def _load_summary(path: Path) -> dict[str, Any]:
 
 
 def _select_records(
-    summary: dict[str, Any], baseline_id: str | None
+    summary: dict[str, Any],
+    baseline_id: str | None,
+    pretrained_id: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     records = summary.get("extractor_results") or []
     if not records or not isinstance(records, list):
         raise ValueError("summary.extractor_results must contain at least two entries")
     baseline = None
-    pretrained = None
     if baseline_id:
         baseline = next((r for r in records if r.get("config_name") == baseline_id), None)
     if baseline is None:
         baseline = records[0]
-    pretrained = next((r for r in records if r is not baseline), None)
-    if pretrained is None:
+    if pretrained_id:
+        pretrained = next((r for r in records if r.get("config_name") == pretrained_id), None)
+        if pretrained is None:
+            raise ValueError(f"Pretrained run id '{pretrained_id}' not found in summary")
+    elif len(records) == 2:
+        pretrained = next((r for r in records if r is not baseline), None)
+    else:
+        raise ValueError(
+            "summary contains multiple records; specify pretrained_run_id to disambiguate"
+        )
+    if pretrained is None or pretrained is baseline:
         raise ValueError("summary must contain a pretrained record distinct from baseline")
     return baseline, pretrained
 
@@ -128,11 +139,12 @@ def _render_markdown(
             "",
             "## Hypothesis Evaluation",
             f"- Decision: {hypothesis_result.get('decision')}",
-            f"- Improvement: {hypothesis_result.get('measured_value'):.2f}% "
-            f"(threshold ≥ {config.improvement_threshold_pct}%)"
+            (
+                f"- Improvement: {hypothesis_result.get('measured_value'):.2f}% "
+                f"(threshold ≥ {config.improvement_threshold_pct}%)"
+            )
             if hypothesis_result.get("measured_value") is not None
-            else f"- Decision: {hypothesis_result.get('decision')} "
-            "(insufficient data for improvement calculation)",
+            else "- Improvement: (insufficient data for improvement calculation)",
             f"- Note: {hypothesis_result.get('note', '')}",
             "",
             "## Figures",
@@ -242,7 +254,9 @@ def generate_imitation_report(
     config: ImitationReportConfig,
 ) -> dict[str, Path | None]:
     summary = _load_summary(summary_path)
-    baseline_rec, pretrained_rec = _select_records(summary, config.baseline_run_id)
+    baseline_rec, pretrained_rec = _select_records(
+        summary, config.baseline_run_id, config.pretrained_run_id
+    )
     figures = _figure_paths(summary_path)
 
     baseline_ts = _metric(baseline_rec, "timesteps_to_convergence")

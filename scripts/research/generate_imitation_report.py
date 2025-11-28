@@ -59,6 +59,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Name of the baseline run to prioritize in the report.",
     )
+    parser.add_argument(
+        "--pretrained-run-id",
+        type=str,
+        default=None,
+        help="Name of the pretrained run to include (required if summary has >2 records).",
+    )
     return parser.parse_args(argv)
 
 
@@ -71,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         improvement_threshold_pct=float(args.threshold),
         export_latex=bool(args.export_latex),
         baseline_run_id=args.baseline_run_id,
+        pretrained_run_id=args.pretrained_run_id,
     )
 
     paths = generate_imitation_report(

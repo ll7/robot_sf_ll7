@@ -22,6 +22,7 @@ from loguru import logger
 
 from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
 from robot_sf.common.artifact_paths import get_imitation_report_dir
+from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.training.multi_extractor_models import (
     ExtractorRunRecord,
     HardwareProfile,
@@ -158,16 +159,6 @@ def _build_record(
         artifacts={"manifest": str(manifest_path)},
         reason=None,
     )
-
-
-def _metric_samples(manifest: dict[str, Any], key: str) -> list[float]:
-    """Return a list of float samples for a metric, if available."""
-
-    metrics = manifest.get("metrics") or {}
-    samples = metrics.get(f"{key}_samples") or metrics.get(key)
-    if isinstance(samples, list):
-        return [float(v) for v in samples if isinstance(v, (int, float))]
-    return []
 
 
 def _plot_timesteps_bar(
@@ -349,23 +340,23 @@ def analyze_imitation_results(
 
     baseline_metrics = {
         "timesteps_to_convergence": _metric_mean(baseline_manifest, "timesteps_to_convergence"),
-        "timesteps_samples": _metric_samples(baseline_manifest, "timesteps_to_convergence"),
+        "timesteps_samples": metric_samples(baseline_manifest, "timesteps_to_convergence"),
         "success_rate": _metric_mean(baseline_manifest, "success_rate"),
-        "success_rate_samples": _metric_samples(baseline_manifest, "success_rate"),
+        "success_rate_samples": metric_samples(baseline_manifest, "success_rate"),
         "collision_rate": _metric_mean(baseline_manifest, "collision_rate"),
-        "collision_rate_samples": _metric_samples(baseline_manifest, "collision_rate"),
+        "collision_rate_samples": metric_samples(baseline_manifest, "collision_rate"),
         "snqi": _metric_mean(baseline_manifest, "snqi"),
-        "snqi_samples": _metric_samples(baseline_manifest, "snqi"),
+        "snqi_samples": metric_samples(baseline_manifest, "snqi"),
     }
     pretrained_metrics = {
         "timesteps_to_convergence": _metric_mean(pretrained_manifest, "timesteps_to_convergence"),
-        "timesteps_samples": _metric_samples(pretrained_manifest, "timesteps_to_convergence"),
+        "timesteps_samples": metric_samples(pretrained_manifest, "timesteps_to_convergence"),
         "success_rate": _metric_mean(pretrained_manifest, "success_rate"),
-        "success_rate_samples": _metric_samples(pretrained_manifest, "success_rate"),
+        "success_rate_samples": metric_samples(pretrained_manifest, "success_rate"),
         "collision_rate": _metric_mean(pretrained_manifest, "collision_rate"),
-        "collision_rate_samples": _metric_samples(pretrained_manifest, "collision_rate"),
+        "collision_rate_samples": metric_samples(pretrained_manifest, "collision_rate"),
         "snqi": _metric_mean(pretrained_manifest, "snqi"),
-        "snqi_samples": _metric_samples(pretrained_manifest, "snqi"),
+        "snqi_samples": metric_samples(pretrained_manifest, "snqi"),
     }
 
     if not output_dir:

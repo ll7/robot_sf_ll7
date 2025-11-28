@@ -19,6 +19,7 @@ from scipy.stats import t
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.statistics import (
     cohen_d,
@@ -87,16 +88,6 @@ def _metric(record: dict[str, Any], key: str) -> float:
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
     return float(val) if isinstance(val, (int, float)) else 0.0
-
-
-def _metric_samples(record: dict[str, Any], key: str) -> list[float]:
-    """Return a list of sample values for a metric if present."""
-
-    metrics = record.get("metrics") or {}
-    samples = metrics.get(f"{key}_samples") or metrics.get(key)
-    if isinstance(samples, list):
-        return [float(v) for v in samples if isinstance(v, (int, float))]
-    return []
 
 
 def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
@@ -349,8 +340,8 @@ def generate_imitation_report(
 
     baseline_ts = _metric(baseline_rec, "timesteps_to_convergence")
     pretrained_ts = _metric(pretrained_rec, "timesteps_to_convergence")
-    baseline_samples = _metric_samples(baseline_rec, "timesteps_to_convergence")
-    pretrained_samples = _metric_samples(pretrained_rec, "timesteps_to_convergence")
+    baseline_samples = metric_samples(baseline_rec, "timesteps_to_convergence")
+    pretrained_samples = metric_samples(pretrained_rec, "timesteps_to_convergence")
     baseline_ci = _ci_from_samples(baseline_samples)
     pretrained_ci = _ci_from_samples(pretrained_samples)
 

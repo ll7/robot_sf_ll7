@@ -40,7 +40,6 @@ def test_generate_figures_creates_all_expected_files(tmp_path: Path):
         "timesteps_comparison",
         "performance_metrics",
         "learning_curve",
-        "sample_efficiency",
         "success_collision_over_time",
         "performance_distribution",
     }

@@ -302,10 +302,6 @@ def _generate_figures(
     if lc_path:
         paths["learning_curve"] = lc_path
 
-    paths["sample_efficiency"] = _plot_timesteps_bar(
-        baseline_metrics, pretrained_metrics, output_dir / "sample_efficiency.png"
-    )
-
     sc_path = _plot_success_collision_over_time(
         baseline_metrics.get("success_rate_samples") or [],
         pretrained_metrics.get("success_rate_samples") or [],

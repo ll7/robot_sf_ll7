@@ -314,7 +314,6 @@ def _figure_paths(summary_path: Path) -> dict[str, Path]:
         "timesteps_comparison.png",
         "performance_metrics.png",
         "learning_curve.png",
-        "sample_efficiency.png",
         "success_collision_over_time.png",
         "performance_distribution.png",
     ):

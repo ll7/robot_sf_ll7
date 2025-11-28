@@ -635,9 +635,7 @@ def compute_aggregate_metrics(
     best_rewards = [
         float(v)
         for record in records
-        if record.metrics
-        for v in [record.metrics.get("best_mean_reward")]
-        if isinstance(v, (int, float))
+        if record.metrics and isinstance(v := record.metrics.get("best_mean_reward"), (int, float))
     ]
     completed = sum(1 for record in records if record.status == "success")
     skipped = sum(1 for record in records if record.status == "skipped")

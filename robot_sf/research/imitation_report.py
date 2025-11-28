@@ -353,9 +353,7 @@ def generate_imitation_report(
     return {
         "report": report_path,
         "metadata": metadata_path,
-        "figures_dir": figures.get("timesteps_comparison", summary_path.parent / "figures").parent
-        if figures
-        else summary_path.parent / "figures",
+        "figures_dir": summary_path.parent / "figures",
         "data_dir": data_dir,
         "latex": latex_path,
     }

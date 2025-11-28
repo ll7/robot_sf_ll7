@@ -120,6 +120,15 @@ def _fmt_stat(value: float | None | str) -> str:
     return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
 
+def _fmt_ci(value: tuple[float, float] | str | None) -> str:
+    """Format confidence interval tuples consistently."""
+
+    if value is None or value == "n/a":
+        return "n/a"
+    low, high = value
+    return f"({low:.4f}, {high:.4f})"
+
+
 def _render_markdown(
     *,
     config: ImitationReportConfig,
@@ -173,8 +182,10 @@ def _render_markdown(
             f"- Cohen's d: {_fmt_stat(stats['effect_size'])}",
             f"- Significance: {stats['significance']}",
             f"- Interpretation: {stats['interpretation']}",
-            f"- Baseline timesteps CI (95%): {stats.get('baseline_ci') or 'n/a'}",
-            f"- Pre-trained timesteps CI (95%): {stats.get('pretrained_ci') or 'n/a'}",
+            f"- Baseline timesteps CI (95%): "
+            f"{_fmt_ci(stats.get('baseline_ci')) if stats.get('baseline_ci') is not None else 'n/a (need ≥2 samples)'}",
+            f"- Pre-trained timesteps CI (95%): "
+            f"{_fmt_ci(stats.get('pretrained_ci')) if stats.get('pretrained_ci') is not None else 'n/a (need ≥2 samples)'}",
             "",
             "## Hypothesis Evaluation",
             f"- Decision: {hypothesis_result.get('decision')}",
@@ -271,8 +282,8 @@ def _render_latex(
             d_line,
             sig_line,
             interp_line,
-            rf"Baseline CI (95\%): {_latex_escape(str(ci_base))}\\",
-            rf"Pre-trained CI (95\%): {_latex_escape(str(ci_pre))}\\",
+            rf"Baseline CI (95\%): {_latex_escape(_fmt_ci(ci_base))}\\",
+            rf"Pre-trained CI (95\%): {_latex_escape(_fmt_ci(ci_pre))}\\",
             r"\section*{Hypothesis Evaluation}",
             rf"Decision: {_latex_escape(str(hypothesis_result.get('decision')))}\\",
         ]

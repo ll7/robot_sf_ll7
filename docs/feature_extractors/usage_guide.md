@@ -1,6 +1,7 @@
 # Usage Guide: Feature Extractors
 
-This guide provides practical examples and best practices for using the enhanced feature extraction system.
+This guide provides practical examples and best practices for using the enhanced feature extraction
+system.
 
 ## Basic Usage Patterns
 
@@ -151,7 +152,31 @@ uv run python scripts/multi_extractor_training.py \
   --output-root results/feature_extractor_comparison
 ```
 
-This runs all extractors with the default hyperparameters and saves timestamped results for analysis.
+This runs all extractors with the default hyperparameters and saves timestamped results for
+analysis.
+
+- Output artifacts include:
+  - `summary.json` / `summary.md` compliant with `contracts/training_summary.schema.json`.
+  - Per-extractor convergence/sample-efficiency metrics (`convergence_timestep`, `sample_efficiency_ratio`, `baseline_target_reward`).
+  - Learning curves and reward distributions under `<run>/extractors/<name>/figures/`.
+  - Legacy `complete_results.json` for downstream scripts.
+
+### Research Report Generation
+Convert a completed multi-extractor run into a research-ready report:
+
+```bash
+uv run python scripts/research/generate_extractor_report.py \
+  --summary tmp/multi_extractor_training/<timestamp-run-id>/summary.json \
+  --experiment-name imitation-study \
+  --hypothesis "Pretraining improves reward" \
+  --export-latex
+```
+
+Outputs under `output/research_reports/<experiment-name>_<run-id>/`:
+- `report.md` (+ optional `report.tex`)
+- `figures/` (final performance, sample efficiency)
+- `data/summary.json`
+- `metadata.json` with git/hardware/package info
 
 ### 2. Custom Comparison
 

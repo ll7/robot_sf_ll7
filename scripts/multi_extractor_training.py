@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import multiprocessing as mp
 import os
 import sys
@@ -36,7 +37,14 @@ from robot_sf.training import (
     collect_hardware_profile,
     make_extractor_directory,
     make_run_directory,
+    summarize_metric,
     write_summary_artifacts,
+)
+from robot_sf.training.multi_extractor_analysis import (
+    convergence_timestep,
+    generate_figures,
+    load_eval_history,
+    sample_efficiency_ratio,
 )
 
 if TYPE_CHECKING:
@@ -64,6 +72,8 @@ class RunSettings:
     seed: Optional[int] = None
     output_root: Optional[str] = None
     notes: list[str] = field(default_factory=list)
+    baseline_extractor: Optional[str] = None
+    convergence_fraction: float = 0.95
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> RunSettings:
@@ -79,15 +89,22 @@ class RunSettings:
         settings.device = str(options.get("device", settings.device)).lower()
         settings.seed = options.get("seed", settings.seed)
         settings.output_root = options.get("output_root", settings.output_root)
+        settings.baseline_extractor = options.get("baseline_extractor", settings.baseline_extractor)
+        settings.convergence_fraction = float(
+            options.get("convergence_fraction", settings.convergence_fraction)
+        )
 
         if settings.worker_mode not in {"single-thread", "vectorized"}:
             raise ValueError(f"Unknown worker_mode: {settings.worker_mode}")
         if settings.worker_mode == "vectorized" and settings.num_envs < 2:
             logger.warning(
-                "vectorized worker_mode is being used with num_envs < 2; this is unusual but allowed for testing or consistency."
+                "vectorized worker_mode is being used with num_envs < 2; "
+                "this is unusual but allowed for testing or consistency.",
             )
         if settings.device not in {"cpu", "cuda"}:
             raise ValueError(f"Unsupported device requested: {settings.device}")
+        if not (0.0 < settings.convergence_fraction <= 1.0):
+            raise ValueError("convergence_fraction must be in (0, 1].")
         return settings
 
     def effective_timesteps(self, *, test_mode: bool) -> int:
@@ -538,14 +555,99 @@ def train_extractor(
     )
 
 
-def compute_aggregate_metrics(records: list[ExtractorRunRecord]) -> dict[str, float]:
+def _load_histories(
+    records: list[ExtractorRunRecord],
+    context: RunContext,
+) -> dict[str, tuple[object | None, Path]]:
+    history_map: dict[str, tuple[object | None, Path]] = {}
+    for record in records:
+        rel = record.artifacts.get("extractor_dir")
+        extractor_dir = context.run_dir / rel if rel else context.run_dir
+        history_map[record.config_name] = (load_eval_history(extractor_dir), extractor_dir)
+    return history_map
+
+
+def _enrich_records_with_analysis(
+    records: list[ExtractorRunRecord],
+    context: RunContext,
+) -> tuple[float, float]:
+    if not records:
+        return 0.0, 0.0
+    history_map = _load_histories(records, context)
+    baseline_name = context.settings.baseline_extractor or (
+        records[0].config_name if records else ""
+    )
+    baseline_record = next((r for r in records if r.config_name == baseline_name), records[0])
+    baseline_history, _ = history_map.get(baseline_record.config_name, (None, context.run_dir))
+    total_timesteps = context.settings.effective_timesteps(test_mode=context.test_mode)
+
+    baseline_best = float(baseline_record.metrics.get("best_mean_reward", 0.0) or 0.0)
+    baseline_target = baseline_best
+    baseline_conv = convergence_timestep(
+        baseline_history,
+        target_reward=baseline_best * context.settings.convergence_fraction,
+        default_timesteps=float(total_timesteps),
+    )
+
+    for record in records:
+        history, extractor_dir = history_map.get(record.config_name, (None, context.run_dir))
+        best_reward = float(record.metrics.get("best_mean_reward", 0.0) or 0.0)
+        conv_target = (
+            best_reward * context.settings.convergence_fraction if best_reward > 0 else 0.0
+        )
+        conv_ts = convergence_timestep(
+            history,
+            target_reward=conv_target,
+            default_timesteps=float(total_timesteps),
+        )
+        sample_ts = convergence_timestep(
+            history,
+            target_reward=baseline_target,
+            default_timesteps=float(total_timesteps),
+        )
+        sample_ratio = sample_efficiency_ratio(
+            baseline_timestep=baseline_conv if baseline_conv else float(total_timesteps),
+            candidate_timestep=sample_ts,
+        )
+        record.metrics.update(
+            {
+                "convergence_timestep": float(conv_ts),
+                "sample_efficiency_timestep": float(sample_ts),
+                "sample_efficiency_ratio": float(sample_ratio),
+                "baseline_target_reward": float(baseline_target),
+                "delta_best_reward_vs_baseline": float(best_reward - baseline_target),
+            }
+        )
+        figure_paths = generate_figures(history, extractor_dir / "figures", record.config_name)
+        for key, path in figure_paths.items():
+            record.artifacts[key] = str(path.relative_to(context.run_dir))
+
+    return baseline_target, baseline_conv
+
+
+def compute_aggregate_metrics(
+    records: list[ExtractorRunRecord],
+    *,
+    baseline_target: float,
+    baseline_convergence: float,
+) -> dict[str, float]:
     total_time = sum(record.duration_seconds or 0.0 for record in records)
-    best_rewards = [record.metrics.get("best_mean_reward") for record in records if record.metrics]
+    best_rewards = [
+        float(v)
+        for record in records
+        if record.metrics and isinstance(v := record.metrics.get("best_mean_reward"), (int, float))
+    ]
     completed = sum(1 for record in records if record.status == "success")
     skipped = sum(1 for record in records if record.status == "skipped")
     failed = sum(1 for record in records if record.status == "failed")
 
     best_reward = max(best_rewards) if best_rewards else 0.0
+    convergence_stats = summarize_metric(
+        record.metrics.get("convergence_timestep", math.nan) for record in records
+    )
+    sample_eff_stats = summarize_metric(
+        record.metrics.get("sample_efficiency_ratio", math.nan) for record in records
+    )
 
     return {
         "completed_runs": float(completed),
@@ -553,12 +655,23 @@ def compute_aggregate_metrics(records: list[ExtractorRunRecord]) -> dict[str, fl
         "failed_runs": float(failed),
         "best_mean_reward": float(best_reward or 0.0),
         "total_wall_time": float(total_time),
+        "avg_convergence_timestep": convergence_stats["mean"],
+        "median_convergence_timestep": convergence_stats["median"],
+        "avg_sample_efficiency_ratio": sample_eff_stats["mean"],
+        "median_sample_efficiency_ratio": sample_eff_stats["median"],
+        "baseline_target_reward": float(baseline_target or 0.0),
+        "baseline_convergence_timestep": float(baseline_convergence or 0.0),
     }
 
 
 def build_summary(context: RunContext, records: list[ExtractorRunRecord]) -> TrainingRunSummary:
     notes = [record.reason for record in records if record.reason]
-    aggregate = compute_aggregate_metrics(records)
+    baseline_target, baseline_convergence = _enrich_records_with_analysis(records, context)
+    aggregate = compute_aggregate_metrics(
+        records,
+        baseline_target=baseline_target,
+        baseline_convergence=baseline_convergence,
+    )
 
     return TrainingRunSummary(
         run_id=context.run_dir.name,

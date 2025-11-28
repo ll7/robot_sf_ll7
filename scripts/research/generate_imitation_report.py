@@ -67,6 +67,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Name of the pretrained run to include (required if summary has >2 records).",
     )
     parser.add_argument(
+        "--num-seeds",
+        type=int,
+        default=None,
+        help="Number of random seeds represented in the comparison.",
+    )
+    parser.add_argument(
         "--ablation-label",
         type=str,
         default=None,
@@ -111,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         pretrained_run_id=args.pretrained_run_id,
         ablation_label=args.ablation_label,
         hyperparameters=_parse_hparams(args.hparam or []),
+        num_seeds=args.num_seeds,
     )
 
     paths = generate_imitation_report(

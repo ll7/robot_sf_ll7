@@ -43,6 +43,7 @@ class ImitationReportConfig:
     config_paths: dict[str, Path] | None = None
     ablation_label: str | None = None
     hyperparameters: dict[str, str] | None = None
+    num_seeds: int | None = None
 
 
 def _timestamp() -> str:
@@ -157,6 +158,7 @@ def _render_markdown(
         f"- Baseline: `{baseline_id}`",
         f"- Pre-trained: `{pretrained_id}`",
         f"- Ablation: {config.ablation_label or 'N/A'}",
+        f"- Num seeds: {config.num_seeds or 'N/A'}",
         f"- Hypothesis: {config.hypothesis or 'N/A'}",
         f"- Significance level: {config.alpha}",
         f"- Metadata: `{metadata_path.name}`",
@@ -252,6 +254,7 @@ def _render_latex(
         rf"\section*{{{_latex_escape(config.experiment_name)} Report}}",
         rf"\textbf{{Baseline}}: \texttt{{{baseline_id}}}\\",
         rf"\textbf{{Pre-trained}}: \texttt{{{pretrained_id}}}\\",
+        rf"\textbf{{Num seeds}}: {_latex_escape(str(config.num_seeds or 'N/A'))}\\",
         rf"\textbf{{Hypothesis}}: {_latex_escape(config.hypothesis or 'N/A')}\\",
         rf"\textbf{{Significance level}}: {config.alpha}\\",
         rf"\textbf{{Metadata}}: \texttt{{{_latex_escape(metadata_path.name)}}}\\",
@@ -414,8 +417,9 @@ def generate_imitation_report(
     # Copy summary for traceability
     shutil.copy2(summary_path, data_dir / "summary.json")
 
+    seeds_list = list(range(config.num_seeds)) if config.num_seeds else []
     metadata = collect_reproducibility_metadata(
-        seeds=[],
+        seeds=seeds_list,
         config_paths=config.config_paths,
     )
     metadata_path = output_dir / "metadata.json"

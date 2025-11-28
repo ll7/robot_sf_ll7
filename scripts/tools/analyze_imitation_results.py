@@ -43,6 +43,39 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional output directory (defaults under imitation report root).",
     )
+    parser.add_argument(
+        "--experiment-name",
+        default="imitation",
+        help="Experiment name used for downstream report generation.",
+    )
+    parser.add_argument(
+        "--num-seeds",
+        type=int,
+        default=None,
+        help="Number of random seeds represented in the comparison.",
+    )
+    parser.add_argument(
+        "--hypothesis",
+        type=str,
+        default="BC pre-training reduces timesteps by ≥30%",
+        help="Hypothesis statement for report generation.",
+    )
+    parser.add_argument(
+        "--generate-report",
+        action="store_true",
+        help="Generate Markdown/LaTeX report after analysis.",
+    )
+    parser.add_argument(
+        "--significance-level",
+        type=float,
+        default=0.05,
+        help="Alpha level for statistical tests in the report.",
+    )
+    parser.add_argument(
+        "--export-latex",
+        action="store_true",
+        help="Also emit LaTeX/PDF when generating the report.",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
@@ -56,6 +89,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_dir=args.output,
     )
     logger.success("Analysis complete", summary=str(artifacts["summary_json"]))
+
+    if args.generate_report:
+        from robot_sf.research.imitation_report import (
+            ImitationReportConfig,
+            generate_imitation_report,
+        )
+
+        cfg = ImitationReportConfig(
+            experiment_name=args.experiment_name,
+            hypothesis=args.hypothesis,
+            alpha=args.significance_level,
+            export_latex=args.export_latex,
+            baseline_run_id=args.baseline,
+            pretrained_run_id=args.pretrained,
+            num_seeds=args.num_seeds,
+        )
+        report_paths = generate_imitation_report(
+            summary_path=artifacts["summary_json"],
+            output_root=Path("output/research_reports"),
+            config=cfg,
+        )
+        logger.success("Report generated", report=str(report_paths["report"]))
     return 0
 
 

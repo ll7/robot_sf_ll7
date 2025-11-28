@@ -73,9 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     cfg = ImitationReportConfig(
         experiment_name=args.experiment_name,
         hypothesis=args.hypothesis,
-        alpha=float(args.alpha),
-        improvement_threshold_pct=float(args.threshold),
-        export_latex=bool(args.export_latex),
+        alpha=args.alpha,
+        improvement_threshold_pct=args.threshold,
+        export_latex=args.export_latex,
         baseline_run_id=args.baseline_run_id,
         pretrained_run_id=args.pretrained_run_id,
     )

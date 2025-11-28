@@ -93,6 +93,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[SNQI Weight Tools](./snqi-weight-tools/README.md)** - Recompute, optimize, and analyze SNQI weights; command reference and workflow examples
 - **[Pyreverse UML Generation](./pyreverse.md)** - Generate class diagrams from code
 - **[Data Analysis Utilities](./DATA_ANALYSIS.md)** - Analysis helpers and data processing tools
+- **[Imitation Results Analysis](./imitation_results_analysis.md)** - Compare baseline vs pre-trained runs, emit training summaries and figures
 
 ### Architecture & Refactoring
 - **[Refactoring Overview](./refactoring/)** - Complete guide to the refactored environment architecture (deployment status, plan, migration guide, summary, automated codebase analysis)

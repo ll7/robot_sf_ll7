@@ -22,7 +22,6 @@ from loguru import logger
 
 from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
 from robot_sf.common.artifact_paths import get_imitation_report_dir
-from robot_sf.training.hardware_probe import collect_hardware_profile
 from robot_sf.training.multi_extractor_models import (
     ExtractorRunRecord,
     HardwareProfile,
@@ -81,6 +80,49 @@ def _status_to_summary(status: str | None) -> str:
     if status == "partial":
         return "failed"
     return "success"
+
+
+def _hardware_profile_from_manifest(manifest: dict[str, Any]) -> HardwareProfile:
+    """Extract hardware metadata from a manifest or return an 'unknown' placeholder."""
+
+    def _as_profile(payload: dict[str, Any]) -> HardwareProfile | None:
+        try:
+            platform = str(payload.get("platform", "unknown"))
+            arch = str(payload.get("arch", "unknown"))
+            python_version = str(payload.get("python_version", "unknown"))
+            workers = int(payload.get("workers", 1) or 1)
+            gpu_model = payload.get("gpu_model")
+            cuda_version = payload.get("cuda_version")
+            return HardwareProfile(
+                platform=platform,
+                arch=arch,
+                python_version=python_version,
+                workers=workers,
+                gpu_model=gpu_model,
+                cuda_version=cuda_version,
+            )
+        except (TypeError, ValueError):
+            return None
+
+    if "hardware_profile" in manifest and isinstance(manifest["hardware_profile"], dict):
+        candidate = _as_profile(manifest["hardware_profile"])
+        if candidate:
+            return candidate
+    if "hardware_overview" in manifest and isinstance(manifest["hardware_overview"], list):
+        for item in manifest["hardware_overview"]:
+            if isinstance(item, dict):
+                candidate = _as_profile(item)
+                if candidate:
+                    return candidate
+
+    return HardwareProfile(
+        platform="unknown",
+        arch="unknown",
+        python_version="unknown",
+        workers=1,
+        gpu_model=None,
+        cuda_version=None,
+    )
 
 
 def _build_record(
@@ -200,21 +242,22 @@ def analyze_imitation_results(
     pretrained_ts = pretrained_metrics["timesteps_to_convergence"]
     sample_efficiency_ratio = baseline_ts / pretrained_ts if pretrained_ts > 0 else 0.0
 
-    hardware = collect_hardware_profile(worker_count=1, skip_gpu=True)
+    baseline_hardware = _hardware_profile_from_manifest(baseline_manifest)
+    pretrained_hardware = _hardware_profile_from_manifest(pretrained_manifest)
     now = datetime.now(UTC).isoformat()
 
     baseline_record = _build_record(
         run_id=baseline_run_id,
         manifest=baseline_manifest,
         manifest_path=baseline_manifest_path,
-        hardware=hardware,
+        hardware=baseline_hardware,
         sample_efficiency_ratio=1.0,
     )
     pretrained_record = _build_record(
         run_id=pretrained_run_id,
         manifest=pretrained_manifest,
         manifest_path=pretrained_manifest_path,
-        hardware=hardware,
+        hardware=pretrained_hardware,
         sample_efficiency_ratio=sample_efficiency_ratio,
     )
 
@@ -232,7 +275,7 @@ def analyze_imitation_results(
         run_id=group_id,
         created_at=now,
         output_root=str(output_dir),
-        hardware_overview=[hardware],
+        hardware_overview=[baseline_hardware, pretrained_hardware],
         extractor_results=[baseline_record, pretrained_record],
         aggregate_metrics=aggregate_metrics,
         notes=None,

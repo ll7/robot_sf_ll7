@@ -159,7 +159,7 @@ def _render_markdown(
         else "Pre-training comparison completed; see detailed results below."
     )
     lines = [
-        f"# {config.experiment_name} Report",
+        "# Imitation Learning for Robot Navigation: Experimental Report",
         "",
         "## Abstract",
         abstract_note,
@@ -358,13 +358,19 @@ def _figure_paths(summary_path: Path) -> dict[str, Path]:
     if not fig_dir.exists():
         return {}
     figures: dict[str, Path] = {}
-    for candidate in (
+    candidates = (
         "timesteps_comparison.png",
         "performance_metrics.png",
         "learning_curve.png",
         "success_collision_over_time.png",
         "performance_distribution.png",
-    ):
+        "fig-sample-efficiency.png",
+        "fig-success_rate-distribution.png",
+        "fig-collision_rate-distribution.png",
+        "fig-snqi-distribution.png",
+        "fig-improvement-summary.png",
+    )
+    for candidate in candidates:
         path = fig_dir / candidate
         if path.exists():
             figures[path.stem] = path

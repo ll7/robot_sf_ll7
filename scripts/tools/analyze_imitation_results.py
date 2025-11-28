@@ -55,6 +55,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Generate Markdown/LaTeX report after analysis.",
     )
+    parser.add_argument(
+        "--report-output-root",
+        type=Path,
+        default=Path("output/research_reports"),
+        help="Output root for generated reports (when --generate-report is used).",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
@@ -86,7 +92,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         report_paths = generate_imitation_report(
             summary_path=artifacts["summary_json"],
-            output_root=Path("output/research_reports"),
+            output_root=args.report_output_root,
             config=cfg,
         )
         logger.success("Report generated", report=str(report_paths["report"]))

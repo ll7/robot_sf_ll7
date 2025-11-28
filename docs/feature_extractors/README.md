@@ -1,6 +1,8 @@
 # Feature Extractor Evaluation and Improvements
 
-This directory contains documentation for the enhanced feature extraction system that provides alternative feature extraction approaches while maintaining full backward compatibility with the original `DynamicsExtractor`.
+This directory contains documentation for the enhanced feature extraction system. It offers
+alternative feature extractors while keeping full backward compatibility with the original
+`DynamicsExtractor`.
 
 ## Quick Start
 
@@ -103,6 +105,11 @@ uv run python scripts/multi_extractor_training.py \
 uv run python scripts/analyze_feature_extractors.py \
   results/feature_extractor_comparison/complete_results.json
 ```
+
+Each run writes:
+- `summary.json` / `summary.md` following `contracts/training_summary.schema.json` with metrics such as `convergence_timestep`, `sample_efficiency_timestep`, and `sample_efficiency_ratio` (baseline taken from `run.baseline_extractor` or the first extractor).
+- Per-extractor figures under `<run>/extractors/<name>/figures/` (`*_learning_curve.png`, `*_reward_distribution.png`).
+- Compatibility `complete_results.json` for legacy tooling.
 
 ### SLURM Cluster Training
 For large-scale experiments on HPC clusters:

@@ -85,9 +85,16 @@ def _parse_hparams(pairs: list[str]) -> dict[str, str]:
     """Parse key=value CLI hyperparameters into a dict."""
     result: dict[str, str] = {}
     for pair in pairs:
-        if "=" in pair:
-            key, value = pair.split("=", 1)
-            result[key.strip()] = value.strip()
+        if "=" not in pair:
+            logger.warning("Ignoring malformed hyperparameter (missing '='): {}", pair)
+            continue
+        key, value = pair.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            logger.warning("Ignoring hyperparameter with empty key: {}", pair)
+            continue
+        result[key] = value
     return result
 
 

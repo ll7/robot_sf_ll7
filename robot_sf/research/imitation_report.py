@@ -35,6 +35,8 @@ class ImitationReportConfig:
     baseline_run_id: str | None = None
     pretrained_run_id: str | None = None
     config_paths: dict[str, Path] | None = None
+    ablation_label: str | None = None
+    hyperparameters: dict[str, str] | None = None
 
 
 def _timestamp() -> str:
@@ -94,6 +96,19 @@ def _metric_samples(record: dict[str, Any], key: str) -> list[float]:
     return []
 
 
+def _ci_from_samples(samples: list[float]) -> tuple[float, float] | None:
+    """Return mean +/- 1.96 * SE as a simple confidence interval."""
+    import math
+
+    if len(samples) < 2:
+        return None
+    mean_val = sum(samples) / len(samples)
+    variance = sum((x - mean_val) ** 2 for x in samples) / (len(samples) - 1)
+    se = math.sqrt(variance) / math.sqrt(len(samples))
+    delta = 1.96 * se
+    return (mean_val - delta, mean_val + delta)
+
+
 def _fmt_stat(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.4f}"
 
@@ -121,6 +136,7 @@ def _render_markdown(
         f"- Generated: {_timestamp()}",
         f"- Baseline: `{baseline_id}`",
         f"- Pre-trained: `{pretrained_id}`",
+        f"- Ablation: {config.ablation_label or 'N/A'}",
         f"- Hypothesis: {config.hypothesis or 'N/A'}",
         f"- Significance level: {config.alpha}",
         f"- Metadata: `{metadata_path.name}`",
@@ -150,6 +166,8 @@ def _render_markdown(
             f"- Cohen's d: {_fmt_stat(stats['effect_size'])}",
             f"- Significance: {stats['significance']}",
             f"- Interpretation: {stats['interpretation']}",
+            f"- Baseline timesteps CI (95%): {stats.get('baseline_ci') or 'n/a'}",
+            f"- Pre-trained timesteps CI (95%): {stats.get('pretrained_ci') or 'n/a'}",
             "",
             "## Hypothesis Evaluation",
             f"- Decision: {hypothesis_result.get('decision')}",
@@ -169,6 +187,10 @@ def _render_markdown(
     lines.append("")
     lines.append("## Reproducibility")
     lines.append(f"- Metadata: `{metadata_path.name}` (git, hardware, packages, configs)")
+    if config.hyperparameters:
+        lines.append("## Hyperparameters")
+        for key, value in sorted(config.hyperparameters.items()):
+            lines.append(f"- {key}: {value}")
     return "\n".join(lines)
 
 
@@ -232,6 +254,8 @@ def _render_latex(
     d_line = rf"Cohen's d: {_fmt_stat(stats['effect_size'])}\\"
     sig_line = rf"Significance: {_latex_escape(str(stats['significance']))}\\"
     interp_line = rf"Interpretation: {_latex_escape(str(stats['interpretation']))}\\"
+    ci_base = stats.get("baseline_ci")
+    ci_pre = stats.get("pretrained_ci")
     lines.extend(
         [
             r"\end{tabular}",
@@ -240,6 +264,8 @@ def _render_latex(
             d_line,
             sig_line,
             interp_line,
+            rf"Baseline CI (95\%): {_latex_escape(str(ci_base))}\\",
+            rf"Pre-trained CI (95\%): {_latex_escape(str(ci_pre))}\\",
             r"\section*{Hypothesis Evaluation}",
             rf"Decision: {_latex_escape(str(hypothesis_result.get('decision')))}\\",
         ]
@@ -260,6 +286,10 @@ def _render_latex(
         lines.append(
             r"Insufficient paired samples for statistical testing (need $\geq$ 2 per run)."
         )
+    if config.hyperparameters:
+        lines.append(r"\section*{Hyperparameters}")
+        for key, value in sorted(config.hyperparameters.items()):
+            lines.append(rf"{_latex_escape(key)}: {_latex_escape(str(value))}\\")
     lines.append(r"\end{document}")
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -296,6 +326,8 @@ def generate_imitation_report(
     pretrained_ts = _metric(pretrained_rec, "timesteps_to_convergence")
     baseline_samples = _metric_samples(baseline_rec, "timesteps_to_convergence")
     pretrained_samples = _metric_samples(pretrained_rec, "timesteps_to_convergence")
+    baseline_ci = _ci_from_samples(baseline_samples)
+    pretrained_ci = _ci_from_samples(pretrained_samples)
 
     # Only run paired tests when we have >=2 paired samples
     if len(baseline_samples) == len(pretrained_samples) and len(baseline_samples) >= 2:
@@ -309,6 +341,8 @@ def generate_imitation_report(
         }
         effect = None
     stats = format_test_results(t_res, effect, alpha=config.alpha)
+    stats["baseline_ci"] = baseline_ci
+    stats["pretrained_ci"] = pretrained_ci
 
     improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts else [])
     improvement_pretrained = pretrained_samples or ([pretrained_ts] if pretrained_ts else [])

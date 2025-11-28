@@ -3455,6 +3455,9 @@ dev = [
     { name = "pylint" },
     { name = "pytest-xdist" },
 ]
+docs = [
+    { name = "pylint" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -3508,6 +3511,7 @@ dev = [
     { name = "pylint", specifier = ">=3.3.4" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
 ]
+docs = [{ name = "pylint", specifier = ">=3.3.4" }]
 
 [[package]]
 name = "roman-numerals-py"

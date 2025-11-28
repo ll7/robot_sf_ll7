@@ -12,6 +12,7 @@ def test_all_notes_membership():
         vc.NOTE_SIM_VIEW_MISSING,
         vc.NOTE_MOVIEPY_MISSING,
         vc.NOTE_INSUFFICIENT_REPLAY,
+        vc.NOTE_FALLBACK_FROM_SIM_VIEW,
     }
     assert expected == vc.ALL_NOTES
 

@@ -80,6 +80,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training with expert trajectories
 - **[Imitation Learning Quickstart](../specs/001-ppo-imitation-pretrain/quickstart.md)** - Step-by-step workflow for BC pre-training and PPO fine-tuning
 - **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
+- **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
 - **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 
 ### Benchmarking & Metrics
@@ -92,6 +93,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[SNQI Weight Tools](./snqi-weight-tools/README.md)** - Recompute, optimize, and analyze SNQI weights; command reference and workflow examples
 - **[Pyreverse UML Generation](./pyreverse.md)** - Generate class diagrams from code
 - **[Data Analysis Utilities](./DATA_ANALYSIS.md)** - Analysis helpers and data processing tools
+- **[Imitation Results Analysis](./imitation_results_analysis.md)** - Compare baseline vs pre-trained runs, emit training summaries and figures
 
 ### Architecture & Refactoring
 - **[Refactoring Overview](./refactoring/)** - Complete guide to the refactored environment architecture (deployment status, plan, migration guide, summary, automated codebase analysis)

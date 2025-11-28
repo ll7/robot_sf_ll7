@@ -3455,9 +3455,6 @@ dev = [
     { name = "pylint" },
     { name = "pytest-xdist" },
 ]
-docs = [
-    { name = "pylint" },
-]
 
 [package.metadata]
 requires-dist = [

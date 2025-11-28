@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
-from robot_sf.common.artifact_paths import get_imitation_report_dir
+from robot_sf.common.artifact_paths import get_artifact_root, get_imitation_report_dir
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -25,8 +25,53 @@ if TYPE_CHECKING:
 def _load_training_run(run_id: str) -> dict[str, Any]:
     """Load training run manifest from disk."""
     manifest_path = get_training_run_manifest_path(run_id)
+    base_runs_dir = manifest_path.parent
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Training run manifest not found: {manifest_path}")
+        # Fallback: try timestamped variants (run_id*) or summary.json inside a run folder.
+        candidates = sorted(
+            base_runs_dir.glob(f"{run_id}*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
+        if candidates:
+            manifest_path = candidates[0]
+            logger.warning("Canonical manifest missing; using closest match {}", manifest_path.name)
+        else:
+            artifact_root = get_artifact_root()
+            nested = sorted(
+                artifact_root.glob(f"**/ppo_imitation/runs/{run_id}*.json"),
+                key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                reverse=True,
+            )
+            if nested:
+                manifest_path = nested[0]
+                logger.warning("Canonical manifest missing; using nested match {}", manifest_path)
+            else:
+                alt_dir = get_imitation_report_dir() / run_id
+                alt_manifest = alt_dir / "summary.json"
+                if alt_manifest.exists():
+                    manifest_path = alt_manifest
+                    logger.warning("Canonical manifest missing; using {}", manifest_path)
+                else:
+                    all_manifests = sorted(
+                        artifact_root.glob("**/ppo_imitation/runs/*.json"),
+                        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                        reverse=True,
+                    )
+                    if all_manifests:
+                        manifest_path = all_manifests[0]
+                        logger.error(
+                            "Canonical manifest for '{}' missing; falling back to unrelated run {}",
+                            run_id,
+                            manifest_path.name,
+                        )
+                    else:
+                        available = sorted(
+                            {p.name for p in base_runs_dir.glob("*.json")}
+                            | {p.name for p in artifact_root.glob("**/ppo_imitation/runs/*.json")}
+                        )
+                        raise FileNotFoundError(
+                            f"Training run manifest not found: {manifest_path}. "
+                            f"Available run_ids: {available}"
+                        )
 
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 

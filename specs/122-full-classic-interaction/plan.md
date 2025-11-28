@@ -57,8 +57,8 @@ Initial alignment (pre‑research):
 5. Minimal Baselines: Uses existing planners (no new baseline) → OK.
 6. Metrics Transparency: Provide per-metric CIs + effect sizes; no single hidden scalar → OK.
 7. Backward Compatibility: Episode schema unchanged; additions only in separate summary/manifest files → OK.
-8. Documentation as API: Will add quickstart + link from central docs index → PENDING (Phase 1 deliverable).
-9. Test Coverage: Add smoke test + unit tests for aggregation/effect size → PENDING.
+8. Documentation as API: Quickstart/docs links added (see specs/122 quickstart + docs/benchmark_full_classic.md references).
+9. Test Coverage: Aggregation/effect-size contract + integration coverage in `tests/benchmark_full/test_integration_aggregate_effect_sizes.py`.
 10. Scope Discipline: No out‑of‑scope features (no new RL algos) → OK.
 
 No violations requiring Complexity Tracking at this stage.

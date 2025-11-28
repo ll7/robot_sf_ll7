@@ -149,7 +149,7 @@ def _build_record(
         end_time=manifest.get("created_at", now),
         duration_seconds=None,
         hardware_profile=hardware,
-        worker_mode="single-thread",
+        worker_mode=manifest.get("worker_mode", "single-thread"),
         training_steps=int(timesteps) if timesteps else 0,
         metrics={
             "timesteps_to_convergence": timesteps,

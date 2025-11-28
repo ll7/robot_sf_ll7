@@ -39,11 +39,16 @@ from robot_sf.research.aggregation import (
     export_metrics_csv,
     export_metrics_json,
 )
+from robot_sf.research.extractor_report import ReportConfig, generate_extractor_report
 from robot_sf.research.figures import (
     configure_matplotlib_backend,
     plot_distributions,
     plot_learning_curve,
     plot_sample_efficiency,
+)
+from robot_sf.research.imitation_report import (
+    ImitationReportConfig,
+    generate_imitation_report,
 )
 from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestrator
 from robot_sf.research.report_template import MarkdownReportRenderer
@@ -51,7 +56,9 @@ from robot_sf.research.statistics import cohen_d, evaluate_hypothesis, paired_t_
 
 __all__ = [
     "AblationOrchestrator",
+    "ImitationReportConfig",
     "MarkdownReportRenderer",
+    "ReportConfig",
     "ReportOrchestrator",
     "aggregate_metrics",
     "bootstrap_ci",
@@ -60,6 +67,8 @@ __all__ = [
     "evaluate_hypothesis",
     "export_metrics_csv",
     "export_metrics_json",
+    "generate_extractor_report",
+    "generate_imitation_report",
     "paired_t_test",
     "plot_distributions",
     "plot_learning_curve",

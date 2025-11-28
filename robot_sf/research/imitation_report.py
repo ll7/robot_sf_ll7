@@ -326,7 +326,7 @@ def _render_latex(
             lines.append(rf"{_latex_escape(key)}: {_latex_escape(str(value))}\\")
     if seeds:
         lines.append(r"\section*{Seeds}")
-        lines.append(_latex_escape(", ".join(str(s) for s in seeds)))
+        lines.append(_latex_escape(", ".join(str(s) for s in seeds)) + r"\\")
     if total_duration is not None:
         lines.append(r"\section*{Timing}")
         lines.append(rf"Total duration (s): {total_duration:.2f}\\")

@@ -25,7 +25,15 @@ configure_matplotlib_backend()
 
 
 def _latex_escape(text: str) -> str:
-    return text.replace("_", r"\_")
+    return (
+        text.replace("&", r"\&")
+        .replace("%", r"\%")
+        .replace("$", r"\$")
+        .replace("#", r"\#")
+        .replace("_", r"\_")
+        .replace("{", r"\{")
+        .replace("}", r"\}")
+    )
 
 
 @dataclass

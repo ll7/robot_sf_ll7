@@ -82,6 +82,16 @@ def _metric(record: dict[str, Any], key: str) -> float:
     return float(val) if isinstance(val, (int, float)) else 0.0
 
 
+def _metric_samples(record: dict[str, Any], key: str) -> list[float]:
+    """Return a list of sample values for a metric if present."""
+
+    metrics = record.get("metrics") or {}
+    samples = metrics.get(f"{key}_samples") or metrics.get(key)
+    if isinstance(samples, list):
+        return [float(v) for v in samples if isinstance(v, (int, float))]
+    return []
+
+
 def _fmt_stat(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.4f}"
 
@@ -239,6 +249,11 @@ def _render_latex(
         for label, path in figures.items():
             lines.append(rf"\subsection*{{{_latex_escape(label)}}}")
             lines.append(rf"\includegraphics[width=\linewidth]{{{path.name}}}")
+    if stats.get("t_stat") is None:
+        lines.append(r"\section*{Notes}")
+        lines.append(
+            r"Insufficient paired samples for statistical testing (need $\geq$ 2 per run)."
+        )
     lines.append(r"\end{document}")
     output_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -269,14 +284,26 @@ def generate_imitation_report(
 
     baseline_ts = _metric(baseline_rec, "timesteps_to_convergence")
     pretrained_ts = _metric(pretrained_rec, "timesteps_to_convergence")
-    baseline_list = [baseline_ts] if baseline_ts else []
-    pretrained_list = [pretrained_ts] if pretrained_ts else []
+    baseline_samples = _metric_samples(baseline_rec, "timesteps_to_convergence")
+    pretrained_samples = _metric_samples(pretrained_rec, "timesteps_to_convergence")
 
-    t_res = paired_t_test(baseline_list, pretrained_list)
-    effect = cohen_d(baseline_list, pretrained_list)
+    # Only run paired tests when we have >=2 paired samples
+    if len(baseline_samples) == len(pretrained_samples) and len(baseline_samples) >= 2:
+        t_res = paired_t_test(baseline_samples, pretrained_samples)
+        effect = cohen_d(baseline_samples, pretrained_samples)
+    else:
+        t_res = {
+            "t_stat": None,
+            "p_value": None,
+            "n": min(len(baseline_samples), len(pretrained_samples)),
+        }
+        effect = None
     stats = format_test_results(t_res, effect, alpha=config.alpha)
+
+    improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts else [])
+    improvement_pretrained = pretrained_samples or ([pretrained_ts] if pretrained_ts else [])
     hypothesis_result = evaluate_hypothesis(
-        baseline_list, pretrained_list, threshold=config.improvement_threshold_pct
+        improvement_baseline, improvement_pretrained, threshold=config.improvement_threshold_pct
     )
 
     run_id = summary.get("run_id", "unknown")

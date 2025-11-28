@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 from loguru import logger
 
+from robot_sf.research.cli_args import add_imitation_report_common_args
 from robot_sf.training import analyze_imitation_results
 
 
@@ -43,38 +44,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional output directory (defaults under imitation report root).",
     )
-    parser.add_argument(
-        "--experiment-name",
-        default="imitation",
-        help="Experiment name used for downstream report generation.",
-    )
-    parser.add_argument(
-        "--num-seeds",
-        type=int,
-        default=None,
-        help="Number of random seeds represented in the comparison.",
-    )
-    parser.add_argument(
-        "--hypothesis",
-        type=str,
-        default="BC pre-training reduces timesteps by ≥30%",
-        help="Hypothesis statement for report generation.",
+    add_imitation_report_common_args(
+        parser,
+        alpha_flag="--significance-level",
+        alpha_dest="significance_level",
+        include_threshold=False,
     )
     parser.add_argument(
         "--generate-report",
         action="store_true",
         help="Generate Markdown/LaTeX report after analysis.",
-    )
-    parser.add_argument(
-        "--significance-level",
-        type=float,
-        default=0.05,
-        help="Alpha level for statistical tests in the report.",
-    )
-    parser.add_argument(
-        "--export-latex",
-        action="store_true",
-        help="Also emit LaTeX/PDF when generating the report.",
     )
     return parser.parse_args(list(argv) if argv is not None else None)
 

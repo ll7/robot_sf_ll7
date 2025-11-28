@@ -7,6 +7,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from robot_sf.research.cli_args import add_imitation_report_common_args
 from robot_sf.research.imitation_report import ImitationReportConfig, generate_imitation_report
 
 
@@ -26,35 +27,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Base directory for generated reports.",
     )
     parser.add_argument(
-        "--experiment-name",
-        type=str,
-        default="imitation",
-        help="Name used for the report folder prefix.",
-    )
-    parser.add_argument(
-        "--hypothesis",
-        type=str,
-        default="BC pre-training reduces timesteps by ≥30%",
-        help="Hypothesis statement to record in the report.",
-    )
-    parser.add_argument(
-        "--alpha",
-        type=float,
-        default=0.05,
-        help="Significance threshold for tests.",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=30.0,
-        help="Improvement percentage threshold for hypothesis evaluation.",
-    )
-    parser.add_argument(
-        "--export-latex",
-        action="store_true",
-        help="Also emit a LaTeX version of the report.",
-    )
-    parser.add_argument(
         "--baseline-run-id",
         type=str,
         default=None,
@@ -67,12 +39,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Name of the pretrained run to include (required if summary has >2 records).",
     )
     parser.add_argument(
-        "--num-seeds",
-        type=int,
-        default=None,
-        help="Number of random seeds represented in the comparison.",
-    )
-    parser.add_argument(
         "--ablation-label",
         type=str,
         default=None,
@@ -83,6 +49,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="append",
         default=None,
         help="Hyperparameter key=value pairs to record in the report (repeatable).",
+    )
+    add_imitation_report_common_args(
+        parser,
+        alpha_flag="--alpha",
+        alpha_dest="alpha",
+        include_threshold=True,
     )
     return parser.parse_args(argv)
 

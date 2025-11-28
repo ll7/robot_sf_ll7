@@ -29,11 +29,19 @@ def _minimal_record(name: str, timesteps: float, success: float, collision: floa
         "training_steps": int(timesteps),
         "metrics": {
             "timesteps_to_convergence": timesteps,
-            "timesteps_to_convergence_samples": [timesteps, timesteps * 1.1],
+            "timesteps_to_convergence_samples": [
+                timesteps * 0.9,
+                timesteps,
+                timesteps * 1.1,
+            ],
             "success_rate": success,
+            "success_rate_samples": [success * 0.95, success, success * 1.05],
             "collision_rate": collision,
+            "collision_rate_samples": [collision * 1.1, collision, collision * 0.9],
             "snqi": snqi,
+            "snqi_samples": [snqi * 0.9, snqi, snqi * 1.05],
             "sample_efficiency_ratio": 1.0,
+            "sample_efficiency_ratio_samples": [0.9, 1.0, 1.1],
         },
         "artifacts": {},
     }
@@ -71,6 +79,7 @@ def test_generate_imitation_report(tmp_path: Path):
     assert out["report"].exists()
     report_text = out["report"].read_text(encoding="utf-8")
     assert "p-value: n/a" not in report_text
+    assert "p-value:" in report_text
     assert out["metadata"].exists()
     assert out["figures_dir"].exists()
     assert out["latex"] is not None and out["latex"].exists()

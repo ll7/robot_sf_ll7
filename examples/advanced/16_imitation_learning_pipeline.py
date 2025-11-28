@@ -31,10 +31,11 @@ the training scripts in sequence:
 generated automatically under output/tmp for each run, so no manual edits are needed.
 
 **Output**:
-- Expert policy: output/benchmarks/expert_policies/
-- Trajectories: output/benchmarks/expert_trajectories/
-- Pre-trained policy: output/benchmarks/expert_policies/
-- Comparison report: output/imitation_reports/comparisons/
+- Timestamped run root: output/benchmarks/<timestamp>/
+- Expert policy: <run-root>/expert_policies/
+- Trajectories: <run-root>/expert_trajectories/
+- Pre-trained policy: <run-root>/expert_policies/
+- Comparison report: <run-root>/ppo_imitation/comparisons/
 
 **Related**:
 - Full documentation: docs/imitation_learning_pipeline.md
@@ -73,7 +74,24 @@ from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus, seri
 from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
 PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
-RUN_MANIFEST_DIR = get_training_run_manifest_path("placeholder").parent
+RUN_ROOT: Path | None = None
+
+
+def _ensure_run_root() -> Path:
+    """Ensure a timestamped artifact root under output/benchmarks and export env override."""
+
+    global RUN_ROOT, PIPELINE_CONFIG_DIR
+    if RUN_ROOT is not None:
+        return RUN_ROOT
+    if os.environ.get("ROBOT_SF_ARTIFACT_ROOT"):
+        RUN_ROOT = Path(os.environ["ROBOT_SF_ARTIFACT_ROOT"]).expanduser()
+    else:
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        RUN_ROOT = Path("output/benchmarks") / timestamp
+        os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(RUN_ROOT)
+    RUN_ROOT.mkdir(parents=True, exist_ok=True)
+    PIPELINE_CONFIG_DIR = RUN_ROOT / "tmp" / "imitation_pipeline"
+    return RUN_ROOT
 
 
 def _load_training_manifest(run_id: str) -> dict[str, Any]:
@@ -250,14 +268,19 @@ def _override_expert_config_policy_id(config_path: Path, policy_id: str) -> Path
     return _write_pipeline_config(filename, data)
 
 
+def _run_manifest_dir() -> Path:
+    return get_training_run_manifest_path("placeholder").parent
+
+
 def _discover_latest_training_run_id(prefix: str) -> str | None:
     """Return the newest training run identifier with the given prefix."""
 
-    if not RUN_MANIFEST_DIR.exists():
+    base_dir = _run_manifest_dir()
+    if not base_dir.exists():
         return None
     candidates: list[tuple[float, str]] = []
     pattern = f"{prefix}*.json"
-    for path in RUN_MANIFEST_DIR.glob(pattern):
+    for path in base_dir.glob(pattern):
         try:
             stat = path.stat()
         except OSError:  # pragma: no cover - filesystem races
@@ -464,6 +487,7 @@ def _run_tracker_smoke(
 
 def main():  # noqa: C901 - Sequential workflow orchestration; complexity is intentional
     """Run complete imitation learning pipeline by calling training scripts."""
+    _ensure_run_root()
     parser = argparse.ArgumentParser(description="Imitation Learning Pipeline - End-to-End Example")
     parser.add_argument(
         "--skip-expert",

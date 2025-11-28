@@ -417,9 +417,8 @@ def generate_imitation_report(
     # Copy summary for traceability
     shutil.copy2(summary_path, data_dir / "summary.json")
 
-    seeds_list = list(range(config.num_seeds)) if config.num_seeds else []
     metadata = collect_reproducibility_metadata(
-        seeds=seeds_list,
+        seeds=[],
         config_paths=config.config_paths,
     )
     metadata_path = output_dir / "metadata.json"

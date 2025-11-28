@@ -11,8 +11,11 @@ if TYPE_CHECKING:
 
 from robot_sf.research.imitation_report import (
     ImitationReportConfig,
+    _ci_from_samples,
+    _fmt_ci,
     generate_imitation_report,
 )
+from scripts.research.generate_imitation_report import _parse_hparams
 
 
 def _minimal_record(name: str, timesteps: float, success: float, collision: float, snqi: float):
@@ -76,7 +79,12 @@ def test_generate_imitation_report(tmp_path: Path):
     (fig_dir / "timesteps_comparison.png").write_bytes(b"png")
     (fig_dir / "performance_metrics.png").write_bytes(b"png")
 
-    cfg = ImitationReportConfig(experiment_name="imitation-demo", export_latex=True)
+    cfg = ImitationReportConfig(
+        experiment_name="imitation-demo",
+        export_latex=True,
+        ablation_label="bc_epochs=5",
+        hyperparameters={"bc_epochs": "5", "dataset_size": "5000"},
+    )
     out = generate_imitation_report(
         summary_path=summary_path,
         output_root=tmp_path,
@@ -87,6 +95,44 @@ def test_generate_imitation_report(tmp_path: Path):
     report_text = out["report"].read_text(encoding="utf-8")
     assert "p-value: n/a" not in report_text
     assert "p-value:" in report_text
+    assert "Ablation: bc_epochs=5" in report_text
+    assert "bc_epochs: 5" in report_text
+    assert "dataset_size: 5000" in report_text
     assert out["metadata"].exists()
     assert out["figures_dir"].exists()
     assert out["latex"] is not None and out["latex"].exists()
+
+
+def test_ci_from_samples_requires_two_or_more():
+    """_ci_from_samples returns n/a for insufficient samples."""
+
+    assert _ci_from_samples([]) == "n/a"
+    assert _ci_from_samples([1.0]) == "n/a"
+
+
+def test_ci_from_samples_computes_interval():
+    """_ci_from_samples computes a symmetric 95% CI for sample arrays."""
+
+    samples = [1.0, 2.0, 3.0, 4.0]
+    ci = _ci_from_samples(samples)
+    assert ci is not None
+    low, high = ci
+    # Mean is 2.5; CI should contain the mean and be symmetric around it.
+    assert low < 2.5 < high
+
+
+def test_fmt_ci_formats_tuple_and_na():
+    """_fmt_ci formats tuples and n/a consistently."""
+
+    assert _fmt_ci((1.23456, 2.34567)) == "(1.2346, 2.3457)"
+    assert _fmt_ci(None) == "n/a"
+    assert _fmt_ci("n/a") == "n/a"
+
+
+def test_parse_hparams_handles_valid_and_invalid(monkeypatch):
+    """_parse_hparams returns parsed dict and ignores malformed pairs."""
+
+    parsed = _parse_hparams(["epochs=5", " dataset = 1000 ", "invalidpair", "=novalue"])
+    assert parsed["epochs"] == "5"
+    assert parsed["dataset"] == "1000"
+    assert "" not in parsed

@@ -66,7 +66,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Name of the pretrained run to include (required if summary has >2 records).",
     )
+    parser.add_argument(
+        "--ablation-label",
+        type=str,
+        default=None,
+        help="Optional ablation label (e.g., dataset size or BC epochs).",
+    )
+    parser.add_argument(
+        "--hparam",
+        action="append",
+        default=None,
+        help="Hyperparameter key=value pairs to record in the report (repeatable).",
+    )
     return parser.parse_args(argv)
+
+
+def _parse_hparams(pairs: list[str]) -> dict[str, str]:
+    """Parse key=value CLI hyperparameters into a dict."""
+    result: dict[str, str] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            logger.warning("Ignoring malformed hyperparameter (missing '='): {}", pair)
+            continue
+        key, value = pair.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            logger.warning("Ignoring hyperparameter with empty key: {}", pair)
+            continue
+        result[key] = value
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         export_latex=args.export_latex,
         baseline_run_id=args.baseline_run_id,
         pretrained_run_id=args.pretrained_run_id,
+        ablation_label=args.ablation_label,
+        hyperparameters=_parse_hparams(args.hparam or []),
     )
 
     paths = generate_imitation_report(

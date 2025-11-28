@@ -57,3 +57,6 @@ def test_generate_extractor_report_smoke(tmp_path: Path):
     meta = json.loads(out["metadata"].read_text(encoding="utf-8"))
     assert "git" in meta and "hardware" in meta and "experiment" in meta
     assert out["latex"].exists()
+    latex_text = out["latex"].read_text(encoding="utf-8")
+    assert "baseline & success" in latex_text
+    assert r"\section*{Statistical Comparison}" in latex_text

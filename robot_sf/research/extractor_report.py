@@ -22,6 +22,10 @@ from robot_sf.research.statistics import cohen_d, paired_t_test
 configure_matplotlib_backend()
 
 
+def _latex_escape(text: str) -> str:
+    return text.replace("_", r"\_")
+
+
 @dataclass
 class ReportConfig:
     experiment_name: str
@@ -119,6 +123,10 @@ def _render_markdown(
     metadata_path: Path,
 ) -> str:
     run_id = summary.get("run_id", "unknown")
+
+    def _fmt_stat(value: float | None) -> str:
+        return "n/a" if value is None else f"{value:.4f}"
+
     lines = [
         f"# {config.experiment_name} Report",
         "",
@@ -147,8 +155,10 @@ def _render_markdown(
             "",
             "## Statistical Comparison",
             f"- Baseline: `{stats.get('baseline')}`",
-            f"- Candidates vs baseline (best_mean_reward): p={stats['reward_p_value']} cohen_d={stats['reward_cohen_d']}",
-            f"- Candidates vs baseline (sample_efficiency_ratio): p={stats['sample_p_value']} cohen_d={stats['sample_cohen_d']}",
+            "- Candidates vs baseline (best_mean_reward): "
+            f"p={_fmt_stat(stats['reward_p_value'])} cohen_d={_fmt_stat(stats['reward_cohen_d'])}",
+            "- Candidates vs baseline (sample_efficiency_ratio): "
+            f"p={_fmt_stat(stats['sample_p_value'])} cohen_d={_fmt_stat(stats['sample_cohen_d'])}",
             "",
             "## Figures",
         ]
@@ -161,27 +171,63 @@ def _render_markdown(
     return "\n".join(lines)
 
 
-def _render_latex(report_md: str, figures: dict[str, Path], output_path: Path) -> None:
-    body_lines = [r"\documentclass{article}", r"\usepackage{graphicx}", r"\begin{document}"]
-    body_lines.append(r"\section*{Extractors}")
-    body_lines.append(r"\begin{itemize}")
-    for line in report_md.splitlines():
-        if line.startswith("| Extractor"):
-            continue
-        if line.startswith("| ---"):
-            continue
-        if line.startswith("| "):
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            if len(cells) >= 5:
-                body_lines.append(
-                    rf"\item {cells[0]} -- status {cells[1]}, best reward {cells[2]}, convergence {cells[3]}, sample eff. {cells[4]}"
-                )
-    body_lines.append(r"\end{itemize}")
+def _render_latex(
+    *,
+    summary: dict[str, Any],
+    config: ReportConfig,
+    stats: dict[str, Any],
+    figures: dict[str, Path],
+    metadata_path: Path,
+    output_path: Path,
+) -> None:
+    def _fmt_stat(value: float | None) -> str:
+        return "n/a" if value is None else f"{value:.4f}"
+
+    run_id = summary.get("run_id", "unknown")
+    body_lines = [
+        r"\documentclass{article}",
+        r"\usepackage{graphicx}",
+        r"\usepackage[margin=1in]{geometry}",
+        r"\begin{document}",
+        rf"\section*{{{_latex_escape(config.experiment_name)} Report}}",
+        r"\begin{itemize}",
+        rf"\item Run ID: \texttt{{{_latex_escape(str(run_id))}}}",
+        rf"\item Generated: {_timestamp()}",
+        rf"\item Git: \texttt{{{_latex_escape(_git_hash())}}}",
+        rf"\item Hypothesis: {_latex_escape(config.hypothesis or 'N/A')}",
+        rf"\item Significance level: {config.significance_level}",
+        rf"\item Metadata: \texttt{{{_latex_escape(metadata_path.name)}}}",
+        r"\end{itemize}",
+        r"\section*{Extractors}",
+        r"\begin{tabular}{lllll}",
+        r"\textbf{Extractor} & \textbf{Status} & \textbf{Best Reward} & \textbf{Convergence (ts)} & \textbf{Sample Eff. Ratio} \\",
+        r"\hline",
+    ]
+
+    for rec in summary.get("extractor_results", []):
+        name = _latex_escape(str(rec.get("config_name", "unknown")))
+        status = _latex_escape(str(rec.get("status", "unknown")))
+        metrics = rec.get("metrics") or {}
+        best_reward = metrics.get("best_mean_reward", "n/a")
+        conv = metrics.get("convergence_timestep", "n/a")
+        ratio = metrics.get("sample_efficiency_ratio", "n/a")
+        body_lines.append(f"{name} & {status} & {best_reward} & {conv} & {ratio} \\\\")
+
+    body_lines.extend(
+        [
+            r"\end{tabular}",
+            r"\section*{Statistical Comparison}",
+            rf"\textbf{{Baseline}}: \texttt{{{_latex_escape(str(stats.get('baseline')))}}}\\",
+            rf"best\_mean\_reward: p={_fmt_stat(stats['reward_p_value'])} \; d={_fmt_stat(stats['reward_cohen_d'])}\\",
+            rf"sample\_efficiency\_ratio: p={_fmt_stat(stats['sample_p_value'])} \; d={_fmt_stat(stats['sample_cohen_d'])}\\",
+        ]
+    )
+
     if figures:
         body_lines.append(r"\section*{Figures}")
-    for label, path in figures.items():
-        body_lines.append(rf"\subsection*{{{label}}}")
-        body_lines.append(rf"\includegraphics[width=\linewidth]{{{path.name}}}")
+        for label, path in figures.items():
+            body_lines.append(rf"\subsection*{{{_latex_escape(label)}}}")
+            body_lines.append(rf"\includegraphics[width=\linewidth]{{{path.name}}}")
     body_lines.append(r"\end{document}")
     output_path.write_text("\n".join(body_lines), encoding="utf-8")
 
@@ -273,7 +319,14 @@ def generate_extractor_report(
 
     if config.export_latex:
         latex_path = output_dir / "report.tex"
-        _render_latex(report_md, figures, latex_path)
+        _render_latex(
+            summary=summary,
+            config=config,
+            stats=stats_payload,
+            figures=figures,
+            metadata_path=metadata_path,
+            output_path=latex_path,
+        )
     else:
         latex_path = None
 

@@ -58,8 +58,9 @@ def _load_training_run(run_id: str) -> dict[str, Any]:
                     )
                     if all_manifests:
                         manifest_path = all_manifests[0]
-                        logger.warning(
-                            "Canonical manifest missing; using newest available run {}",
+                        logger.error(
+                            "Canonical manifest for '{}' missing; falling back to unrelated run {}",
+                            run_id,
                             manifest_path.name,
                         )
                     else:

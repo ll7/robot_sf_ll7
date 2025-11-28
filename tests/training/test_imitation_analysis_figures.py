@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.training.imitation_analysis import _generate_figures
 
 
@@ -43,6 +44,20 @@ def test_generate_figures_creates_all_expected_files(tmp_path: Path):
         "success_collision_over_time",
         "performance_distribution",
     }
-    assert expected.issubset(paths.keys())
+    assert set(paths.keys()) == expected
     for name in expected:
         assert (tmp_path / f"{name}.png").exists()
+
+
+def test_metric_samples_handles_suffix_and_filtering():
+    payload = {
+        "metrics": {
+            "foo_samples": [1, 2.0, "bad", None],
+            "bar": [3, "oops"],
+        }
+    }
+    assert metric_samples(payload, "foo") == [1.0, 2.0]
+    # falls back to base key when *_samples missing
+    assert metric_samples(payload, "bar") == [3.0]
+    # missing metrics yields empty list
+    assert metric_samples({}, "baz") == []

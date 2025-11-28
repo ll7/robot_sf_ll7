@@ -213,13 +213,22 @@ def _render_latex(
         ratio = metrics.get("sample_efficiency_ratio", "n/a")
         body_lines.append(f"{name} & {status} & {best_reward} & {conv} & {ratio} \\\\")
 
+    reward_stats = (
+        rf"best\_mean\_reward: p={_fmt_stat(stats['reward_p_value'])} "
+        rf"\; d={_fmt_stat(stats['reward_cohen_d'])}\\"
+    )
+    sample_stats = (
+        rf"sample\_efficiency\_ratio: p={_fmt_stat(stats['sample_p_value'])} "
+        rf"\; d={_fmt_stat(stats['sample_cohen_d'])}\\"
+    )
+
     body_lines.extend(
         [
             r"\end{tabular}",
             r"\section*{Statistical Comparison}",
             rf"\textbf{{Baseline}}: \texttt{{{_latex_escape(str(stats.get('baseline')))}}}\\",
-            rf"best\_mean\_reward: p={_fmt_stat(stats['reward_p_value'])} \; d={_fmt_stat(stats['reward_cohen_d'])}\\",
-            rf"sample\_efficiency\_ratio: p={_fmt_stat(stats['sample_p_value'])} \; d={_fmt_stat(stats['sample_cohen_d'])}\\",
+            reward_stats,
+            sample_stats,
         ]
     )
 

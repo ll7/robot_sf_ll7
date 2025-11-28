@@ -20,6 +20,7 @@ from robot_sf.training import analyze_imitation_results
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for imitation results analysis."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--group",
@@ -46,6 +47,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Entry point: run analysis and emit summary artifacts."""
     args = parse_args(argv)
     artifacts = analyze_imitation_results(
         group_id=args.group,

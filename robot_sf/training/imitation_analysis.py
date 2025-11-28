@@ -32,6 +32,7 @@ from robot_sf.training.multi_extractor_summary import write_summary_artifacts
 
 
 def _load_training_run(run_id: str) -> tuple[dict[str, Any], Path]:
+    """Load a training manifest for run_id with fallbacks to prefixed/nested variants."""
     manifest_path = get_training_run_manifest_path(run_id)
     base_runs_dir = manifest_path.parent
     if not manifest_path.exists():
@@ -62,6 +63,7 @@ def _load_training_run(run_id: str) -> tuple[dict[str, Any], Path]:
 
 
 def _metric_mean(manifest: dict[str, Any], key: str) -> float:
+    """Return the mean value for a metric in a manifest, defaulting to 0.0."""
     metrics = manifest.get("metrics") or {}
     entry = metrics.get(key) or {}
     if isinstance(entry, dict) and "mean" in entry:
@@ -73,6 +75,7 @@ def _metric_mean(manifest: dict[str, Any], key: str) -> float:
 
 
 def _status_to_summary(status: str | None) -> str:
+    """Normalize manifest statuses into schema-accepted success/failed values."""
     if status == "failed":
         return "failed"
     if status == "partial":
@@ -88,6 +91,7 @@ def _build_record(
     hardware: HardwareProfile,
     sample_efficiency_ratio: float,
 ) -> ExtractorRunRecord:
+    """Convert a training manifest into an ExtractorRunRecord for summary emission."""
     now = datetime.now(UTC).isoformat()
     timesteps = _metric_mean(manifest, "timesteps_to_convergence")
     success_rate = _metric_mean(manifest, "success_rate")
@@ -120,6 +124,7 @@ def _generate_figures(
     pretrained_metrics: dict[str, float],
     output_dir: Path,
 ) -> dict[str, Path]:
+    """Generate comparison figures (timesteps + performance bars) for the analysis."""
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
 
@@ -170,6 +175,7 @@ def analyze_imitation_results(
     pretrained_run_id: str,
     output_dir: Path | None = None,
 ) -> dict[str, Path]:
+    """Summarize baseline vs pretrained runs with metrics, figures, and schema-compliant JSON."""
     baseline_manifest, baseline_manifest_path = _load_training_run(baseline_run_id)
     pretrained_manifest, pretrained_manifest_path = _load_training_run(pretrained_run_id)
 

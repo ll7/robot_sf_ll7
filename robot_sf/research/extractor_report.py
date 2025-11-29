@@ -286,7 +286,7 @@ def generate_extractor_report(
 
     metadata = collect_reproducibility_metadata(
         seeds=[],
-        config_paths={"config": str(copied_config)} if copied_config else {},
+        config_paths={"config": copied_config} if copied_config else None,
     )
     metadata_path = output_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata.to_dict(), indent=2), encoding="utf-8")

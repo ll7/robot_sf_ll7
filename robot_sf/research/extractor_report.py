@@ -133,6 +133,7 @@ def _render_markdown(
     metadata_path: Path,
 ) -> str:
     run_id = summary.get("run_id", "unknown")
+    output_dir = metadata_path.parent
 
     def _fmt_stat(value: float | None) -> str:
         return "n/a" if value is None else f"{value:.4f}"
@@ -174,7 +175,11 @@ def _render_markdown(
         ]
     )
     for label, path in figures.items():
-        lines.append(f"![{label}]({path.name})")
+        try:
+            figure_rel = path.relative_to(output_dir)
+        except ValueError:  # fallback if a figure is outside the report directory
+            figure_rel = path
+        lines.append(f"![{label}]({figure_rel.as_posix()})")
     lines.append("")
     lines.append("## Notes")
     lines.append("- Reports are generated from `summary.json` and enriched metrics.")
@@ -194,6 +199,7 @@ def _render_latex(
         return "n/a" if value is None else f"{value:.4f}"
 
     run_id = summary.get("run_id", "unknown")
+    output_dir = metadata_path.parent
     body_lines = [
         r"\documentclass{article}",
         r"\usepackage{graphicx}",
@@ -245,8 +251,12 @@ def _render_latex(
     if figures:
         body_lines.append(r"\section*{Figures}")
         for label, path in figures.items():
+            try:
+                figure_rel = path.relative_to(output_dir)
+            except ValueError:
+                figure_rel = path
             body_lines.append(rf"\subsection*{{{_latex_escape(label)}}}")
-            body_lines.append(rf"\includegraphics[width=\linewidth]{{{path.name}}}")
+            body_lines.append(rf"\includegraphics[width=\linewidth]{{{figure_rel.as_posix()}}}")
     body_lines.append(r"\end{document}")
     output_path.write_text("\n".join(body_lines), encoding="utf-8")
 

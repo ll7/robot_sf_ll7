@@ -44,10 +44,12 @@ dependencies = [
     "pytest-cov>=6.0.0",
     "scalene>=1.5.48",
     "ruff>=0.9.7",
+    "pdoc>=14.5.0",
     "pre-commit>=4.1.0",
     "setuptools>=70.0.0",
     "pysocialforce",
     "jsonschema>=4.23.0",
+    "libcst>=1.5.0",
 ]
 
 [project.optional-dependencies]
@@ -208,6 +210,19 @@ select = [
   "TCH",    # move typing-only imports under TYPE_CHECKING
   "TID",    # tidy imports (relative vs absolute)
 ]
+extend-select = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    "D201",
+    "D417",
+    "D419",
+]
 
 ignore = [
     # Research/scientific computing patterns that are acceptable
@@ -279,6 +294,7 @@ ignore = [
 "fast-pysf/benchmarks/**/*" = ["T201"]  # Allow prints in benchmarks
 "fast-pysf/tests/**/*" = ["S101", "T201"]  # Allow asserts and prints in tests
 "fast-pysf/pysocialforce/__init__.py" = ["F401"]  # Public API re-exports
+"docs/dev/issues/**/*.ipynb" = ["D100","D101","D102","D103","D104","D105","D106","D107","D201","D417","D419"]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]

@@ -197,6 +197,9 @@ All tests should pass successfully. The test suite includes:
 # Lint and format
 uv run ruff check --fix . && uv run ruff format .
 
+# Docstring enforcement (fails if any D100–D419 rule regresses)
+uv run python scripts/tools/validate_docstring_rules.py
+
 # Run all tests (unified suite)
 uv run pytest
 

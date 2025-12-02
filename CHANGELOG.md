@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Docstring enforcement & API documentation tooling (Feature 001-ruff-docstrings)
+  - Enabled Ruff docstring rules (D100–D107, D201, D417, D419) across the repository with per-file ignores for vendored/generated code
+  - Added enforcement/triage helpers (`scripts/tools/validate_docstring_rules.py`, `scripts/tools/docstring_report.py`, VS Code tasks, and guard wiring in CI/prerequisite scripts)
+  - Replaced placeholder docstrings with fully documented helpers in the environment factories, benchmark aggregation, research reporting, PPO training, tooling CLIs, and imitation-learning examples
+  - Introduced `scripts/tools/build_api_docs.py` to run `pdoc` and emit HTML + PDF artifacts under `output/docs/api/`
+  - Updated README/dev docs/CHANGELOG to surface the new workflows and expectations
 - Automated research reporting pipeline (feature 270-imitation-report): multi-seed aggregation, statistical hypothesis evaluation (paired t-tests, effect sizes, threshold comparisons), publication-quality figure suite (learning curves, sample efficiency, distributions, effect sizes, sensitivity), ablation matrix orchestration, telemetry section, and programmatic + CLI workflows (`scripts/research/generate_report.py`, `scripts/research/compare_ablations.py`). Includes success criteria tests and demo (`examples/advanced/17_research_report_demo.py`).
 - Research reporting polish: metadata manifest aligned with `report_metadata` schema, schema validation tests for metrics/hypotheses, and smoke/performance harnesses (`scripts/validation/test_research_report_smoke.sh`, `scripts/validation/performance_research_report.py`, `tests/research/test_performance_smoke.py`, `tests/research/test_schemas.py`).
 - Multi-extractor training now auto-collects convergence/sample-efficiency metrics, baseline comparisons, and learning-curve/reward-distribution figures, emitting schema-compliant summaries (`summary.json`/`summary.md`) plus legacy `complete_results.json`.

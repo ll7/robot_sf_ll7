@@ -138,6 +138,20 @@ if $INCLUDE_TASKS && [[ -f "$TASKS" ]]; then
     docs+=("tasks.md")
 fi
 
+# Run docstring validation guard unless explicitly skipped
+if [[ -z "${SKIP_DOCSTRING_GUARD:-}" ]]; then
+    GUARD_CMD=(uv run python scripts/tools/validate_docstring_rules.py)
+    if ! command -v uv >/dev/null 2>&1; then
+        GUARD_CMD=(python scripts/tools/validate_docstring_rules.py)
+    fi
+    guard_output=""
+    if ! guard_output=$(cd "$REPO_ROOT" && "${GUARD_CMD[@]}" 2>&1); then
+        echo "$guard_output" >&2
+        echo "ERROR: Docstring validation failed. Run scripts/tools/validate_docstring_rules.py locally for details." >&2
+        exit 1
+    fi
+fi
+
 # Output results
 if $JSON_MODE; then
     # Build JSON array of documents

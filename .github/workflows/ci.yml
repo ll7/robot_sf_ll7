@@ -86,6 +86,9 @@ jobs:
       - name: Migrate legacy artifacts into canonical root
         run: uv run python scripts/tools/migrate_artifacts.py
 
+      - name: Docstring guard
+        run: uv run python scripts/tools/validate_docstring_rules.py
+
       - name: Lint
         run: |
           uv run ruff check .

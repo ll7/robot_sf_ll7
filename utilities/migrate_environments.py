@@ -16,6 +16,14 @@ class EnvironmentMigrator:
     """Automates migration to new environment patterns."""
 
     def __init__(self, project_root: str):
+        """Init.
+
+        Args:
+            project_root: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.project_root = Path(project_root)
         self.changes_made = []
 
@@ -278,6 +286,11 @@ class EnvironmentMigrator:
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(
         description="Migrate Robot SF environments to new factory pattern",
     )

@@ -458,6 +458,9 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
 - Private/internal code should also have docstrings explaining their purpose for easier maintainability.
+- Structured sections (`Args`, `Returns`, `Raises`, `Yields`) must document every public parameter so Ruff’s docstring rules remain satisfied.
+- Run `uv run python scripts/tools/validate_docstring_rules.py` before submitting changes; CI fails if docstring rules regress.
+- For legacy cleanups, run `uv run python scripts/tools/docstring_report.py robot_sf/benchmark/` to group violations by file and focus edits on one module at a time.
 
 ### Clarify questions (with options)
 -In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.

@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
+from loguru import logger
 from scipy.stats import mannwhitneyu, t
 
 if TYPE_CHECKING:
@@ -390,17 +391,18 @@ def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path
         copied[label] = dest_png
 
         # Create a PDF copy for archival if possible
+        fig = None
         try:
             img = plt.imread(path)
             fig, ax = plt.subplots(figsize=(6, 4))
             ax.imshow(img)
             ax.axis("off")
             fig.savefig(destination / f"{label}.pdf", bbox_inches="tight")
-            plt.close(fig)
-        except (OSError, ValueError):  # pragma: no cover - best effort
-            plt.close("all")
-            continue
-    return copied
+        except (OSError, ValueError) as e:  # pragma: no cover - best effort
+            logger.warning(f"Could not create PDF copy for {label}: {e}")
+        finally:
+            if fig:
+                plt.close(fig)
 
 
 def _extract_seeds(summary: dict[str, Any]) -> list[int]:

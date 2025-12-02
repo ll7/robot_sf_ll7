@@ -18,7 +18,7 @@ from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
 from robot_sf.common.artifact_paths import get_artifact_root, get_imitation_report_dir
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from typing import Any
 
 
@@ -42,7 +42,7 @@ def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
         candidate = get_imitation_report_dir() / run_id / "summary.json"
         return candidate if candidate.exists() else None
 
-    strategies: list[tuple[str, callable[[], Path | None]]] = [
+    strategies: list[tuple[str, Callable[[], Path | None]]] = [
         ("canonical", lambda: canonical if canonical.exists() else None),
         (
             "prefixed variant",

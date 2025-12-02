@@ -90,6 +90,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md)** - Formal definitions of benchmark metrics (includes per-pedestrian force quantiles)
 
 ### Tooling
+- **[Docstring Enforcement Quickstart](../specs/001-ruff-docstrings/quickstart.md)** - Run Ruff with docstring rules, use `scripts/tools/docstring_report.py` for grouped findings, invoke the guard (`scripts/tools/validate_docstring_rules.py`), and build HTML/PDF API docs with `scripts/tools/build_api_docs.py`
 - **[SNQI Weight Tools](./snqi-weight-tools/README.md)** - Recompute, optimize, and analyze SNQI weights; command reference and workflow examples
 - **[Pyreverse UML Generation](./pyreverse.md)** - Generate class diagrams from code
 - **[Data Analysis Utilities](./DATA_ANALYSIS.md)** - Analysis helpers and data processing tools

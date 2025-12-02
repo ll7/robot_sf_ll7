@@ -38,6 +38,7 @@ from robot_sf.common.artifacts import (
 )
 from robot_sf.common.compat import validate_compatibility
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.common.seed import SeedReport, set_global_seed
 from robot_sf.common.types import (
     Circle2D,
@@ -93,6 +94,8 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     # Seed management (from .seed)
     "SeedReport",
     "set_global_seed",
+    # Metrics utilities
+    "metric_samples",
     # Errors (from .errors)
     "raise_fatal_with_remedy",
     "warn_soft_degrade",

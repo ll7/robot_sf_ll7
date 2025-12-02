@@ -1,6 +1,7 @@
 """Training utilities shared across CLI workflows."""
 
 from .hardware_probe import collect_hardware_profile
+from .imitation_analysis import analyze_imitation_results
 from .imitation_config import (
     BehaviouralCloningConfig,
     ConvergenceCriteria,
@@ -8,6 +9,13 @@ from .imitation_config import (
     ExpertTrainingConfig,
     PPOFineTuneConfig,
     TrajectoryCollectionConfig,
+)
+from .multi_extractor_analysis import (
+    convergence_timestep,
+    generate_figures,
+    load_eval_history,
+    sample_efficiency_ratio,
+    summarize_metric,
 )
 from .multi_extractor_models import (
     ExtractorConfigurationProfile,
@@ -38,10 +46,16 @@ __all__ = [
     "PPOFineTuneConfig",
     "TrainingRunSummary",
     "TrajectoryCollectionConfig",
+    "analyze_imitation_results",
     "collect_hardware_profile",
+    "convergence_timestep",
+    "generate_figures",
+    "load_eval_history",
     "make_extractor_directory",
     "make_run_directory",
     "resolve_base_output_root",
+    "sample_efficiency_ratio",
+    "summarize_metric",
     "summary_paths",
     "write_summary_artifacts",
 ]

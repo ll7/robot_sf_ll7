@@ -15,19 +15,71 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from robot_sf.benchmark.imitation_manifest import get_training_run_manifest_path
-from robot_sf.common.artifact_paths import get_imitation_report_dir
+from robot_sf.common.artifact_paths import get_artifact_root, get_imitation_report_dir
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from typing import Any
+
+
+def _latest_path(paths: list[Path]) -> Path | None:
+    """Return the newest path from the provided list."""
+
+    existing = [p for p in paths if p.exists()]
+    if not existing:
+        return None
+    return max(existing, key=lambda path: path.stat().st_mtime)
+
+
+def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
+    """Resolve the manifest path and capture which fallback (if any) succeeded."""
+
+    artifact_root = get_artifact_root()
+    canonical = get_training_run_manifest_path(run_id)
+    base_runs_dir = canonical.parent
+
+    def _manifest_summary() -> Path | None:
+        candidate = get_imitation_report_dir() / run_id / "summary.json"
+        return candidate if candidate.exists() else None
+
+    strategies: list[tuple[str, Callable[[], Path | None]]] = [
+        ("canonical", lambda: canonical if canonical.exists() else None),
+        (
+            "prefixed variant",
+            lambda: _latest_path(list(base_runs_dir.glob(f"{run_id}*.json"))),
+        ),
+        (
+            "nested artifact lookup",
+            lambda: _latest_path(list(artifact_root.glob(f"**/ppo_imitation/runs/{run_id}*.json"))),
+        ),
+        ("comparison summary", _manifest_summary),
+        ("latest available", lambda: _latest_path(list(base_runs_dir.glob("*.json")))),
+    ]
+
+    for description, resolver in strategies:
+        path = resolver()
+        if path:
+            if description != "canonical":
+                logger.warning(
+                    "Manifest for %s resolved via %s fallback: %s", run_id, description, path
+                )
+            return path, description
+
+    available = sorted(
+        {p.name for p in base_runs_dir.glob("*.json")}
+        | {p.name for p in artifact_root.glob("**/ppo_imitation/runs/*.json")}
+    )
+    raise FileNotFoundError(
+        f"Training run manifest not found for '{run_id}'. Checked strategies: "
+        + ", ".join(desc for desc, _ in strategies)
+        + f". Available run_ids: {available}"
+    )
 
 
 def _load_training_run(run_id: str) -> dict[str, Any]:
     """Load training run manifest from disk."""
-    manifest_path = get_training_run_manifest_path(run_id)
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"Training run manifest not found: {manifest_path}")
 
+    manifest_path, _source = _resolve_manifest_path(run_id)
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 

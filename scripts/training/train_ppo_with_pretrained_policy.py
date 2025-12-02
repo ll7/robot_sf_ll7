@@ -282,3 +282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     run_ppo_finetuning(config, dry_run=args.dry_run)
     return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Fast validation smoke for Full Classic Interaction Benchmark (T054)
-# Purpose: ensure benchmark orchestration runs end-to-end in smoke mode and produces core artifacts quickly.
 # Usage: ./scripts/validation/test_classic_benchmark_full.sh
 
 set -euo pipefail

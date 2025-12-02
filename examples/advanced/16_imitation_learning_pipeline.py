@@ -31,10 +31,11 @@ the training scripts in sequence:
 generated automatically under output/tmp for each run, so no manual edits are needed.
 
 **Output**:
-- Expert policy: output/benchmarks/expert_policies/
-- Trajectories: output/benchmarks/expert_trajectories/
-- Pre-trained policy: output/benchmarks/expert_policies/
-- Comparison report: output/imitation_reports/comparisons/
+- Timestamped run root: output/benchmarks/<timestamp>/
+- Expert policy: <run-root>/expert_policies/
+- Trajectories: <run-root>/expert_trajectories/
+- Pre-trained policy: <run-root>/expert_policies/
+- Comparison report: <run-root>/ppo_imitation/comparisons/
 
 **Related**:
 - Full documentation: docs/imitation_learning_pipeline.md
@@ -72,8 +73,42 @@ from robot_sf.telemetry import (
 from robot_sf.telemetry.models import PipelineRunRecord, PipelineRunStatus, serialize_many
 from robot_sf.training.imitation_config import build_imitation_pipeline_steps
 
-PIPELINE_CONFIG_DIR = Path("output/tmp/imitation_pipeline")
-RUN_MANIFEST_DIR = get_training_run_manifest_path("placeholder").parent
+
+@dataclass(frozen=True)
+class PipelinePaths:
+    """Resolved directories used throughout the imitation pipeline."""
+
+    run_root: Path
+    config_dir: Path
+
+
+_PIPELINE_PATHS: PipelinePaths | None = None
+
+
+def _ensure_run_root() -> Path:
+    """Ensure a timestamped artifact root under output/benchmarks and export env override."""
+
+    return _ensure_pipeline_paths().run_root
+
+
+def _ensure_pipeline_paths() -> PipelinePaths:
+    """Resolve (and memoize) pipeline directories without relying on mutable globals."""
+
+    global _PIPELINE_PATHS
+    if _PIPELINE_PATHS is not None:
+        return _PIPELINE_PATHS
+    env_root = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
+    if env_root:
+        run_root = Path(env_root).expanduser()
+    else:
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        run_root = Path("output/benchmarks") / timestamp
+        os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(run_root)
+    run_root.mkdir(parents=True, exist_ok=True)
+    config_dir = run_root / "tmp" / "imitation_pipeline"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    _PIPELINE_PATHS = PipelinePaths(run_root=run_root, config_dir=config_dir)
+    return _PIPELINE_PATHS
 
 
 def _load_training_manifest(run_id: str) -> dict[str, Any]:
@@ -195,8 +230,8 @@ def _load_yaml_config(config_path: Path) -> dict[str, Any]:
 def _write_pipeline_config(filename: str, payload: dict[str, Any]) -> Path:
     """Write a temporary YAML config under output/tmp for scripted steps."""
 
-    PIPELINE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    config_path = PIPELINE_CONFIG_DIR / filename
+    paths = _ensure_pipeline_paths()
+    config_path = paths.config_dir / filename
     config_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     logger.debug("Wrote pipeline config {}", config_path)
     return config_path
@@ -250,14 +285,25 @@ def _override_expert_config_policy_id(config_path: Path, policy_id: str) -> Path
     return _write_pipeline_config(filename, data)
 
 
+def _run_manifest_dir() -> Path:
+    return get_training_run_manifest_path("placeholder").parent
+
+
+def _training_manifest_exists(run_id: str) -> bool:
+    """Return True when a canonical manifest is present for run_id."""
+
+    return get_training_run_manifest_path(run_id).exists()
+
+
 def _discover_latest_training_run_id(prefix: str) -> str | None:
     """Return the newest training run identifier with the given prefix."""
 
-    if not RUN_MANIFEST_DIR.exists():
+    base_dir = _run_manifest_dir()
+    if not base_dir.exists():
         return None
     candidates: list[tuple[float, str]] = []
     pattern = f"{prefix}*.json"
-    for path in RUN_MANIFEST_DIR.glob(pattern):
+    for path in base_dir.glob(pattern):
         try:
             stat = path.stat()
         except OSError:  # pragma: no cover - filesystem races
@@ -464,6 +510,7 @@ def _run_tracker_smoke(
 
 def main():  # noqa: C901 - Sequential workflow orchestration; complexity is intentional
     """Run complete imitation learning pipeline by calling training scripts."""
+    _ensure_run_root()
     parser = argparse.ArgumentParser(description="Imitation Learning Pipeline - End-to-End Example")
     parser.add_argument(
         "--skip-expert",
@@ -624,7 +671,8 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
 
     bc_policy_id = f"bc_{expert_policy_id}"
     finetuned_policy_id = f"finetuned_{expert_policy_id}"
-    pretrained_run_id = f"ppo_finetune_{finetuned_policy_id}"
+    pretrained_run_id_hint = f"ppo_finetune_{finetuned_policy_id}"
+    pretrained_run_id: str | None = None
 
     logger.info(f"Expert policy ID: {expert_policy_id}")
     logger.info(f"Dataset ID: {dataset_id}")
@@ -774,6 +822,19 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             )
             if exit_code != 0:
                 return fail_and_return("ppo_finetune", exit_code)
+            if _training_manifest_exists(pretrained_run_id_hint):
+                pretrained_run_id = pretrained_run_id_hint
+            else:
+                pretrained_run_id = _discover_latest_training_run_id(pretrained_run_id_hint)
+        elif _training_manifest_exists(pretrained_run_id_hint):
+            pretrained_run_id = pretrained_run_id_hint
+        else:
+            pretrained_run_id = _discover_latest_training_run_id(pretrained_run_id_hint)
+        if not pretrained_run_id:
+            logger.debug(
+                "Pretrained manifest {} not found yet; comparison step will skip unless it appears later.",
+                pretrained_run_id_hint,
+            )
 
         # Step 5: Generate comparison (optional - script may not exist yet)
         if "compare_runs" in tracked_step_ids:
@@ -783,17 +844,24 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
             logger.info("=" * 70)
 
             if comparison_script.exists():
+                if not pretrained_run_id:
+                    if _training_manifest_exists(pretrained_run_id_hint):
+                        pretrained_run_id = pretrained_run_id_hint
+                    else:
+                        pretrained_run_id = _discover_latest_training_run_id(pretrained_run_id_hint)
                 if not baseline_run_id:
                     logger.warning(
                         "Baseline training run id unavailable; skipping automatic comparison. Run scripts/tools/compare_training_runs.py manually."
+                    )
+                elif not pretrained_run_id:
+                    logger.warning(
+                        "Pretrained training run id unavailable; skipping automatic comparison. "
+                        "Verify PPO fine-tuning completed successfully."
                     )
                 else:
                     comparison_group_id = (
                         f"{expert_policy_id}_vs_{finetuned_policy_id}_"
                         f"{datetime.now(UTC).strftime('%Y%m%d%H%M')}"
-                    )
-                    effective_pretrained_run_id = (
-                        pretrained_run_id or f"ppo_finetune_{finetuned_policy_id}"
                     )
                     cmd = [
                         "uv",
@@ -805,7 +873,7 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                         "--baseline",
                         baseline_run_id,
                         "--pretrained",
-                        effective_pretrained_run_id,
+                        pretrained_run_id,
                     ]
                     exit_code = _run_tracked_step(
                         tracker_context,
@@ -816,27 +884,16 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
                     if exit_code != 0:
                         return fail_and_return("compare_runs", exit_code)
                     comparison_summary = _build_comparison_summary(
-                        comparison_group_id, baseline_run_id, effective_pretrained_run_id
+                        comparison_group_id, baseline_run_id, pretrained_run_id
                     )
             else:
                 logger.warning(f"Comparison script not found: {comparison_script}")
                 logger.info("Skipping comparison step")
 
         # Success summary
-        logger.info("")
-        logger.info("=" * 70)
         logger.success("PIPELINE COMPLETED SUCCESSFULLY!")
-        logger.info("=" * 70)
-        logger.info("")
-        logger.info("Artifacts created:")
-        logger.info(f"  - Expert policy: {expert_policy_id}")
-        logger.info(f"  - Trajectory dataset: {dataset_id}")
-        logger.info(f"  - BC pre-trained policy: {bc_policy_id}")
-        logger.info(f"  - Fine-tuned policy: {finetuned_policy_id}")
-        logger.info("")
         logger.info("Next steps:")
-        logger.info("  - View artifacts: output/benchmarks/expert_policies/")
-        logger.info("  - View trajectories: output/benchmarks/expert_trajectories/")
+        logger.info(f"  - View imitation report directory: {get_imitation_report_dir()}")
         logger.info("  - Full docs: docs/imitation_learning_pipeline.md")
         logger.info("  - Quickstart: specs/001-ppo-imitation-pretrain/quickstart.md")
 

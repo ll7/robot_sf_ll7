@@ -529,7 +529,8 @@ def convert_map(svg_file: str):
         assert isinstance(converter.map_definition, MapDefinition)
         md: MapDefinition = converter.map_definition
         logger.info(
-            "SVG map converted: robot_routes={rr} ped_routes={pr} spawn_zones={sz} goal_zones={gz}",
+            "SVG map {svg_file} converted: robot_routes={rr} ped_routes={pr} spawn_zones={sz} goal_zones={gz}",
+            svg_file=svg_file,
             rr=len(md.robot_routes),
             pr=len(md.ped_routes),
             sz=len(md.robot_spawn_zones),

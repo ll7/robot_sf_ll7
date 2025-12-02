@@ -1,4 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# execute from repo root with ./class_diagram/generate_uml.sh
+
+# Activate repo-local venv
+if [ ! -f ".venv/bin/activate" ]; then
+  echo "Missing .venv. Run 'uv sync' (or python -m venv .venv) first." >&2
+  exit 1
+fi
+
+# Activate the virtual environment
+source .venv/bin/activate
 
 # Check if Graphviz is installed
 if ! command -v dot &> /dev/null; then

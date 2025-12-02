@@ -3455,6 +3455,10 @@ dev = [
     { name = "pylint" },
     { name = "pytest-xdist" },
 ]
+docs = [
+    { name = "sphinx" },
+    { name = "sphinx-rtd-theme" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -3507,6 +3511,10 @@ requires-dist = [
 dev = [
     { name = "pylint", specifier = ">=3.3.4" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
+]
+docs = [
+    { name = "sphinx", specifier = ">=7.0.0" },
+    { name = "sphinx-rtd-theme", specifier = ">=2.0.0" },
 ]
 
 [[package]]

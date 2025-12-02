@@ -53,6 +53,7 @@ def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
             lambda: _latest_path(list(artifact_root.glob(f"**/ppo_imitation/runs/{run_id}*.json"))),
         ),
         ("comparison summary", _manifest_summary),
+        ("latest available", lambda: _latest_path(list(base_runs_dir.glob("*.json")))),
     ]
 
     for description, resolver in strategies:

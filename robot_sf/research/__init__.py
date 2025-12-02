@@ -52,7 +52,13 @@ from robot_sf.research.imitation_report import (
 )
 from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestrator
 from robot_sf.research.report_template import MarkdownReportRenderer
-from robot_sf.research.statistics import cohen_d, evaluate_hypothesis, paired_t_test
+from robot_sf.research.statistics import (
+    cohen_d,
+    cohen_d_independent,
+    evaluate_hypothesis,
+    paired_t_test,
+    welch_t_test,
+)
 
 __all__ = [
     "AblationOrchestrator",
@@ -63,6 +69,7 @@ __all__ = [
     "aggregate_metrics",
     "bootstrap_ci",
     "cohen_d",
+    "cohen_d_independent",
     "configure_matplotlib_backend",
     "evaluate_hypothesis",
     "export_metrics_csv",
@@ -73,4 +80,5 @@ __all__ = [
     "plot_distributions",
     "plot_learning_curve",
     "plot_sample_efficiency",
+    "welch_t_test",
 ]

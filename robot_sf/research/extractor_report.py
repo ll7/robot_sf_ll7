@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 from robot_sf.research.figures import configure_matplotlib_backend
 from robot_sf.research.metadata import collect_reproducibility_metadata
-from robot_sf.research.statistics import cohen_d, paired_t_test
+from robot_sf.research.statistics import cohen_d_independent, welch_t_test
 
 configure_matplotlib_backend()
 
@@ -265,13 +265,9 @@ def _stats_against_baseline(
     baseline_vals: list[float],
     candidate_vals: list[float],
 ) -> tuple[float | None, float | None]:
-    if len(baseline_vals) == len(candidate_vals) and len(baseline_vals) >= 2:
-        p_val_dict = paired_t_test(baseline_vals, candidate_vals)
-        p_val = p_val_dict.get("p_value")
-    else:
-        p_val = None
-    effect = cohen_d(baseline_vals, candidate_vals)
-    return p_val, effect
+    test_result = welch_t_test(baseline_vals, candidate_vals)
+    effect = cohen_d_independent(baseline_vals, candidate_vals)
+    return test_result.get("p_value"), effect
 
 
 def generate_extractor_report(

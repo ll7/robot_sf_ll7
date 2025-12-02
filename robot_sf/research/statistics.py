@@ -1,7 +1,8 @@
 """
 Statistical analyzer for research reporting (User Story 1)
-Implements: paired_t_test, cohen_d, evaluate_hypothesis, format_test_results, validate_sample_size,
-HypothesisEvaluator, compare_to_threshold, export_hypothesis_json
+Implements: paired_t_test, welch_t_test, cohen_d, cohen_d_independent, evaluate_hypothesis,
+format_test_results, validate_sample_size, HypothesisEvaluator, compare_to_threshold,
+export_hypothesis_json
 """
 
 import json
@@ -35,6 +36,44 @@ def paired_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
     return {"t_stat": float(t_stat), "p_value": float(p_value), "n": len(x)}
 
 
+def welch_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
+    """Perform an independent (Welch's) t-test between two samples.
+
+    Args:
+        x: First sample (baseline measurements)
+        y: Second sample (candidate measurements)
+
+    Returns:
+        Dictionary containing:
+            - t_stat: Test statistic (None if insufficient data)
+            - p_value: Two-tailed p-value (None if insufficient data)
+            - n: Total sample size len(x) + len(y)
+            - n_x / n_y: Individual sample sizes for reference
+
+    Note:
+        Requires len(x) >= 2 and len(y) >= 2 for valid results.
+        Uses scipy.stats.ttest_ind with equal_var=False (Welch's test).
+    """
+
+    if len(x) < 2 or len(y) < 2:
+        return {
+            "t_stat": None,
+            "p_value": None,
+            "n": len(x) + len(y),
+            "n_x": len(x),
+            "n_y": len(y),
+        }
+
+    t_stat, p_value = stats.ttest_ind(x, y, equal_var=False)
+    return {
+        "t_stat": float(t_stat),
+        "p_value": float(p_value),
+        "n": len(x) + len(y),
+        "n_x": len(x),
+        "n_y": len(y),
+    }
+
+
 def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
     """Compute Cohen's d effect size for paired samples.
 
@@ -59,6 +98,24 @@ def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
         return None
     diff = np.array(x) - np.array(y)
     return float(np.mean(diff) / np.std(diff, ddof=1)) if np.std(diff, ddof=1) > 0 else None
+
+
+def cohen_d_independent(x: list[float], y: list[float]) -> Optional[float]:
+    """Compute Cohen's d for two independent samples using pooled variance."""
+
+    if len(x) < 2 or len(y) < 2:
+        return None
+
+    x_arr = np.array(x)
+    y_arr = np.array(y)
+    var_x = np.var(x_arr, ddof=1)
+    var_y = np.var(y_arr, ddof=1)
+    pooled_denom = np.sqrt(
+        ((len(x_arr) - 1) * var_x + (len(y_arr) - 1) * var_y) / (len(x_arr) + len(y_arr) - 2)
+    )
+    if pooled_denom == 0:
+        return None
+    return float((np.mean(x_arr) - np.mean(y_arr)) / pooled_denom)
 
 
 def evaluate_hypothesis(

@@ -1,0 +1,22 @@
+# Research Notes: Ruff Docstring Enforcement
+
+## Decision 1: Repository-wide Ruff docstring rules
+- **Decision**: Enable Ruff rules D100–D107, D417, D419, D102, and D201 for every Python path (library, scripts, tests, fast-pysf bindings, tooling) with targeted ignores only for generated or third-party vendored files.
+- **Rationale**: Ensures consistent documentation expectations, matches clarification that scope is the entire repo, and simplifies CI enforcement by avoiding path-specific rule toggles.
+- **Alternatives considered**:
+  - Enable rules only for `robot_sf/`: rejected because scripts/tests would still ship undocumented helper logic.
+  - Maintain per-directory configs: rejected due to maintenance overhead and risk of drift.
+
+## Decision 2: Treat private helpers pragmatically
+- **Decision**: Continue exempting explicitly private helpers (leading underscore) and auto-generated code when Ruff identifies them as such, but require intentional `ignore` entries so exemptions remain auditable.
+- **Rationale**: Keeps focus on public API quality while preventing noisy lint failures on internal scaffolding or generated bindings; aligns with Principle XI.
+- **Alternatives considered**:
+  - Enforce docstrings on every function regardless of prefix: rejected because it would create busywork for trivial test fixtures and degrade signal-to-noise.
+  - Blanket-ignore entire directories: rejected because it risks missing public helpers embedded there.
+
+## Decision 3: Document docstring style expectations in Quickstart
+- **Decision**: Provide contributors with a concise quickstart explaining the required docstring sections (summary, Args, Returns, Raises) and how Ruff enforces them during CI.
+- **Rationale**: Reduces onboarding friction and ensures new docstrings follow the expected structure without trial-and-error via lint failures.
+- **Alternatives considered**:
+  - Rely solely on Ruff error messages: rejected because they lack project-specific nuance (e.g., referencing Loguru context or schema references).
+  - Embed guidance only in existing dev guide: rejected since the feature warrants a targeted quickstart for rapid adoption.

@@ -1,0 +1,62 @@
+openapi: 3.0.3
+info:
+  title: Docstring Enforcement API
+  version: 0.1.0
+  description: >-
+    Contract that models how CI and local tooling invoke Ruff to enforce
+    docstring rules across the repository.
+servers:
+  - url: https://ci.robot-sf.local
+paths:
+  /lint/docstrings:
+    post:
+      summary: Run Ruff docstring enforcement
+      description: >-
+        Executes `uv run ruff check` with the configured docstring rule set and
+        returns pass/fail plus any findings so contributors can remediate quickly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                commit_sha:
+                  type: string
+                  description: Git commit being validated.
+                changed_paths:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional subset of files to lint (defaults to entire repo).
+              required: [commit_sha]
+      responses:
+        '200':
+          description: Lint completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pass, fail]
+                  findings:
+                    type: array
+                    description: Present only when status=fail.
+                    items:
+                      type: object
+                      properties:
+                        file_path:
+                          type: string
+                        line:
+                          type: integer
+                        rule:
+                          type: string
+                        message:
+                          type: string
+        '422':
+          description: Invalid request payload
+        '500':
+          description: Lint infrastructure failure (e.g., Ruff crash)
+components: {}

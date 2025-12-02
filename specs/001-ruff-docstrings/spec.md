@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "I, as a user, want to add the requirement to the project to add docstrings to all methods. To ensure this, I want to enable ruff rules. I want to enable many of the pydocstyle rules (D) and pydoclint rules (DOC). I want to enable these rules, and then I want to fix all new ruff doc errors. Everything should be well documented. Rules I want to enable: D100-D107, D417, D419, D102, D201"
 
+## Clarifications
+
+### Session 2025-12-02
+
+- Q: Should docstring enforcement target just the public `robot_sf` package or the entire repository? → A: Docstrings must be enforced across the entire repository, including support scripts, tests, and tooling modules.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Maintainer enforces docstrings at commit time (Priority: P1)
@@ -62,7 +68,7 @@ Docs writers or downstream users reading generated API docs need every public AP
 
 ### Functional Requirements
 
-- **FR-001**: The lint configuration MUST enable Ruff docstring rules D100–D107, D417, D419, D102, and D201 for the `robot_sf` project and any other user-facing Python packages in the repo.
+- **FR-001**: The lint configuration MUST enable Ruff docstring rules D100–D107, D417, D419, D102, and D201 for every Python package, script, and test suite in the repository (not just `robot_sf`).
 - **FR-002**: CI and local developer workflows MUST treat docstring rule violations as failures so code cannot merge without compliant documentation.
 - **FR-003**: Every public module, class, method, and function MUST provide a docstring summarizing its purpose, inputs, outputs, and side effects at a level consistent with D1xx/D4xx requirements.
 - **FR-004**: Docstrings for callables with parameters MUST enumerate and describe each parameter (including `self`-less helpers) to satisfy D417 coverage expectations.
@@ -77,7 +83,7 @@ Docs writers or downstream users reading generated API docs need every public AP
 
 ### Assumptions
 
-- Private helpers (prefixed with `_`) and auto-generated code under `fast-pysf/` may remain excluded from strict enforcement unless they form part of the user-facing API surface.
+- Private helpers (prefixed with `_`) and auto-generated code under `fast-pysf/` may remain excluded from strict enforcement unless they form part of the user-facing API surface, but the lint configuration still runs over the entire repository to ensure intentional exemptions are explicit.
 - Contributors already run Ruff locally; enabling additional rules primarily expands coverage rather than introducing a new tool.
 - CI capacity is sufficient to run the expanded lint suite without exceeding existing time budgets.
 

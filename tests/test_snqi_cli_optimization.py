@@ -18,6 +18,14 @@ import pytest
 
 @pytest.mark.timeout(30)
 def test_snqi_weight_optimization_cli(tmp_path: Path):
+    """Test snqi weight optimization cli.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Prepare synthetic episodes (two episodes w/ minimal metrics)
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"

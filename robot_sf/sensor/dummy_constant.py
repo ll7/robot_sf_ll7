@@ -33,10 +33,26 @@ class DummyConstantSensor(Sensor):
     """A sensor that returns a constant numpy array observation."""
 
     def __init__(self, config: dict[str, Any]):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self._config = config
         self._obs = self._build_value(config)
 
     def _build_value(self, cfg: dict[str, Any]) -> np.ndarray:
+        """Build value.
+
+        Args:
+            cfg: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         dtype = np.float32 if cfg.get("dtype", "float32") == "float32" else np.int32
         value = cfg.get("value", 0.0)
         arr = np.array(value, dtype=dtype)
@@ -46,12 +62,30 @@ class DummyConstantSensor(Sensor):
         return arr
 
     def reset(self) -> None:  # no state
+        """Reset.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         return None
 
     def step(self, state: Any) -> None:  # no dependence on state
+        """Step.
+
+        Args:
+            state: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         return None
 
     def get_observation(self) -> np.ndarray:
+        """Get observation.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self._obs
 
 

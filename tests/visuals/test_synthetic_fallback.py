@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """Cfg class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -24,6 +26,14 @@ class Cfg:
 
 
 def test_synthetic_fallback_when_sim_view_unavailable(tmp_path: Path):
+    """Test synthetic fallback when sim view unavailable.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Force SimulationView unavailable
     visuals_mod._SIM_VIEW_AVAILABLE = False  # type: ignore[attr-defined]
     records = [

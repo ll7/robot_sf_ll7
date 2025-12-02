@@ -39,6 +39,14 @@ class FastPysfWrapper:
     """
 
     def __init__(self, simulator: pysf.Simulator):
+        """Init.
+
+        Args:
+            simulator: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.sim = simulator
         # Named caches for precomputed force grids. Each cache is a dict with
         # keys: 'xs' (1D array), 'ys' (1D array), 'field' (H,W,2 array).
@@ -51,15 +59,34 @@ class FastPysfWrapper:
         return pos, vel
 
     def _social_params(self):
+        """Social params.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         cfg = self.sim.config.social_force_config
         return cfg.n, cfg.n_prime, cfg.lambda_importance, cfg.gamma, cfg.factor
 
     def _get_obstacles_raw(self) -> np.ndarray:
+        """Get obstacles raw.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         # Returns array shape (M,6) where cols 0:4 are line endpoints and 4:6 orthovec
         return self.sim.get_raw_obstacles()
 
     # --- small helper functions to reduce complexity ---
     def _compute_desired_force(self, p: np.ndarray, desired_goal: Sequence[float]) -> np.ndarray:
+        """Compute desired force.
+
+        Args:
+            p: Auto-generated placeholder description.
+            desired_goal: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         goal = np.asarray(desired_goal, dtype=float).reshape(2)
         dir_vec = goal - p
         dist = np.linalg.norm(dir_vec)
@@ -83,6 +110,14 @@ class FastPysfWrapper:
         return f_des
 
     def _compute_social_force_at_point(self, p: np.ndarray) -> np.ndarray:
+        """Compute social force at point.
+
+        Args:
+            p: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         total = np.zeros(2, dtype=float)
         ped_pos, ped_vel = self._ped_positions_and_velocities()
         if ped_pos.shape[0] == 0:
@@ -112,6 +147,14 @@ class FastPysfWrapper:
         return total
 
     def _compute_obstacle_force_at_point(self, p: np.ndarray) -> np.ndarray:
+        """Compute obstacle force at point.
+
+        Args:
+            p: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         total = np.zeros(2, dtype=float)
         raw_obs = self._get_obstacles_raw()
         if raw_obs is None or len(raw_obs) == 0:
@@ -132,6 +175,15 @@ class FastPysfWrapper:
         return total
 
     def _compute_robot_force_at_point(self, p: np.ndarray, robot_state: dict) -> np.ndarray:
+        """Compute robot force at point.
+
+        Args:
+            p: Auto-generated placeholder description.
+            robot_state: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         # Defensive: try common names for robot interaction functions
         for name in ("robot_force", "robot_interaction_force_on_point", "force_robot"):
             if hasattr(pf_forces, name):

@@ -186,11 +186,12 @@ def _run_command(cmd: list[str], step_name: str, env: dict[str, str] | None = No
     """Run a subprocess command and log results.
 
     Args:
-        cmd: Command and arguments to run
-        step_name: Human-readable step name for logging
+        cmd: Command and arguments to run.
+        step_name: Human-readable step name for logging.
+        env: Optional environment override passed to the subprocess.
 
     Returns:
-        Exit code (0 for success)
+        Exit code returned by the subprocess (0 indicates success).
     """
     logger.info(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, check=False, env=env)
@@ -286,6 +287,11 @@ def _override_expert_config_policy_id(config_path: Path, policy_id: str) -> Path
 
 
 def _run_manifest_dir() -> Path:
+    """Return the canonical directory containing training run manifests.
+
+    Returns:
+        Path: Parent directory of run manifest JSON files managed by the benchmark tooling.
+    """
     return get_training_run_manifest_path("placeholder").parent
 
 
@@ -316,6 +322,7 @@ def _discover_latest_training_run_id(prefix: str) -> str | None:
 
 
 def _env_flag(name: str) -> bool:
+    """Return True when the named environment variable is truthy."""
     value = os.environ.get(name)
     if value is None:
         return False
@@ -323,6 +330,7 @@ def _env_flag(name: str) -> bool:
 
 
 def _resolve_tracker_destination(hint: str | None) -> tuple[RunTrackerConfig, str]:
+    """Resolve run-tracker output directory and run_id from an optional hint."""
     config = RunTrackerConfig()
     run_id = generate_run_id("pipeline")
     if not hint:
@@ -352,6 +360,7 @@ def _create_tracker_context(
     scenario_config: Path,
     telemetry_interval: float | None,
 ) -> TrackerContext:
+    """Create a tracker context (writer + progress tracker + metadata)."""
     config, run_id = _resolve_tracker_destination(tracker_output)
     writer = ManifestWriter(config, run_id)
     tracker = ProgressTracker(step_definitions, writer=writer, log_fn=logger.info)
@@ -377,6 +386,7 @@ def _start_tracker_telemetry(
     *,
     interval_seconds: float | None,
 ) -> None:
+    """Start background telemetry sampling if an interval is provided."""
     if interval_seconds is None or interval_seconds <= 0:
         return
     engine = RecommendationEngine()
@@ -393,6 +403,11 @@ def _start_tracker_telemetry(
 
 
 def _stop_tracker_telemetry(context: TrackerContext) -> None:
+    """Stop the telemetry sampler and record the number of collected snapshots.
+
+    Args:
+        context: Tracker context carrying the sampler reference.
+    """
     sampler = context.telemetry_sampler
     if sampler is None:
         return
@@ -405,6 +420,15 @@ def _build_tracker_summary(
     context: TrackerContext,
     base_summary: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Merge telemetry information with caller-provided summary content.
+
+    Args:
+        context: Tracker context referencing optional telemetry data.
+        base_summary: Existing summary fields that should remain in the payload.
+
+    Returns:
+        dict[str, Any]: Combined summary inserted into the final manifest entry.
+    """
     summary = dict(base_summary or {})
     telemetry_summary = _telemetry_summary(context)
     if telemetry_summary:
@@ -415,6 +439,14 @@ def _build_tracker_summary(
 
 
 def _telemetry_summary(context: TrackerContext) -> dict[str, Any]:
+    """Convert recommendation engine state into a serializable summary.
+
+    Args:
+        context: Tracker context storing the recommendation engine handle.
+
+    Returns:
+        dict[str, Any]: Telemetry metrics, or an empty dict when telemetry was disabled.
+    """
     engine = context.recommendation_engine
     if engine is None:
         return {}
@@ -425,6 +457,14 @@ def _telemetry_summary(context: TrackerContext) -> dict[str, Any]:
 
 
 def _collect_recommendations(context: TrackerContext) -> list[dict[str, Any]]:
+    """Serialize telemetry recommendations so they can be persisted with the run.
+
+    Args:
+        context: Tracker context referencing the recommendation engine.
+
+    Returns:
+        list[dict[str, Any]]: Recommendation payloads ready for JSON storage.
+    """
     engine = context.recommendation_engine
     if engine is None:
         return []
@@ -437,6 +477,13 @@ def _append_run_snapshot(
     *,
     summary: dict[str, Any] | None = None,
 ) -> None:
+    """Append the current run state to the manifest for auditability.
+
+    Args:
+        context: Tracker context carrying run metadata and manifest writer.
+        status: Pipeline status persisted with the snapshot.
+        summary: Optional run summary entry merged into the record.
+    """
     record = PipelineRunRecord(
         run_id=context.run_id,
         created_at=context.created_at,
@@ -458,6 +505,13 @@ def _finalize_tracker(
     *,
     summary: dict[str, Any] | None = None,
 ) -> None:
+    """Clean up tracker state, flush telemetry, and write a final snapshot.
+
+    Args:
+        context: Tracker context or ``None`` when tracking is disabled.
+        status: Final pipeline status recorded in the manifest.
+        summary: Optional summary payload merged with telemetry/recommendation data.
+    """
     if context is None:
         return
     context.tracker.disable_failure_guard()
@@ -476,6 +530,17 @@ def _run_tracked_step(
     step_id: str,
     func: Callable[[], Any],
 ) -> Any:
+    """Execute a pipeline step while updating tracker progress when enabled.
+
+    Args:
+        tracker_ctx: Tracker context used to emit start/stop events (``None`` disables tracking).
+        tracked_steps: Step identifiers configured for tracking in this run.
+        step_id: Identifier corresponding to the callable being executed.
+        func: Callable invoked to execute the pipeline step.
+
+    Returns:
+        Any: Whatever the callable returns (typically an exit code).
+    """
     is_tracked = tracker_ctx is not None and step_id in tracked_steps
     if is_tracked:
         assert tracker_ctx is not None  # type narrowing for static analysis
@@ -499,6 +564,12 @@ def _run_tracked_step(
 def _run_tracker_smoke(
     context: TrackerContext | None, step_definitions: list[PipelineStepDefinition]
 ) -> None:
+    """Simulate a pipeline run to validate tracker wiring without executing commands.
+
+    Args:
+        context: Tracker context; required when running the smoke test.
+        step_definitions: Ordered step definitions used to populate tracker entries.
+    """
     if context is None:
         raise RuntimeError("Tracker smoke execution requires --enable-tracker")
     for definition in step_definitions:
@@ -662,6 +733,15 @@ def main():  # noqa: C901 - Sequential workflow orchestration; complexity is int
         return 0
 
     def fail_and_return(step_id: str, exit_code: int) -> int:
+        """Mark the pipeline as failed, finalize tracker state, and surface an exit code.
+
+        Args:
+            step_id: Identifier for the failing pipeline stage.
+            exit_code: Exit status returned by the subprocess.
+
+        Returns:
+            int: The same exit code, allowing the caller to exit early.
+        """
         _finalize_tracker(
             tracker_context,
             PipelineRunStatus.FAILED,

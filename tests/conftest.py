@@ -35,6 +35,11 @@ if root_str not in sys.path:
 
 
 def _import_torch_optional():
+    """Import torch optional.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         return importlib.import_module("torch")  # type: ignore
     except Exception:  # pragma: no cover - torch optional in some envs
@@ -42,6 +47,14 @@ def _import_torch_optional():
 
 
 def _snapshot_torch_determinism(torch_module):
+    """Snapshot torch determinism.
+
+    Args:
+        torch_module: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     state: dict[str, object | None] = {
         "algos": None,
         "cudnn_backend": None,
@@ -62,6 +75,15 @@ def _snapshot_torch_determinism(torch_module):
 
 
 def _apply_nondeterministic(torch_module, cudnn_backend):
+    """Apply nondeterministic.
+
+    Args:
+        torch_module: Auto-generated placeholder description.
+        cudnn_backend: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         if hasattr(torch_module, "use_deterministic_algorithms"):
             torch_module.use_deterministic_algorithms(False)
@@ -73,6 +95,15 @@ def _apply_nondeterministic(torch_module, cudnn_backend):
 
 
 def _restore_torch_determinism(torch_module, state):
+    """Restore torch determinism.
+
+    Args:
+        torch_module: Auto-generated placeholder description.
+        state: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         prev_algos = state.get("algos")
         cudnn_backend = state.get("cudnn_backend")
@@ -91,6 +122,11 @@ def _restore_torch_determinism(torch_module, state):
 
 @pytest.fixture(scope="session", autouse=True)
 def headless_pygame_environment() -> Generator[None, None, None]:
+    """Headless pygame environment.
+
+    Returns:
+        Generator[None, None, None]: Auto-generated placeholder description.
+    """
     originals: dict[str, str | None] = {
         "DISPLAY": os.environ.get("DISPLAY"),
         "SDL_VIDEODRIVER": os.environ.get("SDL_VIDEODRIVER"),
@@ -117,6 +153,14 @@ def headless_pygame_environment() -> Generator[None, None, None]:
 
 @pytest.fixture(scope="session", autouse=True)
 def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator[None, None, None]:
+    """Reroute artifact root.
+
+    Args:
+        tmp_path_factory: Auto-generated placeholder description.
+
+    Returns:
+        Generator[None, None, None]: Auto-generated placeholder description.
+    """
     original = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
     override_dir = tmp_path_factory.mktemp("robot_sf_artifacts")
     os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(override_dir)
@@ -150,6 +194,11 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
 
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
+    """Perf policy.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if PerformanceBudgetPolicy is not None:
         try:
             return PerformanceBudgetPolicy()
@@ -157,12 +206,22 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
             pass
 
     class _Fallback:  # pragma: no cover - only used when perf utils missing
+        """Fallback class."""
+
         soft_threshold_seconds = 20.0
         hard_timeout_seconds = 60.0
         report_count = 10
         relax_env_var = "ROBOT_SF_PERF_RELAX"
 
         def classify(self, duration_seconds: float):
+            """Classify.
+
+            Args:
+                duration_seconds: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             if duration_seconds >= self.hard_timeout_seconds:
                 return "hard"
             if duration_seconds >= self.soft_threshold_seconds:
@@ -177,6 +236,14 @@ _SLOW_SAMPLES: list[tuple[str, float]] = []
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
+    """Pytest runtest call.
+
+    Args:
+        item: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     start = time.perf_counter()
     try:
         outcome = yield

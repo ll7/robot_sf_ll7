@@ -10,6 +10,11 @@ logger = loguru.logger
 
 
 def test_load_and_visualize_states():
+    """Test load and visualize states.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     logger.info("Testing load and visualize states")
     test_file = "test_pygame/recordings/2024-06-04_08-39-59.pkl"
 

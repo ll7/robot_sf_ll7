@@ -1,3 +1,5 @@
+"""Module training_ped_ppo auto-generated docstring."""
+
 import datetime
 
 import loguru
@@ -19,11 +21,24 @@ logger = loguru.logger
 
 
 def training(svg_map_path: str):
+    """Training.
+
+    Args:
+        svg_map_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     n_envs = 20
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
     def make_env():
+        """Make env.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         map_definition = convert_map(svg_map_path)
         robot_model = PPO.load("./model/run_043", env=None)
 

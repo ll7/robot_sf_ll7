@@ -37,6 +37,26 @@ class BaseEnv(Env):
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ):
+        """Init.
+
+        Args:
+            env_config: Auto-generated placeholder description.
+            debug: Auto-generated placeholder description.
+            recording_enabled: Auto-generated placeholder description.
+            record_video: Auto-generated placeholder description.
+            video_path: Auto-generated placeholder description.
+            video_fps: Auto-generated placeholder description.
+            peds_have_obstacle_forces: Auto-generated placeholder description.
+            use_jsonl_recording: Auto-generated placeholder description.
+            recording_dir: Auto-generated placeholder description.
+            suite_name: Auto-generated placeholder description.
+            scenario_name: Auto-generated placeholder description.
+            algorithm_name: Auto-generated placeholder description.
+            recording_seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().__init__()
 
         # Environment configuration details
@@ -121,9 +141,22 @@ class BaseEnv(Env):
             )
 
     def render(self):
+        """Render.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
     def step(self, action):
+        """Step.
+
+        Args:
+            action: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
     def exit(self):

@@ -1,3 +1,5 @@
+"""Module test_extractor_report auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,14 @@ from robot_sf.research.extractor_report import ReportConfig, generate_extractor_
 
 
 def test_generate_extractor_report_smoke(tmp_path: Path):
+    """Test generate extractor report smoke.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     summary = {
         "run_id": "demo-run",
         "extractor_results": [

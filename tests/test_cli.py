@@ -1,3 +1,5 @@
+"""Module test_cli auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +14,15 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_cli_baseline_subcommand(tmp_path: Path, capsys):
+    """Test cli baseline subcommand.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Build a minimal scenario matrix YAML
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
@@ -73,6 +84,15 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
 
 
 def test_cli_list_scenarios(tmp_path: Path, capsys):
+    """Test cli list scenarios.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Minimal scenario matrix YAML
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
@@ -105,6 +125,15 @@ def test_cli_list_scenarios(tmp_path: Path, capsys):
 
 
 def test_cli_validate_config_success(tmp_path: Path, capsys):
+    """Test cli validate config success.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "s1", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},
@@ -124,6 +153,15 @@ def test_cli_validate_config_success(tmp_path: Path, capsys):
 
 
 def test_cli_validate_config_errors(tmp_path: Path, capsys):
+    """Test cli validate config errors.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "dup", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 0},
@@ -144,6 +182,14 @@ def test_cli_validate_config_errors(tmp_path: Path, capsys):
 
 
 def test_cli_list_algorithms_includes_random(capsys):
+    """Test cli list algorithms includes random.
+
+    Args:
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     rc = cli_main(["list-algorithms"])
     captured = capsys.readouterr()
     assert rc == 0

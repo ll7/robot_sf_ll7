@@ -45,6 +45,15 @@ def _resolve_scenario_config(
     scenario_arg: Path | None,
     training_config: Path | None,
 ) -> Path:
+    """Resolve scenario config.
+
+    Args:
+        scenario_arg: Auto-generated placeholder description.
+        training_config: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     if scenario_arg is not None:
         return scenario_arg.resolve()
     if training_config is None:
@@ -62,6 +71,11 @@ def _resolve_scenario_config(
 
 
 def _git_commit_hash() -> str | None:
+    """Git commit hash.
+
+    Returns:
+        str | None: Auto-generated placeholder description.
+    """
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -75,10 +89,23 @@ def _git_commit_hash() -> str | None:
 
 
 def _command_line() -> str:
+    """Command line.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return " ".join(shlex.quote(arg) for arg in sys.argv)
 
 
 def _zero_action(space: Any) -> np.ndarray:
+    """Zero action.
+
+    Args:
+        space: Auto-generated placeholder description.
+
+    Returns:
+        np.ndarray: Auto-generated placeholder description.
+    """
     shape = getattr(space, "shape", ())
     dtype = float
     return np.zeros(shape, dtype=dtype)
@@ -90,6 +117,16 @@ def _record_episode(
     policy: PPO | None,
     dry_run: bool,
 ) -> tuple[list[Any], list[Any], list[Any]]:
+    """Record episode.
+
+    Args:
+        env: Auto-generated placeholder description.
+        policy: Auto-generated placeholder description.
+        dry_run: Auto-generated placeholder description.
+
+    Returns:
+        tuple[list[Any], list[Any], list[Any]]: Auto-generated placeholder description.
+    """
     obs, _ = env.reset()
     done = False
     positions: list[Any] = []
@@ -123,6 +160,19 @@ def _record_dataset(
     scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
+    """Record dataset.
+
+    Args:
+        config: Auto-generated placeholder description.
+        policy: Auto-generated placeholder description.
+        dry_run: Auto-generated placeholder description.
+        scenario_label: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        scenario_path: Auto-generated placeholder description.
+
+    Returns:
+        tuple[dict[str, list[np.ndarray]], dict[str, int]]: Auto-generated placeholder description.
+    """
     dataset: dict[str, list[np.ndarray]] = {
         "positions": [],
         "actions": [],
@@ -151,6 +201,17 @@ def _write_dataset(
     episode_count: int,
     metadata: Mapping[str, Any],
 ) -> None:
+    """Write dataset.
+
+    Args:
+        path: Auto-generated placeholder description.
+        arrays: Auto-generated placeholder description.
+        episode_count: Auto-generated placeholder description.
+        metadata: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         path,
@@ -163,6 +224,11 @@ def _write_dataset(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Build arg parser.
+
+    Returns:
+        argparse.ArgumentParser: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(
         description="Collect expert trajectory datasets using an expert PPO policy."
     )
@@ -220,6 +286,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

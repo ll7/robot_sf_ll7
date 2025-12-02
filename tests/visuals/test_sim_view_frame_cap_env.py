@@ -9,6 +9,14 @@ from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 
 
 def _basic_state(t: int) -> VisualizableSimState:
+    """Basic state.
+
+    Args:
+        t: Auto-generated placeholder description.
+
+    Returns:
+        VisualizableSimState: Auto-generated placeholder description.
+    """
     return VisualizableSimState(
         timestep=t,
         robot_action=None,
@@ -21,6 +29,16 @@ def _basic_state(t: int) -> VisualizableSimState:
 
 @pytest.mark.parametrize("override, expected", [("5", 5), ("NONE", None), ("-1", None)])
 def test_env_override_max_frames(monkeypatch, override, expected):
+    """Test env override max frames.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+        override: Auto-generated placeholder description.
+        expected: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("ROBOT_SF_MAX_VIDEO_FRAMES", override)
 
@@ -44,6 +62,14 @@ def test_env_override_max_frames(monkeypatch, override, expected):
 
 
 def test_env_override_invalid_ignored(monkeypatch):
+    """Test env override invalid ignored.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("ROBOT_SF_MAX_VIDEO_FRAMES", "not-an-int")
 

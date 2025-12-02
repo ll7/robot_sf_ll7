@@ -15,10 +15,20 @@ import pytest
 
 
 def _mod():
+    """Mod.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_valid_scenario_selection():
+    """Test valid scenario selection.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = _mod()
     # Identify first scenario name via loader directly
     from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix
@@ -40,6 +50,11 @@ def test_valid_scenario_selection():
 
 
 def test_invalid_scenario_name_lists_available():
+    """Test invalid scenario name lists available.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = _mod()
     original_name = mod.SCENARIO_NAME
     original_dry = mod.DRY_RUN

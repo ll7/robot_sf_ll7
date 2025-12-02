@@ -73,6 +73,16 @@ try:  # pragma: no cover - optional dependency
         desc: str | None = None,
         total: int | None = None,
     ) -> Iterator:  # type: ignore[name-defined]
+        """Progress.
+
+        Args:
+            iterable: Auto-generated placeholder description.
+            desc: Auto-generated placeholder description.
+            total: Auto-generated placeholder description.
+
+        Returns:
+            Iterator: Auto-generated placeholder description.
+        """
         return tqdm(iterable, desc=desc, total=total)  # type: ignore[no-any-return]
 
     _TQDM_AVAILABLE = True
@@ -83,6 +93,16 @@ except Exception:
         desc: str | None = None,
         total: int | None = None,
     ) -> Iterator:  # type: ignore[unused-argument]
+        """Progress.
+
+        Args:
+            iterable: Auto-generated placeholder description.
+            desc: Auto-generated placeholder description.
+            total: Auto-generated placeholder description.
+
+        Returns:
+            Iterator: Auto-generated placeholder description.
+        """
         # Fallback: ignore progress parameters when tqdm unavailable
         return iter(iterable)
 
@@ -112,6 +132,15 @@ class SNQIWeightOptimizer:
     """
 
     def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
+        """Init.
+
+        Args:
+            episodes_data: Auto-generated placeholder description.
+            baseline_stats: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = list(WEIGHT_NAMES)
@@ -122,6 +151,16 @@ class SNQIWeightOptimizer:
         simplex: bool,
         total: float = 10.0,
     ) -> dict[str, float]:
+        """Maybe simplex.
+
+        Args:
+            weights: Auto-generated placeholder description.
+            simplex: Auto-generated placeholder description.
+            total: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         if not simplex:
             return weights
         s = sum(weights.values())
@@ -130,9 +169,26 @@ class SNQIWeightOptimizer:
         return {k: (v / s) * total for k, v in weights.items()}
 
     def _episode_snqi(self, metrics: dict[str, float], weights: dict[str, float]) -> float:
+        """Episode snqi.
+
+        Args:
+            metrics: Auto-generated placeholder description.
+            weights: Auto-generated placeholder description.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return compute_snqi(metrics, weights, self.baseline_stats)
 
     def compute_ranking_stability(self, weights: dict[str, float]) -> float:
+        """Compute ranking stability.
+
+        Args:
+            weights: Auto-generated placeholder description.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         if len(self.episodes) < 2:
             return 1.0
         algo_groups: dict[str, list] = {}
@@ -272,6 +328,15 @@ class SNQIWeightOptimizer:
         stagnant_iters = 0
 
         def _callback(xk: np.ndarray, _convergence: float) -> bool:
+            """Callback.
+
+            Args:
+                xk: Auto-generated placeholder description.
+                _convergence: Auto-generated placeholder description.
+
+            Returns:
+                bool: Auto-generated placeholder description.
+            """
             nonlocal best_positive_obj, stagnant_iters
             current_positive = -self.objective_function(xk, simplex=simplex)
             improved = (
@@ -365,6 +430,19 @@ class SNQIWeightOptimizer:
         early_stop_patience: int,
         early_stop_min_delta: float,
     ) -> OptimizationResult:
+        """Differential evolution core.
+
+        Args:
+            maxiter: Auto-generated placeholder description.
+            seed: Auto-generated placeholder description.
+            show_progress: Auto-generated placeholder description.
+            simplex: Auto-generated placeholder description.
+            early_stop_patience: Auto-generated placeholder description.
+            early_stop_min_delta: Auto-generated placeholder description.
+
+        Returns:
+            OptimizationResult: Auto-generated placeholder description.
+        """
         bounds = [(0.1, 3.0)] * len(self.weight_names)
         callback, pbar = self._build_de_callback(
             maxiter=maxiter,
@@ -394,6 +472,14 @@ class SNQIWeightOptimizer:
         """Execute SciPy differential_evolution with provided configuration."""
 
         def _wrapped(vec: np.ndarray) -> float:
+            """Wrapped.
+
+            Args:
+                vec: Auto-generated placeholder description.
+
+            Returns:
+                float: Auto-generated placeholder description.
+            """
             return self.objective_function(vec, simplex=simplex)
 
         result = differential_evolution(
@@ -444,6 +530,14 @@ class SNQIWeightOptimizer:
 
 
 def _load_initial_weights(path: Path) -> dict[str, float]:
+    """Load initial weights.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     with open(path, encoding="utf-8") as f:
         raw = json.load(f)
     if not isinstance(raw, dict):  # pragma: no cover - defensive
@@ -476,6 +570,14 @@ def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
+    """Load baseline stats.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, dict[str, float]]: Auto-generated placeholder description.
+    """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):  # basic validation
@@ -487,12 +589,29 @@ def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
 def _load_inputs(
     args: argparse.Namespace,
 ) -> tuple[list[dict], dict[str, dict[str, float]], int]:
+    """Load inputs.
+
+    Args:
+        args: Auto-generated placeholder description.
+
+    Returns:
+        tuple[list[dict], dict[str, dict[str, float]], int]: Auto-generated placeholder description.
+    """
     episodes, skipped = load_episodes_data(args.episodes)
     baseline_stats = load_baseline_stats(args.baseline)
     return episodes, baseline_stats, skipped
 
 
 def _select_best(results: dict[str, Any], method: str) -> None:
+    """Select best.
+
+    Args:
+        results: Auto-generated placeholder description.
+        method: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if method == "both":
         best_method = "grid_search"
         if "differential_evolution" in results and results["differential_evolution"][
@@ -518,7 +637,27 @@ def _augment_metadata(
     original_episode_count: int | None = None,
     used_episode_count: int | None = None,
 ) -> None:
+    """Augment metadata.
+
+    Args:
+        results: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+        start_iso: Auto-generated placeholder description.
+        start_perf: Auto-generated placeholder description.
+        phase_timings: Auto-generated placeholder description.
+        original_episode_count: Auto-generated placeholder description.
+        used_episode_count: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
+
     def _git_commit() -> str:
+        """Git commit.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         try:
             return (
                 subprocess.check_output(
@@ -632,6 +771,15 @@ def _detect_missing_baseline_metrics(
 
 
 def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
+    """Print summary.
+
+    Args:
+        results: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     recommended = results["recommended"]
     print("\nOptimization Summary:")
     print(f"Method: {recommended['method_used']}")
@@ -654,6 +802,14 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
 
 # ----------------------------- Main runner --------------------------- #
 def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decomposition
+    """Run.
+
+    Args:
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
     phase_start = start_perf
@@ -855,6 +1011,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse args.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        argparse.Namespace: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="Optimize SNQI weights")
     parser.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
     parser.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
@@ -962,6 +1126,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))
     return run(args)

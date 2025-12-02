@@ -31,6 +31,14 @@ MANIFEST_FILES = {
 
 
 def _load_json(path: Path):  # type: ignore[no-untyped-def]
+    """Load json.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 

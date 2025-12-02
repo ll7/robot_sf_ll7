@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """Cfg class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -33,6 +35,15 @@ class Cfg:
 
 
 def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
+    """Test simulation view success stub.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Force SimulationView + moviepy readiness
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
@@ -65,6 +76,17 @@ def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
     )
 
     def _stub_attempt(records, out_dir, cfg, replay_map):
+        """Stub attempt.
+
+        Args:
+            records: Auto-generated placeholder description.
+            out_dir: Auto-generated placeholder description.
+            cfg: Auto-generated placeholder description.
+            replay_map: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Return list with our success artifact
         return [stub_artifact]
 
@@ -95,6 +117,8 @@ def test_simulation_view_encode_path(tmp_path: Path, monkeypatch):
     """Exercise real sim-view encode path (adapter -> frames -> encode)."""
 
     class AutoCfg(Cfg):
+        """AutoCfg class."""
+
         video_renderer = "auto"
 
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
@@ -111,17 +135,46 @@ def test_simulation_view_encode_path(tmp_path: Path, monkeypatch):
     frames = [np.zeros((4, 4, 3), dtype=np.uint8) for _ in range(3)]
 
     def fake_generate_frames(ep, *, fps: int = 10, max_frames=None):
+        """Fake generate frames.
+
+        Args:
+            ep: Auto-generated placeholder description.
+            fps: Auto-generated placeholder description.
+            max_frames: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         assert ep is replay_ep
         yield from frames
 
     class DummyEncodeResult:
+        """DummyEncodeResult class."""
+
         def __init__(self):
+            """Init.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.status = "success"
             self.note = None
             self.encode_time_s = 0.0123
             self.peak_rss_mb = 5.0
 
     def fake_encode_frames(frame_iter, path, *, fps: int = 10, sample_memory: bool = False, **_kw):
+        """Fake encode frames.
+
+        Args:
+            frame_iter: Auto-generated placeholder description.
+            path: Auto-generated placeholder description.
+            fps: Auto-generated placeholder description.
+            sample_memory: Auto-generated placeholder description.
+            _kw: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         list(frame_iter)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ok")

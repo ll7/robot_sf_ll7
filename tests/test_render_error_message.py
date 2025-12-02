@@ -11,6 +11,11 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 
 
 def test_render_error_message_contains_guidance():
+    """Test render error message contains guidance.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = make_robot_env(debug=False)
     try:
         with pytest.raises(RuntimeError) as excinfo:

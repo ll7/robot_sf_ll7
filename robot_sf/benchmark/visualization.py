@@ -116,6 +116,16 @@ class VisualizationError(Exception):
     """Raised when visualization generation fails."""
 
     def __init__(self, message: str, artifact_type: str, details: dict | None = None):
+        """Init.
+
+        Args:
+            message: Auto-generated placeholder description.
+            artifact_type: Auto-generated placeholder description.
+            details: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().__init__(message)
         self.artifact_type = artifact_type
         self.details = details or {}
@@ -821,6 +831,15 @@ def _create_pixel_converter(bounds: tuple[float, float, float, float]):
     height, width = 320, 320
 
     def to_pixel(x: float, y: float) -> tuple[int, int]:
+        """To pixel.
+
+        Args:
+            x: Auto-generated placeholder description.
+            y: Auto-generated placeholder description.
+
+        Returns:
+            tuple[int, int]: Auto-generated placeholder description.
+        """
         norm_x = (x - min_x) / span_x
         norm_y = (y - min_y) / span_y
         col = int(np.clip(norm_x * (width - 1), 0, width - 1))
@@ -906,6 +925,11 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
 
         # Use a generator to avoid loading all frames into memory at once
         def frame_generator():
+            """Frame generator.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             yield from frames
 
         # Create a temporary audio file path (even though audio=False, moviepy expects it)

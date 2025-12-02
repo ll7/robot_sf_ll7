@@ -1,8 +1,19 @@
+"""Module test_cli_plot_scenarios auto-generated docstring."""
+
 import json
 from pathlib import Path
 
 
 def test_cli_plot_scenarios_png_and_pdf(tmp_path: Path, capsys):
+    """Test cli plot scenarios png and pdf.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out_dir = tmp_path / "thumbs"
     out_dir.mkdir(parents=True, exist_ok=True)
     from robot_sf.benchmark.cli import cli_main

@@ -275,6 +275,14 @@ def compute_completeness_score(
     """
 
     def _seed_sort_key(value: str) -> tuple[int, str]:
+        """Seed sort key.
+
+        Args:
+            value: Auto-generated placeholder description.
+
+        Returns:
+            tuple[int, str]: Auto-generated placeholder description.
+        """
         try:
             return (0, str(int(value)))
         except ValueError:

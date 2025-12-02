@@ -12,6 +12,11 @@ import importlib
 
 
 def test_recording_skip_graceful():
+    """Test recording skip graceful.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Force non-dry path
     if hasattr(mod, "DRY_RUN"):

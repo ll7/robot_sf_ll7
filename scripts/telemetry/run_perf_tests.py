@@ -113,6 +113,17 @@ def _write_summary(
     scenario: str | None,
     result: performance_smoke_test.SmokeTestResult,
 ) -> Path:
+    """Write summary.
+
+    Args:
+        run_directory: Auto-generated placeholder description.
+        run_id: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        result: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     payload = result.to_dict()
     payload["run_id"] = run_id
     if scenario is not None:
@@ -130,6 +141,18 @@ def _build_manifest_summary(
     num_resets: int,
     recommendation_count: int,
 ) -> dict[str, Any]:
+    """Build manifest summary.
+
+    Args:
+        result: Auto-generated placeholder description.
+        summary_path: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        num_resets: Auto-generated placeholder description.
+        recommendation_count: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     summary: dict[str, Any] = {
         "scenario": scenario or "default",
         "num_resets": num_resets,
@@ -150,6 +173,15 @@ def _resolve_output_destination(
     config: RunTrackerConfig,
     hint: str | None,
 ) -> tuple[RunTrackerConfig, str]:
+    """Resolve output destination.
+
+    Args:
+        config: Auto-generated placeholder description.
+        hint: Auto-generated placeholder description.
+
+    Returns:
+        tuple[RunTrackerConfig, str]: Auto-generated placeholder description.
+    """
     run_id = generate_run_id("perf")
     if not hint:
         return config, run_id
@@ -172,6 +204,14 @@ def _resolve_output_destination(
 
 
 def _map_test_status(label: str) -> PerformanceTestStatus:
+    """Map test status.
+
+    Args:
+        label: Auto-generated placeholder description.
+
+    Returns:
+        PerformanceTestStatus: Auto-generated placeholder description.
+    """
     normalized = label.strip().upper() if label else "FAIL"
     if normalized == "PASS":
         return PerformanceTestStatus.PASSED
@@ -181,6 +221,14 @@ def _map_test_status(label: str) -> PerformanceTestStatus:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse args.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        argparse.Namespace: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--scenario",
@@ -207,6 +255,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     args = parse_args(argv)
     try:
         exit_code, run_dir = run_perf_tests(

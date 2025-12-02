@@ -26,6 +26,16 @@ from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi
 
 
 def _get_nested(d: Mapping[str, Any], dotted: str, default: Any | None = None) -> Any:
+    """Get nested.
+
+    Args:
+        d: Auto-generated placeholder description.
+        dotted: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cur: Any = d
     for part in dotted.split("."):
         if isinstance(cur, Mapping) and part in cur:
@@ -40,6 +50,16 @@ def _group_by(
     group_by: str,
     fallback: str,
 ) -> dict[str, list[Mapping[str, Any]]]:
+    """Group by.
+
+    Args:
+        records: Auto-generated placeholder description.
+        group_by: Auto-generated placeholder description.
+        fallback: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, list[Mapping[str, Any]]]: Auto-generated placeholder description.
+    """
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for rec in records:
         gid = _get_nested(rec, group_by)
@@ -52,6 +72,14 @@ def _group_by(
 
 
 def _mean(values: Sequence[float]) -> float:
+    """Mean.
+
+    Args:
+        values: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return float(sum(values) / len(values)) if values else float("nan")
 
 
@@ -60,6 +88,16 @@ def _episode_snqi(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> float:
+    """Episode snqi.
+
+    Args:
+        rec: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+        baseline: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return float(compute_snqi(rec.get("metrics", {}), weights, baseline))
 
 
@@ -70,6 +108,18 @@ def _compute_group_means(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, float]:
+    """Compute group means.
+
+    Args:
+        records: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+        baseline: Auto-generated placeholder description.
+        group_by: Auto-generated placeholder description.
+        fallback_group_by: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     groups = _group_by(records, group_by, fallback_group_by)
     means: dict[str, float] = {}
     for gid, rows in groups.items():
@@ -88,6 +138,15 @@ def _ranking_from_means(
     means: Mapping[str, float],
     ascending: bool = False,
 ) -> list[tuple[str, float, int]]:
+    """Ranking from means.
+
+    Args:
+        means: Auto-generated placeholder description.
+        ascending: Auto-generated placeholder description.
+
+    Returns:
+        list[tuple[str, float, int]]: Auto-generated placeholder description.
+    """
     # We treat higher SNQI as better -> descending by default; ascending flag kept for symmetry.
     items = [(g, float(m), 0) for g, m in means.items()]
     items.sort(key=lambda t: t[1], reverse=not ascending)
@@ -97,6 +156,8 @@ def _ranking_from_means(
 
 @dataclass
 class AblationRow:
+    """AblationRow class."""
+
     group: str
     base_rank: int
     base_mean: float
@@ -154,6 +215,14 @@ def compute_snqi_ablation(
 
 
 def format_markdown(rows: Sequence[AblationRow]) -> str:
+    """Format markdown.
+
+    Args:
+        rows: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     headers = ["Rank", "Group", "base_mean", *list(WEIGHT_NAMES)]
     # Only include weights that appear in any row
     used_weights = [w for w in WEIGHT_NAMES if any(w in r.deltas for r in rows)]
@@ -173,6 +242,14 @@ def format_markdown(rows: Sequence[AblationRow]) -> str:
 
 
 def format_csv(rows: Sequence[AblationRow]) -> str:
+    """Format csv.
+
+    Args:
+        rows: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     used_weights = [w for w in WEIGHT_NAMES if any(w in r.deltas for r in rows)]
     headers = ["rank", "group", "base_mean"] + [f"delta_{w}" for w in used_weights]
     lines = [",".join(headers)]
@@ -185,6 +262,14 @@ def format_csv(rows: Sequence[AblationRow]) -> str:
 
 
 def to_json(rows: Sequence[AblationRow]) -> list[dict[str, Any]]:
+    """To json.
+
+    Args:
+        rows: Auto-generated placeholder description.
+
+    Returns:
+        list[dict[str, Any]]: Auto-generated placeholder description.
+    """
     out: list[dict[str, Any]] = []
     for r in rows:
         item = {

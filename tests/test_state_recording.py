@@ -9,6 +9,11 @@ from robot_sf.nav.map_config import MapDefinition
 
 
 def test_recording():
+    """Test recording.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     recordings_dir = resolve_artifact_path(Path("recordings"))
     recordings_dir.mkdir(parents=True, exist_ok=True)
     existing_files = set(recordings_dir.glob("*.pkl"))

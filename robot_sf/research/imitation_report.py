@@ -33,6 +33,8 @@ from robot_sf.research.statistics import (
 
 @dataclass
 class ImitationReportConfig:
+    """ImitationReportConfig class."""
+
     experiment_name: str
     hypothesis: str | None = "BC pre-training reduces timesteps by ≥30%"
     alpha: float = 0.05
@@ -47,10 +49,23 @@ class ImitationReportConfig:
 
 
 def _timestamp() -> str:
+    """Timestamp.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
+    """Load summary.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
@@ -99,6 +114,15 @@ def _select_records(
 
 
 def _metric(record: dict[str, Any], key: str) -> float:
+    """Metric.
+
+    Args:
+        record: Auto-generated placeholder description.
+        key: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
     return float(val) if isinstance(val, (int, float)) else 0.0
@@ -122,6 +146,14 @@ def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
 
 
 def _fmt_stat(value: float | None | str) -> str:
+    """Fmt stat.
+
+    Args:
+        value: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
 
@@ -244,6 +276,14 @@ def _render_markdown(
 
 
 def _latex_escape(text: str) -> str:
+    """Latex escape.
+
+    Args:
+        text: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")

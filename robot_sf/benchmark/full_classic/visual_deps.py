@@ -62,6 +62,11 @@ def simulation_view_ready() -> bool:  # T030
 
 @lru_cache(maxsize=1)
 def has_pygame() -> bool:
+    """Has pygame.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     try:
         import pygame  # type: ignore
 
@@ -76,6 +81,11 @@ def has_pygame() -> bool:
 
 @lru_cache(maxsize=1)
 def has_moviepy() -> bool:
+    """Has moviepy.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     try:
         import moviepy  # type: ignore
 
@@ -90,6 +100,11 @@ def has_moviepy() -> bool:
 
 @lru_cache(maxsize=1)
 def ffmpeg_in_path() -> bool:
+    """Ffmpeg in path.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     return shutil.which("ffmpeg") is not None
 
 

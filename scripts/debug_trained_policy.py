@@ -1,9 +1,16 @@
+"""Module debug_trained_policy auto-generated docstring."""
+
 from stable_baselines3 import PPO
 
 from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def training():
+    """Training.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = RobotEnv(debug=True)
     model = PPO.load("./model/ppo_model", env=env)
 

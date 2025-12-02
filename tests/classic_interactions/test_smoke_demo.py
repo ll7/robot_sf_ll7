@@ -14,11 +14,21 @@ REQUIRED_KEYS = {"scenario", "seed", "steps", "outcome", "recorded"}
 
 
 def _import_demo_module():
+    """Import demo module.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     return mod
 
 
 def test_smoke_run_demo_produces_episode_summaries():
+    """Test smoke run demo produces episode summaries.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = _import_demo_module()
     # Force non-dry run by temporarily patching DRY_RUN constant if present
     if hasattr(mod, "DRY_RUN"):

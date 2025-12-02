@@ -25,6 +25,15 @@ BIN = ["uv", "run", "robot_sf_bench"]
 
 
 def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
+    """Write synthetic inputs.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        n: Auto-generated placeholder description.
+
+    Returns:
+        tuple[Path, Path]: Auto-generated placeholder description.
+    """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
     # Simple baseline med/p95 approximations
@@ -58,6 +67,14 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
+    """Run.
+
+    Args:
+        args: Auto-generated placeholder description.
+
+    Returns:
+        subprocess.CompletedProcess: Auto-generated placeholder description.
+    """
     env = os.environ.copy()
     # Ensure we do not trip the LIGHT_TEST fast path (want real code)
     env.pop("ROBOT_SF_SNQI_LIGHT_TEST", None)
@@ -66,6 +83,15 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 
 @pytest.mark.parametrize("cmd", ["optimize", "recompute"])
 def test_bootstrap_block_present(tmp_path: Path, cmd: str):
+    """Test bootstrap block present.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        cmd: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes, baseline = _write_synthetic_inputs(tmp_path)
     out = tmp_path / f"out_{cmd}.json"
     base = [

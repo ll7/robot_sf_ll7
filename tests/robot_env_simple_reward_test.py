@@ -1,7 +1,14 @@
+"""Module robot_env_simple_reward_test auto-generated docstring."""
+
 from robot_sf.gym_env.robot_env import simple_reward
 
 
 def test_simple_reward():
+    """Test simple reward.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     meta = {
         "step": 0,
         "episode": 0,

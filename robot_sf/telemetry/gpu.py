@@ -34,10 +34,20 @@ class _NvmlHandle:
     """Lazy NVML initializer so callers do not pay the cost unless needed."""
 
     def __init__(self) -> None:
+        """Init.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._initialized = False
         self._failed_reason: str | None = _NVML_ERROR
 
     def ensure_initialized(self) -> bool:
+        """Ensure initialized.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         if pynvml is None:
             return False
         if self._initialized:
@@ -51,6 +61,11 @@ class _NvmlHandle:
         return True
 
     def shutdown(self) -> None:
+        """Shutdown.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self._initialized or pynvml is None:
             return
         with contextlib.suppress(Exception):  # pragma: no cover - teardown best-effort only
@@ -59,6 +74,11 @@ class _NvmlHandle:
 
     @property
     def failed_reason(self) -> str | None:
+        """Failed reason.
+
+        Returns:
+            str | None: Auto-generated placeholder description.
+        """
         return self._failed_reason
 
 
@@ -114,6 +134,15 @@ def with_gpu_support(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to run a callable only when GPU telemetry is available."""
 
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        """Wrapper.
+
+        Args:
+            args: Auto-generated placeholder description.
+            kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if gpu_support_reason() is not None:
             return None
         return func(*args, **kwargs)

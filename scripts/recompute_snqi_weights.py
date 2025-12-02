@@ -86,12 +86,30 @@ class SNQIWeightRecomputer:
     """
 
     def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
+        """Init.
+
+        Args:
+            episodes_data: Auto-generated placeholder description.
+            baseline_stats: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = WEIGHT_NAMES
         self.simplex = False  # toggled externally
 
     def _maybe_simplex(self, weights: dict[str, float], total: float = 10.0) -> dict[str, float]:
+        """Maybe simplex.
+
+        Args:
+            weights: Auto-generated placeholder description.
+            total: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         if not self.simplex:
             return weights
         s = sum(weights.values())
@@ -395,6 +413,14 @@ def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
+    """Load baseline stats.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, dict[str, float]]: Auto-generated placeholder description.
+    """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -406,6 +432,15 @@ def _compute_strategy_set(
     recomputer: SNQIWeightRecomputer,
     strategies: list[str],
 ) -> dict[str, Any]:
+    """Compute strategy set.
+
+    Args:
+        recomputer: Auto-generated placeholder description.
+        strategies: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     out: dict[str, Any] = {}
     for name in strategies:
         try:
@@ -416,6 +451,14 @@ def _compute_strategy_set(
 
 
 def _select_recommended(strategy_results: dict[str, Any]) -> tuple[str, dict[str, float]]:
+    """Select recommended.
+
+    Args:
+        strategy_results: Auto-generated placeholder description.
+
+    Returns:
+        tuple[str, dict[str, float]]: Auto-generated placeholder description.
+    """
     best_name: str | None = None
     best_score = -float("inf")
     for name, data in strategy_results.items():
@@ -440,7 +483,27 @@ def _augment_metadata(
     original_episode_count: int | None = None,
     used_episode_count: int | None = None,
 ) -> None:
+    """Augment metadata.
+
+    Args:
+        results: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+        start_iso: Auto-generated placeholder description.
+        start_perf: Auto-generated placeholder description.
+        phase_timings: Auto-generated placeholder description.
+        original_episode_count: Auto-generated placeholder description.
+        used_episode_count: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
+
     def _git_commit() -> str:
+        """Git commit.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         try:
             return (
                 subprocess.check_output(
@@ -484,6 +547,15 @@ def _augment_metadata(
 
 
 def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
+    """Finalize summary.
+
+    Args:
+        results: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if args.compare_strategies:
         method_descriptor = results.get("recommended_strategy")
     else:
@@ -507,6 +579,16 @@ def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None
 
 
 def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
+    """Print summary.
+
+    Args:
+        results: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+        episodes_count: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     lines: list[str] = []
     lines.append("Weight Recomputation Summary:")
     lines.append(f"Episodes analyzed: {episodes_count}")
@@ -538,6 +620,14 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_c
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse args.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        argparse.Namespace: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="SNQI Weight Recomputation")
     parser.add_argument(
         "--episodes",
@@ -678,6 +768,14 @@ def _detect_missing_baseline_metrics(
 
 
 def run(args: argparse.Namespace) -> int:  # noqa: C901
+    """Run.
+
+    Args:
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
     phase_start = start_perf
@@ -889,6 +987,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))
     return run(args)

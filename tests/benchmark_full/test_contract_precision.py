@@ -11,8 +11,26 @@ from robot_sf.benchmark.full_classic.precision import evaluate_precision
 
 
 def test_evaluate_precision_structure():
+    """Test evaluate precision structure.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     class _Metric:
+        """Metric class."""
+
         def __init__(self, name, mean, mean_ci):
+            """Init.
+
+            Args:
+                name: Auto-generated placeholder description.
+                mean: Auto-generated placeholder description.
+                mean_ci: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.name = name
             self.mean = mean
             self.median = mean
@@ -21,7 +39,18 @@ def test_evaluate_precision_structure():
             self.median_ci = None
 
     class _Group:
+        """Group class."""
+
         def __init__(self, archetype, density):
+            """Init.
+
+            Args:
+                archetype: Auto-generated placeholder description.
+                density: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.archetype = archetype
             self.density = density
             self.count = 40
@@ -33,6 +62,8 @@ def test_evaluate_precision_structure():
     groups = [_Group("crossing", "low")]
 
     class _Cfg:
+        """Cfg class."""
+
         smoke = True
         collision_ci = 0.05
         success_ci = 0.05

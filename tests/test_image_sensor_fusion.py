@@ -398,5 +398,14 @@ class RobotEnvWithImage(RobotEnv):
     """
 
     def __init__(self, env_config, debug=False):
+        """Init.
+
+        Args:
+            env_config: Auto-generated placeholder description.
+            debug: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().__init__(env_config, debug)
         self.sim_ui = None if not hasattr(self, "sim_view") else self.sim_view

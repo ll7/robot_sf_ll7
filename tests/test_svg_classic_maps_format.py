@@ -26,11 +26,24 @@ CLASSIC_PREFIX = "classic_"
 
 
 def _classic_svg_files():
+    """Classic svg files.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return sorted(p for p in SVG_DIR.glob(f"{CLASSIC_PREFIX}*.svg") if p.is_file())
 
 
 @pytest.mark.parametrize("svg_path", _classic_svg_files())
 def test_classic_svg_parse(svg_path: Path):
+    """Test classic svg parse.
+
+    Args:
+        svg_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     converter = SvgMapConverter(str(svg_path))
     md = converter.get_map_definition()
     assert isinstance(md, MapDefinition), "Converter did not produce MapDefinition"

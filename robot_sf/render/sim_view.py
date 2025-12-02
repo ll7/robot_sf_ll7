@@ -1,3 +1,5 @@
+"""Module sim_view auto-generated docstring."""
+
 import os
 import sys
 from dataclasses import dataclass, field
@@ -81,6 +83,8 @@ def _empty_map_definition() -> MapDefinition:
 
 @dataclass
 class VisualizableAction:
+    """VisualizableAction class."""
+
     pose: RobotPose
     action: DifferentialDriveAction | BicycleAction | UnicycleAction
     goal: Vec2D
@@ -457,6 +461,11 @@ class SimulationView:
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
+        """Timestep text pos.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         return (16, 16)
 
     def _scale_tuple(self, tup: tuple[float, float]) -> tuple[float, float]:
@@ -592,6 +601,11 @@ class SimulationView:
             pygame.display.update()
 
     def _resize_window(self):
+        """Resize window.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         logger.debug("Resizing the window.")
         old_surface = self.screen
         if self._use_display:
@@ -613,6 +627,14 @@ class SimulationView:
             self.offset[1] = int(r_y * self.scaling - self.height / 2) * -1
 
     def _draw_robot(self, pose: RobotPose):
+        """Draw robot.
+
+        Args:
+            pose: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # TODO(#252): display robot with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
         pygame.draw.circle(
@@ -623,6 +645,14 @@ class SimulationView:
         )
 
     def _draw_ego_ped(self, pose: PedPose):
+        """Draw ego ped.
+
+        Args:
+            pose: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # TODO(#252): display ego ped with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
         pygame.draw.circle(
@@ -633,6 +663,14 @@ class SimulationView:
         )
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
+        """Draw pedestrians.
+
+        Args:
+            ped_pos: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # TODO(#252): display pedestrians with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
         for ped_x, ped_y in ped_pos:
@@ -644,6 +682,11 @@ class SimulationView:
             )
 
     def _draw_obstacles(self):
+        """Draw obstacles.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
@@ -652,6 +695,11 @@ class SimulationView:
             pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
 
     def _draw_spawn_zones(self):
+        """Draw spawn zones.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Iterate over each spawn_zone in the list of spawn_zones
         for spawn_zone in self.map_def.ped_spawn_zones:
             # Scale and offset the vertices of the zones
@@ -661,6 +709,11 @@ class SimulationView:
             pygame.draw.polygon(self.screen, PED_SPAWN_COLOR, scaled_vertices)
 
     def _draw_goal_zones(self):
+        """Draw goal zones.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Iterate over each goal_zone in the list of goal_zones
         for goal_zone in self.map_def.ped_goal_zones:
             # Scale and offset the vertices of the goal zones
@@ -670,6 +723,14 @@ class SimulationView:
             pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
+        """Augment goal position.
+
+        Args:
+            robot_goal: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         pygame.draw.circle(
             self.screen,
             ROBOT_GOAL_COLOR,
@@ -701,15 +762,42 @@ class SimulationView:
             )
 
     def _augment_action(self, action: VisualizableAction, color):
+        """Augment action.
+
+        Args:
+            action: Auto-generated placeholder description.
+            color: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         r_x, r_y = action.pose[0]
         # scale vector length to be always visible
         vec_length = action.action[0] * self.scaling
         vec_orient = action.pose[1]
 
         def from_polar(length: float, orient: float) -> Vec2D:
+            """From polar.
+
+            Args:
+                length: Auto-generated placeholder description.
+                orient: Auto-generated placeholder description.
+
+            Returns:
+                Vec2D: Auto-generated placeholder description.
+            """
             return cos(orient) * length, sin(orient) * length
 
         def add_vec(v_1: Vec2D, v_2: Vec2D) -> Vec2D:
+            """Add vec.
+
+            Args:
+                v_1: Auto-generated placeholder description.
+                v_2: Auto-generated placeholder description.
+
+            Returns:
+                Vec2D: Auto-generated placeholder description.
+            """
             return v_1[0] + v_2[0], v_1[1] + v_2[1]
 
         vec_x, vec_y = add_vec((r_x, r_y), from_polar(vec_length, vec_orient))
@@ -774,6 +862,15 @@ class SimulationView:
         self.screen.blit(text, (x, y))
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
+        """Add text.
+
+        Args:
+            timestep: Auto-generated placeholder description.
+            state: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         info_lines = self._get_display_info_lines(state)
         text_lines = self._build_text_lines(timestep, state, info_lines)
         self._render_text_display(text_lines)
@@ -907,6 +1004,11 @@ class SimulationView:
         self.screen.blit(hint_surface, (16, 16))
 
     def _add_help_text(self):
+        """Add help text.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         text_lines = [
             "Move camera: arrow keys",
             "Move fast: CTRL + arrow keys",

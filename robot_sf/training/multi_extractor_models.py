@@ -40,6 +40,11 @@ class HardwareProfile:
     cuda_version: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         payload = {
             "platform": self.platform,
             "arch": self.arch,
@@ -70,6 +75,11 @@ class ExtractorRunRecord:
     reason: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         payload = {
             "config_name": self.config_name,
             "status": self.status,
@@ -100,6 +110,11 @@ class TrainingRunSummary:
     notes: Optional[list[str]] = None
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         payload = {
             "run_id": self.run_id,
             "created_at": self.created_at,

@@ -16,7 +16,19 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 class _Cfg:
+    """Cfg class."""
+
     def __init__(self, tmp_path: Path, smoke: bool = True, disable_videos: bool = False):
+        """Init.
+
+        Args:
+            tmp_path: Auto-generated placeholder description.
+            smoke: Auto-generated placeholder description.
+            disable_videos: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Minimal fields used by orchestrator & video/plot logic
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"  # assuming exists
@@ -37,11 +49,27 @@ class _Cfg:
 
 
 def _read_json(path: Path):
+    """Read json.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_visuals_manifest_videos_disabled(tmp_path):
+    """Test visuals manifest videos disabled.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = _Cfg(tmp_path / "run_disabled", disable_videos=True)
     run_full_benchmark(cfg)
     reports = Path(cfg.output_root) / "reports"
@@ -56,6 +84,14 @@ def test_visuals_manifest_videos_disabled(tmp_path):
 
 
 def test_visuals_manifest_smoke_mode(tmp_path):
+    """Test visuals manifest smoke mode.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = _Cfg(tmp_path / "run_smoke", smoke=True)
     run_full_benchmark(cfg)
     reports = Path(cfg.output_root) / "reports"

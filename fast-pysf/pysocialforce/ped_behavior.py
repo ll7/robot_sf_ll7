@@ -1,3 +1,5 @@
+"""Module ped_behavior auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import dist
 from typing import Protocol
@@ -11,10 +13,22 @@ Zone = tuple[Vec2D, Vec2D, Vec2D]
 
 
 class PedestrianBehavior(Protocol):
+    """PedestrianBehavior class."""
+
     def step(self):
+        """Step.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
     def reset(self):
+        """Reset.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
 

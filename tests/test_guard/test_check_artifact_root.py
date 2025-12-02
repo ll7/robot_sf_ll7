@@ -15,6 +15,15 @@ from scripts.tools.check_artifact_root import GuardResult, check_artifact_root
 
 @pytest.fixture(name="repo_root")
 def _repo_root_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Repo root fixture.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     root = tmp_path / "repo"
     root.mkdir()
 
@@ -27,6 +36,14 @@ def _repo_root_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_check_artifact_root_passes_when_clean(repo_root: Path) -> None:
+    """Test check artifact root passes when clean.
+
+    Args:
+        repo_root: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     artifact_root = repo_root / "output"
     result = check_artifact_root(source_root=repo_root, artifact_root=artifact_root)
 
@@ -36,6 +53,14 @@ def test_check_artifact_root_passes_when_clean(repo_root: Path) -> None:
 
 
 def test_check_artifact_root_detects_legacy_paths(repo_root: Path) -> None:
+    """Test check artifact root detects legacy paths.
+
+    Args:
+        repo_root: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     legacy_path = repo_root / "results"
     legacy_path.mkdir(parents=True)
 
@@ -53,6 +78,14 @@ def test_check_artifact_root_detects_legacy_paths(repo_root: Path) -> None:
 
 
 def test_check_artifact_root_respects_allowlist(repo_root: Path) -> None:
+    """Test check artifact root respects allowlist.
+
+    Args:
+        repo_root: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     legacy_file = repo_root / "coverage.json"
     legacy_file.write_text("{}", encoding="utf-8")
 

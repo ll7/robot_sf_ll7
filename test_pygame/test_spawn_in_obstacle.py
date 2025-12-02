@@ -11,6 +11,11 @@ from robot_sf.nav.svg_map_parser import convert_map
 
 
 def test_spawn_in_obstacle():
+    """Test spawn in obstacle.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     logger.info("Testing Spawn in Obstacle")
     map_def = convert_map("maps/svg_maps/test_spawn_in_obstacle.svg")
     logger.debug(f"type map_def: {type(map_def)}")

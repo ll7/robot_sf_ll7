@@ -18,6 +18,16 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
+    """Get dotted.
+
+    Args:
+        d: Auto-generated placeholder description.
+        path: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:
@@ -32,6 +42,17 @@ def _group_values(
     fallback_group_by: str,
     metric: str,
 ) -> dict[str, list[float]]:
+    """Group values.
+
+    Args:
+        records: Auto-generated placeholder description.
+        group_by: Auto-generated placeholder description.
+        fallback_group_by: Auto-generated placeholder description.
+        metric: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, list[float]]: Auto-generated placeholder description.
+    """
     out: dict[str, list[float]] = {}
     for r in records:
         g = _get_dotted(r, group_by)
@@ -68,6 +89,14 @@ def compute_pareto_points(
     points: list[tuple[float, float]] = []
 
     def reducer(vals: list[float]) -> float:
+        """Reducer.
+
+        Args:
+            vals: Auto-generated placeholder description.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         if agg == "median":
             return float(np.median(vals))
         return float(np.mean(vals))
@@ -105,6 +134,17 @@ def _dominates(
     x_higher_better: bool,
     y_higher_better: bool,
 ) -> bool:
+    """Dominates.
+
+    Args:
+        a: Auto-generated placeholder description.
+        b: Auto-generated placeholder description.
+        x_higher_better: Auto-generated placeholder description.
+        y_higher_better: Auto-generated placeholder description.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     ax, ay = a
     bx, by = b
     # Normalize to "lower is better" by flipping signs if higher is better

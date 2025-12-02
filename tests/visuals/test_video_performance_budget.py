@@ -1,3 +1,5 @@
+"""Module test_video_performance_budget auto-generated docstring."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -21,6 +23,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _write_minimal_matrix(path: Path) -> None:
+    """Write minimal matrix.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "perf-video-uni-low-open",
@@ -46,6 +56,15 @@ moviepy_spec = importlib.util.find_spec("moviepy")
 @pytest.mark.skipif(moviepy_spec is None, reason="moviepy/ffmpeg not available")
 @pytest.mark.skipif(logger is None, reason="loguru not available")
 def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
+    """Test video perf soft warn.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Force soft breach but not hard; do not enforce
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "1.0")
@@ -93,6 +112,15 @@ def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
 
 @pytest.mark.skipif(moviepy_spec is None, reason="moviepy/ffmpeg not available")
 def test_video_perf_hard_enforce_fails(tmp_path: Path, monkeypatch):
+    """Test video perf hard enforce fails.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Force hard breach and enforce; expect batch to record a failure
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.0")

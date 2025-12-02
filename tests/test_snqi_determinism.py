@@ -13,6 +13,14 @@ from scripts.snqi_weight_optimization import SNQIWeightOptimizer
 
 
 def _make_synthetic_episodes(n: int = 6):
+    """Make synthetic episodes.
+
+    Args:
+        n: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = []
     rng = np.random.default_rng(123)
     for i in range(n):
@@ -34,6 +42,14 @@ def _make_synthetic_episodes(n: int = 6):
 
 
 def _baseline_from_episodes(episodes):
+    """Baseline from episodes.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Compute simple med/p95 stats to approximate real baseline structure
     metrics = {
         k: []
@@ -56,6 +72,11 @@ def _baseline_from_episodes(episodes):
 
 
 def test_differential_evolution_deterministic_same_seed():
+    """Test differential evolution deterministic same seed.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = _make_synthetic_episodes()
     baseline = _baseline_from_episodes(episodes)
     opt1 = SNQIWeightOptimizer(episodes, baseline)
@@ -69,6 +90,11 @@ def test_differential_evolution_deterministic_same_seed():
 
 
 def test_differential_evolution_differs_different_seed():
+    """Test differential evolution differs different seed.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = _make_synthetic_episodes()
     baseline = _baseline_from_episodes(episodes)
     opt1 = SNQIWeightOptimizer(episodes, baseline)

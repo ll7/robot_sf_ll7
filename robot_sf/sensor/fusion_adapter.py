@@ -195,6 +195,18 @@ class MergedObservationFusion:
         sim: Any | None = None,
         robot_id: int | None = None,
     ) -> None:
+        """Init.
+
+        Args:
+            base_fusion: Auto-generated placeholder description.
+            sensors: Auto-generated placeholder description.
+            sensor_names: Auto-generated placeholder description.
+            sim: Auto-generated placeholder description.
+            robot_id: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._base = base_fusion
         self._sensors = sensors
         self._names = sensor_names
@@ -202,6 +214,11 @@ class MergedObservationFusion:
         self._robot_id = robot_id
 
     def next_obs(self) -> dict[str, Any]:
+        """Next obs.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         obs = self._base.next_obs()
         state = {"sim": self._sim, "robot_id": self._robot_id}
         for name, sensor in zip(self._names, self._sensors, strict=True):
@@ -215,6 +232,11 @@ class MergedObservationFusion:
 
     # Pass-through API used by RobotState
     def reset_cache(self) -> None:
+        """Reset cache.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()
         for sensor in self._sensors:

@@ -34,6 +34,11 @@ class ArtifactCategory:
 
 
 def _canonical_repository_root() -> Path:
+    """Canonical repository root.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     return Path(__file__).resolve().parents[2]
 
 
@@ -45,6 +50,11 @@ def get_repository_root() -> Path:
 
 @lru_cache(maxsize=1)
 def _default_artifact_root() -> Path:
+    """Default artifact root.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     return _canonical_repository_root() / _ARTIFACT_ROOT_NAME
 
 

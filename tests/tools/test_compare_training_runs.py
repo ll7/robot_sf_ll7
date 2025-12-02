@@ -1,3 +1,5 @@
+"""Module test_compare_training_runs auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,15 @@ from scripts.tools import compare_training_runs as ctr
 
 
 def test_load_training_run_falls_back_to_prefixed_manifest(tmp_path: Path, monkeypatch):
+    """Test load training run falls back to prefixed manifest.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Point artifact root to temp location
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     runs_dir = tmp_path / "benchmarks" / "ppo_imitation" / "runs"
@@ -25,6 +36,15 @@ def test_load_training_run_falls_back_to_prefixed_manifest(tmp_path: Path, monke
 
 
 def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkeypatch):
+    """Test load training run searches nested timestamp root.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     nested = tmp_path / "benchmarks" / "ts123" / "benchmarks" / "ppo_imitation" / "runs"
     nested.mkdir(parents=True, exist_ok=True)
@@ -39,6 +59,15 @@ def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkey
 
 
 def test_load_training_run_falls_back_to_newest_when_missing(tmp_path: Path, monkeypatch):
+    """Test load training run falls back to newest when missing.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     runs_dir = tmp_path / "benchmarks" / "ppo_imitation" / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)

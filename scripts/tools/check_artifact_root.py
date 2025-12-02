@@ -38,9 +38,19 @@ class GuardResult:
 
     @property
     def exit_code(self) -> int:
+        """Exit code.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return 0 if not self.violations else 1
 
     def to_dict(self) -> dict[str, object]:
+        """To dict.
+
+        Returns:
+            dict[str, object]: Auto-generated placeholder description.
+        """
         return {
             "violations": [asdict(v) for v in self.violations],
             "artifact_root": self.artifact_root,
@@ -49,6 +59,15 @@ class GuardResult:
 
 
 def _normalize_allowlist(entries: Iterable[str | Path], repo_root: Path) -> set[Path]:
+    """Normalize allowlist.
+
+    Args:
+        entries: Auto-generated placeholder description.
+        repo_root: Auto-generated placeholder description.
+
+    Returns:
+        set[Path]: Auto-generated placeholder description.
+    """
     normalized: set[Path] = set()
     for entry in entries:
         candidate = Path(entry)
@@ -92,6 +111,11 @@ def check_artifact_root(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build parser.
+
+    Returns:
+        argparse.ArgumentParser: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repo-root",
@@ -119,12 +143,29 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _write_json_report(result: GuardResult, path: Path) -> None:
+    """Write json report.
+
+    Args:
+        result: Auto-generated placeholder description.
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8")
     logger.info("Guard result written to {path}", path=path)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     parser = _build_parser()
     args = parser.parse_args(argv)
 

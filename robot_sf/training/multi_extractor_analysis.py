@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class EvalHistory:
+    """EvalHistory class."""
+
     timesteps: list[float]
     mean_rewards: list[float]
 
@@ -126,6 +128,14 @@ def generate_figures(
 
 
 def summarize_metric(values: Iterable[float]) -> dict[str, float]:
+    """Summarize metric.
+
+    Args:
+        values: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     items = [v for v in values if math.isfinite(v)]
     if not items:
         return {"mean": 0.0, "median": 0.0}

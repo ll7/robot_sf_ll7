@@ -1,3 +1,5 @@
+"""Module benchmark_workers auto-generated docstring."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,6 +14,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _make_scenarios(repeats: int) -> list[dict]:
+    """Make scenarios.
+
+    Args:
+        repeats: Auto-generated placeholder description.
+
+    Returns:
+        list[dict]: Auto-generated placeholder description.
+    """
     return [
         {
             "id": "bench-workers-uni-low-open",
@@ -28,6 +38,16 @@ def _make_scenarios(repeats: int) -> list[dict]:
 
 
 def bench(workers: int, repeats: int, out_dir: Path) -> dict:
+    """Bench.
+
+    Args:
+        workers: Auto-generated placeholder description.
+        repeats: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     ensure_output_dir(out_dir)
     out_file = out_dir / f"episodes_w{workers}.jsonl"
     scenarios = _make_scenarios(repeats)
@@ -55,6 +75,11 @@ def bench(workers: int, repeats: int, out_dir: Path) -> dict:
 
 
 def main() -> int:
+    """Main.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="Benchmark run_batch with varying workers")
     parser.add_argument("--max-workers", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=10)

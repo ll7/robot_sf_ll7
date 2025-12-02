@@ -50,6 +50,14 @@ class FeatureExtractorAnalyzer:
         self.analysis_dir.mkdir(exist_ok=True)
 
     def _load_from_summary(self, payload: dict) -> tuple[dict, dict]:
+        """Load from summary.
+
+        Args:
+            payload: Auto-generated placeholder description.
+
+        Returns:
+            tuple[dict, dict]: Auto-generated placeholder description.
+        """
         records = payload.get("extractor_results", [])
         results: dict[str, dict] = {}
         for record in records:
@@ -212,6 +220,11 @@ class FeatureExtractorAnalyzer:
 
     # ---- Visualization helpers (kept small for C901 compliance) ----
     def _set_plot_style(self) -> None:
+        """Set plot style.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         preferred_styles = ["seaborn-v0_8", "seaborn"]
         for style in preferred_styles:
             if style in plt.style.available:
@@ -223,6 +236,14 @@ class FeatureExtractorAnalyzer:
             warnings.warn(f"Could not apply matplotlib style: {exc}", stacklevel=2)
 
     def _plot_reward_bar(self, df: pd.DataFrame) -> Optional[str]:
+        """Plot reward bar.
+
+        Args:
+            df: Auto-generated placeholder description.
+
+        Returns:
+            Optional[str]: Auto-generated placeholder description.
+        """
         if "best_reward" not in df.columns or not df["best_reward"].notna().any():
             return None
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -255,6 +276,14 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_parameter_efficiency(self, df: pd.DataFrame) -> Optional[str]:
+        """Plot parameter efficiency.
+
+        Args:
+            df: Auto-generated placeholder description.
+
+        Returns:
+            Optional[str]: Auto-generated placeholder description.
+        """
         if not all(col in df.columns for col in ["total_parameters", "best_reward"]):
             return None
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -286,6 +315,14 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_training_time(self, df: pd.DataFrame) -> Optional[str]:
+        """Plot training time.
+
+        Args:
+            df: Auto-generated placeholder description.
+
+        Returns:
+            Optional[str]: Auto-generated placeholder description.
+        """
         if "training_time" not in df.columns or not df["training_time"].notna().any():
             return None
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -318,6 +355,14 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_multi_metric_radar(self, df: pd.DataFrame) -> Optional[str]:
+        """Plot multi metric radar.
+
+        Args:
+            df: Auto-generated placeholder description.
+
+        Returns:
+            Optional[str]: Auto-generated placeholder description.
+        """
         if len(df) <= 1:
             return None
         try:
@@ -393,6 +438,11 @@ class FeatureExtractorAnalyzer:
 
     # ---- Report helper methods ----
     def _build_report_header(self) -> list[str]:
+        """Build report header.
+
+        Returns:
+            list[str]: Auto-generated placeholder description.
+        """
         return [
             "# Feature Extractor Comparison Analysis Report",
             f"Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -408,6 +458,14 @@ class FeatureExtractorAnalyzer:
         ]
 
     def _build_rankings_section(self, analysis: dict) -> list[str]:
+        """Build rankings section.
+
+        Args:
+            analysis: Auto-generated placeholder description.
+
+        Returns:
+            list[str]: Auto-generated placeholder description.
+        """
         lines: list[str] = ["### Performance Rankings", ""]
         rankings = analysis.get("rankings", {})
         # Best reward
@@ -437,6 +495,14 @@ class FeatureExtractorAnalyzer:
         return lines
 
     def _build_detailed_results_table(self, df: pd.DataFrame) -> list[str]:
+        """Build detailed results table.
+
+        Args:
+            df: Auto-generated placeholder description.
+
+        Returns:
+            list[str]: Auto-generated placeholder description.
+        """
         lines: list[str] = [
             "### Detailed Results",
             "",
@@ -457,6 +523,14 @@ class FeatureExtractorAnalyzer:
         return lines
 
     def _build_insights_section(self, df: pd.DataFrame) -> list[str]:
+        """Build insights section.
+
+        Args:
+            df: Auto-generated placeholder description.
+
+        Returns:
+            list[str]: Auto-generated placeholder description.
+        """
         lines: list[str] = ["", "## Key Insights", ""]
         if df.empty or "best_reward" not in df.columns:
             return lines

@@ -1,6 +1,8 @@
 # WARNING: don't move this script or else loading trained SB3 policies might not work
 
 
+"""Module feature_extractor auto-generated docstring."""
+
 import numpy as np
 import torch as th
 from gymnasium import spaces
@@ -36,6 +38,18 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         kernel_sizes: list[int] | None = None,
         dropout_rates: list[float] | None = None,
     ):
+        """Init.
+
+        Args:
+            observation_space: Auto-generated placeholder description.
+            use_ray_conv: Auto-generated placeholder description.
+            num_filters: Auto-generated placeholder description.
+            kernel_sizes: Auto-generated placeholder description.
+            dropout_rates: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Extract the ray and drive state spaces from the observation space
         if dropout_rates is None:
             dropout_rates = [0.3, 0.3, 0.3, 0.3]
@@ -123,6 +137,14 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         self.drive_state_extractor = nn.Sequential(nn.Flatten())
 
     def forward(self, obs: dict) -> th.Tensor:
+        """Forward.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            th.Tensor: Auto-generated placeholder description.
+        """
         ray_x = self.ray_extractor(obs[OBS_RAYS])
         drive_x = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
         return th.cat([ray_x, drive_x], dim=1)

@@ -15,15 +15,15 @@ def simple_reward(
     """
     Calculate the reward for the robot's current state.
 
-    Parameters:
-    meta (dict): Metadata containing information about the robot's current state.
-    max_episode_step_discount (float): Discount factor for each step in the episode.
-    ped_coll_penalty (float): Penalty for colliding with a pedestrian.
-    obst_coll_penalty (float): Penalty for colliding with an obstacle.
-    reach_waypoint_reward (float): Reward for reaching a waypoint.
+    Args:
+        meta: Metadata describing the robot's current state.
+        max_episode_step_discount: Per-step discount normalized by the max episode length.
+        ped_coll_penalty: Penalty for pedestrian/robot collisions.
+        obst_coll_penalty: Penalty for obstacle collisions.
+        reach_waypoint_reward: Reward for reaching a waypoint or goal.
 
     Returns:
-    float: The calculated reward.
+        float: The calculated reward.
     """
 
     # Initialize reward with a discount based on the maximum simulation steps
@@ -55,16 +55,16 @@ def simple_ped_reward(
     """
     Calculate the reward for the pedestrian's current state.
 
-    Parameters:
-    meta (dict): Metadata containing information about the pedestrian's current state.
-    max_episode_step_discount (float): Discount factor for each step in the episode.
-    ped_coll_penalty (float): Penalty for colliding with a pedestrian.
-    obst_coll_penalty (float): Penalty for colliding with an obstacle.
-    robot_coll_reward (float): Reward for colliding with a robot.
-    robot_at_goal_penalty (float): Penalty if the robot reaches his goal.
+    Args:
+        meta: Metadata containing pedestrian-centric state.
+        max_episode_step_discount: Per-step discount normalized by the max episode length.
+        ped_coll_penalty: Penalty for pedestrian collisions.
+        obst_coll_penalty: Penalty for obstacle collisions.
+        robot_coll_reward: Reward for colliding with the robot.
+        robot_at_goal_penalty: Penalty applied when the robot reaches its goal.
 
     Returns:
-    float: The calculated reward.
+        float: The calculated reward.
     """
 
     # Initialize reward with a discount based on the maximum simulation steps
@@ -105,17 +105,17 @@ def punish_action_reward(
     """
     Calculate the reward for the robot's current state.
 
-    Parameters:
-    meta (dict): Metadata containing information about the robot's current state.
-    max_episode_step_discount (float): Discount factor for each step in the episode.
-    ped_coll_penalty (float): Penalty for colliding with a pedestrian.
-    obst_coll_penalty (float): Penalty for colliding with an obstacle.
-    reach_waypoint_reward (float): Reward for reaching a waypoint.
-    punish_action (bool): Whether to punish the robot for taking actions.
-    punish_action_penalty (float): Penalty for taking actions.
+    Args:
+        meta: Metadata containing the robot's current state.
+        max_episode_step_discount: Per-step discount normalized by the max episode length.
+        ped_coll_penalty: Penalty for pedestrian collisions.
+        obst_coll_penalty: Penalty for obstacle collisions.
+        reach_waypoint_reward: Reward for reaching the waypoint/goal.
+        punish_action: Whether to penalize action changes.
+        punish_action_penalty: Penalty scaled by the magnitude of the action change.
 
     Returns:
-    float: The calculated reward.
+        float: The calculated reward.
     """
 
     # Initialize reward with a discount based on the maximum simulation steps

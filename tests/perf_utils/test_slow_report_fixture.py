@@ -17,6 +17,11 @@ from .reporting import SlowTestSample, generate_report
 
 
 def test_slow_report_includes_sample():  # basic functional check
+    """Test slow report includes sample.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     policy = PerformanceBudgetPolicy(
         soft_threshold_seconds=0.05,
         hard_timeout_seconds=1.0,

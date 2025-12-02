@@ -229,6 +229,14 @@ def format_episode_summary_table(rows: Iterable[dict[str, Any]]) -> str:
     col_widths = {h: max(len(h), *(len(str(cast(Any, r)[h])) for r in rows)) for h in headers}
 
     def fmt_row(r: dict[str, Any]) -> str:
+        """Fmt row.
+
+        Args:
+            r: Auto-generated placeholder description.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         return " | ".join(str(cast(Any, r)[h]).ljust(col_widths[h]) for h in headers)
 
     header_row: dict[str, Any] = {h: h for h in headers}

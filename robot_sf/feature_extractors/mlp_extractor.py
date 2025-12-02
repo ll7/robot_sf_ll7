@@ -43,6 +43,17 @@ class MLPFeatureExtractor(BaseFeaturesExtractor):
         drive_hidden_dims: list[int] | None = None,
         dropout_rate: float = 0.1,
     ):
+        """Init.
+
+        Args:
+            observation_space: Auto-generated placeholder description.
+            ray_hidden_dims: Auto-generated placeholder description.
+            drive_hidden_dims: Auto-generated placeholder description.
+            dropout_rate: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if ray_hidden_dims is None:
             ray_hidden_dims = [128, 64]
         if drive_hidden_dims is None:

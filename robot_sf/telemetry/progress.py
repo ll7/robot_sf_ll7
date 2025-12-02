@@ -53,6 +53,17 @@ class ProgressTracker:
         log_fn: LogFunction | None = None,
         time_provider: TimeProvider | None = None,
     ) -> None:
+        """Init.
+
+        Args:
+            steps: Auto-generated placeholder description.
+            writer: Auto-generated placeholder description.
+            log_fn: Auto-generated placeholder description.
+            time_provider: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not steps:
             raise ValueError("ProgressTracker requires at least one step definition")
         self._definitions = list(steps)
@@ -89,6 +100,14 @@ class ProgressTracker:
             return deepcopy(self._entries)
 
     def start_step(self, step_id: str) -> None:
+        """Start step.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             if entry.status not in (StepStatus.PENDING, StepStatus.SKIPPED):
@@ -109,6 +128,14 @@ class ProgressTracker:
         self._log_once(step_id, message)
 
     def complete_step(self, step_id: str) -> None:
+        """Complete step.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             if entry.status not in (StepStatus.RUNNING, StepStatus.PENDING):
@@ -133,6 +160,15 @@ class ProgressTracker:
         self._log_once(step_id, message)
 
     def fail_step(self, step_id: str, *, reason: str | None = None) -> None:
+        """Fail step.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+            reason: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             now = self._clock()
@@ -152,6 +188,15 @@ class ProgressTracker:
         self._emit_log(message)
 
     def skip_step(self, step_id: str, *, reason: str | None = None) -> None:
+        """Skip step.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+            reason: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             if entry.status != StepStatus.PENDING:
@@ -175,14 +220,29 @@ class ProgressTracker:
         self._emit_log(message)
 
     def current_step(self) -> StepExecutionEntry | None:
+        """Current step.
+
+        Returns:
+            StepExecutionEntry | None: Auto-generated placeholder description.
+        """
         with self._lock:
             return self._current_step_locked()
 
     def completed_steps(self) -> int:
+        """Completed steps.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         with self._lock:
             return sum(1 for entry in self._entries if entry.status == StepStatus.COMPLETED)
 
     def total_steps(self) -> int:
+        """Total steps.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         with self._lock:
             return len(self._entries)
 
@@ -237,6 +297,16 @@ class ProgressTracker:
         mark_failed: bool = False,
         reason: str | None = None,
     ) -> None:
+        """Guard flush.
+
+        Args:
+            status: Auto-generated placeholder description.
+            mark_failed: Auto-generated placeholder description.
+            reason: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         log_message: str | None = None
         with self._lock:
             if mark_failed:
@@ -249,6 +319,14 @@ class ProgressTracker:
             callback(status)
 
     def _mark_running_step_failed_locked(self, reason: str | None) -> str | None:
+        """Mark running step failed locked.
+
+        Args:
+            reason: Auto-generated placeholder description.
+
+        Returns:
+            str | None: Auto-generated placeholder description.
+        """
         entry = self._current_step_locked()
         if entry is None or entry.status == StepStatus.FAILED:
             return None
@@ -267,21 +345,44 @@ class ProgressTracker:
         )
 
     def _current_step_locked(self) -> StepExecutionEntry | None:
+        """Current step locked.
+
+        Returns:
+            StepExecutionEntry | None: Auto-generated placeholder description.
+        """
         for entry in self._entries:
             if entry.status == StepStatus.RUNNING:
                 return entry
         return None
 
     def _has_active_steps(self) -> bool:
+        """Has active steps.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         with self._lock:
             return self._has_active_steps_locked()
 
     def _has_active_steps_locked(self) -> bool:
+        """Has active steps locked.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         return any(
             entry.status in (StepStatus.PENDING, StepStatus.RUNNING) for entry in self._entries
         )
 
     def _get_entry_locked(self, step_id: str) -> StepExecutionEntry:
+        """Get entry locked.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+
+        Returns:
+            StepExecutionEntry: Auto-generated placeholder description.
+        """
         for entry in self._entries:
             if entry.step_id == step_id:
                 return entry
@@ -317,6 +418,17 @@ class ProgressTracker:
         extra: str | None = None,
         total_steps_hint: int | None = None,
     ) -> str:
+        """Format status.
+
+        Args:
+            entry: Auto-generated placeholder description.
+            prefix: Auto-generated placeholder description.
+            extra: Auto-generated placeholder description.
+            total_steps_hint: Auto-generated placeholder description.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         total = total_steps_hint if total_steps_hint is not None else self.total_steps()
         elapsed = self._format_duration(entry.duration_seconds)
         eta = self._format_duration(entry.eta_snapshot_seconds)
@@ -329,6 +441,15 @@ class ProgressTracker:
         return message
 
     def _log_once(self, step_id: str, message: str) -> None:
+        """Log once.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+            message: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         with self._log_lock:
             last = self._last_log_messages.get(step_id)
             if last == message:
@@ -337,19 +458,45 @@ class ProgressTracker:
         self._emit_log(message)
 
     def _emit_log(self, message: str) -> None:
+        """Emit log.
+
+        Args:
+            message: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._log_fn(message)
 
     def _write_index(self) -> None:
+        """Write index.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         with self._lock:
             self._write_index_locked()
 
     def _write_index_locked(self) -> None:
+        """Write index locked.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if self._writer is None:
             return
         self._writer.write_step_index(self._entries)
 
     @staticmethod
     def _format_duration(value: float | None) -> str:
+        """Format duration.
+
+        Args:
+            value: Auto-generated placeholder description.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         if value is None:
             return "--"
         seconds = int(max(value, 0))
@@ -385,6 +532,18 @@ class _FailureSafeGuard:
         flush_interval: float,
         signals: Sequence[int | signal.Signals] | None,
     ) -> None:
+        """Init.
+
+        Args:
+            has_work: Auto-generated placeholder description.
+            flush_running: Auto-generated placeholder description.
+            flush_failed: Auto-generated placeholder description.
+            flush_interval: Auto-generated placeholder description.
+            signals: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._has_work = has_work
         self._flush_running = flush_running
         self._flush_failed = flush_failed
@@ -402,12 +561,22 @@ class _FailureSafeGuard:
         self._install_signal_handlers()
 
         def _cleanup() -> None:
+            """Cleanup.
+
+            Returns:
+                None: Auto-generated placeholder description.
+            """
             self.close()
 
         self._atexit_callback = _cleanup
         atexit.register(self._atexit_callback)
 
     def close(self) -> None:
+        """Close.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if self._shutdown.is_set():
             return
         self._shutdown.set()
@@ -420,12 +589,22 @@ class _FailureSafeGuard:
             self._atexit_callback = None
 
     def _run(self) -> None:
+        """Run.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         while not self._shutdown.wait(self._flush_interval):
             if not self._has_work():
                 continue
             self._flush_running()
 
     def _install_signal_handlers(self) -> None:
+        """Install signal handlers.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self._signals:
             return
         if threading.current_thread() is not threading.main_thread():
@@ -439,6 +618,11 @@ class _FailureSafeGuard:
             self._previous_handlers[signum] = previous
 
     def _restore_signal_handlers(self) -> None:
+        """Restore signal handlers.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self._previous_handlers:
             return
         for signum, handler in self._previous_handlers.items():
@@ -447,6 +631,15 @@ class _FailureSafeGuard:
         self._previous_handlers.clear()
 
     def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
+        """Handle signal.
+
+        Args:
+            signum: Auto-generated placeholder description.
+            frame: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         signal_name = self._signal_name(signum)
         self._flush_failed(f"Signal {signal_name}")
         previous = self._previous_handlers.get(signum)
@@ -460,6 +653,14 @@ class _FailureSafeGuard:
 
     @staticmethod
     def _signal_name(signum: int) -> str:
+        """Signal name.
+
+        Args:
+            signum: Auto-generated placeholder description.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         try:
             return signal.Signals(signum).name
         except ValueError:
@@ -467,6 +668,14 @@ class _FailureSafeGuard:
 
     @staticmethod
     def _normalize_signals(signals: Sequence[int | signal.Signals] | None) -> tuple[int, ...]:
+        """Normalize signals.
+
+        Args:
+            signals: Auto-generated placeholder description.
+
+        Returns:
+            tuple[int, ...]: Auto-generated placeholder description.
+        """
         if signals is None:
             return tuple(int(sig) for sig in _DEFAULT_FAILURE_SIGNALS)
         normalized: list[int] = []

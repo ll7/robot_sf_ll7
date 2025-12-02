@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 
 
 def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str, Any]]:
+    """Iter records.
+
+    Args:
+        paths: Auto-generated placeholder description.
+
+    Returns:
+        Iterable[dict[str, Any]]: Auto-generated placeholder description.
+    """
     if isinstance(paths, str | Path):
         path_list = [paths]
     else:
@@ -41,6 +49,16 @@ def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
+    """Get nested.
+
+    Args:
+        d: Auto-generated placeholder description.
+        path: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -51,6 +69,14 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
 
 
 def _safe_number(x: Any) -> float | None:
+    """Safe number.
+
+    Args:
+        x: Auto-generated placeholder description.
+
+    Returns:
+        float | None: Auto-generated placeholder description.
+    """
     try:
         v = float(x)
         if math.isnan(v):
@@ -102,11 +128,31 @@ def plot_histograms(
     *,
     bins: int = 30,
 ) -> list[str]:
+    """Plot histograms.
+
+    Args:
+        mins: Auto-generated placeholder description.
+        speeds: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        bins: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     out_paths: list[str] = []
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     def _save(fig, name: str) -> str:
+        """Save.
+
+        Args:
+            fig: Auto-generated placeholder description.
+            name: Auto-generated placeholder description.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         path = str(Path(out_dir) / name)
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
@@ -133,6 +179,15 @@ def plot_histograms(
 
 
 def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | Path) -> list[str]:
+    """Summarize to plots.
+
+    Args:
+        paths: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     mins, speeds = collect_values(_iter_records(paths))
     return plot_histograms(mins, speeds, out_dir)
 

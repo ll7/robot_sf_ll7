@@ -19,16 +19,42 @@ class DummySensor:
     """Test sensor implementation."""
 
     def __init__(self, config):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = config
         self.observation = None
 
     def reset(self) -> None:
+        """Reset.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.observation = None
 
     def step(self, state) -> None:
+        """Step.
+
+        Args:
+            state: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.observation = state
 
     def get_observation(self):
+        """Get observation.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return self.observation
 
 
@@ -62,6 +88,14 @@ def test_register_duplicate_raises_error(clean_registry):
     """Test that registering duplicate sensor name raises error."""
 
     def dummy_factory(config):
+        """Dummy factory.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return DummySensor(config)
 
     register_sensor("test_duplicate", dummy_factory)
@@ -74,9 +108,25 @@ def test_register_duplicate_with_override(clean_registry):
     """Test that override=True allows re-registration."""
 
     def factory1(config):
+        """Factory1.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return DummySensor(config)
 
     def factory2(config):
+        """Factory2.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return DummySensor({**config, "overridden": True})
 
     register_sensor("test_override", factory1)

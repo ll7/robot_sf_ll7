@@ -219,6 +219,15 @@ def validate_schema_references(schema: dict[str, Any]) -> list[str]:
     errors = []
 
     def check_refs(obj: Any, path: str = "") -> None:
+        """Check refs.
+
+        Args:
+            obj: Auto-generated placeholder description.
+            path: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if isinstance(obj, dict):
             for key, value in obj.items():
                 current_path = f"{path}.{key}" if path else key

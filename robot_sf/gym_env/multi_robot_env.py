@@ -37,6 +37,17 @@ class MultiRobotEnv(MultiAgentEnv):
         debug: bool = False,
         num_robots: int | None = None,
     ):
+        """Init.
+
+        Args:
+            env_config: Auto-generated placeholder description.
+            reward_func: Auto-generated placeholder description.
+            debug: Auto-generated placeholder description.
+            num_robots: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if isinstance(env_config, MultiRobotConfig):
             resolved_num_robots = env_config.num_robots
             if num_robots is not None and num_robots != resolved_num_robots:
@@ -155,6 +166,14 @@ class MultiRobotEnv(MultiAgentEnv):
         pass
 
     def close_extras(self, **kwargs):
+        """Close extras.
+
+        Args:
+            kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if getattr(self, "sim_worker_pool", None) is not None:
             try:
                 self.sim_worker_pool.close()

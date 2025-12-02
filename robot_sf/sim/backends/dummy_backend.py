@@ -18,6 +18,14 @@ class DummySimulator:
     """Minimal simulator that returns constant positions for testing."""
 
     def __init__(self, seed: int = 0):
+        """Init.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.timestep = 0

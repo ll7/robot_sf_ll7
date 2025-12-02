@@ -24,6 +24,8 @@ from robot_sf.sim.simulator import PedSimulator, Simulator
 
 
 class AgentType(Enum):
+    """AgentType class."""
+
     ROBOT = 1
     PEDESTRIAN = 2
 
@@ -37,15 +39,13 @@ def init_collision_and_sensors(
     Initialize collision detection and sensor fusion for the robots in the
     simulator.
 
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
+    Args:
+        sim: Simulator instance containing robots and pedestrians.
+        env_config: Environment or simulation configuration.
+        orig_obs_space: Original observation space describing the fused sensors.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy], list[SensorFusion]]: Occupancy trackers and sensor fusions per robot.
     """
 
     # Get the number of robots, simulation configuration,
@@ -76,9 +76,25 @@ def init_collision_and_sensors(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """Ray sensor.
+
+            Args:
+                r_id: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """Target sensor.
+
+            Args:
+                r_id: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
                 sim.goal_pos[r_id],
@@ -86,6 +102,14 @@ def init_collision_and_sensors(
             )
 
         def speed_sensor(r_id=r_id):
+            """Speed sensor.
+
+            Args:
+                r_id: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return sim.robots[r_id].current_speed
 
         # Create the sensor fusion object and add it to the list
@@ -157,6 +181,16 @@ def create_spaces(
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
 ):
+    """Create spaces.
+
+    Args:
+        env_config: Auto-generated placeholder description.
+        map_def: Auto-generated placeholder description.
+        agent_type: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Create a agent using the factory method in the environment configuration
     if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
@@ -263,15 +297,14 @@ def init_ped_collision_and_sensors(
     Initialize collision detection and sensor fusion for the robot and the pedestrian in the
     simulator.
 
-    Parameters:
-    sim (PedSimulator): The simulator object.
-    env_config (PedEnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
+    Args:
+        sim: Pedestrian-focused simulator.
+        env_config: Environment configuration for the ego pedestrian setting.
+        orig_obs_space: Original observation spaces for robot and pedestrian agents.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy | EgoPedContinuousOccupancy], list[SensorFusion]]:
+        Occupancy trackers and sensor fusions for the robot and ego pedestrian.
     """
 
     # Get the simulation configuration, pedestrian configuration,
@@ -303,12 +336,36 @@ def init_ped_collision_and_sensors(
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     def ray_sensor(r_id=0):
+        """Ray sensor.
+
+        Args:
+            r_id: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
     def target_sensor(r_id=0):
+        """Target sensor.
+
+        Args:
+            r_id: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
     def speed_sensor(r_id=0):
+        """Speed sensor.
+
+        Args:
+            r_id: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return sim.robots[r_id].current_speed
 
     # Initialize a sensor fusion object for the robot for sensor data handling
@@ -340,9 +397,19 @@ def init_ped_collision_and_sensors(
     )
 
     def ray_sensor_ego_ped():
+        """Ray sensor ego ped.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
     def target_sensor_ego_ped():
+        """Target sensor ego ped.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return target_sensor_obs(
             sim.ego_ped.pose,
             sim.ego_ped_goal_pos,
@@ -350,6 +417,11 @@ def init_ped_collision_and_sensors(
         )  # TODO: What next goal to choose?
 
     def speed_sensor_ego_ped():
+        """Speed sensor ego ped.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return sim.ego_ped.current_speed
 
     sensor_fusions.append(
@@ -449,16 +521,15 @@ def init_collision_and_sensors_with_image(
     """
     Initialize collision detection and sensor fusion including image sensors for the robots.
 
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
-    sim_view: The simulation view for capturing images (optional).
+    Args:
+        sim: Simulator instance containing robots and pedestrians.
+        env_config: Environment configuration enabling optional image sensors.
+        orig_obs_space: Base observation space before sensor fusion.
+        sim_view: Optional simulation view used for rendering image observations.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[Union[SensorFusion, ImageSensorFusion]]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy], list[SensorFusion | ImageSensorFusion]]:
+        Occupancy trackers and fused sensor stacks per robot.
     """
     # Get the number of robots, simulation configuration,
     # robot configuration, and lidar configuration
@@ -491,9 +562,25 @@ def init_collision_and_sensors_with_image(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """Ray sensor.
+
+            Args:
+                r_id: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """Target sensor.
+
+            Args:
+                r_id: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
                 sim.goal_pos[r_id],
@@ -501,6 +588,14 @@ def init_collision_and_sensors_with_image(
             )
 
         def speed_sensor(r_id=r_id):
+            """Speed sensor.
+
+            Args:
+                r_id: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return sim.robots[r_id].current_speed
 
         # Create appropriate sensor fusion based on configuration

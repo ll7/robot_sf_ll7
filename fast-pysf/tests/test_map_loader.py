@@ -15,6 +15,11 @@ MAPS_DIR = TEST_DIR / "test_maps"
 
 
 def test_load_map():
+    """Test load map.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Test with a valid map file
     map_file = str(MAPS_DIR / "map_regular.json")
     map_definition = load_map(map_file)
@@ -40,6 +45,11 @@ def test_load_map():
 
 
 def test_load_map_with_invalid_file():
+    """Test load map with invalid file.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Test with a non-existent file
     with pytest.raises(FileNotFoundError):
         load_map("non_existent_file.json")

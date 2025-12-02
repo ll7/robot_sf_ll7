@@ -22,6 +22,16 @@ _DEFAULT_PERFORMANCE_SCORE = 1000
 
 
 def register_backend(key: str, factory: SimulatorFactory, *, override: bool = False) -> None:
+    """Register backend.
+
+    Args:
+        key: Auto-generated placeholder description.
+        factory: Auto-generated placeholder description.
+        override: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     k = key.strip()
     if not k:
         raise ValueError("Backend key must be a non-empty string")
@@ -32,6 +42,14 @@ def register_backend(key: str, factory: SimulatorFactory, *, override: bool = Fa
 
 
 def get_backend(key: str) -> SimulatorFactory:
+    """Get backend.
+
+    Args:
+        key: Auto-generated placeholder description.
+
+    Returns:
+        SimulatorFactory: Auto-generated placeholder description.
+    """
     try:
         return _REGISTRY[key]
     except KeyError as e:  # provide suggestions
@@ -40,6 +58,11 @@ def get_backend(key: str) -> SimulatorFactory:
 
 
 def list_backends() -> list[str]:
+    """List backends.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     return sorted(_REGISTRY.keys())
 
 
@@ -75,6 +98,14 @@ def select_best_backend(preferred: str | None = None) -> str:
         )
 
     def _score(name: str) -> tuple[int, str]:
+        """Score.
+
+        Args:
+            name: Auto-generated placeholder description.
+
+        Returns:
+            tuple[int, str]: Auto-generated placeholder description.
+        """
         return (_BACKEND_PERFORMANCE_ORDER.get(name, _DEFAULT_PERFORMANCE_SCORE), name)
 
     best = min(available, key=_score)

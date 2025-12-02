@@ -19,18 +19,27 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class SlowTestSample:
+    """SlowTestSample class."""
+
     test_identifier: str
     duration_seconds: float
 
 
 @dataclass(slots=True)
 class SlowTestRecord:
+    """SlowTestRecord class."""
+
     test_identifier: str
     duration_seconds: float
     breach_type: str
     guidance: list[str]
 
     def format_block(self) -> str:
+        """Format block.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         if not self.guidance:
             return f"{self.test_identifier}  {self.duration_seconds:.2f}s"
         return (
@@ -43,6 +52,15 @@ def generate_report(
     samples: Iterable[SlowTestSample],
     policy: PerformanceBudgetPolicy,
 ) -> list[SlowTestRecord]:
+    """Generate report.
+
+    Args:
+        samples: Auto-generated placeholder description.
+        policy: Auto-generated placeholder description.
+
+    Returns:
+        list[SlowTestRecord]: Auto-generated placeholder description.
+    """
     ordered = sorted(samples, key=lambda s: s.duration_seconds, reverse=True)
     top = ordered[: policy.report_count]
     records: list[SlowTestRecord] = []
@@ -61,6 +79,15 @@ def generate_report(
 
 
 def format_report(records: Iterable[SlowTestRecord], policy: PerformanceBudgetPolicy) -> str:
+    """Format report.
+
+    Args:
+        records: Auto-generated placeholder description.
+        policy: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     lines = [
         f"Slow Test Report (soft<{policy.soft_threshold_seconds:.0f}s hard={policy.hard_timeout_seconds:.0f}s, top {policy.report_count})",
     ]

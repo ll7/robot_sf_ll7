@@ -1,3 +1,5 @@
+"""Module test_cli_run_snqi_from auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +14,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _write_minimal_matrix(path: Path) -> None:
+    """Write minimal matrix.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "cli-run-snqi-from",
@@ -32,6 +42,14 @@ def _write_minimal_matrix(path: Path) -> None:
 
 
 def _write_minimal_baseline(path: Path) -> None:
+    """Write minimal baseline.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     baseline = {
         "collisions": {"med": 0.0, "p95": 1.0},
         "near_misses": {"med": 0.0, "p95": 1.0},
@@ -43,6 +61,15 @@ def _write_minimal_baseline(path: Path) -> None:
 
 
 def test_cli_run_with_snqi_weights_from(tmp_path: Path, capsys):
+    """Test cli run with snqi weights from.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Prepare matrix and baseline
     matrix_path = tmp_path / "matrix.yaml"
     _write_minimal_matrix(matrix_path)

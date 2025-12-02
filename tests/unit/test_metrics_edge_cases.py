@@ -40,6 +40,16 @@ def _episode(
     peds_pos: np.ndarray,
     ped_forces: np.ndarray | None = None,
 ) -> EpisodeData:
+    """Episode.
+
+    Args:
+        robot_pos: Auto-generated placeholder description.
+        peds_pos: Auto-generated placeholder description.
+        ped_forces: Auto-generated placeholder description.
+
+    Returns:
+        EpisodeData: Auto-generated placeholder description.
+    """
     T = robot_pos.shape[0]
     K = peds_pos.shape[1]
     if ped_forces is None:

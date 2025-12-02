@@ -17,6 +17,14 @@ from robot_sf.nav.svg_map_parser import convert_map
 
 
 def _load_yaml_documents(path: Path) -> Any:
+    """Load yaml documents.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
@@ -89,6 +97,15 @@ def _apply_simulation_overrides(
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
 ) -> None:
+    """Apply simulation overrides.
+
+    Args:
+        config: Auto-generated placeholder description.
+        overrides: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not isinstance(overrides, Mapping):
         return
     if "max_episode_steps" in overrides:
@@ -114,6 +131,16 @@ def _apply_map_pool(
     map_file: str | None,
     scenario_path: Path,
 ) -> None:
+    """Apply map pool.
+
+    Args:
+        config: Auto-generated placeholder description.
+        map_file: Auto-generated placeholder description.
+        scenario_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not map_file:
         return
     candidate = Path(map_file)

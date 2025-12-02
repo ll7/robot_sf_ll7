@@ -1,3 +1,5 @@
+"""Module ped_population auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
 
@@ -64,15 +66,50 @@ def sample_group_spawn_on_route(
     start, end = route.sections[sec_id]
 
     def add_vecs(v1, v2):
+        """Add vecs.
+
+        Args:
+            v1: Auto-generated placeholder description.
+            v2: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
     def sub_vecs(v1, v2):
+        """Sub vecs.
+
+        Args:
+            v1: Auto-generated placeholder description.
+            v2: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
     def scale_vec(v, f):
+        """Scale vec.
+
+        Args:
+            v: Auto-generated placeholder description.
+            f: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return (v[0] * f, v[1] * f)
 
     def clip_spread(v):
+        """Clip spread.
+
+        Args:
+            v: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
     center = add_vecs(start, scale_vec(sub_vecs(end, start), sec_offset / sec_len))
@@ -100,6 +137,11 @@ class ZonePointsGenerator:
     _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
         total_area = sum(self.zone_areas)
         self._zone_probs = [area / total_area for area in self.zone_areas]
@@ -121,23 +163,48 @@ class ZonePointsGenerator:
 
 @dataclass
 class RoutePointsGenerator:
+    """RoutePointsGenerator class."""
+
     routes: list[GlobalRoute]
     sidewalk_width: float
     _route_probs: list[float] = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
         self._zone_probs = [r.total_length / self.total_length for r in self.routes]
 
     @property
     def total_length(self) -> float:
+        """Total length.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum([r.total_length for r in self.routes])
 
     @property
     def total_sidewalks_area(self) -> float:
+        """Total sidewalks area.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.total_length * self.sidewalk_width
 
     def generate(self, num_samples: int) -> tuple[list[Vec2D], int, int]:
+        """Generate.
+
+        Args:
+            num_samples: Auto-generated placeholder description.
+
+        Returns:
+            tuple[list[Vec2D], int, int]: Auto-generated placeholder description.
+        """
         route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
         spawn_pos, sec_id = sample_group_spawn_on_route(
             self.routes[route_id], num_samples, self.sidewalk_width

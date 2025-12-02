@@ -19,6 +19,14 @@ SNAPSHOT_PATH = Path(__file__).parent / "snapshots" / "snqi_optimization_keys_sn
 
 
 def _make_dataset(tmp: Path) -> tuple[Path, Path]:
+    """Make dataset.
+
+    Args:
+        tmp: Auto-generated placeholder description.
+
+    Returns:
+        tuple[Path, Path]: Auto-generated placeholder description.
+    """
     episodes_path = tmp / "episodes.jsonl"
     baseline_path = tmp / "baseline.json"
     episodes = [
@@ -61,6 +69,16 @@ def _make_dataset(tmp: Path) -> tuple[Path, Path]:
 
 
 def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
+    """Run script.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+        baseline: Auto-generated placeholder description.
+        out: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     cmd = [
         sys.executable,
         "scripts/snqi_weight_optimization.py",
@@ -87,6 +105,14 @@ def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
 
 
 def test_snqi_optimization_schema_snapshot(tmp_path: Path):
+    """Test snqi optimization schema snapshot.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes, baseline = _make_dataset(tmp_path)
     out_file = tmp_path / "out.json"
     data = _run_script(episodes, baseline, out_file)

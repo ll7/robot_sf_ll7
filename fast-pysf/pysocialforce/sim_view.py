@@ -43,6 +43,15 @@ class VisualizableSimState:
 
 
 def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimState:
+    """To visualizable state.
+
+    Args:
+        step: Auto-generated placeholder description.
+        sim_state: Auto-generated placeholder description.
+
+    Returns:
+        VisualizableSimState: Auto-generated placeholder description.
+    """
     state, groups = sim_state
     ped_pos = np.array(state[:, 0:2])
     ped_vel = np.array(state[:, 2:4])
@@ -87,9 +96,19 @@ class SimulationView:
 
     @property
     def timestep_text_pos(self) -> Vec2D:
+        """Timestep text pos.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         return (16, 16)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
@@ -99,6 +118,11 @@ class SimulationView:
         self.clear()
 
     def preprocess_obstacles(self) -> pygame.Surface:
+        """Preprocess obstacles.
+
+        Returns:
+            pygame.Surface: Auto-generated placeholder description.
+        """
         # Scale the vertices of the obstacles
         obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
 
@@ -140,12 +164,26 @@ class SimulationView:
         self.ui_events_thread.start()
 
         def handle_sigint(signum, frame):
+            """Handle sigint.
+
+            Args:
+                signum: Auto-generated placeholder description.
+                frame: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.is_exit_requested = True
             self.is_abortion_requested = True
 
         signal(SIGINT, handle_sigint)
 
     def exit(self):
+        """Exit.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.is_exit_requested = True
         self.ui_events_thread.join()
 
@@ -243,16 +281,37 @@ class SimulationView:
         pygame.display.update()
 
     def _resize_window(self):
+        """Resize window.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         old_surface = self.screen
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
     def _scale_pedestrian_state(self, state: VisualizableSimState) -> VisualizableSimState:
+        """Scale pedestrian state.
+
+        Args:
+            state: Auto-generated placeholder description.
+
+        Returns:
+            VisualizableSimState: Auto-generated placeholder description.
+        """
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
         return state
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
+        """Draw pedestrians.
+
+        Args:
+            ped_pos: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(
                 self.screen,
@@ -262,6 +321,11 @@ class SimulationView:
             )
 
     def _draw_obstacles(self):
+        """Draw obstacles.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
@@ -295,6 +359,14 @@ class SimulationView:
             )
 
     def _add_text(self, timestep: int):
+        """Add text.
+
+        Args:
+            timestep: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         text_lines = [
             f"step: {timestep}",
             f"scaling: {self.scaling}",

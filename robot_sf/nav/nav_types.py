@@ -1,3 +1,5 @@
+"""Module nav_types auto-generated docstring."""
+
 from dataclasses import dataclass
 
 from robot_sf.common.types import Vec2D, Zone

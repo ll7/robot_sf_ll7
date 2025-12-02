@@ -1,3 +1,5 @@
+"""Module lidar_sensor_obstacle_test auto-generated docstring."""
+
 from math import cos, pi, sin
 
 import numpy as np
@@ -11,6 +13,16 @@ NO_SCAN_NOISE = [0.0, 0.0]
 
 
 def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D:
+    """Rotate.
+
+    Args:
+        point: Auto-generated placeholder description.
+        rot_center: Auto-generated placeholder description.
+        rot_angle_rad: Auto-generated placeholder description.
+
+    Returns:
+        Point2D: Auto-generated placeholder description.
+    """
     x, y = point[0] - rot_center[0], point[1] - rot_center[1]
     s, c = sin(rot_angle_rad), cos(rot_angle_rad)
     x, y = x * c - y * s, x * s + y * c
@@ -18,6 +30,11 @@ def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D
 
 
 def test_scanner_detects_single_obstacle_orthogonal_orientation():
+    """Test scanner detects single obstacle orthogonal orientation.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     obstacles = np.array([[2, 1, 2, -1]])
     occupancy = ContinuousOccupancy(
@@ -38,6 +55,11 @@ def test_scanner_detects_single_obstacle_orthogonal_orientation():
 
 
 def test_scanner_detects_obstacle_other_orientation_superpositioned():
+    """Test scanner detects obstacle other orientation superpositioned.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     obstacles = np.array([[0, 1, 0, -1]])
     occupancy = ContinuousOccupancy(
@@ -58,6 +80,11 @@ def test_scanner_detects_obstacle_other_orientation_superpositioned():
 
 
 def test_scanner_ignores_obstacle_same_orientation_superpositioned():
+    """Test scanner ignores obstacle same orientation superpositioned.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays, max_scan_dist = 1, 5
     obstacles = np.array([[1, 0, -1, 0]])
     occupancy = ContinuousOccupancy(
@@ -79,6 +106,11 @@ def test_scanner_ignores_obstacle_same_orientation_superpositioned():
 
 
 def test_scanner_ignores_obstacle_same_orientation_not_superpositioned():
+    """Test scanner ignores obstacle same orientation not superpositioned.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays, max_scan_dist = 1, 5
     obstacles = np.array([[3, 0, 4, 0]])
     occupancy = ContinuousOccupancy(
@@ -99,6 +131,11 @@ def test_scanner_ignores_obstacle_same_orientation_not_superpositioned():
 
 
 def test_scanner_detects_multiple_equidist_obstacles_from_center():
+    """Test scanner detects multiple equidist obstacles from center.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # construct obstacles to form a 360-edged, isosceles polygon that's
     # located at the map's center where each ray hits the polygon
     # orthogonally after a distance of 2.0
@@ -128,6 +165,11 @@ def test_scanner_detects_multiple_equidist_obstacles_from_center():
 
 
 def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
+    """Test scanner detects multiple equidist obstacles randomly shifted.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # construct obstacles to form a 360-edged, isosceles polygon that's
     # located at a random center where each ray hits the polygon
     # orthogonally after a distance of 2.0
@@ -163,6 +205,11 @@ def test_scanner_detects_multiple_equidist_obstacles_randomly_shifted():
 
 
 def test_scanner_detects_max_range_when_nothing_found():
+    """Test scanner detects max range when nothing found.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     max_scan_range = 5
     lidar_n_rays = 360
     occupancy = ContinuousOccupancy(
@@ -183,6 +230,11 @@ def test_scanner_detects_max_range_when_nothing_found():
 
 
 def test_scanner_detects_only_closest_obstacle():
+    """Test scanner detects only closest obstacle.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     obstacles = np.array([[2, 1, 2, -1], [3, 1, 3, -1]])
     occupancy = ContinuousOccupancy(

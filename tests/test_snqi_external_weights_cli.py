@@ -42,6 +42,14 @@ INVALID_WEIGHTS_NON_NUMERIC = {
 
 @pytest.fixture
 def snqi_small_dataset(tmp_path: Path):
+    """Snqi small dataset.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
     episodes = [
@@ -85,6 +93,15 @@ def snqi_small_dataset(tmp_path: Path):
 
 
 def _write_weights(path: Path, weights: dict):
+    """Write weights.
+
+    Args:
+        path: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     path.write_text(json.dumps(weights), encoding="utf-8")
 
 
@@ -105,6 +122,18 @@ def test_cli_external_initial_weights_validation(
     expect_success,
     script_kind,
 ):
+    """Test cli external initial weights validation.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        snqi_small_dataset: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+        expect_success: Auto-generated placeholder description.
+        script_kind: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes_path, baseline_path = snqi_small_dataset
     weights_file = tmp_path / "weights.json"
     _write_weights(weights_file, weights)

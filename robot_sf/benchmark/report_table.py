@@ -15,6 +15,16 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
+    """Get dotted.
+
+    Args:
+        d: Auto-generated placeholder description.
+        path: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:  # type: ignore[redundant-expr]
@@ -24,6 +34,16 @@ def _get_dotted(d: dict[str, object], path: str, default=None):
 
 
 def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None:
+    """Group key.
+
+    Args:
+        rec: Auto-generated placeholder description.
+        group_by: Auto-generated placeholder description.
+        fallback_group_by: Auto-generated placeholder description.
+
+    Returns:
+        str | None: Auto-generated placeholder description.
+    """
     g = _get_dotted(rec, group_by)
     if g is None:
         g = _get_dotted(rec, fallback_group_by)
@@ -32,6 +52,8 @@ def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None
 
 @dataclass
 class TableRow:
+    """TableRow class."""
+
     group: str
     values: dict[str, float | None]
 
@@ -42,6 +64,17 @@ def compute_table(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
 ) -> list[TableRow]:
+    """Compute table.
+
+    Args:
+        records: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+        group_by: Auto-generated placeholder description.
+        fallback_group_by: Auto-generated placeholder description.
+
+    Returns:
+        list[TableRow]: Auto-generated placeholder description.
+    """
     sums: dict[str, dict[str, float]] = {}
     counts: dict[str, dict[str, int]] = {}
     for rec in records:
@@ -77,6 +110,15 @@ def compute_table(
 
 
 def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
+    """Format markdown.
+
+    Args:
+        rows: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     headers = ["Group", *metrics]
     lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(["---"] * len(headers)) + " |"]
     for r in rows:
@@ -89,6 +131,15 @@ def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
+    """Format csv.
+
+    Args:
+        rows: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     import csv
     from io import StringIO
 
@@ -106,6 +157,14 @@ def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def to_json(rows: Sequence[TableRow]) -> list[dict[str, object]]:
+    """To json.
+
+    Args:
+        rows: Auto-generated placeholder description.
+
+    Returns:
+        list[dict[str, object]]: Auto-generated placeholder description.
+    """
     out: list[dict[str, object]] = []
     for r in rows:
         out.append({"group": r.group, **r.values})

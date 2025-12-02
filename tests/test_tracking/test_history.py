@@ -22,10 +22,26 @@ _FIXTURES = Path(__file__).parent / "fixtures" / "history_runs"
 
 
 def _copy_history_fixtures(target_root: Path) -> None:
+    """Copy history fixtures.
+
+    Args:
+        target_root: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     shutil.copytree(_FIXTURES, target_root, dirs_exist_ok=True)
 
 
 def test_history_filters_runs(tmp_path: Path) -> None:
+    """Test history filters runs.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     config = RunTrackerConfig(artifact_root=tmp_path)
     _copy_history_fixtures(config.run_tracker_root)
 
@@ -48,6 +64,14 @@ def test_history_filters_runs(tmp_path: Path) -> None:
 
 
 def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> None:
+    """Test history discovers nested runs and filters scenarios.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     config = RunTrackerConfig(artifact_root=tmp_path)
     _copy_history_fixtures(config.run_tracker_root)
 
@@ -76,6 +100,14 @@ def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> 
 
 
 def test_failure_guard_marks_failed_steps(run_tracker_config: RunTrackerConfig) -> None:
+    """Test failure guard marks failed steps.
+
+    Args:
+        run_tracker_config: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     writer = ManifestWriter(run_tracker_config, run_id="guard-demo")
     tracker = ProgressTracker(
         [

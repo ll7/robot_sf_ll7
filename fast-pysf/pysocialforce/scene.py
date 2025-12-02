@@ -17,6 +17,16 @@ class PedState:
     """Tracks the state of pedstrains and social groups"""
 
     def __init__(self, state: np.ndarray, groups: list[Group], config: SceneConfig):
+        """Init.
+
+        Args:
+            state: Auto-generated placeholder description.
+            groups: Auto-generated placeholder description.
+            config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.default_tau = config.tau
         self.d_t = config.dt_secs
         self.agent_radius = config.agent_radius
@@ -27,10 +37,27 @@ class PedState:
         self.update(state, groups)
 
     def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
+        """Update.
+
+        Args:
+            state: Auto-generated placeholder description.
+            groups: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.state = state
         self.groups = groups
 
     def _update_state(self, state: np.ndarray) -> None:
+        """Update state.
+
+        Args:
+            state: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         tau = np.full((state.shape[0]), self.default_tau)
         if state.shape[1] < 7:
             self._state = np.concatenate((state, np.expand_dims(tau, -1)), axis=-1)
@@ -42,28 +69,71 @@ class PedState:
 
     @property
     def state(self) -> np.ndarray:
+        """State.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self._state
 
     @state.setter
     def state(self, state: np.ndarray):
+        """State.
+
+        Args:
+            state: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self._update_state(state)
 
     def get_states(self) -> tuple[np.ndarray, list[list[list[int]]]]:
+        """Get states.
+
+        Returns:
+            tuple[np.ndarray, list[list[list[int]]]]: Auto-generated placeholder description.
+        """
         return np.array([self.state]), [self.groups]
 
     def size(self) -> int:
+        """Size.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return self.state.shape[0]
 
     def pos(self) -> np.ndarray:
+        """Pos.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self.state[:, 0:2]
 
     def vel(self) -> np.ndarray:
+        """Vel.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self.state[:, 2:4]
 
     def goal(self) -> np.ndarray:
+        """Goal.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self.state[:, 4:6]
 
     def tau(self) -> np.ndarray:
+        """Tau.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self.state[:, 6:7]
 
     def speeds(self) -> np.ndarray:
@@ -95,16 +165,34 @@ class PedState:
 
     @property
     def groups(self) -> list[list]:
+        """Groups.
+
+        Returns:
+            list[list]: Auto-generated placeholder description.
+        """
         return self._groups
 
     @groups.setter
     def groups(self, groups: list[list]):
+        """Groups.
+
+        Args:
+            groups: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if groups is None:
             self._groups = []
         else:
             self._groups = groups
 
     def has_group(self) -> bool:
+        """Has group.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         return self.groups is not None
 
     def which_group(self, index: int) -> int:
@@ -125,6 +213,11 @@ class EnvState:
     _obstacles_raw: np.ndarray = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self._obstacles_raw = self._update_obstacles_raw(self._orig_obstacles)
         self._obstacles_linspace = self._update_obstacles_linspace(self._orig_obstacles)
 
@@ -150,6 +243,14 @@ class EnvState:
         self._obstacles_linspace = self._update_obstacles_linspace(obstacles)
 
     def _update_obstacles_linspace(self, obs_lines: list[Line2D]) -> list[np.ndarray]:
+        """Update obstacles linspace.
+
+        Args:
+            obs_lines: Auto-generated placeholder description.
+
+        Returns:
+            list[np.ndarray]: Auto-generated placeholder description.
+        """
         if obs_lines is None:
             obstacles = []
         else:
@@ -169,12 +270,37 @@ class EnvState:
         return obstacles
 
     def _update_obstacles_raw(self, obs_lines: list[Line2D]) -> np.ndarray:
+        """Update obstacles raw.
+
+        Args:
+            obs_lines: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
+
         def orient(line):
+            """Orient.
+
+            Args:
+                line: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             start_x, end_x, start_y, end_y = line
             vec_x, vec_y = end_x - start_x, end_y - start_y
             return (atan2(vec_y, vec_x) + 2 * pi) % (2 * pi)
 
         def unit_vec(orient):
+            """Unit vec.
+
+            Args:
+                orient: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return cos(orient), sin(orient)
 
         if obs_lines is None or len(obs_lines) == 0:

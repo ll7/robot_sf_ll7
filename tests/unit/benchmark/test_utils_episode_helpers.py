@@ -224,6 +224,11 @@ class TestFormatEpisodeSummaryTable:
         """Test function works with iterators."""
 
         def episode_generator():
+            """Episode generator.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             yield {
                 "scenario": "test",
                 "seed": 1,

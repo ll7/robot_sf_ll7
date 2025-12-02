@@ -1,3 +1,5 @@
+"""Module test_multi_extractor_summary_markdown auto-generated docstring."""
+
 from robot_sf.training.multi_extractor_models import (
     ExtractorRunRecord,
     HardwareProfile,
@@ -7,6 +9,14 @@ from robot_sf.training.multi_extractor_summary import write_summary_artifacts
 
 
 def test_summary_markdown_contains_required_sections(tmp_path):
+    """Test summary markdown contains required sections.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     base_dir = tmp_path / "run_outputs"
     base_dir.mkdir()
 

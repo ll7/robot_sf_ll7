@@ -1,3 +1,5 @@
+"""Module benchmark02 auto-generated docstring."""
+
 import json
 import platform
 import time
@@ -29,6 +31,11 @@ class BenchmarkMetrics:
     env_info: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """To dict.
+
+        Returns:
+            dict: Auto-generated placeholder description.
+        """
         return {
             "steps_per_second": self.steps_per_second,
             "avg_step_time_ms": self.avg_step_time_ms,
@@ -177,15 +184,13 @@ def save_benchmark_results(
     """
     Save benchmark results to a JSON file.
 
-    Parameters:
-    results (BenchmarkMetrics): The benchmark metrics to save.
-    json_file (str | Path | None): Optional override path for the JSON output. When
-        omitted the canonical artifact location under ``output/benchmarks`` is used.
-    append (bool): If True, append the results to the existing file. If False,
-        overwrite the file. Defaults to True.
+    Args:
+        results: Benchmark metrics to save.
+        json_file: Optional override path; defaults to the canonical artifact location.
+        append: If True append to the file, otherwise overwrite it.
 
     Raises:
-    FileNotFoundError: If the file does not exist and append is True, a new file will be created.
+        FileNotFoundError: If the file does not exist and append is True, a new file will be created.
     """
     target_path = Path(json_file) if json_file is not None else _default_benchmark_results_path()
 

@@ -13,6 +13,8 @@ from robot_sf.benchmark.full_classic.visuals import (
 
 
 class Cfg:
+    """Cfg class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -21,6 +23,15 @@ class Cfg:
 
 
 def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
+    """Test sim view failure triggers synthetic fallback.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         {
             "episode_id": "ep1",
@@ -34,6 +45,17 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
     groups: list = []
 
     def fake_attempt_sim_view(_records, _videos_dir, _cfg, _replay_map):
+        """Fake attempt sim view.
+
+        Args:
+            _records: Auto-generated placeholder description.
+            _videos_dir: Auto-generated placeholder description.
+            _cfg: Auto-generated placeholder description.
+            _replay_map: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",
@@ -49,6 +71,16 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
         ]
 
     def fake_synthetic(_records, _videos_dir, _cfg):
+        """Fake synthetic.
+
+        Args:
+            _records: Auto-generated placeholder description.
+            _videos_dir: Auto-generated placeholder description.
+            _cfg: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",
@@ -79,6 +111,15 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
 
 
 def test_fallback_appends_existing_note(tmp_path, monkeypatch):
+    """Test fallback appends existing note.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         {
             "episode_id": "ep1",
@@ -92,6 +133,17 @@ def test_fallback_appends_existing_note(tmp_path, monkeypatch):
     groups: list = []
 
     def fake_attempt_sim_view(_records, _videos_dir, _cfg, _replay_map):
+        """Fake attempt sim view.
+
+        Args:
+            _records: Auto-generated placeholder description.
+            _videos_dir: Auto-generated placeholder description.
+            _cfg: Auto-generated placeholder description.
+            _replay_map: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",
@@ -107,6 +159,16 @@ def test_fallback_appends_existing_note(tmp_path, monkeypatch):
         ]
 
     def fake_synthetic(_records, _videos_dir, _cfg):
+        """Fake synthetic.
+
+        Args:
+            _records: Auto-generated placeholder description.
+            _videos_dir: Auto-generated placeholder description.
+            _cfg: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",

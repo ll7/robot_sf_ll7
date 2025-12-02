@@ -1,3 +1,5 @@
+"""Module test_cli_ranking auto-generated docstring."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,15 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _write_matrix(path: Path, repeats: int = 3) -> None:
+    """Write matrix.
+
+    Args:
+        path: Auto-generated placeholder description.
+        repeats: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "rank-smoke",
@@ -31,6 +42,15 @@ def _write_matrix(path: Path, repeats: int = 3) -> None:
 
 
 def test_cli_rank_md(tmp_path: Path, capsys):
+    """Test cli rank md.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=3)
     episodes = tmp_path / "episodes.jsonl"

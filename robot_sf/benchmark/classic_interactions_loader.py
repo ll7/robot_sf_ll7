@@ -25,6 +25,14 @@ if TYPE_CHECKING:
 
 
 def load_classic_matrix(path: str) -> list[dict]:
+    """Load classic matrix.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        list[dict]: Auto-generated placeholder description.
+    """
     p = Path(path)
     if not p.exists():  # explicit fast failure
         raise FileNotFoundError(f"Scenario matrix not found: {path}")
@@ -37,6 +45,15 @@ def load_classic_matrix(path: str) -> list[dict]:
 
 
 def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
+    """Select scenario.
+
+    Args:
+        scenarios: Auto-generated placeholder description.
+        name: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     if not scenarios:
         raise ValueError("No scenarios available")
     if name is None:
@@ -49,6 +66,14 @@ def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
 
 
 def iter_episode_seeds(scenario: dict) -> list[int]:
+    """Iter episode seeds.
+
+    Args:
+        scenario: Auto-generated placeholder description.
+
+    Returns:
+        list[int]: Auto-generated placeholder description.
+    """
     seeds = scenario.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError(f"Scenario '{scenario.get('name')}' missing non-empty seeds list")

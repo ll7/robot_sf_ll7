@@ -391,11 +391,11 @@ def jerk_mean(data: EpisodeData) -> float:
     The function averages the norms of the first T-2 jerk vectors (i.e., uses diffs[:-1]) so the denominator is T-2.
     Returns 0.0 if there are fewer than three acceleration samples.
 
-    Parameters:
-        data (EpisodeData): episode container; this function reads data.robot_acc.
+    Args:
+        data: Episode container with ``robot_acc`` populated.
 
     Returns:
-        float: mean jerk magnitude (0.0 when insufficient timesteps).
+        float: Mean jerk magnitude (0.0 when insufficient timesteps).
     """
     acc = data.robot_acc
     T = acc.shape[0]
@@ -583,26 +583,26 @@ def snqi(
         - The final SNQI is: w_success*success - w_time*time_norm - sum(weights * normalized_penalties)
           and is returned as a float.
 
-    Parameters:
-        metric_values: dict
-            Raw metric values from compute_all_metrics.
-        weights: dict
-            Per-component weights. Expected keys include (but are not limited to):
-            "w_success", "w_time", "w_collisions", "w_near", "w_comfort",
-            "w_force_exceed", "w_jerk", "w_curvature". Missing weights default to 1.0.
-        baseline_stats: dict | None
-            Optional mapping from metric name to {'med': float, 'p95': float} used to normalize
-            penalized metrics into [0,1]. If None or a metric entry is missing, that metric's
-            normalized contribution is treated as 0.0.
-        eps: float
-            Small number to avoid division-by-zero when computing normalization denominators.
+    Args:
+        metric_values: Raw outputs from :func:`compute_all_metrics`.
+        weights: Per-component weights (e.g., ``w_success``, ``w_time``). Missing entries default to 1.0.
+        baseline_stats: Optional mapping from metric name to ``{'med': float, 'p95': float}`` for normalization.
+        eps: Small constant to avoid division-by-zero when normalizing.
 
     Returns:
-        float
-            The aggregated SNQI score (higher is better).
+        float: Aggregated SNQI score (higher is better).
     """
 
     def _norm(name: str, value: float) -> float:
+        """Norm.
+
+        Args:
+            name: Auto-generated placeholder description.
+            value: Auto-generated placeholder description.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         if baseline_stats is None or name not in baseline_stats:
             return 0.0
         med = baseline_stats[name].get("med", 0.0)
@@ -616,6 +616,15 @@ def snqi(
         return float(norm)
 
     def _safe(val: float | None, default: float = 0.0) -> float:
+        """Safe.
+
+        Args:
+            val: Auto-generated placeholder description.
+            default: Auto-generated placeholder description.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         v = float(val) if val is not None else default
         return v if math.isfinite(v) else default
 
@@ -1712,21 +1721,13 @@ def compute_all_metrics(
 
     Calls each metric implementation on the provided EpisodeData and collects their scalar results into a dict keyed by metric name.
 
-    Parameters:
-        data: EpisodeData
-            Episode trajectory and auxiliary data used by the metrics.
-        horizon: int
-            Episode horizon (number of timesteps) used by time-normalized metrics.
-        shortest_path_len: float | None
-            Precomputed shortest-path length from start to goal. If None, the Euclidean
-            distance from the episode start to the goal is used as a fallback.
+    Args:
+        data: Episode trajectory and auxiliary data required by each metric.
+        horizon: Episode horizon (timesteps) for time-normalized metrics.
+        shortest_path_len: Optional precomputed shortest-path length. Defaults to the Euclidean start-goal distance.
 
     Returns:
-        Dict[str, float]: A mapping from metric name to its computed scalar value. Keys include
-        "success", "time_to_goal_norm", "collisions", "near_misses", "min_distance",
-        "path_efficiency", force quantile keys (e.g. "force_q50"), "force_exceed_events",
-        "comfort_exposure", "jerk_mean", "curvature_mean", "energy", "avg_speed",
-        and "force_gradient_norm_mean".
+        dict[str, float]: Mapping from metric name to scalar value (e.g., ``success``, ``time_to_goal_norm``, ``force_q50``).
     """
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback

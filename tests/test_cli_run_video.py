@@ -1,3 +1,5 @@
+"""Module test_cli_run_video auto-generated docstring."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,6 +18,15 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
     reason="moviepy/ffmpeg not available",
 )
 def test_cli_run_with_synthetic_video(tmp_path: Path, capsys):
+    """Test cli run with synthetic video.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Minimal scenario matrix YAML (single episode)
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [

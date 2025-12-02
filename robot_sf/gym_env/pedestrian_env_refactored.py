@@ -70,12 +70,13 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         Initialize the Pedestrian Environment.
 
         Args:
-            config: Pedestrian simulation configuration
-            robot_model: Pre-trained robot model for adversarial interaction
-            reward_func: Reward function for pedestrian training
-            debug: Enable debug mode with visualization
-            recording_enabled: Enable state recording
-            peds_have_obstacle_forces: Whether pedestrians exert obstacle forces
+            config: Pedestrian simulation configuration.
+            robot_model: Pre-trained robot model for adversarial interaction.
+            reward_func: Reward function for pedestrian training.
+            debug: Enable debug mode with visualization.
+            recording_enabled: Enable state recording.
+            peds_have_obstacle_forces: Whether pedestrians exert obstacle forces.
+            **kwargs: Forwarded to :class:`PedestrianEnv` for future extension.
         """
         if config is None:
             config = PedestrianSimulationConfig()

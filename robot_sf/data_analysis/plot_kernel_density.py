@@ -26,11 +26,11 @@ def plot_kde_on_map(
     Plot the Kernel Density Estimation of pedestrian positions on a map.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
-        bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
-        interactive (bool): If True, show the plot interactively.
-        unique_id (str): Unique identifier for the plot filename, usually the timestamp
-        map_def (MapDefinition, optional): Map definition to plot obstacles
+        ped_positions_array: Array of shape ``(timesteps, num_pedestrians, 2)``.
+        bandwidth: KDE bandwidth controlling smoothness.
+        interactive: Whether to show the plot interactively.
+        unique_id: Optional identifier appended to the output filename.
+        map_def: Optional map definition used to draw obstacles.
     """
     peds_data = ped_positions_array.reshape(-1, 2)
 
@@ -87,8 +87,8 @@ def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
     Perform Kernel Density Estimation on a 1D axis.
 
     Args:
-        data (np.ndarray): shape: (n_samples, 1)
-        bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+        data: Input samples with shape ``(n_samples, 1)``.
+        bandwidth: KDE bandwidth controlling smoothness.
     """
     kde = KernelDensity(kernel="gaussian", bandwidth=bandwidth)
     kde.fit(data)
@@ -117,11 +117,11 @@ def plot_kde_in_x_y(
     Plot the Kernel Density Estimation of npc and ego positions in X and Y axes.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
-        ego_data (np.ndarray): shape: (timesteps, 2)
-        bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
-        interactive (bool): If True, show the plot interactively.
-        unique_id (str): Unique identifier for the plot filename, usually the timestamp
+        ped_positions_array: NPC position array with shape ``(timesteps, num_pedestrians, 2)``.
+        ego_data: Ego trajectory array of shape ``(timesteps, 2)``.
+        bandwidth: KDE bandwidth controlling smoothness.
+        interactive: Whether to show the plot interactively.
+        unique_id: Optional identifier appended to the output filename.
     """
     peds_data = ped_positions_array.reshape(-1, 2)
     # Perform KDE on npc data x positions

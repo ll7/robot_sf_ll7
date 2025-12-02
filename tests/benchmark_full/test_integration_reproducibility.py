@@ -121,6 +121,15 @@ def test_reproducibility_same_seed(
     hard_timeout_sec = 60
 
     def _timeout_handler(signum, frame):  # pragma: no cover - timeout path rarely triggered
+        """Timeout handler.
+
+        Args:
+            signum: Auto-generated placeholder description.
+            frame: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise TimeoutError(
             f"Reproducibility test exceeded hard timeout of {hard_timeout_sec}s (signal).",
         )

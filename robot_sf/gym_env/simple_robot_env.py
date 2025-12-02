@@ -15,6 +15,14 @@ class SimpleRobotEnv(gymnasium.Env):
     """
 
     def __init__(self, env_config: EnvSettings = EnvSettings()):
+        """Init.
+
+        Args:
+            env_config: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.info = {}
 
         # Action space
@@ -54,9 +62,25 @@ class SimpleRobotEnv(gymnasium.Env):
         return self.info
 
     def step(self, action):
+        """Step.
+
+        Args:
+            action: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         pass
 
     def reset(self, seed=None):
+        """Reset.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # seed for self.np_random
         super().reset(seed=seed)
 
@@ -65,7 +89,20 @@ class SimpleRobotEnv(gymnasium.Env):
         return observation, info
 
     def render(self, mode="human"):
+        """Render.
+
+        Args:
+            mode: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         pass
 
     def close(self):
+        """Close.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         pass

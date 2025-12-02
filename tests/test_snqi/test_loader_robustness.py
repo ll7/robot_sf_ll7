@@ -1,3 +1,5 @@
+"""Module test_loader_robustness auto-generated docstring."""
+
 from __future__ import annotations
 
 import argparse
@@ -24,6 +26,14 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
     # - module_from_spec returns a lightweight module-like object with run() -> 0
     # - spec_from_file_location returns a dummy spec with a no-op loader
     def fake_module_from_spec(spec):  # type: ignore[no-untyped-def]
+        """Fake module from spec.
+
+        Args:
+            spec: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         mod = types.SimpleNamespace()
         # mimic minimal module attrs the loader might expect
         mod.__spec__ = spec
@@ -32,16 +42,48 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
         return mod
 
     class _DummyLoader:  # minimal loader; exec_module is a no-op
+        """DummyLoader class."""
+
         def exec_module(self, _mod):  # type: ignore[no-untyped-def]
+            """Exec module.
+
+            Args:
+                _mod: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return None
 
     class _DummySpec:
+        """DummySpec class."""
+
         def __init__(self, name, origin):
+            """Init.
+
+            Args:
+                name: Auto-generated placeholder description.
+                origin: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.name = name
             self.origin = str(origin)
             self.loader = _DummyLoader()
 
     def fake_spec_from_file_location(name, path, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        """Fake spec from file location.
+
+        Args:
+            name: Auto-generated placeholder description.
+            path: Auto-generated placeholder description.
+            _args: Auto-generated placeholder description.
+            _kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return _DummySpec(name, path)
 
     monkeypatch.setattr(importlib_util, "module_from_spec", fake_module_from_spec, raising=True)

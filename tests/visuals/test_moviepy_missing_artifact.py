@@ -1,3 +1,5 @@
+"""Module test_moviepy_missing_artifact auto-generated docstring."""
+
 from pathlib import Path
 
 import pytest
@@ -7,7 +9,18 @@ from robot_sf.benchmark.full_classic.visual_constants import NOTE_MOVIEPY_MISSIN
 
 
 class DummyEnc:
+    """DummyEnc class."""
+
     def __init__(self, status: str, note: str | None):
+        """Init.
+
+        Args:
+            status: Auto-generated placeholder description.
+            note: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.status = status
         self.note = note
         self.encode_time_s = None
@@ -15,17 +28,48 @@ class DummyEnc:
 
 
 def fake_generate_frames(_ep, *, fps: int = 10, max_frames=None, **_kwargs):
+    """Fake generate frames.
+
+    Args:
+        _ep: Auto-generated placeholder description.
+        fps: Auto-generated placeholder description.
+        max_frames: Auto-generated placeholder description.
+        _kwargs: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Yield minimal frames; encoder result will mark skipped/moviepy-missing.
     for _ in range(2):
         yield None
 
 
 def fake_encode_frames(_frame_iter, _path, *, fps: int = 10, sample_memory: bool = False, **_kw):
+    """Fake encode frames.
+
+    Args:
+        _frame_iter: Auto-generated placeholder description.
+        _path: Auto-generated placeholder description.
+        fps: Auto-generated placeholder description.
+        sample_memory: Auto-generated placeholder description.
+        _kw: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return DummyEnc(status="skipped", note=NOTE_MOVIEPY_MISSING)
 
 
 @pytest.fixture(autouse=True)
 def patch_dependencies(monkeypatch):
+    """Patch dependencies.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Force simulation view available and replay capture active
     monkeypatch.setattr(visuals_mod, "_SIM_VIEW_AVAILABLE", True)
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
@@ -41,6 +85,8 @@ def patch_dependencies(monkeypatch):
 
 
 class Cfg:
+    """Cfg class."""
+
     capture_replay = True
     video_fps = 5
     smoke = False
@@ -51,6 +97,15 @@ class Cfg:
 
 
 def test_moviepy_missing_yields_skipped_artifact(tmp_path: Path, monkeypatch):
+    """Test moviepy missing yields skipped artifact.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Provide replay episodes; we bypass validation by monkeypatching validate_replay_episode
     records = [
         {"episode_id": "ep1", "scenario_id": "sc1"},

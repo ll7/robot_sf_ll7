@@ -23,10 +23,27 @@ _CI_EXAMPLES: tuple[ExampleScript, ...] = tuple(_MANIFEST.iter_ci_enabled_exampl
 
 
 def _id(example: ExampleScript) -> str:
+    """Id.
+
+    Args:
+        example: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return example.path.as_posix()
 
 
 def _merge_pythonpath(root: Path, existing: str | None) -> str:
+    """Merge pythonpath.
+
+    Args:
+        root: Auto-generated placeholder description.
+        existing: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     parts: list[str] = [str(root)]
     if existing:
         parts.extend(element for element in existing.split(os.pathsep) if element)
@@ -40,6 +57,15 @@ def _merge_pythonpath(root: Path, existing: str | None) -> str:
 
 
 def _tail(text: str | bytes | None, limit: int = 20) -> str:
+    """Tail.
+
+    Args:
+        text: Auto-generated placeholder description.
+        limit: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     if text is None:
         return ""
     if isinstance(text, bytes):
@@ -52,11 +78,24 @@ def _tail(text: str | bytes | None, limit: int = 20) -> str:
 
 @pytest.fixture(scope="module", name="repo_root_path")
 def _repo_root_path() -> Path:
+    """Repo root path.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     return _REPO_ROOT
 
 
 @pytest.fixture(scope="module", name="example_env")
 def _example_env(repo_root_path: Path) -> dict[str, str]:
+    """Example env.
+
+    Args:
+        repo_root_path: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, str]: Auto-generated placeholder description.
+    """
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -76,6 +115,17 @@ def test_example_runs_without_error(
     example_env: dict[str, str],
     perf_policy,
 ) -> None:
+    """Test example runs without error.
+
+    Args:
+        example: Auto-generated placeholder description.
+        repo_root_path: Auto-generated placeholder description.
+        example_env: Auto-generated placeholder description.
+        perf_policy: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     script_path = _MANIFEST.resolve_example_path(example)
     assert script_path.is_file(), f"Example path missing: {script_path}"
 
@@ -84,7 +134,7 @@ def test_example_runs_without_error(
 
     start = time.perf_counter()
     try:
-        completed = subprocess.run(  # noqa: PL subprocess-run-check
+        completed = subprocess.run(
             command,
             cwd=repo_root_path,
             env=example_env,
@@ -113,4 +163,9 @@ def test_example_runs_without_error(
 
 @pytest.mark.skipif(len(_CI_EXAMPLES) == 0, reason="No CI-enabled examples declared in manifest")
 def test_manifest_has_ci_enabled_entries() -> None:
+    """Test manifest has ci enabled entries.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     assert _CI_EXAMPLES, "Expected at least one CI-enabled example in manifest"

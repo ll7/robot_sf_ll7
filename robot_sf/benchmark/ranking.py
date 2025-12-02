@@ -20,6 +20,15 @@ if TYPE_CHECKING:
 
 
 def _get_nested(d: dict[str, Any], dotted: str) -> Any:
+    """Get nested.
+
+    Args:
+        d: Auto-generated placeholder description.
+        dotted: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cur: Any = d
     for part in dotted.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -30,6 +39,14 @@ def _get_nested(d: dict[str, Any], dotted: str) -> Any:
 
 
 def _to_float(x: Any) -> float | None:
+    """To float.
+
+    Args:
+        x: Auto-generated placeholder description.
+
+    Returns:
+        float | None: Auto-generated placeholder description.
+    """
     try:
         if x is None:
             return None
@@ -40,6 +57,8 @@ def _to_float(x: Any) -> float | None:
 
 @dataclass
 class RankingRow:
+    """RankingRow class."""
+
     group: str
     mean: float
     count: int

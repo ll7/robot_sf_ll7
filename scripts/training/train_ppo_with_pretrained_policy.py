@@ -35,11 +35,13 @@ class TimestepTracker(BaseCallback):
     """Callback to track timesteps for convergence measurement."""
 
     def __init__(self):
+        """Initialize convergence tracking fields."""
         super().__init__()
         self.timesteps_to_convergence = None
         self.converged = False
 
     def _on_step(self) -> bool:
+        """Record the timestep when convergence is first observed."""
         # Simplified convergence check - production would use proper metrics
         if not self.converged and self.num_timesteps > 1000:
             self.timesteps_to_convergence = self.num_timesteps
@@ -53,7 +55,17 @@ def _evaluate_policy_metrics(
     *,
     dry_run: bool,
 ) -> tuple[list[float], list[float], list[float]]:
-    """Run short evaluation episodes and return per-episode samples for metrics."""
+    """Collect short evaluation rollouts and summarize basic quality metrics.
+
+    Args:
+        model: Fine-tuned PPO instance; ``None`` indicates dry-run placeholder metrics.
+        config: Training configuration providing seeds and environment hints.
+        dry_run: When True, skips environment interaction and returns canned values.
+
+    Returns:
+        tuple[list[float], list[float], list[float]]: Success indicators, collision flags,
+        and SNQI estimates for each evaluation episode.
+    """
 
     if dry_run:
         logger.warning("Dry run mode: using placeholder metrics for evaluation")
@@ -128,7 +140,16 @@ def run_ppo_finetuning(
     *,
     dry_run: bool = False,
 ) -> tuple[Path, int]:
-    """Execute PPO fine-tuning and return checkpoint path and convergence timesteps."""
+    """Fine-tune PPO from a pre-trained policy and emit manifest metadata.
+
+    Args:
+        config: :class:`PPOFineTuningConfig` describing checkpoints, seeds, and learning rate.
+        dry_run: When True, skip reinforcement learning work and emit placeholder artifacts.
+
+    Returns:
+        tuple[Path, int]: Path to the saved PPO checkpoint and the timestep at which
+        convergence was observed.
+    """
     logger.info("Starting PPO fine-tuning run_id={}", config.run_id)
 
     # Load pre-trained policy
@@ -198,6 +219,14 @@ def run_ppo_finetuning(
     )
 
     def _metric(values: list[float]) -> common.MetricAggregate:
+        """Summarize a list of episode values into a MetricAggregate.
+
+        Args:
+            values: Collection of scalar episode metrics.
+
+        Returns:
+            MetricAggregate: Means, medians, p95, and naïve 95% CI estimates.
+        """
         if not values:
             return common.MetricAggregate(mean=0.0, median=0.0, p95=0.0, ci95=(0.0, 0.0))
         arr = np.asarray(values, dtype=float)
@@ -241,7 +270,7 @@ def run_ppo_finetuning(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build argument parser for PPO fine-tuning script."""
+    """Build argument parser describing configuration path and dry-run flag."""
     parser = argparse.ArgumentParser(
         description="Fine-tune PPO policy from a pre-trained checkpoint."
     )
@@ -260,7 +289,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
-    """Load and parse PPO fine-tuning configuration from YAML."""
+    """Deserialize the PPO fine-tuning configuration YAML into a dataclass.
+
+    Args:
+        config_path: File path pointing to the YAML document.
+
+    Returns:
+        PPOFineTuningConfig: Parsed values with defaults applied.
+    """
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
     return PPOFineTuningConfig.from_raw(
@@ -273,7 +309,14 @@ def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point for PPO fine-tuning script."""
+    """Parse CLI arguments and kick off PPO fine-tuning runs.
+
+    Args:
+        argv: Optional argument overrides (defaults to :data:`sys.argv`).
+
+    Returns:
+        int: Process exit code where ``0`` indicates success.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

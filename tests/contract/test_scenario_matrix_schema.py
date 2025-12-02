@@ -26,10 +26,20 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
+    """Load schema.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_scenario_matrix_invalid_sample_fails():
+    """Test scenario matrix invalid sample fails.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = _load_schema()
     invalid = {"scenarios": [{"id": 1}]}  # id wrong type, missing required keys
     with pytest.raises(Exception):
@@ -37,6 +47,11 @@ def test_scenario_matrix_invalid_sample_fails():
 
 
 def test_scenario_matrix_minimal_valid_passes_when_ready():
+    """Test scenario matrix minimal valid passes when ready.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = _load_schema()
     minimal = {
         "scenarios": [

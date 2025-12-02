@@ -9,6 +9,14 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 def _read_first_record(path: Path) -> dict:
+    """Read first record.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
@@ -19,6 +27,15 @@ def _read_first_record(path: Path) -> dict:
 
 
 def test_replay_and_metrics_present(config_factory, tmp_path):
+    """Test replay and metrics present.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = config_factory(
         smoke=True,
         capture_replay=True,

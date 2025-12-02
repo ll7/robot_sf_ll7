@@ -30,6 +30,11 @@ from robot_sf.render.playback_recording import load_states
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="Plot KDE of pedestrian positions.")
     parser.add_argument(
         "--recording",

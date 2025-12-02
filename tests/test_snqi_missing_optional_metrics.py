@@ -15,6 +15,11 @@ from scripts.snqi_weight_optimization import SNQIWeightOptimizer
 
 
 def _episodes_partial():
+    """Episodes partial.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Some episodes with missing metrics fields
     return [
         {"scenario_id": "a", "metrics": {"success": 1.0, "time_to_goal_norm": 0.4}},
@@ -30,6 +35,11 @@ def _episodes_partial():
 
 
 def _baseline_stub():
+    """Baseline stub.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Minimal baseline: supply stats only for metrics that may appear
     return {
         "collisions": {"med": 0.0, "p95": 2.0},
@@ -40,6 +50,11 @@ def _baseline_stub():
 
 
 def test_recompute_with_missing_optional_metrics():
+    """Test recompute with missing optional metrics.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     eps = _episodes_partial()
     recomputer = SNQIWeightRecomputer(eps, _baseline_stub())
     res = recomputer.recompute_with_strategy("default")
@@ -50,6 +65,11 @@ def test_recompute_with_missing_optional_metrics():
 
 
 def test_optimization_with_missing_optional_metrics():
+    """Test optimization with missing optional metrics.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     eps = _episodes_partial()
     optimizer = SNQIWeightOptimizer(eps, _baseline_stub())
     # Differential evolution might be overkill; use small grid for speed
@@ -59,6 +79,14 @@ def test_optimization_with_missing_optional_metrics():
 
 
 def test_load_episodes_skips_malformed(tmp_path):
+    """Test load episodes skips malformed.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Create JSONL with some bad lines
     good1 = {"scenario_id": "x", "metrics": {"success": 1.0, "time_to_goal_norm": 0.5}}
     good2 = {"scenario_id": "y", "metrics": {"success": 0.0, "time_to_goal_norm": 0.8}}

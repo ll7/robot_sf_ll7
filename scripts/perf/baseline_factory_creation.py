@@ -31,12 +31,27 @@ except Exception as e:  # pragma: no cover - baseline script bootstrap
 
 @runtime_checkable
 class _EnvLike(Protocol):  # minimal protocol to appease static checks
-    def reset(self) -> Any: ...
+    """EnvLike class."""
 
-    def close(self) -> None: ...
+    def reset(self) -> Any:
+        """Reset the environment."""
+        ...
+
+    def close(self) -> None:
+        """Close the environment."""
+        ...
 
 
 def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, float]:
+    """Time creation.
+
+    Args:
+        fn: Auto-generated placeholder description.
+        iterations: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     times: list[float] = []
     for _ in range(iterations):
         start = time.perf_counter()
@@ -60,6 +75,15 @@ def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, flo
 
 
 def _percentile(values: list[float], p: float) -> float:
+    """Percentile.
+
+    Args:
+        values: Auto-generated placeholder description.
+        p: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     if not values:
         return 0.0
     values_sorted = sorted(values)
@@ -74,6 +98,11 @@ def _percentile(values: list[float], p: float) -> float:
 
 
 def main() -> None:
+    """Main.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="Baseline factory creation timing")
     parser.add_argument("--iterations", type=int, default=30, help="Creations per factory")
     parser.add_argument(

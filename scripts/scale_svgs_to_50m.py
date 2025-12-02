@@ -26,6 +26,14 @@ def scale_path_data(d: str, scale_factor: float) -> str:
 
     # Match numbers (including negative and decimals)
     def replace_number(match):
+        """Replace number.
+
+        Args:
+            match: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return scale_coordinate(match.group(0), scale_factor)
 
     return re.sub(r"-?\d+\.?\d*", replace_number, d)

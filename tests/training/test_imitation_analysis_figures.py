@@ -1,3 +1,5 @@
+"""Module test_imitation_analysis_figures auto-generated docstring."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -10,6 +12,14 @@ from robot_sf.training.imitation_analysis import _generate_figures
 
 
 def test_generate_figures_creates_all_expected_files(tmp_path: Path):
+    """Test generate figures creates all expected files.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     baseline_metrics = {
         "timesteps_to_convergence": 1000.0,
         "timesteps_samples": [900.0, 1000.0, 1100.0],
@@ -50,6 +60,11 @@ def test_generate_figures_creates_all_expected_files(tmp_path: Path):
 
 
 def test_metric_samples_handles_suffix_and_filtering():
+    """Test metric samples handles suffix and filtering.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     payload = {
         "metrics": {
             "foo_samples": [1, 2.0, "bad", None],

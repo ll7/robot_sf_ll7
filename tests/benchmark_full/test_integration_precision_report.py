@@ -14,6 +14,14 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 def test_precision_report_structure(config_factory):
+    """Test precision report structure.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = config_factory(smoke=True)
     manifest = run_full_benchmark(cfg)
     report_path = Path(manifest.output_root) / "reports" / "statistical_sufficiency.json"

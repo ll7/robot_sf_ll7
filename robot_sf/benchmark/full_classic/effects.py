@@ -39,6 +39,8 @@ __all__ = ["EffectSizeEntry", "EffectSizeReport", "compute_effect_sizes"]
 
 @dataclass
 class EffectSizeEntry:  # matches data model
+    """EffectSizeEntry class."""
+
     metric: str
     density_low: str
     density_high: str
@@ -48,11 +50,22 @@ class EffectSizeEntry:  # matches data model
 
 @dataclass
 class EffectSizeReport:
+    """EffectSizeReport class."""
+
     archetype: str
     comparisons: list[EffectSizeEntry]
 
 
 def compute_effect_sizes(groups, cfg):  # T032
+    """Compute effect sizes.
+
+    Args:
+        groups: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     by_arch = _group_by_archetype(groups)
     reference_density = getattr(cfg, "effect_size_reference_density", "low")
     reports: list[EffectSizeReport] = []
@@ -69,6 +82,14 @@ def compute_effect_sizes(groups, cfg):  # T032
 
 
 def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
+    """Group by archetype.
+
+    Args:
+        groups: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, dict[str, object]]: Auto-generated placeholder description.
+    """
     result: dict[str, dict[str, object]] = {}
     for g in groups:
         result.setdefault(g.archetype, {})[g.density] = g
@@ -76,6 +97,16 @@ def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
 
 
 def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
+    """Build comparisons for archetype.
+
+    Args:
+        ref_group: Auto-generated placeholder description.
+        density_map: Auto-generated placeholder description.
+        reference_density: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     comparisons: list[EffectSizeEntry] = []
     for density_key, group in sorted(density_map.items()):
         if density_key == reference_density:
@@ -88,6 +119,17 @@ def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
 
 
 def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
+    """Rate effect sizes.
+
+    Args:
+        ref_group: Auto-generated placeholder description.
+        other_group: Auto-generated placeholder description.
+        ref_density: Auto-generated placeholder description.
+        other_density: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     entries: list[EffectSizeEntry] = []
     for metric in RATE_METRICS:
         ref_metric = ref_group.metrics.get(metric)
@@ -113,6 +155,17 @@ def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
 
 
 def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density):
+    """Continuous effect sizes.
+
+    Args:
+        ref_group: Auto-generated placeholder description.
+        other_group: Auto-generated placeholder description.
+        ref_density: Auto-generated placeholder description.
+        other_density: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     entries: list[EffectSizeEntry] = []
     for metric in CONT_METRICS:
         ref_metric = ref_group.metrics.get(metric)
@@ -136,6 +189,16 @@ def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density)
 
 
 def _glass_delta(ref_metric, diff, n):
+    """Glass delta.
+
+    Args:
+        ref_metric: Auto-generated placeholder description.
+        diff: Auto-generated placeholder description.
+        n: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ci = getattr(ref_metric, "mean_ci", None)
     if not ci or n <= 1:
         if not ci:

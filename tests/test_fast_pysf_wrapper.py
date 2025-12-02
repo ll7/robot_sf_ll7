@@ -1,3 +1,5 @@
+"""Module test_fast_pysf_wrapper auto-generated docstring."""
+
 import numpy as np
 from pysocialforce import Simulator
 
@@ -5,6 +7,11 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
 def make_simple_sim():
+    """Make simple sim.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Create a minimal simulator with two pedestrians and a small obstacle
     # state shape for 2 peds: [x, y, vx, vy, goalx, goaly, tau]
     state = np.array(
@@ -21,6 +28,11 @@ def make_simple_sim():
 
 
 def test_get_forces_at_point():
+    """Test get forces at point.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     sim = make_simple_sim()
     wrapper = FastPysfWrapper(sim)
 
@@ -31,6 +43,11 @@ def test_get_forces_at_point():
 
 
 def test_get_force_field():
+    """Test get force field.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     sim = make_simple_sim()
     wrapper = FastPysfWrapper(sim)
 

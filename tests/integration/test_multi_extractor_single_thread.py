@@ -1,3 +1,5 @@
+"""Module test_multi_extractor_single_thread auto-generated docstring."""
+
 import json
 import os
 import subprocess
@@ -13,6 +15,14 @@ CONFIG_DEFAULT = ROOT / "configs" / "scenarios" / "multi_extractor_default.yaml"
 
 @pytest.mark.skipif(not CONFIG_DEFAULT.exists(), reason="default multi-extractor config missing")
 def test_single_thread_run_produces_timestamped_summary(tmp_path):
+    """Test single thread run produces timestamped summary.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = os.environ.copy()
     env["ROBOT_SF_MULTI_EXTRACTOR_TMP"] = str(tmp_path)
     env["ROBOT_SF_MULTI_EXTRACTOR_TEST_MODE"] = "1"

@@ -22,9 +22,9 @@ description: "Task list for enforcing Ruff docstring rules"
 
 **Purpose**: Establish baseline visibility into docstring gaps before changing configuration.
 
-- [ ] T001 Capture baseline Ruff docstring violations by running `uv run ruff check --select D,D417,D419,D102,D201` and saving the log to `output/issues/docstrings_baseline.txt`.
-- [ ] T002 [P] Append a repository-wide Python path inventory (robot_sf/, fast-pysf/, scripts/, tests/, examples/) to `specs/001-ruff-docstrings/research.md` for future traceability.
-- [ ] T003 [P] Create `output/issues/docstrings_todo.jsonl` and seed it with the modules that currently lack docstrings so remediation can be tracked.
+- [X] T001 Capture baseline Ruff docstring violations by running `uv run ruff check --select D,D417,D419,D102,D201` and saving the log to `output/issues/docstrings_baseline.txt`.
+- [X] T002 [P] Append a repository-wide Python path inventory (robot_sf/, fast-pysf/, scripts/, tests/, examples/) to `specs/001-ruff-docstrings/research.md` for future traceability.
+- [X] T003 [P] Create `output/issues/docstrings_todo.jsonl` and seed it with the modules that currently lack docstrings so remediation can be tracked.
 
 ---
 
@@ -32,9 +32,9 @@ description: "Task list for enforcing Ruff docstring rules"
 
 **Purpose**: Configure the core lint infrastructure that every user story relies on.
 
-- [ ] T004 Update `pyproject.toml` `[tool.ruff]` settings to enable rules D100-D107, D417, D419, D102, and D201 across the entire repository.
-- [ ] T005 Define `per-file-ignores` in `pyproject.toml` for generated or third-party directories (e.g., `fast-pysf/pysocialforce/_version.py`) so intentional exclusions are tracked.
-- [ ] T006 Document the DocstringRuleSet include/exclude patterns inside `specs/001-ruff-docstrings/data-model.md` so future contributors know which paths are governed.
+- [X] T004 Update `pyproject.toml` `[tool.ruff]` settings to enable rules D100-D107, D417, D419, D102, and D201 across the entire repository.
+- [X] T005 Define `per-file-ignores` in `pyproject.toml` for generated or third-party directories (e.g., `fast-pysf/pysocialforce/_version.py`) so intentional exclusions are tracked.
+- [X] T006 Document the DocstringRuleSet include/exclude patterns inside `specs/001-ruff-docstrings/data-model.md` so future contributors know which paths are governed.
 
 **Checkpoint**: Ruff configuration is authoritative; user stories can now leverage it.
 
@@ -48,12 +48,12 @@ description: "Task list for enforcing Ruff docstring rules"
 
 ### Implementation
 
-- [ ] T007 [US1] Update `.github/workflows/ci.yml` so the lint job runs `uv run ruff check` with the new docstring rule set and fails the workflow on violations.
-- [ ] T008 [US1] Add a small guard script `scripts/tools/validate_docstring_rules.py` that shells out to Ruff and exits non-zero when any docstring rule fails (used by CI and local scripts).
-- [ ] T009 [US1] Add "Docstring enforcement" guidance to `docs/dev_guide.md`, covering required sections (summary, Args, Returns, Raises) and pointing to the guard script.
-- [ ] T010 [US1] Update `README.md` to mention that PRs must satisfy Ruff docstring checks before review.
-- [ ] T011 [US1] Create `tests/tools/test_docstring_rule_config.py` that loads `pyproject.toml` and asserts the configured rule list matches the required set.
-- [ ] T012 [US1] Wire the new guard script into `.github/workflows/ci.yml` and `.specify/scripts/bash/check-prerequisites.sh` (lint section) so maintainers get consistent enforcement in both automation and manual checks.
+- [X] T007 [US1] Update `.github/workflows/ci.yml` so the lint job runs `uv run ruff check` with the new docstring rule set and fails the workflow on violations.
+- [X] T008 [US1] Add a small guard script `scripts/tools/validate_docstring_rules.py` that shells out to Ruff and exits non-zero when any docstring rule fails (used by CI and local scripts).
+- [X] T009 [US1] Add "Docstring enforcement" guidance to `docs/dev_guide.md`, covering required sections (summary, Args, Returns, Raises) and pointing to the guard script.
+- [X] T010 [US1] Update `README.md` to mention that PRs must satisfy Ruff docstring checks before review.
+- [X] T011 [US1] Create `tests/tools/test_docstring_rule_config.py` that loads `pyproject.toml` and asserts the configured rule list matches the required set.
+- [X] T012 [US1] Wire the new guard script into `.github/workflows/ci.yml` and `.specify/scripts/bash/check-prerequisites.sh` (lint section) so maintainers get consistent enforcement in both automation and manual checks.
 
 **Checkpoint**: Maintainers cannot merge code lacking compliant docstrings.
 
@@ -67,11 +67,11 @@ description: "Task list for enforcing Ruff docstring rules"
 
 ### Implementation
 
-- [ ] T013 [US2] Implement `scripts/tools/docstring_report.py` that runs `uv run ruff check --output-format json`, groups results by file, and writes a sortable summary to `output/issues/docstrings_summary.json`.
-- [ ] T014 [P] [US2] Extend `specs/001-ruff-docstrings/quickstart.md` with a walkthrough for running `scripts/tools/docstring_report.py` and interpreting grouped output.
-- [ ] T015 [US2] Add a "Docstring Report" VS Code task (and optional Make target) inside `.vscode/tasks.json` so contributors can launch the grouping script with one command.
-- [ ] T016 [US2] Publish a sample remediation checklist (top offenders, rule hints) to `specs/001-ruff-docstrings/research.md` using data from `output/issues/docstrings_summary.json`.
-- [ ] T017 [US2] Document the contributor workflow in `docs/dev_guide.md`, focusing on how to use grouped reports to clean modules without touching unrelated files.
+- [X] T013 [US2] Implement `scripts/tools/docstring_report.py` that runs `uv run ruff check --output-format json`, groups results by file, and writes a sortable summary to `output/issues/docstrings_summary.json`.
+- [X] T014 [P] [US2] Extend `specs/001-ruff-docstrings/quickstart.md` with a walkthrough for running `scripts/tools/docstring_report.py` and interpreting grouped output.
+- [X] T015 [US2] Add a "Docstring Report" VS Code task (and optional Make target) inside `.vscode/tasks.json` so contributors can launch the grouping script with one command.
+- [X] T016 [US2] Publish a sample remediation checklist (top offenders, rule hints) to `specs/001-ruff-docstrings/research.md` using data from `output/issues/docstrings_summary.json`.
+- [X] T017 [US2] Document the contributor workflow in `docs/dev_guide.md`, focusing on how to use grouped reports to clean modules without touching unrelated files.
 
 **Checkpoint**: Contributors have low-friction tooling to understand and fix docstring issues.
 
@@ -85,13 +85,13 @@ description: "Task list for enforcing Ruff docstring rules"
 
 ### Implementation
 
-- [ ] T018 [US3] Add full docstrings for factory helpers in `robot_sf/gym_env/environment_factory.py`, covering parameters, return environments, and side effects.
-- [ ] T019 [P] [US3] Document aggregation utilities in `robot_sf/benchmark/aggregate.py`, emphasizing metric grouping and bootstrap semantics.
-- [ ] T020 [P] [US3] Expand docstrings in `robot_sf/research/extractor_report.py` so statistical helpers describe inputs (dataframes/paths) and outputs (figures/JSON).
-- [ ] T021 [P] [US3] Annotate `scripts/training/train_ppo_with_pretrained_policy.py` functions (config loading, training loop, artifact writes) with docstrings suitable for CLI documentation.
-- [ ] T022 [P] [US3] Document command helpers in `scripts/tools/compare_training_runs.py`, including `_resolve_manifest_path` and report builders.
-- [ ] T023 [P] [US3] Update `examples/advanced/16_imitation_learning_pipeline.py` with docstrings summarizing each pipeline stage so generated docs explain the workflow.
-- [ ] T024 [US3] Add a lightweight doc-generation script `scripts/tools/build_api_docs.py` that runs `pdoc` and writes HTML/PDF output to `output/docs/api/` for smoke verification.
+- [X] T018 [US3] Add full docstrings for factory helpers in `robot_sf/gym_env/environment_factory.py`, covering parameters, return environments, and side effects.
+- [X] T019 [P] [US3] Document aggregation utilities in `robot_sf/benchmark/aggregate.py`, emphasizing metric grouping and bootstrap semantics.
+- [X] T020 [P] [US3] Expand docstrings in `robot_sf/research/extractor_report.py` so statistical helpers describe inputs (dataframes/paths) and outputs (figures/JSON).
+- [X] T021 [P] [US3] Annotate `scripts/training/train_ppo_with_pretrained_policy.py` functions (config loading, training loop, artifact writes) with docstrings suitable for CLI documentation.
+- [X] T022 [P] [US3] Document command helpers in `scripts/tools/compare_training_runs.py`, including `_resolve_manifest_path` and report builders.
+- [X] T023 [P] [US3] Update `examples/advanced/16_imitation_learning_pipeline.py` with docstrings summarizing each pipeline stage so generated docs explain the workflow.
+- [X] T024 [US3] Add a lightweight doc-generation script `scripts/tools/build_api_docs.py` that runs `pdoc` and writes HTML/PDF output to `output/docs/api/` for smoke verification.
 
 **Checkpoint**: Generated documentation reflects the enforced docstring quality.
 
@@ -101,10 +101,10 @@ description: "Task list for enforcing Ruff docstring rules"
 
 **Purpose**: Final cleanup, documentation, and validation after all user stories land.
 
-- [ ] T025 Update `CHANGELOG.md` with a summary of repo-wide docstring enforcement and tooling improvements.
-- [ ] T026 [P] Re-run `uv run ruff check` and `uv run pytest tests` (repo root) and attach the passing logs to `output/issues/docstrings_final.log`.
-- [ ] T027 [P] Remove temporary baseline artifacts (`output/issues/docstrings_baseline.txt`, `output/issues/docstrings_todo.jsonl`) once the final report is archived.
-- [ ] T028 Publish a short how-to section in `docs/README.md` pointing readers to the new quickstart and tooling for docstrings.
+- [X] T025 Update `CHANGELOG.md` with a summary of repo-wide docstring enforcement and tooling improvements.
+- [X] T026 [P] Re-run `uv run ruff check` and `uv run pytest tests` (repo root) and attach the passing logs to `output/issues/docstrings_final.log`.
+- [X] T027 [P] Remove temporary baseline artifacts (`output/issues/docstrings_baseline.txt`, `output/issues/docstrings_todo.jsonl`) once the final report is archived.
+- [X] T028 Publish a short how-to section in `docs/README.md` pointing readers to the new quickstart and tooling for docstrings.
 
 ---
 

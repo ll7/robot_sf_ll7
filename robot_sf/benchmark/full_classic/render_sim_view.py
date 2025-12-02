@@ -49,6 +49,11 @@ else:  # pragma: no cover - trivial branch
 
 
 def _assert_ready() -> None:
+    """Assert ready.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not has_pygame() or SimulationView is None or not simulation_view_ready():  # type: ignore
         raise RuntimeError(
             "SimulationView not available (pygame or probe failed); caller should fallback",
@@ -154,6 +159,16 @@ __all__ = ["generate_frames"]
 
 
 def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
+    """Build state.
+
+    Args:
+        step: Auto-generated placeholder description.
+        idx: Auto-generated placeholder description.
+        dt: Auto-generated placeholder description.
+
+    Returns:
+        VisualizableSimState: Auto-generated placeholder description.
+    """
     ped_positions = np.asarray(step.ped_positions or [], dtype=float)
     ray_vecs = (
         np.asarray(step.ray_vecs, dtype=float) if step.ray_vecs is not None else np.zeros((0, 2))
@@ -184,6 +199,14 @@ def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
 
 
 def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
+    """Load map def.
+
+    Args:
+        ep: Auto-generated placeholder description.
+
+    Returns:
+        MapDefinition | None: Auto-generated placeholder description.
+    """
     # Try to reuse already converted map from episode if present
     if hasattr(ep, "_map_def_cache"):
         return ep._map_def_cache
@@ -201,6 +224,16 @@ def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
 
 
 def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
+    """Build view.
+
+    Args:
+        episode: Auto-generated placeholder description.
+        fps: Auto-generated placeholder description.
+        video_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     map_def = _load_map_def(episode)
     view_kwargs: dict = {
         "record_video": True,

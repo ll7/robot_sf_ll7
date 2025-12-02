@@ -10,10 +10,20 @@ import importlib
 
 
 def _load():
+    """Load.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_seed_order_reproducible():
+    """Test seed order reproducible.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = _load()
     # Force non-dry execution
     if hasattr(mod, "DRY_RUN"):

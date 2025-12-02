@@ -20,6 +20,15 @@ from robot_sf.benchmark.metrics import (
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
+    """Make episode.
+
+    Args:
+        T: Auto-generated placeholder description.
+        K: Auto-generated placeholder description.
+
+    Returns:
+        EpisodeData: Auto-generated placeholder description.
+    """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
     robot_acc = np.zeros((T, 2))
@@ -39,12 +48,22 @@ def _make_episode(T: int, K: int) -> EpisodeData:
 
 
 def test_metrics_docstring_marks_implemented_and_not_stubbed():
+    """Test metrics docstring marks implemented and not stubbed.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     doc = (metrics_mod.__doc__ or "").lower()
     assert "stub" not in doc, "Docstring should not advertise implemented metrics as stubs"
     assert "implemented" in doc, "Docstring should describe implementation status"
 
 
 def test_metrics_keys_empty_crowd():
+    """Test metrics keys empty crowd.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ep = _make_episode(T=5, K=0)
     values = compute_all_metrics(ep, horizon=10)
     for name in METRIC_NAMES:
@@ -52,6 +71,11 @@ def test_metrics_keys_empty_crowd():
 
 
 def test_metrics_keys_all_collisions():
+    """Test metrics keys all collisions.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ep = _make_episode(T=5, K=3)
     # Overwrite positions to simulate overlap (robot at origin, peds too)
     ep.peds_pos[:] = 0.0
@@ -69,12 +93,22 @@ def test_metrics_keys_all_collisions():
 
 
 def test_metrics_partial_success_flag_present():
+    """Test metrics partial success flag present.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ep = _make_episode(T=5, K=2)
     vals = compute_all_metrics(ep, horizon=10)
     assert "success" in vals
 
 
 def test_near_miss_region_only():
+    """Test near miss region only.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Craft positions so robot at origin; pedestrians at 0.3m (>0.25 collision) and 0.45m
     T, K = 4, 2
     ep = _make_episode(T=T, K=K)
@@ -94,6 +128,11 @@ def test_near_miss_region_only():
 
 
 def test_mixed_collision_and_near_miss():
+    """Test mixed collision and near miss.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # First two timesteps collision (<0.25), next two near-miss (0.3)
     T = 4
     ep = _make_episode(T=T, K=1)
@@ -109,6 +148,11 @@ def test_mixed_collision_and_near_miss():
 
 
 def test_success_and_time_to_goal_norm_success_case():
+    """Test success and time to goal norm success case.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Robot moves linearly to goal without collisions
     T = 6
     ep = _make_episode(T=T, K=0)
@@ -124,12 +168,22 @@ def test_success_and_time_to_goal_norm_success_case():
 
 
 def test_time_to_goal_nan_when_goal_not_reached():
+    """Test time to goal nan when goal not reached.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ep = _make_episode(T=4, K=0)
     ep.reached_goal_step = None
     assert math.isnan(time_to_goal(ep))
 
 
 def test_success_failure_due_to_collision():
+    """Test success failure due to collision.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 5
     ep = _make_episode(T=T, K=1)
     # Robot moves, but pedestrian collides at step 1
@@ -143,6 +197,11 @@ def test_success_failure_due_to_collision():
 
 
 def test_path_efficiency_curved_path_less_than_one():
+    """Test path efficiency curved path less than one.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Robot zig-zags to goal increasing actual length
     T = 6
     ep = _make_episode(T=T, K=0)
@@ -162,6 +221,11 @@ def test_path_efficiency_curved_path_less_than_one():
 
 
 def test_force_metrics_basic():
+    """Test force metrics basic.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T, K = 5, 3
     ep = _make_episode(T=T, K=K)
     # Populate forces with increasing pattern
@@ -182,6 +246,11 @@ def test_force_metrics_basic():
 
 
 def test_force_metrics_no_peds():
+    """Test force metrics no peds.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ep = _make_episode(T=4, K=0)
     vals = compute_all_metrics(ep, horizon=10)
     assert np.isnan(vals["force_q50"])  # no pedestrians
@@ -360,6 +429,11 @@ def test_force_metrics_missing_force_data_flagged():
 
 
 def test_energy_and_jerk_mean():
+    """Test energy and jerk mean.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 6
     ep = _make_episode(T=T, K=0)
     # Construct acceleration as linearly increasing in x: a_t = t
@@ -374,6 +448,11 @@ def test_energy_and_jerk_mean():
 
 
 def test_curvature_mean():
+    """Test curvature mean.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 6
     ep = _make_episode(T=T, K=0)
 
@@ -399,6 +478,11 @@ def test_curvature_mean():
 
 
 def test_curvature_mean_straight_line():
+    """Test curvature mean straight line.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 6
     ep = _make_episode(T=T, K=0)
 
@@ -416,6 +500,11 @@ def test_curvature_mean_straight_line():
 
 
 def test_curvature_mean_insufficient_points():
+    """Test curvature mean insufficient points.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Test with fewer than 4 points (should return 0.0)
     T = 3
     ep = _make_episode(T=T, K=0)
@@ -429,6 +518,11 @@ def test_curvature_mean_insufficient_points():
 
 
 def test_curvature_mean_invalid_dt_zero():
+    """Test curvature mean invalid dt zero.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # dt == 0 should safely return 0.0
     T = 6
     ep = _make_episode(T=T, K=0)
@@ -440,6 +534,11 @@ def test_curvature_mean_invalid_dt_zero():
 
 
 def test_curvature_mean_invalid_dt_nan():
+    """Test curvature mean invalid dt nan.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # dt NaN should safely return 0.0
     T = 6
     ep = _make_episode(T=T, K=0)
@@ -450,12 +549,22 @@ def test_curvature_mean_invalid_dt_nan():
 
 
 def test_force_gradient_requires_grid():
+    """Test force gradient requires grid.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ep = _make_episode(T=3, K=1)
     vals = compute_all_metrics(ep, horizon=10)
     assert math.isnan(vals["force_gradient_norm_mean"])
 
 
 def test_force_gradient_norm_mean():
+    """Test force gradient norm mean.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Create a simple linear force field Fx = x, Fy = y so |F| = sqrt(x^2+y^2).
     # Gradient norm of |F| is 1 everywhere except at origin where it's undefined (we exclude by path).
     nx, ny = 6, 4
@@ -478,6 +587,11 @@ def test_force_gradient_norm_mean():
 
 
 def test_snqi_scoring():
+    """Test snqi scoring.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Construct two metric dicts: one ideal, one poor
     good = {
         "success": 1.0,

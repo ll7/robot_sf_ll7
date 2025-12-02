@@ -17,6 +17,14 @@ if TYPE_CHECKING:
 
 
 def test_generate_table_from_summary_with_ci(tmp_path: Path):
+    """Test generate table from summary with ci.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Minimal episodes (still required for other steps, but table will use summary)
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")  # dummy line; table not derived from it

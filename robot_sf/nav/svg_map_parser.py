@@ -214,6 +214,17 @@ class SvgMapConverter:
         # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create
         # minimal synthetic zones around first/last waypoint so downstream logic still works.
         def _safe_zone(index: int, zones: list[Rect], waypoint, kind: str) -> Rect:
+            """Safe zone.
+
+            Args:
+                index: Auto-generated placeholder description.
+                zones: Auto-generated placeholder description.
+                waypoint: Auto-generated placeholder description.
+                kind: Auto-generated placeholder description.
+
+            Returns:
+                Rect: Auto-generated placeholder description.
+            """
             if zones and 0 <= index < len(zones):
                 return zones[index]
             logger.warning(
@@ -502,6 +513,14 @@ class SvgMapConverter:
         return self.map_definition
 
     def __get_path_number(self, route: str) -> tuple[int, int]:
+        """Get path number.
+
+        Args:
+            route: Auto-generated placeholder description.
+
+        Returns:
+            tuple[int, int]: Auto-generated placeholder description.
+        """
         # routes have a label of the form 'ped_route_<spawn>_<goal>'
         numbers = re.findall(r"\d+", route)
         if numbers:
@@ -551,6 +570,15 @@ def convert_map(svg_file: str):
 
 
 def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
+    """Load single svg.
+
+    Args:
+        file_path: Auto-generated placeholder description.
+        strict: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, MapDefinition]: Auto-generated placeholder description.
+    """
     if file_path.suffix.lower() != ".svg":
         raise ValueError(f"Expected an SVG file, got: {file_path}")
     try:
@@ -566,6 +594,16 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
 
 
 def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str, MapDefinition]:
+    """Load svg directory.
+
+    Args:
+        dir_path: Auto-generated placeholder description.
+        pattern: Auto-generated placeholder description.
+        strict: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, MapDefinition]: Auto-generated placeholder description.
+    """
     svg_files = sorted(dir_path.glob(pattern))
     if not svg_files:
         raise ValueError(f"No SVG files found in directory {dir_path} with pattern '{pattern}'")

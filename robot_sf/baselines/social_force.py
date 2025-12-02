@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class SFPlannerConfig:
+    """SFPlannerConfig class."""
+
     # Kinematics
     mode: str = "velocity"  # "velocity" or "unicycle"
     v_max: float = 2.0
@@ -79,6 +81,8 @@ class SFPlannerConfig:
 
 @dataclass
 class Observation:
+    """Observation class."""
+
     dt: float
     robot: dict[str, Any]
     agents: list[dict[str, Any]]
@@ -86,23 +90,65 @@ class Observation:
 
 
 class BasePolicy:
+    """BasePolicy class."""
+
     def __init__(self, config: Any, *, seed: int | None = None):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
     def reset(self, *, seed: int | None = None) -> None:
+        """Reset.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
     def configure(self, config: Any) -> None:
+        """Configure.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
     def step(self, obs: Any) -> dict[str, float]:
+        """Step.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
     def close(self) -> None:
+        """Close.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         raise NotImplementedError
 
 
 class SocialForcePlanner(BasePolicy):
+    """SocialForcePlanner class."""
+
     # Numerical stability epsilon used for safe division and small-magnitude checks.
     EPSILON: float = 1e-9
 
@@ -110,6 +156,14 @@ class SocialForcePlanner(BasePolicy):
         """Expose randint() and normal() using numpy's Generator."""
 
         def __init__(self, seed: int | None):
+            """Init.
+
+            Args:
+                seed: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self._gen = np.random.default_rng(seed)
 
         def randint(
@@ -118,6 +172,16 @@ class SocialForcePlanner(BasePolicy):
             high: int | None = None,
             size: int | tuple[int, ...] | None = None,
         ):
+            """Randint.
+
+            Args:
+                low: Auto-generated placeholder description.
+                high: Auto-generated placeholder description.
+                size: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return self._gen.integers(low, high=high, size=size)
 
         def normal(
@@ -126,9 +190,28 @@ class SocialForcePlanner(BasePolicy):
             scale: float = 1.0,
             size: int | tuple[int, ...] | None = None,
         ):
+            """Normal.
+
+            Args:
+                loc: Auto-generated placeholder description.
+                scale: Auto-generated placeholder description.
+                size: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return self._gen.normal(loc, scale, size)
 
     def __init__(self, config: dict[str, Any] | SFPlannerConfig, *, seed: int | None = None):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = self._parse_config(config)
         self._rng = self._RNGCompat(seed)
         self._sim: Any | None = None
@@ -138,6 +221,14 @@ class SocialForcePlanner(BasePolicy):
         self._robot_state: dict[str, Any] | None = None
 
     def _parse_config(self, config: dict[str, Any] | SFPlannerConfig) -> SFPlannerConfig:
+        """Parse config.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            SFPlannerConfig: Auto-generated placeholder description.
+        """
         if isinstance(config, dict):
             return SFPlannerConfig(**config)  # type: ignore[arg-type]
         if isinstance(config, SFPlannerConfig):
@@ -145,6 +236,14 @@ class SocialForcePlanner(BasePolicy):
         raise TypeError(f"Invalid config type: {type(config)}")
 
     def reset(self, *, seed: int | None = None) -> None:
+        """Reset.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if seed is not None:
             self._rng = self._RNGCompat(seed)
         self._sim = None
@@ -154,9 +253,25 @@ class SocialForcePlanner(BasePolicy):
         self._robot_state = None
 
     def configure(self, config: dict[str, Any] | SFPlannerConfig) -> None:
+        """Configure.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict) -> dict[str, float]:
+        """Step.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -189,6 +304,14 @@ class SocialForcePlanner(BasePolicy):
         return action
 
     def _setup_simulation(self, obs: Observation) -> None:
+        """Setup simulation.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         agent_states = getattr(obs, "agents", [])
         n_agents = len(agent_states)
 
@@ -218,6 +341,11 @@ class SocialForcePlanner(BasePolicy):
         self._wrapper = FastPysfWrapper(self._sim)
 
     def _create_pysf_config(self) -> SimulatorConfig:
+        """Create pysf config.
+
+        Returns:
+            SimulatorConfig: Auto-generated placeholder description.
+        """
         return SimulatorConfig(
             scene_config=SceneConfig(
                 agent_radius=0.35,
@@ -304,6 +432,18 @@ class SocialForcePlanner(BasePolicy):
         robot_goal: np.ndarray,
         dt: float,
     ) -> dict[str, float]:
+        """Force to action.
+
+        Args:
+            force: Auto-generated placeholder description.
+            robot_pos: Auto-generated placeholder description.
+            robot_vel: Auto-generated placeholder description.
+            robot_goal: Auto-generated placeholder description.
+            dt: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         if self.config.action_space == "velocity":
             return self._force_to_velocity_action(force, robot_vel)
         if self.config.action_space == "unicycle":
@@ -315,6 +455,15 @@ class SocialForcePlanner(BasePolicy):
         force: np.ndarray,
         robot_vel: np.ndarray,
     ) -> dict[str, float]:
+        """Force to velocity action.
+
+        Args:
+            force: Auto-generated placeholder description.
+            robot_vel: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         desired_vel = robot_vel + force * self.config.tau
         if self.config.safety_clamp:
             speed = float(np.linalg.norm(desired_vel))
@@ -330,6 +479,18 @@ class SocialForcePlanner(BasePolicy):
         robot_goal: np.ndarray,
         dt: float,
     ) -> dict[str, float]:
+        """Force to unicycle action.
+
+        Args:
+            force: Auto-generated placeholder description.
+            robot_pos: Auto-generated placeholder description.
+            robot_vel: Auto-generated placeholder description.
+            robot_goal: Auto-generated placeholder description.
+            dt: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         mag = float(np.linalg.norm(force))
         if mag < 1e-6:
             return {"v": 0.0, "omega": 0.0}
@@ -361,10 +522,20 @@ class SocialForcePlanner(BasePolicy):
         return {"v": float(v), "omega": float(omega)}
 
     def close(self) -> None:
+        """Close.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._sim = None
         self._wrapper = None
 
     def get_metadata(self) -> dict[str, Any]:
+        """Get metadata.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         config_dict = asdict(self.config)
         config_hash = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[
             :16

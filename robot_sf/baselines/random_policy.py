@@ -16,6 +16,8 @@ import numpy as np
 
 @dataclass
 class RandomPlannerConfig:
+    """RandomPlannerConfig class."""
+
     mode: str = "velocity"  # "velocity" or "unicycle"
     v_max: float = 2.0
     omega_max: float = 1.0
@@ -26,6 +28,8 @@ class RandomPlannerConfig:
 
 @dataclass
 class Observation:
+    """Observation class."""
+
     dt: float
     robot: dict[str, Any]
     agents: list[dict[str, Any]]
@@ -33,12 +37,23 @@ class Observation:
 
 
 class RandomPlanner:
+    """RandomPlanner class."""
+
     def __init__(
         self,
         config: dict[str, Any] | RandomPlannerConfig,
         *,
         seed: int | None = None,
     ):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = self._parse_config(config)
         self._rng = np.random.default_rng(seed)
 
@@ -46,6 +61,14 @@ class RandomPlanner:
         self,
         config: dict[str, Any] | RandomPlannerConfig,
     ) -> RandomPlannerConfig:
+        """Parse config.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            RandomPlannerConfig: Auto-generated placeholder description.
+        """
         if isinstance(config, dict):
             return RandomPlannerConfig(**config)  # type: ignore[arg-type]
         if isinstance(config, RandomPlannerConfig):
@@ -53,13 +76,37 @@ class RandomPlanner:
         raise TypeError(f"Invalid config type: {type(config)}")
 
     def reset(self, *, seed: int | None = None) -> None:
+        """Reset.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
 
     def configure(self, config: dict[str, Any] | RandomPlannerConfig) -> None:
+        """Configure.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
+        """Step.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         # Support dict-style Observation
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
@@ -96,9 +143,19 @@ class RandomPlanner:
         raise ValueError(f"Unknown mode: {self.config.mode}")
 
     def close(self) -> None:  # For API symmetry
+        """Close.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         pass
 
     def get_metadata(self) -> dict[str, Any]:
+        """Get metadata.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         cfg = asdict(self.config)
         cfg_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
         return {"algorithm": "random", "config": cfg, "config_hash": cfg_hash}

@@ -14,6 +14,14 @@ from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestra
 
 
 def _synthetic_records(seeds: list[int]) -> list[dict[str, float]]:
+    """Synthetic records.
+
+    Args:
+        seeds: Auto-generated placeholder description.
+
+    Returns:
+        list[dict[str, float]]: Auto-generated placeholder description.
+    """
     records = []
     for s in seeds:
         records.append(
@@ -38,6 +46,14 @@ def _synthetic_records(seeds: list[int]) -> list[dict[str, float]]:
 
 
 def build_report(out_dir: Path) -> Path:
+    """Build report.
+
+    Args:
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     seeds = [1, 2, 3]
     records = _synthetic_records(seeds)
     baseline_ts = [r["timesteps_to_convergence"] for r in records if r["policy_type"] == "baseline"]
@@ -60,6 +76,14 @@ def build_report(out_dir: Path) -> Path:
 
 
 def build_ablation(out_dir: Path) -> Path:
+    """Build ablation.
+
+    Args:
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     params = {"bc_epochs": [5, 10], "dataset_size": [100, 200]}
     ab_orch = AblationOrchestrator(
         experiment_name="demo_ablation",
@@ -73,6 +97,11 @@ def build_ablation(out_dir: Path) -> Path:
 
 
 def main() -> None:
+    """Main.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="Demo: generate research report + ablation")
     parser.add_argument("--out", type=Path, required=True, help="Output directory root")
     args = parser.parse_args()

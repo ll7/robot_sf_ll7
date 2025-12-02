@@ -24,6 +24,16 @@ Record = Mapping[str, object]
 
 
 def _get_dotted(d: Mapping[str, object], path: str, default=None):
+    """Get dotted.
+
+    Args:
+        d: Auto-generated placeholder description.
+        path: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, Mapping) or part not in cur:  # type: ignore[operator]
@@ -45,6 +55,14 @@ def collect_grouped_values(
     """
 
     def _to_float(x: object | None) -> float | None:
+        """To float.
+
+        Args:
+            x: Auto-generated placeholder description.
+
+        Returns:
+            float | None: Auto-generated placeholder description.
+        """
         try:
             v = float(x)  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -73,15 +91,32 @@ def collect_grouped_values(
 
 @dataclass
 class DistPlotMeta:
+    """DistPlotMeta class."""
+
     wrote: list[str]
     pdfs: list[str]
 
 
 def _apply_rcparams() -> None:
+    """Apply rcparams.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     apply_latex_style()
 
 
 def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
+    """Maybe kde.
+
+    Args:
+        ax: Auto-generated placeholder description.
+        data: Auto-generated placeholder description.
+        color: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     try:
         from scipy.stats import gaussian_kde  # type: ignore
 

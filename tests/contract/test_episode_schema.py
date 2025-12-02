@@ -37,11 +37,21 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
+    """Load schema.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     text = SCHEMA_PATH.read_text()  # may raise FileNotFoundError (expected red)
     return json.loads(text)
 
 
 def test_episode_schema_invalid_sample_fails():
+    """Test episode schema invalid sample fails.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = _load_schema()
     invalid_record = {  # missing many required keys by design
         "episode_id": "abc123",
@@ -52,6 +62,11 @@ def test_episode_schema_invalid_sample_fails():
 
 
 def test_episode_schema_minimal_valid_passes_when_ready():
+    """Test episode schema minimal valid passes when ready.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = _load_schema()
     minimal = {
         # Placeholder minimal fields; update once schema is defined.

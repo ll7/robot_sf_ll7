@@ -11,6 +11,11 @@ from robot_sf.nav.svg_map_parser import convert_map
 
 
 def test_pedestrian_obstacle_avoidance():
+    """Test pedestrian obstacle avoidance.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     logger.info("Testing Pedestrian and Obstacle forces")
     map_def = convert_map("maps/svg_maps/example_map_with_obstacles.svg")
     logger.debug(f"type map_def: {type(map_def)}")

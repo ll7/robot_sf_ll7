@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """Cfg class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -26,6 +28,15 @@ class Cfg:
 
 
 def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
+    """Test performance flags over budget.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Provide simple record with minimal replay (synthetic path ignores replay)
     records = [
         {
@@ -41,7 +52,14 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 
     # Monkeypatch build to simulate long encode time & over-budget plots
     class FakeVideoArtifact:
+        """FakeVideoArtifact class."""
+
         def __init__(self):
+            """Init.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -53,6 +71,17 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
             self.peak_rss_mb = 30.0
 
     def fake_build(_cfg, _recs, _vdir, _rmap):
+        """Fake build.
+
+        Args:
+            _cfg: Auto-generated placeholder description.
+            _recs: Auto-generated placeholder description.
+            _vdir: Auto-generated placeholder description.
+            _rmap: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return [FakeVideoArtifact()]
 
     monkeypatch.setattr(visuals_mod, "_build_video_artifacts", fake_build)
@@ -61,6 +90,11 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
     timeline = [base, base + 3.1, base + 3.2, base + 3.25]
 
     def fake_perf_counter2():
+        """Fake perf counter2.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if len(timeline) == 1:
             return timeline[0]
         return timeline.pop(0)
@@ -75,9 +109,27 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 
 @pytest.mark.parametrize("peak", [101.0, 150.0])
 def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
+    """Test memory over budget flag.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+        peak: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     # Monkeypatch encoding to inject a synthetic success with high peak memory
     class FakeVideoArtifact:
+        """FakeVideoArtifact class."""
+
         def __init__(self):
+            """Init.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -89,6 +141,17 @@ def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
             self.peak_rss_mb = peak
 
     def fake_build_video(_cfg, _records, _videos_dir, _replay_map):
+        """Fake build video.
+
+        Args:
+            _cfg: Auto-generated placeholder description.
+            _records: Auto-generated placeholder description.
+            _videos_dir: Auto-generated placeholder description.
+            _replay_map: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return [FakeVideoArtifact()]
 
     monkeypatch.setattr(visuals_mod, "_build_video_artifacts", fake_build_video)

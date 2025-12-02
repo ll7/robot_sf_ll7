@@ -1,7 +1,14 @@
+"""Module test_simulator auto-generated docstring."""
+
 import pysocialforce as pysf
 
 
 def test_can_simulate_with_empty_map_no_peds():
+    """Test can simulate with empty map no peds.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     simulator = pysf.Simulator_v2()
     for _ in range(10):
         simulator.step()
@@ -9,6 +16,11 @@ def test_can_simulate_with_empty_map_no_peds():
 
 
 def test_can_simulate_with_populated_map():
+    """Test can simulate with populated map.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     obstacle01 = pysf.map_config.Obstacle([(10, 10), (15, 10), (15, 15), (10, 15)])
     obstacle02 = pysf.map_config.Obstacle([(20, 10), (25, 10), (25, 15), (20, 15)])
 

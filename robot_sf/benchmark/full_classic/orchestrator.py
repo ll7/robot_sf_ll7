@@ -55,6 +55,8 @@ except ImportError:
 
 @dataclass
 class BenchmarkManifest:
+    """BenchmarkManifest class."""
+
     output_root: Path
     git_hash: str
     scenario_matrix_hash: str
@@ -146,6 +148,14 @@ def _compute_git_hash(root: Path) -> str:
 
 
 def _prepare_output_dirs(cfg):
+    """Prepare output dirs.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     root = Path(cfg.output_root)
     episodes_dir = root / "episodes"
     aggregates_dir = root / "aggregates"
@@ -162,6 +172,17 @@ def _init_manifest(
     cfg,
     scenario_matrix_hash: str,
 ) -> BenchmarkManifest:
+    """Init manifest.
+
+    Args:
+        root: Auto-generated placeholder description.
+        episodes_path: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        scenario_matrix_hash: Auto-generated placeholder description.
+
+    Returns:
+        BenchmarkManifest: Auto-generated placeholder description.
+    """
     return BenchmarkManifest(
         output_root=root,
         git_hash=_compute_git_hash(root),
@@ -194,6 +215,17 @@ def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
 
 
 def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
+    """Write iteration artifacts.
+
+    Args:
+        root: Auto-generated placeholder description.
+        groups: Auto-generated placeholder description.
+        effects: Auto-generated placeholder description.
+        precision_report: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
     _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
     _write_json(
@@ -213,6 +245,14 @@ def _episode_id_from_job(job) -> str:
 
 
 def _scan_existing_episode_ids(path: Path) -> set[str]:
+    """Scan existing episode ids.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        set[str]: Auto-generated placeholder description.
+    """
     ids: set[str] = set()
     if not path.exists():
         return ids
@@ -250,6 +290,14 @@ _DEFAULT_SNQI_WEIGHTS = {
 
 @lru_cache(maxsize=4)
 def _load_snqi_weights(path: str | None):
+    """Load snqi weights.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if not path:
         return dict(_DEFAULT_SNQI_WEIGHTS)
     p = Path(path)
@@ -264,6 +312,15 @@ def _load_snqi_weights(path: str | None):
 
 
 def _resolve_horizon(job, cfg) -> int:
+    """Resolve horizon.
+
+    Args:
+        job: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     horizon = int(getattr(job, "horizon", 0) or 0)
     if getattr(cfg, "smoke", False):
         cap = int(getattr(cfg, "smoke_horizon_cap", 40) or 40)
@@ -272,6 +329,16 @@ def _resolve_horizon(job, cfg) -> int:
 
 
 def _build_env_config(scenario, cfg, horizon: int):
+    """Build env config.
+
+    Args:
+        scenario: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        horizon: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     raw = dict(getattr(scenario, "raw", {}))
     matrix_path = Path(cfg.scenario_matrix_path)
     matrix_dir = matrix_path.parent
@@ -299,6 +366,14 @@ def _build_env_config(scenario, cfg, horizon: int):
 
 
 def _simple_goal_policy(simulator) -> np.ndarray:
+    """Simple goal policy.
+
+    Args:
+        simulator: Auto-generated placeholder description.
+
+    Returns:
+        np.ndarray: Auto-generated placeholder description.
+    """
     robot_pos = np.asarray(simulator.robot_pos[0], dtype=float)
     goal = np.asarray(simulator.goal_pos[0], dtype=float)
     heading = float(simulator.robot_poses[0][1])
@@ -314,6 +389,15 @@ def _simple_goal_policy(simulator) -> np.ndarray:
 
 
 def _stack_ped_positions(series: list[np.ndarray], fill_value: float = 0.0) -> np.ndarray:
+    """Stack ped positions.
+
+    Args:
+        series: Auto-generated placeholder description.
+        fill_value: Auto-generated placeholder description.
+
+    Returns:
+        np.ndarray: Auto-generated placeholder description.
+    """
     max_len = max((len(p) for p in series), default=0)
     if max_len == 0:
         return np.zeros((len(series), 0, 2), dtype=float)
@@ -357,6 +441,15 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
 
 
 def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+    """Vel and acc.
+
+    Args:
+        pos: Auto-generated placeholder description.
+        dt: Auto-generated placeholder description.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Auto-generated placeholder description.
+    """
     if len(pos) == 0:
         return np.zeros((0, 2), dtype=float), np.zeros((0, 2), dtype=float)
     if len(pos) == 1 or dt <= 0:
@@ -373,6 +466,14 @@ def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _capture_visual_state(env):
+    """Capture visual state.
+
+    Args:
+        env: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if not hasattr(env, "_prepare_visualizable_state"):
         return None, None, None
     try:
@@ -414,6 +515,25 @@ def _compute_episode_metrics(
     goal: np.ndarray,
     horizon: int,
 ) -> dict[str, float]:
+    """Compute episode metrics.
+
+    Args:
+        job: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        robot_pos: Auto-generated placeholder description.
+        robot_vel: Auto-generated placeholder description.
+        robot_acc: Auto-generated placeholder description.
+        ped_pos: Auto-generated placeholder description.
+        ped_forces: Auto-generated placeholder description.
+        dt: Auto-generated placeholder description.
+        reached_goal_step: Auto-generated placeholder description.
+        goal: Auto-generated placeholder description.
+        horizon: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     shortest_path = float(np.linalg.norm(robot_pos[0] - goal)) if len(robot_pos) else float("nan")
     if not math.isfinite(shortest_path):
         logger.bind(
@@ -459,6 +579,18 @@ def _compute_episode_metrics(
 
 
 def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
+    """Init env for job.
+
+    Args:
+        job: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        horizon: Auto-generated placeholder description.
+        episode_id: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     config = _build_env_config(scenario, cfg, horizon)
     capture_replay = bool(getattr(cfg, "capture_replay", False))
     record_dir = Path(cfg.output_root)
@@ -510,6 +642,17 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
 
 
 def _rollout_episode(env, horizon: int, dt: float, replay_cap):
+    """Rollout episode.
+
+    Args:
+        env: Auto-generated placeholder description.
+        horizon: Auto-generated placeholder description.
+        dt: Auto-generated placeholder description.
+        replay_cap: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
@@ -557,6 +700,14 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
 
 
 def _close_env(env):
+    """Close env.
+
+    Args:
+        env: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         env.exit()
     except Exception:  # pragma: no cover
@@ -723,6 +874,15 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
 
 
 def _partition_jobs(existing_ids: set[str], job_iter: Iterable[object]) -> tuple[list[object], int]:
+    """Partition jobs.
+
+    Args:
+        existing_ids: Auto-generated placeholder description.
+        job_iter: Auto-generated placeholder description.
+
+    Returns:
+        tuple[list[object], int]: Auto-generated placeholder description.
+    """
     run_list: list[object] = []
     skip_count = 0
     for jb in job_iter:
@@ -740,6 +900,18 @@ def _execute_seq(
     cfg,
     manifest,
 ) -> Iterator[dict]:
+    """Execute seq.
+
+    Args:
+        job_list: Auto-generated placeholder description.
+        existing_ids: Auto-generated placeholder description.
+        episodes_path: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        manifest: Auto-generated placeholder description.
+
+    Returns:
+        Iterator[dict]: Auto-generated placeholder description.
+    """
     for jb in job_list:
         start = time.time()
         rec = _make_episode_record(jb, cfg)
@@ -753,8 +925,28 @@ def _execute_seq(
 
 
 def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
+    """Worker job wrapper.
+
+    Args:
+        job: Auto-generated placeholder description.
+        cfg_payload: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     class _TempCfg:
+        """TempCfg class."""
+
         def __init__(self, payload):
+            """Init.
+
+            Args:
+                payload: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             for k, v in payload.items():
                 setattr(self, k, v)
 
@@ -772,6 +964,19 @@ def _execute_parallel(
     manifest,
     workers: int,
 ) -> Iterator[dict]:
+    """Execute parallel.
+
+    Args:
+        job_list: Auto-generated placeholder description.
+        existing_ids: Auto-generated placeholder description.
+        episodes_path: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        manifest: Auto-generated placeholder description.
+        workers: Auto-generated placeholder description.
+
+    Returns:
+        Iterator[dict]: Auto-generated placeholder description.
+    """
     logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
     cfg_payload = vars(cfg).copy() if hasattr(cfg, "__dict__") else {}
     if "disable_videos" not in cfg_payload:
@@ -1023,6 +1228,15 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
 
 
 def _write_json(path: Path, obj):  # helper
+    """Write json.
+
+    Args:
+        path: Auto-generated placeholder description.
+        obj: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         tmp = path.with_suffix(path.suffix + ".tmp")
         with tmp.open("w", encoding="utf-8") as f:
@@ -1033,6 +1247,14 @@ def _write_json(path: Path, obj):  # helper
 
 
 def _serialize_groups(groups):
+    """Serialize groups.
+
+    Args:
+        groups: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = []
     for g in groups:
         out.append(
@@ -1056,6 +1278,14 @@ def _serialize_groups(groups):
 
 
 def _serialize_effects(effects):
+    """Serialize effects.
+
+    Args:
+        effects: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = []
     for rep in effects:
         out.append(
@@ -1077,6 +1307,14 @@ def _serialize_effects(effects):
 
 
 def _serialize_precision(report):
+    """Serialize precision.
+
+    Args:
+        report: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return {
         "final_pass": report.final_pass,
         "evaluations": [

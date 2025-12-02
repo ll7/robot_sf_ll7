@@ -20,6 +20,15 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 @pytest.mark.timeout(60)
 def test_smoke_run_creates_structure(config_factory, perf_policy):
+    """Test smoke run creates structure.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+        perf_policy: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     start = time.perf_counter()
     cfg = config_factory(smoke=True, workers=1)
     manifest = run_full_benchmark(cfg)

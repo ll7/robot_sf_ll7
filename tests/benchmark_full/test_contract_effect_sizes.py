@@ -11,8 +11,25 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 def test_compute_effect_sizes_structure():
+    """Test compute effect sizes structure.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     class _Metric:
+        """Metric class."""
+
         def __init__(self, name, mean):
+            """Init.
+
+            Args:
+                name: Auto-generated placeholder description.
+                mean: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.name = name
             self.mean = mean
             self.median = mean
@@ -21,7 +38,19 @@ def test_compute_effect_sizes_structure():
             self.median_ci = None
 
     class _Group:
+        """Group class."""
+
         def __init__(self, archetype, density, mean_collision):
+            """Init.
+
+            Args:
+                archetype: Auto-generated placeholder description.
+                density: Auto-generated placeholder description.
+                mean_collision: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.archetype = archetype
             self.density = density
             self.count = 10
@@ -33,6 +62,8 @@ def test_compute_effect_sizes_structure():
     ]
 
     class _Cfg:
+        """Cfg class."""
+
         effect_size_reference_density = "low"
 
     reports = compute_effect_sizes(groups, _Cfg())

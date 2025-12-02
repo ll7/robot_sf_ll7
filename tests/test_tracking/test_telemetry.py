@@ -14,14 +14,37 @@ from robot_sf.telemetry.sampler import TelemetrySampler
 
 
 class _DummyWriter:
+    """DummyWriter class."""
+
     def __init__(self) -> None:
+        """Init.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.snapshots: list[TelemetrySnapshot] = []
 
     def append_telemetry_snapshot(self, snapshot: TelemetrySnapshot) -> None:
+        """Append telemetry snapshot.
+
+        Args:
+            snapshot: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.snapshots.append(snapshot)
 
 
 def test_sampler_emits_fallback_notes_when_psutil_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test sampler emits fallback notes when psutil missing.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     writer = _DummyWriter()
     fake_resource = SimpleNamespace(
         RUSAGE_SELF=0,
@@ -54,6 +77,11 @@ def test_sampler_emits_fallback_notes_when_psutil_missing(monkeypatch: pytest.Mo
 
 
 def test_recommendation_engine_triggers_all_rules() -> None:
+    """Test recommendation engine triggers all rules.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     engine = RecommendationEngine(
         rules=RecommendationRules(
             throughput_baseline=10.0,

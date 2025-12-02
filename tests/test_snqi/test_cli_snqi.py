@@ -29,6 +29,14 @@ BIN = ["uv", "run", "robot_sf_bench"]  # rely on project script entry via uv
 
 @pytest.fixture()
 def snqi_inputs(tmp_path: Path):
+    """Snqi inputs.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
     output = tmp_path / "out.json"
@@ -46,6 +54,15 @@ def _run_cmd(
     args: list[str],
     env_extra: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
+    """Run cmd.
+
+    Args:
+        args: Auto-generated placeholder description.
+        env_extra: Auto-generated placeholder description.
+
+    Returns:
+        subprocess.CompletedProcess: Auto-generated placeholder description.
+    """
     env = os.environ.copy()
     env["ROBOT_SF_SNQI_LIGHT_TEST"] = "1"  # ensure fast path
     if env_extra:
@@ -54,6 +71,14 @@ def _run_cmd(
 
 
 def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
+    """Test snqi optimize fast path.
+
+    Args:
+        snqi_inputs: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cp = _run_cmd(
         [
             *BIN,
@@ -71,6 +96,14 @@ def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
 
 
 def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
+    """Test snqi recompute fast path.
+
+    Args:
+        snqi_inputs: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cp = _run_cmd(
         [
             *BIN,
@@ -88,6 +121,11 @@ def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
 
 
 def test_snqi_missing_subcommand():
+    """Test snqi missing subcommand.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cp = _run_cmd([*BIN, "snqi"])  # no subcommand
     # Argparse prints help and we expect non-zero exit (2 from our dispatcher)
     assert cp.returncode == 2, cp.stderr

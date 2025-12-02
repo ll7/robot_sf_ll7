@@ -52,6 +52,8 @@ class DifferentialDriveSettings:
 
 @dataclass
 class DifferentialDriveState:
+    """DifferentialDriveState class."""
+
     pose: RobotPose = ((0.0, 0.0), 0.0)
     velocity: PolarVec2D = (0.0, 0.0)
     last_wheel_speeds: WheelSpeedState = (0.0, 0.0)

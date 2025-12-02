@@ -23,10 +23,20 @@ import pytest
 
 
 def _demo_module():
+    """Demo module.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_model_path_missing_provides_actionable_message():
+    """Test model path missing provides actionable message.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = _demo_module()
     # Patch constants: ensure DRY_RUN disabled and model path points to definitely-missing file.
     original_dry = getattr(mod, "DRY_RUN", None)

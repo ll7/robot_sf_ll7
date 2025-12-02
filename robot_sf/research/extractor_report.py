@@ -25,6 +25,7 @@ configure_matplotlib_backend()
 
 
 def _latex_escape(text: str) -> str:
+    """Escape LaTeX special characters so experiment names render correctly."""
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")
@@ -38,6 +39,8 @@ def _latex_escape(text: str) -> str:
 
 @dataclass
 class ReportConfig:
+    """ReportConfig class."""
+
     experiment_name: str
     hypothesis: str | None
     significance_level: float
@@ -46,10 +49,12 @@ class ReportConfig:
 
 
 def _timestamp() -> str:
+    """Return a UTC timestamp suitable for embedding in the report."""
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
+    """Load the orchestrator's ``summary.json`` into a dictionary."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
@@ -57,6 +62,7 @@ def _load_summary(path: Path) -> dict[str, Any]:
 
 
 def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | None:
+    """Copy the training config into the report directory when available."""
     if config_path is None or not config_path.exists():
         return None
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -66,6 +72,7 @@ def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | Non
 
 
 def _git_hash() -> str:
+    """Return the short git hash (or ``unknown`` when unavailable)."""
     try:
         return (
             subprocess.check_output(
@@ -79,6 +86,7 @@ def _git_hash() -> str:
 
 
 def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
+    """Collect numeric metric values from extractor records."""
     vals: list[float] = []
     for rec in records:
         metrics = rec.get("metrics") or {}
@@ -89,12 +97,14 @@ def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
 
 
 def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[str, Path]:
+    """Generate basic bar charts for reward and sample-efficiency metrics."""
     import matplotlib.pyplot as plt
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
 
     def _collect_named_metric(metric_key: str) -> list[tuple[str, float]]:
+        """Return ``(extractor_name, metric_value)`` pairs for plotting."""
         aligned: list[tuple[str, float]] = []
         for idx, rec in enumerate(records):
             metrics = rec.get("metrics") or {}
@@ -143,10 +153,19 @@ def _render_markdown(
     figures: dict[str, Path],
     metadata_path: Path,
 ) -> str:
+    """Render the full Markdown report and return its contents."""
     run_id = summary.get("run_id", "unknown")
     output_dir = metadata_path.parent
 
     def _fmt_stat(value: float | None) -> str:
+        """Format statistics for Markdown output.
+
+        Args:
+            value: Metric to format; ``None`` uses a placeholder.
+
+        Returns:
+            str: ``\"n/a\"`` for missing values or a four-decimal string otherwise.
+        """
         return "n/a" if value is None else f"{value:.4f}"
 
     lines = [
@@ -206,7 +225,17 @@ def _render_latex(
     metadata_path: Path,
     output_path: Path,
 ) -> None:
+    """Render the LaTeX variant of the report when requested."""
+
     def _fmt_stat(value: float | None) -> str:
+        """Format statistics for LaTeX output.
+
+        Args:
+            value: Metric to format; ``None`` uses a placeholder.
+
+        Returns:
+            str: ``\"n/a\"`` for missing values or a four-decimal string otherwise.
+        """
         return "n/a" if value is None else f"{value:.4f}"
 
     run_id = summary.get("run_id", "unknown")
@@ -276,6 +305,7 @@ def _stats_against_baseline(
     baseline_vals: list[float],
     candidate_vals: list[float],
 ) -> tuple[float | None, float | None]:
+    """Run Welch's t-test + Cohen's d for candidate vs baseline metrics."""
     test_result = welch_t_test(baseline_vals, candidate_vals)
     effect = cohen_d_independent(baseline_vals, candidate_vals)
     return test_result.get("p_value"), effect
@@ -288,6 +318,18 @@ def generate_extractor_report(
     config: ReportConfig,
     config_path: Path | None = None,
 ) -> dict[str, Path | None]:
+    """Generate Markdown (and optional LaTeX) reports from a training summary.
+
+    Args:
+        summary_path: Path to the orchestrator ``summary.json``.
+        output_root: Directory in which the report folder is created.
+        config: Report configuration bundle.
+        config_path: Optional path to the training config that should be archived.
+
+    Returns:
+        dict[str, Path | None]: Paths to the generated report, metadata, figure dir,
+        data dir, and optional LaTeX file.
+    """
     summary = _load_summary(summary_path)
     run_id = summary.get("run_id", "unknown")
     output_dir = output_root / f"{config.experiment_name}_{run_id}"

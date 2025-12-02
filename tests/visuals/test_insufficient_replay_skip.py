@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class DummyCfg:
+    """DummyCfg class."""
+
     output_root = ".tmp_test_visuals_insufficient"
     smoke = False
     disable_videos = False
@@ -33,6 +35,14 @@ class DummyCfg:
 
 
 def test_insufficient_replay_skip(tmp_path: Path):
+    """Test insufficient replay skip.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Skip dynamically if SimulationView truly unavailable
     try:
         importlib.import_module("robot_sf.render.sim_view")

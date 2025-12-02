@@ -166,6 +166,11 @@ class SensorFusion:
     cache_steps: int = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Initialize the number of steps to cache based on the LiDAR observation space
         self.cache_steps = self.unnormed_obs_space[OBS_RAYS].shape[0]
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)

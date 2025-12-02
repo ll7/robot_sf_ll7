@@ -16,6 +16,15 @@ if TYPE_CHECKING:
 
 
 def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
+    """Base cmd.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     return [
         "uv",
         "run",
@@ -38,6 +47,14 @@ def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
 
 
 def test_missing_ci_warning(tmp_path: Path):
+    """Test missing ci warning.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")
     # Summary without mean_ci
@@ -61,6 +78,14 @@ def test_missing_ci_warning(tmp_path: Path):
 
 
 def test_custom_ci_suffix(tmp_path: Path):
+    """Test custom ci suffix.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")
     summary = {"algoA": {"collisions": {"mean": 0.2, "mean_ci": [0.1, 0.3]}}}

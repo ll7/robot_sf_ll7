@@ -41,12 +41,10 @@ class EmptyRobotEnv(Env):
         """
         Initialize the Robot Environment.
 
-        Parameters:
-        - env_config (EnvSettings): Configuration for environment settings.
-        - reward_func (Callable[[dict], float]): Reward function that takes
-            a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as
-            visualizations.
+        Args:
+            env_config: Environment configuration settings.
+            reward_func: Reward function that consumes the metadata dict produced by :meth:`RobotState.meta_dict`.
+            debug: Whether to enable debug visualizations.
         """
 
         # Environment configuration details
@@ -102,14 +100,11 @@ class EmptyRobotEnv(Env):
         """
         Execute one time step within the environment.
 
-        Parameters:
-        - action: Action to be executed.
+        Args:
+            action: Action to execute (velocity or acceleration tuple depending on config).
 
         Returns:
-        - obs: Observation after taking the action.
-        - reward: Calculated reward for the taken action.
-        - term: Boolean indicating if the episode has terminated.
-        - info: Additional information as dictionary.
+            tuple: Observation, reward, termination flag, and metadata dict.
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)

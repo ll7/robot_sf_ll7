@@ -16,6 +16,11 @@ SOFT_THRESHOLD_SECONDS = 4.0  # relaxed after fast-path; still a guard vs large 
 
 
 def test_demo_runtime_under_threshold():
+    """Test demo runtime under threshold.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Set fast demo env var BEFORE importing module so import-time constants / logic can read it
     os.environ["ROBOT_SF_FAST_DEMO"] = "1"
     mod = importlib.import_module("examples.classic_interactions_pygame")

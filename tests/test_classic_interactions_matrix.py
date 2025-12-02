@@ -36,22 +36,48 @@ RECOMMENDED_RANGE = (0.02, 0.08)
 
 
 def load_yaml(path: Path) -> dict:
+    """Load yaml.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 @pytest.mark.parametrize("path", [SCENARIO_FILE])
 def test_yaml_exists(path: Path) -> None:
+    """Test yaml exists.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     assert path.exists(), f"Scenario file missing: {path}"
 
 
 def test_yaml_parses() -> None:
+    """Test yaml parses.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     data = load_yaml(SCENARIO_FILE)
     assert "scenarios" in data and isinstance(data["scenarios"], list)
     assert data["scenarios"], "No scenarios defined"
 
 
 def test_each_scenario_structure_and_files() -> None:
+    """Test each scenario structure and files.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     data = load_yaml(SCENARIO_FILE)
     for scenario in data["scenarios"]:
         missing = REQUIRED_SCENARIO_KEYS - scenario.keys()
@@ -86,6 +112,11 @@ def test_each_scenario_structure_and_files() -> None:
 
 
 def test_seed_lists_have_length() -> None:
+    """Test seed lists have length.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     data = load_yaml(SCENARIO_FILE)
     for scenario in data["scenarios"]:
         seeds = scenario.get("seeds")

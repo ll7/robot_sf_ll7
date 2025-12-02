@@ -17,6 +17,15 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
+    """Make episode.
+
+    Args:
+        T: Auto-generated placeholder description.
+        K: Auto-generated placeholder description.
+
+    Returns:
+        EpisodeData: Auto-generated placeholder description.
+    """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
     robot_acc = np.zeros((T, 2))
@@ -36,6 +45,11 @@ def _make_episode(T: int, K: int) -> EpisodeData:
 
 
 def main() -> None:
+    """Main.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     T, K = 5, 3
     ep = _make_episode(T=T, K=K)
 

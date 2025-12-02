@@ -1,3 +1,5 @@
+"""Module test_algorithm_metadata auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +14,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_algorithm_metadata_present(tmp_path: Path):
+    """Test algorithm metadata present.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     matrix = [
         {
             "id": "algo-meta-smoke",

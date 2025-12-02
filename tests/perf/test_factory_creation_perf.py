@@ -25,6 +25,14 @@ ITERATIONS = 2  # keep light for CI; baseline may have been generated with more
 
 
 def _time_once(fn):  # minimal inline timing to avoid importing heavy script
+    """Time once.
+
+    Args:
+        fn: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     import time
 
     start = time.perf_counter()
@@ -44,6 +52,14 @@ def _time_once(fn):  # minimal inline timing to avoid importing heavy script
     reason="Baseline file missing; run baseline script first.",
 )
 def test_factory_creation_mean_within_budget(monkeypatch):
+    """Test factory creation mean within budget.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Disable fast demo shortcut if present
     monkeypatch.delenv("ROBOT_SF_FAST_DEMO", raising=False)
 

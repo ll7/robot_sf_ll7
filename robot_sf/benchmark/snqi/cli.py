@@ -83,6 +83,14 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
 
 def _load_episodes_jsonl(path: Path) -> list[dict]:
+    """Load episodes jsonl.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        list[dict]: Auto-generated placeholder description.
+    """
     episodes: list[dict] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -97,6 +105,15 @@ def _load_episodes_jsonl(path: Path) -> list[dict]:
 
 
 def _extract_metric_values(episodes: Iterable[dict], metric: str) -> list[float]:
+    """Extract metric values.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+        metric: Auto-generated placeholder description.
+
+    Returns:
+        list[float]: Auto-generated placeholder description.
+    """
     vals = []
     for ep in episodes:
         metrics = ep.get("metrics", {})

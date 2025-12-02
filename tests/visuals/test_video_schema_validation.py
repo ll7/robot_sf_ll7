@@ -25,6 +25,11 @@ if jsonschema_spec:  # type: ignore
 
 
 def load_schema():  # pragma: no cover - trivial IO helper
+    """Load schema.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return json.loads(SCHEMA_PATH.read_text())
 
 
@@ -35,10 +40,20 @@ def validate(instance):
 
 
 def test_valid_minimal_manifest():
+    """Test valid minimal manifest.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     validate({"artifacts": []})  # empty list allowed
 
 
 def test_valid_success_entry():
+    """Test valid success entry.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     validate(
         {
             "artifacts": [
@@ -54,12 +69,22 @@ def test_valid_success_entry():
 
 
 def test_missing_required_field():
+    """Test missing required field.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Expect schema validation failure due to missing required 'episode_id' field
     with pytest.raises(jsonschema.ValidationError):  # type: ignore[name-defined]
         validate({"artifacts": [{"renderer": "synthetic", "status": "skipped"}]})
 
 
 def test_success_without_filename_fails():
+    """Test success without filename fails.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Success status requires a filename according to schema
     with pytest.raises(jsonschema.ValidationError):  # type: ignore[name-defined]
         validate({"artifacts": [{"episode_id": "1", "renderer": "synthetic", "status": "success"}]})

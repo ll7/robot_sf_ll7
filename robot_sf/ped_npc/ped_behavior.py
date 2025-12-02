@@ -22,9 +22,19 @@ class PedestrianBehavior(Protocol):
     """
 
     def step(self):
+        """Step.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
     def reset(self):
+        """Reset.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
 

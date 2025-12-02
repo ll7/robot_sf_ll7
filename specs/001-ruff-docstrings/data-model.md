@@ -7,9 +7,10 @@
 - **Fields**:
   - `name` (string) – human-readable identifier (e.g., "docstrings_full_repo").
   - `rules` (list[string]) – ordered list of rule codes (D100–D107, D417, D419, D102, D201).
-  - `include_paths` (list[path]) – glob patterns covered by enforcement.
-  - `exclude_paths` (list[path]) – explicit exemptions (generated/vendor code) with justification links.
-  - `severity` (enum: warning|error) – gating level; must be `error` for CI per requirements.
+- `include_paths` (list[path]) – glob patterns covered by enforcement.
+- `exclude_paths` (list[path]) – explicit exemptions (generated/vendor code) with justification links.
+  - `docs/dev/issues/**/*.ipynb` – archival notebooks treated as generated assets; they retain lint coverage but are exempted from docstring rules.
+- `severity` (enum: warning|error) – gating level; must be `error` for CI per requirements.
 - **Relationships**: Referenced by `LintWorkflow` to determine gating behavior.
 
 ### LintWorkflow

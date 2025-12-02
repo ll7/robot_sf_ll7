@@ -18,6 +18,8 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
+    """Cfg class."""
+
     def __init__(
         self,
         tmp_path: Path,
@@ -25,6 +27,17 @@ class _Cfg:
         capture_replay: bool = True,
         scenario_path: Path | None = None,
     ):
+        """Init.
+
+        Args:
+            tmp_path: Auto-generated placeholder description.
+            video_renderer: Auto-generated placeholder description.
+            capture_replay: Auto-generated placeholder description.
+            scenario_path: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         scenario_file = scenario_path or write_minimal_matrix(tmp_path)
@@ -47,10 +60,26 @@ class _Cfg:
 
 
 def _read(path: Path):
+    """Read.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_video_renderer_forced_synthetic(tmp_path):
+    """Test video renderer forced synthetic.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = _Cfg(tmp_path / "synthetic", video_renderer="synthetic", capture_replay=True)
     run_full_benchmark(cfg)
     manifest = Path(cfg.output_root) / "reports" / "video_artifacts.json"
@@ -63,6 +92,14 @@ def test_video_renderer_forced_synthetic(tmp_path):
 
 
 def test_video_renderer_forced_sim_view_missing(tmp_path):
+    """Test video renderer forced sim view missing.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Force sim-view but disable replay capture so it cannot render; expect skipped simulation_view artifacts
     cfg = _Cfg(tmp_path / "simview_missing", video_renderer="sim-view", capture_replay=False)
     run_full_benchmark(cfg)

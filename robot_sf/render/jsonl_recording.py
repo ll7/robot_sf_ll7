@@ -82,11 +82,13 @@ class JSONLRecorder:
         """Initialize the JSONL recorder.
 
         Args:
-            output_dir: Directory to save recordings
-            suite: Test suite name for file naming
-            scenario: Scenario name for file naming
-            algorithm: Algorithm name for file naming
-            seed: Random seed for file naming
+            output_dir: Directory to save recordings.
+            suite: Suite name baked into filenames.
+            scenario: Scenario name baked into filenames.
+            algorithm: Algorithm/agent identifier baked into filenames.
+            seed: Seed baked into filenames.
+            flush_every_n: Flush frequency; ``None`` disables periodic flushing.
+            flush_on_episode_end: Whether to flush when an episode completes.
         """
         resolved_output = resolve_artifact_path(output_dir)
         self.output_dir = Path(resolved_output)

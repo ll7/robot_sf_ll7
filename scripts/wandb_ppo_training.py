@@ -49,6 +49,11 @@ DIFFICULTY = wandb_config["difficulty"]
 
 
 def make_env():
+    """Make env.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     config = EnvSettings()
     config.sim_config.ped_density_by_difficulty = ped_densities
     config.sim_config.difficulty = DIFFICULTY

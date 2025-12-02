@@ -49,6 +49,8 @@ __all__ = [
 
 @dataclass
 class AggregateMetric:  # mirrors spec (subset for current needs)
+    """AggregateMetric class."""
+
     name: str
     mean: float
     median: float
@@ -59,6 +61,8 @@ class AggregateMetric:  # mirrors spec (subset for current needs)
 
 @dataclass
 class AggregateMetricsGroup:
+    """AggregateMetricsGroup class."""
+
     archetype: str
     density: str
     count: int
@@ -66,6 +70,15 @@ class AggregateMetricsGroup:
 
 
 def _percentile(sorted_vals: list[float], p: float) -> float:
+    """Percentile.
+
+    Args:
+        sorted_vals: Auto-generated placeholder description.
+        p: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     if not sorted_vals:
         return math.nan
     if p <= 0:
@@ -88,6 +101,17 @@ def _bootstrap_ci(
     conf: float,
     rng: random.Random,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Bootstrap ci.
+
+    Args:
+        values: Auto-generated placeholder description.
+        samples: Auto-generated placeholder description.
+        conf: Auto-generated placeholder description.
+        rng: Auto-generated placeholder description.
+
+    Returns:
+        tuple[tuple[float, float], tuple[float, float]]: Auto-generated placeholder description.
+    """
     if not values:
         nan_pair = (math.nan, math.nan)
         return nan_pair, nan_pair
@@ -114,6 +138,15 @@ def _bootstrap_ci(
 
 
 def aggregate_metrics(records: Iterable[dict], cfg):  # T030
+    """Aggregate metrics.
+
+    Args:
+        records: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     groups_raw = _group_records(records)
     if not groups_raw:
         return []
@@ -144,6 +177,14 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
 
 
 def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]:
+    """Group records.
+
+    Args:
+        records: Auto-generated placeholder description.
+
+    Returns:
+        dict[tuple[str, str], list[dict]]: Auto-generated placeholder description.
+    """
     groups: dict[tuple[str, str], list[dict]] = {}
     for rec in records:
         try:
@@ -160,6 +201,14 @@ def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]
 
 
 def _bootstrap_params(cfg) -> tuple[int, float, int]:
+    """Bootstrap params.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        tuple[int, float, int]: Auto-generated placeholder description.
+    """
     samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
     if getattr(cfg, "smoke", False):
         samples = min(samples, 300)
@@ -169,6 +218,14 @@ def _bootstrap_params(cfg) -> tuple[int, float, int]:
 
 
 def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
+    """Collect metric values.
+
+    Args:
+        recs: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, list[float]]: Auto-generated placeholder description.
+    """
     vals: dict[str, list[float]] = {}
     for r in recs:
         for k, v in r.get("metrics", {}).items():
@@ -187,6 +244,20 @@ def _aggregate_single_metric(
     bootstrap_samples: int,
     conf: float,
 ) -> AggregateMetric:
+    """Aggregate single metric.
+
+    Args:
+        values: Auto-generated placeholder description.
+        arch: Auto-generated placeholder description.
+        dens: Auto-generated placeholder description.
+        metric_name: Auto-generated placeholder description.
+        master_seed: Auto-generated placeholder description.
+        bootstrap_samples: Auto-generated placeholder description.
+        conf: Auto-generated placeholder description.
+
+    Returns:
+        AggregateMetric: Auto-generated placeholder description.
+    """
     finite_values = [v for v in values if math.isfinite(v)]
     non_finite = len(values) - len(finite_values)
     if non_finite:
@@ -254,6 +325,14 @@ def _wilson_interval(p: float, n: int, conf: float) -> tuple[float, float]:  # T
 
 
 def _z_from_conf(conf: float) -> float:
+    """Z from conf.
+
+    Args:
+        conf: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     # Map a set of common confidence levels; fallback to 0.95 if unknown.
     mapping = {
         0.90: 1.6448536269514722,

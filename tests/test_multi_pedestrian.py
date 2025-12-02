@@ -11,6 +11,11 @@ from robot_sf.nav.map_config import MapDefinitionPool
 
 
 def test_multi_pedestrian_map_definition():
+    """Test multi pedestrian map definition.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     map_def = create_multi_pedestrian_map()
     assert len(map_def.single_pedestrians) == 4  # T033: exactly 4 single pedestrians
     ids = {ped.id for ped in map_def.single_pedestrians}
@@ -29,6 +34,11 @@ def test_multi_pedestrian_map_definition():
 
 
 def test_multi_pedestrian_env_smoke():
+    """Test multi pedestrian env smoke.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     map_def = create_multi_pedestrian_map()
     pool = MapDefinitionPool(map_defs={"multi_ped": map_def})
     config = RobotSimulationConfig()

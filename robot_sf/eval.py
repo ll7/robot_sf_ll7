@@ -1,3 +1,5 @@
+"""Module eval auto-generated docstring."""
+
 from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -5,6 +7,8 @@ from statistics import mean
 
 
 class EnvOutcome(IntEnum):
+    """EnvOutcome class."""
+
     REACHED_GOAL = 0
     TIMEOUT = 1
     PEDESTRIAN_COLLISION = 2
@@ -16,59 +20,129 @@ class EnvOutcome(IntEnum):
 
 @dataclass
 class EnvMetrics:
+    """EnvMetrics class."""
+
     route_outcomes: list[EnvOutcome] = field(default_factory=list)
     intermediate_goal_outcomes: list[EnvOutcome] = field(default_factory=list)
     cache_size: int = 10
 
     @property
     def total_routes(self) -> int:
+        """Total routes.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return max(len(self.route_outcomes), 1)
 
     @property
     def total_intermediate_goals(self) -> int:
+        """Total intermediate goals.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return max(len(self.intermediate_goal_outcomes), 1)
 
     @property
     def pedestrian_collisions(self) -> int:
+        """Pedestrian collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
 
     @property
     def obstacle_collisions(self) -> int:
+        """Obstacle collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
 
     @property
     def exceeded_timesteps(self) -> int:
+        """Exceeded timesteps.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
 
     @property
     def completed_routes(self) -> int:
+        """Completed routes.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
 
     @property
     def reached_intermediate_goals(self) -> int:
+        """Reached intermediate goals.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.intermediate_goal_outcomes if o == EnvOutcome.REACHED_GOAL])
 
     @property
     def route_completion_rate(self) -> float:
+        """Route completion rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.completed_routes / self.total_routes
 
     @property
     def interm_goal_completion_rate(self) -> float:
+        """Interm goal completion rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.reached_intermediate_goals / self.total_intermediate_goals
 
     @property
     def timeout_rate(self) -> float:
+        """Timeout rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.exceeded_timesteps / self.total_routes
 
     @property
     def obstacle_collision_rate(self) -> float:
+        """Obstacle collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.obstacle_collisions / self.total_routes
 
     @property
     def pedestrian_collision_rate(self) -> float:
+        """Pedestrian collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.pedestrian_collisions / self.total_routes
 
     def update(self, meta: dict):
+        """Update.
+
+        Args:
+            meta: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         is_end_of_interm_goal = (
             meta["is_pedestrian_collision"]
             or meta["is_obstacle_collision"]
@@ -88,6 +162,14 @@ class EnvMetrics:
             self._on_next_route_outcome(meta)
 
     def _on_next_intermediate_outcome(self, meta: dict):
+        """On next intermediate outcome.
+
+        Args:
+            meta: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
         elif meta["is_obstacle_collision"]:
@@ -104,6 +186,14 @@ class EnvMetrics:
         self.intermediate_goal_outcomes.append(outcome)
 
     def _on_next_route_outcome(self, meta: dict):
+        """On next route outcome.
+
+        Args:
+            meta: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
         elif meta["is_obstacle_collision"]:
@@ -122,104 +212,229 @@ class EnvMetrics:
 
 @dataclass
 class VecEnvMetrics:
+    """VecEnvMetrics class."""
+
     metrics: list[EnvMetrics]
 
     @property
     def route_completion_rate(self) -> float:
+        """Route completion rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.route_completion_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def interm_goal_completion_rate(self) -> float:
+        """Interm goal completion rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.interm_goal_completion_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def timeout_rate(self) -> float:
+        """Timeout rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def obstacle_collision_rate(self) -> float:
+        """Obstacle collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def pedestrian_collision_rate(self) -> float:
+        """Pedestrian collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     def update(self, metas: list[dict]):
+        """Update.
+
+        Args:
+            metas: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)
 
 
 @dataclass
 class PedEnvMetrics:
+    """PedEnvMetrics class."""
+
     route_outcomes: deque[EnvOutcome] = field(default_factory=lambda: deque(maxlen=10))
     avg_distance: deque[float] = field(default_factory=lambda: deque(maxlen=10))
     route_distances: list[float] = field(default_factory=list)
 
     @property
     def total_routes(self) -> int:
+        """Total routes.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return max(len(self.route_outcomes), 1)
 
     @property
     def pedestrian_collisions(self) -> int:
+        """Pedestrian collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
 
     @property
     def obstacle_collisions(self) -> int:
+        """Obstacle collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
 
     @property
     def exceeded_timesteps(self) -> int:
+        """Exceeded timesteps.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
 
     @property
     def robot_collisions(self) -> int:
+        """Robot collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_COLLISION])
 
     @property
     def robot_at_goal(self) -> int:
+        """Robot at goal.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
 
     @property
     def robot_obstacle_collisions(self) -> int:
+        """Robot obstacle collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_OBSTACLE_COLLISION])
 
     @property
     def robot_pedestrian_collisions(self) -> int:
+        """Robot pedestrian collisions.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION])
 
     @property
     def timeout_rate(self) -> float:
+        """Timeout rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.exceeded_timesteps / self.total_routes
 
     @property
     def obstacle_collision_rate(self) -> float:
+        """Obstacle collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.obstacle_collisions / self.total_routes
 
     @property
     def pedestrian_collision_rate(self) -> float:
+        """Pedestrian collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.pedestrian_collisions / self.total_routes
 
     @property
     def robot_collision_rate(self) -> float:
+        """Robot collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.robot_collisions / self.total_routes
 
     @property
     def robot_at_goal_rate(self) -> float:
+        """Robot at goal rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.robot_at_goal / self.total_routes
 
     @property
     def robot_obstacle_collision_rate(self) -> float:
+        """Robot obstacle collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.robot_obstacle_collisions / self.total_routes
 
     @property
     def robot_pedestrian_collision_rate(self) -> float:
+        """Robot pedestrian collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.robot_pedestrian_collisions / self.total_routes
 
     @property
     def route_end_distance(self) -> float:
+        """Route end distance.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return mean(self.avg_distance) if self.avg_distance else 0.0
 
     def update(self, meta: dict):
+        """Update.
+
+        Args:
+            meta: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.route_distances.append(meta["distance_to_robot"])
 
         if not self._is_end_of_route(meta):
@@ -283,40 +498,90 @@ class PedEnvMetrics:
 
 @dataclass
 class PedVecEnvMetrics:
+    """PedVecEnvMetrics class."""
+
     metrics: list[PedEnvMetrics]
 
     @property
     def timeout_rate(self) -> float:
+        """Timeout rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def obstacle_collision_rate(self) -> float:
+        """Obstacle collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def pedestrian_collision_rate(self) -> float:
+        """Pedestrian collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_collision_rate(self) -> float:
+        """Robot collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.robot_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_at_goal_rate(self) -> float:
+        """Robot at goal rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.robot_at_goal_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_obstacle_collision_rate(self) -> float:
+        """Robot obstacle collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.robot_obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def robot_pedestrian_collision_rate(self) -> float:
+        """Robot pedestrian collision rate.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.robot_pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
     @property
     def route_end_distance(self) -> float:
+        """Route end distance.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return sum(m.route_end_distance for m in self.metrics) / len(self.metrics)
 
     def update(self, metas: list[dict]):
+        """Update.
+
+        Args:
+            metas: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)

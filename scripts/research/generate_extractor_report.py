@@ -11,6 +11,14 @@ from robot_sf.research.extractor_report import ReportConfig, generate_extractor_
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse args.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        argparse.Namespace: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--summary",
@@ -63,6 +71,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     args = parse_args(argv)
     cfg = ReportConfig(
         experiment_name=args.experiment_name,

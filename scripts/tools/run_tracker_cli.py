@@ -23,6 +23,11 @@ class CommandContext:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build parser.
+
+    Returns:
+        argparse.ArgumentParser: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="Robot SF run tracker CLI")
     parser.add_argument(
         "--artifact-root", type=Path, help="Override artifact root for tracker output"
@@ -40,6 +45,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def add_status_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add status parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser("status", help="Show the latest state of a run")
     parser.add_argument(
         "run_id",
@@ -48,6 +61,14 @@ def add_status_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
 
 
 def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add list parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser("list", help="List historical runs")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument(
@@ -64,6 +85,14 @@ def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
 
 def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add summary parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser(
         "summary",
         aliases=["show"],
@@ -79,6 +108,14 @@ def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
 
 
 def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add watch parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser("watch", help="Tail manifest updates for a run")
     parser.add_argument("run_id")
     parser.add_argument(
@@ -90,6 +127,14 @@ def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 
 
 def add_perf_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add perf parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser("perf-tests", help="Execute the telemetry performance wrapper")
     parser.add_argument("--scenario", help="Optional scenario config override")
     parser.add_argument(
@@ -106,6 +151,14 @@ def add_perf_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
 
 def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add tensorboard parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser(
         "enable-tensorboard", help="Mirror metrics to TensorBoard logdir"
     )
@@ -114,6 +167,14 @@ def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.Argum
 
 
 def add_export_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Add export parser.
+
+    Args:
+        subparsers: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     parser = subparsers.add_parser("export", help="Export a run summary to a file")
     parser.add_argument("run_id")
     parser.add_argument(
@@ -131,6 +192,15 @@ def add_export_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
 
 
 def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
+    """Dispatch.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     handlers = {
         "status": handle_status,
         "list": handle_list,
@@ -146,6 +216,15 @@ def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle placeholder.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     run_hint = getattr(args, "run_id", context.run_id)
     message = (
         "Command not implemented yet. Refer to specs/001-performance-tracking/tasks.md "
@@ -156,6 +235,15 @@ def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> int
 
 
 def handle_perf_tests(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle perf tests.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     try:
         from scripts.telemetry.run_perf_tests import run_perf_tests
     except ModuleNotFoundError as exc:  # pragma: no cover - dev only
@@ -178,6 +266,15 @@ def handle_perf_tests(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_enable_tensorboard(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle enable tensorboard.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     try:
         run_dir = _resolve_run_directory(context.config, args.run_id)
     except FileNotFoundError as exc:
@@ -203,6 +300,15 @@ def handle_enable_tensorboard(context: CommandContext, args: argparse.Namespace)
 
 
 def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle status.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     try:
         run_dir = _resolve_run_directory(context.config, args.run_id)
         steps = _load_step_entries(context.config, run_dir)
@@ -215,6 +321,15 @@ def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle list.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     try:
         since = _parse_since(args.since)
     except ValueError as exc:
@@ -236,6 +351,15 @@ def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_summary(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle summary.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     try:
         entry = load_run(context.config, args.run_id)
     except FileNotFoundError as exc:
@@ -252,6 +376,15 @@ def handle_summary(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_export(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle export.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     try:
         entry = load_run(context.config, args.run_id)
     except FileNotFoundError as exc:
@@ -268,6 +401,15 @@ def handle_export(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_watch(context: CommandContext, args: argparse.Namespace) -> int:
+    """Handle watch.
+
+    Args:
+        context: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     interval = max(args.interval, 0.5)
     try:
         while True:
@@ -281,12 +423,29 @@ def handle_watch(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def build_context(args: argparse.Namespace) -> CommandContext:
+    """Build context.
+
+    Args:
+        args: Auto-generated placeholder description.
+
+    Returns:
+        CommandContext: Auto-generated placeholder description.
+    """
     base_root = args.artifact_root if args.artifact_root else None
     config = RunTrackerConfig(artifact_root=base_root)
     return CommandContext(config=config)
 
 
 def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
+    """Resolve run directory.
+
+    Args:
+        config: Auto-generated placeholder description.
+        run_hint: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     candidate = Path(run_hint).expanduser()
     if candidate.is_dir():
         return candidate
@@ -298,6 +457,15 @@ def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
 
 
 def _load_step_entries(config: RunTrackerConfig, run_dir: Path) -> list[dict[str, Any]]:
+    """Load step entries.
+
+    Args:
+        config: Auto-generated placeholder description.
+        run_dir: Auto-generated placeholder description.
+
+    Returns:
+        list[dict[str, Any]]: Auto-generated placeholder description.
+    """
     steps_path = run_dir / config.steps_filename
     if not steps_path.is_file():
         raise FileNotFoundError(steps_path)
@@ -308,6 +476,14 @@ def _load_step_entries(config: RunTrackerConfig, run_dir: Path) -> list[dict[str
 
 
 def _summarize_steps(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize steps.
+
+    Args:
+        entries: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     completed = 0
     current = None
     last_completed = None
@@ -328,6 +504,15 @@ def _summarize_steps(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _print_status(run_dir: Path, summary: dict[str, Any]) -> None:
+    """Print status.
+
+    Args:
+        run_dir: Auto-generated placeholder description.
+        summary: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     total = summary["total"]
     completed = summary["completed"]
     current = summary["current"]
@@ -360,6 +545,14 @@ def _print_status(run_dir: Path, summary: dict[str, Any]) -> None:
 
 
 def _print_run_table(entries: list[RunHistoryEntry]) -> None:
+    """Print run table.
+
+    Args:
+        entries: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not entries:
         print("No run tracker entries found.")
         return
@@ -378,11 +571,27 @@ def _print_run_table(entries: list[RunHistoryEntry]) -> None:
 
 
 def _print_run_summary(entry: RunHistoryEntry) -> None:
+    """Print run summary.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     for line in _iter_run_summary_lines(entry):
         print(line)
 
 
 def _iter_run_summary_lines(entry: RunHistoryEntry) -> list[str]:
+    """Iter run summary lines.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     header = _format_run_header(entry)
     summary_section = _format_summary_section(entry.summary)
     steps_section = _format_steps_section(entry.steps)
@@ -392,6 +601,14 @@ def _iter_run_summary_lines(entry: RunHistoryEntry) -> list[str]:
 
 
 def _format_run_header(entry: RunHistoryEntry) -> list[str]:
+    """Format run header.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
     completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
     return [
@@ -404,6 +621,14 @@ def _format_run_header(entry: RunHistoryEntry) -> list[str]:
 
 
 def _format_summary_section(summary: dict[str, Any] | None) -> list[str]:
+    """Format summary section.
+
+    Args:
+        summary: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     if not summary:
         return ["Summary: (none)"]
     lines = ["Summary:"]
@@ -417,6 +642,14 @@ def _format_summary_section(summary: dict[str, Any] | None) -> list[str]:
 
 
 def _format_telemetry_lines(values: dict[str, Any]) -> list[str]:
+    """Format telemetry lines.
+
+    Args:
+        values: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["  - Telemetry:"]
     for key, value in values.items():
         lines.append(f"      * {key}: {_format_summary_value(value)}")
@@ -424,6 +657,14 @@ def _format_telemetry_lines(values: dict[str, Any]) -> list[str]:
 
 
 def _format_steps_section(steps: list[dict[str, Any]]) -> list[str]:
+    """Format steps section.
+
+    Args:
+        steps: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["Steps:"]
     for step in steps:
         status = step.get("status", "unknown").upper()
@@ -435,6 +676,14 @@ def _format_steps_section(steps: list[dict[str, Any]]) -> list[str]:
 
 
 def _format_recommendation_section(recommendations: tuple[dict[str, Any], ...]) -> list[str]:
+    """Format recommendation section.
+
+    Args:
+        recommendations: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     if not recommendations:
         return []
     lines = ["Recommendations:"]
@@ -448,6 +697,14 @@ def _format_recommendation_section(recommendations: tuple[dict[str, Any], ...]) 
 
 
 def _format_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
+    """Format perf section.
+
+    Args:
+        perf_tests: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     if not perf_tests:
         return []
     lines = ["Performance tests:"]
@@ -461,12 +718,28 @@ def _format_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
 
 
 def _format_numeric(value: Any) -> str:
+    """Format numeric.
+
+    Args:
+        value: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     if isinstance(value, int | float):
         return f"{value:.2f}"
     return str(value)
 
 
 def _render_markdown(entry: RunHistoryEntry) -> str:
+    """Render markdown.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     lines: list[str] = []
     lines.extend(_markdown_header_lines(entry))
     lines.extend(_markdown_summary_sections(entry))
@@ -477,6 +750,14 @@ def _render_markdown(entry: RunHistoryEntry) -> str:
 
 
 def _markdown_header_lines(entry: RunHistoryEntry) -> list[str]:
+    """Markdown header lines.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
     completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
     return [
@@ -490,6 +771,14 @@ def _markdown_header_lines(entry: RunHistoryEntry) -> list[str]:
 
 
 def _markdown_summary_sections(entry: RunHistoryEntry) -> list[str]:
+    """Markdown summary sections.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["", "## Summary"]
     summary_lines = _markdown_summary_lines(entry.summary)
     lines.extend(summary_lines or ["- _(none)_"])
@@ -502,6 +791,14 @@ def _markdown_summary_sections(entry: RunHistoryEntry) -> list[str]:
 
 
 def _markdown_summary_lines(summary: dict[str, Any] | None) -> list[str]:
+    """Markdown summary lines.
+
+    Args:
+        summary: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     if not isinstance(summary, dict):
         return []
     lines: list[str] = []
@@ -513,10 +810,26 @@ def _markdown_summary_lines(summary: dict[str, Any] | None) -> list[str]:
 
 
 def _markdown_telemetry_lines(values: dict[str, Any]) -> list[str]:
+    """Markdown telemetry lines.
+
+    Args:
+        values: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     return [f"- **{key}:** {_format_summary_value(value)}" for key, value in values.items()]
 
 
 def _markdown_steps_section(steps: list[dict[str, Any]]) -> list[str]:
+    """Markdown steps section.
+
+    Args:
+        steps: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["", "## Steps"]
     for step in steps:
         status = step.get("status", "unknown").upper()
@@ -527,6 +840,14 @@ def _markdown_steps_section(steps: list[dict[str, Any]]) -> list[str]:
 
 
 def _markdown_recommendations_section(recommendations: tuple[dict[str, Any], ...]) -> list[str]:
+    """Markdown recommendations section.
+
+    Args:
+        recommendations: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     if not recommendations:
         return []
     lines = ["", "## Recommendations"]
@@ -541,6 +862,14 @@ def _markdown_recommendations_section(recommendations: tuple[dict[str, Any], ...
 
 
 def _markdown_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
+    """Markdown perf section.
+
+    Args:
+        perf_tests: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     if not perf_tests:
         return []
     lines = ["", "## Performance Tests"]
@@ -556,6 +885,14 @@ def _markdown_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
 
 
 def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
+    """Current elapsed seconds.
+
+    Args:
+        entry: Auto-generated placeholder description.
+
+    Returns:
+        float | None: Auto-generated placeholder description.
+    """
     started_at = entry.get("started_at")
     if not started_at:
         return None
@@ -566,6 +903,14 @@ def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse timestamp.
+
+    Args:
+        value: Auto-generated placeholder description.
+
+    Returns:
+        datetime | None: Auto-generated placeholder description.
+    """
     if not value:
         return None
     try:
@@ -575,6 +920,14 @@ def _parse_timestamp(value: str | None) -> datetime | None:
 
 
 def _format_seconds(value: float | None) -> str:
+    """Format seconds.
+
+    Args:
+        value: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     if value is None:
         return "--"
     seconds = int(max(value, 0))
@@ -588,6 +941,14 @@ def _format_seconds(value: float | None) -> str:
 
 
 def _format_summary_value(value: object) -> str:
+    """Format summary value.
+
+    Args:
+        value: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     if value is None:
         return "--"
     if isinstance(value, float):
@@ -596,6 +957,14 @@ def _format_summary_value(value: object) -> str:
 
 
 def _parse_since(value: str | None) -> datetime | None:
+    """Parse since.
+
+    Args:
+        value: Auto-generated placeholder description.
+
+    Returns:
+        datetime | None: Auto-generated placeholder description.
+    """
     if not value:
         return None
     try:
@@ -610,6 +979,14 @@ def _parse_since(value: str | None) -> datetime | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     context = build_context(args)

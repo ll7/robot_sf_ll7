@@ -24,11 +24,21 @@ from pathlib import Path
 
 @dataclass
 class Sample:
+    """Sample class."""
+
     test_identifier: str
     duration_seconds: float
 
 
 def load_any(path: Path) -> list[Sample]:
+    """Load any.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        list[Sample]: Auto-generated placeholder description.
+    """
     raw = json.loads(path.read_text(encoding="utf-8"))
     data = raw["samples"] if isinstance(raw, dict) and "samples" in raw else raw
     out: list[Sample] = []
@@ -46,10 +56,26 @@ def load_any(path: Path) -> list[Sample]:
 
 
 def index_by(samples: list[Sample]) -> dict[str, float]:
+    """Index by.
+
+    Args:
+        samples: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     return {s.test_identifier: s.duration_seconds for s in samples}
 
 
 def main(argv=None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     p = argparse.ArgumentParser(description="Compare slow test duration captures")
     p.add_argument("--before", required=True)
     p.add_argument("--after", required=True)

@@ -36,6 +36,8 @@ except ImportError:
 
 @dataclass
 class EncodeResult:
+    """EncodeResult class."""
+
     path: Path
     status: str  # success|skipped|failed
     note: str | None
@@ -56,6 +58,11 @@ def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, It
         return None, iter(())
 
     def chain_first():  # local generator
+        """Chain first.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         yield first
         yield from it
 
@@ -83,6 +90,11 @@ def _start_memory_sampler(sample: bool, interval: float):
     stop_flag: list[bool] = [False]
 
     def _sampler():
+        """Sampler.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         while not stop_flag[0]:
             try:
                 rss = process.memory_info().rss / (1024 * 1024)
@@ -97,6 +109,11 @@ def _start_memory_sampler(sample: bool, interval: float):
     th.start()
 
     def _stop():
+        """Stop.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         stop_flag[0] = True
         try:
             th.join(timeout=0.5)
@@ -108,6 +125,14 @@ def _start_memory_sampler(sample: bool, interval: float):
 
 
 def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
+    """Validate first.
+
+    Args:
+        first: Auto-generated placeholder description.
+
+    Returns:
+        tuple[bool, str | None]: Auto-generated placeholder description.
+    """
     if first is None:
         return False, "no-frames"
     if first.dtype != np.uint8 or first.ndim != 3 or first.shape[2] != 3:

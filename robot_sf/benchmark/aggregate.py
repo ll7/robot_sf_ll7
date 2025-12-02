@@ -32,6 +32,15 @@ if TYPE_CHECKING:
 
 
 def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]:
+    """Load benchmark episode records from one or more JSONL files.
+
+    Args:
+        paths: Single path or iterable of paths pointing to JSONL files produced by
+            ``scripts/benchmark`` runs.
+
+    Returns:
+        list[dict[str, Any]]: Parsed episode dictionaries (invalid JSON lines are skipped).
+    """
     if isinstance(paths, str | Path):
         path_list = [paths]
     else:
@@ -55,6 +64,16 @@ def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
+    """Fetch the value for a dotted path from a nested dictionary.
+
+    Args:
+        d: Episode or metadata mapping to inspect.
+        path: Dot-delimited key chain (for example ``scenario_params.algo``).
+        default: Value returned when any portion of the path is missing.
+
+    Returns:
+        Any: Retrieved value or ``default`` when traversal fails.
+    """
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -68,6 +87,14 @@ _EFFECTIVE_GROUP_KEY = "scenario_params.algo | algo | scenario_id"
 
 
 def _normalize_algo(value: Any) -> str | None:
+    """Normalize algorithm identifiers into trimmed non-empty strings.
+
+    Args:
+        value: Candidate algorithm string (possibly None or whitespace).
+
+    Returns:
+        str | None: Sanitized identifier when non-empty; otherwise ``None``.
+    """
     if isinstance(value, str):
         trimmed = value.strip()
         if trimmed:
@@ -76,6 +103,16 @@ def _normalize_algo(value: Any) -> str | None:
 
 
 def _ensure_mapping(record: dict[str, Any], key: str, episode_id: str | None) -> None:
+    """Ensure the requested record key points to a mapping.
+
+    Args:
+        record: Episode dictionary under validation.
+        key: Top-level key expected to contain nested metadata (e.g., ``scenario_params``).
+        episode_id: Optional identifier included in raised errors for traceability.
+
+    Raises:
+        AggregationMetadataError: If the value exists and is not a ``dict``.
+    """
     value = record.get(key)
     if value is not None and not isinstance(value, dict):
         raise AggregationMetadataError(
@@ -92,6 +129,19 @@ def _resolve_group_key(
     group_by: str,
     fallback_group_by: str,
 ) -> str:
+    """Resolve the aggregation group key for a benchmark record.
+
+    Args:
+        record: Episode dictionary emitted by the benchmark runner.
+        group_by: Preferred dotted path (``scenario_params.algo`` by default).
+        fallback_group_by: Alternate path used when algorithm metadata is absent.
+
+    Returns:
+        str: Normalized algorithm/scenario identifier chosen for aggregation.
+
+    Raises:
+        AggregationMetadataError: If both the preferred and fallback metadata are missing.
+    """
     episode_id = record.get("episode_id")
     episode_ref = str(episode_id) if episode_id is not None else None
 
@@ -131,6 +181,14 @@ def _resolve_group_key(
 
 
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
+    """Flatten nested metric structures for CSV/aggregation consumers.
+
+    Args:
+        rec: Episode dictionary containing ``metrics`` and optional ``force_quantiles``.
+
+    Returns:
+        dict[str, Any]: Flat mapping including id fields and metric scalars.
+    """
     base = {
         "episode_id": rec.get("episode_id"),
         "scenario_id": rec.get("scenario_id"),
@@ -152,6 +210,13 @@ def _ensure_snqi(
     weights: dict[str, float] | None,
     baseline: dict[str, dict[str, float]] | None,
 ) -> None:
+    """Populate the SNQI metric when weights/baseline data are available.
+
+    Args:
+        rec: Episode dictionary modified in place.
+        weights: Metric weights passed to :func:`snqi_fn`; ``None`` leaves records untouched.
+        baseline: Optional SNQI baseline statistics for normalization.
+    """
     if rec.get("metrics") is None:
         return
     if "snqi" in rec["metrics"]:
@@ -172,6 +237,17 @@ def write_episode_csv(
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
 ) -> str:
+    """Write a per-episode metrics CSV.
+
+    Args:
+        records: Episode dictionaries (e.g., output of :func:`read_jsonl`).
+        out_csv: Destination CSV path.
+        snqi_weights: Optional weights used to compute SNQI when missing.
+        snqi_baseline: Optional baseline statistics used for SNQI normalization.
+
+    Returns:
+        str: The path that was written.
+    """
     # Optionally compute SNQI per record if missing
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
@@ -197,6 +273,14 @@ def write_episode_csv(
 
 
 def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
+    """Extract numeric metric entries, skipping ids and nulls.
+
+    Args:
+        d: Flattened metrics row that may contain identifiers and non-numeric fields.
+
+    Returns:
+        dict[str, float]: Mapping of metric names to float values.
+    """
     out: dict[str, float] = {}
     for k, v in d.items():
         if k in ("episode_id", "scenario_id", "seed"):
@@ -218,6 +302,23 @@ def compute_aggregates(
     expected_algorithms: set[str] | None = None,
     logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, float]]]:
+    """Aggregate per-episode metrics by algorithm/scenario.
+
+    Args:
+        records: Episode dictionaries emitted by the benchmark runner.
+        group_by: Dotted path used to resolve the group key (defaults to ``scenario_params.algo``).
+        fallback_group_by: Secondary path used when algorithm metadata is missing.
+        snqi_weights: Optional weights to recompute SNQI on the fly.
+        snqi_baseline: Optional SNQI baseline stats.
+        expected_algorithms: Optional set of algorithms expected in the summary; missing
+            entries raise a warning in ``_meta``.
+        logger_ctx: Optional logger binding for emitting warnings (defaults to :data:`logger`).
+
+    Returns:
+        dict[str, dict[str, dict[str, float]]]: Nested mapping
+        ``{group -> metric -> {mean, median, p95}}`` with a ``_meta`` entry describing
+        the aggregation context.
+    """
     # Optionally compute SNQI per record if missing
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
@@ -286,14 +387,16 @@ def _bootstrap_ci(
 ) -> tuple[float, float]:
     """Percentile bootstrap confidence interval for a statistic.
 
-    Parameters
-    - data: 1D numpy array (NaNs will be ignored).
-    - stat_fn: callable computing a scalar statistic on a 1D array.
-    - samples: number of bootstrap resamples (B).
-    - confidence: confidence level (e.g., 0.95).
-    - seed: optional RNG seed for reproducibility.
+    Args:
+        data: 1D array of metric values; NaNs are ignored.
+        stat_fn: Callable that computes the statistic of interest.
+        samples: Number of bootstrap resamples to draw.
+        confidence: Desired confidence level in (0, 1).
+        seed: Optional random seed for deterministic resampling.
 
-    Returns (low, high) CI bounds; (nan, nan) if insufficient data or samples=0.
+    Returns:
+        tuple[float, float]: Lower and upper bounds; returns ``(nan, nan)`` when
+        there is insufficient data.
     """
     if samples <= 0:
         return (float("nan"), float("nan"))
@@ -326,6 +429,16 @@ def _group_flattened(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, list[dict[str, Any]]]:
+    """Group flattened metric rows by resolved aggregation key.
+
+    Args:
+        records: Raw benchmark episode dictionaries.
+        group_by: Primary dotted path for deriving the group key.
+        fallback_group_by: Backup path when the primary metadata is missing.
+
+    Returns:
+        dict[str, list[dict[str, Any]]]: Mapping of ``group`` → flattened rows.
+    """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
         key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
@@ -341,16 +454,28 @@ def _attach_ci_for_group(
     bootstrap_confidence: float,
     bootstrap_seed: int | None,
 ) -> None:
+    """Attach bootstrap confidence intervals to a group's metric summary.
+
+    Args:
+        dst_group: Aggregate entry that will receive ``*_ci`` keys.
+        values_by_metric: Collected numeric values for the group per metric name.
+        bootstrap_samples: Number of bootstrap resamples to draw per metric.
+        bootstrap_confidence: Percentile interval confidence level (0–1 range).
+        bootstrap_seed: Optional RNG seed for deterministic intervals.
+    """
     for metric_name, values in values_by_metric.items():
         arr = np.asarray(values, dtype=float)
 
         def mean_fn(a: np.ndarray) -> float:
+            """Return the arithmetic mean of an array."""
             return float(np.mean(a))
 
         def median_fn(a: np.ndarray) -> float:
+            """Return the median of an array."""
             return float(np.median(a))
 
         def p95_fn(a: np.ndarray) -> float:
+            """Return the 95th percentile of an array."""
             return float(np.percentile(a, 95))
 
         lo_hi_mean = _bootstrap_ci(
@@ -394,11 +519,17 @@ def compute_aggregates_with_ci(
     expected_algorithms: set[str] | None = None,
     logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    """Compute grouped aggregates and optional bootstrap CIs.
+    """Compute grouped aggregates and optional bootstrap confidence intervals.
 
-    This preserves the original aggregate keys (mean, median, p95) and, when
-    return_ci is True and bootstrap_samples>0, adds parallel keys 'mean_ci',
-    'median_ci', 'p95_ci' with [low, high] bounds using percentile bootstrap.
+    Args mirror :func:`compute_aggregates`; additional ones:
+        return_ci: When False, skips bootstrap work and returns base aggregates.
+        bootstrap_samples: Number of bootstrap resamples for CI estimation.
+        bootstrap_confidence: Confidence level (0–1) for the percentile interval.
+        bootstrap_seed: Optional RNG seed for deterministic CI estimation.
+
+    Returns:
+        dict[str, dict[str, dict[str, Any]]]: Aggregates augmented with
+        ``mean_ci``, ``median_ci``, and ``p95_ci`` entries containing ``[low, high]`` bounds.
     """
     # Start from base aggregates (no CI) for consistency
     base = compute_aggregates(

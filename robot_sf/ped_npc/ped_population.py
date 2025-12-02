@@ -1,3 +1,5 @@
+"""Module ped_population auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
 
@@ -88,13 +90,39 @@ def sample_route(
 
     # Define helper functions for vector operations
     def add_vecs(v1, v2):
+        """Add vecs.
+
+        Args:
+            v1: Auto-generated placeholder description.
+            v2: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
     def sub_vecs(v1, v2):
+        """Sub vecs.
+
+        Args:
+            v1: Auto-generated placeholder description.
+            v2: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
     # Clip function to constrain random spread to the sidewalk width
     def clip_spread(v):
+        """Clip spread.
+
+        Args:
+            v: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
     # Calculate the center point between the start and end of the section
@@ -132,6 +160,11 @@ class ZonePointsGenerator:
     _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Calculate the area for each zone assuming zones are rectangular
         # This uses an external `dist` function to measure distances
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
@@ -307,6 +340,15 @@ def populate_crowded_zones(
     config: PedSpawnConfig,
     crowded_zones: list[Zone],
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
+    """Populate crowded zones.
+
+    Args:
+        config: Auto-generated placeholder description.
+        crowded_zones: Auto-generated placeholder description.
+
+    Returns:
+        tuple[PedState, list[PedGrouping], ZoneAssignments]: Auto-generated placeholder description.
+    """
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
@@ -407,6 +449,18 @@ def populate_simulation(
     ped_crowded_zones: list[Zone],
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
+    """Populate simulation.
+
+    Args:
+        tau: Auto-generated placeholder description.
+        spawn_config: Auto-generated placeholder description.
+        ped_routes: Auto-generated placeholder description.
+        ped_crowded_zones: Auto-generated placeholder description.
+        single_pedestrians: Auto-generated placeholder description.
+
+    Returns:
+        tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]: Auto-generated placeholder description.
+    """
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,
         ped_crowded_zones,

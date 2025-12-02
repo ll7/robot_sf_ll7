@@ -16,6 +16,17 @@ def _make_record(
     scenario_id: str = "scenario-1",
     success_rate: float = 1.0,
 ) -> dict[str, object]:
+    """Make record.
+
+    Args:
+        algo: Auto-generated placeholder description.
+        include_nested: Auto-generated placeholder description.
+        scenario_id: Auto-generated placeholder description.
+        success_rate: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, object]: Auto-generated placeholder description.
+    """
     record: dict[str, object] = {
         "episode_id": f"{scenario_id}-{algo or 'none'}",
         "scenario_id": scenario_id,

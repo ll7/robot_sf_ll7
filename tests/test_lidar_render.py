@@ -1,3 +1,5 @@
+"""Module test_lidar_render auto-generated docstring."""
+
 import numpy as np
 import pytest
 
@@ -5,6 +7,11 @@ from robot_sf.render.lidar_visual import render_lidar
 
 
 def test_render_lidar_basic():
+    """Test render lidar basic.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Basic test with simple values
     robot_pos = [0, 0]
     distances = np.array([1, 2, 3])
@@ -25,6 +32,11 @@ def test_render_lidar_basic():
 
 
 def test_render_lidar_zero_distances():
+    """Test render lidar zero distances.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # When distances are all zeros, the endpoints should equal the robot_pos.
     robot_pos = [5, -3]
     distances = np.array([0, 0, 0])
@@ -37,6 +49,11 @@ def test_render_lidar_zero_distances():
 
 
 def test_render_lidar_empty_input():
+    """Test render lidar empty input.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # When lists are empty, expect an empty array.
     robot_pos = [1, 1]
     distances = np.array([])
@@ -49,6 +66,11 @@ def test_render_lidar_empty_input():
 
 
 def test_render_lidar_negative_values():
+    """Test render lidar negative values.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Test with negative distances and directions values.
     robot_pos = [0, 0]
     distances = np.array([-1, -2])
@@ -66,6 +88,11 @@ def test_render_lidar_negative_values():
 
 
 def test_render_lidar_nonzero_robot_pos():
+    """Test render lidar nonzero robot pos.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Test with a non-zero robot position.
     robot_pos = [10, 20]
     distances = np.array([3])
@@ -82,6 +109,11 @@ def test_render_lidar_nonzero_robot_pos():
 
 
 def test_render_lidar_output_dtype():
+    """Test render lidar output dtype.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Ensure the returned value is a numpy array with correct dtype.
     robot_pos = [0, 0]
     distances = np.array([1.5, 2.5])
@@ -102,6 +134,16 @@ def test_render_lidar_output_dtype():
     ],
 )
 def test_render_lidar_parametrized(robot_pos, distances, directions):
+    """Test render lidar parametrized.
+
+    Args:
+        robot_pos: Auto-generated placeholder description.
+        distances: Auto-generated placeholder description.
+        directions: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Compute expected endpoints for each parameter set
     expected_list = []
     for d, theta in zip(distances, directions, strict=False):
@@ -118,6 +160,11 @@ def test_render_lidar_parametrized(robot_pos, distances, directions):
 
 
 def test_render_lidar_invalid_inputs():
+    """Test render lidar invalid inputs.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     robot_pos = [0, 0]
     # Test mismatched lengths
     distances = np.array([1, 2])

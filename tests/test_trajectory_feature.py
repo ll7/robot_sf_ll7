@@ -14,10 +14,20 @@ from dataclasses import dataclass
 # Mock the dependencies for testing
 @dataclass
 class MockPose:
+    """MockPose class."""
+
     position: tuple[float, float]
     orientation: float
 
     def __getitem__(self, index):
+        """Getitem.
+
+        Args:
+            index: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if index == 0:
             return self.position
         elif index == 1:
@@ -28,6 +38,8 @@ class MockPose:
 
 @dataclass
 class MockVisualizableSimState:
+    """MockVisualizableSimState class."""
+
     timestep: int
     robot_pose: MockPose
     pedestrian_positions: list[list[float]]
@@ -36,6 +48,8 @@ class MockVisualizableSimState:
 
 @dataclass
 class MockMapDefinition:
+    """MockMapDefinition class."""
+
     name: str = "test_map"
 
 
@@ -43,6 +57,11 @@ class TrajectoryVisualizationTest:
     """Test class for trajectory visualization functionality."""
 
     def __init__(self):
+        """Init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.show_trajectories = True
         self.max_trajectory_length = 10
         self.robot_trajectory = deque(maxlen=self.max_trajectory_length)

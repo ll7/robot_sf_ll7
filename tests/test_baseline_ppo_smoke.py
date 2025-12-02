@@ -1,3 +1,5 @@
+"""Module test_baseline_ppo_smoke auto-generated docstring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,12 +10,22 @@ from robot_sf.benchmark.runner import run_episode
 
 
 def _default_model_path() -> Path:
+    """Default model path.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     # Must mirror PPOPlannerConfig default
     return Path("model/ppo_model_retrained_10m_2025-02-01.zip")
 
 
 @pytest.mark.timeout(30)
 def test_ppo_baseline_smoke_runs_or_skips():
+    """Test ppo baseline smoke runs or skips.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     model_path = _default_model_path()
     algo_cfg_path = None
 

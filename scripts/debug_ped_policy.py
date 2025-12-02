@@ -1,3 +1,5 @@
+"""Module debug_ped_policy auto-generated docstring."""
+
 import os
 from pathlib import Path
 
@@ -15,6 +17,11 @@ logger = loguru.logger
 
 
 def make_env():
+    """Make env.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map("maps/svg_maps/debug_03.svg")
@@ -42,6 +49,11 @@ def get_file():
 
 
 def run():
+    """Run.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = make_env()
     filename = get_file()
     # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
@@ -69,6 +81,15 @@ def run():
 
 
 def extract_info(meta: dict, reward: float) -> str:
+    """Extract info.
+
+    Args:
+        meta: Auto-generated placeholder description.
+        reward: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     meta = meta["meta"]
     eps_num = meta["episode"]
     steps = meta["step_of_episode"]

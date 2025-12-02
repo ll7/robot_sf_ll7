@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class BenchmarkConfig:  # lightweight test double; replaced by real implementation later
+    """BenchmarkConfig class."""
+
     output_root: str
     scenario_matrix_path: str
     fast_stub: bool = True
@@ -44,6 +46,11 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
 
 @pytest.fixture()
 def temp_results_dir() -> Iterator[Path]:
+    """Temp results dir.
+
+    Returns:
+        Iterator[Path]: Auto-generated placeholder description.
+    """
     with tempfile.TemporaryDirectory(prefix="classic_bench_") as d:
         yield Path(d)
 
@@ -53,6 +60,14 @@ def config_factory(temp_results_dir: Path):
     """Return factory producing BenchmarkConfig test doubles."""
 
     def _factory(**overrides):
+        """Factory.
+
+        Args:
+            overrides: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         base = BenchmarkConfig(
             output_root=str(temp_results_dir),
             scenario_matrix_path="configs/scenarios/classic_interactions.yaml",
@@ -66,7 +81,21 @@ def config_factory(temp_results_dir: Path):
 
 @pytest.fixture()
 def synthetic_episode_record():
+    """Synthetic episode record.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     def _make(**overrides):
+        """Make.
+
+        Args:
+            overrides: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         rec = {
             "episode_id": overrides.get("episode_id", "ep-1"),
             "scenario_id": overrides.get("scenario_id", "scenario_a"),

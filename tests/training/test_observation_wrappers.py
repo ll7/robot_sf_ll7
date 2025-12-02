@@ -14,15 +14,41 @@ class _DummyEnv(Env):
     metadata = {"render_modes": []}
 
     def __init__(self, observation_space: spaces.Space, action_space: spaces.Space) -> None:
+        """Init.
+
+        Args:
+            observation_space: Auto-generated placeholder description.
+            action_space: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         super().__init__()
         self.observation_space = observation_space
         self.action_space = action_space
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):  # type: ignore[override]
+        """Reset.
+
+        Args:
+            seed: Auto-generated placeholder description.
+            options: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().reset(seed=seed)
         return self.observation_space.sample(), {}
 
     def step(self, action):  # type: ignore[override]
+        """Step.
+
+        Args:
+            action: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         observation = self.observation_space.sample()
         reward = 0.0
         terminated = False
@@ -31,10 +57,20 @@ class _DummyEnv(Env):
         return observation, reward, terminated, truncated, info
 
     def render(self):  # type: ignore[override]
+        """Render.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return None
 
 
 def test_maybe_flatten_env_noop_for_box_space():
+    """Test maybe flatten env noop for box space.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
     action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
     env = _DummyEnv(observation_space, action_space)
@@ -47,6 +83,11 @@ def test_maybe_flatten_env_noop_for_box_space():
 
 
 def test_maybe_flatten_env_wraps_dict_space():
+    """Test maybe flatten env wraps dict space.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     observation_space = spaces.Dict(
         {
             "drive_state": spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32),

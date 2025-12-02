@@ -21,6 +21,8 @@ from robot_sf.benchmark.full_classic.orchestrator import run_episode_jobs
 
 @dataclass
 class _Job:
+    """Job class."""
+
     job_id: str
     scenario_id: str
     seed: int
@@ -32,14 +34,34 @@ class _Job:
 
 @dataclass
 class _Manifest:
+    """Manifest class."""
+
     episodes_path: str
 
 
 def _episode_id(job: _Job) -> str:  # simplistic deterministic id for test
+    """Episode id.
+
+    Args:
+        job: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return f"{job.scenario_id}-{job.seed}"
 
 
 def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, monkeypatch):
+    """Test run episode jobs resume.
+
+    Args:
+        temp_results_dir: Auto-generated placeholder description.
+        synthetic_episode_record: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes_dir = Path(temp_results_dir) / "episodes"
     episodes_dir.mkdir()
     episodes_file = episodes_dir / "episodes.jsonl"
@@ -66,6 +88,15 @@ def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, mon
     cfg.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
 
     def _stub_make_episode(job, _cfg):
+        """Stub make episode.
+
+        Args:
+            job: Auto-generated placeholder description.
+            _cfg: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return synthetic_episode_record(
             episode_id=_episode_id(job),
             scenario_id=job.scenario_id,

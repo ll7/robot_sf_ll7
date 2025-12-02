@@ -28,6 +28,11 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
 def make_demo_sim():
+    """Make demo sim.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
@@ -42,6 +47,11 @@ def make_demo_sim():
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # LaTeX-friendly export settings (see docs/dev_guide.md)
     plt.rcParams.update(
         {

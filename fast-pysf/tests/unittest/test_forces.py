@@ -1,3 +1,5 @@
+"""Module test_forces auto-generated docstring."""
+
 import unittest
 
 import numpy as np

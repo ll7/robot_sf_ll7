@@ -12,10 +12,20 @@ REQUIRED_KEYS = {"scenario", "seed", "steps", "success", "collision", "timeout"}
 
 
 def _demo():
+    """Demo.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_episode_summary_schema():
+    """Test episode summary schema.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = _demo()
     if hasattr(mod, "DRY_RUN"):
         original = mod.DRY_RUN

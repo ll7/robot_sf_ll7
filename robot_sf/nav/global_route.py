@@ -1,3 +1,5 @@
+"""Module global_route auto-generated docstring."""
+
 from dataclasses import dataclass
 from math import dist
 

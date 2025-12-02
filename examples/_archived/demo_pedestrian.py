@@ -32,6 +32,15 @@ logger = loguru.logger
 
 
 def make_env(map_name: str, robot_model: str):
+    """Make env.
+
+    Args:
+        map_name: Auto-generated placeholder description.
+        robot_model: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map(map_name)
@@ -49,6 +58,16 @@ def make_env(map_name: str, robot_model: str):
 
 
 def run(filename: str, map_name: str, robot_model: str):
+    """Run.
+
+    Args:
+        filename: Auto-generated placeholder description.
+        map_name: Auto-generated placeholder description.
+        robot_model: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = make_env(map_name, robot_model)
 
     logger.info(f"Loading pedestrian model from {filename}")

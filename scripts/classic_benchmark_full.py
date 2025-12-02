@@ -20,6 +20,14 @@ try:
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - during early scaffolding
 
     def run_full_benchmark(cfg):  # fallback placeholder
+        """Run full benchmark.
+
+        Args:
+            cfg: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise NotImplementedError("Full benchmark not yet implemented. Follow tasks T022+.")
 
 
@@ -57,6 +65,11 @@ class BenchmarkCLIConfig:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Build arg parser.
+
+    Returns:
+        argparse.ArgumentParser: Auto-generated placeholder description.
+    """
     # Generate timestamp for default output directory
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     default_output = f"tmp/results/full_classic_run_{timestamp}"
@@ -173,6 +186,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
+    """Args to config.
+
+    Args:
+        ns: Auto-generated placeholder description.
+
+    Returns:
+        BenchmarkCLIConfig: Auto-generated placeholder description.
+    """
     horizon_override = ns.horizon if ns.horizon and ns.horizon > 0 else None
     return BenchmarkCLIConfig(
         scenario_matrix_path=ns.scenarios,
@@ -197,6 +218,14 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     # Configure loguru level early

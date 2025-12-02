@@ -54,6 +54,11 @@ class _VideoArtifact:
     # Backward compatibility for older tests expecting .path_mp4
     @property
     def path_mp4(self) -> str:
+        """Path mp4.
+
+        Returns:
+            str: Auto-generated placeholder description.
+        """
         return self.filename or ""
 
 
@@ -98,6 +103,14 @@ def _render_episode_frames(seed: int, N: int) -> tuple[list, list[float], list[f
 
 
 def _build_outcome(rec) -> str:
+    """Build outcome.
+
+    Args:
+        rec: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     collision_flag = bool(rec.get("collisions") or rec.get("collision"))
     success_flag = bool(rec.get("success", not collision_flag))
     timeout_flag = bool(rec.get("timeout")) and not success_flag and not collision_flag
@@ -136,6 +149,15 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
     selected = records[:max_videos]
 
     def _mk_skip(rec, note: str):  # helper
+        """Mk skip.
+
+        Args:
+            rec: Auto-generated placeholder description.
+            note: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Provide deterministic filename even when skipped (legacy expectation)
         episode_id = rec.get("episode_id", "unknown")
         mp4_name = f"video_{episode_id}.mp4"

@@ -13,6 +13,14 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 def test_effect_sizes_presence(config_factory):
+    """Test effect sizes presence.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = config_factory(smoke=True)
     manifest = run_full_benchmark(cfg)
     effects_path = Path(manifest.output_root) / "reports" / "effect_sizes.json"

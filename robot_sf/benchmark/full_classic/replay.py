@@ -72,9 +72,22 @@ class ReplayEpisode:
     map_path: str | None = None
 
     def __len__(self) -> int:  # pragma: no cover - trivial
+        """Len.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len(self.steps)
 
     def append(self, step: ReplayStep) -> None:
+        """Append.
+
+        Args:
+            step: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.steps.append(step)
 
 
@@ -105,6 +118,23 @@ class ReplayCapture:
         ped_actions: list[tuple[float, float]] | None = None,
         robot_goal: tuple[float, float] | None = None,
     ) -> None:
+        """Record.
+
+        Args:
+            t: Auto-generated placeholder description.
+            x: Auto-generated placeholder description.
+            y: Auto-generated placeholder description.
+            heading: Auto-generated placeholder description.
+            speed: Auto-generated placeholder description.
+            ped_positions: Auto-generated placeholder description.
+            action: Auto-generated placeholder description.
+            ray_vecs: Auto-generated placeholder description.
+            ped_actions: Auto-generated placeholder description.
+            robot_goal: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._steps.append(
             ReplayStep(
                 t=t,
@@ -121,6 +151,11 @@ class ReplayCapture:
         )
 
     def finalize(self) -> ReplayEpisode:
+        """Finalize.
+
+        Returns:
+            ReplayEpisode: Auto-generated placeholder description.
+        """
         return ReplayEpisode(
             episode_id=self.episode_id,
             scenario_id=self.scenario_id,
@@ -164,15 +199,20 @@ def build_replay_episode(
 ) -> ReplayEpisode:
     """Convenience constructor from basic sequences.
 
-    Parameters
-    ----------
-    seq : sequence of (t, x, y, heading)
-        Core robot kinematic samples.
-    ped_seq : optional sequence parallel to seq with pedestrian position lists.
-    action_seq : optional sequence parallel to seq with action tuples.
-    ray_seq : optional sequence parallel to seq with ray vectors for lidar.
-    ped_action_seq : optional sequence parallel to seq with ped action vectors.
-    goal_seq : optional sequence parallel to seq with robot goal tuples.
+    Args:
+        episode_id: Unique identifier for the replay episode.
+        scenario_id: Source scenario identifier.
+        seq: Sequence of ``(t, x, y, heading)`` tuples describing robot state.
+        ped_seq: Optional sequence aligned with ``seq`` that contains pedestrian positions.
+        action_seq: Optional aligned sequence of robot action tuples.
+        ray_seq: Optional aligned sequence of lidar ray vectors.
+        ped_action_seq: Optional aligned sequence of pedestrian action vectors.
+        goal_seq: Optional aligned sequence of robot goal positions.
+        dt: Optional timestep override (seconds).
+        map_path: Optional map path recorded with the episode.
+
+    Returns:
+        ReplayEpisode: Fully populated replay record.
     """
     steps: list[ReplayStep] = []
     for i, (t, x, y, h) in enumerate(seq):

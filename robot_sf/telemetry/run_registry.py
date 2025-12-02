@@ -24,12 +24,25 @@ class RunRegistry:
     """Create per-run directories and prune historical runs when necessary."""
 
     def __init__(self, config: RunTrackerConfig) -> None:
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not isinstance(config, RunTrackerConfig):  # pragma: no cover - runtime guard
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
         self._config = config
 
     @property
     def base_dir(self) -> Path:
+        """Base dir.
+
+        Returns:
+            Path: Auto-generated placeholder description.
+        """
         return Path(self._config.run_tracker_root)
 
     def create_run_directory(self, run_id: str, *, allow_existing: bool = False) -> RunDirectory:

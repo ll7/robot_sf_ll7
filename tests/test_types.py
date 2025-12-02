@@ -1,4 +1,6 @@
 # FILE: robot_sf/util/test_types.py
+"""Module test_types auto-generated docstring."""
+
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -29,6 +31,11 @@ if TYPE_CHECKING:
 
 
 def test_vec2d():
+    """Test vec2d.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     vec: Vec2D = (1.0, 2.0)
     assert isinstance(vec, tuple)
     assert len(vec) == 2
@@ -37,6 +44,11 @@ def test_vec2d():
 
 
 def test_range2d():
+    """Test range2d.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     r: Range2D = (0.0, 10.0)
     assert isinstance(r, tuple)
     assert len(r) == 2
@@ -45,6 +57,11 @@ def test_range2d():
 
 
 def test_line2d():
+    """Test line2d.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     line: Line2D = (0.0, 0.0, 5.0, 5.0)
     assert isinstance(line, tuple)
     assert len(line) == 4
@@ -53,6 +70,11 @@ def test_line2d():
 
 
 def test_point2d():
+    """Test point2d.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     pt: Point2D = (3.0, 4.0)
     assert isinstance(pt, tuple)
     assert len(pt) == 2
@@ -61,6 +83,11 @@ def test_point2d():
 
 
 def test_circle2d():
+    """Test circle2d.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     circle: Circle2D = ((0.0, 0.0), 5.0)
     assert isinstance(circle, tuple)
     assert len(circle) == 2
@@ -72,6 +99,11 @@ def test_circle2d():
 
 
 def test_map_bounds():
+    """Test map bounds.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     bounds: MapBounds = ((0.0, 10.0), (0.0, 20.0))
     assert isinstance(bounds, tuple)
     assert len(bounds) == 2
@@ -83,6 +115,11 @@ def test_map_bounds():
 
 
 def test_rect_zone_polar_range():
+    """Test rect zone polar range.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     rect: Rect = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0))
     zone: Zone = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0))
     polar: PolarVec2D = (1.0, 45.0)
@@ -106,6 +143,11 @@ def test_rect_zone_polar_range():
 
 
 def test_differential_drive_action():
+    """Test differential drive action.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     action: DifferentialDriveAction = (1.0, 0.5)
     assert isinstance(action, tuple)
     assert len(action) == 2
@@ -114,6 +156,11 @@ def test_differential_drive_action():
 
 
 def test_bicycle_action():
+    """Test bicycle action.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     action: BicycleAction = (0.8, 0.2)
     assert isinstance(action, tuple)
     assert len(action) == 2
@@ -122,6 +169,11 @@ def test_bicycle_action():
 
 
 def test_robot_action_union():
+    """Test robot action union.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Test as DifferentialDriveAction
     action1: RobotAction = (1.0, 0.5)
     # Test as BicycleAction
@@ -134,6 +186,11 @@ def test_robot_action_union():
 
 
 def test_robot_pose():
+    """Test robot pose.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     pose: RobotPose = ((2.0, 3.0), 1.57)
     assert isinstance(pose, tuple)
     assert len(pose) == 2
@@ -146,6 +203,11 @@ def test_robot_pose():
 
 
 def test_ped_pose():
+    """Test ped pose.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ped: PedPose = ((4.0, 5.0), 0.0)
     assert isinstance(ped, tuple)
     assert len(ped) == 2
@@ -158,6 +220,11 @@ def test_ped_pose():
 
 
 def test_unicycle_action():
+    """Test unicycle action.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     action: UnicycleAction = (0.5, 0.1)
     assert isinstance(action, tuple)
     assert len(action) == 2
@@ -166,11 +233,21 @@ def test_unicycle_action():
 
 
 def test_ped_state():
+    """Test ped state.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     state: PedState = np.array([1.0, 2.0, 3.0])
     assert isinstance(state, np.ndarray)
 
 
 def test_ped_grouping():
+    """Test ped grouping.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     grouping: PedGrouping = {1, 2, 3}
     assert isinstance(grouping, set)
     for element in grouping:
@@ -178,6 +255,11 @@ def test_ped_grouping():
 
 
 def test_zone_assignments():
+    """Test zone assignments.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     assignments: ZoneAssignments = {1: 10, 2: 20}
     assert isinstance(assignments, dict)
     for key, value in assignments.items():
@@ -186,6 +268,11 @@ def test_zone_assignments():
 
 
 def test_rgb_color():
+    """Test rgb color.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     color: RgbColor = (255, 128, 64)
     assert isinstance(color, tuple)
     assert len(color) == 3

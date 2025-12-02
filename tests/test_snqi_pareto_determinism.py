@@ -13,6 +13,14 @@ from scripts.recompute_snqi_weights import SNQIWeightRecomputer
 
 
 def _episodes(n: int = 10):
+    """Episodes.
+
+    Args:
+        n: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     rng = np.random.default_rng(7)
     eps = []
     for i in range(n):
@@ -34,6 +42,14 @@ def _episodes(n: int = 10):
 
 
 def _baseline(episodes):
+    """Baseline.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for ep in episodes:
         for k in metrics:
@@ -46,6 +62,11 @@ def _baseline(episodes):
 
 
 def test_pareto_sampling_deterministic():
+    """Test pareto sampling deterministic.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     eps = _episodes()
     baseline = _baseline(eps)
 

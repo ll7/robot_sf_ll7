@@ -44,4 +44,12 @@ def default_guidance(duration_seconds: float, breach_type: str) -> list[str]:
 
 
 def format_guidance_lines(lines: Iterable[str]) -> str:
+    """Format guidance lines.
+
+    Args:
+        lines: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return "\n".join(f"  - {line}" for line in lines)

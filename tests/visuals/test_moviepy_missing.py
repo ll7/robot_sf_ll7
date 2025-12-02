@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """Cfg class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -28,6 +30,15 @@ class Cfg:
 
 
 def test_moviepy_missing_sim_view_forced(tmp_path: Path, monkeypatch):
+    """Test moviepy missing sim view forced.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Pretend SimulationView available
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)

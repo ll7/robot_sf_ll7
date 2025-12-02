@@ -16,7 +16,18 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
+    """Cfg class."""
+
     def __init__(self, tmp_path: Path, **over):
+        """Init.
+
+        Args:
+            tmp_path: Auto-generated placeholder description.
+            over: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
@@ -36,11 +47,27 @@ class _Cfg:
 
 
 def _read(path: Path):
+    """Read.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_deterministic_video_selection(tmp_path):
+    """Test deterministic video selection.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg1 = _Cfg(tmp_path / "sel1")
     cfg2 = _Cfg(tmp_path / "sel2")
     run_full_benchmark(cfg1)
@@ -51,6 +78,14 @@ def test_deterministic_video_selection(tmp_path):
 
 
 def test_renderer_field_present(tmp_path):
+    """Test renderer field present.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = _Cfg(tmp_path / "renderer")
     run_full_benchmark(cfg)
     vids = _read(Path(cfg.output_root) / "reports" / "video_artifacts.json")
@@ -58,6 +93,14 @@ def test_renderer_field_present(tmp_path):
 
 
 def test_disable_vs_smoke_notes(tmp_path):
+    """Test disable vs smoke notes.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg_disable = _Cfg(tmp_path / "disa", disable_videos=True)
     cfg_smoke = _Cfg(tmp_path / "smok", smoke=True)
     run_full_benchmark(cfg_disable)

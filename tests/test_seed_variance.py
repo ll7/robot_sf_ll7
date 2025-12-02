@@ -1,9 +1,21 @@
+"""Module test_seed_variance auto-generated docstring."""
+
 from __future__ import annotations
 
 from robot_sf.benchmark.seed_variance import compute_seed_variance
 
 
 def _make_record(group: str, seed: int, metrics: dict[str, float]) -> dict:
+    """Make record.
+
+    Args:
+        group: Auto-generated placeholder description.
+        seed: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     return {
         "episode_id": f"{group}-{seed}",
         "scenario_id": group,
@@ -13,6 +25,11 @@ def _make_record(group: str, seed: int, metrics: dict[str, float]) -> dict:
 
 
 def test_compute_seed_variance_basic():
+    """Test compute seed variance basic.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         _make_record("g1", 0, {"a": 1.0, "b": 2.0}),
         _make_record("g1", 1, {"a": 3.0, "b": 2.0}),
@@ -32,6 +49,11 @@ def test_compute_seed_variance_basic():
 
 
 def test_compute_seed_variance_metric_filter():
+    """Test compute seed variance metric filter.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         _make_record("g", 0, {"a": 1.0, "b": 2.0}),
         _make_record("g", 1, {"a": 3.0, "b": 4.0}),

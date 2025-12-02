@@ -12,6 +12,14 @@ from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
 
 
 def test_aggregate_metrics_structure(synthetic_episode_record):
+    """Test aggregate metrics structure.
+
+    Args:
+        synthetic_episode_record: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         synthetic_episode_record(
             episode_id="ep1",
@@ -30,6 +38,8 @@ def test_aggregate_metrics_structure(synthetic_episode_record):
     ]
 
     class _Cfg:  # minimal config stub
+        """Cfg class."""
+
         bootstrap_samples = 50
         bootstrap_confidence = 0.95
         master_seed = 123

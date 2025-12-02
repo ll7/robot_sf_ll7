@@ -1,9 +1,19 @@
+"""Module test_force_field_figure auto-generated docstring."""
+
 from pathlib import Path
 
 from robot_sf.benchmark.figures.force_field import generate_force_field_figure
 
 
 def test_force_field_figure_runs(tmp_path: Path):
+    """Test force field figure runs.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     png = tmp_path / "ff.png"
     pdf = tmp_path / "ff.pdf"
 

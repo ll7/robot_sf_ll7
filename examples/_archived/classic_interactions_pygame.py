@@ -99,6 +99,11 @@ ENABLE_RECORDING = True
 
 
 def _default_output_dir() -> Path:
+    """Default output dir.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     return resolve_artifact_path(Path("tmp/vis_runs") / time.strftime("%Y%m%d_%H%M%S"))
 
 
@@ -119,6 +124,8 @@ _CACHED_MODEL_SENTINEL = object()
 
 
 class EpisodeSummary(TypedDict):  # (FR-020)
+    """EpisodeSummary class."""
+
     scenario: str
     seed: int
     steps: int
@@ -138,6 +145,11 @@ else:
 
 
 def _validate_constants() -> None:  # (FR-019)
+    """Validate constants.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not SCENARIO_MATRIX_PATH.exists():
         raise FileNotFoundError(
             f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant.",
@@ -179,6 +191,18 @@ def _maybe_record(
     episode_index: int,
     out_dir: Path,
 ) -> bool:
+    """Maybe record.
+
+    Args:
+        frames: Auto-generated placeholder description.
+        scenario_name: Auto-generated placeholder description.
+        seed: Auto-generated placeholder description.
+        episode_index: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     if not frames:
         return False
     try:
@@ -204,6 +228,20 @@ def run_episode(
     seed: int,
     episode_index: int,
 ) -> EpisodeSummary:
+    """Run episode.
+
+    Args:
+        env: Auto-generated placeholder description.
+        policy: Auto-generated placeholder description.
+        record: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        scenario_name: Auto-generated placeholder description.
+        seed: Auto-generated placeholder description.
+        episode_index: Auto-generated placeholder description.
+
+    Returns:
+        EpisodeSummary: Auto-generated placeholder description.
+    """
     obs, _ = env.reset(seed=seed)
     done = False
     step = 0
@@ -296,6 +334,14 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
     try:
 
         def frame_sum(frame_obj):
+            """Frame sum.
+
+            Args:
+                frame_obj: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             # Prefer ndarray.sum if present, else construct array
             if hasattr(frame_obj, "sum") and callable(frame_obj.sum):
                 try:
@@ -342,12 +388,30 @@ def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str,
 
 
 def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
+    """Log dry run.
+
+    Args:
+        scenario: Auto-generated placeholder description.
+        seeds: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     logger.debug(
         f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}",
     )
 
 
 def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-any]
+    """Load or stub model.
+
+    Args:
+        fast_mode: Auto-generated placeholder description.
+        eff_max: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     if fast_mode and eff_max <= 1:
         # Only fall back to stub if user explicitly requested fast demo; otherwise enforce model presence.
@@ -358,7 +422,18 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
         if explicit_fast_flag:
 
             class _StubPolicy:  # pragma: no cover - trivial
+                """StubPolicy class."""
+
                 def predict(self, _obs, **_kwargs):
+                    """Predict.
+
+                    Args:
+                        _obs: Auto-generated placeholder description.
+                        _kwargs: Auto-generated placeholder description.
+
+                    Returns:
+                        Any: Auto-generated placeholder description.
+                    """
                     return np.zeros(2, dtype=float), None
 
             logger.info("FAST DEMO: Using stub policy (ROBOT_SF_FAST_DEMO=1)")
@@ -375,6 +450,14 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
 
 
 def _create_demo_env(fast_mode: bool):
+    """Create demo env.
+
+    Args:
+        fast_mode: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     sim_cfg = RobotSimulationConfig()
     if fast_mode:
         sim_cfg.sim_config.sim_time_in_secs = min(sim_cfg.sim_config.sim_time_in_secs, 3.0)
@@ -422,6 +505,20 @@ def _run_episodes(
     eff_record: bool,
     out_dir: Path,
 ) -> list[EpisodeSummary]:
+    """Run episodes.
+
+    Args:
+        env: Auto-generated placeholder description.
+        model: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        seeds: Auto-generated placeholder description.
+        eff_max: Auto-generated placeholder description.
+        eff_record: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        list[EpisodeSummary]: Auto-generated placeholder description.
+    """
     results: list[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error
         stack.callback(env.close)
@@ -450,6 +547,15 @@ def _run_episodes(
 
 
 def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[override]
+    """Warn if recording without ui.
+
+    Args:
+        env: Auto-generated placeholder description.
+        record: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if record and not getattr(env, "sim_ui", None):  # user expects video but debug disabled
         logger.warning(
             "Recording enabled but environment created with debug=False: no real frames will be captured. "
@@ -458,6 +564,14 @@ def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[ov
 
 
 def _maybe_print_summary(results: list[EpisodeSummary]) -> None:
+    """Maybe print summary.
+
+    Args:
+        results: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if LOGGING_ENABLED:
         print("Summary:")
         # Guarantee at least a header line so logging toggle test observes difference.

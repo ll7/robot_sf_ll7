@@ -41,6 +41,16 @@ def training(
     ped_densities: list[float] | None = None,
     difficulty: int = 2,
 ):
+    """Training.
+
+    Args:
+        n_envs: Auto-generated placeholder description.
+        ped_densities: Auto-generated placeholder description.
+        difficulty: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if n_envs is None:
         n_envs = os.cpu_count() or 1
     """Train a robot in robot_sf.
@@ -54,6 +64,11 @@ def training(
         ped_densities = [0.01, 0.02, 0.04, 0.08]
 
     def make_env():
+        """Make env.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities
         config.sim_config.difficulty = difficulty

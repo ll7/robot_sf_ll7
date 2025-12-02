@@ -1,3 +1,5 @@
+"""Module goal_sensor auto-generated docstring."""
+
 from math import atan2, dist
 
 import numpy as np
@@ -7,6 +9,14 @@ from robot_sf.common.types import PolarVec2D, RobotPose, Vec2D
 
 
 def norm_angle(angle: float) -> float:
+    """Norm angle.
+
+    Args:
+        angle: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
 

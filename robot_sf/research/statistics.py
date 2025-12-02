@@ -267,16 +267,43 @@ class HypothesisEvaluator:
     """
 
     def __init__(self, threshold: float = 40.0):
+        """Init.
+
+        Args:
+            threshold: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.threshold = threshold
 
     def evaluate_variant(
         self, baseline: list[float], pretrained: list[float], variant_id: str
     ) -> dict[str, Any]:
+        """Evaluate variant.
+
+        Args:
+            baseline: Auto-generated placeholder description.
+            pretrained: Auto-generated placeholder description.
+            variant_id: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         result = compare_to_threshold(baseline, pretrained, self.threshold)
         result["variant_id"] = variant_id
         return result
 
     def export_hypothesis_json(self, path: str | Path, results: list[dict[str, Any]]) -> Path:
+        """Export hypothesis json.
+
+        Args:
+            path: Auto-generated placeholder description.
+            results: Auto-generated placeholder description.
+
+        Returns:
+            Path: Auto-generated placeholder description.
+        """
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:

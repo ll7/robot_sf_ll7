@@ -65,6 +65,11 @@ class SmokeTestResult:
     exit_code: int = 0
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         payload = {
             "timestamp": self.timestamp.isoformat(timespec="seconds"),
             "environment_creation_sec": self.creation_seconds,
@@ -153,6 +158,22 @@ def run_performance_smoke_test(
     enforce: bool | None = None,
     on_ci: bool | None = None,
 ) -> SmokeTestResult:
+    """Run performance smoke test.
+
+    Args:
+        num_resets: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        include_recommendations: Auto-generated placeholder description.
+        creation_soft: Auto-generated placeholder description.
+        creation_hard: Auto-generated placeholder description.
+        reset_soft: Auto-generated placeholder description.
+        reset_hard: Auto-generated placeholder description.
+        enforce: Auto-generated placeholder description.
+        on_ci: Auto-generated placeholder description.
+
+    Returns:
+        SmokeTestResult: Auto-generated placeholder description.
+    """
     creation_soft = (
         creation_soft
         if creation_soft is not None
@@ -234,6 +255,11 @@ def run_performance_smoke_test(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse args.
+
+    Returns:
+        argparse.Namespace: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--num-resets",
@@ -265,6 +291,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Main.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     print("Social Navigation Benchmark - Performance Smoke Test")
     print("=" * 60)
 
@@ -334,11 +365,26 @@ def main() -> int:
 
 
 def _default_summary_path() -> Path:
+    """Default summary path.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     ensure_canonical_tree(categories=("benchmarks",))
     return get_artifact_category_path("benchmarks") / "performance_smoke_test.json"
 
 
 def _status_label(soft_ok: bool, hard_ok: bool, enforce: bool) -> str:
+    """Status label.
+
+    Args:
+        soft_ok: Auto-generated placeholder description.
+        hard_ok: Auto-generated placeholder description.
+        enforce: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     if hard_ok and soft_ok:
         return "PASS"
     if hard_ok and not soft_ok:
@@ -354,6 +400,17 @@ def _build_recommendations(
     resets_per_sec: float,
     thresholds: dict[str, float | bool],
 ) -> tuple[PerformanceRecommendation, ...]:
+    """Build recommendations.
+
+    Args:
+        statuses: Auto-generated placeholder description.
+        creation_time: Auto-generated placeholder description.
+        resets_per_sec: Auto-generated placeholder description.
+        thresholds: Auto-generated placeholder description.
+
+    Returns:
+        tuple[PerformanceRecommendation, ...]: Auto-generated placeholder description.
+    """
     recommendations: list[PerformanceRecommendation] = []
     timestamp_ms = int(time.time() * 1000)
     if statuses["creation"] != "PASS":
@@ -406,6 +463,15 @@ def _build_recommendations(
 
 
 def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
+    """Write telemetry snapshot.
+
+    Args:
+        path: Auto-generated placeholder description.
+        result: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     payload = {
         "timestamp_ms": int(result.timestamp.timestamp() * 1000),
         "step_id": "performance_smoke_test",
@@ -418,6 +484,15 @@ def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
 
 
 def _env_float(name: str, default: float) -> float:
+    """Env float.
+
+    Args:
+        name: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     try:
         return float(os.environ.get(name, "").strip() or default)
     except ValueError:

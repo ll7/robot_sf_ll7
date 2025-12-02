@@ -1,3 +1,5 @@
+"""Module test_cli_run auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +14,15 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_cli_run_subcommand(tmp_path: Path, capsys):
+    """Test cli run subcommand.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Minimal scenario matrix YAML
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [

@@ -1,3 +1,5 @@
+"""Module test_cli_snqi_ablation auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,14 @@ if TYPE_CHECKING:
 
 
 def _write_episodes(path: Path) -> None:
+    """Write episodes.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     recs = [
         {
             "episode_id": "e1",
@@ -34,6 +44,15 @@ def _write_episodes(path: Path) -> None:
 
 
 def test_cli_snqi_ablate_md(tmp_path: Path, capsys):
+    """Test cli snqi ablate md.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = tmp_path / "episodes.jsonl"
     _write_episodes(episodes)
     weights = {"w_success": 2.0, "w_time": 1.0, "w_collisions": 2.0}

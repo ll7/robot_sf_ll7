@@ -45,6 +45,18 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
     ):
+        """Init.
+
+        Args:
+            observation_space: Auto-generated placeholder description.
+            num_filters: Auto-generated placeholder description.
+            kernel_sizes: Auto-generated placeholder description.
+            dropout_rate: Auto-generated placeholder description.
+            drive_hidden_dims: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if num_filters is None:
             num_filters = [32, 16]
         if kernel_sizes is None:

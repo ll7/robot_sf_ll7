@@ -35,6 +35,20 @@ class BaseSimulationEnv(Env, ABC):
         video_fps: float | None = None,
         **kwargs,
     ):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            debug: Auto-generated placeholder description.
+            recording_enabled: Auto-generated placeholder description.
+            record_video: Auto-generated placeholder description.
+            video_path: Auto-generated placeholder description.
+            video_fps: Auto-generated placeholder description.
+            kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().__init__()
         self.config = config
         self.debug = debug
@@ -104,6 +118,15 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, **kwargs):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.state = None
         self.simulator = None
         self.last_action = None
@@ -138,6 +161,16 @@ class MultiAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, num_agents: int, **kwargs):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            num_agents: Auto-generated placeholder description.
+            kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().__init__(config, **kwargs)
         self.num_agents = num_agents
         self.agents = []

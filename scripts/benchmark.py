@@ -1,3 +1,5 @@
+"""Module benchmark auto-generated docstring."""
+
 import time
 
 from scalene import scalene_profiler
@@ -7,6 +9,11 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():
+    """Benchmark.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     total_steps = 10000
     env = RobotEnv()
     model = load_trained_policy("./model/ppo_model")

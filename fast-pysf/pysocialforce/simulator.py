@@ -34,9 +34,13 @@ class ForceContext(Protocol):
 
     peds: PedState
 
-    def get_obstacles(self) -> list[np.ndarray]: ...
+    def get_obstacles(self) -> list[np.ndarray]:
+        """Return the obstacles visible to the simulator."""
+        ...
 
-    def get_raw_obstacles(self) -> np.ndarray: ...
+    def get_raw_obstacles(self) -> np.ndarray:
+        """Return the raw obstacle array."""
+        ...
 
 
 ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
@@ -59,6 +63,8 @@ def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force
 
 
 class Simulator_v2:
+    """Simulator v2 class."""
+
     def __init__(
         self,
         map_definition: MapDefinition = EMPTY_MAP,
@@ -165,6 +171,8 @@ class Simulator_v2:
 
 
 class Simulator:
+    """Simulator class."""
+
     def __init__(
         self,
         state: np.ndarray,
@@ -174,6 +182,19 @@ class Simulator:
         make_forces: ForceFactory = make_forces,
         on_step: Callable[[int, SimState], None] = lambda t, s: None,
     ):
+        """Init.
+
+        Args:
+            state: Auto-generated placeholder description.
+            groups: Auto-generated placeholder description.
+            obstacles: Auto-generated placeholder description.
+            config: Auto-generated placeholder description.
+            make_forces: Auto-generated placeholder description.
+            on_step: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = config
         self.on_step = on_step
         resolution = self.config.scene_config.resolution
@@ -188,9 +209,19 @@ class Simulator:
 
     @property
     def current_state(self) -> SimState:
+        """Current state.
+
+        Returns:
+            SimState: Auto-generated placeholder description.
+        """
         return self.peds.state, self.peds.groups
 
     def get_states(self):
+        """Get states.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         warn(
             "For performance reasons This function does not retrieve the whole \
               state history (it used to facilitate video recordings). \
@@ -205,9 +236,19 @@ class Simulator:
         return len(self.get_states()[0])
 
     def get_obstacles(self) -> list[np.ndarray]:
+        """Get obstacles.
+
+        Returns:
+            list[np.ndarray]: Auto-generated placeholder description.
+        """
         return self.env.obstacles
 
     def get_raw_obstacles(self) -> np.ndarray:
+        """Get raw obstacles.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         return self.env.obstacles_raw
 
     def step_once(self) -> None:

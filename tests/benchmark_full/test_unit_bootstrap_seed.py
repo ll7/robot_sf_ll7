@@ -11,7 +11,17 @@ from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
 
 
 class _Cfg:
+    """Cfg class."""
+
     def __init__(self, seed: int):
+        """Init.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.bootstrap_samples = 200
         self.bootstrap_confidence = 0.90
         self.master_seed = seed
@@ -19,6 +29,11 @@ class _Cfg:
 
 
 def _records():
+    """Records.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     base = []
     for i in range(30):
         base.append(
@@ -33,6 +48,11 @@ def _records():
 
 
 def test_bootstrap_same_seed_identical():
+    """Test bootstrap same seed identical.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     recs = _records()
     g1 = aggregate_metrics(deepcopy(recs), _Cfg(123))
     g2 = aggregate_metrics(deepcopy(recs), _Cfg(123))
@@ -40,6 +60,11 @@ def test_bootstrap_same_seed_identical():
 
 
 def test_bootstrap_different_seed_differs():
+    """Test bootstrap different seed differs.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     recs = _records()
     g1 = aggregate_metrics(deepcopy(recs), _Cfg(123))
     g2 = aggregate_metrics(deepcopy(recs), _Cfg(456))

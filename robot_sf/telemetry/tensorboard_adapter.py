@@ -36,6 +36,11 @@ class TensorBoardAdapter:
     tag_prefix: str = "telemetry"
 
     def __post_init__(self) -> None:
+        """Post init.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.log_dir = Path(self.log_dir)
         self._writer_cls = _SummaryWriter
         self._writer: _SummaryWriter | None = None
@@ -121,6 +126,15 @@ def _iter_scalar_values(
     *,
     prefix: str,
 ) -> Iterable[tuple[str, float | None]]:
+    """Iter scalar values.
+
+    Args:
+        snapshot: Auto-generated placeholder description.
+        prefix: Auto-generated placeholder description.
+
+    Returns:
+        Iterable[tuple[str, float | None]]: Auto-generated placeholder description.
+    """
     yield f"{prefix}/steps_per_sec", snapshot.steps_per_sec
     yield f"{prefix}/cpu_process_percent", snapshot.cpu_percent_process
     yield f"{prefix}/cpu_system_percent", snapshot.cpu_percent_system

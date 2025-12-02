@@ -25,6 +25,11 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
 def make_demo_sim():
+    """Make demo sim.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # two pedestrians walking to the right, small vertical obstacle
     state = np.array(
         [
@@ -40,6 +45,11 @@ def make_demo_sim():
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     sim = make_demo_sim()
     wrapper = FastPysfWrapper(sim)
 

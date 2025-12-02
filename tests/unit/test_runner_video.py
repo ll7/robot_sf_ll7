@@ -1,3 +1,5 @@
+"""Module test_runner_video auto-generated docstring."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -17,6 +19,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
     reason="moviepy/ffmpeg not available",
 )
 def test_run_batch_with_synthetic_video(tmp_path: Path):
+    """Test run batch with synthetic video.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Minimal in-memory scenario list (single episode)
     scenarios = [
         {
@@ -71,7 +81,26 @@ def test_run_batch_with_synthetic_video(tmp_path: Path):
     reason="moviepy/ffmpeg not available",
 )
 def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Test zero step episode skips video.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     def fake_encoder(*args, **kwargs):  # type: ignore[no-untyped-def]
+        """Fake encoder.
+
+        Args:
+            args: Auto-generated placeholder description.
+            kwargs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return None, {"reason": "no-frames", "renderer": "synthetic", "steps": 0}
 
     monkeypatch.setattr(runner_mod, "_try_encode_synthetic_video", fake_encoder)
@@ -125,6 +154,14 @@ def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.Monke
     reason="moviepy/ffmpeg not available",
 )
 def test_metrics_match_with_and_without_video(tmp_path: Path):
+    """Test metrics match with and without video.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "unit-video-metrics",

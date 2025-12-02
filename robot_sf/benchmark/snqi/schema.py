@@ -34,17 +34,37 @@ EXPECTED_SCHEMA_VERSION = 1
 
 @dataclass
 class _FieldSpec:
+    """FieldSpec class."""
+
     name: str
     required: bool = True
 
 
 def _expect_keys(d: Mapping[str, Any], specs: Iterable[_FieldSpec], ctx: str) -> None:
+    """Expect keys.
+
+    Args:
+        d: Auto-generated placeholder description.
+        specs: Auto-generated placeholder description.
+        ctx: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     for spec in specs:
         if spec.required and spec.name not in d:
             raise ValueError(f"Missing required key '{spec.name}' in {ctx}")
 
 
 def _is_number(x: Any) -> bool:
+    """Is number.
+
+    Args:
+        x: Auto-generated placeholder description.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     return isinstance(x, int | float) and not isinstance(x, bool)
 
 
@@ -68,6 +88,14 @@ def assert_all_finite(obj: Any, path: str = "$") -> None:
 
 
 def _validate_metadata(meta: Mapping[str, Any]) -> None:
+    """Validate metadata.
+
+    Args:
+        meta: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     _expect_keys(
         meta,
         [
@@ -89,6 +117,14 @@ def _validate_metadata(meta: Mapping[str, Any]) -> None:
 
 
 def _validate_optimization(obj: Mapping[str, Any]) -> None:
+    """Validate optimization.
+
+    Args:
+        obj: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     # Required top-level keys (besides _metadata)
     required = ["recommended"]
     for key in required:
@@ -106,6 +142,14 @@ def _validate_optimization(obj: Mapping[str, Any]) -> None:
 
 
 def _validate_recompute(obj: Mapping[str, Any]) -> None:
+    """Validate recompute.
+
+    Args:
+        obj: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if "recommended_weights" not in obj:
         raise ValueError("Recompute output missing 'recommended_weights'")
     weights = obj["recommended_weights"]
@@ -117,6 +161,14 @@ def _validate_recompute(obj: Mapping[str, Any]) -> None:
 
 
 def _validate_sensitivity(obj: Mapping[str, Any]) -> None:
+    """Validate sensitivity.
+
+    Args:
+        obj: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     # Expect at least one analysis block
     expected_any = ["weight_sweep", "pairwise", "ablation", "normalization"]
     if not any(k in obj for k in expected_any):

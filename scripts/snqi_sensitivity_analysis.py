@@ -529,6 +529,11 @@ def load_weights(file_path: Path) -> dict[str, float]:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build arg parser.
+
+    Returns:
+        argparse.ArgumentParser: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description="SNQI Sensitivity Analysis")
     parser.add_argument(
         "--episodes",
@@ -591,6 +596,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _load_inputs(
     args: argparse.Namespace,
 ) -> tuple[list[dict], dict[str, dict[str, float]], dict[str, float]]:
+    """Load inputs.
+
+    Args:
+        args: Auto-generated placeholder description.
+
+    Returns:
+        tuple[list[dict], dict[str, dict[str, float]], dict[str, float]]: Auto-generated placeholder description.
+    """
     try:
         episodes = load_episodes_data(args.episodes)
         baseline_stats = load_baseline_stats(args.baseline)
@@ -605,6 +618,14 @@ def _load_inputs(
 
 
 def _apply_seed_if_any(seed: int | None) -> None:
+    """Apply seed if any.
+
+    Args:
+        seed: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if seed is not None:
         np.random.seed(seed)
 
@@ -615,6 +636,17 @@ def _run_analyses(
     sweep_points: int,
     pairwise_points: int,
 ) -> dict[str, Any]:
+    """Run analyses.
+
+    Args:
+        analyzer: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+        sweep_points: Auto-generated placeholder description.
+        pairwise_points: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     results: dict[str, Any] = {}
     logger.info("Running weight sweep analysis")
     results["weight_sweep"] = analyzer.weight_sweep_analysis(weights, n_points=sweep_points)
@@ -631,6 +663,11 @@ def _run_analyses(
 
 
 def _git_commit() -> str:
+    """Git commit.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     try:
         return (
             subprocess.check_output(
@@ -650,6 +687,17 @@ def _build_metadata(
     end_iso: str,
     runtime_seconds: float,
 ) -> dict[str, Any]:
+    """Build metadata.
+
+    Args:
+        args: Auto-generated placeholder description.
+        start_iso: Auto-generated placeholder description.
+        end_iso: Auto-generated placeholder description.
+        runtime_seconds: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     return {
         "schema_version": 1,
         "generated_at": end_iso,
@@ -671,6 +719,15 @@ def _build_metadata(
 
 
 def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
+    """Validate results.
+
+    Args:
+        results: Auto-generated placeholder description.
+        validate: Auto-generated placeholder description.
+
+    Returns:
+        int | None: Auto-generated placeholder description.
+    """
     try:
         if validate:
             validate_snqi(results, "sensitivity", check_finite=True)
@@ -683,6 +740,15 @@ def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
 
 
 def _write_results(results: dict[str, Any], output_dir: Path) -> None:
+    """Write results.
+
+    Args:
+        results: Auto-generated placeholder description.
+        output_dir: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -698,6 +764,21 @@ def _build_summary(
     end_iso: str,
     metadata: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build summary.
+
+    Args:
+        results: Auto-generated placeholder description.
+        total_episodes: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+        runtime_seconds: Auto-generated placeholder description.
+        start_iso: Auto-generated placeholder description.
+        end_iso: Auto-generated placeholder description.
+        metadata: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     summary: dict[str, Any] = {
         "analysis_summary": {
             "total_episodes": total_episodes,
@@ -746,6 +827,15 @@ def _build_summary(
 
 
 def _write_summary(summary: dict[str, Any], output_dir: Path) -> None:
+    """Write summary.
+
+    Args:
+        summary: Auto-generated placeholder description.
+        output_dir: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     with open(output_dir / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
@@ -756,6 +846,17 @@ def _handle_visualizations(
     output_dir: Path,
     skip_visualizations: bool,
 ) -> int | None:
+    """Handle visualizations.
+
+    Args:
+        analyzer: Auto-generated placeholder description.
+        results: Auto-generated placeholder description.
+        output_dir: Auto-generated placeholder description.
+        skip_visualizations: Auto-generated placeholder description.
+
+    Returns:
+        int | None: Auto-generated placeholder description.
+    """
     if skip_visualizations:
         return None
     try:
@@ -774,6 +875,15 @@ def _handle_visualizations(
 
 
 def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
+    """Print summary.
+
+    Args:
+        results: Auto-generated placeholder description.
+        total_episodes: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     logger.info("Sensitivity analysis completed.")
     print("\nSensitivity Analysis Summary:")
     print(f"Episodes analyzed: {total_episodes}")
@@ -795,6 +905,11 @@ def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
 
 
 def main() -> int:
+    """Main.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
 

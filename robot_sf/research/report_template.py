@@ -12,6 +12,14 @@ class MarkdownReportRenderer:
     """Renders research report as Markdown with optional LaTeX export."""
 
     def __init__(self, output_dir: Path):
+        """Init.
+
+        Args:
+            output_dir: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -252,6 +260,14 @@ class MarkdownReportRenderer:
                 pdf = Path(pdf_path) if pdf_path else None
 
                 def _rel_safe(path: Path) -> str:
+                    """Rel safe.
+
+                    Args:
+                        path: Auto-generated placeholder description.
+
+                    Returns:
+                        str: Auto-generated placeholder description.
+                    """
                     if not path.is_absolute():
                         return path.as_posix()
                     try:

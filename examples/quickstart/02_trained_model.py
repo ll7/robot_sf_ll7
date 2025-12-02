@@ -35,6 +35,11 @@ def project_root() -> Path:
 
 
 def main() -> int:
+    """Main.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     root = project_root()
     matrix = root / "configs/baselines/example_matrix.yaml"
     ppo_cfg = root / "configs/baselines/ppo.yaml"

@@ -1,3 +1,5 @@
+"""Module test_manifest_resume auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _scenarios(repeats: int = 2):
+    """Scenarios.
+
+    Args:
+        repeats: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return [
         {
             "id": "manifest-uni-low-open",
@@ -29,6 +39,14 @@ def _scenarios(repeats: int = 2):
 
 
 def test_manifest_created_and_used_for_resume(tmp_path: Path):
+    """Test manifest created and used for resume.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out_file = tmp_path / "episodes.jsonl"
     sc = _scenarios(repeats=2)
     # First run writes 2 lines and should produce a manifest
@@ -67,6 +85,14 @@ def test_manifest_created_and_used_for_resume(tmp_path: Path):
 
 
 def test_manifest_stale_fallbacks_to_scan(tmp_path: Path):
+    """Test manifest stale fallbacks to scan.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out_file = tmp_path / "episodes.jsonl"
     sc = _scenarios(repeats=1)
     # Write one episode
@@ -108,6 +134,14 @@ def test_manifest_stale_fallbacks_to_scan(tmp_path: Path):
 
 
 def test_manifest_identity_hash_mismatch_forces_scan(tmp_path: Path):
+    """Test manifest identity hash mismatch forces scan.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out_file = tmp_path / "episodes.jsonl"
     sc = _scenarios(repeats=1)
     # First run writes the file and manifest

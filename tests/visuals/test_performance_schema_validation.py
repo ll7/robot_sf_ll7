@@ -16,18 +16,41 @@ if jsonschema_spec:  # type: ignore
 
 
 def _schema():
+    """Schema.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def _validate(inst):
+    """Validate.
+
+    Args:
+        inst: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     jsonschema.validate(instance=inst, schema=_schema())  # type: ignore
 
 
 def test_valid_minimal():
+    """Test valid minimal.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     _validate({"plots_time_s": 0.5, "plots_over_budget": False, "video_over_budget": False})
 
 
 def test_missing_required_field():
+    """Test missing required field.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     import pytest as _pytest
 
     with _pytest.raises(Exception):

@@ -28,6 +28,15 @@ class StubRobotModel:  # pragma: no cover - trivial
     """
 
     def predict(self, _obs: Any, **_ignored: Any) -> tuple[object, None]:
+        """Predict.
+
+        Args:
+            _obs: Auto-generated placeholder description.
+            _ignored: Auto-generated placeholder description.
+
+        Returns:
+            tuple[object, None]: Auto-generated placeholder description.
+        """
         import numpy as np  # local import to avoid global dependency at module load
 
         return np.zeros(2, dtype=float), None

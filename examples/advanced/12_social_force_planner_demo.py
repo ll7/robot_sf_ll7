@@ -35,22 +35,62 @@ except ImportError:
 
     # Mock numpy for basic functionality
     class MockNumpy:
+        """MockNumpy class."""
+
         def array(self, data, dtype=None):
+            """Array.
+
+            Args:
+                data: Auto-generated placeholder description.
+                dtype: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return data
 
         # Mock ndarray attribute for type hints
         ndarray = list
 
         def linalg(self):
+            """Linalg.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return self
 
         def norm(self, vec):
+            """Norm.
+
+            Args:
+                vec: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return math.sqrt(sum(x * x for x in vec))
 
         def mean(self, data):
+            """Mean.
+
+            Args:
+                data: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return sum(data) / len(data)
 
         def max(self, data):
+            """Max.
+
+            Args:
+                data: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return max(data)
 
     np = MockNumpy()  # type: ignore[assignment]
@@ -72,14 +112,37 @@ except ImportError as e:
 
     # Mock implementations for demo purposes
     class Observation:
+        """Observation class."""
+
         def __init__(self, dt, robot, agents, obstacles=None):
+            """Init.
+
+            Args:
+                dt: Auto-generated placeholder description.
+                robot: Auto-generated placeholder description.
+                agents: Auto-generated placeholder description.
+                obstacles: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.dt = dt
             self.robot = robot
             self.agents = agents or []
             self.obstacles = obstacles or []
 
     class SFPlannerConfig:
+        """SFPlannerConfig class."""
+
         def __init__(self, **kwargs):
+            """Init.
+
+            Args:
+                kwargs: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             # Default configuration values
             self.action_space = kwargs.get("action_space", "velocity")
             self.v_max = kwargs.get("v_max", 2.0)
@@ -98,6 +161,15 @@ except ImportError as e:
         """Mock Social Force Planner for demonstration purposes."""
 
         def __init__(self, config, seed=None):
+            """Init.
+
+            Args:
+                config: Auto-generated placeholder description.
+                seed: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             if isinstance(config, dict):
                 self.config = SFPlannerConfig(**config)
             else:
@@ -169,18 +241,47 @@ except ImportError as e:
             return {"vx": total_vel[0], "vy": total_vel[1]}
 
         def reset(self, seed=None):
+            """Reset.
+
+            Args:
+                seed: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             if seed is not None:
                 self.seed = seed
 
         def configure(self, new_config):
+            """Configure.
+
+            Args:
+                new_config: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             if isinstance(new_config, dict):
                 for key, value in new_config.items():
                     setattr(self.config, key, value)
 
         def close(self):
+            """Close.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             pass
 
     def get_baseline(name):
+        """Get baseline.
+
+        Args:
+            name: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if name == "baseline_sf":
             return MockSocialForcePlanner
         else:
@@ -194,10 +295,27 @@ if "MockSocialForcePlanner" not in globals():
         """Lightweight mock Social Force Planner (fallback when real deps present)."""
 
         def __init__(self, config, seed=None):
+            """Init.
+
+            Args:
+                config: Auto-generated placeholder description.
+                seed: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.config = config
             self.seed = seed
 
         def step(self, obs) -> dict[str, float]:
+            """Step.
+
+            Args:
+                obs: Auto-generated placeholder description.
+
+            Returns:
+                dict[str, float]: Auto-generated placeholder description.
+            """
             # Trivial straight-line goal seeker with zero avoidance
             goal = obs.robot["goal"]
             pos = obs.robot["position"]
@@ -217,13 +335,34 @@ if "MockSocialForcePlanner" not in globals():
             return {"vx": ux * speed, "vy": uy * speed}
 
         def reset(self, seed=None):
+            """Reset.
+
+            Args:
+                seed: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             if seed is not None:
                 self.seed = seed
 
         def configure(self, new_config):
+            """Configure.
+
+            Args:
+                new_config: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             pass
 
         def close(self):
+            """Close.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             pass
 
 
@@ -574,6 +713,14 @@ class SFPDemo:
             # Create observation
             # Convert container types safely
             def _to_list(x):
+                """To list.
+
+                Args:
+                    x: Auto-generated placeholder description.
+
+                Returns:
+                    Any: Auto-generated placeholder description.
+                """
                 if hasattr(x, "tolist"):
                     return x.tolist()
                 if isinstance(x, list | tuple):

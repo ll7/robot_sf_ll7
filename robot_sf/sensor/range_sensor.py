@@ -1,3 +1,5 @@
+"""Module range_sensor auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import cos, sin
 
@@ -16,12 +18,12 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     """
     Calculate Euclidean distance between two 2D vectors.
 
-    Parameters:
-    vec_1 (Vec2D): First 2D vector.
-    vec_2 (Vec2D): Second 2D vector.
+    Args:
+        vec_1: First 2D vector.
+        vec_2: Second 2D vector.
 
     Returns:
-    float: Euclidean distance between vec_1 and vec_2.
+        float: Euclidean distance between the vectors.
     """
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root
@@ -34,13 +36,13 @@ def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_v
     Calculate the distance from the sensor position to the intersection point
     between a line segment and a ray vector.
 
-    Parameters:
-    segment (Line2D): The line segment.
-    sensor_pos (Vec2D): The sensor position.
-    ray_vec (Vec2D): The ray vector.
+    Args:
+        segment: Line segment represented as ``((x1, y1), (x2, y2))``.
+        sensor_pos: Sensor origin.
+        ray_vec: Ray direction vector.
 
     Returns:
-    float: The distance to the intersection point, or infinity if no intersection.
+        float: Distance to the intersection point or ``inf`` if none exists.
     """
     # Unpack segment endpoints, sensor position, and ray vector
     # Line2D is ((x1, y1), (x2, y2))
@@ -78,14 +80,13 @@ def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: 
     Calculate the distance from the origin to the intersection point between
     a circle and a ray vector.
 
-    Parameters:
-    circle (Circle2D): The circle defined by its center and radius.
-    origin (Vec2D): The origin of the ray vector.
-    ray_vec (Vec2D): The ray vector.
+    Args:
+        circle: Circle defined by center coordinates and radius.
+        origin: Ray origin in world coordinates.
+        ray_vec: Ray direction vector.
 
     Returns:
-    float: The distance to the nearest intersection point, or infinity if no
-    intersection.
+        float: Distance to the nearest intersection point, or ``inf`` if there is none.
     """
     # Unpack circle center and radius, and ray vector
     (circle_x, circle_y), radius = circle
@@ -143,6 +144,11 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
         if self.max_scan_dist <= 0:
@@ -236,6 +242,17 @@ def raycast_obstacles(
     obstacles: np.ndarray,
     ray_angles: np.ndarray,
 ):
+    """Raycast obstacles.
+
+    Args:
+        out_ranges: Auto-generated placeholder description.
+        scanner_pos: Auto-generated placeholder description.
+        obstacles: Auto-generated placeholder description.
+        ray_angles: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
 
@@ -335,6 +352,15 @@ def lidar_ray_scan(
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
+    """Lidar sensor space.
+
+    Args:
+        num_rays: Auto-generated placeholder description.
+        max_scan_dist: Auto-generated placeholder description.
+
+    Returns:
+        spaces.Box: Auto-generated placeholder description.
+    """
     high = np.full((num_rays), max_scan_dist, dtype=np.float32)
     low = np.zeros((num_rays), dtype=np.float32)
     return spaces.Box(low=low, high=high, dtype=np.float32)

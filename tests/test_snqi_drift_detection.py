@@ -1,3 +1,5 @@
+"""Module test_snqi_drift_detection auto-generated docstring."""
+
 import json
 from pathlib import Path
 
@@ -8,6 +10,14 @@ ARTIFACT = Path("model/snqi_canonical_weights_v1.json")
 
 
 def test_snqi_drift_minimal(tmp_path):
+    """Test snqi drift minimal.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = FIXTURE_DIR / "episodes_small.jsonl"
     baseline = FIXTURE_DIR / "baseline_stats.json"
     out = tmp_path / "opt.json"

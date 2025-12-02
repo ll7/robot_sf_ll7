@@ -1,3 +1,5 @@
+"""Module test_train_expert_ppo auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +13,15 @@ from scripts.training.train_expert_ppo import (
 
 
 def test_expert_training_dry_run(tmp_path, monkeypatch):
+    """Test expert training dry run.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     config_path = Path("configs/training/ppo_imitation/expert_ppo.yaml").resolve()
     config = load_expert_training_config(config_path)

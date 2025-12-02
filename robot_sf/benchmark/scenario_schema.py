@@ -29,6 +29,11 @@ SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json
 
 
 def load_scenario_schema() -> dict[str, Any]:
+    """Load scenario schema.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         import json
 
@@ -36,6 +41,14 @@ def load_scenario_schema() -> dict[str, Any]:
 
 
 def _json_pointer(path_elems: Iterable[Any]) -> str:
+    """Json pointer.
+
+    Args:
+        path_elems: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     parts: list[str] = []
     for p in path_elems:
         if isinstance(p, int):

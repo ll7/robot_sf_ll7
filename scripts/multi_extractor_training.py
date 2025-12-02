@@ -77,6 +77,14 @@ class RunSettings:
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> RunSettings:
+        """From mapping.
+
+        Args:
+            payload: Auto-generated placeholder description.
+
+        Returns:
+            RunSettings: Auto-generated placeholder description.
+        """
         options = payload.get("run", {})
         settings = cls()
         settings.run_label = str(options.get("run_id", settings.run_label))
@@ -108,21 +116,50 @@ class RunSettings:
         return settings
 
     def effective_timesteps(self, *, test_mode: bool) -> int:
+        """Effective timesteps.
+
+        Args:
+            test_mode: Auto-generated placeholder description.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         if not test_mode:
             return self.total_timesteps
         return max(8, min(self.total_timesteps, 128))
 
     def effective_eval_freq(self, *, test_mode: bool) -> int:
+        """Effective eval freq.
+
+        Args:
+            test_mode: Auto-generated placeholder description.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         if not test_mode:
             return self.eval_freq
         return max(1, min(self.eval_freq, 32))
 
     def effective_save_freq(self, *, test_mode: bool) -> int:
+        """Effective save freq.
+
+        Args:
+            test_mode: Auto-generated placeholder description.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         if not test_mode:
             return self.save_freq
         return max(4, min(self.save_freq, 64))
 
     def worker_count(self) -> int:
+        """Worker count.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return self.num_envs if self.worker_mode == "vectorized" else 1
 
 
@@ -140,6 +177,14 @@ class RunContext:
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    """Parse args.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        argparse.Namespace: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -168,12 +213,25 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 def _configure_logging(verbose: bool) -> None:
+    """Configure logging.
+
+    Args:
+        verbose: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     logger.remove()
     level = "DEBUG" if verbose else "INFO"
     logger.add(sys.stderr, level=level)
 
 
 def _ensure_spawn_start_method() -> None:
+    """Ensure spawn start method.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if sys.platform != "darwin":
         return
     current = mp.get_start_method(allow_none=True)
@@ -205,6 +263,14 @@ def _get_vec_env_config(
 def load_configuration(
     config_path: Path,
 ) -> tuple[RunSettings, list[ExtractorConfigurationProfile]]:
+    """Load configuration.
+
+    Args:
+        config_path: Auto-generated placeholder description.
+
+    Returns:
+        tuple[RunSettings, list[ExtractorConfigurationProfile]]: Auto-generated placeholder description.
+    """
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
@@ -238,6 +304,14 @@ def load_configuration(
 
 
 def should_use_test_mode(environment: dict[str, str]) -> bool:
+    """Should use test mode.
+
+    Args:
+        environment: Auto-generated placeholder description.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     value = environment.get(TEST_MODE_ENV)
     if not value:
         return False
@@ -250,6 +324,16 @@ def resolve_run_context(
     args: argparse.Namespace,
     environment: dict[str, str],
 ) -> RunContext:
+    """Resolve run context.
+
+    Args:
+        settings: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+        environment: Auto-generated placeholder description.
+
+    Returns:
+        RunContext: Auto-generated placeholder description.
+    """
     run_id = args.run_id or settings.run_label
     now = datetime.now(UTC)
     timestamp = now.strftime("%Y%m%d-%H%M%S")
@@ -280,6 +364,14 @@ def resolve_run_context(
 
 
 def _resolve_feature_config(profile: ExtractorConfigurationProfile) -> FeatureExtractorConfig:
+    """Resolve feature config.
+
+    Args:
+        profile: Auto-generated placeholder description.
+
+    Returns:
+        FeatureExtractorConfig: Auto-generated placeholder description.
+    """
     from robot_sf.feature_extractors.config import FeatureExtractorPresets
 
     preset_name = profile.preset or profile.name
@@ -294,6 +386,11 @@ def _resolve_feature_config(profile: ExtractorConfigurationProfile) -> FeatureEx
 
 
 def _gpu_available() -> bool:
+    """Gpu available.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     try:
         import torch
     except Exception:  # pragma: no cover - torch is an install requirement
@@ -308,6 +405,17 @@ def _skip_record(
     artifacts: dict[str, str],
     reason: str,
 ) -> ExtractorRunRecord:
+    """Skip record.
+
+    Args:
+        profile: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+        artifacts: Auto-generated placeholder description.
+        reason: Auto-generated placeholder description.
+
+    Returns:
+        ExtractorRunRecord: Auto-generated placeholder description.
+    """
     now = datetime.now(UTC).isoformat()
     return ExtractorRunRecord(
         config_name=profile.name,
@@ -331,6 +439,17 @@ def _simulate_extractor_run(
     extractor_dir: Path,
     artifacts: dict[str, str],
 ) -> ExtractorRunRecord:
+    """Simulate extractor run.
+
+    Args:
+        profile: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+        extractor_dir: Auto-generated placeholder description.
+        artifacts: Auto-generated placeholder description.
+
+    Returns:
+        ExtractorRunRecord: Auto-generated placeholder description.
+    """
     logger.debug("Simulating extractor run", extractor=profile.name)
     start_time = datetime.now(UTC).isoformat()
     metrics = {
@@ -367,6 +486,19 @@ def _run_sb3_training(
     start_time_iso: str,
     start_wall: float,
 ) -> ExtractorRunRecord:
+    """Run sb3 training.
+
+    Args:
+        profile: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+        extractor_dir: Auto-generated placeholder description.
+        artifacts: Auto-generated placeholder description.
+        start_time_iso: Auto-generated placeholder description.
+        start_wall: Auto-generated placeholder description.
+
+    Returns:
+        ExtractorRunRecord: Auto-generated placeholder description.
+    """
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import (
@@ -384,6 +516,11 @@ def _run_sb3_training(
         save_freq = context.settings.effective_save_freq(test_mode=context.test_mode)
 
         def env_factory() -> Any:
+            """Env factory.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             return environment_factory.make_robot_env(seed=context.settings.seed)
 
         _ensure_spawn_start_method()
@@ -502,6 +639,15 @@ def _run_sb3_training(
 def _determine_skip_reason(
     profile: ExtractorConfigurationProfile, context: RunContext
 ) -> Optional[str]:
+    """Determine skip reason.
+
+    Args:
+        profile: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+
+    Returns:
+        Optional[str]: Auto-generated placeholder description.
+    """
     settings = context.settings
     gpu_available = _gpu_available()
 
@@ -521,6 +667,15 @@ def train_extractor(
     profile: ExtractorConfigurationProfile,
     context: RunContext,
 ) -> ExtractorRunRecord:
+    """Train extractor.
+
+    Args:
+        profile: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+
+    Returns:
+        ExtractorRunRecord: Auto-generated placeholder description.
+    """
     settings = context.settings
     extractor_dir = make_extractor_directory(context.run_dir, profile.name)
     artifacts: dict[str, str] = {"extractor_dir": str(extractor_dir.relative_to(context.run_dir))}
@@ -559,6 +714,15 @@ def _load_histories(
     records: list[ExtractorRunRecord],
     context: RunContext,
 ) -> dict[str, tuple[object | None, Path]]:
+    """Load histories.
+
+    Args:
+        records: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, tuple[object | None, Path]]: Auto-generated placeholder description.
+    """
     history_map: dict[str, tuple[object | None, Path]] = {}
     for record in records:
         rel = record.artifacts.get("extractor_dir")
@@ -571,6 +735,15 @@ def _enrich_records_with_analysis(
     records: list[ExtractorRunRecord],
     context: RunContext,
 ) -> tuple[float, float]:
+    """Enrich records with analysis.
+
+    Args:
+        records: Auto-generated placeholder description.
+        context: Auto-generated placeholder description.
+
+    Returns:
+        tuple[float, float]: Auto-generated placeholder description.
+    """
     if not records:
         return 0.0, 0.0
     history_map = _load_histories(records, context)
@@ -631,6 +804,16 @@ def compute_aggregate_metrics(
     baseline_target: float,
     baseline_convergence: float,
 ) -> dict[str, float]:
+    """Compute aggregate metrics.
+
+    Args:
+        records: Auto-generated placeholder description.
+        baseline_target: Auto-generated placeholder description.
+        baseline_convergence: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     total_time = sum(record.duration_seconds or 0.0 for record in records)
     best_rewards = [
         float(v)
@@ -665,6 +848,15 @@ def compute_aggregate_metrics(
 
 
 def build_summary(context: RunContext, records: list[ExtractorRunRecord]) -> TrainingRunSummary:
+    """Build summary.
+
+    Args:
+        context: Auto-generated placeholder description.
+        records: Auto-generated placeholder description.
+
+    Returns:
+        TrainingRunSummary: Auto-generated placeholder description.
+    """
     notes = [record.reason for record in records if record.reason]
     baseline_target, baseline_convergence = _enrich_records_with_analysis(records, context)
     aggregate = compute_aggregate_metrics(
@@ -731,6 +923,14 @@ def write_legacy_results(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     args = parse_args(argv)
     _configure_logging(verbose=args.verbose)
 

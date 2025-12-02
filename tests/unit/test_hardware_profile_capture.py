@@ -1,3 +1,5 @@
+"""Module test_hardware_profile_capture auto-generated docstring."""
+
 import platform
 import sys
 
@@ -9,6 +11,15 @@ from robot_sf.training.hardware_probe import collect_hardware_profile
 
 @pytest.mark.parametrize("worker_count", [1, 4])
 def test_collect_hardware_profile_cpu_only(monkeypatch, worker_count):
+    """Test collect hardware profile cpu only.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+        worker_count: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", lambda: (None, None))
 
     profile = collect_hardware_profile(worker_count=worker_count)
@@ -23,6 +34,14 @@ def test_collect_hardware_profile_cpu_only(monkeypatch, worker_count):
 
 
 def test_collect_hardware_profile_with_gpu(monkeypatch):
+    """Test collect hardware profile with gpu.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", lambda: ("Fake GPU", "12.3"))
 
     profile = collect_hardware_profile(worker_count=2)

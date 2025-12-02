@@ -9,6 +9,8 @@ from robot_sf.render.sim_view import VisualizableSimState
 
 
 class TestVisualizableSimState:
+    """TestVisualizableSimState class."""
+
     # Remove the __init__ method entirely
 
     @pytest.fixture

@@ -1,3 +1,5 @@
+"""Module test_plots_pareto auto-generated docstring."""
+
 from __future__ import annotations
 
 from robot_sf.benchmark.plots import (
@@ -8,6 +10,16 @@ from robot_sf.benchmark.plots import (
 
 
 def _rec(g: str, x: float, y: float) -> dict:
+    """Rec.
+
+    Args:
+        g: Auto-generated placeholder description.
+        x: Auto-generated placeholder description.
+        y: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     return {
         "scenario_id": f"scn-{g}",
         "scenario_params": {"algo": g},
@@ -17,6 +29,11 @@ def _rec(g: str, x: float, y: float) -> dict:
 
 
 def test_compute_points_and_front():
+    """Test compute points and front.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         _rec("A", 1.0, 0.5),
         _rec("A", 1.0, 0.6),
@@ -31,6 +48,14 @@ def test_compute_points_and_front():
 
 
 def test_save_png_creates_file(tmp_path):
+    """Test save png creates file.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         _rec("A", 1.0, 0.5),
         _rec("B", 0.8, 0.9),
@@ -44,6 +69,14 @@ def test_save_png_creates_file(tmp_path):
 
 
 def test_save_pdf_option(tmp_path):
+    """Test save pdf option.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         _rec("A", 1.0, 0.5),
         _rec("B", 0.8, 0.9),

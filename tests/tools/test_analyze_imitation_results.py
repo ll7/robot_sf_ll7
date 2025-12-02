@@ -1,3 +1,5 @@
+"""Module test_analyze_imitation_results auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,16 @@ if TYPE_CHECKING:
 
 
 def _write_manifest(run_id: str, root: Path, metrics: dict[str, float]) -> Path:
+    """Write manifest.
+
+    Args:
+        run_id: Auto-generated placeholder description.
+        root: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     path = get_training_run_manifest_path(run_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     metric_payload: dict[str, Any] = {}
@@ -35,6 +47,15 @@ def _write_manifest(run_id: str, root: Path, metrics: dict[str, float]) -> Path:
 
 
 def test_analyze_imitation_results_generates_summary(tmp_path: Path, monkeypatch):
+    """Test analyze imitation results generates summary.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     baseline_metrics = {
         "timesteps_to_convergence": 1000.0,

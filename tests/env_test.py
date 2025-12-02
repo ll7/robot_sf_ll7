@@ -1,3 +1,5 @@
+"""Module env_test auto-generated docstring."""
+
 from typing import cast
 
 from gymnasium import spaces
@@ -9,11 +11,21 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 
 def test_can_create_env():
+    """Test can create env.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = RobotEnv()
     assert env is not None
 
 
 def test_can_return_valid_observation():
+    """Test can return valid observation.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = RobotEnv()
     # Cast observation_space to spaces.Dict for static type checkers
     obs_dict = cast(spaces.Dict, env.observation_space)
@@ -29,6 +41,11 @@ def test_can_return_valid_observation():
 
 
 def test_can_simulate_with_pedestrians():
+    """Test can simulate with pedestrians.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     total_steps = 1000
     env = RobotEnv()
     env.reset()
@@ -41,6 +58,11 @@ def test_can_simulate_with_pedestrians():
 
 
 def test_ego_ped_env():
+    """Test ego ped env.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     total_steps = 1000
     robot_model = PPO.load("./model/run_043", env=None)
     env = PedestrianEnv(robot_model=robot_model)

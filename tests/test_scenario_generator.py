@@ -33,6 +33,11 @@ BASE_PARAMS = {
 
 
 def test_determinism_same_seed():
+    """Test determinism same seed.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     p = {**BASE_PARAMS}
     a = generate_scenario(p, seed=123)
     b = generate_scenario(p, seed=123)
@@ -43,6 +48,11 @@ def test_determinism_same_seed():
 
 
 def test_variation_different_seed():
+    """Test variation different seed.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     p = {**BASE_PARAMS}
     a = generate_scenario(p, seed=1)
     c = generate_scenario(p, seed=2)
@@ -51,6 +61,11 @@ def test_variation_different_seed():
 
 
 def test_density_counts():
+    """Test density counts.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     for density, expected in {"low": 10, "med": 25, "high": 40}.items():
         p = {**BASE_PARAMS, "density": density}
         scen = generate_scenario(p, seed=42)
@@ -60,6 +75,11 @@ def test_density_counts():
 
 
 def test_obstacle_layouts():
+    """Test obstacle layouts.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     kinds_expected = {"open": 0, "bottleneck": 2, "maze": 3}
     for kind, exp in kinds_expected.items():
         p = {**BASE_PARAMS, "obstacle": kind}
@@ -68,6 +88,11 @@ def test_obstacle_layouts():
 
 
 def test_goal_topology_swap_and_circulate():
+    """Test goal topology swap and circulate.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # swap reverses ordering of positions for goals
     p_swap = {**BASE_PARAMS, "flow": "uni", "goal_topology": "swap"}
     scen_swap = generate_scenario(p_swap, seed=5)
@@ -84,6 +109,11 @@ def test_goal_topology_swap_and_circulate():
 
 
 def test_group_assignment_fraction():
+    """Test group assignment fraction.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Use high density for better sample size
     p = {**BASE_PARAMS, "density": "high", "groups": 0.4}
     scen = generate_scenario(p, seed=7)
@@ -93,6 +123,11 @@ def test_group_assignment_fraction():
 
 
 def test_speed_variance_metadata():
+    """Test speed variance metadata.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     p_low = {**BASE_PARAMS, "speed_var": "low"}
     scen_low = generate_scenario(p_low, seed=11)
     assert np.isclose(scen_low.metadata["speed_std"], 0.2)
@@ -102,6 +137,11 @@ def test_speed_variance_metadata():
 
 
 def test_flow_goal_geometries():
+    """Test flow goal geometries.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # bi-directional
     p_bi = {**BASE_PARAMS, "flow": "bi", "goal_topology": "point", "density": "med"}
     scen_bi = generate_scenario(p_bi, seed=21)

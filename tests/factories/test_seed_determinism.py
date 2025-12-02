@@ -37,6 +37,14 @@ def _extract_numeric(obs):
 
 @pytest.mark.parametrize("debug", [False])
 def test_seed_determinism(debug):
+    """Test seed determinism.
+
+    Args:
+        debug: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     config1 = RobotSimulationConfig()
     config2 = RobotSimulationConfig()
     # Assign same seed before creation if attribute exists

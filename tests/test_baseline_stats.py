@@ -1,3 +1,5 @@
+"""Module test_baseline_stats auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +18,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_compute_baseline_stats_from_records(tmp_path: Path):
+    """Test compute baseline stats from records.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Create a tiny JSONL with two records and known metrics
     p = tmp_path / "episodes.jsonl"
     recs = [
@@ -62,6 +72,14 @@ ess_min_matrix = [
 
 
 def test_run_and_compute_baseline(tmp_path: Path):
+    """Test run and compute baseline.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out_json = tmp_path / "baseline_stats.json"
     out_jsonl = tmp_path / "episodes.jsonl"
     stats = run_and_compute_baseline(

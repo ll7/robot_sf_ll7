@@ -1,3 +1,5 @@
+"""Module map_config auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import dist
 
@@ -65,6 +67,11 @@ class Obstacle:
     vertices_np: np.ndarray = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if not self.vertices:
             raise ValueError("No vertices specified for obstacle!")
 

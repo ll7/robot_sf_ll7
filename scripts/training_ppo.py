@@ -1,3 +1,5 @@
+"""Module training_ppo auto-generated docstring."""
+
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
@@ -10,11 +12,21 @@ from robot_sf.tb_logging import DrivingMetricsCallback
 
 
 def training():
+    """Training.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     n_envs = 22
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
     def make_env():
+        """Make env.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities
         config.sim_config.difficulty = difficulty

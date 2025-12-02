@@ -1,3 +1,5 @@
+"""Module unicycle_drive auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import atan2, cos, sin, tan
 
@@ -40,6 +42,11 @@ class UnicycleDriveState:
 
     @property
     def pos(self) -> Vec2D:
+        """Pos.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         return self.pose[0]
 
     @property
@@ -125,37 +132,92 @@ class UnicycleDrivePedestrian:
     movement: UnicycleMotion = field(init=False)
 
     def __post_init__(self):
+        """Post init.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.movement = UnicycleMotion(self.config)
 
     @property
     def observation_space(self) -> spaces.Box:
+        """Observation space.
+
+        Returns:
+            spaces.Box: Auto-generated placeholder description.
+        """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def action_space(self) -> spaces.Box:
+        """Action space.
+
+        Returns:
+            spaces.Box: Auto-generated placeholder description.
+        """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def pos(self) -> Vec2D:
+        """Pos.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         return self.state.pose[0]
 
     @property
     def pose(self) -> PedPose:
+        """Pose.
+
+        Returns:
+            PedPose: Auto-generated placeholder description.
+        """
         return self.state.pose
 
     @property
     def current_speed(self) -> PolarVec2D:
+        """Current speed.
+
+        Returns:
+            PolarVec2D: Auto-generated placeholder description.
+        """
         return self.state.current_speed
 
     def apply_action(self, action: UnicycleAction, d_t: float):
+        """Apply action.
+
+        Args:
+            action: Auto-generated placeholder description.
+            d_t: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.movement.move(self.state, action, d_t)
 
     def reset_state(self, new_pose: PedPose):
+        """Reset state.
+
+        Args:
+            new_pose: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.state = UnicycleDriveState(new_pose, 0)
 
     def parse_action(self, action: np.ndarray) -> UnicycleAction:
+        """Parse action.
+
+        Args:
+            action: Auto-generated placeholder description.
+
+        Returns:
+            UnicycleAction: Auto-generated placeholder description.
+        """
         return (action[0], action[1])

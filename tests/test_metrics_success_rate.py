@@ -1,3 +1,5 @@
+"""Module test_metrics_success_rate auto-generated docstring."""
+
 import numpy as np
 
 from robot_sf.benchmark.metrics import (
@@ -10,6 +12,15 @@ from robot_sf.benchmark.metrics import (
 
 
 def make_base_episode(T=5, with_peds=True):
+    """Make base episode.
+
+    Args:
+        T: Auto-generated placeholder description.
+        with_peds: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
     robot_acc = np.zeros((T, 2))
@@ -25,6 +36,11 @@ def make_base_episode(T=5, with_peds=True):
 
 
 def test_success_without_collisions_reaches_goal():
+    """Test success without collisions reaches goal.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(T)
     # place robot at goal at step 3
@@ -46,6 +62,11 @@ def test_success_without_collisions_reaches_goal():
 
 
 def test_failure_on_wall_collision():
+    """Test failure on wall collision.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -72,6 +93,11 @@ def test_failure_on_wall_collision():
 
 
 def test_failure_on_agent_collision():
+    """Test failure on agent collision.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -98,6 +124,11 @@ def test_failure_on_agent_collision():
 
 
 def test_failure_on_human_collision():
+    """Test failure on human collision.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(T)
     robot_pos[:4, 0] = np.linspace(0.0, 10.0, 4)

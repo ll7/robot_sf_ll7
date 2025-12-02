@@ -1,3 +1,5 @@
+"""Module test_runner_batch auto-generated docstring."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_run_batch_to_tmp(tmp_path: Path):
+    """Test run batch to tmp.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "batch-uni-low-open",

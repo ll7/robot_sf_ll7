@@ -1,3 +1,5 @@
+"""Module ped_grouping auto-generated docstring."""
+
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -150,29 +152,71 @@ class PedestrianGroupings:
 
     @property
     def groups_as_lists(self) -> list[list[int]]:
+        """Groups as lists.
+
+        Returns:
+            list[list[int]]: Auto-generated placeholder description.
+        """
         # info: this facilitates slicing over numpy arrays
         #       for some reason, numpy cannot slide over indices provided as set ...
         return [list(ped_ids) for ped_ids in self.groups.values()]
 
     @property
     def group_ids(self) -> set[int]:
+        """Group ids.
+
+        Returns:
+            set[int]: Auto-generated placeholder description.
+        """
         # info: ignore empty groups
         return {k for k in self.groups if len(self.groups[k]) > 0}
 
     def group_centroid(self, group_id: int) -> Vec2D:
+        """Group centroid.
+
+        Args:
+            group_id: Auto-generated placeholder description.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         group = self.groups[group_id]
         positions = self.states.pos_of_many(group)
         c_x, c_y = np.mean(positions, axis=0)
         return (c_x, c_y)
 
     def group_size(self, group_id: int) -> int:
+        """Group size.
+
+        Args:
+            group_id: Auto-generated placeholder description.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return len(self.groups[group_id])
 
     def goal_of_group(self, group_id: int) -> Vec2D:
+        """Goal of group.
+
+        Args:
+            group_id: Auto-generated placeholder description.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
 
     def new_group(self, ped_ids: set[int]) -> int:
+        """New group.
+
+        Args:
+            ped_ids: Auto-generated placeholder description.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0
         self.groups[new_gid] = ped_ids.copy()
         for ped_id in ped_ids:
@@ -183,15 +227,41 @@ class PedestrianGroupings:
         return new_gid
 
     def remove_group(self, group_id: int):
+        """Remove group.
+
+        Args:
+            group_id: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         ped_ids = deepcopy(self.groups[group_id])
         for ped_id in ped_ids:
             self.new_group({ped_id})
         self.groups[group_id].clear()
 
     def redirect_group(self, group_id: int, new_goal: Vec2D):
+        """Redirect group.
+
+        Args:
+            group_id: Auto-generated placeholder description.
+            new_goal: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
 
     def reposition_group(self, group_id: int, new_positions: list[Vec2D]):
+        """Reposition group.
+
+        Args:
+            group_id: Auto-generated placeholder description.
+            new_positions: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for ped_id, new_pos in zip(self.groups[group_id], new_positions, strict=False):
             self.states.reposition(ped_id, new_pos)

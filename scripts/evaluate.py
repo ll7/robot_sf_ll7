@@ -1,3 +1,5 @@
+"""Module evaluate auto-generated docstring."""
+
 import json
 from dataclasses import dataclass
 from typing import Union
@@ -25,6 +27,8 @@ VehicleConfig = Union[DifferentialDriveSettings, BicycleDriveSettings]
 
 @dataclass
 class GymAdapterSettings:
+    """GymAdapterSettings class."""
+
     obs_space: spaces.Space
     action_space: spaces.Space
     obs_timesteps: int
@@ -33,6 +37,14 @@ class GymAdapterSettings:
     return_dict: bool
 
     def obs_adapter(self, obs):
+        """Obs adapter.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if self.return_dict:
             return obs
         else:
@@ -52,6 +64,8 @@ class GymAdapterSettings:
 
 @dataclass
 class EvalSettings:
+    """EvalSettings class."""
+
     num_episodes: int
     ped_densities: list[float]
     vehicle_config: VehicleConfig
@@ -61,28 +75,63 @@ class EvalSettings:
 
 @dataclass
 class AdaptedEnv(gymnasium.Env):
+    """AdaptedEnv class."""
+
     orig_env: RobotEnv
     config: GymAdapterSettings
 
     @property
     def observation_space(self):
+        """Observation space.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return self.config.obs_space
 
     @property
     def action_space(self):
+        """Action space.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return self.config.action_space
 
     def step(self, action):
+        """Step.
+
+        Args:
+            action: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         obs, reward, done, meta = self.orig_env.step(action)
         obs = self.config.obs_adapter(obs)
         return obs, reward, done, meta
 
     def reset(self):
+        """Reset.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         obs = self.orig_env.reset()
         return self.config.obs_adapter(obs)
 
 
 def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
+    """Evaluate.
+
+    Args:
+        env: Auto-generated placeholder description.
+        model: Auto-generated placeholder description.
+        num_episodes: Auto-generated placeholder description.
+
+    Returns:
+        EnvMetrics: Auto-generated placeholder description.
+    """
     eval_metrics = EnvMetrics(cache_size=num_episodes)
 
     iterator = tqdm(range(num_episodes)) if tqdm is not None else range(num_episodes)
@@ -109,6 +158,15 @@ def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMet
 
 
 def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
+    """Prepare env.
+
+    Args:
+        settings: Auto-generated placeholder description.
+        difficulty: Auto-generated placeholder description.
+
+    Returns:
+        gymnasium.Env: Auto-generated placeholder description.
+    """
     env_settings = EnvSettings()
     env_settings.sim_config.prf_config = settings.prf_config
     env_settings.sim_config.ped_density_by_difficulty = settings.ped_densities
@@ -120,10 +178,28 @@ def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
 
 
 def prepare_model(model_path: str, env: gymnasium.Env) -> DriveModel:
+    """Prepare model.
+
+    Args:
+        model_path: Auto-generated placeholder description.
+        env: Auto-generated placeholder description.
+
+    Returns:
+        DriveModel: Auto-generated placeholder description.
+    """
     return A2C.load(model_path, env=env)
 
 
 def evaluation_series(model_path: str, settings: EvalSettings):
+    """Evaluation series.
+
+    Args:
+        model_path: Auto-generated placeholder description.
+        settings: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     all_metrics = {}
 
     for difficulty in range(len(settings.ped_densities)):
@@ -145,6 +221,11 @@ def evaluation_series(model_path: str, settings: EvalSettings):
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     model_path = "./model/a2c_model"
     obs_space, action_space = prepare_gym_spaces()
 
@@ -184,6 +265,11 @@ def main():
 
 
 def prepare_gym_spaces():
+    """Prepare gym spaces.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     obs_low = np.array([])
     obs_high = np.array([])
     action_low = np.array([])

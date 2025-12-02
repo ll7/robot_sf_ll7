@@ -16,6 +16,14 @@ if TYPE_CHECKING:
 
 
 def test_collision_sanity(tmp_path: Path):
+    """Test collision sanity.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Prepare output path under pytest tmp dir
     out_path = tmp_path / "episodes_collision_sanity.jsonl"
 

@@ -28,6 +28,8 @@ LEGACY_PERMISSIVE_ENV = "ROBOT_SF_FACTORY_LEGACY"
 
 @dataclass(frozen=True)
 class DeprecationEntry:
+    """DeprecationEntry class."""
+
     legacy: str
     new: str | None  # None means removed with no replacement (ignored permissively)
     note: str = ""
@@ -73,10 +75,20 @@ class UnknownLegacyParameterError(ValueError):
 
 
 def is_permissive_mode() -> bool:
+    """Is permissive mode.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     return os.getenv(LEGACY_PERMISSIVE_ENV, "0") not in ("", "0", "false", "False", "NO", "no")
 
 
 def iter_deprecation_entries() -> Iterable[DeprecationEntry]:
+    """Iter deprecation entries.
+
+    Returns:
+        Iterable[DeprecationEntry]: Auto-generated placeholder description.
+    """
     return iter(_DEPRECATION_TABLE)
 
 

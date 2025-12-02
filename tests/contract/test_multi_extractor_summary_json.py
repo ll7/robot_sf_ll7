@@ -1,3 +1,5 @@
+"""Module test_multi_extractor_summary_json auto-generated docstring."""
+
 import json
 from pathlib import Path
 
@@ -14,6 +16,14 @@ SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "training_summ
 
 
 def test_summary_json_matches_contract(tmp_path):
+    """Test summary json matches contract.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     validator = Draft7Validator(schema)
 

@@ -39,6 +39,14 @@ from robot_sf.sim.simulator import (
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
 def _stable_config_hash(cfg: EnvSettings) -> str:
+    """Stable config hash.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     try:
         payload = json.dumps(
             asdict(cfg) if is_dataclass(cfg) else cfg.__dict__,
@@ -95,15 +103,21 @@ class RobotEnv(BaseEnv):
         """
         Initialize the Robot Environment.
 
-        Parameters:
-        - env_config (EnvSettings): Configuration for environment settings.
-        - reward_func (Callable[[dict], float]): Reward function that takes
-            a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as
-            visualizations.
-        - recording_enabled (bool): If True, enables recording of the simulation
-        - record_video: If True, saves simulation as video file
-        - video_path: Path where to save the video file
+        Args:
+            env_config: Environment configuration settings.
+            reward_func: Optional reward function; falls back to :func:`simple_reward`.
+            debug: Whether to enable debug visualizations.
+            recording_enabled: Whether to record simulator states.
+            record_video: Whether to capture videos via :class:`SimulationView`.
+            video_path: Target path for recorded videos.
+            video_fps: Optional FPS override for recordings.
+            peds_have_obstacle_forces: Whether pedestrians exert obstacle forces.
+            use_jsonl_recording: Whether to emit JSONL recording artifacts.
+            recording_dir: Directory for JSONL or video artifacts.
+            suite_name: Suite identifier stored with recordings.
+            scenario_name: Scenario identifier stored with recordings.
+            algorithm_name: Algorithm identifier stored with recordings.
+            recording_seed: Optional deterministic seed saved with recordings.
         """
         super().__init__(
             env_config=env_config,
@@ -161,15 +175,11 @@ class RobotEnv(BaseEnv):
         """
         Execute one time step within the environment.
 
-        Parameters:
-        - action: Action to be executed.
+        Args:
+            action: Action sampled by the policy/agent.
 
         Returns:
-        - obs: Observation after taking the action.
-        - reward: Calculated reward for the taken action.
-        - term: Boolean indicating if the episode has terminated.
-        - truncated: Boolean indicating if the episode was truncated.
-        - info: Additional information as dictionary.
+            tuple: Observation, reward, termination flag, truncation flag, and info dict.
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)
@@ -217,14 +227,12 @@ class RobotEnv(BaseEnv):
         4. Resets the environment's state to obtain the initial observation.
         5. If recording is enabled, saves the current recording.
 
-        Parameters:
-            seed (Optional[int]): The seed value for environment reset.
-            options (Optional[dict]): Additional options for the reset process.
+        Args:
+            seed: Optional seed value for reproducible resets.
+            options: Additional reset options.
 
         Returns:
-            tuple: A tuple containing:
-                - obs: The initial observation after the environment reset.
-                - info (dict): A dictionary with auxiliary information.
+            tuple: Initial observation and an info dict.
         """
         super().reset(seed=seed, options=options)
         # Reset last_action
@@ -257,6 +265,11 @@ class RobotEnv(BaseEnv):
         return obs, info
 
     def _prepare_visualizable_state(self):
+        """Prepare visualizable state.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Prepare action visualization, if any action was executed
         action = (
             None

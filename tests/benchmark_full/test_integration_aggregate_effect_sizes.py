@@ -16,6 +16,8 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 class _Cfg:
+    """Cfg class."""
+
     bootstrap_samples = 50
     bootstrap_confidence = 0.95
     master_seed = 123
@@ -25,6 +27,11 @@ class _Cfg:
 
 @pytest.fixture
 def records():
+    """Records.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return [
         {
             "episode_id": "low1",
@@ -82,6 +89,14 @@ def records():
 
 
 def test_aggregate_then_effect_sizes(records):
+    """Test aggregate then effect sizes.
+
+    Args:
+        records: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     groups = aggregate_metrics(records, _Cfg())
     reports = compute_effect_sizes(groups, _Cfg())
 

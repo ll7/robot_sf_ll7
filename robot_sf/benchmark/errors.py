@@ -19,6 +19,17 @@ class AggregationMetadataError(ValueError):
         missing_fields: Iterable[str] | None = None,
         advice: str | None = None,
     ) -> None:
+        """Init.
+
+        Args:
+            message: Auto-generated placeholder description.
+            episode_id: Auto-generated placeholder description.
+            missing_fields: Auto-generated placeholder description.
+            advice: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         super().__init__(message)
         self.episode_id = episode_id
         self.missing_fields: tuple[str, ...] = tuple(missing_fields or ())

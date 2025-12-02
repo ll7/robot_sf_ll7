@@ -48,6 +48,14 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix  # Shared helpe
 
 
 def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
+    """Tune config.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     for attr, value in [
         ("workers", 1),
         ("bootstrap_samples", 0),
@@ -64,6 +72,14 @@ def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
 
 
 def _inject_minimal_matrix(cfg):  # delegate to shared writer
+    """Inject minimal matrix.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     root = Path(cfg.output_root)
     root.mkdir(parents=True, exist_ok=True)
     mini_path = write_minimal_matrix(root)
@@ -73,20 +89,54 @@ def _inject_minimal_matrix(cfg):  # delegate to shared writer
 
 
 def _read_lines(path: Path):
+    """Read lines.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
 def _assert_no_video_artifacts(root: Path):
+    """Assert no video artifacts.
+
+    Args:
+        root: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     vids = list(root.rglob("*.mp4")) + list(root.rglob("*.gif"))
     assert not vids, f"Unexpected video artifacts produced: {vids}"
 
 
 @pytest.mark.timeout(60)
 def test_resume_skips_existing(config_factory, perf_policy):
+    """Test resume skips existing.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+        perf_policy: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     start = time.perf_counter()
     hard_timeout_sec = 60
 
     def _timeout_handler(signum, frame):  # pragma: no cover
+        """Timeout handler.
+
+        Args:
+            signum: Auto-generated placeholder description.
+            frame: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         raise TimeoutError("Resume integration test exceeded hard timeout (60s)")
 
     try:

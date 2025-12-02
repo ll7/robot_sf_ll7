@@ -21,6 +21,16 @@ if TYPE_CHECKING:
 
 
 def _metric(rec: dict[str, Any], name: str, default: float = 0.0) -> float:
+    """Metric.
+
+    Args:
+        rec: Auto-generated placeholder description.
+        name: Auto-generated placeholder description.
+        default: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     m = rec.get("metrics") or {}
     v = m.get(name, default)
     try:

@@ -50,6 +50,19 @@ class AnalysisTracker:
         enable_tensorboard: bool,
         tensorboard_logdir: Path | None,
     ) -> None:
+        """Init.
+
+        Args:
+            tracker_root: Auto-generated placeholder description.
+            run_id_hint: Auto-generated placeholder description.
+            initiator: Auto-generated placeholder description.
+            enable_report_step: Auto-generated placeholder description.
+            enable_tensorboard: Auto-generated placeholder description.
+            tensorboard_logdir: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.enabled = bool(tracker_root or run_id_hint or enable_tensorboard)
         self.config: RunTrackerConfig | None = None
         self.writer: ManifestWriter | None = None
@@ -94,6 +107,14 @@ class AnalysisTracker:
         self._sampler.start()
 
     def has_step(self, step_id: str) -> bool:
+        """Has step.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         return bool(
             self.enabled
             and self.progress
@@ -102,12 +123,25 @@ class AnalysisTracker:
 
     @property
     def run_directory(self) -> Path | None:
+        """Run directory.
+
+        Returns:
+            Path | None: Auto-generated placeholder description.
+        """
         if not self.enabled or not self.writer:
             return None
         return self.writer.run_directory
 
     @contextmanager
     def step(self, step_id: str):
+        """Step.
+
+        Args:
+            step_id: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if not self.enabled or not self.progress or not self.has_step(step_id):
             yield
             return
@@ -122,18 +156,42 @@ class AnalysisTracker:
             self.progress.complete_step(step_id)
 
     def finish(self, summary: dict[str, Any] | None = None) -> None:
+        """Finish.
+
+        Args:
+            summary: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self.enabled:
             return
         self._write_run_record(PipelineRunStatus.COMPLETED, summary=summary)
         self._close()
 
     def fail(self, summary: dict[str, Any] | None = None) -> None:
+        """Fail.
+
+        Args:
+            summary: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self.enabled:
             return
         self._write_run_record(PipelineRunStatus.FAILED, summary=summary or {})
         self._close()
 
     def _heartbeat(self, status: PipelineRunStatus) -> None:
+        """Heartbeat.
+
+        Args:
+            status: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self.enabled:
             return
         self._write_run_record(status)
@@ -144,6 +202,15 @@ class AnalysisTracker:
         *,
         summary: dict[str, Any] | None = None,
     ) -> None:
+        """Write run record.
+
+        Args:
+            status: Auto-generated placeholder description.
+            summary: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not self.enabled or not self.progress:
             return
         record = PipelineRunRecord(
@@ -159,6 +226,11 @@ class AnalysisTracker:
         self.writer.append_run_record(record)
 
     def _close(self) -> None:
+        """Close.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if self._sampler:
             self._sampler.stop(flush_final=True)
             self._sampler = None

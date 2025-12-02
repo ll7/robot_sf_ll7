@@ -1,3 +1,5 @@
+"""Module test_summary auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -7,6 +9,14 @@ from robot_sf.benchmark.summary import summarize_to_plots
 
 
 def _write_sample_jsonl(path: Path) -> None:
+    """Write sample jsonl.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     records = [
         {
             "episode_id": "e1",
@@ -27,6 +37,14 @@ def _write_sample_jsonl(path: Path) -> None:
 
 
 def test_summary_creates_pngs(tmp_path: Path):
+    """Test summary creates pngs.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     src = tmp_path / "episodes.jsonl"
     _write_sample_jsonl(src)
     out_dir = tmp_path / "figs"

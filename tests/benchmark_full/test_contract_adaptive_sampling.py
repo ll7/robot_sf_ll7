@@ -12,8 +12,21 @@ from robot_sf.benchmark.full_classic.orchestrator import adaptive_sampling_itera
 
 
 def test_adaptive_sampling_iteration():
+    """Test adaptive sampling iteration.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     class _Scenario:
+        """Scenario class."""
+
         def __init__(self):
+            """Init.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.scenario_id = "scenario_a"
             self.archetype = "crossing"
             self.density = "low"
@@ -22,6 +35,8 @@ def test_adaptive_sampling_iteration():
     scenarios = [_Scenario()]
 
     class _Cfg:
+        """Cfg class."""
+
         max_episodes = 10
         batch_size = 5
         smoke = True

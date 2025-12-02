@@ -42,6 +42,8 @@ from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 
 @dataclass
 class PPOPlannerConfig:
+    """PPOPlannerConfig class."""
+
     # Required
     model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"
 
@@ -79,6 +81,15 @@ class PPOPlanner:
         *,
         seed: int | None = None,
     ):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
@@ -86,6 +97,14 @@ class PPOPlanner:
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
+        """Parse config.
+
+        Args:
+            cfg: Auto-generated placeholder description.
+
+        Returns:
+            PPOPlannerConfig: Auto-generated placeholder description.
+        """
         if isinstance(cfg, PPOPlannerConfig):
             return cfg
         if isinstance(cfg, dict):
@@ -93,6 +112,11 @@ class PPOPlanner:
         raise TypeError(f"Invalid config type: {type(cfg)}")
 
     def _load_model(self) -> None:
+        """Load model.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
             warn_soft_degrade(
                 "PPO",
@@ -135,11 +159,24 @@ class PPOPlanner:
             )
 
     def reset(self, *, seed: int | None = None) -> None:
+        """Reset.
+
+        Args:
+            seed: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         # No RNN state; just update seed and keep model
         if seed is not None:
             self._seed = seed
 
     def close(self) -> None:
+        """Close.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._model = None
 
     def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
@@ -150,6 +187,14 @@ class PPOPlanner:
 
     # --- API -----------------------------------------------------------
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
+        """Step.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -168,6 +213,14 @@ class PPOPlanner:
 
     # --- Helpers -------------------------------------------------------
     def _predict_action(self, obs: Observation) -> np.ndarray | None:
+        """Predict action.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray | None: Auto-generated placeholder description.
+        """
         if self._model is None:
             return None
 
@@ -192,6 +245,14 @@ class PPOPlanner:
             return None
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
+        """Build model obs.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         if self.config.obs_mode == "image":
             img = obs.robot.get("image") if isinstance(obs.robot, dict) else None
             if img is None:
@@ -201,6 +262,14 @@ class PPOPlanner:
         return self._vectorize(obs)
 
     def _vectorize(self, obs: Observation) -> np.ndarray:
+        """Vectorize.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rv = np.asarray(obs.robot["velocity"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
@@ -225,6 +294,15 @@ class PPOPlanner:
         return vec
 
     def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
+        """Action vec to dict.
+
+        Args:
+            act: Auto-generated placeholder description.
+            _obs: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0
@@ -244,6 +322,14 @@ class PPOPlanner:
         return {"vx": vx, "vy": vy}
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
+        """Fallback action.
+
+        Args:
+            obs: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
         vec = rg - rp
@@ -262,6 +348,11 @@ class PPOPlanner:
 
     # --- Metadata ------------------------------------------------------
     def get_metadata(self) -> dict[str, Any]:
+        """Get metadata.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata
         cfg["model_path"] = str(Path(self.config.model_path))

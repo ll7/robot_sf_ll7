@@ -19,7 +19,18 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:  # minimal inline config mirroring other tests
+    """Cfg class."""
+
     def __init__(self, tmp_path: Path, renderer: str = "synthetic"):
+        """Init.
+
+        Args:
+            tmp_path: Auto-generated placeholder description.
+            renderer: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
@@ -41,10 +52,26 @@ class _Cfg:  # minimal inline config mirroring other tests
 
 
 def _read_json(path: Path):
+    """Read json.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_performance_manifest_has_render_encode_keys(tmp_path):
+    """Test performance manifest has render encode keys.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = _Cfg(tmp_path)
     run_full_benchmark(cfg)
     perf_path = Path(cfg.output_root) / "reports" / "performance_visuals.json"
@@ -65,6 +92,14 @@ def test_performance_manifest_has_render_encode_keys(tmp_path):
 
 @pytest.mark.skip(reason="SimulationView specific assertion not yet implemented in headless CI")
 def test_sim_view_mode_sets_render_time_when_available(tmp_path):  # pragma: no cover - placeholder
+    """Test sim view mode sets render time when available.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = _Cfg(tmp_path / "sim_view", renderer="sim-view")
     run_full_benchmark(cfg)
     perf_path = Path(cfg.output_root) / "reports" / "performance_visuals.json"

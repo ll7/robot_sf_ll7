@@ -60,13 +60,13 @@ class PedestrianEnv(Env):
         """
         Initialize the pedestrian Environment.
 
-        Parameters:
-        - env_config (PedEnvSettings): Configuration for environment settings.
-        - reward_func (Callable[[dict], float]): Reward function that takes
-            a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as
-            visualizations.
-        - recording_enabled (bool): If True, enables recording of the simulation
+        Args:
+            env_config: Pedestrian environment configuration.
+            reward_func: Reward function that consumes the metadata dict.
+            robot_model: Optional robot policy/model used to generate counterfactual actions.
+            debug: Whether to enable debug visualizations.
+            recording_enabled: Whether to record simulation states.
+            peds_have_obstacle_forces: Whether pedestrians experience obstacle forces.
         """
         if env_config is None:
             env_config = PedEnvSettings()
@@ -162,14 +162,11 @@ class PedestrianEnv(Env):
         """
         Execute one time step within the environment.
 
-        Parameters:
-        - action: Action to be executed.
+        Args:
+            action: Pedestrian action sampled by the policy.
 
         Returns:
-        - obs: Observation after taking the action.
-        - reward: Calculated reward for the taken action.
-        - term: Boolean indicating if the episode has terminated.
-        - info: Additional information as dictionary.
+            tuple: Observation, reward, termination flag, truncation flag, and info dict.
         """
         action_ped = action
 
@@ -231,6 +228,11 @@ class PedestrianEnv(Env):
         return obs_ped, {"info": "test"}
 
     def _prepare_visualizable_state(self):
+        """Prepare visualizable state.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         # Prepare action visualization, if any action was executed
         robot_action = (
             None

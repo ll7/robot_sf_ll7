@@ -144,6 +144,15 @@ def _compute_aggregates_payload(
     *,
     expected_algorithms: set[str] | None,
 ) -> dict[str, Any]:
+    """Compute aggregates payload.
+
+    Args:
+        records: Auto-generated placeholder description.
+        expected_algorithms: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, Any]: Auto-generated placeholder description.
+    """
     aggregate_kwargs: dict[str, Any] = {
         "records": records,
         "group_by": "scenario_params.algo",
@@ -167,6 +176,15 @@ def _compute_aggregates_payload(
 
 
 def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:
+    """Write aggregates file.
+
+    Args:
+        output_root: Auto-generated placeholder description.
+        aggregates: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     aggregates_file = Path(output_root) / "aggregated_results.json"
     with open(aggregates_file, "w", encoding="utf-8") as f:
         json.dump(aggregates, f, indent=2)

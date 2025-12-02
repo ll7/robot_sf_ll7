@@ -1,3 +1,5 @@
+"""Module test_cli_plot_distributions_ci auto-generated docstring."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,15 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _write_matrix(path: Path, repeats: int = 4) -> None:
+    """Write matrix.
+
+    Args:
+        path: Auto-generated placeholder description.
+        repeats: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "dist-ci",
@@ -36,6 +47,15 @@ essential_markers = [
 
 
 def test_cli_plot_distributions_ci(tmp_path: Path, capsys):
+    """Test cli plot distributions ci.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=4)
     episodes = tmp_path / "episodes.jsonl"

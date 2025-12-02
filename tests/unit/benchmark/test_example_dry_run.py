@@ -1,3 +1,5 @@
+"""Module test_example_dry_run auto-generated docstring."""
+
 import os
 
 from examples.classic_interactions_pygame import run_demo

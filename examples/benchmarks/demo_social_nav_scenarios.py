@@ -38,10 +38,23 @@ SVG_MAPS = [
 
 
 def _fast_demo_enabled() -> bool:
+    """Fast demo enabled.
+
+    Returns:
+        bool: Auto-generated placeholder description.
+    """
     return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def _step_budget(default: int) -> int:
+    """Step budget.
+
+    Args:
+        default: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
     if override:
         try:
@@ -57,6 +70,15 @@ STEPS_PER_SCENARIO = _step_budget(200)
 
 
 def run_svg_scenario(name: str, svg_path: str) -> None:
+    """Run svg scenario.
+
+    Args:
+        name: Auto-generated placeholder description.
+        svg_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     print(f"\n=== Scenario: {name} ===")
     map_def = convert_map(svg_path)
     pool = MapDefinitionPool(map_defs={name: map_def})
@@ -78,6 +100,11 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
 
 
 def main() -> None:
+    """Main.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     for name, svg_path in SVG_MAPS:
         run_svg_scenario(name, svg_path)
     print("\nAll scenarios completed.")

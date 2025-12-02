@@ -21,6 +21,15 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 @pytest.mark.timeout(60)
 def test_adaptive_early_stop(config_factory, perf_policy):
+    """Test adaptive early stop.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+        perf_policy: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     start = time.perf_counter()
     cfg = config_factory(
         smoke=True,

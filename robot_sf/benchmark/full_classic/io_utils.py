@@ -15,10 +15,26 @@ from loguru import logger
 
 
 def _ensure_parent(path: Path) -> None:
+    """Ensure parent.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
+    """Serialize obj.
+
+    Args:
+        obj: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if isinstance(obj, str | int | float | bool) or obj is None:
         return obj
     if isinstance(obj, dict):
@@ -39,6 +55,15 @@ def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
 
 
 def _atomic_write_json(path: Path, data: dict) -> None:
+    """Atomic write json.
+
+    Args:
+        path: Auto-generated placeholder description.
+        data: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     tmp_fd, tmp_path = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
     try:
         with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:

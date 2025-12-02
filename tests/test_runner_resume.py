@@ -1,3 +1,5 @@
+"""Module test_runner_resume auto-generated docstring."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_run_batch_resume_skips_existing(tmp_path: Path):
+    """Test run batch resume skips existing.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "resume-uni-low-open",

@@ -1,3 +1,5 @@
+"""Module play_recordings auto-generated docstring."""
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,6 +42,11 @@ def get_specific_file(filename: str):
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Load the states from the file and view the recording
     # load_states_and_visualize(get_latest_file())
     # View all files

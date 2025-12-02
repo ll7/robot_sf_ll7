@@ -115,7 +115,23 @@ def _make_training_env(
     scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> Callable[[], Any]:
+    """Make training env.
+
+    Args:
+        seed: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+        scenario_path: Auto-generated placeholder description.
+
+    Returns:
+        Callable[[], Any]: Auto-generated placeholder description.
+    """
+
     def _factory() -> Any:
+        """Factory.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
         return make_robot_env(config=env_config, seed=seed)
 
@@ -127,6 +143,15 @@ def _train_model(
     *,
     scenario: Mapping[str, Any],
 ) -> tuple[PPO, DummyVecEnv]:
+    """Train model.
+
+    Args:
+        config: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+
+    Returns:
+        tuple[PPO, DummyVecEnv]: Auto-generated placeholder description.
+    """
     seeds = config.seeds or (0,)
     env_fns = [
         _make_training_env(int(seed), scenario=scenario, scenario_path=config.scenario_config)
@@ -151,6 +176,14 @@ def _train_model(
 
 
 def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
+    """Estimate path efficiency.
+
+    Args:
+        meta: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     steps_taken = float(meta.get("step_of_episode", 0) or 0)
     max_steps = float(meta.get("max_sim_steps", steps_taken if steps_taken > 0 else 1))
     if max_steps <= 0:
@@ -160,6 +193,14 @@ def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
 
 
 def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
+    """Gather episode metrics.
+
+    Args:
+        info: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, float]: Auto-generated placeholder description.
+    """
     raw_meta = info.get("meta", {}) if isinstance(info, Mapping) else {}
     if isinstance(raw_meta, Mapping):
         meta: Mapping[str, object] = cast(Mapping[str, object], raw_meta)
@@ -192,6 +233,16 @@ def _evaluate_policy(
     *,
     scenario: Mapping[str, Any],
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
+    """Evaluate policy.
+
+    Args:
+        model: Auto-generated placeholder description.
+        config: Auto-generated placeholder description.
+        scenario: Auto-generated placeholder description.
+
+    Returns:
+        tuple[MetricSamples, list[dict[str, object]]]: Auto-generated placeholder description.
+    """
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
         "success_rate": [],
@@ -239,6 +290,14 @@ def _evaluate_policy(
 def _simulate_dry_run_metrics(
     config: ExpertTrainingConfig,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
+    """Simulate dry run metrics.
+
+    Args:
+        config: Auto-generated placeholder description.
+
+    Returns:
+        tuple[MetricSamples, list[dict[str, object]]]: Auto-generated placeholder description.
+    """
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
         "success_rate": [],
@@ -282,6 +341,14 @@ def _simulate_dry_run_metrics(
 
 
 def _aggregate_metrics(samples: MetricSamples) -> dict[str, common.MetricAggregate]:
+    """Aggregate metrics.
+
+    Args:
+        samples: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, common.MetricAggregate]: Auto-generated placeholder description.
+    """
     aggregates: dict[str, common.MetricAggregate] = {}
     rng = np.random.default_rng(12345)
     for name, values in samples.items():
@@ -308,6 +375,15 @@ def _aggregate_metrics(samples: MetricSamples) -> dict[str, common.MetricAggrega
 
 
 def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> None:
+    """Write episode log.
+
+    Args:
+        path: Auto-generated placeholder description.
+        records: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
@@ -480,6 +556,11 @@ def run_expert_training(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Build arg parser.
+
+    Returns:
+        argparse.ArgumentParser: Auto-generated placeholder description.
+    """
     parser = argparse.ArgumentParser(
         description="Train an expert PPO policy with manifest outputs."
     )
@@ -501,6 +582,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

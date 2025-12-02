@@ -15,17 +15,45 @@ class FakeClock:
     """Deterministic clock helper for tracker tests."""
 
     def __init__(self) -> None:
+        """Init.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._current = datetime(2025, 1, 1, tzinfo=UTC)
 
     def __call__(self) -> datetime:
+        """Call.
+
+        Returns:
+            datetime: Auto-generated placeholder description.
+        """
         return self._current
 
     def advance(self, seconds: float) -> datetime:
+        """Advance.
+
+        Args:
+            seconds: Auto-generated placeholder description.
+
+        Returns:
+            datetime: Auto-generated placeholder description.
+        """
         self._current = self._current + timedelta(seconds=seconds)
         return self._current
 
 
 def _make_tracker(*, writer, log_fn, time_provider) -> ProgressTracker:
+    """Make tracker.
+
+    Args:
+        writer: Auto-generated placeholder description.
+        log_fn: Auto-generated placeholder description.
+        time_provider: Auto-generated placeholder description.
+
+    Returns:
+        ProgressTracker: Auto-generated placeholder description.
+    """
     return ProgressTracker(
         [
             PipelineStepDefinition("collect", "Collect Trajectories", expected_duration_seconds=10),
@@ -38,6 +66,14 @@ def _make_tracker(*, writer, log_fn, time_provider) -> ProgressTracker:
 
 
 def test_progress_tracker_emits_eta_and_writes_index(run_tracker_config) -> None:
+    """Test progress tracker emits eta and writes index.
+
+    Args:
+        run_tracker_config: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     logs: list[str] = []
     clock = FakeClock()
     writer = ManifestWriter(run_tracker_config, run_id="eta-demo")
@@ -65,6 +101,14 @@ def test_progress_tracker_emits_eta_and_writes_index(run_tracker_config) -> None
 
 
 def test_progress_tracker_handles_skip_and_fail(run_tracker_config) -> None:
+    """Test progress tracker handles skip and fail.
+
+    Args:
+        run_tracker_config: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     writer = ManifestWriter(run_tracker_config, run_id="skip-demo")
     tracker = _make_tracker(
         writer=writer,

@@ -108,14 +108,14 @@ def extract_buildings_as_obstacle(
 
 def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
     """
-    Adds a scale bar to the root element of an SVG image.
+    Add a simple scale bar to the root element of an SVG image.
 
-    Parameters:
-        root (ET.Element): The root element of the SVG image.
-        line_length (int): The length of each line segment in meters.
+    Args:
+        root: SVG root element that receives the scale bar.
+        line_length: Length of each alternating segment in meters/pixels.
 
     Returns:
-        ET.Element: The modified root element with the scale bar added.
+        ET.Element: The modified root element.
     """
     # Get the width of the image
     viewbox = list(map(float, root.attrib["viewBox"].split()))
@@ -142,12 +142,12 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
 
 def save_root_as_svg(root: ET.Element, filename: str, add_conversion_time: bool = False):
     """
-    Saves the root element as an SVG file.
+    Persist the provided root element as an SVG file.
 
-    Parameters:
-        root (ET.Element): The root element of the SVG image.
-        filename (str): The name of the SVG file to save. Include `.svg` in the name.
-        add_conversion_time (bool): Whether to add the current time to the filename.
+    Args:
+        root: SVG root element to serialize.
+        filename: Output filename (should include the ``.svg`` suffix).
+        add_conversion_time: Whether to append a timestamp before saving.
     """
     tree = ET.ElementTree(root)
     if add_conversion_time:

@@ -30,6 +30,8 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class GeneratedManifest:
+    """GeneratedManifest class."""
+
     path: Path
     run_id: str
     seed: int
@@ -37,6 +39,14 @@ class GeneratedManifest:
 
 
 def _now_run_id(prefix: str) -> str:
+    """Now run id.
+
+    Args:
+        prefix: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     return f"{time.strftime('%Y%m%d_%H%M%S')}_{prefix}"
 
 
@@ -47,6 +57,18 @@ def create_minimal_manifest(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> Path:
+    """Create minimal manifest.
+
+    Args:
+        run_id: Auto-generated placeholder description.
+        seed: Auto-generated placeholder description.
+        policy_type: Auto-generated placeholder description.
+        output_dir: Auto-generated placeholder description.
+        episode_count: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     if not isinstance(episode_count, int) or episode_count <= 0:
         raise ValueError("episode_count must be a positive integer")
     if policy_type not in {"baseline", "pretrained"}:
@@ -104,6 +126,17 @@ def create_seed_set(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> list[Path]:
+    """Create seed set.
+
+    Args:
+        policy_type: Auto-generated placeholder description.
+        seeds: Auto-generated placeholder description.
+        output_dir: Auto-generated placeholder description.
+        episode_count: Auto-generated placeholder description.
+
+    Returns:
+        list[Path]: Auto-generated placeholder description.
+    """
     paths: list[Path] = []
     for seed in seeds:
         paths.append(

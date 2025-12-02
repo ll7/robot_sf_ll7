@@ -1,3 +1,5 @@
+"""Module svg_conv auto-generated docstring."""
+
 import json
 import os
 import sys
@@ -18,10 +20,27 @@ your own use case."""
 
 
 def paths_of_svg(svg: SVG) -> list[Path]:
+    """Paths of svg.
+
+    Args:
+        svg: Auto-generated placeholder description.
+
+    Returns:
+        list[Path]: Auto-generated placeholder description.
+    """
     return [e for e in svg.elements() if isinstance(e, Path)]
 
 
 def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
+    """Filter paths by color.
+
+    Args:
+        paths: Auto-generated placeholder description.
+        color: Auto-generated placeholder description.
+
+    Returns:
+        list[Path]: Auto-generated placeholder description.
+    """
     red, green, blue = color
     paths = [
         e for e in paths if e.fill.red == red and e.fill.green == green and e.fill.blue == blue
@@ -30,6 +49,14 @@ def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
 
 
 def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
+    """Points of paths.
+
+    Args:
+        paths: Auto-generated placeholder description.
+
+    Returns:
+        list[list[Vec2D]]: Auto-generated placeholder description.
+    """
     all_lines = []
     for path in paths:
         points: list[Point] = list(path.as_points())
@@ -38,6 +65,14 @@ def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
 
 
 def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
+    """Serialize mapjson.
+
+    Args:
+        poly_points: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     obstacles = poly_points
     all_points = [p for points in poly_points for p in points]
     x_margin = [min([x for x, _ in all_points]), max([x for x, _ in all_points])]
@@ -49,10 +84,28 @@ def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
 
 
 def scale(p: Vec2D, factor: float) -> Vec2D:
+    """Scale.
+
+    Args:
+        p: Auto-generated placeholder description.
+        factor: Auto-generated placeholder description.
+
+    Returns:
+        Vec2D: Auto-generated placeholder description.
+    """
     return p[0] * factor, p[1] * factor
 
 
 def convert_map(input_svg_file: str, output_json_file: str):
+    """Convert map.
+
+    Args:
+        input_svg_file: Auto-generated placeholder description.
+        output_json_file: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     svg = SVG.parse(input_svg_file)
     house_color = (217, 208, 201)
     paths = paths_of_svg(svg)
@@ -65,10 +118,33 @@ def convert_map(input_svg_file: str, output_json_file: str):
 
 
 def main():
+    """Main.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     def file_exists(path):
+        """File exists.
+
+        Args:
+            path: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return os.path.exists(path) and os.path.isfile(path)
 
     def has_fileext(path, ext):
+        """Has fileext.
+
+        Args:
+            path: Auto-generated placeholder description.
+            ext: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return "." + path.split(".")[-1] == ext
 
     if (

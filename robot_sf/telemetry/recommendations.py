@@ -47,6 +47,15 @@ class RecommendationEngine:
         rules: RecommendationRules | None = None,
         total_memory_mb: float | None = None,
     ) -> None:
+        """Init.
+
+        Args:
+            rules: Auto-generated placeholder description.
+            total_memory_mb: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self._rules = rules or RecommendationRules()
         self._snapshots: list[TelemetrySnapshot] = []
         self._total_memory_mb = total_memory_mb or self._detect_total_memory()
@@ -84,6 +93,11 @@ class RecommendationEngine:
         return recommendations
 
     def _evaluate_throughput(self) -> list[PerformanceRecommendation]:
+        """Evaluate throughput.
+
+        Returns:
+            list[PerformanceRecommendation]: Auto-generated placeholder description.
+        """
         rules = self._rules
         baseline = rules.throughput_baseline
         average = _avg(snapshot.steps_per_sec for snapshot in self._snapshots)
@@ -119,6 +133,11 @@ class RecommendationEngine:
         ]
 
     def _evaluate_cpu(self) -> list[PerformanceRecommendation]:
+        """Evaluate cpu.
+
+        Returns:
+            list[PerformanceRecommendation]: Auto-generated placeholder description.
+        """
         rules = self._rules
         process_max = _max(snapshot.cpu_percent_process for snapshot in self._snapshots)
         system_max = _max(snapshot.cpu_percent_system for snapshot in self._snapshots)
@@ -151,6 +170,11 @@ class RecommendationEngine:
         ]
 
     def _evaluate_memory(self) -> list[PerformanceRecommendation]:
+        """Evaluate memory.
+
+        Returns:
+            list[PerformanceRecommendation]: Auto-generated placeholder description.
+        """
         memory_max = _max(snapshot.memory_rss_mb for snapshot in self._snapshots)
         if memory_max is None:
             return []
@@ -185,6 +209,11 @@ class RecommendationEngine:
         ]
 
     def _evaluate_gpu_idle(self) -> list[PerformanceRecommendation]:
+        """Evaluate gpu idle.
+
+        Returns:
+            list[PerformanceRecommendation]: Auto-generated placeholder description.
+        """
         gpu_utils = [
             snapshot.gpu_util_percent
             for snapshot in self._snapshots
@@ -214,6 +243,11 @@ class RecommendationEngine:
         ]
 
     def _last_timestamp(self) -> int:
+        """Last timestamp.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         last = self._snapshots[-1]
         if last.timestamp_ms:
             return last.timestamp_ms
@@ -221,6 +255,11 @@ class RecommendationEngine:
 
     @staticmethod
     def _detect_total_memory() -> float | None:
+        """Detect total memory.
+
+        Returns:
+            float | None: Auto-generated placeholder description.
+        """
         if psutil is None:  # pragma: no cover - psutil missing
             return None
         with contextlib.suppress(psutil.Error):  # type: ignore[attr-defined]
@@ -230,6 +269,14 @@ class RecommendationEngine:
 
 
 def _avg(values: Iterable[float | None]) -> float | None:
+    """Avg.
+
+    Args:
+        values: Auto-generated placeholder description.
+
+    Returns:
+        float | None: Auto-generated placeholder description.
+    """
     filtered = [value for value in values if value is not None]
     if not filtered:
         return None
@@ -237,6 +284,14 @@ def _avg(values: Iterable[float | None]) -> float | None:
 
 
 def _max(values: Iterable[float | None]) -> float | None:
+    """Max.
+
+    Args:
+        values: Auto-generated placeholder description.
+
+    Returns:
+        float | None: Auto-generated placeholder description.
+    """
     filtered = [value for value in values if value is not None]
     if not filtered:
         return None

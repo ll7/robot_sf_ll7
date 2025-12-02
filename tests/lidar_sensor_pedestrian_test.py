@@ -1,3 +1,5 @@
+"""Module lidar_sensor_pedestrian_test auto-generated docstring."""
+
 from math import cos, pi, sin
 
 import numpy as np
@@ -11,6 +13,16 @@ NO_SCAN_NOISE = [0.0, 0.0]
 
 
 def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D:
+    """Rotate.
+
+    Args:
+        point: Auto-generated placeholder description.
+        rot_center: Auto-generated placeholder description.
+        rot_angle_rad: Auto-generated placeholder description.
+
+    Returns:
+        Point2D: Auto-generated placeholder description.
+    """
     x, y = point[0] - rot_center[0], point[1] - rot_center[1]
     s, c = sin(rot_angle_rad), cos(rot_angle_rad)
     x, y = x * c - y * s, x * s + y * c
@@ -18,6 +30,11 @@ def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D
 
 
 def test_scanner_detects_single_pedestrian():
+    """Test scanner detects single pedestrian.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -38,6 +55,11 @@ def test_scanner_detects_single_pedestrian():
 
 
 def test_scanner_detects_multiple_equidist_pedestrians_from_center():
+    """Test scanner detects multiple equidist pedestrians from center.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # construct 360 pedestrian circles arranges as isosceles,
     # scanned from the map's center where each ray hits a circle
     # orthogonally after a distance of 2.0
@@ -62,6 +84,11 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
 
 
 def test_scanner_detects_only_closest_pedestrian():
+    """Test scanner detects only closest pedestrian.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0], [3.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -82,6 +109,11 @@ def test_scanner_detects_only_closest_pedestrian():
 
 
 def test_scanner_detects_nothing_when_there_is_nothing():
+    """Test scanner detects nothing when there is nothing.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     occupancy = ContinuousOccupancy(
         10,
@@ -101,6 +133,11 @@ def test_scanner_detects_nothing_when_there_is_nothing():
 
 
 def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
+    """Test scanner detects nothing when ray pointing to other side.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -121,6 +158,11 @@ def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
 
 
 def test_scanner_detect_robot():
+    """Test scanner detect robot.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     occupancy = EgoPedContinuousOccupancy(
         10,
@@ -142,6 +184,11 @@ def test_scanner_detect_robot():
 
 
 def test_scanner_robot_detect_ego_ped():
+    """Test scanner robot detect ego ped.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     lidar_n_rays = 1
     ped_pos = np.array([[3.4, 0], [4.4, 0]])
     ego_ped_pos = (2.4, 0)

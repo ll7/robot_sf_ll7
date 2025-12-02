@@ -1,5 +1,7 @@
 # test_moviepy_setup.py
 
+"""Module test_moviepy_setup auto-generated docstring."""
+
 from pathlib import Path
 
 import numpy as np

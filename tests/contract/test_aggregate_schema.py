@@ -26,10 +26,20 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
+    """Load schema.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_aggregate_summary_invalid_sample_fails():
+    """Test aggregate summary invalid sample fails.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = _load_schema()
     invalid = {
         "groups": {"A": {"metrics": {"collisions": {"mean": 0}}}},
@@ -39,6 +49,11 @@ def test_aggregate_summary_invalid_sample_fails():
 
 
 def test_aggregate_summary_minimal_valid_passes_when_ready():
+    """Test aggregate summary minimal valid passes when ready.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     schema = _load_schema()
     minimal = {
         "version": "v1",

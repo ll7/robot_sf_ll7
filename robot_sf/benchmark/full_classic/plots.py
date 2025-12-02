@@ -22,6 +22,8 @@ except ImportError:
 
 @dataclass
 class _PlotArtifact:  # lightweight internal representation matching data model subset
+    """PlotArtifact class."""
+
     kind: str
     path_pdf: str
     status: str
@@ -29,6 +31,14 @@ class _PlotArtifact:  # lightweight internal representation matching data model 
 
 
 def _safe_fig_close(fig):  # pragma: no cover - trivial
+    """Safe fig close.
+
+    Args:
+        fig: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         # Clear and fully close to avoid accumulating many open figures triggering warnings.
         fig.clf()
@@ -49,6 +59,16 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
 
 
 def _write_placeholder_text(path: Path, title: str, lines: list[str]):
+    """Write placeholder text.
+
+    Args:
+        path: Auto-generated placeholder description.
+        title: Auto-generated placeholder description.
+        lines: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if plt is None:
         return False
     fig, ax = plt.subplots(figsize=(4, 3))
@@ -80,6 +100,15 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
 
 
 def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
+    """Distribution plot.
+
+    Args:
+        groups: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        _PlotArtifact: Auto-generated placeholder description.
+    """
     pdf_path = out_dir / "distributions_basic.pdf"
     if plt is None:
         return _PlotArtifact("distribution", str(pdf_path), "skipped", note="matplotlib missing")
@@ -120,6 +149,15 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
 
 
 def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
+    """Trajectory plot.
+
+    Args:
+        records: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        _PlotArtifact: Auto-generated placeholder description.
+    """
     pdf_path = out_dir / "trajectories_basic.pdf"
     if plt is None:
         return _PlotArtifact("trajectory", str(pdf_path), "skipped", note="matplotlib missing")
@@ -156,6 +194,15 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
 
 
 def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
+    """Kde plot placeholder.
+
+    Args:
+        groups: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        _PlotArtifact: Auto-generated placeholder description.
+    """
     pdf_path = out_dir / "path_efficiency.pdf"
     if plt is None:
         return _PlotArtifact("kde", str(pdf_path), "skipped", note="matplotlib missing")
@@ -185,6 +232,15 @@ def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
 
 
 def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
+    """Pareto plot placeholder.
+
+    Args:
+        groups: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+
+    Returns:
+        _PlotArtifact: Auto-generated placeholder description.
+    """
     pdf_path = out_dir / "pareto_placeholder.pdf"
     if plt is None:
         return _PlotArtifact("pareto", str(pdf_path), "skipped", note="matplotlib missing")
@@ -218,6 +274,15 @@ def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
 
 
 def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotArtifact:
+    """Force heatmap placeholder.
+
+    Args:
+        out_dir: Auto-generated placeholder description.
+        records: Auto-generated placeholder description.
+
+    Returns:
+        _PlotArtifact: Auto-generated placeholder description.
+    """
     pdf_path = out_dir / "episode_lengths.pdf"
     if plt is None:
         return _PlotArtifact("force_heatmap", str(pdf_path), "skipped", note="matplotlib missing")

@@ -44,10 +44,26 @@ SCRIPT_VERSION = "0.1.0"
 
 
 def _ensure_dir(p: Path) -> None:
+    """Ensure dir.
+
+    Args:
+        p: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     p.mkdir(parents=True, exist_ok=True)
 
 
 def _git_sha_short(length: int = 7) -> str:
+    """Git sha short.
+
+    Args:
+        length: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     try:
         sha = (
             subprocess.check_output(
@@ -63,6 +79,15 @@ def _git_sha_short(length: int = 7) -> str:
 
 
 def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
+    """Compute auto out dir.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+        base_dir: Auto-generated placeholder description.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     stem = episodes.stem
     sha = _git_sha_short()
     version = _infer_schema_version(episodes) or SCHEMA_VERSION
@@ -72,6 +97,16 @@ def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
 
 
 def _write_meta(out_dir: Path, episodes: Path, args: argparse.Namespace) -> None:
+    """Write meta.
+
+    Args:
+        out_dir: Auto-generated placeholder description.
+        episodes: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     meta = {
         "episodes_path": str(episodes),
         "generated_at": datetime.now(UTC).isoformat(),
@@ -118,6 +153,16 @@ def _load_snqi_inputs(
     weights_from: Path | None,
     baseline_path: Path | None,
 ) -> tuple[dict | None, dict | None]:
+    """Load snqi inputs.
+
+    Args:
+        weights_path: Auto-generated placeholder description.
+        weights_from: Auto-generated placeholder description.
+        baseline_path: Auto-generated placeholder description.
+
+    Returns:
+        tuple[dict | None, dict | None]: Auto-generated placeholder description.
+    """
     weights = None
     baseline = None
     try:
@@ -146,6 +191,16 @@ def _load_snqi_inputs(
 
 
 def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | None) -> None:
+    """Inject snqi.
+
+    Args:
+        records: Auto-generated placeholder description.
+        weights: Auto-generated placeholder description.
+        baseline: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not isinstance(weights, dict):
         return
     for rec in records:
@@ -163,6 +218,11 @@ def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | Non
 
 
 def main() -> int:
+    """Main.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     ap = argparse.ArgumentParser(
         description="Generate benchmark figures from episodes JSONL (and optional thumbnails)",
     )
@@ -345,6 +405,16 @@ def _generate_pareto(records, out_dir, args) -> None:
 
 
 def _generate_distributions(records, out_dir: Path, args) -> None:
+    """Generate distributions.
+
+    Args:
+        records: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     dmetrics = [m.strip() for m in str(args.dmetrics).split(",") if m.strip()]
     grouped = collect_grouped_values(
         records,
@@ -362,6 +432,16 @@ def _generate_distributions(records, out_dir: Path, args) -> None:
 
 
 def _generate_table(records, out_dir: Path, args) -> None:
+    """Generate table.
+
+    Args:
+        records: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if args.table_summary:
         rows, metric_cols = _rows_from_summary(
             summary_path=Path(args.table_summary),
@@ -390,6 +470,15 @@ def _generate_table(records, out_dir: Path, args) -> None:
 
 
 def _maybe_thumbnails(out_dir: Path, args) -> None:
+    """Maybe thumbnails.
+
+    Args:
+        out_dir: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not args.thumbs_matrix:
         return
     thumbs_out = Path(args.thumbs_out_dir) if args.thumbs_out_dir else (out_dir / "scenarios")
@@ -406,6 +495,15 @@ def _maybe_thumbnails(out_dir: Path, args) -> None:
 
 
 def _maybe_force_field(out_dir: Path, args) -> None:
+    """Maybe force field.
+
+    Args:
+        out_dir: Auto-generated placeholder description.
+        args: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     if not bool(args.force_field):
         return
     ff_png = Path(args.ff_png) if args.ff_png else (out_dir / "fig-force-field.png")
@@ -430,6 +528,17 @@ def _summary_build_columns(
     include_ci: bool,
     ci_suffix: str,
 ) -> list[str]:
+    """Summary build columns.
+
+    Args:
+        metrics: Auto-generated placeholder description.
+        stats: Auto-generated placeholder description.
+        include_ci: Auto-generated placeholder description.
+        ci_suffix: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     cols: list[str] = []
     for m in metrics:
         for st in stats:
@@ -463,6 +572,20 @@ def _summary_extract_row(
     ci_suffix: str,
     missing: set[str],
 ) -> TableRow:
+    """Summary extract row.
+
+    Args:
+        group: Auto-generated placeholder description.
+        metrics_map: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+        stats: Auto-generated placeholder description.
+        include_ci: Auto-generated placeholder description.
+        ci_suffix: Auto-generated placeholder description.
+        missing: Auto-generated placeholder description.
+
+    Returns:
+        TableRow: Auto-generated placeholder description.
+    """
     values: dict[str, float] = {}
     for m in metrics:
         mm = metrics_map.get(m)

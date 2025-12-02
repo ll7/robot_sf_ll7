@@ -15,12 +15,24 @@ from robot_sf.benchmark.full_classic.io_utils import write_manifest
 
 
 def test_write_manifest_creates_file(temp_results_dir):
+    """Test write manifest creates file.
+
+    Args:
+        temp_results_dir: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     manifest_path = Path(temp_results_dir) / "manifest.json"
 
     class _Config:
+        """Config class."""
+
         algo = "ppo"
 
     class _Manifest:
+        """Manifest class."""
+
         git_hash = "deadbeef"
         scenario_matrix_hash = "cafebabe"
         config = _Config()

@@ -27,12 +27,19 @@ if TYPE_CHECKING:
 
 @dataclass
 class ThumbMeta:
+    """ThumbMeta class."""
+
     scenario_id: str
     png: str
     pdf: str | None
 
 
 def _latex_rcparams():
+    """Latex rcparams.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Maintain backward compatibility for existing imports; delegate to shared helper
     apply_latex_style(
         {
@@ -47,6 +54,15 @@ def _latex_rcparams():
 
 
 def _scenario_seed(base_seed: int, scenario_id: str) -> int:
+    """Scenario seed.
+
+    Args:
+        base_seed: Auto-generated placeholder description.
+        scenario_id: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     # Small stable hash to offset base seed per scenario
     import hashlib
 
@@ -55,11 +71,30 @@ def _scenario_seed(base_seed: int, scenario_id: str) -> int:
 
 
 def _draw_obstacles(ax, obstacles: Sequence[tuple[float, float, float, float]]):
+    """Draw obstacles.
+
+    Args:
+        ax: Auto-generated placeholder description.
+        obstacles: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     for x1, y1, x2, y2 in obstacles:
         ax.plot([x1, x2], [y1, y2], color="#444", lw=1.2, alpha=0.9)
 
 
 def _draw_agents(ax, pos: np.ndarray, goals: np.ndarray | None = None):
+    """Draw agents.
+
+    Args:
+        ax: Auto-generated placeholder description.
+        pos: Auto-generated placeholder description.
+        goals: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if pos.size == 0:
         return
     ax.scatter(pos[:, 0], pos[:, 1], s=10, c="#1f77b4", alpha=0.7, edgecolors="none")
@@ -76,6 +111,14 @@ def _draw_agents(ax, pos: np.ndarray, goals: np.ndarray | None = None):
 
 
 def _extract_goals_from_state(state: np.ndarray) -> np.ndarray:
+    """Extract goals from state.
+
+    Args:
+        state: Auto-generated placeholder description.
+
+    Returns:
+        np.ndarray: Auto-generated placeholder description.
+    """
     # state cols: [x,y,vx,vy,goalx,goaly,tau]
     if state.shape[1] >= 6:
         return state[:, 4:6]
@@ -145,6 +188,18 @@ def save_scenario_thumbnails(
     out_pdf: bool = False,
     figsize: tuple[float, float] = (3.2, 2.0),
 ) -> list[ThumbMeta]:
+    """Save scenario thumbnails.
+
+    Args:
+        scenarios: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        base_seed: Auto-generated placeholder description.
+        out_pdf: Auto-generated placeholder description.
+        figsize: Auto-generated placeholder description.
+
+    Returns:
+        list[ThumbMeta]: Auto-generated placeholder description.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     metas: list[ThumbMeta] = []

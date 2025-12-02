@@ -22,6 +22,11 @@ import pytest
 
 @pytest.mark.timeout(10)
 def test_enforce_mode_escalates():
+    """Test enforce mode escalates.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Create a small test file under repo tests/ so root conftest is loaded.
     repo_root = Path(__file__).resolve().parents[2]
     target_dir = repo_root / "tests" / "perf_utils" / "_enforce_tmp"

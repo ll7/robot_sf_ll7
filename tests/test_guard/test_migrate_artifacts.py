@@ -12,11 +12,28 @@ from scripts.tools.migrate_artifacts import migrate_artifacts
 
 
 def _create_file(path: Path, content: str = "test") -> None:
+    """Create file.
+
+    Args:
+        path: Auto-generated placeholder description.
+        content: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
 def test_migrate_artifacts_moves_known_paths(tmp_path: Path) -> None:
+    """Test migrate artifacts moves known paths.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     repo_root = tmp_path / "repo"
     artifact_root = repo_root / "output"
     repo_root.mkdir()
@@ -58,6 +75,14 @@ def test_migrate_artifacts_moves_known_paths(tmp_path: Path) -> None:
 
 
 def test_migrate_artifacts_dry_run_does_not_modify(tmp_path: Path) -> None:
+    """Test migrate artifacts dry run does not modify.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     repo_root = tmp_path / "repo"
     artifact_root = repo_root / "output"
     repo_root.mkdir()

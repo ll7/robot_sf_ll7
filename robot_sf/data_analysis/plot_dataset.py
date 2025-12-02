@@ -26,10 +26,10 @@ def plot_all_npc_ped_positions(
     Plot all NPC pedestrian positions from the given position array.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
-        interactive (bool): If True, show the plot interactively.
-        unique_id (str): Unique identifier for the plot filename, usually the timestamp
-        map_def (MapDefinition, optional): Map definition to plot obstacles
+        ped_positions_array: Array of shape ``(timesteps, num_pedestrians, 2)``.
+        interactive: Whether to show the plot interactively.
+        unique_id: Optional identifier appended to the output filename.
+        map_def: Optional map definition used to overlay static obstacles.
     """
     # Create a figure and axes
     _fig, ax = plt.subplots(figsize=(10, 8))

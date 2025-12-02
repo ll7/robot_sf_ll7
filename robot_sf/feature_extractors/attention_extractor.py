@@ -22,6 +22,16 @@ class MultiHeadAttention(nn.Module):
     """
 
     def __init__(self, embed_dim: int, num_heads: int, dropout: float = 0.1):
+        """Init.
+
+        Args:
+            embed_dim: Auto-generated placeholder description.
+            num_heads: Auto-generated placeholder description.
+            dropout: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -37,6 +47,14 @@ class MultiHeadAttention(nn.Module):
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
     def forward(self, x: th.Tensor) -> th.Tensor:
+        """Forward.
+
+        Args:
+            x: Auto-generated placeholder description.
+
+        Returns:
+            th.Tensor: Auto-generated placeholder description.
+        """
         batch_size, seq_len, embed_dim = x.shape
 
         # Generate queries, keys, values
@@ -89,6 +107,19 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
     ):
+        """Init.
+
+        Args:
+            observation_space: Auto-generated placeholder description.
+            embed_dim: Auto-generated placeholder description.
+            num_heads: Auto-generated placeholder description.
+            num_layers: Auto-generated placeholder description.
+            dropout_rate: Auto-generated placeholder description.
+            drive_hidden_dims: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]
         # Extract observation spaces

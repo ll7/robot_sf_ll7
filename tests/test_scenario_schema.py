@@ -1,3 +1,5 @@
+"""Module test_scenario_schema auto-generated docstring."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +13,11 @@ if TYPE_CHECKING:
 
 
 def test_validate_scenario_list_success():
+    """Test validate scenario list success.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     scenarios = [
         {"id": "s1", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},
         {"id": "s2", "density": "med", "flow": "bi", "obstacle": "bottleneck", "repeats": 2},
@@ -20,6 +27,11 @@ def test_validate_scenario_list_success():
 
 
 def test_validate_scenario_list_errors():
+    """Test validate scenario list errors.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     scenarios = [
         {"id": "a", "density": "invalid", "flow": "uni", "obstacle": "open", "repeats": 1},
         {"id": "a", "density": "low", "flow": "bi", "obstacle": "maze", "repeats": 0},
@@ -33,6 +45,15 @@ def test_validate_scenario_list_errors():
 
 
 def test_cli_validate_config_with_schema(tmp_path: Path, capsys):
+    """Test cli validate config with schema.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        capsys: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "ok", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},

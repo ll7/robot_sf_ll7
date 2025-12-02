@@ -1,3 +1,5 @@
+"""Module simulator auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import ceil, cos, pi, sin
 from random import sample, uniform
@@ -200,15 +202,15 @@ def init_simulators(
     """
     Initialize simulators for the robot environment.
 
-    Parameters:
-    env_config (EnvSettings): Configuration settings for the environment.
-    map_def (MapDefinition): Definition of the map for the environment.
-    num_robots (int): Number of robots in the environment.
-    random_start_pos (bool): Whether to start the robots at random positions.
-
+    Args:
+        env_config: Environment or simulation configuration.
+        map_def: Map used for route generation and obstacle layouts.
+        num_robots: Number of robots to simulate.
+        random_start_pos: Whether to randomize robot spawn points.
+        peds_have_obstacle_forces: Whether pedestrians feel obstacle forces from the robot.
 
     Returns:
-    List[Simulator]: A list of initialized Simulator objects.
+        list[Simulator]: Initialized simulator instances.
     """
     # assert that the map_def has the correct type
     try:
@@ -274,17 +276,37 @@ class PedSimulator(Simulator):
 
     @property
     def ego_ped_pos(self) -> Vec2D:
+        """Ego ped pos.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         return self.ego_ped.pos
 
     @property
     def ego_ped_pose(self) -> PedPose:
+        """Ego ped pose.
+
+        Returns:
+            PedPose: Auto-generated placeholder description.
+        """
         return self.ego_ped.pose
 
     @property
     def ego_ped_goal_pos(self) -> Vec2D:
+        """Ego ped goal pos.
+
+        Returns:
+            Vec2D: Auto-generated placeholder description.
+        """
         return self.robots[0].pos
 
     def reset_state(self):
+        """Reset state.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
@@ -298,6 +320,15 @@ class PedSimulator(Simulator):
         self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
     def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]):
+        """Step once.
+
+        Args:
+            actions: Auto-generated placeholder description.
+            ego_ped_actions: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
@@ -366,14 +397,14 @@ def init_ped_simulators(
     """
     Initialize simulators for the pedestrian environment.
 
-    Parameters:
-    env_config (PedEnvSettings): Configuration settings for the environment.
-    map_def (MapDefinition): Definition of the map for the environment.
-    num_robots (int): Number of robots in the environment.
-    random_start_pos (bool): Whether to start the robots at random positions.
+    Args:
+        env_config: Pedestrian environment configuration.
+        map_def: Map definition used for route sampling.
+        random_start_pos: Whether to randomize robot start positions.
+        peds_have_obstacle_forces: Whether pedestrians feel obstacle forces from the robot.
 
     Returns:
-    sim (PedSimulator): A Simulator object for the pedestrian environment.
+        list[PedSimulator]: Pedestrian simulator instances.
     """
 
     # Calculate the proximity to the goal based on the robot radius and goal radius

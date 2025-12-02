@@ -1,3 +1,5 @@
+"""Module test_multi_extractor_analysis auto-generated docstring."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,12 +14,30 @@ from scripts.multi_extractor_training import (
 
 
 def _write_eval_history(path, timesteps, rewards):
+    """Write eval history.
+
+    Args:
+        path: Auto-generated placeholder description.
+        timesteps: Auto-generated placeholder description.
+        rewards: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     eval_dir = path / "eval_logs"
     eval_dir.mkdir(parents=True, exist_ok=True)
     np.savez(eval_dir / "evaluations.npz", timesteps=np.array(timesteps), results=np.array(rewards))
 
 
 def test_enrich_records_computes_convergence_and_figures(tmp_path):
+    """Test enrich records computes convergence and figures.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     base_dir = run_dir / "extractors" / "base"

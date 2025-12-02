@@ -1,9 +1,16 @@
+"""Module test_snqi_ablation auto-generated docstring."""
+
 from __future__ import annotations
 
 from robot_sf.benchmark.ablation import compute_snqi_ablation
 
 
 def _episodes_two_groups():
+    """Episodes two groups.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Two groups (A, B) with two episodes each; metrics chosen so that
     # base ranking favors B, but removing collisions weight favors A.
     base = {
@@ -43,6 +50,11 @@ def _episodes_two_groups():
 
 
 def test_compute_snqi_ablation_rank_shifts():
+    """Test compute snqi ablation rank shifts.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = _episodes_two_groups()
     weights = {"w_success": 2.0, "w_time": 1.0, "w_collisions": 2.0}
     baseline = {"collisions": {"med": 0.0, "p95": 2.0}}

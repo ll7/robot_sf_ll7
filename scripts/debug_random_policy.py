@@ -8,6 +8,11 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():
+    """Benchmark.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     total_steps = 20000
     env = RobotEnv(debug=True)
     env.reset()

@@ -20,6 +20,14 @@ NO_OP = (0.0, 0.0)
 
 
 def select_action(obs: dict) -> UnicycleAction:
+    """Select action.
+
+    Args:
+        obs: Auto-generated placeholder description.
+
+    Returns:
+        UnicycleAction: Auto-generated placeholder description.
+    """
     drive_state = obs["drive_state"][0]
     target_angle = drive_state[3]
 
@@ -35,6 +43,11 @@ def select_action(obs: dict) -> UnicycleAction:
 
 
 def make_env():
+    """Make env.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map("maps/svg_maps/debug_02.svg")
@@ -55,6 +68,11 @@ def make_env():
 
 
 def run():
+    """Run.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     env = make_env()
 
     obs = env.reset()

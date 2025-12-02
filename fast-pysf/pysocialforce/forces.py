@@ -29,13 +29,28 @@ class SimEntitiesProvider(Protocol):
     """Not implemented!!!"""
 
     def get_obstacles(self) -> list[np.ndarray]:
+        """Get obstacles.
+
+        Returns:
+            list[np.ndarray]: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
     def get_raw_obstacles(self) -> np.ndarray:
+        """Get raw obstacles.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
     @property
     def peds(self) -> PedState:
+        """Peds.
+
+        Returns:
+            PedState: Auto-generated placeholder description.
+        """
         raise NotImplementedError()
 
 
@@ -43,6 +58,14 @@ class DebuggableForce:
     """A wrapper class that adds debugging functionality to a given force."""
 
     def __init__(self, force: Force):
+        """Init.
+
+        Args:
+            force: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.force = force
 
     def __call__(self, debug: bool = False):
@@ -83,6 +106,15 @@ class DesiredForce:
     """
 
     def __init__(self, config: DesiredForceConfig, peds: PedState):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            peds: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = config
         self.peds = peds
 
@@ -136,10 +168,24 @@ class SocialForce:
     """
 
     def __init__(self, config: SocialForceConfig, peds: PedState):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            peds: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = config
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
+        """Call.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
         forces = social_force(
@@ -310,6 +356,14 @@ def social_force_ped_ped(
 
 @njit(fastmath=True)
 def norm_vec(vec: Point2D) -> tuple[Point2D, float]:
+    """Norm vec.
+
+    Args:
+        vec: Auto-generated placeholder description.
+
+    Returns:
+        tuple[Point2D, float]: Auto-generated placeholder description.
+    """
     if vec[0] == 0 and vec[1] == 0:
         return vec, 0
     vec_len = (vec[0] ** 2 + vec[1] ** 2) ** 0.5
@@ -323,6 +377,15 @@ class ObstacleForce:
     """
 
     def __init__(self, config: ObstacleForceConfig, sim: SimEntitiesProvider):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            sim: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = config
         self.get_obstacles = sim.get_raw_obstacles
         self.get_peds = sim.peds.pos
@@ -351,16 +414,16 @@ def all_obstacle_forces(
     out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
 ):
     """
-    Calculates the forces exerted by all obstacles on each pedestrian.
+    Calculate the net obstacle force for every pedestrian.
 
-    Parameters:
-    - out_forces (np.ndarray): Array to store the resulting forces for each pedestrian.
-    - ped_positions (np.ndarray): Array of shape (num_peds, 2) containing the positions of all pedestrians.
-    - obstacles (np.ndarray): Array of shape (num_obstacles, 6) containing the obstacle line segments and their orthogonal vectors.
-    - ped_radius (float): Radius of the pedestrians.
+    Args:
+        out_forces: Array that is updated with obstacle forces per pedestrian.
+        ped_positions: Array of shape ``(num_peds, 2)`` with pedestrian positions.
+        obstacles: Array of obstacle definitions (line segments + orthogonal vectors).
+        ped_radius: Pedestrian radius used to offset the obstacle distance.
 
     Returns:
-    None
+        None: ``out_forces`` is modified in-place.
     """
     # Extract obstacle line segments and their orthogonal vectors
     obstacle_segments = obstacles[:, :4]
@@ -468,22 +531,64 @@ def obstacle_force(
 def potential_field_force(
     obst_dist: float, dx_obst_dist: float, dy_obst_dist: float
 ) -> tuple[float, float]:
+    """Potential field force.
+
+    Args:
+        obst_dist: Auto-generated placeholder description.
+        dx_obst_dist: Auto-generated placeholder description.
+        dy_obst_dist: Auto-generated placeholder description.
+
+    Returns:
+        tuple[float, float]: Auto-generated placeholder description.
+    """
     der_potential = 1 / pow(obst_dist, 3)
     return der_potential * dx_obst_dist, der_potential * dy_obst_dist
 
 
 @njit(fastmath=True)
 def euclid_dist(x1: float, y1: float, x2: float, y2: float) -> float:
+    """Euclid dist.
+
+    Args:
+        x1: Auto-generated placeholder description.
+        y1: Auto-generated placeholder description.
+        x2: Auto-generated placeholder description.
+        y2: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return pow(pow(x2 - x1, 2) + pow(y2 - y1, 2), 0.5)
 
 
 @njit(fastmath=True)
 def euclid_dist_sq(x1: float, y1: float, x2: float, y2: float) -> float:
+    """Euclid dist sq.
+
+    Args:
+        x1: Auto-generated placeholder description.
+        y1: Auto-generated placeholder description.
+        x2: Auto-generated placeholder description.
+        y2: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return pow(x2 - x1, 2) + pow(y2 - y1, 2)
 
 
 @njit(fastmath=True)
 def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> tuple[float, float]:
+    """Der euclid dist.
+
+    Args:
+        p1: Auto-generated placeholder description.
+        p2: Auto-generated placeholder description.
+        distance: Auto-generated placeholder description.
+
+    Returns:
+        tuple[float, float]: Auto-generated placeholder description.
+    """
     # info: distance is an expensive operation and therefore pre-computed
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
@@ -514,6 +619,11 @@ class GroupCoherenceForceAlt:
         self.config = config
 
     def __call__(self) -> np.ndarray:
+        """Call.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         # Initialize an array to store coherence forces for each pedestrian with zero values.
         forces = np.zeros((self.peds.size(), 2))
 
@@ -568,6 +678,11 @@ class GroupRepulsiveForce:
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
+        """Call.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         # Retrieve the distance threshold from configuration where repulsive force is effective.
         threshold = self.config.threshold
         # Initialize a zero np.array to store repulsive forces for each pedestrian.
@@ -710,6 +825,15 @@ def group_gaze_force(
 
 @njit
 def vec_len_2d(vec_x: float, vec_y: float) -> float:
+    """Vec len 2d.
+
+    Args:
+        vec_x: Auto-generated placeholder description.
+        vec_y: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return (vec_x**2 + vec_y**2) ** 0.5
 
 
@@ -766,15 +890,11 @@ def centroid(vecs: np.ndarray) -> tuple[float, float]:
     """
     Compute the centroid of a set of points in 2D space.
 
-    The centroid is calculated as the arithmetic mean (average)
-    of all the points. It is often referred to as the "center of gravity" or
-    "geometric center" of a two-dimensional shape.
-
-    Parameters:
-    vecs (np.ndarray): An array of points where each point is represented as [x, y].
+    Args:
+        vecs: Array of shape ``(n, 2)`` where each row is ``[x, y]``.
 
     Returns:
-    Tuple[float, float]: A tuple containing the x and y coordinates of the centroid.
+        tuple[float, float]: X and Y coordinates of the centroid.
     """
     # Check if the array is empty
     if vecs.size == 0:

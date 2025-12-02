@@ -1,3 +1,5 @@
+"""Module map_test auto-generated docstring."""
+
 from math import dist
 
 import numpy as np
@@ -9,6 +11,11 @@ from robot_sf.sim.simulator import init_ped_simulators
 
 
 def test_create_map():
+    """Test create map.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     _map = ContinuousOccupancy(
         10,
         10,
@@ -21,6 +28,11 @@ def test_create_map():
 
 
 def test_is_in_bounds():
+    """Test is in bounds.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     _map = ContinuousOccupancy(
         10,
         10,
@@ -38,6 +50,11 @@ def test_is_in_bounds():
 
 
 def test_is_out_of_bounds():
+    """Test is out of bounds.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     _map = ContinuousOccupancy(
         10,
         10,
@@ -53,6 +70,11 @@ def test_is_out_of_bounds():
 
 
 def test_is_collision_with_obstacle_segment_fully_contained_inside_circle():
+    """Test is collision with obstacle segment fully contained inside circle.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     obstacle_pos = np.random.uniform(-10, 10, size=(1, 4))
     robot_pos = (obstacle_pos[0, 0], obstacle_pos[0, 1])
     _map = ContinuousOccupancy(
@@ -68,6 +90,11 @@ def test_is_collision_with_obstacle_segment_fully_contained_inside_circle():
 
 
 def test_is_collision_with_obstacle_segment_outside_circle():
+    """Test is collision with obstacle segment outside circle.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     obstacle_pos = np.random.uniform(-10, 10, size=(1, 4))
     middle = np.squeeze((obstacle_pos[0::2] + obstacle_pos[0:2:]) / 2)
     robot_pos = (middle[0], middle[1])
@@ -85,6 +112,11 @@ def test_is_collision_with_obstacle_segment_outside_circle():
 
 
 def test_is_collision_with_pedestrian():
+    """Test is collision with pedestrian.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ped_pos = np.random.uniform(-10, 10, size=2)
     robot_pos = (ped_pos[0], ped_pos[1])
     _map = ContinuousOccupancy(
@@ -100,6 +132,11 @@ def test_is_collision_with_pedestrian():
 
 
 def test_is_collision_with_agent():
+    """Test is collision with agent.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     agent_pos = np.random.uniform(-10, 10, size=2)
     enemy_pos = (agent_pos[0], agent_pos[1])
     _map = EgoPedContinuousOccupancy(
@@ -119,6 +156,11 @@ def test_is_collision_with_agent():
 
 
 def test_proximity_point():
+    """Test proximity point.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     fixed_point = (50, 50)
     lower_bound = 15
     upper_bound = 20

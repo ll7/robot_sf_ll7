@@ -7,8 +7,26 @@ from loguru import logger
 
 
 def timeit(f):
+    """Timeit.
+
+    Args:
+        f: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
+
     @wraps(f)
     def wrap(*args, **kw):
+        """Wrap.
+
+        Args:
+            args: Auto-generated placeholder description.
+            kw: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         ts = time()
         result = f(*args, **kw)
         te = time()

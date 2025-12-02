@@ -1,3 +1,5 @@
+"""Module navigation auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import atan2, dist
 from random import randint, sample

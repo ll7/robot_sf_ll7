@@ -11,6 +11,14 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 
 def test_recording_creates_simulation_view(tmp_path):
+    """Test recording creates simulation view.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     vid_path = tmp_path / "episode.mp4"
     env = make_robot_env(
         config=RobotSimulationConfig(),

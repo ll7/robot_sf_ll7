@@ -58,6 +58,8 @@ except ImportError:
 
 @dataclass
 class PlotArtifact:
+    """PlotArtifact class."""
+
     kind: str
     path_pdf: str
     status: str
@@ -66,6 +68,8 @@ class PlotArtifact:
 
 @dataclass
 class VideoArtifact:
+    """VideoArtifact class."""
+
     artifact_id: str
     scenario_id: str
     episode_id: str
@@ -83,6 +87,15 @@ class VideoArtifact:
 
 
 def _write_json(path: Path, obj: Any) -> None:
+    """Write json.
+
+    Args:
+        path: Auto-generated placeholder description.
+        obj: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
@@ -91,6 +104,14 @@ def _write_json(path: Path, obj: Any) -> None:
 
 
 def _convert_plot_artifacts(raw_list) -> list[dict]:
+    """Convert plot artifacts.
+
+    Args:
+        raw_list: Auto-generated placeholder description.
+
+    Returns:
+        list[dict]: Auto-generated placeholder description.
+    """
     out: list[dict] = []
     for a in raw_list:
         out.append(
@@ -108,6 +129,15 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
     """Return (success_count, status_note) for video artifacts."""
 
     def _get(item, key):
+        """Get.
+
+        Args:
+            item: Auto-generated placeholder description.
+            key: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         if isinstance(item, dict):
             return item.get(key)
         return getattr(item, key, None)
@@ -131,6 +161,17 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
 
 
 def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[VideoArtifact]:
+    """Attempt sim view videos.
+
+    Args:
+        records: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        replay_map: Auto-generated placeholder description.
+
+    Returns:
+        list[VideoArtifact]: Auto-generated placeholder description.
+    """
     if not _SIM_VIEW_AVAILABLE or not simulation_view_ready():
         return []
     if not bool(getattr(cfg, "capture_replay", False)):
@@ -204,6 +245,16 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
 
 
 def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> list[VideoArtifact]:
+    """Synthetic fallback videos.
+
+    Args:
+        records: Auto-generated placeholder description.
+        out_dir: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        list[VideoArtifact]: Auto-generated placeholder description.
+    """
     raw = generate_fallback_videos(records, out_dir, cfg)
     out: list[VideoArtifact] = []
     for a in raw:
@@ -222,6 +273,15 @@ def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> list[VideoArtifac
 
 
 def _select_records(records, cfg) -> list[dict]:
+    """Select records.
+
+    Args:
+        records: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+
+    Returns:
+        list[dict]: Auto-generated placeholder description.
+    """
     max_videos = int(getattr(cfg, "max_videos", 1))
     return records[: max_videos or 1]
 
@@ -232,6 +292,18 @@ def _build_video_artifacts(
     videos_dir: Path,
     replay_map: dict,
 ) -> list[VideoArtifact]:
+    """Build video artifacts.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+        records: Auto-generated placeholder description.
+        videos_dir: Auto-generated placeholder description.
+        replay_map: Auto-generated placeholder description.
+
+    Returns:
+        list[VideoArtifact]: Auto-generated placeholder description.
+    """
+
     # --- Inner helpers (local to keep namespace clean) ------------------
     def _normalize_mode(raw) -> str:
         """Normalize renderer mode string.
@@ -357,6 +429,16 @@ def _build_video_artifacts(
 
 
 def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: list[VideoArtifact]):
+    """Final normalize insufficient.
+
+    Args:
+        cfg: Auto-generated placeholder description.
+        records: Auto-generated placeholder description.
+        video_artifacts: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     if not bool(getattr(cfg, "capture_replay", False)):
         return
     mode = str(getattr(cfg, "video_renderer", "auto")).strip().lower()
@@ -380,6 +462,17 @@ def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: lis
 
 
 def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
+    """Generate visual artifacts.
+
+    Args:
+        root: Auto-generated placeholder description.
+        cfg: Auto-generated placeholder description.
+        groups: Auto-generated placeholder description.
+        records: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     plots_dir = root / "plots"
     videos_dir = root / "videos"
     reports_dir = root / "reports"

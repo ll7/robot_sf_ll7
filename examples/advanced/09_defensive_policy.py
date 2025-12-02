@@ -42,6 +42,14 @@ def run_simulation() -> None:
     model = load_trained_policy("./model/run_023")
 
     def obs_adapter(orig_obs):
+        """Obs adapter.
+
+        Args:
+            orig_obs: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         drive_state = orig_obs[OBS_DRIVE_STATE]
         ray_state = orig_obs[OBS_RAYS]
         drive_state = drive_state[:, :-1]
@@ -64,6 +72,11 @@ def run_simulation() -> None:
 
 
 def prepare_gym_spaces():
+    """Prepare gym spaces.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     obs_low = np.array(
         [
             0.0,

@@ -1,3 +1,5 @@
+"""Module test_small_dataset_warning auto-generated docstring."""
+
 import json
 import re
 from pathlib import Path
@@ -10,6 +12,15 @@ from robot_sf.benchmark.cli import cli_main
 
 
 def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
+    """Run cli.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        action: Auto-generated placeholder description.
+
+    Returns:
+        tuple[int, str]: Auto-generated placeholder description.
+    """
     out = tmp_path / f"snqi_{action}_small.json"
     episodes = Path("tests/data/snqi/episodes_small.jsonl").absolute()
     baseline = Path("tests/data/snqi/baseline_stats.json").absolute()
@@ -42,6 +53,16 @@ def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
 
 @pytest.mark.parametrize("action", ["recompute", "optimize"])
 def test_small_dataset_warning_emitted_and_exit_zero(tmp_path: Path, caplog, action: str):
+    """Test small dataset warning emitted and exit zero.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+        caplog: Auto-generated placeholder description.
+        action: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     caplog.set_level("WARNING")
     code, _ = _run_cli(tmp_path, action)
     assert code == 0

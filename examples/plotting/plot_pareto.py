@@ -34,6 +34,11 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def _synthetic_records():
+    """Synthetic records.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return [
         {
             "scenario_id": "s1",
@@ -59,6 +64,14 @@ def _synthetic_records():
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Main.
+
+    Args:
+        argv: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default=None)
     ap.add_argument("--out", default="results/pareto_demo.png")

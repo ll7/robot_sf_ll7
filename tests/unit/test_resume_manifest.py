@@ -29,16 +29,41 @@ if TYPE_CHECKING:
 
 
 def _write_jsonl(tmp: Path, lines: list[dict]):
+    """Write jsonl.
+
+    Args:
+        tmp: Auto-generated placeholder description.
+        lines: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     with tmp.open("w", encoding="utf-8") as f:
         for rec in lines:
             f.write(json.dumps(rec) + "\n")
 
 
 def _basic_episode(eid: str) -> dict:
+    """Basic episode.
+
+    Args:
+        eid: Auto-generated placeholder description.
+
+    Returns:
+        dict: Auto-generated placeholder description.
+    """
     return {"episode_id": eid}
 
 
 def test_manifest_valid_roundtrip(tmp_path: Path):
+    """Test manifest valid roundtrip.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0"), _basic_episode("sc1--1")]
     _write_jsonl(out, lines)
@@ -48,6 +73,14 @@ def test_manifest_valid_roundtrip(tmp_path: Path):
 
 
 def test_invalidate_on_size_change(tmp_path: Path):
+    """Test invalidate on size change.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)
@@ -59,6 +92,14 @@ def test_invalidate_on_size_change(tmp_path: Path):
 
 
 def test_invalidate_on_mtime_change(tmp_path: Path):
+    """Test invalidate on mtime change.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)
@@ -71,6 +112,14 @@ def test_invalidate_on_mtime_change(tmp_path: Path):
 
 
 def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
+    """Test invalidate on schema version mismatch.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)
@@ -91,6 +140,14 @@ def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
 
 
 def test_invalidate_on_episodes_count_mismatch(tmp_path: Path):
+    """Test invalidate on episodes count mismatch.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0"), _basic_episode("sc1--1")]
     _write_jsonl(out, lines)
@@ -103,6 +160,14 @@ def test_invalidate_on_episodes_count_mismatch(tmp_path: Path):
 
 
 def test_invalidate_on_identity_hash_mismatch(tmp_path: Path):
+    """Test invalidate on identity hash mismatch.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)

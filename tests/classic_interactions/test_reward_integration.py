@@ -18,6 +18,11 @@ import importlib
 
 
 def test_reward_integration_episode_present():
+    """Test reward integration episode present.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     mod = importlib.import_module("examples.classic_interactions_pygame")
     original_dry = getattr(mod, "DRY_RUN", None)
     mod.DRY_RUN = False  # type: ignore

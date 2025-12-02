@@ -22,6 +22,15 @@ display = pysf.SimulationView(map_def=map_def, scaling=10)
 
 
 def render_step(t, s):
+    """Render step.
+
+    Args:
+        t: Auto-generated placeholder description.
+        s: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     return display.render(pysf.to_visualizable_state(t, s))
 
 

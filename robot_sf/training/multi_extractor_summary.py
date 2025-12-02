@@ -31,6 +31,14 @@ def write_summary_artifacts(*, summary: TrainingRunSummary, destination: Path) -
 
 
 def _render_markdown(summary: TrainingRunSummary) -> str:
+    """Render markdown.
+
+    Args:
+        summary: Auto-generated placeholder description.
+
+    Returns:
+        str: Auto-generated placeholder description.
+    """
     lines: list[str] = []
     lines.append("# Multi-Extractor Training Summary")
     lines.append(f"Run ID: {summary.run_id}")
@@ -53,6 +61,14 @@ def _render_markdown(summary: TrainingRunSummary) -> str:
 
 
 def _render_hardware_overview(summary: TrainingRunSummary) -> list[str]:
+    """Render hardware overview.
+
+    Args:
+        summary: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["## Hardware Overview"]
     lines.append("| Platform | Arch | GPU Model | CUDA Version | Python | Workers |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
@@ -67,6 +83,14 @@ def _render_hardware_overview(summary: TrainingRunSummary) -> list[str]:
 
 
 def _render_extractor_table(records: list[ExtractorRunRecord]) -> list[str]:
+    """Render extractor table.
+
+    Args:
+        records: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["## Extractor Results"]
     lines.append("| Extractor Name | Status | Worker Mode | Duration (s) | Best Metric | Notes |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
@@ -85,6 +109,14 @@ def _render_extractor_table(records: list[ExtractorRunRecord]) -> list[str]:
 
 
 def _best_metric(record: ExtractorRunRecord) -> tuple[str, str]:
+    """Best metric.
+
+    Args:
+        record: Auto-generated placeholder description.
+
+    Returns:
+        tuple[str, str]: Auto-generated placeholder description.
+    """
     # Prioritize the most important metric for the summary table.
     priority_metric = "best_mean_reward"
     if record.metrics and priority_metric in record.metrics:
@@ -103,6 +135,14 @@ def _best_metric(record: ExtractorRunRecord) -> tuple[str, str]:
 
 
 def _render_failures(records: list[ExtractorRunRecord]) -> list[str]:
+    """Render failures.
+
+    Args:
+        records: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["## Failures & Skips"]
     issues = [record for record in records if record.status != "success"]
     if not issues:
@@ -115,6 +155,14 @@ def _render_failures(records: list[ExtractorRunRecord]) -> list[str]:
 
 
 def _render_aggregate_metrics(metrics: dict[str, float]) -> list[str]:
+    """Render aggregate metrics.
+
+    Args:
+        metrics: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["## Aggregated Metrics"]
     if not metrics:
         lines.append("- None recorded")
@@ -132,6 +180,14 @@ def _render_aggregate_metrics(metrics: dict[str, float]) -> list[str]:
 
 
 def _render_reproducibility(summary: TrainingRunSummary) -> list[str]:
+    """Render reproducibility.
+
+    Args:
+        summary: Auto-generated placeholder description.
+
+    Returns:
+        list[str]: Auto-generated placeholder description.
+    """
     lines = ["## Reproducibility"]
     lines.append(f"- JSON summary: `{SUMMARY_JSON_FILENAME}`")
     lines.append(f"- Markdown summary: `{SUMMARY_MARKDOWN_FILENAME}`")

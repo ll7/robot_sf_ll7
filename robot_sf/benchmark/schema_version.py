@@ -138,12 +138,36 @@ class SchemaVersion:
         return False
 
     def __le__(self, other: "SchemaVersion") -> bool:
+        """Le.
+
+        Args:
+            other: Auto-generated placeholder description.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         return self < other or self == other
 
     def __gt__(self, other: "SchemaVersion") -> bool:
+        """Gt.
+
+        Args:
+            other: Auto-generated placeholder description.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         return not (self <= other)
 
     def __ge__(self, other: "SchemaVersion") -> bool:
+        """Ge.
+
+        Args:
+            other: Auto-generated placeholder description.
+
+        Returns:
+            bool: Auto-generated placeholder description.
+        """
         return not (self < other)
 
     def __hash__(self) -> int:

@@ -89,6 +89,14 @@ def _hardware_profile_from_manifest(manifest: dict[str, Any]) -> HardwareProfile
     """Extract hardware metadata from a manifest or return an 'unknown' placeholder."""
 
     def _as_profile(payload: dict[str, Any]) -> HardwareProfile | None:
+        """As profile.
+
+        Args:
+            payload: Auto-generated placeholder description.
+
+        Returns:
+            HardwareProfile | None: Auto-generated placeholder description.
+        """
         try:
             platform = str(payload.get("platform", "unknown"))
             arch = str(payload.get("arch", "unknown"))

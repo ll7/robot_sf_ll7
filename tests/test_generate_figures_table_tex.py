@@ -15,6 +15,14 @@ if TYPE_CHECKING:
 
 
 def test_generate_figures_table_tex(tmp_path: Path):
+    """Test generate figures table tex.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     episodes = tmp_path / "eps.jsonl"
     rec = {
         "episode_id": "e0",

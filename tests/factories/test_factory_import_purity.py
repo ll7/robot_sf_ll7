@@ -15,6 +15,11 @@ from contextlib import redirect_stderr, redirect_stdout
 
 
 def test_environment_factory_import_is_pure():
+    """Test environment factory import is pure.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     # Remove module if already imported to force re-execution of top-level code
     sys.modules.pop("robot_sf.gym_env.environment_factory", None)
     stdout_buf = io.StringIO()

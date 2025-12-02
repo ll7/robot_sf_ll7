@@ -15,10 +15,10 @@ if TYPE_CHECKING:  # for type hints only
 def fast_pysf_factory(env_config: EnvSettings, map_def: MapDefinition, peds: bool):
     """Create a simulator instance using the existing init_simulators helper.
 
-    Parameters
-    - env_config: environment settings
-    - map_def: selected map definition
-    - peds: whether pedestrians perceive robot as obstacle (interaction forces)
+    Args:
+        env_config: Environment settings passed to the simulator.
+        map_def: Map definition selected by the caller.
+        peds: Whether pedestrians experience obstacle forces from the robot.
     """
     from robot_sf.sim.simulator import init_simulators
 

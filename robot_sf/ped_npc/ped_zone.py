@@ -1,3 +1,5 @@
+"""Module ped_zone auto-generated docstring."""
+
 import numpy as np
 
 from robot_sf.common.types import Vec2D, Zone

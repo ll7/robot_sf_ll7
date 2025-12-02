@@ -59,7 +59,7 @@ except (ImportError, ModuleNotFoundError):
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
 
-from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
+from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.reward import simple_ped_reward
@@ -98,6 +98,28 @@ class EnvironmentFactory:
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ) -> SingleAgentEnv:
+        """Instantiate a robot environment (image or state observations).
+
+        Args:
+            config: Simulation configuration; defaults chosen based on ``use_image_obs``.
+            use_image_obs: Selects :class:`robot_sf.gym_env.robot_env_with_image.RobotEnvWithImage`.
+            peds_have_obstacle_forces: Whether pedestrians experience robot interaction forces.
+            reward_func: Optional reward override; ``None`` falls back to the built-in helper.
+            debug: Enables debug visualization (implicitly turned on by recording helpers).
+            recording_enabled: Master switch for recording even if options request it.
+            record_video: Effective recording flag propagated to env ctor.
+            video_path: Optional render output path provided to the env ctor.
+            video_fps: Optional FPS override (propagated to render options).
+            use_jsonl_recording: Enables JSONL per-episode recorder when recordings are active.
+            recording_dir: Directory for JSONL recorder outputs.
+            suite_name: Metadata tag stored in recordings.
+            scenario_name: Metadata tag stored in recordings.
+            algorithm_name: Metadata tag stored in recordings.
+            recording_seed: Deterministic seed forwarded to the recorder.
+
+        Returns:
+            SingleAgentEnv: Configured :class:`RobotEnv` or :class:`RobotEnvWithImage`.
+        """
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
@@ -136,6 +158,19 @@ class EnvironmentFactory:
         recording_enabled: bool = False,
         peds_have_obstacle_forces: bool = False,
     ) -> SingleAgentEnv:
+        """Instantiate the adversarial pedestrian environment.
+
+        Args:
+            robot_model: Policy used by the robot counterpart.
+            config: Pedestrian simulation configuration; defaults to :class:`PedestrianSimulationConfig`.
+            reward_func: Optional reward override; defaults to :func:`simple_ped_reward`.
+            debug: Enables debug visualization (used when recording to render frames).
+            recording_enabled: Master switch for recording support.
+            peds_have_obstacle_forces: Enables robot-as-obstacle forces inside the simulator.
+
+        Returns:
+            SingleAgentEnv: Configured :class:`robot_sf.gym_env.pedestrian_env.PedestrianEnv`.
+        """
         if config is None:
             config = PedestrianSimulationConfig()
         from robot_sf.gym_env.pedestrian_env import PedestrianEnv
@@ -162,6 +197,17 @@ class EnvironmentFactory:
         reward_func: Callable | None,
         debug: bool,
     ) -> MultiAgentEnv:
+        """Instantiate the legacy multi-robot simulator wrapper.
+
+        Args:
+            config: Multi-robot configuration; inferred when ``None``.
+            num_robots: Number of robots to spawn in the environment.
+            reward_func: Optional reward override.
+            debug: Enables debug/visual features in :class:`MultiRobotEnv`.
+
+        Returns:
+            MultiAgentEnv: Instance of :class:`robot_sf.gym_env.multi_robot_env.MultiRobotEnv`.
+        """
         if config is None:
             config = MultiRobotConfig()
         if config.num_robots != num_robots:
@@ -177,6 +223,19 @@ class EnvironmentFactory:
 
 
 def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
+    """Merge legacy render kwargs into a :class:`RenderOptions` instance.
+
+    Args:
+        mapped: Normalized legacy kwargs (e.g., ``render_options.max_fps_override``) that
+            should be merged into the structured options object. Keys are popped as they are
+            consumed.
+        render: Previously supplied :class:`RenderOptions` replacement; ``None`` triggers
+            allocation of a fresh object when legacy values are present.
+
+    Returns:
+        RenderOptions | None: Updated options honoring the legacy fields, or the original
+        input when no render-specific keys were found.
+    """
     if "render_options.max_fps_override" in mapped:
         ro = render or RenderOptions()
         ro.max_fps_override = mapped.pop("render_options.max_fps_override")
@@ -185,6 +244,18 @@ def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
 
 
 def _apply_recording(mapped: dict[str, Any], rec: RecordingOptions | None):
+    """Convert legacy recording flags/paths into :class:`RecordingOptions`.
+
+    Args:
+        mapped: Legacy kwargs emitted by :func:`apply_legacy_kwargs`. The helper removes
+            handled keys so the caller can detect unrecognized parameters.
+        rec: Existing :class:`RecordingOptions`; ``None`` creates a new instance whenever
+            legacy ``record`` or ``video_path`` values are provided.
+
+    Returns:
+        RecordingOptions | None: Updated options that reflect the legacy inputs, or the
+        untouched original when no recording keys were supplied.
+    """
     keys = ("recording_options.record", "recording_options.video_path")
     if any(k in mapped for k in keys):
         out = rec or RecordingOptions()
@@ -277,58 +348,31 @@ def make_robot_env(
 ) -> SingleAgentEnv:
     """Create a standard robot environment (non-image observations).
 
-    Parameters
-    ----------
-    config : RobotSimulationConfig | None
-        Optional pre-constructed config; a default instance is created if ``None``.
-    seed : int | None
-        Deterministic seed (Python ``random``, NumPy, PyTorch, hash seed). Stored on the
-        returned env as ``applied_seed``.
-    peds_have_obstacle_forces : bool
-        Whether pedestrians perceive the robot as an obstacle (interaction forces enabled).
-    reward_func : Callable | None
-        Optional custom reward function; falls back to internal simple reward with warning.
-    debug : bool
-        Enable debug / visual features (may trigger view creation when recording).
-    recording_enabled : bool
-        Master switch gating recording runtime even if options request it (feature flag style).
-    record_video : bool
-        Convenience flag; if True and no explicit ``RecordingOptions`` provided one is synthesized.
-    video_path : str | None
-        Convenience output path used if ``RecordingOptions`` absent or lacks path.
-    video_fps : float | None
-        Convenience FPS; sets ``RenderOptions.max_fps_override`` if unset.
-    render_options : RenderOptions | None
-        Advanced rendering options; takes precedence over convenience flags.
-    recording_options : RecordingOptions | None
-        Advanced recording options. For robot/image factories, convenience flag may upgrade
-        ``record`` to True if conflicting (precedence rule #3).
-    use_jsonl_recording : bool
-        Enable JSONL episode recording (per-episode JSONL + metadata outputs) when recording is on.
-    recording_dir : str
-        Directory where JSONL recorder stores per-episode files if enabled.
-    suite_name : str
-        Suite identifier stored in JSONL metadata for downstream grouping.
-    scenario_name : str
-        Scenario identifier stored in JSONL metadata.
-    algorithm_name : str
-        Algorithm identifier stored in JSONL metadata.
-    recording_seed : int | None
-        Optional stable seed used by the recorder to derive deterministic episode names.
-    legacy_kwargs : dict
-        Deprecated legacy surface (mapped via :func:`apply_legacy_kwargs`). Unknown params
-        rejected unless ``{env}`` is truthy (permissive).
+    Args:
+        config: Optional simulation config; defaults to :class:`RobotSimulationConfig`.
+        seed: Deterministic seed applied to Python, NumPy, Torch, and ``PYTHONHASHSEED``.
+        peds_have_obstacle_forces: Enables robot-as-obstacle forces for pedestrians.
+        reward_func: Optional reward override; defaults to internal helper.
+        debug: Enables debug/visualization features.
+        recording_enabled: Master switch for the recording subsystem.
+        record_video: Convenience flag to turn on recording when no options are supplied.
+        video_path: Convenience path used when ``RecordingOptions`` is absent or lacks a path.
+        video_fps: Convenience FPS override for :class:`RenderOptions`.
+        render_options: Advanced rendering options (precedence over convenience flags).
+        recording_options: Advanced recording options; may be upgraded when ``record_video`` is True.
+        use_jsonl_recording: Enables JSONL episode recording when recordings are active.
+        recording_dir: Directory for JSONL outputs.
+        suite_name: Metadata tag stored in recordings.
+        scenario_name: Metadata tag stored in recordings.
+        algorithm_name: Metadata tag stored in recordings.
+        recording_seed: Deterministic seed forwarded to the recorder.
+        legacy_kwargs: Deprecated kwargs surface mapped via :func:`apply_legacy_kwargs`. Unknown
+            parameters are rejected unless the ``LEGACY_PERMISSIVE_ENV`` environment flag is set.
 
-    Returns
-    -------
-    SingleAgentEnv
-        Initialized robot environment instance with ``applied_seed`` attribute set.
-
-    Notes
-    -----
-    * Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
-    * Performance: heavy image rendering imports are avoided along this path.
-    """.replace("{env}", LEGACY_PERMISSIVE_ENV)
+    Returns:
+        SingleAgentEnv: Initialized :class:`robot_sf.gym_env.robot_env.RobotEnv` instance with
+        ``applied_seed`` attribute populated.
+    """
     # Apply legacy parameter mapping FIRST so explicit new-style arguments win.
     if legacy_kwargs:
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
@@ -404,9 +448,9 @@ def make_image_robot_env(
 ) -> SingleAgentEnv:
     """Create a robot environment with image observations.
 
-    Mirrors :func:`make_robot_env` adding an internal switch to select the image-capable
-    environment implementation. All parameter semantics and precedence are identical.
-    Lazy import defers expensive view initialization until first creation.
+    Mirrors :func:`make_robot_env` while selecting :class:`RobotEnvWithImage` internally.
+    All parameter semantics remain the same; see :func:`make_robot_env` for argument
+    descriptions.``legacy_kwargs`` mapping behaves identically.
     """
     if legacy_kwargs:
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
@@ -472,19 +516,29 @@ def make_pedestrian_env(
 ) -> SingleAgentEnv:
     """Create a pedestrian (adversarial) environment.
 
-    Differences vs. :func:`make_robot_env` / :func:`make_image_robot_env`:
-    * Honors explicit recording opt-out (``RecordingOptions(record=False)``) even if
-      ``record_video=True`` (no implicit flip). Required by T012 test.
-    * May auto-enable ``debug`` when effective recording is active to ensure frames
-      are produced.
-    * Injects a stub robot model when ``robot_model`` is ``None`` for backward compatibility.
+    Args:
+        config: Optional pedestrian simulation configuration.
+        seed: Deterministic seed applied to RNGs.
+        robot_model: Policy used by the robot counterpart (stubbed if ``None``).
+        reward_func: Optional reward override; defaults to :func:`simple_ped_reward`.
+        debug: Enables debug visualization.
+        recording_enabled: Master switch for recording support.
+        peds_have_obstacle_forces: Toggle for robot-as-obstacle forces.
+        record_video: Convenience recording flag (explicit ``RecordingOptions`` with
+            ``record=False`` cannot be overridden).
+        video_path: Convenience recording path.
+        video_fps: Convenience FPS override.
+        render_options: Advanced rendering options.
+        recording_options: Advanced recording options with precedence over convenience flags.
+        legacy_kwargs: Deprecated surface mapped via :func:`apply_legacy_kwargs`.
 
-    Parameters follow the same semantics; additional ones:
-    robot_model : Any | None
-        Trained policy / model providing robot actions. A lightweight stub is injected if
-        absent so tests and simple demos can still run.
-    peds_have_obstacle_forces : bool
-        Interaction force toggle for pedestrian physics.
+    Returns:
+        SingleAgentEnv: Configured :class:`robot_sf.gym_env.pedestrian_env.PedestrianEnv`.
+
+    Notes:
+        Explicit recording opt-out is honored even when ``record_video=True`` so tests
+        can disable recording deterministically; ``debug`` is enabled automatically when
+        recording is effective to ensure frames are produced.
     """
     # Capture explicit override intent BEFORE normalization mutates structures.
     if legacy_kwargs:
@@ -586,7 +640,17 @@ def make_multi_robot_env(
     reward_func: Callable | None = None,
     debug: bool = False,
 ) -> MultiAgentEnv:
-    """Create a multi-robot environment."""
+    """Create a multi-robot environment.
+
+    Args:
+        num_robots: Number of robots to simulate.
+        config: Optional :class:`MultiRobotConfig`; updated with ``num_robots`` when provided.
+        reward_func: Optional reward callback.
+        debug: Enables debug visualization within :class:`MultiRobotEnv`.
+
+    Returns:
+        MultiAgentEnv: Instance of :class:`robot_sf.gym_env.multi_robot_env.MultiRobotEnv`.
+    """
     return EnvironmentFactory.create_multi_robot_env(
         config=config,
         num_robots=num_robots,

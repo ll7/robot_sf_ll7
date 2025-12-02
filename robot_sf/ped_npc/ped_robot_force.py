@@ -1,3 +1,5 @@
+"""Module ped_robot_force auto-generated docstring."""
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -10,6 +12,8 @@ from robot_sf.common.types import Vec2D
 
 @dataclass
 class PedRobotForceConfig:
+    """PedRobotForceConfig class."""
+
     is_active: bool = True
     robot_radius: float = 1.0
     activation_threshold: float = 2.0
@@ -29,12 +33,27 @@ class PedRobotForce:
         peds: PedState,
         get_robot_pos: Callable[[], Vec2D],
     ):
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            peds: Auto-generated placeholder description.
+            get_robot_pos: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         self.config = config
         self.peds = peds
         self.get_robot_pos = get_robot_pos
         self.last_forces = 0.0
 
     def __call__(self) -> np.ndarray:
+        """Call.
+
+        Returns:
+            np.ndarray: Auto-generated placeholder description.
+        """
         threshold = (
             self.config.activation_threshold + self.peds.agent_radius + self.config.robot_radius
         )
@@ -124,6 +143,16 @@ def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
 
 @numba.njit(fastmath=True)
 def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
+    """Der euclid dist.
+
+    Args:
+        p1: Auto-generated placeholder description.
+        p2: Auto-generated placeholder description.
+        distance: Auto-generated placeholder description.
+
+    Returns:
+        Vec2D: Auto-generated placeholder description.
+    """
     # info: distance is an expensive operation and therefore pre-computed
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
@@ -132,5 +161,15 @@ def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
 
 @numba.njit(fastmath=True)
 def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> tuple[float, float]:
+    """Potential field force.
+
+    Args:
+        dist: Auto-generated placeholder description.
+        dx_dist: Auto-generated placeholder description.
+        dy_dist: Auto-generated placeholder description.
+
+    Returns:
+        tuple[float, float]: Auto-generated placeholder description.
+    """
     der_potential = 1 / pow(dist, 3)
     return der_potential * dx_dist, der_potential * dy_dist

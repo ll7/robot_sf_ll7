@@ -311,10 +311,23 @@ class InteractivePlayback(SimulationView):
     # Property to ensure direct assignment also updates deques
     @property
     def max_trajectory_length(self) -> int:
+        """Max trajectory length.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return getattr(self, "_max_trajectory_length", 100)
 
     @max_trajectory_length.setter
     def max_trajectory_length(self, value: int) -> None:
+        """Max trajectory length.
+
+        Args:
+            value: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         clamped = max(10, min(int(value), 500))
         old = getattr(self, "_max_trajectory_length", None)
         if old == clamped:

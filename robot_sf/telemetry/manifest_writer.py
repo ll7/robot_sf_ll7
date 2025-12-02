@@ -31,6 +31,16 @@ class ManifestWriter:
         *,
         registry: RunRegistry | None = None,
     ) -> None:
+        """Init.
+
+        Args:
+            config: Auto-generated placeholder description.
+            run_id: Auto-generated placeholder description.
+            registry: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         if not isinstance(config, RunTrackerConfig):  # defensive gate for early adopters
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
         self._config = config
@@ -45,19 +55,48 @@ class ManifestWriter:
 
     @property
     def run_directory(self) -> Path:
+        """Run directory.
+
+        Returns:
+            Path: Auto-generated placeholder description.
+        """
         return self._run_dir
 
     def append_run_record(self, record: PipelineRunRecord | dict[str, object]) -> None:
+        """Append run record.
+
+        Args:
+            record: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         payload = self._prepare_payload(record)
         with self._lock:
             self._append_json_line(self._manifest_path, payload)
 
     def append_telemetry_snapshot(self, snapshot: TelemetrySnapshot | dict[str, object]) -> None:
+        """Append telemetry snapshot.
+
+        Args:
+            snapshot: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         payload = self._prepare_payload(snapshot)
         with self._lock:
             self._append_json_line(self._telemetry_path, payload)
 
     def write_step_index(self, entries: list[StepExecutionEntry]) -> Path:
+        """Write step index.
+
+        Args:
+            entries: Auto-generated placeholder description.
+
+        Returns:
+            Path: Auto-generated placeholder description.
+        """
         payload = serialize_many(entries)
         with self._lock:
             self._steps_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -67,17 +106,38 @@ class ManifestWriter:
         self,
         recommendations: list[PerformanceRecommendation] | list[dict[str, object]],
     ) -> None:
+        """Append recommendations.
+
+        Args:
+            recommendations: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         serialized = [self._prepare_payload(item) for item in recommendations]
         with self._lock:
             for recommendation in serialized:
                 self._append_json_line(self._manifest_path, {"recommendation": recommendation})
 
     def append_performance_test(self, result: PerformanceTestResult | dict[str, object]) -> None:
+        """Append performance test.
+
+        Args:
+            result: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         payload = self._prepare_payload(result)
         with self._lock:
             self._append_json_line(self._manifest_path, {"perf_test": payload})
 
     def iter_run_records(self) -> list[dict[str, object]]:
+        """Iter run records.
+
+        Returns:
+            list[dict[str, object]]: Auto-generated placeholder description.
+        """
         if not self._manifest_path.exists():
             return []
         return [
@@ -88,12 +148,29 @@ class ManifestWriter:
 
     @staticmethod
     def _append_json_line(target: Path, payload: dict[str, Any]) -> None:
+        """Append json line.
+
+        Args:
+            target: Auto-generated placeholder description.
+            payload: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
 
     @staticmethod
     def _prepare_payload(payload: object) -> dict[str, Any]:
+        """Prepare payload.
+
+        Args:
+            payload: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         if isinstance(payload, dict):
             return cast(dict[str, Any], payload)
         if is_dataclass(payload):

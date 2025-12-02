@@ -34,6 +34,15 @@ DEFAULT_METRICS: list[str] = [
 
 
 def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[float]:
+    """Extract metric values.
+
+    Args:
+        records: Auto-generated placeholder description.
+        key: Auto-generated placeholder description.
+
+    Returns:
+        list[float]: Auto-generated placeholder description.
+    """
     vals: list[float] = []
     for rec in records:
         m = rec.get("metrics") or {}
@@ -47,6 +56,15 @@ def compute_baseline_stats_from_records(
     records: list[dict[str, Any]],
     metrics: Iterable[str] | None = None,
 ) -> dict[str, dict[str, float]]:
+    """Compute baseline stats from records.
+
+    Args:
+        records: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, dict[str, float]]: Auto-generated placeholder description.
+    """
     if metrics is None:
         metrics = tuple(DEFAULT_METRICS)
     stats: dict[str, dict[str, float]] = {}
@@ -81,6 +99,28 @@ def run_and_compute_baseline(
     resume: bool = True,
     progress_cb=None,
 ) -> dict[str, dict[str, float]]:
+    """Run and compute baseline.
+
+    Args:
+        scenarios_or_path: Auto-generated placeholder description.
+        out_json: Auto-generated placeholder description.
+        out_jsonl: Auto-generated placeholder description.
+        schema_path: Auto-generated placeholder description.
+        base_seed: Auto-generated placeholder description.
+        repeats_override: Auto-generated placeholder description.
+        horizon: Auto-generated placeholder description.
+        dt: Auto-generated placeholder description.
+        record_forces: Auto-generated placeholder description.
+        metrics: Auto-generated placeholder description.
+        algo: Auto-generated placeholder description.
+        algo_config_path: Auto-generated placeholder description.
+        workers: Auto-generated placeholder description.
+        resume: Auto-generated placeholder description.
+        progress_cb: Auto-generated placeholder description.
+
+    Returns:
+        dict[str, dict[str, float]]: Auto-generated placeholder description.
+    """
     # Optionally run batch to collect JSONL
     tmp_jsonl: str | None = None
     if out_jsonl is not None:

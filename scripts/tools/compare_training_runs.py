@@ -23,7 +23,14 @@ if TYPE_CHECKING:
 
 
 def _latest_path(paths: list[Path]) -> Path | None:
-    """Return the newest path from the provided list."""
+    """Return the most recently modified path from the provided list.
+
+    Args:
+        paths: Candidate manifest paths gathered from multiple search strategies.
+
+    Returns:
+        Path | None: The newest existing file or ``None`` when no path exists.
+    """
 
     existing = [p for p in paths if p.exists()]
     if not existing:
@@ -32,13 +39,24 @@ def _latest_path(paths: list[Path]) -> Path | None:
 
 
 def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
-    """Resolve the manifest path and capture which fallback (if any) succeeded."""
+    """Resolve a training manifest path using canonical and fallback heuristics.
+
+    Args:
+        run_id: Identifier embedded in manifest file names.
+
+    Returns:
+        tuple[Path, str]: File path plus a description of the strategy that located it.
+
+    Raises:
+        FileNotFoundError: If no manifest can be found after exhausting fallbacks.
+    """
 
     artifact_root = get_artifact_root()
     canonical = get_training_run_manifest_path(run_id)
     base_runs_dir = canonical.parent
 
     def _manifest_summary() -> Path | None:
+        """Return comparison summary path if it exists."""
         candidate = get_imitation_report_dir() / run_id / "summary.json"
         return candidate if candidate.exists() else None
 
@@ -77,14 +95,28 @@ def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
 
 
 def _load_training_run(run_id: str) -> dict[str, Any]:
-    """Load training run manifest from disk."""
+    """Load a training run manifest as a dictionary.
+
+    Args:
+        run_id: Identifier passed through to :func:`_resolve_manifest_path`.
+
+    Returns:
+        dict[str, Any]: Parsed JSON manifest describing the run.
+    """
 
     manifest_path, _source = _resolve_manifest_path(run_id)
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
 def _extract_convergence_timesteps(run_data: dict[str, Any]) -> int:
-    """Extract convergence timesteps from training run notes."""
+    """Extract convergence timesteps from manifest notes or fall back to total timesteps.
+
+    Args:
+        run_data: Manifest dictionary containing optional ``notes`` entries.
+
+    Returns:
+        int: Parsed timestep count or ``total_timesteps`` when notes lack context.
+    """
     # Look for convergence info in notes
     for note in run_data.get("notes", []):
         if "Converged at" in note:
@@ -104,7 +136,15 @@ def _compute_sample_efficiency_ratio(
     baseline_timesteps: int,
     pretrained_timesteps: int,
 ) -> float:
-    """Compute sample-efficiency ratio (lower is better for pretrained)."""
+    """Compute the sample-efficiency ratio (pretrained timesteps ÷ baseline timesteps).
+
+    Args:
+        baseline_timesteps: Steps consumed by the scratch baseline model.
+        pretrained_timesteps: Steps consumed by the fine-tuned model.
+
+    Returns:
+        float: Ratio where values <1 represent efficiency gains.
+    """
     if baseline_timesteps == 0:
         return 1.0
     return pretrained_timesteps / baseline_timesteps
@@ -114,7 +154,15 @@ def _compare_metrics(
     baseline_metrics: dict[str, Any],
     pretrained_metrics: dict[str, Any],
 ) -> dict[str, dict[str, float]]:
-    """Compare metrics between baseline and pretrained runs."""
+    """Compare metric means between baseline and pretrained runs.
+
+    Args:
+        baseline_metrics: Mapping of metric name → aggregate dict for the baseline run.
+        pretrained_metrics: Same schema but for the pretrained run.
+
+    Returns:
+        dict[str, dict[str, float]]: Per-metric baseline/pretrained means plus improvements.
+    """
     comparison = {}
 
     all_keys = set(baseline_metrics.keys()) | set(pretrained_metrics.keys())
@@ -143,7 +191,16 @@ def generate_comparison_report(
     baseline_run_id: str,
     pretrained_run_id: str,
 ) -> dict[str, Any]:
-    """Generate comprehensive comparison report between training runs."""
+    """Generate a comparison report summarizing convergence and metric improvements.
+
+    Args:
+        run_group_id: Human-readable label for the comparison (used in filenames).
+        baseline_run_id: Identifier for the scratch training manifest.
+        pretrained_run_id: Identifier for the fine-tuned training manifest.
+
+    Returns:
+        dict[str, Any]: Structured report ready for JSON serialization.
+    """
     logger.info("Generating comparison report for group {}", run_group_id)
 
     # Load training runs
@@ -188,7 +245,12 @@ def generate_comparison_report(
 
 
 def save_comparison_report(report: dict[str, Any], output_path: Path) -> None:
-    """Save comparison report to JSON file."""
+    """Persist a comparison report to JSON.
+
+    Args:
+        report: Data structure returned by :func:`generate_comparison_report`.
+        output_path: Destination path; parent directories are created automatically.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, sort_keys=True)
@@ -196,7 +258,11 @@ def save_comparison_report(report: dict[str, Any], output_path: Path) -> None:
 
 
 def print_comparison_summary(report: dict[str, Any]) -> None:
-    """Print human-readable summary of comparison report."""
+    """Print a human-readable summary of the comparison report to stdout.
+
+    Args:
+        report: Report dictionary including convergence + metrics data.
+    """
     print("\n" + "=" * 70)
     print(f"Training Comparison Report: {report['run_group_id']}")
     print("=" * 70)
@@ -227,7 +293,7 @@ def print_comparison_summary(report: dict[str, Any]) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build argument parser for comparison tool."""
+    """Build argument parser describing run IDs, grouping, and output controls."""
     parser = argparse.ArgumentParser(
         description="Compare baseline and pretrained PPO training runs."
     )
@@ -261,7 +327,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point for comparison tool."""
+    """CLI entry point for training run comparisons.
+
+    Args:
+        argv: Optional argument vector override for testing.
+
+    Returns:
+        int: Exit code where ``0`` indicates the efficiency target was met.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

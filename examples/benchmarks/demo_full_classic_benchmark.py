@@ -61,10 +61,20 @@ from scripts.classic_benchmark_full import BenchmarkCLIConfig, run_full_benchmar
 
 
 def _project_root() -> Path:
+    """Project root.
+
+    Returns:
+        Path: Auto-generated placeholder description.
+    """
     return Path(__file__).resolve().parents[2]
 
 
 def main() -> int:
+    """Main.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     root = _project_root()
 
     # Scenario matrix (choose one appropriate to your local setup)

@@ -59,11 +59,21 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class _Stat:
+    """Stat class."""
+
     size: int
     mtime_ns: int
 
 
 def _stat_of(path: Path) -> _Stat:
+    """Stat of.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        _Stat: Auto-generated placeholder description.
+    """
     st = path.stat()
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))
 
@@ -142,14 +152,15 @@ def save_manifest(
 ) -> None:
     """Write or update the manifest to reflect the current on-disk state.
 
-    Parameters
-    - out_path: Path to the JSONL episodes file.
-    - episode_ids: Iterable of episode_id strings present in the file.
+    Args:
+        out_path: Path to the JSONL episodes file being tracked.
+        episode_ids: Collection of episode identifiers present in the file.
+        identity_hash: Optional content hash recorded for reproducibility.
+        schema_version: Episode schema version stored in the sidecar.
 
-    Behavior
-    - If the JSONL file does not exist, the function returns without writing.
-    - The sidecar's stat is captured from the JSONL at save time to bind the
-      manifest to the exact file content.
+    Behavior:
+        If the JSONL file does not exist the function returns without writing.
+        The captured file stat binds the sidecar to a specific file version.
     """
     if not out_path.exists():
         return

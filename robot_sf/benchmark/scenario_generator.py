@@ -55,6 +55,8 @@ _DENSITY_COUNTS = {"low": 10, "med": 25, "high": 40}
 
 @dataclass
 class GeneratedScenario:
+    """GeneratedScenario class."""
+
     simulator: Any
     state: np.ndarray
     obstacles: list[tuple[float, float, float, float]]
@@ -63,11 +65,28 @@ class GeneratedScenario:
 
 
 def _select_counts(params: dict[str, Any]) -> int:
+    """Select counts.
+
+    Args:
+        params: Auto-generated placeholder description.
+
+    Returns:
+        int: Auto-generated placeholder description.
+    """
     density = params.get("density", "med")
     return int(_DENSITY_COUNTS.get(density, _DENSITY_COUNTS["med"]))
 
 
 def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
+    """Sample positions.
+
+    Args:
+        rng: Auto-generated placeholder description.
+        n: Auto-generated placeholder description.
+
+    Returns:
+        np.ndarray: Auto-generated placeholder description.
+    """
     # Uniform in central bounding box with small margin
     margin = 0.5
     xs = rng.uniform(margin, AREA_WIDTH - margin, size=n)
@@ -76,6 +95,14 @@ def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
 
 
 def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
+    """Build obstacles.
+
+    Args:
+        kind: Auto-generated placeholder description.
+
+    Returns:
+        list[tuple[float, float, float, float]]: Auto-generated placeholder description.
+    """
     if kind == "open":
         return []
     if kind == "bottleneck":
@@ -98,6 +125,16 @@ def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
 
 
 def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
+    """Assign goals.
+
+    Args:
+        flow: Auto-generated placeholder description.
+        goal_topology: Auto-generated placeholder description.
+        pos: Auto-generated placeholder description.
+
+    Returns:
+        np.ndarray: Auto-generated placeholder description.
+    """
     n = pos.shape[0]
     goals = np.zeros_like(pos)
     if flow == "uni":
@@ -132,6 +169,16 @@ def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
 
 
 def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[int]:
+    """Assign groups.
+
+    Args:
+        rng: Auto-generated placeholder description.
+        n: Auto-generated placeholder description.
+        fraction: Auto-generated placeholder description.
+
+    Returns:
+        list[int]: Auto-generated placeholder description.
+    """
     if fraction <= 0:
         return [-1] * n
     num_grouped = int(round(n * fraction))
@@ -150,6 +197,14 @@ def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[in
 
 
 def _speed_variation(speed_var: str) -> float:
+    """Speed variation.
+
+    Args:
+        speed_var: Auto-generated placeholder description.
+
+    Returns:
+        float: Auto-generated placeholder description.
+    """
     return 0.2 if speed_var == "low" else 0.5
 
 

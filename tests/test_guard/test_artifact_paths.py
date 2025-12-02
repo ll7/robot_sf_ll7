@@ -21,6 +21,14 @@ from robot_sf.common.artifact_paths import (
 
 
 def test_get_artifact_root_defaults_to_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get artifact root defaults to output.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
     root = get_artifact_root()
     repo_root = get_repository_root()
@@ -28,6 +36,15 @@ def test_get_artifact_root_defaults_to_output(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_get_artifact_root_honors_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test get artifact root honors override.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     override = (tmp_path / "custom").resolve()
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(override))
     assert get_artifact_override_root() == override
@@ -38,6 +55,15 @@ def test_get_artifact_category_path_uses_active_root(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """Test get artifact category path uses active root.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     override = (tmp_path / "override").resolve()
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(override))
     ensure_canonical_tree(override)
@@ -46,6 +72,14 @@ def test_get_artifact_category_path_uses_active_root(
 
 
 def test_ensure_canonical_tree_creates_category_directories(tmp_path: Path) -> None:
+    """Test ensure canonical tree creates category directories.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     root = ensure_canonical_tree(tmp_path / "artifacts")
     expected_relative = {category.relative_path for category in iter_artifact_categories()}
     for relative_path in expected_relative:
@@ -53,6 +87,14 @@ def test_ensure_canonical_tree_creates_category_directories(tmp_path: Path) -> N
 
 
 def test_find_legacy_artifact_paths_detects_known_locations(tmp_path: Path) -> None:
+    """Test find legacy artifact paths detects known locations.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     (tmp_path / "results").mkdir()
     (tmp_path / "coverage.json").write_text("{}", encoding="utf-8")
     (tmp_path / "output").mkdir()
@@ -64,17 +106,32 @@ def test_find_legacy_artifact_paths_detects_known_locations(tmp_path: Path) -> N
 
 
 def test_get_repository_root_matches_expected_path() -> None:
+    """Test get repository root matches expected path.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     repo_root = get_repository_root()
     assert repo_root == Path(__file__).resolve().parents[2]
 
 
 def test_get_legacy_migration_plan_contains_expected_keys() -> None:
+    """Test get legacy migration plan contains expected keys.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     plan = get_legacy_migration_plan()
     assert Path("results") in plan
     assert Path("coverage.json") in plan
 
 
 def test_get_artifact_category_unknown_raises() -> None:
+    """Test get artifact category unknown raises.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     with pytest.raises(KeyError):
         get_artifact_category("non-existent")
 
@@ -82,6 +139,14 @@ def test_get_artifact_category_unknown_raises() -> None:
 def test_resolve_artifact_path_uses_canonical_root_when_no_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test resolve artifact path uses canonical root when no override.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
     expected_base = get_artifact_category_path("benchmarks")
     resolved = resolve_artifact_path("benchmarks/output.json")
@@ -91,6 +156,14 @@ def test_resolve_artifact_path_uses_canonical_root_when_no_override(
 def test_resolve_artifact_path_preserves_repo_relative_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test resolve artifact path preserves repo relative paths.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
     resolved = resolve_artifact_path(Path("docs/example.md"))
     assert resolved == (get_repository_root() / "docs/example.md").resolve()
@@ -99,6 +172,14 @@ def test_resolve_artifact_path_preserves_repo_relative_paths(
 def test_resolve_artifact_path_migrates_legacy_files(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test resolve artifact path migrates legacy files.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     monkeypatch.delenv("ROBOT_SF_ARTIFACT_ROOT", raising=False)
     expected = get_artifact_category_path("coverage") / "coverage.json"
     resolved = resolve_artifact_path("coverage.json")
@@ -108,6 +189,15 @@ def test_resolve_artifact_path_migrates_legacy_files(
 def test_resolve_artifact_path_honors_override(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test resolve artifact path honors override.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     override = (tmp_path / "override").resolve()
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(override))
     ensure_canonical_tree(override)

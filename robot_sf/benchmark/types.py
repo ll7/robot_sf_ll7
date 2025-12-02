@@ -41,6 +41,11 @@ class ScenarioSpec:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:  # stable conversion
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         return asdict(self)
 
 
@@ -55,9 +60,23 @@ class MetricsBundle:
     values: dict[str, float]
 
     def get(self, name: str, default: float | None = None) -> float | None:
+        """Get.
+
+        Args:
+            name: Auto-generated placeholder description.
+            default: Auto-generated placeholder description.
+
+        Returns:
+            float | None: Auto-generated placeholder description.
+        """
         return self.values.get(name, default)
 
     def to_dict(self) -> dict[str, float]:
+        """To dict.
+
+        Returns:
+            dict[str, float]: Auto-generated placeholder description.
+        """
         return dict(self.values)
 
 
@@ -82,6 +101,11 @@ class EpisodeRecord:
     raw: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         d = asdict(self)
         # flatten metrics bundle for JSON writing
         d["metrics"] = self.metrics.to_dict()
@@ -97,6 +121,11 @@ class SNQIWeights:
     meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         return {"version": self.version, "weights": dict(self.weights), "meta": self.meta or {}}
 
 
@@ -115,6 +144,11 @@ class ResumeManifest:
     )
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         return {
             "version": self.version,
             "episodes": list(self.episodes),

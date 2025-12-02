@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class _MinimalState:
+    """MinimalState class."""
+
     timestep: int
     robot_pose: tuple[tuple[float, float], float]
 
@@ -40,6 +42,14 @@ def build_minimal_states(ep: ReplayEpisode) -> Iterable[_MinimalState]:
 
 
 def iter_states(ep: ReplayEpisode) -> Generator[_MinimalState, None, None]:  # thin alias
+    """Iter states.
+
+    Args:
+        ep: Auto-generated placeholder description.
+
+    Returns:
+        Generator[_MinimalState, None, None]: Auto-generated placeholder description.
+    """
     yield from build_minimal_states(ep)
 
 

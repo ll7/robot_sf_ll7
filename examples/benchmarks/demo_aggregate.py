@@ -29,6 +29,14 @@ from robot_sf.render.helper_catalog import ensure_output_dir
 
 
 def _write_demo_matrix(path: Path) -> None:
+    """Write demo matrix.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     scenarios = [
         {
             "id": "demo-agg-uni-low-open",
@@ -49,6 +57,11 @@ def _write_demo_matrix(path: Path) -> None:
 
 
 def main() -> None:
+    """Main.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     # Use helper catalog to ensure output directory exists
     out_dir = ensure_output_dir(Path("results/demo_aggregate"))
 

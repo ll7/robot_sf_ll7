@@ -27,10 +27,20 @@ class SeedReport:
     notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """To dict.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         return asdict(self)
 
 
 def _import_torch():
+    """Import torch.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     try:
         import torch  # type: ignore
 
@@ -42,13 +52,12 @@ def _import_torch():
 def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
     """Set global seeds for random, numpy, and torch (if available).
 
-    Parameters
-    - seed: Global seed to apply.
-    - deterministic: If True, set torch.backends.cudnn.deterministic True and
-      disable CUDNN benchmarking for deterministic convs (if torch available).
+    Args:
+        seed: Global seed value applied to all RNGs.
+        deterministic: Whether to force deterministic torch/CUDNN behavior when available.
 
-    Returns
-    - SeedReport with applied settings.
+    Returns:
+        SeedReport: Summary of applied settings.
     """
     # Core RNGs
     random.seed(seed)

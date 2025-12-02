@@ -1,3 +1,5 @@
+"""Module obstacle auto-generated docstring."""
+
 from dataclasses import dataclass, field
 
 import numpy as np

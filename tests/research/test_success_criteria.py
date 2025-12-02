@@ -10,6 +10,14 @@ from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestra
 
 
 def test_success_criteria_report(tmp_path):
+    """Test success criteria report.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     seeds = [1, 2]
     metric_records = [
         {
@@ -59,6 +67,14 @@ def test_success_criteria_report(tmp_path):
 
 
 def test_success_criteria_ablation(tmp_path):
+    """Test success criteria ablation.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     ab_orch = AblationOrchestrator(
         experiment_name="sc_ablation",
         seeds=[1],

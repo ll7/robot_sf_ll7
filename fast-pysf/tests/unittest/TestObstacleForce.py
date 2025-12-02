@@ -1,9 +1,13 @@
+"""Module TestObstacleForce auto-generated docstring."""
+
 import unittest
 
 from pysocialforce.forces import obstacle_force
 
 
 class TestObstacleForce(unittest.TestCase):
+    """TestObstacleForce class."""
+
     def test_single_point_obstacle(self):
         """Test obstacle_force with an obstacle that is a single point."""
         obstacle = (1, 1, 1, 1)  # Single point obstacle

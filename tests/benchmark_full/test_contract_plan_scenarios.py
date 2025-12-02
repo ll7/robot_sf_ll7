@@ -15,6 +15,14 @@ from robot_sf.benchmark.full_classic.planning import plan_scenarios
 
 
 def test_plan_scenarios_seed_count(config_factory):  # uses test double BenchmarkConfig
+    """Test plan scenarios seed count.
+
+    Args:
+        config_factory: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     cfg = config_factory(initial_episodes=7)
     raw = [
         {

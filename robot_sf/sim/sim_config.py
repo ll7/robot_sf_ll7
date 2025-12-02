@@ -1,3 +1,5 @@
+"""Module sim_config auto-generated docstring."""
+
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -78,8 +80,18 @@ class SimulationSettings:
 
     @property
     def max_sim_steps(self) -> int:
+        """Max sim steps.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         return ceil(self.sim_time_in_secs / self.time_per_step_in_secs)
 
     @property
     def peds_per_area_m2(self) -> float:
+        """Peds per area m2.
+
+        Returns:
+            float: Auto-generated placeholder description.
+        """
         return self.ped_density_by_difficulty[self.difficulty]

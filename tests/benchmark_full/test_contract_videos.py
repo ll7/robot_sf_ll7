@@ -12,6 +12,15 @@ from robot_sf.benchmark.full_classic.videos import generate_videos
 
 
 def test_generate_videos_smoke_skip(temp_results_dir, synthetic_episode_record):
+    """Test generate videos smoke skip.
+
+    Args:
+        temp_results_dir: Auto-generated placeholder description.
+        synthetic_episode_record: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     records = [
         synthetic_episode_record(
             episode_id="ep1",
@@ -21,6 +30,8 @@ def test_generate_videos_smoke_skip(temp_results_dir, synthetic_episode_record):
     ]
 
     class _Cfg:
+        """Cfg class."""
+
         smoke = True
         output_root = str(temp_results_dir)
 

@@ -18,6 +18,14 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_runner_single_episode_tmp(tmp_path: Path):
+    """Test runner single episode tmp.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     scenario = {
         "id": "smoke-uni-low-open",
         "density": "low",

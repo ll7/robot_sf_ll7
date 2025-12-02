@@ -1,3 +1,5 @@
+"""Module test_expert_trajectory_dataset auto-generated docstring."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -7,6 +9,15 @@ from robot_sf.benchmark.validation.trajectory_dataset import TrajectoryDatasetVa
 
 
 def _write_npz_dataset(path, episode_count: int) -> None:
+    """Write npz dataset.
+
+    Args:
+        path: Auto-generated placeholder description.
+        episode_count: Auto-generated placeholder description.
+
+    Returns:
+        None: Auto-generated placeholder description.
+    """
     positions = np.zeros((episode_count, 4, 2), dtype=float)
     actions = np.zeros((episode_count, 4, 2), dtype=float)
     observations = np.zeros((episode_count, 4, 5), dtype=float)
@@ -22,6 +33,14 @@ def _write_npz_dataset(path, episode_count: int) -> None:
 
 
 def test_validate_npz_dataset(tmp_path):
+    """Test validate npz dataset.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     dataset_path = tmp_path / "expert_dataset.npz"
     _write_npz_dataset(dataset_path, episode_count=8)
 
@@ -37,6 +56,14 @@ def test_validate_npz_dataset(tmp_path):
 
 
 def test_incomplete_dataset_quarantines(tmp_path):
+    """Test incomplete dataset quarantines.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     dataset_path = tmp_path / "missing_actions.npz"
     positions = np.zeros((2, 3, 2), dtype=float)
     np.savez(dataset_path, positions=positions)
@@ -49,6 +76,14 @@ def test_incomplete_dataset_quarantines(tmp_path):
 
 
 def test_jsonl_dataset_drafts_when_small(tmp_path):
+    """Test jsonl dataset drafts when small.
+
+    Args:
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     dataset_path = tmp_path / "todo.jsonl_frames"
     dataset_path.write_text("{}\n{}\n", encoding="utf-8")
 

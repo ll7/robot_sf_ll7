@@ -15,6 +15,15 @@ from robot_sf.benchmark.full_classic.plots import generate_plots
 
 
 def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
+    """Test generate plots smoke.
+
+    Args:
+        temp_results_dir: Auto-generated placeholder description.
+        synthetic_episode_record: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     out_dir = Path(temp_results_dir) / "plots"
     records = [
         synthetic_episode_record(
@@ -25,7 +34,18 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     ]
 
     class _Metric:
+        """Metric class."""
+
         def __init__(self, name, mean):
+            """Init.
+
+            Args:
+                name: Auto-generated placeholder description.
+                mean: Auto-generated placeholder description.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.name = name
             self.mean = mean
             self.median = mean
@@ -34,7 +54,14 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
             self.median_ci = None
 
     class _Group:
+        """Group class."""
+
         def __init__(self):
+            """Init.
+
+            Returns:
+                Any: Auto-generated placeholder description.
+            """
             self.archetype = "crossing"
             self.density = "low"
             self.count = 1
@@ -43,6 +70,8 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     groups = [_Group()]
 
     class _Cfg:
+        """Cfg class."""
+
         smoke = True
 
     artifacts = generate_plots(groups, records, str(out_dir), _Cfg())

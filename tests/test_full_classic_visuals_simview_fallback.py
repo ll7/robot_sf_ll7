@@ -17,7 +17,17 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
+    """Cfg class."""
+
     def __init__(self, tmp_path: Path):
+        """Init.
+
+        Args:
+            tmp_path: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
@@ -37,18 +47,54 @@ class _Cfg:
 
 
 def _read_json(path: Path):
+    """Read json.
+
+    Args:
+        path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_simulation_view_empty_list_triggers_fallback(monkeypatch, tmp_path):
+    """Test simulation view empty list triggers fallback.
+
+    Args:
+        monkeypatch: Auto-generated placeholder description.
+        tmp_path: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     visuals_mod = importlib.import_module("robot_sf.benchmark.full_classic.visuals")
     videos_mod = importlib.import_module("robot_sf.benchmark.full_classic.videos")
 
     def _no_videos(*_a, **_k):  # simulate SimulationView returning no artifacts
+        """No videos.
+
+        Args:
+            _a: Auto-generated placeholder description.
+            _k: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         return []
 
     def _stub_generate(records, out_dir, _cfg):  # fabricate 1 synthetic artifact
+        """Stub generate.
+
+        Args:
+            records: Auto-generated placeholder description.
+            out_dir: Auto-generated placeholder description.
+            _cfg: Auto-generated placeholder description.
+
+        Returns:
+            Any: Auto-generated placeholder description.
+        """
         rec = records[0] if records else {"episode_id": "ep0", "scenario_id": "sc0"}
         return [
             SimpleNamespace(

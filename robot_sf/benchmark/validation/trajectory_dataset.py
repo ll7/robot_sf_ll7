@@ -30,10 +30,26 @@ class TrajectoryDatasetValidator:
     """Validate curated trajectory datasets for completeness and integrity."""
 
     def __init__(self, dataset_path: Path | str) -> None:
+        """Init.
+
+        Args:
+            dataset_path: Auto-generated placeholder description.
+
+        Returns:
+            None: Auto-generated placeholder description.
+        """
         self.dataset_path = Path(dataset_path).resolve()
         self.dataset_id = self.dataset_path.stem
 
     def validate(self, *, minimum_episodes: int = 200) -> TrajectoryDatasetValidationResult:
+        """Validate.
+
+        Args:
+            minimum_episodes: Auto-generated placeholder description.
+
+        Returns:
+            TrajectoryDatasetValidationResult: Auto-generated placeholder description.
+        """
         if not self.dataset_path.exists():
             raise FileNotFoundError(f"Dataset not found: {self.dataset_path}")
 
@@ -54,6 +70,15 @@ class TrajectoryDatasetValidator:
         file_size: int,
         minimum_episodes: int,
     ) -> TrajectoryDatasetValidationResult:
+        """Validate npz.
+
+        Args:
+            file_size: Auto-generated placeholder description.
+            minimum_episodes: Auto-generated placeholder description.
+
+        Returns:
+            TrajectoryDatasetValidationResult: Auto-generated placeholder description.
+        """
         with np.load(self.dataset_path, allow_pickle=True) as data:
             files = data.files
             arrays = {name: data[name] for name in files}
@@ -88,6 +113,15 @@ class TrajectoryDatasetValidator:
         file_size: int,
         minimum_episodes: int,
     ) -> TrajectoryDatasetValidationResult:
+        """Validate jsonl.
+
+        Args:
+            file_size: Auto-generated placeholder description.
+            minimum_episodes: Auto-generated placeholder description.
+
+        Returns:
+            TrajectoryDatasetValidationResult: Auto-generated placeholder description.
+        """
         lines = self.dataset_path.read_text(encoding="utf-8").strip().splitlines()
         episode_count = len(lines)
         report = {
@@ -112,6 +146,17 @@ class TrajectoryDatasetValidator:
         file_size: int,
         minimum_episodes: int,
     ) -> TrajectoryQuality:
+        """Determine quality.
+
+        Args:
+            episode_count: Auto-generated placeholder description.
+            missing_arrays: Auto-generated placeholder description.
+            file_size: Auto-generated placeholder description.
+            minimum_episodes: Auto-generated placeholder description.
+
+        Returns:
+            TrajectoryQuality: Auto-generated placeholder description.
+        """
         if file_size > MAX_DATASET_SIZE_BYTES:
             return TrajectoryQuality.QUARANTINED
         if missing_arrays:
@@ -122,6 +167,14 @@ class TrajectoryDatasetValidator:
 
     @staticmethod
     def _extract_episode_count(arrays: dict[str, Any]) -> int:
+        """Extract episode count.
+
+        Args:
+            arrays: Auto-generated placeholder description.
+
+        Returns:
+            int: Auto-generated placeholder description.
+        """
         count_value = arrays.get("episode_count")
         if isinstance(count_value, np.ndarray):
             if count_value.size == 1:
@@ -138,6 +191,14 @@ class TrajectoryDatasetValidator:
 
     @staticmethod
     def _extract_metadata(arrays: dict[str, Any]) -> dict[str, Any]:
+        """Extract metadata.
+
+        Args:
+            arrays: Auto-generated placeholder description.
+
+        Returns:
+            dict[str, Any]: Auto-generated placeholder description.
+        """
         raw = arrays.get("metadata")
         if isinstance(raw, np.ndarray):
             if raw.shape == ():

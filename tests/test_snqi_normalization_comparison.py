@@ -14,6 +14,11 @@ from scripts.recompute_snqi_weights import SNQIWeightRecomputer
 
 
 def _episodes():
+    """Episodes.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     rng = np.random.default_rng(5)
     episodes = []
     for i in range(15):
@@ -35,6 +40,14 @@ def _episodes():
 
 
 def _baseline(episodes):
+    """Baseline.
+
+    Args:
+        episodes: Auto-generated placeholder description.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for e in episodes:
         for k in metrics:
@@ -47,6 +60,11 @@ def _baseline(episodes):
 
 
 def test_normalization_comparison_correlations_range():
+    """Test normalization comparison correlations range.
+
+    Returns:
+        Any: Auto-generated placeholder description.
+    """
     eps = _episodes()
     base = _baseline(eps)
     recomputer = SNQIWeightRecomputer(eps, base)

@@ -101,6 +101,19 @@
 				"focus": false,
 				"panel": "shared"
 			}
+		},
+		{
+			"label": "Docstring Report",
+			"type": "shell",
+			"command": "uv run python scripts/tools/docstring_report.py",
+			"problemMatcher": [],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			}
 		}
 	]
 }

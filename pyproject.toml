@@ -386,6 +386,10 @@ dev = [
     "pylint>=3.3.4",
     "pytest-xdist>=3.6.1",
 ]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+]
 
 [project.scripts]
 robot_sf_bench = "robot_sf.benchmark.cli:main"

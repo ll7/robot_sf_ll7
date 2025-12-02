@@ -94,9 +94,19 @@ def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[
     figures_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
 
-    rewards = _extract_metric(records, "best_mean_reward")
-    names = [rec.get("config_name", f"extractor_{i}") for i, rec in enumerate(records)]
-    if rewards:
+    def _collect_named_metric(metric_key: str) -> list[tuple[str, float]]:
+        aligned: list[tuple[str, float]] = []
+        for idx, rec in enumerate(records):
+            metrics = rec.get("metrics") or {}
+            raw_val = metrics.get(metric_key)
+            if isinstance(raw_val, (int, float)):
+                name = rec.get("config_name", f"extractor_{idx}")
+                aligned.append((name, float(raw_val)))
+        return aligned
+
+    reward_pairs = _collect_named_metric("best_mean_reward")
+    if reward_pairs:
+        names, rewards = zip(*reward_pairs, strict=False)
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.bar(names, rewards, color="#4c78a8")
         ax.set_ylabel("Best mean reward")
@@ -108,8 +118,9 @@ def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[
         plt.close(fig)
         paths["final_performance"] = path
 
-    sample_eff = _extract_metric(records, "sample_efficiency_ratio")
-    if sample_eff:
+    sample_pairs = _collect_named_metric("sample_efficiency_ratio")
+    if sample_pairs:
+        names, sample_eff = zip(*sample_pairs, strict=False)
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.bar(names, sample_eff, color="#f58518")
         ax.set_ylabel("Sample efficiency ratio (baseline/candidate)")

@@ -221,7 +221,7 @@ select = [
     "D105",  # Missing docstring in magic method
     "D106",  # Missing docstring in public nested class
     "D107",  # Missing docstring in __init__
-    # "D417",  # Missing argument descriptions in the docstring
+    "D417",  # Missing argument descriptions in the docstring
     "D419",  # Empty docstring
     "DOC102",  # Documented parameter {id} is not in the function's signature
     # "DOC201",  # `return` is not documented in docstring
@@ -318,6 +318,11 @@ ignore = [
 "fast-pysf/benchmarks/**/*.py" = ["T201"]  # Allow prints in benchmarks
 "fast-pysf/tests/**/*.py" = ["S101", "T201"]  # Allow asserts and prints in tests
 "fast-pysf/pysocialforce/__init__.py" = ["F401"]  # Public API re-exports
+# Enforce Docstring rules in robot-sf
+"!robot_sf/**/*.py" = [
+    "D417",
+    "DOC201",
+]
 
 
 # Allow unused variables when underscore-prefixed.

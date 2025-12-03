@@ -594,14 +594,15 @@ def snqi(
     """
 
     def _norm(name: str, value: float) -> float:
-        """Norm.
+        """Normalize ``value`` against baseline statistics for ``name``.
 
         Args:
-            name: Auto-generated placeholder description.
-            value: Auto-generated placeholder description.
+            name: Metric key that should exist in ``baseline_stats`` (for example ``"collisions"``).
+            value: Observed value of the metric for the current episode/run.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Normalized value clamped to ``[0, 1]``; returns ``0.0`` when no baseline is
+                available.
         """
         if baseline_stats is None or name not in baseline_stats:
             return 0.0
@@ -616,14 +617,14 @@ def snqi(
         return float(norm)
 
     def _safe(val: float | None, default: float = 0.0) -> float:
-        """Safe.
+        """Convert optional floats to finite values suitable for arithmetic.
 
         Args:
-            val: Auto-generated placeholder description.
-            default: Auto-generated placeholder description.
+            val: Raw value read from ``metric_values`` (may be ``None`` or ``NaN``).
+            default: Fallback used when ``val`` is missing or non-finite.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: ``val`` cast to ``float`` when finite, otherwise ``default``.
         """
         v = float(val) if val is not None else default
         return v if math.isfinite(v) else default

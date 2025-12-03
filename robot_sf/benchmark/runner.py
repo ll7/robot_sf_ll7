@@ -79,18 +79,11 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
 
 
 def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_positions, dt):
-    """Build observation.
+    """Populate the baseline planner Observation from robot state and pedestrians.
 
-    Args:
-        ObservationCls: Auto-generated placeholder description.
-        robot_pos: Auto-generated placeholder description.
-        robot_vel: Auto-generated placeholder description.
-        robot_goal: Auto-generated placeholder description.
-        ped_positions: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
-
-    Returns:
-        Any: Auto-generated placeholder description.
+    The helper converts ``robot_pos``, ``robot_vel``, ``robot_goal``, and ``ped_positions``
+    into the dictionary schema expected by ``ObservationCls`` while forwarding ``dt`` as
+    the time delta. Returns an instantiated observation ready for the planner.
     """
     agents = [
         {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
@@ -114,10 +107,10 @@ FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 
 def _git_hash_fallback() -> str:
-    """Git hash fallback.
+    """Return the repository HEAD hash when git is available, else ``"unknown"``.
 
-    Returns:
-        str: Auto-generated placeholder description.
+    Uses ``git rev-parse`` but swallows failures so the runner keeps working in
+    archive/zip installs where git metadata is missing.
     """
     # Best effort; avoid importing subprocess if not needed later
     try:
@@ -132,13 +125,10 @@ def _git_hash_fallback() -> str:
 
 
 def _config_hash(obj: Any) -> str:
-    """Config hash.
+    """Return a short deterministic hash for config dictionaries.
 
-    Args:
-        obj: Auto-generated placeholder description.
-
-    Returns:
-        str: Auto-generated placeholder description.
+    Serializes ``obj`` as canonical JSON before hashing so the same configuration
+    produces identical identifiers regardless of key ordering.
     """
     data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(data).hexdigest()[:16]
@@ -208,13 +198,10 @@ def index_existing(out_path: Path) -> set[str]:
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
-    """Load scenario matrix.
+    """Load the YAML scenario matrix from ``path`` and return a list of dicts.
 
-    Args:
-        path: Auto-generated placeholder description.
-
-    Returns:
-        list[dict[str, Any]]: Auto-generated placeholder description.
+    Accepts a YAML stream containing either a list or multiple documents and
+    normalizes the result to ``list[dict[str, Any]]`` for downstream processing.
     """
     with Path(path).open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
@@ -238,14 +225,10 @@ def _prepare_robot_points(
     robot_start: Sequence[float] | None,
     robot_goal: Sequence[float] | None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Prepare robot points.
+    """Return start/goal arrays, defaulting to the classic hallway coordinates.
 
-    Args:
-        robot_start: Auto-generated placeholder description.
-        robot_goal: Auto-generated placeholder description.
-
-    Returns:
-        tuple[np.ndarray, np.ndarray]: Auto-generated placeholder description.
+    ``robot_start`` and ``robot_goal`` overrides are converted to ``np.ndarray``; when
+    ``None`` we fall back to the standard benchmark points.
     """
     if robot_start is None:
         rs = np.array([0.3, 3.0], dtype=float)
@@ -289,20 +272,10 @@ def _build_episode_data(
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
-    """Build episode data.
+    """Stack recorded trajectories into the :class:`EpisodeData` dataclass.
 
-    Args:
-        robot_pos_traj: Auto-generated placeholder description.
-        robot_vel_traj: Auto-generated placeholder description.
-        robot_acc_traj: Auto-generated placeholder description.
-        peds_pos_traj: Auto-generated placeholder description.
-        ped_forces_traj: Auto-generated placeholder description.
-        goal: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
-        reached_goal_step: Auto-generated placeholder description.
-
-    Returns:
-        EpisodeData: Auto-generated placeholder description.
+    Converts the per-step robot and pedestrian trajectories plus ``goal``, ``dt``, and
+    ``reached_goal_step`` into contiguous arrays that metric functions can consume.
     """
     robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))

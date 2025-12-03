@@ -35,19 +35,20 @@ class BaseSimulationEnv(Env, ABC):
         video_fps: float | None = None,
         **kwargs,
     ):
-        """Init.
+        """Initialize shared simulation plumbing used by all environments.
 
         Args:
-            config: Auto-generated placeholder description.
-            debug: Auto-generated placeholder description.
-            recording_enabled: Auto-generated placeholder description.
-            record_video: Auto-generated placeholder description.
-            video_path: Auto-generated placeholder description.
-            video_fps: Auto-generated placeholder description.
-            kwargs: Auto-generated placeholder description.
-
-        Returns:
-            Any: Auto-generated placeholder description.
+            config: Unified simulation config describing backends, map sources, and
+                runtime toggles.
+            debug: Whether to enable verbose logging or visualization helpers.
+            recording_enabled: Enables capture of ``VisualizableSimState`` snapshots per
+                step so runs can be replayed later.
+            record_video: If ``True``, exports a video when ``save_recording`` is called.
+            video_path: Optional override for the recording destination path.
+            video_fps: Frames-per-second to use for rendered videos; defaults to the view
+                FPS when ``None``.
+            kwargs: Additional keyword arguments consumed by subclasses (e.g., custom
+                simulator hooks).
         """
         super().__init__()
         self.config = config
@@ -118,14 +119,12 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, **kwargs):
-        """Init.
+        """Configure base state for a single-agent environment.
 
         Args:
-            config: Auto-generated placeholder description.
-            kwargs: Auto-generated placeholder description.
-
-        Returns:
-            Any: Auto-generated placeholder description.
+            config: Simulation config that defines the map, backend, and robot-specific
+                parameters.
+            kwargs: Extra keyword arguments forwarded to :class:`BaseSimulationEnv`.
         """
         self.state = None
         self.simulator = None
@@ -161,15 +160,12 @@ class MultiAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, num_agents: int, **kwargs):
-        """Init.
+        """Configure shared resources for a multi-agent simulation.
 
         Args:
-            config: Auto-generated placeholder description.
-            num_agents: Auto-generated placeholder description.
-            kwargs: Auto-generated placeholder description.
-
-        Returns:
-            Any: Auto-generated placeholder description.
+            config: Simulation config applied to every agent instance.
+            num_agents: Number of agents to spawn and coordinate.
+            kwargs: Additional keyword arguments passed to :class:`BaseSimulationEnv`.
         """
         super().__init__(config, **kwargs)
         self.num_agents = num_agents

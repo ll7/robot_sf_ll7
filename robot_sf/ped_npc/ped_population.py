@@ -90,29 +90,38 @@ def sample_route(
 
     # Define helper functions for vector operations
     def add_vecs(v1, v2):
-        """TODO docstring. Document this function.
+        """Add two 2D vectors component-wise.
 
         Args:
-            v1: TODO docstring.
-            v2: TODO docstring.
+            v1: First vector as a tuple ``(x, y)``.
+            v2: Second vector as a tuple ``(x, y)``.
+
+        Returns:
+            tuple[float, float]: The component-wise sum ``(v1.x + v2.x, v1.y + v2.y)``.
         """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
     def sub_vecs(v1, v2):
-        """TODO docstring. Document this function.
+        """Subtract two 2D vectors component-wise.
 
         Args:
-            v1: TODO docstring.
-            v2: TODO docstring.
+            v1: Minuend vector as a tuple ``(x, y)``.
+            v2: Subtrahend vector as a tuple ``(x, y)``.
+
+        Returns:
+            tuple[float, float]: The component-wise difference ``(v1.x - v2.x, v1.y - v2.y)``.
         """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
     # Clip function to constrain random spread to the sidewalk width
     def clip_spread(v):
-        """TODO docstring. Document this function.
+        """Clip values to remain within the sidewalk half-width.
 
         Args:
-            v: TODO docstring.
+            v: Scalar or array-like values to clip.
+
+        Returns:
+            numpy.ndarray: Values clipped to ``[-sidewalk_width/2, sidewalk_width/2]``.
         """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 

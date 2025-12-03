@@ -28,12 +28,20 @@ class SeedReport:
     notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Return the dataclass as a regular dictionary for logging/JSON."""
+        """Return the dataclass as a regular dictionary for logging/JSON.
+
+        Returns:
+            dict[str, Any]: Dictionary representation suitable for serialization.
+        """
         return asdict(self)
 
 
 def _import_torch():
-    """Import torch lazily and return the module when available."""
+    """Import torch lazily and return the module when available.
+
+    Returns:
+        Any | None: Imported torch module when available, otherwise None.
+    """
     try:
         return importlib.import_module("torch")  # type: ignore
     except ImportError:  # pragma: no cover - optional dependency
@@ -88,7 +96,11 @@ def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
 
 
 def get_seed_state_sample(n: int = 5) -> dict[str, Any]:
-    """Return small sample sequences for quick sanity checks."""
+    """Return small sample sequences for quick sanity checks.
+
+    Returns:
+        dict[str, Any]: Example sequences for Python's `random` and NumPy RNGs.
+    """
     # Python random
     rand_seq = [random.random() for _ in range(n)]
     # NumPy

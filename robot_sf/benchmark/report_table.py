@@ -5,7 +5,9 @@ Compute per-group means for a set of metrics and format as Markdown/CSV/JSON.
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
+from io import StringIO
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -78,7 +80,10 @@ def compute_table(
 
 def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
     headers = ["Group", *metrics]
-    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(["---"] * len(headers)) + " |"]
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
     for r in rows:
         vals = [r.group]
         for name in metrics:
@@ -89,9 +94,6 @@ def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
-    import csv
-    from io import StringIO
-
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Group", *metrics])

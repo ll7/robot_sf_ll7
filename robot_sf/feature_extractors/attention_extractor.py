@@ -92,11 +92,11 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]
         # Extract observation spaces
-        rays_space = cast(spaces.Box, observation_space.spaces[OBS_RAYS])
-        drive_state_space = cast(spaces.Box, observation_space.spaces[OBS_DRIVE_STATE])
+        rays_space = cast("spaces.Box", observation_space.spaces[OBS_RAYS])
+        drive_state_space = cast("spaces.Box", observation_space.spaces[OBS_DRIVE_STATE])
 
         # Calculate dimensions
-        num_timesteps, num_rays = rays_space.shape
+        num_timesteps, _num_rays = rays_space.shape
         drive_input_dim = int(np.prod(drive_state_space.shape))
         drive_output_dim = drive_hidden_dims[-1] if drive_hidden_dims else drive_input_dim
 
@@ -131,7 +131,11 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
 
         for i in range(len(drive_dims) - 1):
             drive_layers.extend(
-                [nn.Linear(drive_dims[i], drive_dims[i + 1]), nn.ReLU(), nn.Dropout(dropout_rate)]
+                [
+                    nn.Linear(drive_dims[i], drive_dims[i + 1]),
+                    nn.ReLU(),
+                    nn.Dropout(dropout_rate),
+                ]
             )
 
         self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)

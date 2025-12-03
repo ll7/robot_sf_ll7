@@ -4,6 +4,7 @@ This module provides helper functions extracted from examples and scripts for
 setting up environments, loading policies, and running benchmark episodes.
 """
 
+import importlib
 from pathlib import Path
 from typing import Any, cast
 
@@ -67,7 +68,8 @@ def load_trained_policy(path: str):
         RuntimeError: If stable_baselines3 is not available
     """
     try:
-        from stable_baselines3 import PPO
+        sb3 = importlib.import_module("stable_baselines3")
+        PPO = sb3.PPO
     except ImportError as e:
         raise RuntimeError(
             "stable_baselines3 PPO import failed. Install with 'uv add stable-baselines3' to use this helper."
@@ -78,7 +80,7 @@ def load_trained_policy(path: str):
     if cache_map is None:
         cache_map = {}
     # Store cache on the function __dict__ to avoid protected-member access lint
-    cast(Any, load_trained_policy).__dict__["_cache_map"] = cache_map
+    cast("Any", load_trained_policy).__dict__["_cache_map"] = cache_map
 
     if abs_path in cache_map:
         logger.debug(f"Loading cached policy from {abs_path}")

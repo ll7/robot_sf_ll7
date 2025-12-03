@@ -27,12 +27,12 @@ Clamping Implications:
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import TYPE_CHECKING
+from subprocess import DEVNULL, run
 
-if TYPE_CHECKING:
-    from robot_sf.benchmark.snqi.types import SNQIWeights
+from robot_sf.benchmark.snqi.types import SNQIWeights
 
 WEIGHT_NAMES = [
     "w_success",
@@ -135,11 +135,6 @@ def recompute_snqi_weights(
     Returns:
         SNQIWeights instance with computed weights and metadata.
     """
-    import json
-    from subprocess import DEVNULL, run
-
-    from robot_sf.benchmark.snqi.types import SNQIWeights
-
     # Default canonical weights
     canonical_weights = {
         "w_success": 1.0,
@@ -156,7 +151,7 @@ def recompute_snqi_weights(
         weights = canonical_weights.copy()
     elif method == "balanced":
         # Balanced approach - all weights equal
-        weights = {k: 1.0 for k in WEIGHT_NAMES}
+        weights = dict.fromkeys(WEIGHT_NAMES, 1.0)
     elif method == "optimized":
         # Could implement optimization here - for now use canonical
         weights = canonical_weights.copy()

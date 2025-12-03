@@ -7,7 +7,7 @@ export_hypothesis_json
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -74,7 +74,7 @@ def welch_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
     }
 
 
-def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
+def cohen_d(x: list[float], y: list[float]) -> float | None:
     """Compute Cohen's d effect size for paired samples.
 
     Args:
@@ -100,7 +100,7 @@ def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
     return float(np.mean(diff) / np.std(diff, ddof=1)) if np.std(diff, ddof=1) > 0 else None
 
 
-def cohen_d_independent(x: list[float], y: list[float]) -> Optional[float]:
+def cohen_d_independent(x: list[float], y: list[float]) -> float | None:
     """Compute Cohen's d for two independent samples using pooled variance."""
 
     if len(x) < 2 or len(y) < 2:
@@ -184,7 +184,7 @@ def validate_sample_size(x: list[float], y: list[float]) -> dict[str, Any]:
 
 
 def format_test_results(
-    t_test: dict[str, Any], effect_size: Optional[float], alpha: float = 0.05
+    t_test: dict[str, Any], effect_size: float | None, alpha: float = 0.05
 ) -> dict[str, Any]:
     """Format statistical test results into standardized structure.
 

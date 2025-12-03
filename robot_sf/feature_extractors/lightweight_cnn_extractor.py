@@ -52,8 +52,8 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]
         # Extract observation spaces
-        rays_space = cast(spaces.Box, observation_space.spaces[OBS_RAYS])
-        drive_state_space = cast(spaces.Box, observation_space.spaces[OBS_DRIVE_STATE])
+        rays_space = cast("spaces.Box", observation_space.spaces[OBS_RAYS])
+        drive_state_space = cast("spaces.Box", observation_space.spaces[OBS_DRIVE_STATE])
 
         # Calculate dimensions
         drive_input_dim = int(np.prod(drive_state_space.shape))

@@ -6,6 +6,7 @@ Implemented across tasks T035 (basic), T036 (extended plots).
 from __future__ import annotations
 
 import contextlib
+import importlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,16 +33,18 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
     try:
         # Clear and fully close to avoid accumulating many open figures triggering warnings.
         fig.clf()
-        import matplotlib.pyplot as _plt  # type: ignore
-
-        # matplotlib close may raise on some backends; suppress non-fatal errors
-        with contextlib.suppress(Exception):
-            _plt.close(fig)
-    except (RuntimeError, AttributeError, ValueError) as exc:  # pragma: no cover - defensive
+        if plt is not None:
+            # matplotlib close may raise on some backends; suppress non-fatal errors
+            with contextlib.suppress(Exception):
+                plt.close(fig)
+    except (
+        RuntimeError,
+        AttributeError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive
         # Log at debug for visibility without changing behavior
         try:
-            from loguru import logger
-
+            logger = importlib.import_module("loguru").logger
             logger.debug("_safe_fig_close failed: %s", exc)
         except ImportError:
             # If logger import fails we still want to silently ignore close failures
@@ -69,10 +72,13 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
         # Always attempt to close the figure; log on unexpected failures.
         try:
             _safe_fig_close(fig)
-        except (RuntimeError, AttributeError, OSError) as exc:  # pragma: no cover - defensive
+        except (
+            RuntimeError,
+            AttributeError,
+            OSError,
+        ) as exc:  # pragma: no cover - defensive
             try:
-                from loguru import logger
-
+                logger = importlib.import_module("loguru").logger
                 logger.debug("_write_placeholder_text close failed: %s", exc)
             except ImportError:
                 pass
@@ -101,7 +107,13 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     fig, ax = plt.subplots(figsize=(6, 4))
     x = range(len(labels))
     ax.bar(x, success_vals, width=0.4, label="success_rate", color="tab:green")
-    ax.bar([v + 0.4 for v in x], collision_vals, width=0.4, label="collision_rate", color="tab:red")
+    ax.bar(
+        [v + 0.4 for v in x],
+        collision_vals,
+        width=0.4,
+        label="collision_rate",
+        color="tab:red",
+    )
     ax.set_xticks([v + 0.2 for v in x])
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel("rate")
@@ -134,7 +146,12 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
         xs = [float(t[1]) for t in steps]
         ys = [float(t[2]) for t in steps]
         ax.plot(
-            xs, ys, linewidth=1.2, marker=".", markersize=3, label=rec.get("scenario_id", "episode")
+            xs,
+            ys,
+            linewidth=1.2,
+            marker=".",
+            markersize=3,
+            label=rec.get("scenario_id", "episode"),
         )
         plotted = True
     if not plotted:

@@ -11,6 +11,7 @@ Rule Categories
 - Instantiation: Runtime environment creation compatibility
 """
 
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -117,7 +118,6 @@ def check_file_readable(map_path: Path) -> list[RuleViolation]:
 
 def check_valid_svg(map_path: Path) -> list[RuleViolation]:
     """Check that the file is valid XML/SVG."""
-    import xml.etree.ElementTree as ET
 
     violations = []
 
@@ -173,7 +173,6 @@ def check_required_layers(map_path: Path) -> list[RuleViolation]:
     - Emits INFO rule R005 when labels exist to surface improvement hints.
     - Warns (R004) only when there are zero labeled groups.
     """
-    import xml.etree.ElementTree as ET
 
     violations: list[RuleViolation] = []
 

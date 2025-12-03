@@ -16,7 +16,12 @@ extension (e.g., adding action space validation or logging).
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
+
+
+def _get_numpy():
+    return importlib.import_module("numpy")
 
 
 class StubRobotModel:  # pragma: no cover - trivial
@@ -28,6 +33,5 @@ class StubRobotModel:  # pragma: no cover - trivial
     """
 
     def predict(self, _obs: Any, **_ignored: Any) -> tuple[object, None]:
-        import numpy as np  # local import to avoid global dependency at module load
-
+        np = _get_numpy()
         return np.zeros(2, dtype=float), None

@@ -134,7 +134,7 @@ def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
 def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[int]:
     if fraction <= 0:
         return [-1] * n
-    num_grouped = int(round(n * fraction))
+    num_grouped = round(n * fraction)
     indices = rng.permutation(n)[:num_grouped]
     group_ids = [-1] * n
     current_gid = 0
@@ -179,7 +179,12 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         state[:, 6] = 1.0
         obstacles: list[tuple[float, float, float, float]] = []
         groups: list[int] = [-1]
-        metadata = {**params, "n_agents": n, "area": AREA_WIDTH * AREA_HEIGHT, "seed": seed}
+        metadata = {
+            **params,
+            "n_agents": n,
+            "area": AREA_WIDTH * AREA_HEIGHT,
+            "seed": seed,
+        }
         simulator = None if pysf is None else pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
         return GeneratedScenario(
             simulator=simulator,

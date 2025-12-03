@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import robot_sf
 from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
 
 logger = logging.getLogger(__name__)
@@ -104,8 +105,6 @@ class SchemaReference:
             FileNotFoundError: If resolved path doesn't exist
         """
         # Get the robot_sf package root
-        import robot_sf
-
         package_root = Path(robot_sf.__file__).parent
 
         # Resolve the relative path

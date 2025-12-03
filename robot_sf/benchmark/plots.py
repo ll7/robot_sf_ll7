@@ -5,6 +5,7 @@ Create Pareto scatter plots to visualize trade-offs between two metrics.
 
 from __future__ import annotations
 
+import gc
 import os
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,11 @@ import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+try:
+    from robot_sf.benchmark.plotting_style import apply_latex_style
+except ImportError:  # pragma: no cover - optional styling helper
+    apply_latex_style = None  # type: ignore[assignment]
 
 Record = dict[str, object]
 
@@ -87,15 +93,12 @@ def _maybe_apply_latex_style() -> None:
     Kept as a separate helper to reduce complexity in plotting functions and to
     isolate optional dependency handling.
     """
+    if apply_latex_style is None:
+        return
     try:
-        from robot_sf.benchmark.plotting_style import apply_latex_style
-
-        try:
-            apply_latex_style()
-        except (AttributeError, TypeError, ValueError, RuntimeError):
-            # If the helper misbehaves, silently continue using defaults.
-            return
-    except ImportError:
+        apply_latex_style()
+    except (AttributeError, TypeError, ValueError, RuntimeError):
+        # If the helper misbehaves, silently continue using defaults.
         return
 
 
@@ -192,8 +195,6 @@ def save_pareto_png(
     plt.savefig(out_path, dpi=150)
     # Force garbage collection to reduce memory footprint in long CI runs
     try:
-        import gc
-
         gc.collect()
     except Exception:
         pass

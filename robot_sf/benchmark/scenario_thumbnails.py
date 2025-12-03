@@ -8,6 +8,7 @@ step the simulator. Headless-safe via MPL Agg backend (see seed_utils).
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,7 +19,11 @@ import numpy as np
 from PIL import Image  # pillow
 
 from robot_sf.benchmark.plotting_style import apply_latex_style
-from robot_sf.benchmark.scenario_generator import AREA_HEIGHT, AREA_WIDTH, generate_scenario
+from robot_sf.benchmark.scenario_generator import (
+    AREA_HEIGHT,
+    AREA_WIDTH,
+    generate_scenario,
+)
 from robot_sf.common.seed import set_global_seed
 
 if TYPE_CHECKING:
@@ -48,8 +53,6 @@ def _latex_rcparams():
 
 def _scenario_seed(base_seed: int, scenario_id: str) -> int:
     # Small stable hash to offset base seed per scenario
-    import hashlib
-
     h = hashlib.sha256(scenario_id.encode()).hexdigest()[:8]
     return (base_seed + int(h, 16)) % (2**31 - 1)
 
@@ -172,7 +175,7 @@ def save_montage(
     if len(metas) == 0:
         return {"png": str(out_png)}
     cols = max(1, int(cols))
-    rows = int(math.ceil(len(metas) / cols))
+    rows = math.ceil(len(metas) / cols)
     # Load images
     imgs = [Image.open(m.png) for m in metas]
     w, h = imgs[0].size

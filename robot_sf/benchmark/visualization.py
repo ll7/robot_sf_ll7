@@ -11,13 +11,17 @@ once downstream consumers migrate.
 from __future__ import annotations
 
 # Standard library
+import gc
+import importlib
+import importlib.util
 import json
 import os
+import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional, cast
+from typing import Literal, cast
 
 # Third-party
 import numpy as np
@@ -62,7 +66,7 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
     raise ValueError("SVG missing width/height or valid viewBox")
 
 
-def overlay_text(canvas, text: str, pos: tuple[int, int], font: Optional[str] = None) -> None:
+def overlay_text(canvas, text: str, pos: tuple[int, int], font: str | None = None) -> None:
     """Draw text on a duck-typed canvas object.
 
     The canvas must provide a `draw_text(text, pos, font=None)` method. This
@@ -86,6 +90,31 @@ avoid importing matplotlib at module import time (see Constitution XII).
 
 # Default robot speed for replay episodes when speed data is not available
 DEFAULT_ROBOT_SPEED = 0.5
+_MATPLOTLIB_INITIALIZED = False
+
+
+def _ensure_matplotlib_backend() -> None:
+    global _MATPLOTLIB_INITIALIZED
+    if _MATPLOTLIB_INITIALIZED:
+        return
+    mpl = importlib.import_module("matplotlib")
+    mpl.use("Agg")
+    _MATPLOTLIB_INITIALIZED = True
+
+
+def _get_pyplot():
+    _ensure_matplotlib_backend()
+    return importlib.import_module("matplotlib.pyplot")
+
+
+def _load_replay_types():
+    module = importlib.import_module("robot_sf.benchmark.full_classic.replay")
+    return module.ReplayEpisode, module.ReplayStep
+
+
+def _load_image_sequence_clip():
+    module = importlib.import_module("moviepy.video.io.ImageSequenceClip")
+    return module.ImageSequenceClip
 
 
 @dataclass
@@ -271,14 +300,14 @@ def generate_benchmark_plots(
     # Handle backward compatibility: if episodes_data is a path, load it
     if isinstance(episodes_data, str | Path):
         return generate_benchmark_plots_from_file(
-            cast(str | Path, episodes_data),
+            cast("str | Path", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
         )
     else:
         return generate_benchmark_plots_from_data(
-            cast(list[dict], episodes_data),
+            cast("list[dict]", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -288,11 +317,7 @@ def generate_benchmark_plots(
 def _check_matplotlib_available() -> None:
     """Check if matplotlib is available, raise VisualizationError if not."""
     _check_dependencies(["matplotlib"])
-
-    # Set non-interactive backend
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    _ensure_matplotlib_backend()
 
 
 def _load_episodes(episodes_path: str) -> list[dict]:
@@ -354,7 +379,7 @@ def _filter_episodes(
 
 def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
     """Generate metrics distribution plot and return artifact."""
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     try:
         # Extract metrics
@@ -363,7 +388,7 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in episodes]
 
         # Create plot
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+        _fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
 
         # Plot 1: Collision distribution
         ax1.hist(collisions, bins=20, alpha=0.7, color="red")
@@ -395,11 +420,9 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         plot_filename = "metrics_distribution.pdf"
         plot_path = Path(output_dir) / plot_filename
         plt.savefig(plot_path, format="pdf", bbox_inches="tight")
-        plt.close()
+        plt.close(_fig)
         # Ensure figures are fully released and memory returned to OS where possible
         try:
-            import gc
-
             gc.collect()
         except Exception:
             pass
@@ -428,7 +451,7 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
 
 def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
     """Generate scenario comparison plot and return artifact."""
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     try:
         # Group episodes by scenario
@@ -456,7 +479,7 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
             success_rates.append(sum(successes) / len(successes))
 
         # Create plot
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+        _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
 
         # Plot 1: Average SNQI by scenario
         ax1.bar(scenarios, avg_snqi, color="blue", alpha=0.7)
@@ -482,11 +505,9 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
         plot_filename = "scenario_comparison.pdf"
         plot_path = Path(output_dir) / plot_filename
         plt.savefig(plot_path, format="pdf", bbox_inches="tight")
-        plt.close()
+        plt.close(_fig)
         # Ensure figures are fully released and memory returned to OS where possible
         try:
-            import gc
-
             gc.collect()
         except Exception:
             pass
@@ -696,7 +717,7 @@ def generate_benchmark_videos(
     # Handle backward compatibility: if episodes_data is a path, load it
     if isinstance(episodes_data, str | Path):
         return generate_benchmark_videos_from_file(
-            cast(str | Path, episodes_data),
+            cast("str | Path", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -705,7 +726,7 @@ def generate_benchmark_videos(
         )
     else:
         return generate_benchmark_videos_from_data(
-            cast(list[dict], episodes_data),
+            cast("list[dict]", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -722,9 +743,9 @@ def _check_moviepy_available() -> None:
 def _episode_record_to_replay_episode(episode: dict):
     """Convert an episode record with replay data to a ReplayEpisode object."""
     try:
-        from robot_sf.benchmark.full_classic.replay import ReplayEpisode, ReplayStep
-    except ImportError:
-        raise VisualizationError("ReplayEpisode not available", "video")
+        ReplayEpisode, ReplayStep = _load_replay_types()
+    except (ImportError, ModuleNotFoundError) as exc:
+        raise VisualizationError("ReplayEpisode not available", "video") from exc
 
     episode_id = episode["episode_id"]
     scenario_id = episode["scenario_id"]
@@ -900,9 +921,7 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
         raise VisualizationError("No frames to encode", "video")
 
     try:
-        import tempfile
-
-        from moviepy import ImageSequenceClip
+        ImageSequenceClip = _load_image_sequence_clip()
 
         # Use a generator to avoid loading all frames into memory at once
         def frame_generator():
@@ -992,8 +1011,6 @@ def _check_dependencies(required_deps: list[str]) -> None:
     Raises:
         VisualizationError: If any required dependencies are missing
     """
-    import importlib.util
-
     missing_deps = []
 
     for dep in required_deps:

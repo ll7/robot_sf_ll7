@@ -13,20 +13,21 @@ Deferred (future): true SimulationView renderer, memory peak measurement, stream
 
 from __future__ import annotations
 
+import io
 import math
 import random
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import numpy as np
+import numpy as np
 
 try:  # Optional dependencies
     import matplotlib.pyplot as plt  # type: ignore
+    from matplotlib import image as mpimg  # type: ignore
 except ImportError:
     plt = None  # type: ignore
+    mpimg = None  # type: ignore[assignment]
 
 try:  # moviepy for encoding
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
@@ -57,7 +58,7 @@ class _VideoArtifact:
         return self.filename or ""
 
 
-def _canvas_to_rgb_simple(fig) -> np.ndarray:  # type: ignore[name-defined]
+def _canvas_to_rgb_simple(fig) -> np.ndarray:
     """Return RGB array from figure using the simplest, backend-agnostic path.
 
     We intentionally avoid complex HiDPI / ARGB logic here; on macOS the default
@@ -66,24 +67,20 @@ def _canvas_to_rgb_simple(fig) -> np.ndarray:  # type: ignore[name-defined]
     `tostring_rgb` is available. If absent we raise a clear error directing the
     user to set MPLBACKEND=Agg.
     """
-    import numpy as _np  # local import
-
     fig.canvas.draw()  # type: ignore[attr-defined]
     w, h = fig.canvas.get_width_height()  # type: ignore[attr-defined]
     if hasattr(fig.canvas, "tostring_rgb"):
         buf = fig.canvas.tostring_rgb()  # type: ignore[attr-defined]
-        return _np.frombuffer(buf, dtype="uint8").reshape((h, w, 3))
+        return np.frombuffer(buf, dtype="uint8").reshape((h, w, 3))
     # Portable fallback: render figure to PNG in-memory and decode with matplotlib.image
-    import io
-
-    from matplotlib import image as mpimg  # type: ignore
-
+    if mpimg is None:
+        raise RuntimeError("matplotlib.image not available; ensure matplotlib installed")
     bio = io.BytesIO()
     fig.savefig(bio, format="png", dpi=100)  # type: ignore[attr-defined]
     bio.seek(0)
     png_arr = mpimg.imread(bio)
     # mpimg may return float [0,1] array; convert to uint8 RGB (drop alpha if present)
-    if png_arr.dtype != _np.uint8:
+    if png_arr.dtype != np.uint8:
         png_arr = (png_arr * 255).astype("uint8")
     if png_arr.shape[-1] == 4:  # RGBA -> RGB
         png_arr = png_arr[:, :, :3]
@@ -186,7 +183,12 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
             t0 = time.perf_counter()
             for idx in range(N):
                 fig, ax = plt.subplots(figsize=(3, 3))  # type: ignore
-                ax.plot(xs_full[: idx + 1], ys_full[: idx + 1], color="tab:blue", linewidth=1.5)
+                ax.plot(
+                    xs_full[: idx + 1],
+                    ys_full[: idx + 1],
+                    color="tab:blue",
+                    linewidth=1.5,
+                )
                 ax.scatter(xs_full[idx], ys_full[idx], color="red", s=20)
                 ax.set_xlim(-1.2, 1.2)
                 ax.set_ylim(-1.2, 1.2)

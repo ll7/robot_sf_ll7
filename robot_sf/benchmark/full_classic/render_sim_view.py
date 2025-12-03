@@ -18,13 +18,19 @@ Future extensions (not in T031 scope):
 
 from __future__ import annotations
 
+import importlib
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.render.sim_view import MOVIEPY_AVAILABLE, VisualizableSimState
+from robot_sf.render.sim_view import (
+    MOVIEPY_AVAILABLE,
+    VisualizableAction,
+    VisualizableSimState,
+)
 
 from .visual_deps import has_pygame, simulation_view_ready
 
@@ -81,13 +87,17 @@ def generate_frames(
             map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
         except Exception as exc:  # pragma: no cover - fallback path
             try:
-                from loguru import logger
-
+                logger = importlib.import_module("loguru").logger
                 logger.debug("convert_map failed for %s: %s", episode.map_path, exc)
             except Exception:
                 pass
             map_def = None
-    view_kwargs: dict = {"record_video": False, "video_fps": fps, "width": 640, "height": 360}
+    view_kwargs: dict = {
+        "record_video": False,
+        "video_fps": fps,
+        "width": 640,
+        "height": 360,
+    }
     if map_def is not None:
         view_kwargs["map_def"] = map_def
         view_kwargs["obstacles"] = getattr(map_def, "obstacles", [])
@@ -98,8 +108,6 @@ def generate_frames(
         for idx, step in enumerate(episode.steps):
             ped_positions = np.asarray(step.ped_positions or [], dtype=float)
             try:
-                from robot_sf.render.sim_view import VisualizableSimState
-
                 state = VisualizableSimState(  # type: ignore[call-arg]
                     timestep=idx,
                     robot_action=None,
@@ -114,7 +122,7 @@ def generate_frames(
             try:
                 if hasattr(_sim_view, "render"):
                     _sim_view.render(state)  # type: ignore[arg-type]
-                    import pygame  # type: ignore
+                    pygame = importlib.import_module("pygame")
 
                     if hasattr(_sim_view, "screen") and isinstance(
                         _sim_view.screen,
@@ -131,8 +139,7 @@ def generate_frames(
                 frame = np.zeros((360, 640, 3), dtype=np.uint8)
             except Exception as exc:  # pragma: no cover - defensive
                 try:
-                    from loguru import logger
-
+                    logger = importlib.import_module("loguru").logger
                     logger.debug("generate_frames render capture failed: %s", exc)
                 except ImportError:
                     pass
@@ -163,8 +170,6 @@ def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
         if step.ped_actions is not None
         else np.zeros_like(ped_positions)
     )
-    from robot_sf.render.sim_view import VisualizableAction
-
     robot_action = None
     if step.robot_goal is not None and step.action is not None:
         robot_action = VisualizableAction(
@@ -237,11 +242,9 @@ def generate_video_file(
             produced += 1
             if max_frames is not None and produced >= max_frames:
                 break
-        import time as _time
-
-        t0 = _time.perf_counter()
+        t0 = time.perf_counter()
         view.exit_simulation()  # writes video when record_video=True
-        encode_time = _time.perf_counter() - t0
+        encode_time = time.perf_counter() - t0
         size = Path(video_path).stat().st_size if Path(video_path).exists() else 0
         status = "success" if size > 0 else "skipped"
         if size == 0:

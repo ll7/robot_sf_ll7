@@ -16,10 +16,18 @@ from robot_sf.sensor.fusion_adapter import (
     create_sensors_from_config,
 )
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
-from robot_sf.sensor.image_sensor import image_sensor_space
+from robot_sf.sensor.image_sensor import (
+    ImageSensor,
+    ImageSensorSettings,
+    image_sensor_space,
+)
 from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
 from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
-from robot_sf.sensor.sensor_fusion import SensorFusion, fused_sensor_space
+from robot_sf.sensor.sensor_fusion import (
+    SensorFusion,
+    fused_sensor_space,
+    fused_sensor_space_with_image,
+)
 from robot_sf.sim.simulator import PedSimulator, Simulator
 
 
@@ -414,8 +422,6 @@ def create_spaces_with_image(
 
     # Extend the agent's observation space with additional sensors
     if image_obs_space is not None:
-        from robot_sf.sensor.sensor_fusion import fused_sensor_space_with_image
-
         observation_space, orig_obs_space = fused_sensor_space_with_image(
             env_config.sim_config.stack_steps,
             agent.observation_space,
@@ -505,15 +511,11 @@ def init_collision_and_sensors_with_image(
 
         # Create appropriate sensor fusion based on configuration
         if use_image_obs and sim_view is not None:
-            from robot_sf.sensor.image_sensor import ImageSensor
-
             # Create image sensor
             image_config = getattr(env_config, "image_config", None)
             if image_config is not None:
                 image_sensor = ImageSensor(image_config, sim_view)
             else:
-                from robot_sf.sensor.image_sensor import ImageSensorSettings
-
                 image_sensor = ImageSensor(ImageSensorSettings(), sim_view)
 
             # Create image sensor fusion

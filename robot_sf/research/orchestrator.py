@@ -29,7 +29,7 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -106,8 +106,8 @@ class ReportOrchestrator:
 
     def _write_hypothesis_file(
         self,
-        baseline_timesteps: Optional[list[float]],
-        pretrained_timesteps: Optional[list[float]],
+        baseline_timesteps: list[float] | None,
+        pretrained_timesteps: list[float] | None,
         threshold: float,
         data_dir: Path,
     ) -> dict[str, Any]:
@@ -124,7 +124,7 @@ class ReportOrchestrator:
         self,
         seeds: Sequence[int],
         metric_records: list[dict[str, Any]],
-        completeness: Optional[dict[str, Any]],
+        completeness: dict[str, Any] | None,
         data_dir: Path,
     ) -> dict[str, Any]:
         """Compute completeness (if needed) and persist to disk."""
@@ -141,10 +141,10 @@ class ReportOrchestrator:
 
     def _generate_figures(
         self,
-        baseline_timesteps: Optional[list[float]],
-        pretrained_timesteps: Optional[list[float]],
-        baseline_rewards: Optional[list[list[float]]],
-        pretrained_rewards: Optional[list[list[float]]],
+        baseline_timesteps: list[float] | None,
+        pretrained_timesteps: list[float] | None,
+        baseline_rewards: list[list[float]] | None,
+        pretrained_rewards: list[list[float]] | None,
         figures_dir: Path,
     ) -> list[dict[str, Any]]:
         """Generate requested figures, tolerating missing or partial inputs."""
@@ -395,14 +395,14 @@ class ReportOrchestrator:
         metric_records: list[dict[str, Any]],
         run_id: str,
         seeds: Sequence[int],
-        baseline_timesteps: Optional[list[float]] = None,
-        pretrained_timesteps: Optional[list[float]] = None,
-        baseline_rewards: Optional[list[list[float]]] = None,
-        pretrained_rewards: Optional[list[list[float]]] = None,
+        baseline_timesteps: list[float] | None = None,
+        pretrained_timesteps: list[float] | None = None,
+        baseline_rewards: list[list[float]] | None = None,
+        pretrained_rewards: list[list[float]] | None = None,
         threshold: float = 40.0,
-        seed_status: Optional[list[dict[str, Any]]] = None,
-        completeness: Optional[dict[str, Any]] = None,
-        telemetry: Optional[dict[str, Any]] = None,
+        seed_status: list[dict[str, Any]] | None = None,
+        completeness: dict[str, Any] | None = None,
+        telemetry: dict[str, Any] | None = None,
         generate_figures: bool = True,
     ) -> Path:
         """Render the research report and return the path to the generated Markdown file."""
@@ -590,7 +590,7 @@ class AblationOrchestrator:
                 v["decision"] = "INCOMPLETE"
         return variants
 
-    def generate_ablation_report(self, variants: Optional[list[dict[str, Any]]] = None) -> Path:
+    def generate_ablation_report(self, variants: list[dict[str, Any]] | None = None) -> Path:
         """Write a simple Markdown report summarizing ablation variants."""
         variants = variants or self.run_ablation_matrix()
         figures_dir = self.output_dir / "figures"

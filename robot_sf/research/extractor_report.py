@@ -7,6 +7,7 @@ reproducibility metadata.
 
 from __future__ import annotations
 
+import importlib
 import json
 import shutil
 import subprocess
@@ -22,6 +23,10 @@ from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.statistics import cohen_d_independent, welch_t_test
 
 configure_matplotlib_backend()
+
+
+def _get_pyplot():
+    return importlib.import_module("matplotlib.pyplot")
 
 
 def _latex_escape(text: str) -> str:
@@ -74,7 +79,11 @@ def _git_hash() -> str:
             .decode()
             .strip()
         )
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):  # pragma: no cover
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        OSError,
+    ):  # pragma: no cover
         return "unknown"
 
 
@@ -89,7 +98,7 @@ def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
 
 
 def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[str, Path]:
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}

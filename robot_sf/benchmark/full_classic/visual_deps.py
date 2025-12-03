@@ -7,6 +7,7 @@ raising hard import errors inside the core benchmark logic.
 
 from __future__ import annotations
 
+import importlib
 import shutil
 from functools import lru_cache
 
@@ -27,10 +28,11 @@ def simulation_view_ready() -> bool:  # T030
     if not has_pygame():  # Quick fail path
         return False
     ready = False
+    pygame = None  # type: ignore[assignment]
     try:
-        import pygame  # type: ignore
-
-        from robot_sf.render.sim_view import SimulationView  # type: ignore
+        pygame = importlib.import_module("pygame")  # type: ignore
+        sim_module = importlib.import_module("robot_sf.render.sim_view")
+        SimulationView = sim_module.SimulationView
 
         view = SimulationView(record_video=False)  # lightweight init
         _ = pygame.time.get_ticks  # touch pygame to silence unused import
@@ -43,8 +45,7 @@ def simulation_view_ready() -> bool:  # T030
         # Unexpected failure during lightweight sim view probe -> treat as not ready
         # but log at debug level for diagnostics.
         try:
-            from loguru import logger
-
+            logger = importlib.import_module("loguru").logger
             logger.debug("simulation_view_ready probe failed: %s", exc)
         except (ImportError, ModuleNotFoundError):
             # If logger import fails, silently ignore to remain graceful
@@ -52,8 +53,9 @@ def simulation_view_ready() -> bool:  # T030
         return False
     finally:  # Best effort cleanup (safe if pygame not fully init)
         try:
-            pygame.display.quit()  # type: ignore[name-defined]
-            pygame.quit()  # type: ignore[name-defined]
+            if pygame is not None:
+                pygame.display.quit()  # type: ignore[attr-defined]
+                pygame.quit()
         except (OSError, AttributeError):
             # Best-effort cleanup may fail if pygame partially initialized
             pass
@@ -63,8 +65,7 @@ def simulation_view_ready() -> bool:  # T030
 @lru_cache(maxsize=1)
 def has_pygame() -> bool:
     try:
-        import pygame  # type: ignore
-
+        pygame = importlib.import_module("pygame")  # type: ignore
         _ = pygame.time.get_ticks  # access attribute to avoid unused warning
     except ImportError:
         return False
@@ -77,8 +78,7 @@ def has_pygame() -> bool:
 @lru_cache(maxsize=1)
 def has_moviepy() -> bool:
     try:
-        import moviepy  # type: ignore
-
+        moviepy = importlib.import_module("moviepy")  # type: ignore
         _ = getattr(moviepy, "__version__", None)
     except ImportError:
         return False

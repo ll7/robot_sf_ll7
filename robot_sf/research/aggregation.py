@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # Performance: only needed for type checking
     from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -36,7 +36,7 @@ def aggregate_metrics(
     group_by: str = "policy_type",
     ci_samples: int = 1000,
     ci_confidence: float = 0.95,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Aggregates metrics across seeds and variants, computes mean, median, p95, std, and bootstrap CIs.
@@ -91,7 +91,7 @@ def aggregate_metrics(
                     "ci_low": ci_low,
                     "ci_high": ci_high,
                     "ci_confidence": ci_confidence,
-                    "sample_size": int(len(values)),
+                    "sample_size": len(values),
                     "effect_size": None,  # To be filled in by statistics module if needed
                 }
             )
@@ -132,8 +132,8 @@ def bootstrap_ci(
     values: list[float],
     ci_samples: int = 1000,
     ci_confidence: float = 0.95,
-    seed: Optional[int] = None,
-) -> tuple[Optional[float], Optional[float]]:
+    seed: int | None = None,
+) -> tuple[float | None, float | None]:
     """Compute bootstrap confidence interval for a list of values.
 
     Args:

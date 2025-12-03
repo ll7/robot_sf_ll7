@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib as mpl
+import numpy as np
 
 # Use headless backend for CI/non-GUI
 mpl.use("Agg", force=True)
@@ -60,7 +61,9 @@ def _safe_number(x: Any) -> float | None:
         return None
 
 
-def collect_values(records: Iterable[dict[str, Any]]) -> tuple[list[float], list[float]]:
+def collect_values(
+    records: Iterable[dict[str, Any]],
+) -> tuple[list[float], list[float]]:
     """Collect min_distance and avg_speed from episode records.
 
     Falls back to computing avg speed from robot_vel if present under
@@ -84,8 +87,6 @@ def collect_values(records: Iterable[dict[str, Any]]) -> tuple[list[float], list
             rv = traj.get("robot_vel")
             if isinstance(rv, list) and rv and isinstance(rv[0], list | tuple):
                 try:
-                    import numpy as np
-
                     arr = np.asarray(rv, dtype=float)
                     s = np.linalg.norm(arr, axis=1).mean()
                     if np.isfinite(s):
@@ -185,8 +186,6 @@ def bootstrap_metric_confidence(
     Returns:
         Dictionary with keys: mean, median, ci_low, ci_high
     """
-    import numpy as np
-
     if not values:
         return {
             "mean": 0.0,

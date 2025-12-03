@@ -6,7 +6,6 @@ and scripts.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -48,7 +47,7 @@ class HelperCapability:
     outputs: str
     dependencies: list[str]
     tests: str
-    docs_link: Optional[str] = None
+    docs_link: str | None = None
 
 
 @dataclass

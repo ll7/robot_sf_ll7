@@ -16,6 +16,9 @@ Design notes:
 
 from __future__ import annotations
 
+import importlib
+import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -43,7 +46,9 @@ class EncodeResult:
     peak_rss_mb: float | None = None  # populated when memory sampling enabled & psutil present
 
 
-def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, Iterator[np.ndarray]]:
+def _iter_first(
+    frame_iter: Iterable[np.ndarray],
+) -> tuple[np.ndarray | None, Iterator[np.ndarray]]:
     """Peek first frame without materializing the rest.
 
     Returns (first_frame_or_none, iterator_starting_from_first) so we can
@@ -66,11 +71,8 @@ def _start_memory_sampler(sample: bool, interval: float):
     """Return (stop_callable, peak_container) starting sampler if psutil available else no-op."""
     if not sample:
         return (lambda: None), [None]
-    import threading
-    import time
-
     try:
-        import psutil  # type: ignore
+        psutil = importlib.import_module("psutil")  # type: ignore
     except ImportError:
         return (lambda: None), [None]
 
@@ -225,8 +227,6 @@ def encode_frames(
         return EncodeResult(path=out_path, status="skipped", note=NOTE_MOVIEPY_MISSING)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    import time  # local import to keep module import light
 
     stop_sampler, peak_container = _start_memory_sampler(sample_memory, sample_interval_s)
 

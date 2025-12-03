@@ -2,22 +2,29 @@
 
 from __future__ import annotations
 
+import importlib
 import platform
-from typing import Optional
 
 from loguru import logger
 
 from robot_sf.training.multi_extractor_models import HardwareProfile
 
 
-def _collect_gpu_metadata() -> tuple[Optional[str], Optional[str]]:
+def _load_torch():
+    try:
+        return importlib.import_module("torch")
+    except ModuleNotFoundError:  # pragma: no cover
+        logger.info("torch not found, skipping GPU metadata collection")
+        return None
+
+
+def _collect_gpu_metadata() -> tuple[str | None, str | None]:
     """Return (gpu_model, cuda_version) when CUDA is available."""
 
     try:
-        import torch
-    except (ImportError, ModuleNotFoundError):  # pragma: no cover
-        logger.info("torch not found, skipping GPU metadata collection")
-        return None, None
+        torch = _load_torch()
+        if torch is None:
+            return None, None
     except (OSError, RuntimeError) as exc:  # pragma: no cover
         logger.warning("A runtime error occurred during torch import: {}", exc)
         return None, None
@@ -31,7 +38,10 @@ def _collect_gpu_metadata() -> tuple[Optional[str], Optional[str]]:
         gpu_model = torch.cuda.get_device_name(device_index)
         cuda_version = getattr(torch, "version", {}).get("cuda", None)
         return gpu_model, cuda_version
-    except (OSError, RuntimeError) as exc:  # pragma: no cover - relies on runtime GPU state
+    except (
+        OSError,
+        RuntimeError,
+    ) as exc:  # pragma: no cover - relies on runtime GPU state
         logger.warning("Failed to capture CUDA metadata: {}", exc)
         return None, None
 

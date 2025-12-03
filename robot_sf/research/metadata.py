@@ -20,6 +20,8 @@ Usage:
 
 from __future__ import annotations
 
+import importlib
+import importlib.metadata as importlib_metadata
 import json
 import platform
 import subprocess
@@ -36,6 +38,13 @@ from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def _optional_import(module: str):
+    try:
+        return importlib.import_module(module)
+    except ModuleNotFoundError:
+        return None
 
 
 @dataclass
@@ -157,8 +166,6 @@ def get_package_versions() -> dict[str, str]:
         Only includes packages relevant to research reporting:
         scipy, matplotlib, pandas, numpy, stable-baselines3, torch
     """
-    import importlib.metadata
-
     packages = [
         "scipy",
         "matplotlib",
@@ -172,8 +179,8 @@ def get_package_versions() -> dict[str, str]:
     versions = {}
     for pkg in packages:
         try:
-            versions[pkg] = importlib.metadata.version(pkg)
-        except importlib.metadata.PackageNotFoundError:
+            versions[pkg] = importlib_metadata.version(pkg)
+        except importlib_metadata.PackageNotFoundError:
             # Package not installed - record as unavailable for reproducibility tracking
             versions[pkg] = "not installed"
 
@@ -194,15 +201,14 @@ def get_hardware_profile() -> HardwareProfile:
     # Attempt to collect GPU info (optional)
     gpu_info = None
     try:
-        import torch
-
-        if torch.cuda.is_available():
+        torch = _optional_import("torch")
+        if torch and torch.cuda.is_available():
             gpu_info = {
                 "model": torch.cuda.get_device_name(0),
                 "count": torch.cuda.device_count(),
                 "memory_gb": torch.cuda.get_device_properties(0).total_memory / (1024**3),
             }
-    except (ImportError, RuntimeError):
+    except RuntimeError:
         pass  # GPU info optional
 
     logger.debug(

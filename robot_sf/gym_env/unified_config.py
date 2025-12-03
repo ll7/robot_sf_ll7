@@ -5,6 +5,7 @@ This module provides a unified configuration hierarchy that eliminates
 duplication and provides clear separation of concerns.
 """
 
+import importlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -14,7 +15,10 @@ if TYPE_CHECKING:
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
-from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
+from robot_sf.robot.differential_drive import (
+    DifferentialDriveRobot,
+    DifferentialDriveSettings,
+)
 from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -116,7 +120,8 @@ class PedestrianSimulationConfig(RobotSimulationConfig):
 
     def pedestrian_factory(self) -> "UnicycleDrivePedestrian":
         """Create a pedestrian instance based on configuration."""
-        from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
+        module = importlib.import_module("robot_sf.ped_ego.unicycle_drive")
+        UnicycleDrivePedestrian = module.UnicycleDrivePedestrian
 
         if isinstance(self.ego_ped_config, UnicycleDriveSettings):
             return UnicycleDrivePedestrian(self.ego_ped_config)

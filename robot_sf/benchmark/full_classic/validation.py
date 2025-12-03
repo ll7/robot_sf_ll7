@@ -15,6 +15,7 @@ Design:
 
 from __future__ import annotations
 
+import importlib
 import json
 from typing import TYPE_CHECKING
 
@@ -51,7 +52,7 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
         Filenames successfully validated. Empty if jsonschema not installed.
     """
     try:
-        import jsonschema  # type: ignore
+        jsonschema = importlib.import_module("jsonschema")  # type: ignore
     except ImportError:
         logger.debug("jsonschema not installed; skipping visuals manifest validation")
         return []

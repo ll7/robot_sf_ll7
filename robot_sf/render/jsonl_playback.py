@@ -23,11 +23,14 @@ import json
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import loguru
+import numpy as np
 
+from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.render.sim_view import VisualizableSimState
 
 logger = loguru.logger
@@ -39,8 +42,8 @@ class PlaybackEpisode:
 
     episode_id: int
     states: list[VisualizableSimState]
-    metadata: Optional[dict[str, Any]] = None
-    reset_points: Optional[list[int]] = None  # Step indices where resets occurred
+    metadata: dict[str, Any] | None = None
+    reset_points: list[int] | None = None  # Step indices where resets occurred
 
 
 @dataclass
@@ -77,8 +80,6 @@ class JSONLPlaybackLoader:
         Returns:
             Reconstructed VisualizableSimState
         """
-        import numpy as np
-
         # Extract timestep
         timestep = state_dict.get("timestep", timestep)
 
@@ -134,7 +135,7 @@ class JSONLPlaybackLoader:
         return state
 
     def _reconstruct_map_definition(
-        self, metadata: Optional[dict[str, Any]], states: list[VisualizableSimState]
+        self, metadata: dict[str, Any] | None, states: list[VisualizableSimState]
     ) -> MapDefinition:
         """Reconstruct MapDefinition from metadata or fallback to minimal dummy.
 
@@ -162,9 +163,6 @@ class JSONLPlaybackLoader:
         Returns:
             Reconstructed MapDefinition
         """
-        from robot_sf.nav.global_route import GlobalRoute
-        from robot_sf.nav.obstacle import Obstacle
-
         # Extract basic dimensions
         width = float(map_data.get("width", 20.0))
         height = float(map_data.get("height", 20.0))
@@ -317,7 +315,7 @@ class JSONLPlaybackLoader:
             ped_routes=[],
         )
 
-    def _load_episode_metadata(self, episode_file: Path) -> Optional[dict[str, Any]]:
+    def _load_episode_metadata(self, episode_file: Path) -> dict[str, Any] | None:
         """Load metadata for an episode from sidecar file.
 
         Args:
@@ -409,7 +407,10 @@ class JSONLPlaybackLoader:
 
         # Create episode
         episode = PlaybackEpisode(
-            episode_id=episode_id, states=states, metadata=metadata, reset_points=reset_points
+            episode_id=episode_id,
+            states=states,
+            metadata=metadata,
+            reset_points=reset_points,
         )
 
         # Reconstruct MapDefinition from metadata or fallback to minimal dummy

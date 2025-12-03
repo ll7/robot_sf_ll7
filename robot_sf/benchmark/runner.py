@@ -15,9 +15,12 @@ multi-processing are future work.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import math
 import os
+import platform
+import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -26,11 +29,27 @@ from datetime import (
     datetime,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import yaml
 from loguru import logger
+
+try:
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    ImageSequenceClip = None  # type: ignore[assignment]
+
+try:
+    from robot_sf.baselines import get_baseline, list_baselines
+    from robot_sf.baselines.social_force import Observation
+except ImportError as exc:  # pragma: no cover - optional baseline dependency
+    get_baseline = None  # type: ignore[assignment]
+    list_baselines = None  # type: ignore[assignment]
+    Observation = None  # type: ignore[assignment]
+    _BASELINE_IMPORT_ERROR = exc
+else:
+    _BASELINE_IMPORT_ERROR = None
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
@@ -48,18 +67,13 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
 
     Returns (planner, ObservationCls, config_dict).
     """
-    try:
-        from robot_sf.baselines import get_baseline
-        from robot_sf.baselines.social_force import Observation
-    except ImportError as e:
-        raise RuntimeError(f"Failed to import baseline algorithms: {e}")
+    if get_baseline is None or Observation is None:
+        raise RuntimeError(f"Failed to import baseline algorithms: {_BASELINE_IMPORT_ERROR}")
 
     try:
         planner_class = get_baseline(algo)
     except KeyError:
-        from robot_sf.baselines import list_baselines
-
-        available = list_baselines()
+        available = list_baselines() if list_baselines is not None else []
         raise ValueError(f"Unknown algorithm '{algo}'. Available: {available}")
 
     # Load configuration if provided
@@ -103,11 +117,13 @@ FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 def _git_hash_fallback() -> str:
     # Best effort; avoid importing subprocess if not needed later
     try:
-        import subprocess
-
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
         return out.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        OSError,
+    ) as exc:  # pragma: no cover
         # Best-effort fallback when git is unavailable or fails; retain behavior
         logger.debug("_git_hash_fallback failed: %s", exc)
         return "unknown"
@@ -141,8 +157,6 @@ def _episode_identity_hash() -> str:
     as well, which invalidates any previously saved manifest sidecars.
     """
     try:
-        import inspect
-
         src = inspect.getsource(compute_episode_id)
     except (OSError, TypeError):
         # Fallback to function name when source isn't available (e.g., pyc only)
@@ -381,21 +395,16 @@ def _emit_video_skip(
     if error:
         context["error"] = error
     try:
-        from loguru import logger  # type: ignore
-    except ImportError:
-        logger = None  # type: ignore
-    if logger is not None:
-        try:
-            logger.warning(
-                (
-                    "Video skipped: reason={reason} episode_id={episode_id} "
-                    "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
-                ),
-                **context,
-            )
-        except (AttributeError, TypeError):
-            # Logging failure -> ignore
-            pass
+        logger.warning(
+            (
+                "Video skipped: reason={reason} episode_id={episode_id} "
+                "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
+            ),
+            **context,
+        )
+    except (AttributeError, TypeError):
+        # Logging failure -> ignore
+        pass
 
     note_parts = [f"video skipped ({renderer}): {reason}"]
     if steps is not None:
@@ -419,9 +428,7 @@ def _try_encode_synthetic_video(
     - Draws a simple red dot for the robot position per frame on a black canvas.
     - Uses moviepy ImageSequenceClip if available; returns None when unavailable.
     """
-    try:
-        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-    except (ImportError, ModuleNotFoundError):
+    if ImageSequenceClip is None:
         _skip_info = {
             "reason": "moviepy-missing",
             "renderer": "synthetic",
@@ -429,8 +436,6 @@ def _try_encode_synthetic_video(
         }
         return None, _skip_info
     # Successfully imported moviepy; proceed with encoding attempt
-
-    import numpy as _np  # local alias to avoid confusion
 
     N = len(robot_pos_traj)
     if N == 0:
@@ -442,8 +447,8 @@ def _try_encode_synthetic_video(
         return None, _skip_info
     H, W = 128, 128
     # Determine bounds for simple normalization
-    xs = _np.array([p[0] for p in robot_pos_traj], dtype=float)
-    ys = _np.array([p[1] for p in robot_pos_traj], dtype=float)
+    xs = np.array([p[0] for p in robot_pos_traj], dtype=float)
+    ys = np.array([p[1] for p in robot_pos_traj], dtype=float)
     min_x, max_x = float(xs.min()), float(xs.max())
     min_y, max_y = float(ys.min()), float(ys.max())
     # Pad 10%
@@ -462,15 +467,15 @@ def _try_encode_synthetic_video(
         py = int((1.0 - ny) * (H - 1))
         return px, py
 
-    frames: list[_np.ndarray] = []
+    frames: list[np.ndarray] = []
     for i in range(N):
-        img = _np.zeros((H, W, 3), dtype=_np.uint8)
+        img = np.zeros((H, W, 3), dtype=np.uint8)
         x, y = robot_pos_traj[i]
         px, py = to_px(float(x), float(y))
         # Draw small 3x3 red square centered at (px,py)
         x0, x1 = max(0, px - 1), min(W, px + 2)
         y0, y1 = max(0, py - 1), min(H, py + 2)
-        img[y0:y1, x0:x1, :] = _np.array([220, 30, 30], dtype=_np.uint8)
+        img[y0:y1, x0:x1, :] = np.array([220, 30, 30], dtype=np.uint8)
         frames.append(img)
     mp4_path = out_dir / f"video_{episode_id}.mp4"
     try:
@@ -554,8 +559,6 @@ def _annotate_and_check_video_perf(
             )
         else:
             try:
-                from loguru import logger  # type: ignore
-
                 logger.warning(
                     (
                         "Video overhead hard breach but continue: "
@@ -578,8 +581,6 @@ def _annotate_and_check_video_perf(
             )
         else:
             try:
-                from loguru import logger  # type: ignore
-
                 logger.warning(
                     (
                         "Video overhead soft breach: "
@@ -983,7 +984,11 @@ def _run_batch_sequential(
                     pass
         except Exception as e:  # pragma: no cover - error path
             failures.append(
-                {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)},
+                {
+                    "scenario_id": sc.get("id", "unknown"),
+                    "seed": seed,
+                    "error": repr(e),
+                },
             )
             if progress_cb is not None:
                 try:
@@ -1027,7 +1032,11 @@ def _run_batch_parallel(
                         pass
             except Exception as e:  # pragma: no cover
                 failures.append(
-                    {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)},
+                    {
+                        "scenario_id": sc.get("id", "unknown"),
+                        "seed": seed,
+                        "error": repr(e),
+                    },
                 )
                 if progress_cb is not None:
                     try:
@@ -1050,14 +1059,12 @@ def _prepare_batch_setup(
 ) -> tuple[list[dict[str, Any]], Path, dict[str, Any]]:
     """Prepare scenarios, output path, and schema for batch processing."""
     # Load scenarios
-    from typing import cast
-
     scenarios_is_path = isinstance(scenarios_or_path, str | Path)
     if scenarios_is_path:
-        scenarios = load_scenario_matrix(cast(str | Path, scenarios_or_path))
+        scenarios = load_scenario_matrix(cast("str | Path", scenarios_or_path))
     else:
         # scenarios_or_path is already list[dict[str, Any]]
-        scenarios = cast(list[dict[str, Any]], scenarios_or_path)
+        scenarios = cast("list[dict[str, Any]]", scenarios_or_path)
 
     # Prepare output
     out_path = Path(out_path)
@@ -1174,8 +1181,6 @@ def _finalize_batch(
     # Optional: write a small performance snapshot for video encoding if requested
     try:
         if os.getenv("ROBOT_SF_VIDEO_PERF_SNAPSHOT"):
-            import platform
-
             vids: list[dict] = []
             try:
                 with out_path.open("r", encoding="utf-8") as f:

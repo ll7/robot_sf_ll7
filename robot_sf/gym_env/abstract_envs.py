@@ -10,6 +10,7 @@ from typing import Any
 
 from gymnasium import Env, spaces
 
+from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.unified_config import BaseSimulationConfig
 from robot_sf.render.sim_view import VisualizableSimState
 
@@ -84,8 +85,6 @@ class BaseSimulationEnv(Env, ABC):
 
     def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to file."""
-        from robot_sf.gym_env.base_env import BaseEnv
-
         # Reuse existing implementation
         base_env = BaseEnv.__new__(BaseEnv)
         base_env.recorded_states = self.recorded_states

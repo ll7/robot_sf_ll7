@@ -44,6 +44,9 @@ overhead (FR‑017). Rendering classes for image observations are imported lazil
 
 from __future__ import annotations
 
+import importlib
+import os
+import random
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -76,6 +79,33 @@ if TYPE_CHECKING:
     from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
 
 
+def _load_robot_env_with_image():
+    module = importlib.import_module("robot_sf.gym_env.robot_env_with_image")
+    return module.RobotEnvWithImage
+
+
+def _load_pedestrian_env():
+    module = importlib.import_module("robot_sf.gym_env.pedestrian_env")
+    return module.PedestrianEnv
+
+
+def _load_multi_robot_env():
+    module = importlib.import_module("robot_sf.gym_env.multi_robot_env")
+    return module.MultiRobotEnv
+
+
+def _load_stub_robot_model():
+    module = importlib.import_module("robot_sf.gym_env._stub_robot_model")
+    return module.StubRobotModel
+
+
+def _optional_import(module_name: str):
+    try:
+        return importlib.import_module(module_name)
+    except (ImportError, ModuleNotFoundError):
+        return None
+
+
 class EnvironmentFactory:
     """Internal helpers to construct concrete environments (not exported)."""
 
@@ -103,9 +133,7 @@ class EnvironmentFactory:
         config.use_image_obs = use_image_obs
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
         if use_image_obs:
-            from robot_sf.gym_env.robot_env_with_image import (  # type: ignore
-                RobotEnvWithImage as EnvCls,
-            )
+            EnvCls = _load_robot_env_with_image()
         else:
             EnvCls = RobotEnv  # type: ignore[assignment]
         if EnvCls is None:  # pragma: no cover - defensive
@@ -138,7 +166,7 @@ class EnvironmentFactory:
     ) -> SingleAgentEnv:
         if config is None:
             config = PedestrianSimulationConfig()
-        from robot_sf.gym_env.pedestrian_env import PedestrianEnv
+        PedestrianEnv = _load_pedestrian_env()
 
         # Allow None to be passed through from ergonomic factories and
         # fall back to the canonical internal simple_ped_reward.
@@ -166,7 +194,7 @@ class EnvironmentFactory:
             config = MultiRobotConfig()
         if config.num_robots != num_robots:
             config.num_robots = num_robots
-        from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
+        MultiRobotEnv = _load_multi_robot_env()
 
         return MultiRobotEnv(
             env_config=config,
@@ -344,14 +372,18 @@ def make_robot_env(
     # Validate configuration and log resolved config (T030/T031)
     _validate_and_log_config(config)
 
-    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
-        _normalize_factory_inputs(
-            record_video=record_video,
-            video_path=video_path,
-            video_fps=video_fps,
-            render_options=render_options,
-            recording_options=recording_options,
-        )
+    (
+        render_options,
+        recording_options,
+        eff_record_video,
+        eff_video_path,
+        eff_video_fps,
+    ) = _normalize_factory_inputs(
+        record_video=record_video,
+        video_path=video_path,
+        video_fps=video_fps,
+        render_options=render_options,
+        recording_options=recording_options,
     )
     logger.info(
         "Creating robot env debug={debug} record_video={record} video_path={path} fps={fps}",
@@ -417,14 +449,18 @@ def make_image_robot_env(
     # Validate configuration and log resolved config (T030/T031)
     _validate_and_log_config(config)
 
-    render_options, recording_options, eff_record_video, eff_video_path, eff_video_fps = (
-        _normalize_factory_inputs(
-            record_video=record_video,
-            video_path=video_path,
-            video_fps=video_fps,
-            render_options=render_options,
-            recording_options=recording_options,
-        )
+    (
+        render_options,
+        recording_options,
+        eff_record_video,
+        eff_video_path,
+        eff_video_fps,
+    ) = _normalize_factory_inputs(
+        record_video=record_video,
+        video_path=video_path,
+        video_fps=video_fps,
+        render_options=render_options,
+        recording_options=recording_options,
     )
     logger.info(
         "Creating image robot env debug={debug} record_video={record} video_path={path} fps={fps}",
@@ -501,14 +537,18 @@ def make_pedestrian_env(
         recording_options is not None and recording_options.record is False and record_video
     )
 
-    render_options, recording_options, eff_record_video, _eff_video_path, _eff_video_fps = (
-        _normalize_factory_inputs(
-            record_video=record_video,
-            video_path=video_path,
-            video_fps=video_fps,
-            render_options=render_options,
-            recording_options=recording_options,
-        )
+    (
+        render_options,
+        recording_options,
+        eff_record_video,
+        _eff_video_path,
+        _eff_video_fps,
+    ) = _normalize_factory_inputs(
+        record_video=record_video,
+        video_path=video_path,
+        video_fps=video_fps,
+        render_options=render_options,
+        recording_options=recording_options,
     )
 
     # Reinstate explicit opt-out if requested (override robot-style convenience precedence).
@@ -519,9 +559,7 @@ def make_pedestrian_env(
 
     if robot_model is None:
         # Maintain previous behavior (tests rely on automatic stub when not provided)
-        from robot_sf.gym_env._stub_robot_model import StubRobotModel
-
-        robot_model = StubRobotModel()
+        robot_model = _load_stub_robot_model()()
 
     # Determine effective debug flag (enable view only if actually recording here)
     if eff_record_video and not _explicit_no_record:
@@ -555,28 +593,17 @@ def _apply_global_seed(seed: int | None) -> None:
     """
     if seed is None:
         return
-    import os as _os
-    import random as _random
-
-    _random.seed(seed)
-    try:  # NumPy optional
-        import numpy as np  # type: ignore
-
-        np.random.seed(seed)
-    except (ImportError, ModuleNotFoundError):
-        # NumPy not available; skip seeding it
-        pass
-    try:  # PyTorch optional
-        import torch as _torch  # type: ignore
-
-        if hasattr(_torch, "manual_seed"):
-            _torch.manual_seed(seed)
-        if hasattr(_torch, "cuda") and hasattr(_torch.cuda, "manual_seed_all"):
-            _torch.cuda.manual_seed_all(seed)
-    except (ImportError, ModuleNotFoundError):
-        # Torch not available; skip seeding it
-        pass
-    _os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    numpy_mod = _optional_import("numpy")
+    if numpy_mod is not None:
+        numpy_mod.random.seed(seed)
+    torch_mod = _optional_import("torch")
+    if torch_mod is not None:
+        if hasattr(torch_mod, "manual_seed"):
+            torch_mod.manual_seed(seed)
+        if hasattr(torch_mod, "cuda") and hasattr(torch_mod.cuda, "manual_seed_all"):
+            torch_mod.cuda.manual_seed_all(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
 
 
 def make_multi_robot_env(

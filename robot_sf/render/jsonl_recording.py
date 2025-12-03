@@ -24,7 +24,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import loguru
 
@@ -44,9 +44,9 @@ class EpisodeMetadata:
     seed: int
     config_hash: str
     schema_version: str = "1.0"
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
-    total_steps: Optional[int] = None
+    start_time: float | None = None
+    end_time: float | None = None
+    total_steps: int | None = None
 
 
 @dataclass
@@ -58,7 +58,7 @@ class JSONLRecord:
     event: str  # "episode_start", "step", "episode_end", "entity_reset"
     timestamp: float
     state: dict[str, Any]
-    entity_ids: Optional[list[int]] = None  # For entity_reset events
+    entity_ids: list[int] | None = None  # For entity_reset events
 
 
 class JSONLRecorder:
@@ -150,7 +150,7 @@ class JSONLRecorder:
         return state_dict
 
     # --- Serialization helpers (each intentionally small & focused) ---
-    def _serialize_robot_pose(self, state: VisualizableSimState) -> Optional[list[Any]]:
+    def _serialize_robot_pose(self, state: VisualizableSimState) -> list[Any] | None:
         """Return robot pose [[x, y], theta] if available else None."""
         if not hasattr(state, "robot_pose") or state.robot_pose is None:
             return None
@@ -164,7 +164,7 @@ class JSONLRecorder:
 
     def _serialize_pedestrian_positions(
         self, state: VisualizableSimState
-    ) -> Optional[list[list[float]]]:
+    ) -> list[list[float]] | None:
         """Return list of pedestrian positions [[x,y], ...] or None if absent."""
         if not hasattr(state, "pedestrian_positions") or state.pedestrian_positions is None:
             return None
@@ -176,7 +176,7 @@ class JSONLRecorder:
         except (TypeError, ValueError, IndexError):
             return []
 
-    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> Optional[list[Any]]:
+    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> list[Any] | None:
         """Return ego pedestrian pose [[x,y], theta] if available else None."""
         if not hasattr(state, "ego_ped_pose") or state.ego_ped_pose is None:
             return None
@@ -188,7 +188,7 @@ class JSONLRecorder:
         except (TypeError, ValueError, IndexError):
             return None
 
-    def _serialize_ray_vecs(self, state: VisualizableSimState) -> Optional[list[Any]]:
+    def _serialize_ray_vecs(self, state: VisualizableSimState) -> list[Any] | None:
         """Return ray vectors list representation or None if absent."""
         if not hasattr(state, "ray_vecs") or state.ray_vecs is None:
             return None
@@ -202,7 +202,7 @@ class JSONLRecorder:
         except (TypeError, ValueError):
             return []
 
-    def _serialize_robot_action(self, state: VisualizableSimState) -> Optional[dict[str, float]]:
+    def _serialize_robot_action(self, state: VisualizableSimState) -> dict[str, float] | None:
         """Return robot action dict {'linear_velocity':..,'angular_velocity':..} or None."""
         if not hasattr(state, "robot_action") or state.robot_action is None:
             return None
@@ -220,7 +220,7 @@ class JSONLRecorder:
                 pass
         return action_dict or None
 
-    def _normalize_flush_interval(self, flush_every_n: int | None) -> Optional[int]:
+    def _normalize_flush_interval(self, flush_every_n: int | None) -> int | None:
         """Validate and normalize the flush interval setting.
 
         Returns ``None`` when periodic flushing is disabled.

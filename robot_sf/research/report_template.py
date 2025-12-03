@@ -5,7 +5,7 @@ Implements: MarkdownReportRenderer, export_latex, _render_abstract
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class MarkdownReportRenderer:
@@ -22,10 +22,10 @@ class MarkdownReportRenderer:
         aggregated_metrics: list[dict[str, Any]],
         figures: list[dict[str, Any]],
         metadata: dict[str, Any],
-        seed_status: Optional[list[dict[str, Any]]] = None,
-        completeness: Optional[dict[str, Any]] = None,
-        ablation_variants: Optional[list[dict[str, Any]]] = None,
-        telemetry: Optional[dict[str, Any]] = None,
+        seed_status: list[dict[str, Any]] | None = None,
+        completeness: dict[str, Any] | None = None,
+        ablation_variants: list[dict[str, Any]] | None = None,
+        telemetry: dict[str, Any] | None = None,
     ) -> Path:
         """
         Render full Markdown report.
@@ -130,8 +130,8 @@ class MarkdownReportRenderer:
 
     def _render_seed_summary(
         self,
-        seed_status: Optional[list[dict[str, Any]]],
-        completeness: Optional[dict[str, Any]],
+        seed_status: list[dict[str, Any]] | None,
+        completeness: dict[str, Any] | None,
     ) -> str:
         """Render seed completeness table.
 
@@ -333,7 +333,7 @@ class MarkdownReportRenderer:
             section += f"| {k} | {v} |\n"
         return section + "\n"
 
-    def export_latex(self, markdown_path: Path) -> Optional[Path]:
+    def export_latex(self, markdown_path: Path) -> Path | None:
         """
         Export Markdown report to LaTeX format.
         Returns path to .tex file, or None if conversion fails.

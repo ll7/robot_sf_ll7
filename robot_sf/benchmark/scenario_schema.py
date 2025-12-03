@@ -14,6 +14,7 @@ and may include a "details" field with structured info.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -30,8 +31,6 @@ SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json
 
 def load_scenario_schema() -> dict[str, Any]:
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
-        import json
-
         return json.load(f)
 
 

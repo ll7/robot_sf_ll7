@@ -56,7 +56,7 @@ class RobotState:
     @property
     def max_sim_steps(self) -> int:
         """Calculates the maximum number of simulation steps based on time limit."""
-        return int(ceil(self.sim_time_limit / self.d_t))
+        return ceil(self.sim_time_limit / self.d_t)
 
     @property
     def is_terminal(self) -> bool:

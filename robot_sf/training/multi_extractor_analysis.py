@@ -7,6 +7,7 @@ figures for summaries.
 
 from __future__ import annotations
 
+import importlib
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -24,6 +25,10 @@ except (ImportError, RuntimeError):  # pragma: no cover - plotting already guard
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
+
+
+def _get_pyplot():
+    return importlib.import_module("matplotlib.pyplot")
 
 
 @dataclass
@@ -92,7 +97,7 @@ def generate_figures(
     if history is None or not history.timesteps:
         return {}
     try:
-        import matplotlib.pyplot as plt
+        plt = _get_pyplot()
 
         out_dir.mkdir(parents=True, exist_ok=True)
         learning_curve = out_dir / f"{extractor_name}_learning_curve.png"

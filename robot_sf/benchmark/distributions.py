@@ -11,6 +11,7 @@ CLI wiring is done in robot_sf.benchmark.cli (plot-distributions).
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,12 +84,18 @@ def _apply_rcparams() -> None:
 
 def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
     try:
-        from scipy.stats import gaussian_kde  # type: ignore
-
+        stats_module = importlib.import_module("scipy.stats")
+        gaussian_kde = stats_module.gaussian_kde
         kde = gaussian_kde(data)
         xs = np.linspace(data.min(), data.max(), 200)
         ys = kde(xs)
-        ax.plot(xs, ys * (len(data) * (xs[1] - xs[0])), color=color, alpha=0.8, linewidth=1.0)
+        ax.plot(
+            xs,
+            ys * (len(data) * (xs[1] - xs[0])),
+            color=color,
+            alpha=0.8,
+            linewidth=1.0,
+        )
     except (ImportError, ModuleNotFoundError):
         # scipy optional; silently skip KDE if unavailable
         pass

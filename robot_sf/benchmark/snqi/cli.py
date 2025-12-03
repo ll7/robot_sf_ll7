@@ -130,7 +130,7 @@ def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]
         values_sorted = sorted(values)
         med = statistics.median(values_sorted)
         # p95 index calculation
-        idx = min(len(values_sorted) - 1, max(0, int(round(0.95 * (len(values_sorted) - 1)))))
+        idx = min(len(values_sorted) - 1, max(0, round(0.95 * (len(values_sorted) - 1))))
         p95 = float(values_sorted[idx])
         if abs(p95 - med) < 1e-12:  # ensure non-zero span for normalization downstream
             p95 = med + 1.0

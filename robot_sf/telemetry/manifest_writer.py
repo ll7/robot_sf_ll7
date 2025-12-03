@@ -95,7 +95,7 @@ class ManifestWriter:
     @staticmethod
     def _prepare_payload(payload: object) -> dict[str, Any]:
         if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
+            return cast("dict[str, Any]", payload)
         if is_dataclass(payload):
             serialized = serialize_payload(payload)
             if not isinstance(serialized, dict):  # pragma: no cover - defensive guard

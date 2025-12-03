@@ -226,10 +226,10 @@ def format_episode_summary_table(rows: Iterable[dict[str, Any]]) -> str:
         return "(no episodes)"
 
     headers: list[str] = ["scenario", "seed", "steps", "outcome", "recorded"]
-    col_widths = {h: max(len(h), *(len(str(cast(Any, r)[h])) for r in rows)) for h in headers}
+    col_widths = {h: max(len(h), *(len(str(cast("Any", r)[h])) for r in rows)) for h in headers}
 
     def fmt_row(r: dict[str, Any]) -> str:
-        return " | ".join(str(cast(Any, r)[h]).ljust(col_widths[h]) for h in headers)
+        return " | ".join(str(cast("Any", r)[h]).ljust(col_widths[h]) for h in headers)
 
     header_row: dict[str, Any] = {h: h for h in headers}
     lines = [fmt_row(header_row)]

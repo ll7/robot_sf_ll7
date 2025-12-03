@@ -7,6 +7,7 @@ runners and scripts to harden reproducibility guarantees.
 
 from __future__ import annotations
 
+import importlib
 import os
 import random
 from dataclasses import asdict, dataclass
@@ -32,9 +33,7 @@ class SeedReport:
 
 def _import_torch():
     try:
-        import torch  # type: ignore
-
-        return torch
+        return importlib.import_module("torch")  # type: ignore
     except ImportError:  # pragma: no cover - optional dependency
         return None
 

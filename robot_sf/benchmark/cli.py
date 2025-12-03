@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -36,8 +38,12 @@ from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.scenario_thumbnails import save_montage as _thumb_montage
-from robot_sf.benchmark.scenario_thumbnails import save_scenario_thumbnails as _thumb_save_all
-from robot_sf.benchmark.seed_variance import compute_seed_variance as _compute_seed_variance
+from robot_sf.benchmark.scenario_thumbnails import (
+    save_scenario_thumbnails as _thumb_save_all,
+)
+from robot_sf.benchmark.seed_variance import (
+    compute_seed_variance as _compute_seed_variance,
+)
 from robot_sf.benchmark.summary import summarize_to_plots
 from robot_sf.common.seed import get_seed_state_sample as _seed_sample
 from robot_sf.common.seed import set_global_seed as _set_seed
@@ -84,9 +90,8 @@ def _handle_list_algorithms(_args) -> int:
 
         # Try to load baseline algorithms
         try:
-            from robot_sf.baselines import list_baselines
-
-            baseline_algos = list_baselines()
+            baseline_module = importlib.import_module("robot_sf.baselines")
+            baseline_algos = baseline_module.list_baselines()
             algorithms.extend(baseline_algos)
         except ImportError:
             pass
@@ -128,8 +133,8 @@ def _progress_cb_factory(quiet: bool):
     pbar = None
     if not quiet:
         try:  # pragma: no cover - tqdm optional
-            from tqdm import tqdm  # type: ignore
-
+            tqdm_module = importlib.import_module("tqdm")
+            tqdm = tqdm_module.tqdm
             pbar = tqdm(total=0, unit="ep", disable=False)
         except Exception:
             logging.debug("tqdm import failed or pbar unavailable", exc_info=True)
@@ -535,7 +540,11 @@ def _handle_validate_config(args) -> int:
         scenarios = load_scenario_matrix(args.matrix)
         errors = validate_scenario_list(scenarios)
         warnings = []
-        report = {"num_scenarios": len(scenarios), "errors": errors, "warnings": warnings}
+        report = {
+            "num_scenarios": len(scenarios),
+            "errors": errors,
+            "warnings": warnings,
+        }
         print(json.dumps(report))
         return 0 if not errors else 2
     except Exception:  # pragma: no cover - error path
@@ -1117,7 +1126,9 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     # We replicate the script arguments (kept minimal & aligned with parse_args in scripts) to avoid code duplication.
     # Dynamic loading is used so we don't need to refactor the existing scripts immediately.
 
-    def _add_snqi_optimize(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    def _add_snqi_optimize(
+        sp: argparse._SubParsersAction[argparse.ArgumentParser],
+    ) -> None:
         p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
         p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
@@ -1205,13 +1216,21 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         )
         p.set_defaults(cmd="snqi", snqi_cmd="optimize")
 
-    def _add_snqi_recompute(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    def _add_snqi_recompute(
+        sp: argparse._SubParsersAction[argparse.ArgumentParser],
+    ) -> None:
         p = sp.add_parser("recompute", help="Recompute SNQI weights via predefined strategies")
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
         p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
         p.add_argument(
             "--strategy",
-            choices=["default", "balanced", "safety_focused", "efficiency_focused", "pareto"],
+            choices=[
+                "default",
+                "balanced",
+                "safety_focused",
+                "efficiency_focused",
+                "pareto",
+            ],
             default="default",
         )
         p.add_argument("--output", type=Path, required=True, help="Output JSON file")
@@ -1274,8 +1293,6 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
 
         Uses importlib spec APIs so module metadata (__spec__, __file__) is set.
         """
-        from importlib.util import module_from_spec, spec_from_file_location  # local import
-
         # Defensive: if a prior failed import left a None placeholder, remove it
         existing = sys.modules.get(name)
         if existing is None:
@@ -1284,10 +1301,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         path = Path(__file__).resolve().parents[2] / rel
         if not path.exists():  # pragma: no cover - defensive
             raise FileNotFoundError(f"SNQI script not found: {path}")
-        spec = spec_from_file_location(name, path)
+        spec = importlib.util.spec_from_file_location(name, path)
         if spec is None or spec.loader is None:  # pragma: no cover - defensive
             raise ImportError(f"Unable to load spec for {path}")
-        mod = module_from_spec(spec)
+        mod = importlib.util.module_from_spec(spec)
         sys.modules[name] = mod  # allow relative imports inside script if any
         spec.loader.exec_module(mod)
         return mod
@@ -1459,9 +1476,8 @@ def cli_main(argv: list[str] | None = None) -> int:
     # macOS safe start method for multiprocessing
     if getattr(args, "workers", 1) and int(getattr(args, "workers", 1)) > 1:
         try:
-            import multiprocessing as _mp
-
-            _mp.set_start_method("spawn", force=False)
+            multiprocessing_module = importlib.import_module("multiprocessing")
+            multiprocessing_module.set_start_method("spawn", force=False)
         except Exception:
             logging.debug("Failed to set multiprocessing start method to spawn", exc_info=True)
 

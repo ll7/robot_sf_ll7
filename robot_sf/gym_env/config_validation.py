@@ -5,13 +5,16 @@ Validates unified configuration for unknown keys, conflicts, and schema violatio
 
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
+from dataclasses import asdict, fields, is_dataclass
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
 if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import BaseSimulationConfig
+
+from robot_sf.sensor.registry import list_sensors
+from robot_sf.sim.registry import list_backends
 
 
 def _get_valid_field_names(config: BaseSimulationConfig) -> set[str]:
@@ -78,8 +81,6 @@ def _check_backend_valid(config: BaseSimulationConfig) -> None:
     KeyError
         If backend name not registered
     """
-    from robot_sf.sim.registry import list_backends
-
     backend = getattr(config, "backend", "fast-pysf")
     available = list_backends()
 
@@ -101,8 +102,6 @@ def _check_sensor_names_valid(config: BaseSimulationConfig) -> None:
     KeyError
         If sensor type not registered
     """
-    from robot_sf.sensor.registry import list_sensors
-
     sensors = getattr(config, "sensors", [])
     if not sensors:
         return
@@ -179,8 +178,6 @@ def get_resolved_config_dict(config: BaseSimulationConfig) -> dict:
     dict
         Dictionary representation with all defaults resolved
     """
-    from dataclasses import asdict
-
     if is_dataclass(config):
         return asdict(config)
     # Fallback for non-dataclass configs

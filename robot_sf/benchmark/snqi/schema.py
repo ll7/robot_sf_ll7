@@ -25,6 +25,7 @@ If validation fails a ValueError is raised with a concise explanation.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -53,8 +54,6 @@ def assert_all_finite(obj: Any, path: str = "$") -> None:
 
     Non‑numeric values are ignored. Raises ValueError on first failure.
     """
-    import math
-
     if _is_number(obj):
         if math.isnan(obj) or math.isinf(obj):
             raise ValueError(f"Non‑finite numeric value at {path}: {obj}")

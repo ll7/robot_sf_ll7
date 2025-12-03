@@ -412,7 +412,7 @@ def compute_aggregates_with_ci(
     )
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
-        return cast(dict[str, dict[str, dict[str, Any]]], base)
+        return cast("dict[str, dict[str, dict[str, Any]]]", base)
 
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:

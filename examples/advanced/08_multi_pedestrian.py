@@ -38,7 +38,7 @@ def create_multi_pedestrian_map() -> MapDefinition:
     ped_goal_zones = []
     ped_crowded_zones = []
     bounds = cast(
-        list[Line2D],
+        "list[Line2D]",
         [
             (0.0, width, 0.0, 0.0),  # bottom
             (0.0, width, height, height),  # top

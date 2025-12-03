@@ -52,7 +52,7 @@ def main():
 
     X, Y = np.meshgrid(xs, ys)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    _fig, ax = plt.subplots(figsize=(8, 6))
     _q = ax.quiver(X, Y, U, V, scale=5, width=0.003)
     ax.set_title("Sampled force field from pysocialforce")
     ax.set_xlabel("x")

@@ -124,31 +124,28 @@ class EnvMetrics:
 
     @property
     def timeout_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average timeout rate across vectorized environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `timeout_rate` across all `PedEnvMetrics`.
         """
         return self.exceeded_timesteps / self.total_routes
 
     @property
     def obstacle_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average obstacle collision rate across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `obstacle_collision_rate` across metrics.
         """
         return self.obstacle_collisions / self.total_routes
 
     @property
     def pedestrian_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average pedestrian collision rate across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `pedestrian_collision_rate` across metrics.
         """
         return self.pedestrian_collisions / self.total_routes
 
@@ -405,51 +402,46 @@ class PedEnvMetrics:
 
     @property
     def robot_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average robot collision rate across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `robot_collision_rate` across metrics.
         """
         return self.robot_collisions / self.total_routes
 
     @property
     def robot_at_goal_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average goal-reaching rate across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `robot_at_goal_rate` across metrics.
         """
         return self.robot_at_goal / self.total_routes
 
     @property
     def robot_obstacle_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average robot-obstacle collision rate across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `robot_obstacle_collision_rate` across metrics.
         """
         return self.robot_obstacle_collisions / self.total_routes
 
     @property
     def robot_pedestrian_collision_rate(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average robot-pedestrian collision rate across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `robot_pedestrian_collision_rate` across metrics.
         """
         return self.robot_pedestrian_collisions / self.total_routes
 
     @property
     def route_end_distance(self) -> float:
-        """TODO docstring. Document this function.
-
+        """Average end-of-route distance across environments.
 
         Returns:
-            TODO docstring.
+            float: Mean of `route_end_distance` across metrics.
         """
         return mean(self.avg_distance) if self.avg_distance else 0.0
 
@@ -468,7 +460,12 @@ class PedEnvMetrics:
         self._finalize_route_outcome(outcome)
 
     def _is_end_of_route(self, meta: dict) -> bool:
-        """Check if the current step marks the end of a route."""
+        """Check if the current step marks the end of a route.
+
+        Returns:
+            bool: True if any terminal condition is flagged in ``meta``
+            (collision, timeout, goal, or route completion), otherwise False.
+        """
         end_conditions = [
             "is_pedestrian_collision",
             "is_obstacle_collision",
@@ -487,6 +484,10 @@ class PedEnvMetrics:
         Note: Collision outcomes take precedence over goal/timeout outcomes.
         This ensures that if both a collision and goal are flagged simultaneously,
         the collision is reported as the outcome.
+
+        Returns:
+            EnvOutcome: The resolved environment outcome derived from ``meta``,
+            prioritizing collision signals over timeout and goal signals.
         """
         # Check collisions first (highest priority)
         collision_checks = [

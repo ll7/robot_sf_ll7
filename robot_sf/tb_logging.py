@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""TensorBoard logging callbacks for training metrics.
+
+Provides callbacks for logging navigation and pedestrian metrics during
+StableBaselines3 training runs.
+"""
 
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import SummaryWriter, TensorBoardOutputFormat
@@ -7,36 +11,34 @@ from robot_sf.eval import EnvMetrics, PedEnvMetrics, PedVecEnvMetrics, VecEnvMet
 
 
 class BaseMetricsCallback(BaseCallback):
-    """TODO docstring. Document this class."""
+    """Base callback for logging metrics to TensorBoard during training."""
 
     def __init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize the base metrics callback with default logging frequency."""
         super().__init__()
         self.writer: SummaryWriter | None = None
         self._log_freq = 1000  # log every 1000 calls
 
     @property
     def meta_dicts(self) -> list[dict]:
-        """TODO docstring. Document this function.
-
+        """Extract metadata dicts from environment info.
 
         Returns:
-            TODO docstring.
+            List of metadata dictionaries from episode infos.
         """
         return [m["meta"] for m in self.locals["infos"]]
 
     @property
     def is_logging_step(self) -> bool:
-        """TODO docstring. Document this function.
-
+        """Check if current step should log metrics.
 
         Returns:
-            TODO docstring.
+            True if metrics should be logged at this step, False otherwise.
         """
         return self.n_calls % self._log_freq == 0
 
     def _on_training_start(self):
-        """TODO docstring. Document this function."""
+        """Initialize TensorBoard writer at training start."""
         if self.logger is not None:
             output_formats = self.logger.output_formats
             tb_formatter: TensorBoardOutputFormat | None = next(
@@ -60,23 +62,22 @@ class BaseMetricsCallback(BaseCallback):
 
 
 class DrivingMetricsCallback(BaseMetricsCallback):
-    """TODO docstring. Document this class."""
+    """Callback for logging robot navigation metrics during training."""
 
     def __init__(self, num_envs: int):
-        """TODO docstring. Document this function.
+        """Initialize driving metrics callback.
 
         Args:
-            num_envs: TODO docstring.
+            num_envs: Number of parallel environments.
         """
         super().__init__()
         self.metrics = VecEnvMetrics([EnvMetrics() for _ in range(num_envs)])
 
     def _on_step(self) -> bool:
-        """TODO docstring. Document this function.
-
+        """Log driving metrics at each training step.
 
         Returns:
-            TODO docstring.
+            True to continue training.
         """
         self.metrics.update(self.meta_dicts)
 
@@ -111,23 +112,22 @@ class DrivingMetricsCallback(BaseMetricsCallback):
 
 
 class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
-    """TODO docstring. Document this class."""
+    """Callback for logging adversarial pedestrian metrics during training."""
 
     def __init__(self, num_envs: int):
-        """TODO docstring. Document this function.
+        """Initialize pedestrian metrics callback.
 
         Args:
-            num_envs: TODO docstring.
+            num_envs: Number of parallel environments.
         """
         super().__init__()
         self.metrics = PedVecEnvMetrics([PedEnvMetrics() for _ in range(num_envs)])
 
     def _on_step(self) -> bool:
-        """TODO docstring. Document this function.
-
+        """Log pedestrian metrics at each training step.
 
         Returns:
-            TODO docstring.
+            True to continue training.
         """
         self.metrics.update(self.meta_dicts)
 

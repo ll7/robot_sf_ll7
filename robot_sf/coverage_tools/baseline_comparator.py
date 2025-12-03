@@ -256,7 +256,11 @@ def generate_warning(delta: CoverageDelta, format_type: str = "github") -> str:
 
 
 def _generate_github_annotation(delta: CoverageDelta) -> str:
-    """Generate GitHub Actions annotation format."""
+    """Generate GitHub Actions annotation format.
+
+    Returns:
+        str: Annotation lines joined by newlines, or empty string when no decrease.
+    """
     if not delta.has_decrease:
         return ""
 
@@ -278,7 +282,11 @@ def _generate_github_annotation(delta: CoverageDelta) -> str:
 
 
 def _generate_terminal_warning(delta: CoverageDelta) -> str:
-    """Generate terminal-friendly warning."""
+    """Generate terminal-friendly warning.
+
+    Returns:
+        str: Human-readable warning string summarizing coverage change.
+    """
     if not delta.has_decrease:
         return "✓ Coverage maintained or improved"
 
@@ -299,7 +307,11 @@ def _generate_terminal_warning(delta: CoverageDelta) -> str:
 
 
 def _generate_json_warning(delta: CoverageDelta) -> str:
-    """Generate JSON format warning."""
+    """Generate JSON format warning.
+
+    Returns:
+        str: JSON-formatted string with coverage delta details.
+    """
     return json.dumps(
         {
             "has_decrease": delta.has_decrease,

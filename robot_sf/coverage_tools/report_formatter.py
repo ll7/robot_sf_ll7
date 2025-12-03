@@ -85,7 +85,11 @@ def format_markdown_report(data: dict[str, Any], report_type: str = "coverage") 
 
 
 def _format_coverage_terminal(data: dict[str, Any]) -> str:
-    """Format basic coverage summary for terminal."""
+    """Format basic coverage summary for terminal.
+
+    Returns:
+        str: Multi-line string ready for terminal display.
+    """
     total = data.get("totals", {})
     covered = total.get("covered_lines", 0)
     total_lines = total.get("num_statements", 0)
@@ -104,7 +108,11 @@ def _format_coverage_terminal(data: dict[str, Any]) -> str:
 
 
 def _format_gap_terminal(data: dict[str, Any]) -> str:
-    """Format gap analysis for terminal."""
+    """Format gap analysis for terminal.
+
+    Returns:
+        str: Multi-line string enumerating top gaps.
+    """
     gaps = data.get("gaps", [])
     lines = [
         "=" * 60,
@@ -127,7 +135,11 @@ def _format_gap_terminal(data: dict[str, Any]) -> str:
 
 
 def _format_trend_terminal(data: dict[str, Any]) -> str:
-    """Format trend report for terminal."""
+    """Format trend report for terminal.
+
+    Returns:
+        str: Multi-line string summarizing coverage trend.
+    """
     direction = data.get("direction", "unknown")
     rate = data.get("rate_per_week", 0.0)
     current = data.get("current_coverage", 0.0)
@@ -147,7 +159,11 @@ def _format_trend_terminal(data: dict[str, Any]) -> str:
 
 
 def _format_baseline_terminal(data: dict[str, Any]) -> str:
-    """Format baseline comparison for terminal."""
+    """Format baseline comparison for terminal.
+
+    Returns:
+        str: Multi-line string comparing current vs baseline coverage.
+    """
     current = data.get("current_coverage", 0.0)
     baseline = data.get("baseline_coverage", 0.0)
     delta = data.get("delta", 0.0)
@@ -177,7 +193,11 @@ def _format_baseline_terminal(data: dict[str, Any]) -> str:
 
 
 def _format_coverage_markdown(data: dict[str, Any]) -> str:
-    """Format coverage summary as Markdown."""
+    """Format coverage summary as Markdown.
+
+    Returns:
+        str: Markdown string summarizing coverage totals.
+    """
     total = data.get("totals", {})
     covered = total.get("covered_lines", 0)
     total_lines = total.get("num_statements", 0)
@@ -194,7 +214,11 @@ def _format_coverage_markdown(data: dict[str, Any]) -> str:
 
 
 def _format_gap_markdown(data: dict[str, Any]) -> str:
-    """Format gap analysis as Markdown table."""
+    """Format gap analysis as Markdown table.
+
+    Returns:
+        str: Markdown table listing coverage gaps.
+    """
     gaps = data.get("gaps", [])
     lines = [
         f"# Coverage Gaps ({len(gaps)} found)",
@@ -217,7 +241,11 @@ def _format_gap_markdown(data: dict[str, Any]) -> str:
 
 
 def _format_trend_markdown(data: dict[str, Any]) -> str:
-    """Format trend report as Markdown."""
+    """Format trend report as Markdown.
+
+    Returns:
+        str: Markdown list summarizing trend metrics.
+    """
     direction = data.get("direction", "unknown")
     rate = data.get("rate_per_week", 0.0)
     current = data.get("current_coverage", 0.0)
@@ -235,7 +263,11 @@ def _format_trend_markdown(data: dict[str, Any]) -> str:
 
 
 def _format_baseline_markdown(data: dict[str, Any]) -> str:
-    """Format baseline comparison as Markdown."""
+    """Format baseline comparison as Markdown.
+
+    Returns:
+        str: Markdown section comparing baseline and current coverage.
+    """
     current = data.get("current_coverage", 0.0)
     baseline = data.get("baseline_coverage", 0.0)
     delta = data.get("delta", 0.0)

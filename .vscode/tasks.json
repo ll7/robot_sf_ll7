@@ -11,7 +11,6 @@
 			"label": "Run Tests",
 			"type": "shell",
 			"command": "uv run pytest tests",
-			"problemMatcher": ["$python"],
 			"group": {
 				"kind": "test",
 				"isDefault": true
@@ -21,7 +20,6 @@
 			"label": "Run Tests (GUI)",
 			"type": "shell",
 			"command": "uv run pytest test_pygame",
-			"problemMatcher": ["$python"],
 			"group": "test"
 		},
 		{
@@ -45,7 +43,6 @@
 			"label": "Run Tests (Show All Warnings)",
 			"type": "shell",
 			"command": "uv run pytest tests --disable-warnings --tb=short -v",
-			"problemMatcher": ["$python"],
 			"group": "test"
 		},
 		{
@@ -66,7 +63,6 @@
 			"label": "Run Tests with Coverage",
 			"type": "shell",
 			"command": "uv run pytest tests",
-			"problemMatcher": ["$python"],
 			"group": "test",
 			"presentation": {
 				"echo": true,
@@ -87,8 +83,7 @@
 				"focus": false,
 				"panel": "shared"
 			}
-		}
-		,
+		},
 		{
 			"label": "Map Verification (CI Mode)",
 			"type": "shell",
@@ -101,6 +96,11 @@
 				"focus": false,
 				"panel": "shared"
 			}
+		},
+		{
+			"label": "Ruff: Format and Fix",
+			"type": "shell",
+			"command": "uv run ruff check --fix . --output-format concise; uv run ruff format .; uv run ruff check . --statistics"
 		}
 	]
 }

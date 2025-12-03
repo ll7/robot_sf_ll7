@@ -117,7 +117,7 @@ class SNQIWeightRecomputer:
 
     def balanced_weights(self) -> dict[str, float]:
         """Return balanced weight configuration."""
-        return {name: 1.0 for name in self.weight_names}
+        return dict.fromkeys(self.weight_names, 1.0)
 
     def safety_focused_weights(self) -> dict[str, float]:
         """Return safety-focused weight configuration."""
@@ -427,7 +427,7 @@ def _select_recommended(strategy_results: dict[str, Any]) -> tuple[str, dict[str
             best_score = score
             best_name = name
     if best_name is None:
-        return "", {k: 1.0 for k in WEIGHT_NAMES}
+        return "", dict.fromkeys(WEIGHT_NAMES, 1.0)
     return best_name, dict(strategy_results[best_name]["weights"])  # copy
 
 

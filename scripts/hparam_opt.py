@@ -34,7 +34,7 @@ class DriveQualityCallback(BaseCallback):
         )
         reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
         threshold_scores = sum(
-            [t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds],
+            t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds
         )
         return threshold_scores / (sum(self.completion_thresholds) * 3)
 

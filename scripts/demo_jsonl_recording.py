@@ -35,7 +35,7 @@ def demo_jsonl_recording():
 
         # Create environment with JSONL recording enabled
         env = cast(
-            RobotEnv,
+            "RobotEnv",
             make_robot_env(
                 recording_enabled=True,
                 use_jsonl_recording=True,
@@ -124,7 +124,7 @@ def demo_batch_analysis():
         # Create a small batch of recordings
         for ep in range(2):
             env = cast(
-                RobotEnv,
+                "RobotEnv",
                 make_robot_env(
                     recording_enabled=True,
                     use_jsonl_recording=True,

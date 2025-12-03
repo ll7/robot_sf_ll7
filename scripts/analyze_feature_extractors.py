@@ -8,7 +8,6 @@ statistical comparisons and visualizations.
 import json
 import warnings
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -106,7 +105,7 @@ class FeatureExtractorAnalyzer:
 
         return pd.DataFrame(summary_data)
 
-    def load_tensorboard_data(self, extractor_name: str) -> Optional[pd.DataFrame]:
+    def load_tensorboard_data(self, extractor_name: str) -> pd.DataFrame | None:
         """
         Load tensorboard data for an extractor (if available).
 
@@ -222,10 +221,10 @@ class FeatureExtractorAnalyzer:
         except OSError as exc:  # pragma: no cover - extremely unlikely fallback
             warnings.warn(f"Could not apply matplotlib style: {exc}", stacklevel=2)
 
-    def _plot_reward_bar(self, df: pd.DataFrame) -> Optional[str]:
+    def _plot_reward_bar(self, df: pd.DataFrame) -> str | None:
         if "best_reward" not in df.columns or not df["best_reward"].notna().any():
             return None
-        fig, ax = plt.subplots(figsize=(12, 6))
+        _fig, ax = plt.subplots(figsize=(12, 6))
         palette = [
             "skyblue",
             "lightgreen",
@@ -254,10 +253,10 @@ class FeatureExtractorAnalyzer:
         plt.close()
         return str(plot_path)
 
-    def _plot_parameter_efficiency(self, df: pd.DataFrame) -> Optional[str]:
+    def _plot_parameter_efficiency(self, df: pd.DataFrame) -> str | None:
         if not all(col in df.columns for col in ["total_parameters", "best_reward"]):
             return None
-        fig, ax = plt.subplots(figsize=(10, 6))
+        _fig, ax = plt.subplots(figsize=(10, 6))
         scatter = ax.scatter(
             df["total_parameters"],
             df["best_reward"],
@@ -285,10 +284,10 @@ class FeatureExtractorAnalyzer:
         plt.close()
         return str(plot_path)
 
-    def _plot_training_time(self, df: pd.DataFrame) -> Optional[str]:
+    def _plot_training_time(self, df: pd.DataFrame) -> str | None:
         if "training_time" not in df.columns or not df["training_time"].notna().any():
             return None
-        fig, ax = plt.subplots(figsize=(12, 6))
+        _fig, ax = plt.subplots(figsize=(12, 6))
         palette = [
             "lightblue",
             "lightgreen",
@@ -317,7 +316,7 @@ class FeatureExtractorAnalyzer:
         plt.close()
         return str(plot_path)
 
-    def _plot_multi_metric_radar(self, df: pd.DataFrame) -> Optional[str]:
+    def _plot_multi_metric_radar(self, df: pd.DataFrame) -> str | None:
         if len(df) <= 1:
             return None
         try:
@@ -344,7 +343,7 @@ class FeatureExtractorAnalyzer:
             angles = np.linspace(0, 2 * np.pi, len(available_metrics), endpoint=False)
             angles = np.concatenate((angles, [angles[0]]))
             colors = ["red", "blue", "green", "orange", "purple", "brown"]
-            fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={"projection": "polar"})
+            _fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={"projection": "polar"})
             for i, (_, row) in enumerate(df.iterrows()):
                 values = [df_norm.iloc[i][metric] for metric in available_metrics]
                 values = np.concatenate((values, [values[0]]))
@@ -361,7 +360,10 @@ class FeatureExtractorAnalyzer:
             ax.set_xticklabels([m.replace("_", " ").title() for m in available_metrics])
             ax.set_ylim(0, 1)
             ax.set_title(
-                "Multi-Metric Performance Comparison", fontsize=14, fontweight="bold", pad=20
+                "Multi-Metric Performance Comparison",
+                fontsize=14,
+                fontweight="bold",
+                pad=20,
             )
             ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.0))
             plt.tight_layout()

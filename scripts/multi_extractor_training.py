@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import yaml  # type: ignore
 from loguru import logger
@@ -69,10 +69,10 @@ class RunSettings:
     save_freq: int = 16_000
     n_eval_episodes: int = 5
     device: str = "cpu"
-    seed: Optional[int] = None
-    output_root: Optional[str] = None
+    seed: int | None = None
+    output_root: str | None = None
     notes: list[str] = field(default_factory=list)
-    baseline_extractor: Optional[str] = None
+    baseline_extractor: str | None = None
     convergence_fraction: float = 0.95
 
     @classmethod
@@ -139,7 +139,7 @@ class RunContext:
     test_mode: bool
 
 
-def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -501,7 +501,7 @@ def _run_sb3_training(
 
 def _determine_skip_reason(
     profile: ExtractorConfigurationProfile, context: RunContext
-) -> Optional[str]:
+) -> str | None:
     settings = context.settings
     gpu_available = _gpu_available()
 
@@ -730,7 +730,7 @@ def write_legacy_results(
     destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     _configure_logging(verbose=args.verbose)
 

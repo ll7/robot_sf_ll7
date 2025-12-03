@@ -62,9 +62,9 @@ def run_standardized_benchmark(
     # Record observation space info
     from gymnasium import spaces as _spaces  # local import to avoid global dependency for types
 
-    obs_dict = cast(_spaces.Dict, env.observation_space)
-    drive_space = cast(_spaces.Box, obs_dict["drive_state"])  # type: ignore[index]
-    rays_space = cast(_spaces.Box, obs_dict["rays"])  # type: ignore[index]
+    obs_dict = cast("_spaces.Dict", env.observation_space)
+    drive_space = cast("_spaces.Box", obs_dict["drive_state"])  # type: ignore[index]
+    rays_space = cast("_spaces.Box", obs_dict["rays"])  # type: ignore[index]
 
     obs_space_info = {
         "drive_state_shape": drive_space.shape,

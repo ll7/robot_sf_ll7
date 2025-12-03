@@ -222,7 +222,7 @@ class SNQIWeightOptimizer:
                 best_stability = self.compute_ranking_stability(weights)
             evaluations += 1
         if best_weights is None:  # Fallback (should not happen)
-            best_weights = {k: 1.0 for k in self.weight_names}
+            best_weights = dict.fromkeys(self.weight_names, 1.0)
         # Convert objective back to positive score (we minimized negative)
         positive_score = -best_obj
         best_scores = [

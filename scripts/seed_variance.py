@@ -73,7 +73,7 @@ def compute_seed_variance(
             continue
         arr = np.asarray(seed_means, dtype=float)
         out[g] = {
-            "seeds": int(len(seed_means)),
+            "seeds": len(seed_means),
             "snqi_mean": float(np.mean(arr)),
             "snqi_std": float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0,
             "snqi_cv": float(np.std(arr, ddof=1) / (np.mean(arr) + 1e-9)) if len(arr) > 1 else 0.0,

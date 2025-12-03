@@ -162,7 +162,7 @@ def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
 def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
     raw_meta = info.get("meta", {}) if isinstance(info, Mapping) else {}
     if isinstance(raw_meta, Mapping):
-        meta: Mapping[str, object] = cast(Mapping[str, object], raw_meta)
+        meta: Mapping[str, object] = cast("Mapping[str, object]", raw_meta)
     else:
         meta = {}
     success = 1.0 if bool(meta.get("is_route_complete")) else 0.0

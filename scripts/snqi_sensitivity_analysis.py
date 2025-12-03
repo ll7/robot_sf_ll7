@@ -87,7 +87,7 @@ class SNQISensitivityAnalyzer:
     ) -> dict[str, Any]:
         """Perform sweep analysis for each weight individually."""
         if weight_ranges is None:
-            weight_ranges = {name: (0.1, 3.0) for name in self.weight_names}
+            weight_ranges = dict.fromkeys(self.weight_names, (0.1, 3.0))
 
         results = {}
 

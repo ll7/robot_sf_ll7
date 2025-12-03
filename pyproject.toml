@@ -213,6 +213,9 @@ select = [
   "TID",    # tidy imports (relative vs absolute)
 ]
 
+fixable = ["ALL"]
+unfixable = []
+
 ignore = [
     # Research/scientific computing patterns that are acceptable
     "PLR0911",  # Too many return statements

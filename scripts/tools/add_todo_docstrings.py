@@ -244,7 +244,26 @@ def _function_returns_value(node: ast.FunctionDef | ast.AsyncFunctionDef) -> boo
 
     visitor = ReturnVisitor()
     visitor.visit(node)
-    return visitor.returns_value
+    return visitor.returns_value or _has_non_none_return_annotation(node)
+
+
+def _has_non_none_return_annotation(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Check whether a function is annotated with a non-None return type.
+
+    Returns:
+        bool: True if the return annotation is not None/NoReturn/ellipsis.
+    """
+
+    annotation = node.returns
+    if annotation is None:
+        return False
+    if isinstance(annotation, ast.Constant):
+        return annotation.value is not None and annotation.value is not Ellipsis
+    if isinstance(annotation, ast.Name):
+        return annotation.id not in {"None", "NoReturn"}
+    if isinstance(annotation, ast.Attribute):
+        return annotation.attr not in {"None", "NoReturn"}
+    return True
 
 
 def _arg_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:

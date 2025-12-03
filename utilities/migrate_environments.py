@@ -9,6 +9,7 @@ suggest or make changes automatically.
 
 import argparse
 import re
+from datetime import datetime
 from pathlib import Path
 
 
@@ -223,8 +224,6 @@ class EnvironmentMigrator:
     def generate_migration_report(self, directories: list[str] | None = None) -> str:
         """Generate a comprehensive migration report."""
         files = self.find_python_files(directories)
-
-        from datetime import datetime
 
         current_date = datetime.now().strftime("%B %d, %Y")
 

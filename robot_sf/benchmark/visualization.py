@@ -94,6 +94,7 @@ _MATPLOTLIB_INITIALIZED = False
 
 
 def _ensure_matplotlib_backend() -> None:
+    """TODO docstring. Document this function."""
     global _MATPLOTLIB_INITIALIZED
     if _MATPLOTLIB_INITIALIZED:
         return
@@ -103,16 +104,19 @@ def _ensure_matplotlib_backend() -> None:
 
 
 def _get_pyplot():
+    """TODO docstring. Document this function."""
     _ensure_matplotlib_backend()
     return importlib.import_module("matplotlib.pyplot")
 
 
 def _load_replay_types():
+    """TODO docstring. Document this function."""
     module = importlib.import_module("robot_sf.benchmark.full_classic.replay")
     return module.ReplayEpisode, module.ReplayStep
 
 
 def _load_image_sequence_clip():
+    """TODO docstring. Document this function."""
     module = importlib.import_module("moviepy.video.io.ImageSequenceClip")
     return module.ImageSequenceClip
 
@@ -145,6 +149,13 @@ class VisualizationError(Exception):
     """Raised when visualization generation fails."""
 
     def __init__(self, message: str, artifact_type: str, details: dict | None = None):
+        """TODO docstring. Document this function.
+
+        Args:
+            message: TODO docstring.
+            artifact_type: TODO docstring.
+            details: TODO docstring.
+        """
         super().__init__(message)
         self.artifact_type = artifact_type
         self.details = details or {}
@@ -842,6 +853,15 @@ def _create_pixel_converter(bounds: tuple[float, float, float, float]):
     height, width = 320, 320
 
     def to_pixel(x: float, y: float) -> tuple[int, int]:
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+            y: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         norm_x = (x - min_x) / span_x
         norm_y = (y - min_y) / span_y
         col = int(np.clip(norm_x * (width - 1), 0, width - 1))
@@ -925,6 +945,7 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
 
         # Use a generator to avoid loading all frames into memory at once
         def frame_generator():
+            """TODO docstring. Document this function."""
             yield from frames
 
         # Create a temporary audio file path (even though audio=False, moviepy expects it)

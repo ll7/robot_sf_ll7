@@ -20,6 +20,14 @@ from robot_sf.research.schema_loader import load_schema, validate_data
 
 @pytest.fixture(name="report_dir")
 def report_artifacts_dir(tmp_path: Path) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out_dir = tmp_path / "report"
     orchestrator = ReportOrchestrator(out_dir)
     seeds = [1, 2, 3]
@@ -47,11 +55,24 @@ def report_artifacts_dir(tmp_path: Path) -> Path:
 
 
 def _load(path: Path) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_hypothesis_schema(report_dir: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        report_dir: TODO docstring.
+    """
     hypothesis_path = report_dir / "data" / "hypothesis.json"
     assert hypothesis_path.exists(), "hypothesis.json missing"
     data = _load(hypothesis_path)
@@ -61,6 +82,11 @@ def test_hypothesis_schema(report_dir: Path):
 
 
 def test_metrics_schema(report_dir: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        report_dir: TODO docstring.
+    """
     metrics_path = report_dir / "data" / "metrics.json"
     assert metrics_path.exists(), "metrics.json missing"
     data = _load(metrics_path)
@@ -70,6 +96,11 @@ def test_metrics_schema(report_dir: Path):
 
 
 def test_metadata_schema(report_dir: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        report_dir: TODO docstring.
+    """
     metadata_path = report_dir / "metadata.json"
     assert metadata_path.exists(), "metadata.json missing"
     data = _load(metadata_path)

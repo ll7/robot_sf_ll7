@@ -311,10 +311,21 @@ class InteractivePlayback(SimulationView):
     # Property to ensure direct assignment also updates deques
     @property
     def max_trajectory_length(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return getattr(self, "_max_trajectory_length", 100)
 
     @max_trajectory_length.setter
     def max_trajectory_length(self, value: int) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            value: TODO docstring.
+        """
         clamped = max(10, min(int(value), 500))
         old = getattr(self, "_max_trajectory_length", None)
         if old == clamped:

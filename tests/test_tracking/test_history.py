@@ -22,10 +22,20 @@ _FIXTURES = Path(__file__).parent / "fixtures" / "history_runs"
 
 
 def _copy_history_fixtures(target_root: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        target_root: TODO docstring.
+    """
     shutil.copytree(_FIXTURES, target_root, dirs_exist_ok=True)
 
 
 def test_history_filters_runs(tmp_path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     config = RunTrackerConfig(artifact_root=tmp_path)
     _copy_history_fixtures(config.run_tracker_root)
 
@@ -48,6 +58,11 @@ def test_history_filters_runs(tmp_path: Path) -> None:
 
 
 def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     config = RunTrackerConfig(artifact_root=tmp_path)
     _copy_history_fixtures(config.run_tracker_root)
 
@@ -76,6 +91,11 @@ def test_history_discovers_nested_runs_and_filters_scenarios(tmp_path: Path) -> 
 
 
 def test_failure_guard_marks_failed_steps(run_tracker_config: RunTrackerConfig) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_tracker_config: TODO docstring.
+    """
     writer = ManifestWriter(run_tracker_config, run_id="guard-demo")
     tracker = ProgressTracker(
         [

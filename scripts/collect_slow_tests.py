@@ -61,6 +61,7 @@ def parse(lines: list[str]) -> list[dict[str, object]]:
 
 
 def main() -> None:
+    """TODO docstring. Document this function."""
     parser = argparse.ArgumentParser(description="Parse pytest --durations output to JSON")
     parser.add_argument(
         "--input",

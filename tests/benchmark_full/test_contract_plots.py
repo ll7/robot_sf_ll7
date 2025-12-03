@@ -15,6 +15,12 @@ from robot_sf.benchmark.full_classic.plots import generate_plots
 
 
 def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
+    """TODO docstring. Document this function.
+
+    Args:
+        temp_results_dir: TODO docstring.
+        synthetic_episode_record: TODO docstring.
+    """
     out_dir = Path(temp_results_dir) / "plots"
     records = [
         synthetic_episode_record(
@@ -25,7 +31,15 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     ]
 
     class _Metric:
+        """TODO docstring. Document this class."""
+
         def __init__(self, name, mean):
+            """TODO docstring. Document this function.
+
+            Args:
+                name: TODO docstring.
+                mean: TODO docstring.
+            """
             self.name = name
             self.mean = mean
             self.median = mean
@@ -34,7 +48,10 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
             self.median_ci = None
 
     class _Group:
+        """TODO docstring. Document this class."""
+
         def __init__(self):
+            """TODO docstring. Document this function."""
             self.archetype = "crossing"
             self.density = "low"
             self.count = 1
@@ -43,6 +60,8 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     groups = [_Group()]
 
     class _Cfg:
+        """TODO docstring. Document this class."""
+
         smoke = True
 
     artifacts = generate_plots(groups, records, str(out_dir), _Cfg())

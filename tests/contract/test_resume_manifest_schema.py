@@ -26,10 +26,17 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_resume_manifest_invalid_sample_fails():
+    """TODO docstring. Document this function."""
     schema = _load_schema()
     invalid = {"episodes": ["id1", "id2"], "hash": 123}  # missing version, type mismatch
     with pytest.raises(Exception):
@@ -37,6 +44,7 @@ def test_resume_manifest_invalid_sample_fails():
 
 
 def test_resume_manifest_minimal_valid_passes_when_ready():
+    """TODO docstring. Document this function."""
     schema = _load_schema()
     minimal = {
         "version": "v1",

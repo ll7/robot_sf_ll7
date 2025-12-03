@@ -19,6 +19,14 @@ SNAPSHOT_PATH = Path(__file__).parent / "snapshots" / "snqi_optimization_keys_sn
 
 
 def _make_dataset(tmp: Path) -> tuple[Path, Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes_path = tmp / "episodes.jsonl"
     baseline_path = tmp / "baseline.json"
     episodes = [
@@ -61,6 +69,16 @@ def _make_dataset(tmp: Path) -> tuple[Path, Path]:
 
 
 def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        episodes: TODO docstring.
+        baseline: TODO docstring.
+        out: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cmd = [
         sys.executable,
         "scripts/snqi_weight_optimization.py",
@@ -87,6 +105,11 @@ def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
 
 
 def test_snqi_optimization_schema_snapshot(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes, baseline = _make_dataset(tmp_path)
     out_file = tmp_path / "out.json"
     data = _run_script(episodes, baseline, out_file)

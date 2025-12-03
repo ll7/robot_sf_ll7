@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import cos, sin
 
@@ -143,6 +145,7 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
         if self.max_scan_dist <= 0:
@@ -164,28 +167,18 @@ def raycast_pedestrians(
     ped_radius: float,
     ray_angles: np.ndarray,
 ):
-    """
-    Perform raycasting to detect pedestrians within the scanner's range.
+    """Perform raycasts to detect pedestrians within the scanner's range.
 
-    Parameters
-    ----------
-    out_ranges : np.ndarray
-        The output array to store the detected range for each ray.
-        ! This array is modified in place.
-    scanner_pos : Vec2D
-        The position of the scanner.
-    max_scan_range : float
-        The maximum range of the scanner.
-    ped_positions : np.ndarray
-        The positions of the pedestrians.
-    ped_radius : float
-        The radius of the pedestrians.
-    ray_angles : np.ndarray
-        The angles of the rays.
+    Args:
+        out_ranges: Output array modified in-place with the detected range per ray.
+        scanner_pos: Position of the LiDAR sensor in world coordinates.
+        max_scan_range: Maximum detection distance for each ray.
+        ped_positions: Pedestrian positions to test against the rays.
+        ped_radius: Radius used to approximate pedestrians as discs.
+        ray_angles: Ray directions in radians.
 
-    Returns
-    -------
-    output_ranges is modified in place.
+    Notes:
+        ``out_ranges`` is modified in place and no value is returned.
     """
 
     # Check if pedestrian positions array is empty or not 2D
@@ -236,6 +229,14 @@ def raycast_obstacles(
     obstacles: np.ndarray,
     ray_angles: np.ndarray,
 ):
+    """TODO docstring. Document this function.
+
+    Args:
+        out_ranges: TODO docstring.
+        scanner_pos: TODO docstring.
+        obstacles: TODO docstring.
+        ray_angles: TODO docstring.
+    """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
 
@@ -335,6 +336,15 @@ def lidar_ray_scan(
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
+    """TODO docstring. Document this function.
+
+    Args:
+        num_rays: TODO docstring.
+        max_scan_dist: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     high = np.full((num_rays), max_scan_dist, dtype=np.float32)
     low = np.zeros((num_rays), dtype=np.float32)
     return spaces.Box(low=low, high=high, dtype=np.float32)

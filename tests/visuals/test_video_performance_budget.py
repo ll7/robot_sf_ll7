@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -21,6 +23,11 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _write_minimal_matrix(path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     scenarios = [
         {
             "id": "perf-video-uni-low-open",
@@ -47,6 +54,12 @@ moviepy_spec = importlib.util.find_spec("moviepy")
 @pytest.mark.skipif(logger is None, reason="loguru not available")
 def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
     # Force soft breach but not hard; do not enforce
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "1.0")
     monkeypatch.delenv("ROBOT_SF_PERF_ENFORCE", raising=False)
@@ -94,6 +107,12 @@ def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
 @pytest.mark.skipif(moviepy_spec is None, reason="moviepy/ffmpeg not available")
 def test_video_perf_hard_enforce_fails(tmp_path: Path, monkeypatch):
     # Force hard breach and enforce; expect batch to record a failure
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.0")
     monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import json
 from pathlib import Path
 
@@ -14,6 +16,11 @@ SCHEMA_PATH = Path(__file__).resolve().parents[2] / "contracts" / "training_summ
 
 
 def test_summary_json_matches_contract(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     validator = Draft7Validator(schema)
 

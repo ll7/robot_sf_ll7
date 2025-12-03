@@ -28,11 +28,14 @@ if TYPE_CHECKING:
 
 
 def _get_pyplot():
+    """TODO docstring. Document this function."""
     return importlib.import_module("matplotlib.pyplot")
 
 
 @dataclass
 class EvalHistory:
+    """TODO docstring. Document this class."""
+
     timesteps: list[float]
     mean_rewards: list[float]
 
@@ -131,6 +134,14 @@ def generate_figures(
 
 
 def summarize_metric(values: Iterable[float]) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     items = [v for v in values if math.isfinite(v)]
     if not items:
         return {"mean": 0.0, "median": 0.0}

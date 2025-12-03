@@ -17,6 +17,7 @@ from .reporting import SlowTestSample, generate_report
 
 
 def test_slow_report_includes_sample():  # basic functional check
+    """TODO docstring. Document this function."""
     policy = PerformanceBudgetPolicy(
         soft_threshold_seconds=0.05,
         hard_timeout_seconds=1.0,

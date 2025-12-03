@@ -80,26 +80,35 @@ if TYPE_CHECKING:
 
 
 def _load_robot_env_with_image():
+    """TODO docstring. Document this function."""
     module = importlib.import_module("robot_sf.gym_env.robot_env_with_image")
     return module.RobotEnvWithImage
 
 
 def _load_pedestrian_env():
+    """TODO docstring. Document this function."""
     module = importlib.import_module("robot_sf.gym_env.pedestrian_env")
     return module.PedestrianEnv
 
 
 def _load_multi_robot_env():
+    """TODO docstring. Document this function."""
     module = importlib.import_module("robot_sf.gym_env.multi_robot_env")
     return module.MultiRobotEnv
 
 
 def _load_stub_robot_model():
+    """TODO docstring. Document this function."""
     module = importlib.import_module("robot_sf.gym_env._stub_robot_model")
     return module.StubRobotModel
 
 
 def _optional_import(module_name: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        module_name: TODO docstring.
+    """
     try:
         return importlib.import_module(module_name)
     except (ImportError, ModuleNotFoundError):
@@ -128,6 +137,28 @@ class EnvironmentFactory:
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ) -> SingleAgentEnv:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            use_image_obs: TODO docstring.
+            peds_have_obstacle_forces: TODO docstring.
+            reward_func: TODO docstring.
+            debug: TODO docstring.
+            recording_enabled: TODO docstring.
+            record_video: TODO docstring.
+            video_path: TODO docstring.
+            video_fps: TODO docstring.
+            use_jsonl_recording: TODO docstring.
+            recording_dir: TODO docstring.
+            suite_name: TODO docstring.
+            scenario_name: TODO docstring.
+            algorithm_name: TODO docstring.
+            recording_seed: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
@@ -164,6 +195,19 @@ class EnvironmentFactory:
         recording_enabled: bool = False,
         peds_have_obstacle_forces: bool = False,
     ) -> SingleAgentEnv:
+        """TODO docstring. Document this function.
+
+        Args:
+            robot_model: TODO docstring.
+            config: TODO docstring.
+            reward_func: TODO docstring.
+            debug: TODO docstring.
+            recording_enabled: TODO docstring.
+            peds_have_obstacle_forces: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if config is None:
             config = PedestrianSimulationConfig()
         PedestrianEnv = _load_pedestrian_env()
@@ -190,6 +234,17 @@ class EnvironmentFactory:
         reward_func: Callable | None,
         debug: bool,
     ) -> MultiAgentEnv:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            num_robots: TODO docstring.
+            reward_func: TODO docstring.
+            debug: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if config is None:
             config = MultiRobotConfig()
         if config.num_robots != num_robots:
@@ -205,6 +260,12 @@ class EnvironmentFactory:
 
 
 def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
+    """TODO docstring. Document this function.
+
+    Args:
+        mapped: TODO docstring.
+        render: TODO docstring.
+    """
     if "render_options.max_fps_override" in mapped:
         ro = render or RenderOptions()
         ro.max_fps_override = mapped.pop("render_options.max_fps_override")
@@ -213,6 +274,12 @@ def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
 
 
 def _apply_recording(mapped: dict[str, Any], rec: RecordingOptions | None):
+    """TODO docstring. Document this function.
+
+    Args:
+        mapped: TODO docstring.
+        rec: TODO docstring.
+    """
     keys = ("recording_options.record", "recording_options.video_path")
     if any(k in mapped for k in keys):
         out = rec or RecordingOptions()
@@ -303,6 +370,31 @@ def make_robot_env(
     recording_seed: int | None = None,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        seed: TODO docstring.
+        peds_have_obstacle_forces: TODO docstring.
+        reward_func: TODO docstring.
+        debug: TODO docstring.
+        recording_enabled: TODO docstring.
+        record_video: TODO docstring.
+        video_path: TODO docstring.
+        video_fps: TODO docstring.
+        render_options: TODO docstring.
+        recording_options: TODO docstring.
+        use_jsonl_recording: TODO docstring.
+        recording_dir: TODO docstring.
+        suite_name: TODO docstring.
+        scenario_name: TODO docstring.
+        algorithm_name: TODO docstring.
+        recording_seed: TODO docstring.
+        legacy_kwargs: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     """Create a standard robot environment (non-image observations).
 
     Parameters

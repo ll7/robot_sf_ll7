@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from collections.abc import Callable
 from dataclasses import dataclass
 

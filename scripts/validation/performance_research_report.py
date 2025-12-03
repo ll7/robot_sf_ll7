@@ -16,6 +16,12 @@ TARGET_SECONDS = float(os.environ.get("RESEARCH_PERF_BUDGET", "120.0"))
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     start = time.time()
     out_dir = Path(os.environ.get("RESEARCH_REPORT_PERF_DIR", "output/tmp/perf_research_report"))
     out_dir.mkdir(parents=True, exist_ok=True)

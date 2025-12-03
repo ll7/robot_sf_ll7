@@ -32,6 +32,8 @@ from robot_sf.sim.simulator import PedSimulator, Simulator
 
 
 class AgentType(Enum):
+    """TODO docstring. Document this class."""
+
     ROBOT = 1
     PEDESTRIAN = 2
 
@@ -84,9 +86,19 @@ def init_collision_and_sensors(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """TODO docstring. Document this function.
+
+            Args:
+                r_id: TODO docstring.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """TODO docstring. Document this function.
+
+            Args:
+                r_id: TODO docstring.
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
                 sim.goal_pos[r_id],
@@ -94,6 +106,11 @@ def init_collision_and_sensors(
             )
 
         def speed_sensor(r_id=r_id):
+            """TODO docstring. Document this function.
+
+            Args:
+                r_id: TODO docstring.
+            """
             return sim.robots[r_id].current_speed
 
         # Create the sensor fusion object and add it to the list
@@ -166,6 +183,13 @@ def create_spaces(
     agent_type: AgentType = AgentType.ROBOT,
 ):
     # Create a agent using the factory method in the environment configuration
+    """TODO docstring. Document this function.
+
+    Args:
+        env_config: TODO docstring.
+        map_def: TODO docstring.
+        agent_type: TODO docstring.
+    """
     if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
     elif agent_type == AgentType.PEDESTRIAN:
@@ -311,12 +335,27 @@ def init_ped_collision_and_sensors(
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     def ray_sensor(r_id=0):
+        """TODO docstring. Document this function.
+
+        Args:
+            r_id: TODO docstring.
+        """
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
     def target_sensor(r_id=0):
+        """TODO docstring. Document this function.
+
+        Args:
+            r_id: TODO docstring.
+        """
         return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
     def speed_sensor(r_id=0):
+        """TODO docstring. Document this function.
+
+        Args:
+            r_id: TODO docstring.
+        """
         return sim.robots[r_id].current_speed
 
     # Initialize a sensor fusion object for the robot for sensor data handling
@@ -348,9 +387,11 @@ def init_ped_collision_and_sensors(
     )
 
     def ray_sensor_ego_ped():
+        """TODO docstring. Document this function."""
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
     def target_sensor_ego_ped():
+        """TODO docstring. Document this function."""
         return target_sensor_obs(
             sim.ego_ped.pose,
             sim.ego_ped_goal_pos,
@@ -358,6 +399,7 @@ def init_ped_collision_and_sensors(
         )  # TODO: What next goal to choose?
 
     def speed_sensor_ego_ped():
+        """TODO docstring. Document this function."""
         return sim.ego_ped.current_speed
 
     sensor_fusions.append(
@@ -497,9 +539,19 @@ def init_collision_and_sensors_with_image(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """TODO docstring. Document this function.
+
+            Args:
+                r_id: TODO docstring.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """TODO docstring. Document this function.
+
+            Args:
+                r_id: TODO docstring.
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
                 sim.goal_pos[r_id],
@@ -507,6 +559,11 @@ def init_collision_and_sensors_with_image(
             )
 
         def speed_sensor(r_id=r_id):
+            """TODO docstring. Document this function.
+
+            Args:
+                r_id: TODO docstring.
+            """
             return sim.robots[r_id].current_speed
 
         # Create appropriate sensor fusion based on configuration

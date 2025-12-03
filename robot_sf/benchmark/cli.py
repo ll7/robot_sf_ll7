@@ -52,6 +52,14 @@ DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schem
 
 
 def _handle_baseline(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         progress_cb = _progress_cb_factory(bool(args.quiet))
         run_and_compute_baseline(
@@ -84,6 +92,14 @@ def _handle_baseline(args) -> int:
 
 
 def _handle_list_algorithms(_args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        _args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         # Show built-in simple policy
         algorithms = ["simple_policy"]
@@ -105,6 +121,11 @@ def _handle_list_algorithms(_args) -> int:
 
 
 def _load_snqi_inputs(args):
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+    """
     snqi_weights = None
     snqi_baseline = None
     # Priority: explicit weights JSON
@@ -130,6 +151,11 @@ def _load_snqi_inputs(args):
 
 def _progress_cb_factory(quiet: bool):
     # Try to use tqdm when available
+    """TODO docstring. Document this function.
+
+    Args:
+        quiet: TODO docstring.
+    """
     pbar = None
     if not quiet:
         try:  # pragma: no cover - tqdm optional
@@ -141,6 +167,16 @@ def _progress_cb_factory(quiet: bool):
             pbar = None
 
     def _cb(i, total, sc, seed, ok, err):
+        """TODO docstring. Document this function.
+
+        Args:
+            i: TODO docstring.
+            total: TODO docstring.
+            sc: TODO docstring.
+            seed: TODO docstring.
+            ok: TODO docstring.
+            err: TODO docstring.
+        """
         if quiet:
             return
         status = "ok" if ok else "FAIL"
@@ -162,6 +198,14 @@ def _progress_cb_factory(quiet: bool):
 
 
 def _handle_run(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         # Optional: load SNQI weights/baseline for inline SNQI computation
         try:
@@ -200,6 +244,14 @@ def _handle_run(args) -> int:
 
 
 def _handle_summary(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         summarize_to_plots(args.in_path, args.out_dir)
         try:
@@ -212,6 +264,14 @@ def _handle_summary(args) -> int:
 
 
 def _handle_aggregate(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         # Optional: load SNQI inputs to compute metrics.snqi during aggregation
         snqi_weights = None
@@ -260,6 +320,14 @@ def _handle_aggregate(args) -> int:
 
 
 def _handle_snqi_ablate(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         snqi_weights, snqi_baseline = _load_snqi_inputs(args)
@@ -306,6 +374,14 @@ def _handle_snqi_ablate(args) -> int:
 
 
 def _handle_seed_variance(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         metrics = None
@@ -332,6 +408,14 @@ def _handle_seed_variance(args) -> int:
 
 
 def _handle_extract_failures(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         failures = _extract_failures(
@@ -363,6 +447,14 @@ def _handle_extract_failures(args) -> int:
 
 
 def _handle_rank(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         rows = _compute_ranking(
@@ -396,6 +488,14 @@ def _handle_rank(args) -> int:
 
 
 def _handle_table(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
@@ -430,6 +530,14 @@ def _handle_table(args) -> int:
 
 
 def _handle_debug_seeds(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         report = _set_seed(int(args.seed), deterministic=bool(args.deterministic))
         sample = _seed_sample(n=5)
@@ -447,6 +555,14 @@ def _handle_debug_seeds(args) -> int:
 
 
 def _handle_plot_pareto(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         _save_pareto_png(
@@ -468,6 +584,14 @@ def _handle_plot_pareto(args) -> int:
 
 
 def _handle_plot_distributions(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         records = _agg_read_jsonl(args.in_path)
         metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
@@ -494,6 +618,14 @@ def _handle_plot_distributions(args) -> int:
 
 
 def _handle_plot_scenarios(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         scenarios = load_scenario_matrix(args.matrix)
         # Ignore repeats for thumbnails by deduping by id order-preserving
@@ -525,6 +657,14 @@ def _handle_plot_scenarios(args) -> int:
 
 
 def _handle_list_scenarios(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         scenarios = load_scenario_matrix(args.matrix)
         ids = [str(s.get("id", "unknown")) for s in scenarios]
@@ -536,6 +676,14 @@ def _handle_list_scenarios(args) -> int:
 
 
 def _handle_validate_config(args) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         scenarios = load_scenario_matrix(args.matrix)
         errors = validate_scenario_list(scenarios)
@@ -554,6 +702,11 @@ def _handle_validate_config(args) -> int:
 def _add_baseline_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "baseline",
         help="Run batch and compute baseline med/p95 stats for SNQI",
@@ -599,6 +752,11 @@ def _add_baseline_subparser(
 def _add_run_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "run",
         help="Run a batch of episodes from a scenario matrix and write JSONL with real plots/videos",
@@ -681,6 +839,11 @@ def _add_run_subparser(
 def _add_list_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "list-algorithms",
         help="List available baseline algorithms",
@@ -706,6 +869,11 @@ def _add_list_subparser(
 def _add_summary_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "summary",
         help="Generate real statistical plots (PDF histograms, distributions) from episode JSONL",
@@ -718,6 +886,11 @@ def _add_summary_subparser(
 def _add_aggregate_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "aggregate",
         help=(
@@ -768,6 +941,11 @@ def _add_aggregate_subparser(
 def _add_snqi_ablate_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "snqi-ablate",
         help="Compute rank shifts from one-at-a-time SNQI component removal",
@@ -812,6 +990,11 @@ def _add_snqi_ablate_subparser(
 def _add_seed_variance_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "seed-variance",
         help=("Compute per-metric variability across seeds for groups; writes JSON summary"),
@@ -839,6 +1022,11 @@ def _add_seed_variance_subparser(
 def _add_extract_failures_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "extract-failures",
         help="Filter episodes with collisions/low comfort/near-misses/SNQI threshold",
@@ -881,6 +1069,11 @@ def _add_extract_failures_subparser(
 def _add_rank_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "rank",
         help=("Compute rankings by mean of a metric per group and write as Markdown/CSV/JSON"),
@@ -914,6 +1107,11 @@ def _add_rank_subparser(
 def _add_table_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "table",
         help=(
@@ -950,6 +1148,11 @@ def _add_table_subparser(
 def _add_debug_seeds_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "debug-seeds",
         help="Set global seeds (random, numpy, torch) and print a small state sample.",
@@ -968,6 +1171,11 @@ def _add_debug_seeds_subparser(
 def _add_plot_pareto_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "plot-pareto",
         help="Plot a Pareto front for two metrics grouped by algo (PNG)",
@@ -997,6 +1205,11 @@ def _add_plot_pareto_subparser(
 def _add_plot_distributions_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "plot-distributions",
         help="Plot per-metric distributions (histograms, optional KDE) per group",
@@ -1041,6 +1254,11 @@ def _add_plot_distributions_subparser(
 def _add_plot_scenarios_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     p = subparsers.add_parser(
         "plot-scenarios",
         help="Render per-scenario thumbnails (PNG/PDF) and optional montage",
@@ -1057,6 +1275,12 @@ def _add_plot_scenarios_subparser(
 
 
 def _base_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(
         prog="robot_sf_bench",
         description="Social Navigation Benchmark CLI",
@@ -1101,6 +1325,11 @@ def configure_logging(quiet: bool, level: str) -> None:
 
 
 def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        parser: TODO docstring.
+    """
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)
     _add_run_subparser(subparsers)
@@ -1129,6 +1358,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     def _add_snqi_optimize(
         sp: argparse._SubParsersAction[argparse.ArgumentParser],
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            sp: TODO docstring.
+        """
         p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
         p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
@@ -1219,6 +1453,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     def _add_snqi_recompute(
         sp: argparse._SubParsersAction[argparse.ArgumentParser],
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            sp: TODO docstring.
+        """
         p = sp.add_parser("recompute", help="Recompute SNQI weights via predefined strategies")
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
         p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
@@ -1310,9 +1549,19 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         return mod
 
     def _get_opt_run(mod):  # type: ignore[no-untyped-def]
+        """TODO docstring. Document this function.
+
+        Args:
+            mod: TODO docstring.
+        """
         return mod.run
 
     def _get_recompute_run(mod):  # type: ignore[no-untyped-def]
+        """TODO docstring. Document this function.
+
+        Args:
+            mod: TODO docstring.
+        """
         return mod.run
 
     def _ensure_snqi_opt_defaults(args: argparse.Namespace) -> None:
@@ -1351,6 +1600,14 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         return _get_opt_run(_OPT_MOD)
 
     def _invoke_snqi_opt(args: argparse.Namespace) -> int:
+        """TODO docstring. Document this function.
+
+        Args:
+            args: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         _ensure_snqi_opt_defaults(args)
         if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
             return 0
@@ -1360,6 +1617,14 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         return int(run_fn(args))  # type: ignore[no-any-return]
 
     def _invoke_snqi_recompute(args: argparse.Namespace) -> int:
+        """TODO docstring. Document this function.
+
+        Args:
+            args: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
             return 0
         nonlocal _RECOMP_MOD
@@ -1383,6 +1648,12 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = _base_parser()
     _attach_core_subcommands(parser)
     # Install intermixed args behavior directly so both get_parser() and cli_main share it.
@@ -1390,6 +1661,12 @@ def _configure_parser() -> argparse.ArgumentParser:
         _orig = parser.parse_args  # type: ignore[assignment]
 
         def _mixed_parse(args=None, namespace=None):  # type: ignore[override]
+            """TODO docstring. Document this function.
+
+            Args:
+                args: TODO docstring.
+                namespace: TODO docstring.
+            """
             if args is not None:
                 # Allow global flags placed after the subcommand by hoisting them before parsing.
                 # Pattern observed in tests: [subcommand, --log-level, DEBUG, --quiet]
@@ -1460,6 +1737,12 @@ def get_parser() -> argparse.ArgumentParser:
         _orig = parser.parse_args  # type: ignore[assignment]
 
         def _mixed_parse(args=None, namespace=None):  # type: ignore[override]
+            """TODO docstring. Document this function.
+
+            Args:
+                args: TODO docstring.
+                namespace: TODO docstring.
+            """
             try:  # pragma: no cover - fallback path only hit if feature absent/fails
                 return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
             except Exception:
@@ -1470,6 +1753,14 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def cli_main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = _configure_parser()
     args = parser.parse_args(argv)
     _configure_logging(getattr(args, "quiet", False), getattr(args, "log_level", "INFO"))
@@ -1516,6 +1807,7 @@ def cli_main(argv: list[str] | None = None) -> int:
 
 
 def main() -> None:  # pragma: no cover - thin wrapper
+    """TODO docstring. Document this function."""
     raise SystemExit(cli_main())
 
 

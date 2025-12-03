@@ -29,6 +29,11 @@ BIN = ["uv", "run", "robot_sf_bench"]  # rely on project script entry via uv
 
 @pytest.fixture()
 def snqi_inputs(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
     output = tmp_path / "out.json"
@@ -46,6 +51,15 @@ def _run_cmd(
     args: list[str],
     env_extra: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+        env_extra: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     env = os.environ.copy()
     env["ROBOT_SF_SNQI_LIGHT_TEST"] = "1"  # ensure fast path
     if env_extra:
@@ -54,6 +68,11 @@ def _run_cmd(
 
 
 def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
+    """TODO docstring. Document this function.
+
+    Args:
+        snqi_inputs: TODO docstring.
+    """
     cp = _run_cmd(
         [
             *BIN,
@@ -71,6 +90,11 @@ def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
 
 
 def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
+    """TODO docstring. Document this function.
+
+    Args:
+        snqi_inputs: TODO docstring.
+    """
     cp = _run_cmd(
         [
             *BIN,
@@ -88,6 +112,7 @@ def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
 
 
 def test_snqi_missing_subcommand():
+    """TODO docstring. Document this function."""
     cp = _run_cmd([*BIN, "snqi"])  # no subcommand
     # Argparse prints help and we expect non-zero exit (2 from our dispatcher)
     assert cp.returncode == 2, cp.stderr

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass
 from math import dist
 

@@ -28,6 +28,15 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def _ensure_file(path: Path, content: str) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        content: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     resolved = resolve_artifact_path(path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
     if not resolved.exists():
@@ -36,6 +45,12 @@ def _ensure_file(path: Path, content: str) -> Path:
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     ap = argparse.ArgumentParser(description="SNQI figures example runner")
     ap.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL path")
     ap.add_argument("--weights", type=Path, default=None, help="SNQI weights JSON path")

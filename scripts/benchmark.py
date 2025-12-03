@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import time
 
 from scalene import scalene_profiler
@@ -7,6 +9,7 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():
+    """TODO docstring. Document this function."""
     total_steps = 10000
     env = RobotEnv()
     model = load_trained_policy("./model/ppo_model")

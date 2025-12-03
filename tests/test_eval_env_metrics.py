@@ -6,6 +6,7 @@ from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics
 
 
 def test_total_routes():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.total_routes == 1
     metrics.route_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -13,6 +14,7 @@ def test_total_routes():
 
 
 def test_total_intermediate_goals():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.total_intermediate_goals == 1
     metrics.intermediate_goal_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -20,6 +22,7 @@ def test_total_intermediate_goals():
 
 
 def test_pedestrian_collisions():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.pedestrian_collisions == 0
     metrics.route_outcomes.append(EnvOutcome.PEDESTRIAN_COLLISION)
@@ -27,6 +30,7 @@ def test_pedestrian_collisions():
 
 
 def test_obstacle_collisions():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.obstacle_collisions == 0
     metrics.route_outcomes.append(EnvOutcome.OBSTACLE_COLLISION)
@@ -34,6 +38,7 @@ def test_obstacle_collisions():
 
 
 def test_exceeded_timesteps():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.exceeded_timesteps == 0
     metrics.route_outcomes.append(EnvOutcome.TIMEOUT)
@@ -41,6 +46,7 @@ def test_exceeded_timesteps():
 
 
 def test_completed_routes():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.completed_routes == 0
     metrics.route_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -48,6 +54,7 @@ def test_completed_routes():
 
 
 def test_reached_intermediate_goals():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     assert metrics.reached_intermediate_goals == 0
     metrics.intermediate_goal_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -55,6 +62,7 @@ def test_reached_intermediate_goals():
 
 
 def test_robot_collisions():
+    """TODO docstring. Document this function."""
     metrics = PedEnvMetrics()
     assert metrics.robot_collisions == 0
     metrics.route_outcomes.append(EnvOutcome.ROBOT_COLLISION)
@@ -62,6 +70,7 @@ def test_robot_collisions():
 
 
 def test_update():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     meta = {
         "is_pedestrian_collision": False,
@@ -76,6 +85,7 @@ def test_update():
 
 
 def test_on_next_intermediate_outcome():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     meta = {
         "is_pedestrian_collision": False,
@@ -88,6 +98,7 @@ def test_on_next_intermediate_outcome():
 
 
 def test_on_next_route_outcome():
+    """TODO docstring. Document this function."""
     metrics = EnvMetrics()
     meta = {
         "is_pedestrian_collision": False,
@@ -100,6 +111,7 @@ def test_on_next_route_outcome():
 
 
 def test_ped_update():
+    """TODO docstring. Document this function."""
     metrics = PedEnvMetrics()
     meta = {
         "is_pedestrian_collision": False,

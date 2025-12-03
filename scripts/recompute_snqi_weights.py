@@ -86,12 +86,27 @@ class SNQIWeightRecomputer:
     """
 
     def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
+        """TODO docstring. Document this function.
+
+        Args:
+            episodes_data: TODO docstring.
+            baseline_stats: TODO docstring.
+        """
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = WEIGHT_NAMES
         self.simplex = False  # toggled externally
 
     def _maybe_simplex(self, weights: dict[str, float], total: float = 10.0) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            weights: TODO docstring.
+            total: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not self.simplex:
             return weights
         s = sum(weights.values())
@@ -395,6 +410,14 @@ def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -406,6 +429,15 @@ def _compute_strategy_set(
     recomputer: SNQIWeightRecomputer,
     strategies: list[str],
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        recomputer: TODO docstring.
+        strategies: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: dict[str, Any] = {}
     for name in strategies:
         try:
@@ -416,6 +448,14 @@ def _compute_strategy_set(
 
 
 def _select_recommended(strategy_results: dict[str, Any]) -> tuple[str, dict[str, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        strategy_results: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     best_name: str | None = None
     best_score = -float("inf")
     for name, data in strategy_results.items():
@@ -440,7 +480,25 @@ def _augment_metadata(
     original_episode_count: int | None = None,
     used_episode_count: int | None = None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        args: TODO docstring.
+        start_iso: TODO docstring.
+        start_perf: TODO docstring.
+        phase_timings: TODO docstring.
+        original_episode_count: TODO docstring.
+        used_episode_count: TODO docstring.
+    """
+
     def _git_commit() -> str:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         try:
             return (
                 subprocess.check_output(
@@ -484,6 +542,12 @@ def _augment_metadata(
 
 
 def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        args: TODO docstring.
+    """
     if args.compare_strategies:
         method_descriptor = results.get("recommended_strategy")
     else:
@@ -507,6 +571,13 @@ def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None
 
 
 def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        args: TODO docstring.
+        episodes_count: TODO docstring.
+    """
     lines: list[str] = []
     lines.append("Weight Recomputation Summary:")
     lines.append(f"Episodes analyzed: {episodes_count}")
@@ -538,6 +609,14 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_c
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description="SNQI Weight Recomputation")
     parser.add_argument(
         "--episodes",
@@ -678,6 +757,14 @@ def _detect_missing_baseline_metrics(
 
 
 def run(args: argparse.Namespace) -> int:  # noqa: C901
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
     phase_start = start_perf
@@ -889,6 +976,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))
     return run(args)

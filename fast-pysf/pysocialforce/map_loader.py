@@ -45,6 +45,14 @@ def load_map(file_path: str | Path) -> MapDefinition:
 
             # Helper to coerce truthy/falsey strings and numbers to bool
             def _as_bool(value) -> bool:
+                """TODO docstring. Document this function.
+
+                Args:
+                    value: TODO docstring.
+
+                Returns:
+                    TODO docstring.
+                """
                 if isinstance(value, bool):
                     return value
                 if isinstance(value, numbers.Real):

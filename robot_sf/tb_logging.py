@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import SummaryWriter, TensorBoardOutputFormat
 
@@ -5,20 +7,36 @@ from robot_sf.eval import EnvMetrics, PedEnvMetrics, PedVecEnvMetrics, VecEnvMet
 
 
 class BaseMetricsCallback(BaseCallback):
+    """TODO docstring. Document this class."""
+
     def __init__(self):
+        """TODO docstring. Document this function."""
         super().__init__()
         self.writer: SummaryWriter | None = None
         self._log_freq = 1000  # log every 1000 calls
 
     @property
     def meta_dicts(self) -> list[dict]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return [m["meta"] for m in self.locals["infos"]]
 
     @property
     def is_logging_step(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.n_calls % self._log_freq == 0
 
     def _on_training_start(self):
+        """TODO docstring. Document this function."""
         if self.logger is not None:
             output_formats = self.logger.output_formats
             tb_formatter: TensorBoardOutputFormat | None = next(
@@ -32,15 +50,34 @@ class BaseMetricsCallback(BaseCallback):
 
     # Define an abstract method for _on_step() if needed
     def _on_step(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         raise NotImplementedError
 
 
 class DrivingMetricsCallback(BaseMetricsCallback):
+    """TODO docstring. Document this class."""
+
     def __init__(self, num_envs: int):
+        """TODO docstring. Document this function.
+
+        Args:
+            num_envs: TODO docstring.
+        """
         super().__init__()
         self.metrics = VecEnvMetrics([EnvMetrics() for _ in range(num_envs)])
 
     def _on_step(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         self.metrics.update(self.meta_dicts)
 
         if self.writer is not None and self.is_logging_step:
@@ -74,11 +111,24 @@ class DrivingMetricsCallback(BaseMetricsCallback):
 
 
 class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
+    """TODO docstring. Document this class."""
+
     def __init__(self, num_envs: int):
+        """TODO docstring. Document this function.
+
+        Args:
+            num_envs: TODO docstring.
+        """
         super().__init__()
         self.metrics = PedVecEnvMetrics([PedEnvMetrics() for _ in range(num_envs)])
 
     def _on_step(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         self.metrics.update(self.meta_dicts)
 
         if self.writer is not None and self.is_logging_step:

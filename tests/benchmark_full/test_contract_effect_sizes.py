@@ -11,8 +11,18 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 def test_compute_effect_sizes_structure():
+    """TODO docstring. Document this function."""
+
     class _Metric:
+        """TODO docstring. Document this class."""
+
         def __init__(self, name, mean):
+            """TODO docstring. Document this function.
+
+            Args:
+                name: TODO docstring.
+                mean: TODO docstring.
+            """
             self.name = name
             self.mean = mean
             self.median = mean
@@ -21,7 +31,16 @@ def test_compute_effect_sizes_structure():
             self.median_ci = None
 
     class _Group:
+        """TODO docstring. Document this class."""
+
         def __init__(self, archetype, density, mean_collision):
+            """TODO docstring. Document this function.
+
+            Args:
+                archetype: TODO docstring.
+                density: TODO docstring.
+                mean_collision: TODO docstring.
+            """
             self.archetype = archetype
             self.density = density
             self.count = 10
@@ -33,6 +52,8 @@ def test_compute_effect_sizes_structure():
     ]
 
     class _Cfg:
+        """TODO docstring. Document this class."""
+
         effect_size_reference_density = "low"
 
     reports = compute_effect_sizes(groups, _Cfg())

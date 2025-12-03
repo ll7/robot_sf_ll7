@@ -422,6 +422,14 @@ class MapDefinitionPool:
 
         # Function to load a JSON file
         def load_json(path: str) -> dict:
+            """TODO docstring. Document this function.
+
+            Args:
+                path: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             with open(path, encoding="utf-8") as file:
                 return json.load(file)
 
@@ -482,6 +490,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Function to normalize a position
     def norm_pos(pos: Vec2D) -> Vec2D:
+        """TODO docstring. Document this function.
+
+        Args:
+            pos: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return (pos[0] - min_x, pos[1] - min_y)
 
     # Normalize the obstacles
@@ -491,6 +507,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Function to normalize a zone
     def norm_zone(rect: Rect) -> Rect:
+        """TODO docstring. Document this function.
+
+        Args:
+            rect: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
     # Normalize the zones
@@ -524,6 +548,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Function to reverse a route
     def reverse_route(route: GlobalRoute) -> GlobalRoute:
+        """TODO docstring. Document this function.
+
+        Args:
+            route: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return GlobalRoute(
             route.goal_id,
             route.spawn_id,

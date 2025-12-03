@@ -66,6 +66,8 @@ def _iso() -> str:  # small helper
 
 @dataclass
 class SeedSummary:
+    """TODO docstring. Document this class."""
+
     seed: int
     baseline_status: str
     pretrained_status: str
@@ -177,6 +179,14 @@ class ReportOrchestrator:
         """Build artifact manifest entries relative to the output directory."""
 
         def _relative(path: Path) -> str:
+            """TODO docstring. Document this function.
+
+            Args:
+                path: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             try:
                 return str(path.relative_to(self.output_dir))
             except ValueError:  # pragma: no cover
@@ -304,6 +314,14 @@ class ReportOrchestrator:
         """Load manifests into a seed→payload map, skipping invalid entries."""
 
         def _load(path: Path) -> dict[str, Any] | None:
+            """TODO docstring. Document this function.
+
+            Args:
+                path: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             try:
                 with path.open(encoding="utf-8") as f:
                     return json.load(f)

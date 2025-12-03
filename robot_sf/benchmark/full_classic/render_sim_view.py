@@ -55,6 +55,7 @@ else:  # pragma: no cover - trivial branch
 
 
 def _assert_ready() -> None:
+    """TODO docstring. Document this function."""
     if not has_pygame() or SimulationView is None or not simulation_view_ready():  # type: ignore
         raise RuntimeError(
             "SimulationView not available (pygame or probe failed); caller should fallback",
@@ -161,6 +162,16 @@ __all__ = ["generate_frames"]
 
 
 def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
+    """TODO docstring. Document this function.
+
+    Args:
+        step: TODO docstring.
+        idx: TODO docstring.
+        dt: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     ped_positions = np.asarray(step.ped_positions or [], dtype=float)
     ray_vecs = (
         np.asarray(step.ray_vecs, dtype=float) if step.ray_vecs is not None else np.zeros((0, 2))
@@ -190,6 +201,14 @@ def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
 
 def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
     # Try to reuse already converted map from episode if present
+    """TODO docstring. Document this function.
+
+    Args:
+        ep: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if hasattr(ep, "_map_def_cache"):
         return ep._map_def_cache
     map_def = None
@@ -206,6 +225,13 @@ def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
 
 
 def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        episode: TODO docstring.
+        fps: TODO docstring.
+        video_path: TODO docstring.
+    """
     map_def = _load_map_def(episode)
     view_kwargs: dict = {
         "record_video": True,

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,12 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 def test_cli_baseline_subcommand(tmp_path: Path, capsys):
     # Build a minimal scenario matrix YAML
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {
@@ -74,6 +82,12 @@ def test_cli_baseline_subcommand(tmp_path: Path, capsys):
 
 def test_cli_list_scenarios(tmp_path: Path, capsys):
     # Minimal scenario matrix YAML
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {
@@ -105,6 +119,12 @@ def test_cli_list_scenarios(tmp_path: Path, capsys):
 
 
 def test_cli_validate_config_success(tmp_path: Path, capsys):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "s1", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 1},
@@ -124,6 +144,12 @@ def test_cli_validate_config_success(tmp_path: Path, capsys):
 
 
 def test_cli_validate_config_errors(tmp_path: Path, capsys):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {"id": "dup", "density": "low", "flow": "uni", "obstacle": "open", "repeats": 0},
@@ -144,6 +170,11 @@ def test_cli_validate_config_errors(tmp_path: Path, capsys):
 
 
 def test_cli_list_algorithms_includes_random(capsys):
+    """TODO docstring. Document this function.
+
+    Args:
+        capsys: TODO docstring.
+    """
     rc = cli_main(["list-algorithms"])
     captured = capsys.readouterr()
     assert rc == 0

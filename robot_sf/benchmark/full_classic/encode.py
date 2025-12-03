@@ -39,6 +39,8 @@ except ImportError:
 
 @dataclass
 class EncodeResult:
+    """TODO docstring. Document this class."""
+
     path: Path
     status: str  # success|skipped|failed
     note: str | None
@@ -61,6 +63,7 @@ def _iter_first(
         return None, iter(())
 
     def chain_first():  # local generator
+        """TODO docstring. Document this function."""
         yield first
         yield from it
 
@@ -85,6 +88,7 @@ def _start_memory_sampler(sample: bool, interval: float):
     stop_flag: list[bool] = [False]
 
     def _sampler():
+        """TODO docstring. Document this function."""
         while not stop_flag[0]:
             try:
                 rss = process.memory_info().rss / (1024 * 1024)
@@ -99,6 +103,7 @@ def _start_memory_sampler(sample: bool, interval: float):
     th.start()
 
     def _stop():
+        """TODO docstring. Document this function."""
         stop_flag[0] = True
         try:
             th.join(timeout=0.5)
@@ -110,6 +115,14 @@ def _start_memory_sampler(sample: bool, interval: float):
 
 
 def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
+    """TODO docstring. Document this function.
+
+    Args:
+        first: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if first is None:
         return False, "no-frames"
     if first.dtype != np.uint8 or first.ndim != 3 or first.shape[2] != 3:

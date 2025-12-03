@@ -36,6 +36,17 @@ class BaseSimulationEnv(Env, ABC):
         video_fps: float | None = None,
         **kwargs,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            debug: TODO docstring.
+            recording_enabled: TODO docstring.
+            record_video: TODO docstring.
+            video_path: TODO docstring.
+            video_fps: TODO docstring.
+            kwargs: TODO docstring.
+        """
         super().__init__()
         self.config = config
         self.debug = debug
@@ -103,6 +114,12 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, **kwargs):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            kwargs: TODO docstring.
+        """
         self.state = None
         self.simulator = None
         self.last_action = None
@@ -137,6 +154,13 @@ class MultiAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, num_agents: int, **kwargs):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            num_agents: TODO docstring.
+            kwargs: TODO docstring.
+        """
         super().__init__(config, **kwargs)
         self.num_agents = num_agents
         self.agents = []

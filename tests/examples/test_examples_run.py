@@ -23,10 +23,27 @@ _CI_EXAMPLES: tuple[ExampleScript, ...] = tuple(_MANIFEST.iter_ci_enabled_exampl
 
 
 def _id(example: ExampleScript) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        example: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return example.path.as_posix()
 
 
 def _merge_pythonpath(root: Path, existing: str | None) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+        existing: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parts: list[str] = [str(root)]
     if existing:
         parts.extend(element for element in existing.split(os.pathsep) if element)
@@ -40,6 +57,15 @@ def _merge_pythonpath(root: Path, existing: str | None) -> str:
 
 
 def _tail(text: str | bytes | None, limit: int = 20) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        text: TODO docstring.
+        limit: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if text is None:
         return ""
     if isinstance(text, bytes):
@@ -52,11 +78,25 @@ def _tail(text: str | bytes | None, limit: int = 20) -> str:
 
 @pytest.fixture(scope="module", name="repo_root_path")
 def _repo_root_path() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return _REPO_ROOT
 
 
 @pytest.fixture(scope="module", name="example_env")
 def _example_env(repo_root_path: Path) -> dict[str, str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        repo_root_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -76,6 +116,14 @@ def test_example_runs_without_error(
     example_env: dict[str, str],
     perf_policy,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        example: TODO docstring.
+        repo_root_path: TODO docstring.
+        example_env: TODO docstring.
+        perf_policy: TODO docstring.
+    """
     script_path = _MANIFEST.resolve_example_path(example)
     assert script_path.is_file(), f"Example path missing: {script_path}"
 
@@ -113,4 +161,5 @@ def test_example_runs_without_error(
 
 @pytest.mark.skipif(len(_CI_EXAMPLES) == 0, reason="No CI-enabled examples declared in manifest")
 def test_manifest_has_ci_enabled_entries() -> None:
+    """TODO docstring. Document this function."""
     assert _CI_EXAMPLES, "Expected at least one CI-enabled example in manifest"

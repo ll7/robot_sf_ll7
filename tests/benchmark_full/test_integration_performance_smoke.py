@@ -22,6 +22,11 @@ SOFT_RUNTIME_SEC = 20.0  # generous for CI now that real simulation runs
 
 def test_performance_smoke(config_factory):
     # Configure very small run: 1 initial, max 2 episodes per scenario, batch size 1
+    """TODO docstring. Document this function.
+
+    Args:
+        config_factory: TODO docstring.
+    """
     cfg = config_factory(
         smoke=True,
         initial_episodes=1,

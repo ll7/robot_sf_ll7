@@ -9,6 +9,15 @@ from robot_sf.benchmark.full_classic import orchestrator
 
 
 def _make_base_record(algo: str, episode_suffix: int) -> dict[str, object]:
+    """TODO docstring. Document this function.
+
+    Args:
+        algo: TODO docstring.
+        episode_suffix: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     record: dict[str, object] = {
         "episode_id": f"{algo}-{episode_suffix}",
         "scenario_id": f"scenario-{episode_suffix}",

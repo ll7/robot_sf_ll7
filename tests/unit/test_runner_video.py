@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -18,6 +20,11 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 )
 def test_run_batch_with_synthetic_video(tmp_path: Path):
     # Minimal in-memory scenario list (single episode)
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     scenarios = [
         {
             "id": "unit-video-uni-low-open",
@@ -71,7 +78,20 @@ def test_run_batch_with_synthetic_video(tmp_path: Path):
     reason="moviepy/ffmpeg not available",
 )
 def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
+
     def fake_encoder(*args, **kwargs):  # type: ignore[no-untyped-def]
+        """TODO docstring. Document this function.
+
+        Args:
+            args: TODO docstring.
+            kwargs: TODO docstring.
+        """
         return None, {"reason": "no-frames", "renderer": "synthetic", "steps": 0}
 
     monkeypatch.setattr(runner_mod, "_try_encode_synthetic_video", fake_encoder)
@@ -125,6 +145,11 @@ def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.Monke
     reason="moviepy/ffmpeg not available",
 )
 def test_metrics_match_with_and_without_video(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     scenarios = [
         {
             "id": "unit-video-metrics",

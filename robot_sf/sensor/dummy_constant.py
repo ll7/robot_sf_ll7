@@ -33,10 +33,23 @@ class DummyConstantSensor(Sensor):
     """A sensor that returns a constant numpy array observation."""
 
     def __init__(self, config: dict[str, Any]):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         self._config = config
         self._obs = self._build_value(config)
 
     def _build_value(self, cfg: dict[str, Any]) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+        Args:
+            cfg: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         dtype = np.float32 if cfg.get("dtype", "float32") == "float32" else np.int32
         value = cfg.get("value", 0.0)
         arr = np.array(value, dtype=dtype)
@@ -46,12 +59,24 @@ class DummyConstantSensor(Sensor):
         return arr
 
     def reset(self) -> None:  # no state
+        """TODO docstring. Document this function."""
         return None
 
     def step(self, state: Any) -> None:  # no dependence on state
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+        """
         return None
 
     def get_observation(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self._obs
 
 

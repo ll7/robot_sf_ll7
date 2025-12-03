@@ -20,6 +20,7 @@ class RunTrackerConfig:
     telemetry_interval_seconds: float = 1.0
 
     def __post_init__(self) -> None:
+        """TODO docstring. Document this function."""
         base_root = self.artifact_root or get_artifact_root()
         self.artifact_root = Path(base_root).expanduser().resolve()
 
@@ -35,10 +36,34 @@ class RunTrackerConfig:
         return ensure_run_tracker_tree(run_id=run_id, base_root=self.artifact_root)
 
     def manifest_path(self, run_id: str) -> Path:
+        """TODO docstring. Document this function.
+
+        Args:
+            run_id: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return self.get_run_directory(run_id) / self.manifest_filename
 
     def telemetry_path(self, run_id: str) -> Path:
+        """TODO docstring. Document this function.
+
+        Args:
+            run_id: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return self.get_run_directory(run_id) / self.telemetry_filename
 
     def steps_path(self, run_id: str) -> Path:
+        """TODO docstring. Document this function.
+
+        Args:
+            run_id: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return self.get_run_directory(run_id) / self.steps_filename

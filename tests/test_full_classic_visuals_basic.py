@@ -16,8 +16,17 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 class _Cfg:
+    """TODO docstring. Document this class."""
+
     def __init__(self, tmp_path: Path, smoke: bool = True, disable_videos: bool = False):
         # Minimal fields used by orchestrator & video/plot logic
+        """TODO docstring. Document this function.
+
+        Args:
+            tmp_path: TODO docstring.
+            smoke: TODO docstring.
+            disable_videos: TODO docstring.
+        """
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"  # assuming exists
         self.initial_episodes = 1
@@ -37,11 +46,21 @@ class _Cfg:
 
 
 def _read_json(path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_visuals_manifest_videos_disabled(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     cfg = _Cfg(tmp_path / "run_disabled", disable_videos=True)
     run_full_benchmark(cfg)
     reports = Path(cfg.output_root) / "reports"
@@ -56,6 +75,11 @@ def test_visuals_manifest_videos_disabled(tmp_path):
 
 
 def test_visuals_manifest_smoke_mode(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     cfg = _Cfg(tmp_path / "run_smoke", smoke=True)
     run_full_benchmark(cfg)
     reports = Path(cfg.output_root) / "reports"

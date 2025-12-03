@@ -26,7 +26,7 @@ def plot_kde_on_map(
     Plot the Kernel Density Estimation of pedestrian positions on a map.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -117,7 +117,7 @@ def plot_kde_in_x_y(
     Plot the Kernel Density Estimation of npc and ego positions in X and Y axes.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_data (np.ndarray): shape: (timesteps, 2)
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
         interactive (bool): If True, show the plot interactively.

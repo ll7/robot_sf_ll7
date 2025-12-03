@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,11 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def test_run_batch_resume_parallel_skips_existing(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     scenarios = [
         {
             "id": "resume-parallel-uni-low-open",

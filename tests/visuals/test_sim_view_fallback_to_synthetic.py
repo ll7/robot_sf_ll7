@@ -13,6 +13,8 @@ from robot_sf.benchmark.full_classic.visuals import (
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -21,6 +23,12 @@ class Cfg:
 
 
 def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     records = [
         {
             "episode_id": "ep1",
@@ -34,6 +42,14 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
     groups: list = []
 
     def fake_attempt_sim_view(_records, _videos_dir, _cfg, _replay_map):
+        """TODO docstring. Document this function.
+
+        Args:
+            _records: TODO docstring.
+            _videos_dir: TODO docstring.
+            _cfg: TODO docstring.
+            _replay_map: TODO docstring.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",
@@ -49,6 +65,13 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
         ]
 
     def fake_synthetic(_records, _videos_dir, _cfg):
+        """TODO docstring. Document this function.
+
+        Args:
+            _records: TODO docstring.
+            _videos_dir: TODO docstring.
+            _cfg: TODO docstring.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",
@@ -79,6 +102,12 @@ def test_sim_view_failure_triggers_synthetic_fallback(tmp_path, monkeypatch):
 
 
 def test_fallback_appends_existing_note(tmp_path, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     records = [
         {
             "episode_id": "ep1",
@@ -92,6 +121,14 @@ def test_fallback_appends_existing_note(tmp_path, monkeypatch):
     groups: list = []
 
     def fake_attempt_sim_view(_records, _videos_dir, _cfg, _replay_map):
+        """TODO docstring. Document this function.
+
+        Args:
+            _records: TODO docstring.
+            _videos_dir: TODO docstring.
+            _cfg: TODO docstring.
+            _replay_map: TODO docstring.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",
@@ -107,6 +144,13 @@ def test_fallback_appends_existing_note(tmp_path, monkeypatch):
         ]
 
     def fake_synthetic(_records, _videos_dir, _cfg):
+        """TODO docstring. Document this function.
+
+        Args:
+            _records: TODO docstring.
+            _videos_dir: TODO docstring.
+            _cfg: TODO docstring.
+        """
         return [
             VideoArtifact(
                 artifact_id="video_ep1",

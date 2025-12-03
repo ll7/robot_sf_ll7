@@ -22,6 +22,8 @@ from robot_sf.common.artifact_paths import (
 
 @dataclass
 class RelocatedItem:
+    """TODO docstring. Document this class."""
+
     legacy_path: str
     destination: str
     item_type: str
@@ -29,18 +31,28 @@ class RelocatedItem:
 
 @dataclass
 class SkippedItem:
+    """TODO docstring. Document this class."""
+
     legacy_path: str
     reason: str
 
 
 @dataclass
 class MigrationReport:
+    """TODO docstring. Document this class."""
+
     relocated: list[RelocatedItem]
     skipped: list[SkippedItem]
     warnings: list[str]
     artifact_root: str
 
     def to_dict(self) -> dict[str, object]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return {
             "relocated": [asdict(item) for item in self.relocated],
             "skipped": [asdict(item) for item in self.skipped],
@@ -50,12 +62,26 @@ class MigrationReport:
 
 
 def _serialize_report(report: MigrationReport, report_path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        report: TODO docstring.
+        report_path: TODO docstring.
+    """
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
     logger.info("Migration report written to {path}", path=report_path)
 
 
 def _iter_legacy_sources(source_root: Path) -> list[Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        source_root: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return sorted(find_legacy_artifact_paths(source_root))
 
 
@@ -146,6 +172,12 @@ def migrate_artifacts(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dry-run",
@@ -176,6 +208,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = _build_parser()
     args = parser.parse_args(argv)
 

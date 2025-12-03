@@ -20,6 +20,12 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 @pytest.mark.timeout(60)
 def test_smoke_run_creates_structure(config_factory, perf_policy):
+    """TODO docstring. Document this function.
+
+    Args:
+        config_factory: TODO docstring.
+        perf_policy: TODO docstring.
+    """
     start = time.perf_counter()
     cfg = config_factory(smoke=True, workers=1)
     manifest = run_full_benchmark(cfg)

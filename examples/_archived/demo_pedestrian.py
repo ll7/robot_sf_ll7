@@ -32,6 +32,12 @@ logger = loguru.logger
 
 
 def make_env(map_name: str, robot_model: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        map_name: TODO docstring.
+        robot_model: TODO docstring.
+    """
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map(map_name)
@@ -49,6 +55,13 @@ def make_env(map_name: str, robot_model: str):
 
 
 def run(filename: str, map_name: str, robot_model: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        filename: TODO docstring.
+        map_name: TODO docstring.
+        robot_model: TODO docstring.
+    """
     env = make_env(map_name, robot_model)
 
     logger.info(f"Loading pedestrian model from {filename}")

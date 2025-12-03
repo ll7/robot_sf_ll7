@@ -48,6 +48,11 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix  # Shared helpe
 
 
 def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+    """
     for attr, value in [
         ("workers", 1),
         ("bootstrap_samples", 0),
@@ -64,6 +69,11 @@ def _tune_config(cfg):  # consolidated minimal tuning (T011 refactor)
 
 
 def _inject_minimal_matrix(cfg):  # delegate to shared writer
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+    """
     root = Path(cfg.output_root)
     root.mkdir(parents=True, exist_ok=True)
     mini_path = write_minimal_matrix(root)
@@ -73,20 +83,42 @@ def _inject_minimal_matrix(cfg):  # delegate to shared writer
 
 
 def _read_lines(path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     return [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
 def _assert_no_video_artifacts(root: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+    """
     vids = list(root.rglob("*.mp4")) + list(root.rglob("*.gif"))
     assert not vids, f"Unexpected video artifacts produced: {vids}"
 
 
 @pytest.mark.timeout(60)
 def test_resume_skips_existing(config_factory, perf_policy):
+    """TODO docstring. Document this function.
+
+    Args:
+        config_factory: TODO docstring.
+        perf_policy: TODO docstring.
+    """
     start = time.perf_counter()
     hard_timeout_sec = 60
 
     def _timeout_handler(signum, frame):  # pragma: no cover
+        """TODO docstring. Document this function.
+
+        Args:
+            signum: TODO docstring.
+            frame: TODO docstring.
+        """
         raise TimeoutError("Resume integration test exceeded hard timeout (60s)")
 
     try:

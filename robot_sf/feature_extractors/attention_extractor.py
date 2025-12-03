@@ -22,6 +22,13 @@ class MultiHeadAttention(nn.Module):
     """
 
     def __init__(self, embed_dim: int, num_heads: int, dropout: float = 0.1):
+        """TODO docstring. Document this function.
+
+        Args:
+            embed_dim: TODO docstring.
+            num_heads: TODO docstring.
+            dropout: TODO docstring.
+        """
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -37,6 +44,14 @@ class MultiHeadAttention(nn.Module):
         self.output_proj = nn.Linear(embed_dim, embed_dim)
 
     def forward(self, x: th.Tensor) -> th.Tensor:
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         batch_size, seq_len, embed_dim = x.shape
 
         # Generate queries, keys, values
@@ -89,6 +104,16 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            observation_space: TODO docstring.
+            embed_dim: TODO docstring.
+            num_heads: TODO docstring.
+            num_layers: TODO docstring.
+            dropout_rate: TODO docstring.
+            drive_hidden_dims: TODO docstring.
+        """
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]
         # Extract observation spaces

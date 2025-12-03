@@ -24,6 +24,13 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        path: TODO docstring.
+        default: TODO docstring.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:
@@ -38,6 +45,17 @@ def _group_values(
     fallback_group_by: str,
     metric: str,
 ) -> dict[str, list[float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+        metric: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: dict[str, list[float]] = {}
     for r in records:
         g = _get_dotted(r, group_by)
@@ -74,6 +92,14 @@ def compute_pareto_points(
     points: list[tuple[float, float]] = []
 
     def reducer(vals: list[float]) -> float:
+        """TODO docstring. Document this function.
+
+        Args:
+            vals: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if agg == "median":
             return float(np.median(vals))
         return float(np.mean(vals))
@@ -108,6 +134,17 @@ def _dominates(
     x_higher_better: bool,
     y_higher_better: bool,
 ) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        a: TODO docstring.
+        b: TODO docstring.
+        x_higher_better: TODO docstring.
+        y_higher_better: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     ax, ay = a
     bx, by = b
     # Normalize to "lower is better" by flipping signs if higher is better

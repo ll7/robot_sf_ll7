@@ -26,7 +26,7 @@ def plot_all_npc_ped_positions(
     Plot all NPC pedestrian positions from the given position array.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively.
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
         map_def (MapDefinition, optional): Map definition to plot obstacles

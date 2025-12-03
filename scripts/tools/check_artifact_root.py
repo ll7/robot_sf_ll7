@@ -38,9 +38,21 @@ class GuardResult:
 
     @property
     def exit_code(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return 0 if not self.violations else 1
 
     def to_dict(self) -> dict[str, object]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return {
             "violations": [asdict(v) for v in self.violations],
             "artifact_root": self.artifact_root,
@@ -49,6 +61,15 @@ class GuardResult:
 
 
 def _normalize_allowlist(entries: Iterable[str | Path], repo_root: Path) -> set[Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entries: TODO docstring.
+        repo_root: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     normalized: set[Path] = set()
     for entry in entries:
         candidate = Path(entry)
@@ -92,6 +113,12 @@ def check_artifact_root(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repo-root",
@@ -119,12 +146,26 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _write_json_report(result: GuardResult, path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        result: TODO docstring.
+        path: TODO docstring.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8")
     logger.info("Guard result written to {path}", path=path)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = _build_parser()
     args = parser.parse_args(argv)
 

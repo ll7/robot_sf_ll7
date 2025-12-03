@@ -15,7 +15,14 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
+    """TODO docstring. Document this class."""
+
     def __init__(self, tmp_path: Path):
+        """TODO docstring. Document this function.
+
+        Args:
+            tmp_path: TODO docstring.
+        """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
         self.scenario_matrix_path = str(write_minimal_matrix(tmp_path))
@@ -35,11 +42,22 @@ class _Cfg:
 
 
 def _read_json(path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_plots_skipped_when_matplotlib_missing(monkeypatch, tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+        tmp_path: TODO docstring.
+    """
     plots_mod = importlib.import_module("robot_sf.benchmark.full_classic.plots")
     # Force simulated absence
     monkeypatch.setattr(plots_mod, "plt", None)

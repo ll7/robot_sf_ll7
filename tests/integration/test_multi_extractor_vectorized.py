@@ -33,6 +33,12 @@ CONFIG_GPU = ROOT / "configs" / "scenarios" / "multi_extractor_gpu.yaml"
 
 
 def _detect_cuda_available() -> bool:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     if torch is None:
         return False
     try:
@@ -42,6 +48,14 @@ def _detect_cuda_available() -> bool:
 
 
 def _resolve_cuda_expectation(env: dict[str, str]) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     override = env.get(CI_EXPECTS_CUDA_ENV)
     if override in {"0", "1"}:
         return override == CUDA_AVAILABLE_FLAG
@@ -52,6 +66,11 @@ def _resolve_cuda_expectation(env: dict[str, str]) -> bool:
 
 @pytest.mark.skipif(not CONFIG_GPU.exists(), reason="GPU multi-extractor config missing")
 def test_vectorized_run_handles_cuda_availability(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     env = os.environ.copy()
     env["ROBOT_SF_MULTI_EXTRACTOR_TMP"] = str(tmp_path)
     env["ROBOT_SF_MULTI_EXTRACTOR_TEST_MODE"] = "1"

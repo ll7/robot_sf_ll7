@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import json
 from pathlib import Path
 
@@ -8,6 +10,11 @@ ARTIFACT = Path("model/snqi_canonical_weights_v1.json")
 
 
 def test_snqi_drift_minimal(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes = FIXTURE_DIR / "episodes_small.jsonl"
     baseline = FIXTURE_DIR / "baseline_stats.json"
     out = tmp_path / "opt.json"

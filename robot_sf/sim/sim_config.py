@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -78,8 +80,20 @@ class SimulationSettings:
 
     @property
     def max_sim_steps(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return ceil(self.sim_time_in_secs / self.time_per_step_in_secs)
 
     @property
     def peds_per_area_m2(self) -> float:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.ped_density_by_difficulty[self.difficulty]

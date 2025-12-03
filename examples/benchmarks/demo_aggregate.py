@@ -29,6 +29,11 @@ from robot_sf.render.helper_catalog import ensure_output_dir
 
 
 def _write_demo_matrix(path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     scenarios = [
         {
             "id": "demo-agg-uni-low-open",
@@ -50,6 +55,7 @@ def _write_demo_matrix(path: Path) -> None:
 
 def main() -> None:
     # Use helper catalog to ensure output directory exists
+    """TODO docstring. Document this function."""
     out_dir = ensure_output_dir(Path("results/demo_aggregate"))
 
     matrix_path = out_dir / "matrix.yaml"

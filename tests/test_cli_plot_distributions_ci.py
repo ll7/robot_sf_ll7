@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,12 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 
 def _write_matrix(path: Path, repeats: int = 4) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        repeats: TODO docstring.
+    """
     scenarios = [
         {
             "id": "dist-ci",
@@ -36,6 +44,12 @@ essential_markers = [
 
 
 def test_cli_plot_distributions_ci(tmp_path: Path, capsys):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=4)
     episodes = tmp_path / "episodes.jsonl"

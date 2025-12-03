@@ -77,6 +77,14 @@ class RunSettings:
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> RunSettings:
+        """TODO docstring. Document this function.
+
+        Args:
+            payload: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         options = payload.get("run", {})
         settings = cls()
         settings.run_label = str(options.get("run_id", settings.run_label))
@@ -108,21 +116,51 @@ class RunSettings:
         return settings
 
     def effective_timesteps(self, *, test_mode: bool) -> int:
+        """TODO docstring. Document this function.
+
+        Args:
+            test_mode: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not test_mode:
             return self.total_timesteps
         return max(8, min(self.total_timesteps, 128))
 
     def effective_eval_freq(self, *, test_mode: bool) -> int:
+        """TODO docstring. Document this function.
+
+        Args:
+            test_mode: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not test_mode:
             return self.eval_freq
         return max(1, min(self.eval_freq, 32))
 
     def effective_save_freq(self, *, test_mode: bool) -> int:
+        """TODO docstring. Document this function.
+
+        Args:
+            test_mode: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not test_mode:
             return self.save_freq
         return max(4, min(self.save_freq, 64))
 
     def worker_count(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.num_envs if self.worker_mode == "vectorized" else 1
 
 
@@ -140,6 +178,14 @@ class RunContext:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -168,12 +214,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _configure_logging(verbose: bool) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        verbose: TODO docstring.
+    """
     logger.remove()
     level = "DEBUG" if verbose else "INFO"
     logger.add(sys.stderr, level=level)
 
 
 def _ensure_spawn_start_method() -> None:
+    """TODO docstring. Document this function."""
     if sys.platform != "darwin":
         return
     current = mp.get_start_method(allow_none=True)
@@ -205,6 +257,14 @@ def _get_vec_env_config(
 def load_configuration(
     config_path: Path,
 ) -> tuple[RunSettings, list[ExtractorConfigurationProfile]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
@@ -238,6 +298,14 @@ def load_configuration(
 
 
 def should_use_test_mode(environment: dict[str, str]) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        environment: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     value = environment.get(TEST_MODE_ENV)
     if not value:
         return False
@@ -250,6 +318,16 @@ def resolve_run_context(
     args: argparse.Namespace,
     environment: dict[str, str],
 ) -> RunContext:
+    """TODO docstring. Document this function.
+
+    Args:
+        settings: TODO docstring.
+        args: TODO docstring.
+        environment: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     run_id = args.run_id or settings.run_label
     now = datetime.now(UTC)
     timestamp = now.strftime("%Y%m%d-%H%M%S")
@@ -280,6 +358,14 @@ def resolve_run_context(
 
 
 def _resolve_feature_config(profile: ExtractorConfigurationProfile) -> FeatureExtractorConfig:
+    """TODO docstring. Document this function.
+
+    Args:
+        profile: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     from robot_sf.feature_extractors.config import FeatureExtractorPresets
 
     preset_name = profile.preset or profile.name
@@ -294,6 +380,12 @@ def _resolve_feature_config(profile: ExtractorConfigurationProfile) -> FeatureEx
 
 
 def _gpu_available() -> bool:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     try:
         import torch
     except Exception:  # pragma: no cover - torch is an install requirement
@@ -308,6 +400,17 @@ def _skip_record(
     artifacts: dict[str, str],
     reason: str,
 ) -> ExtractorRunRecord:
+    """TODO docstring. Document this function.
+
+    Args:
+        profile: TODO docstring.
+        context: TODO docstring.
+        artifacts: TODO docstring.
+        reason: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     now = datetime.now(UTC).isoformat()
     return ExtractorRunRecord(
         config_name=profile.name,
@@ -331,6 +434,17 @@ def _simulate_extractor_run(
     extractor_dir: Path,
     artifacts: dict[str, str],
 ) -> ExtractorRunRecord:
+    """TODO docstring. Document this function.
+
+    Args:
+        profile: TODO docstring.
+        context: TODO docstring.
+        extractor_dir: TODO docstring.
+        artifacts: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     logger.debug("Simulating extractor run", extractor=profile.name)
     start_time = datetime.now(UTC).isoformat()
     metrics = {
@@ -367,6 +481,19 @@ def _run_sb3_training(
     start_time_iso: str,
     start_wall: float,
 ) -> ExtractorRunRecord:
+    """TODO docstring. Document this function.
+
+    Args:
+        profile: TODO docstring.
+        context: TODO docstring.
+        extractor_dir: TODO docstring.
+        artifacts: TODO docstring.
+        start_time_iso: TODO docstring.
+        start_wall: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         from stable_baselines3 import PPO
         from stable_baselines3.common.callbacks import (
@@ -384,6 +511,12 @@ def _run_sb3_training(
         save_freq = context.settings.effective_save_freq(test_mode=context.test_mode)
 
         def env_factory() -> Any:
+            """TODO docstring. Document this function.
+
+
+            Returns:
+                TODO docstring.
+            """
             return environment_factory.make_robot_env(seed=context.settings.seed)
 
         _ensure_spawn_start_method()
@@ -502,6 +635,15 @@ def _run_sb3_training(
 def _determine_skip_reason(
     profile: ExtractorConfigurationProfile, context: RunContext
 ) -> str | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        profile: TODO docstring.
+        context: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     settings = context.settings
     gpu_available = _gpu_available()
 
@@ -521,6 +663,15 @@ def train_extractor(
     profile: ExtractorConfigurationProfile,
     context: RunContext,
 ) -> ExtractorRunRecord:
+    """TODO docstring. Document this function.
+
+    Args:
+        profile: TODO docstring.
+        context: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     settings = context.settings
     extractor_dir = make_extractor_directory(context.run_dir, profile.name)
     artifacts: dict[str, str] = {"extractor_dir": str(extractor_dir.relative_to(context.run_dir))}
@@ -559,6 +710,15 @@ def _load_histories(
     records: list[ExtractorRunRecord],
     context: RunContext,
 ) -> dict[str, tuple[object | None, Path]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        context: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     history_map: dict[str, tuple[object | None, Path]] = {}
     for record in records:
         rel = record.artifacts.get("extractor_dir")
@@ -571,6 +731,15 @@ def _enrich_records_with_analysis(
     records: list[ExtractorRunRecord],
     context: RunContext,
 ) -> tuple[float, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        context: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not records:
         return 0.0, 0.0
     history_map = _load_histories(records, context)
@@ -631,6 +800,16 @@ def compute_aggregate_metrics(
     baseline_target: float,
     baseline_convergence: float,
 ) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        baseline_target: TODO docstring.
+        baseline_convergence: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     total_time = sum(record.duration_seconds or 0.0 for record in records)
     best_rewards = [
         float(v)
@@ -665,6 +844,15 @@ def compute_aggregate_metrics(
 
 
 def build_summary(context: RunContext, records: list[ExtractorRunRecord]) -> TrainingRunSummary:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        records: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     notes = [record.reason for record in records if record.reason]
     baseline_target, baseline_convergence = _enrich_records_with_analysis(records, context)
     aggregate = compute_aggregate_metrics(
@@ -731,6 +919,14 @@ def write_legacy_results(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     args = parse_args(argv)
     _configure_logging(verbose=args.verbose)
 

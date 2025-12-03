@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import numpy as np
 
 from robot_sf.benchmark.metrics import (
@@ -10,6 +12,12 @@ from robot_sf.benchmark.metrics import (
 
 
 def make_base_episode(T=5, with_peds=True):
+    """TODO docstring. Document this function.
+
+    Args:
+        T: TODO docstring.
+        with_peds: TODO docstring.
+    """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
     robot_acc = np.zeros((T, 2))
@@ -25,6 +33,7 @@ def make_base_episode(T=5, with_peds=True):
 
 
 def test_success_without_collisions_reaches_goal():
+    """TODO docstring. Document this function."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(T)
     # place robot at goal at step 3
@@ -46,6 +55,7 @@ def test_success_without_collisions_reaches_goal():
 
 
 def test_failure_on_wall_collision():
+    """TODO docstring. Document this function."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -72,6 +82,7 @@ def test_failure_on_wall_collision():
 
 
 def test_failure_on_agent_collision():
+    """TODO docstring. Document this function."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(
         T, with_peds=False
@@ -98,6 +109,7 @@ def test_failure_on_agent_collision():
 
 
 def test_failure_on_human_collision():
+    """TODO docstring. Document this function."""
     T = 10
     robot_pos, robot_vel, robot_acc, peds_pos, ped_forces, goal, dt = make_base_episode(T)
     robot_pos[:4, 0] = np.linspace(0.0, 10.0, 4)

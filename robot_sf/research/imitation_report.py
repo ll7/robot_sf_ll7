@@ -33,6 +33,8 @@ from robot_sf.research.statistics import (
 
 @dataclass
 class ImitationReportConfig:
+    """TODO docstring. Document this class."""
+
     experiment_name: str
     hypothesis: str | None = "BC pre-training reduces timesteps by ≥30%"
     alpha: float = 0.05
@@ -47,10 +49,24 @@ class ImitationReportConfig:
 
 
 def _timestamp() -> str:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
@@ -99,6 +115,15 @@ def _select_records(
 
 
 def _metric(record: dict[str, Any], key: str) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        key: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
     return float(val) if isinstance(val, (int, float)) else 0.0
@@ -122,6 +147,14 @@ def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
 
 
 def _fmt_stat(value: float | None | str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
 
@@ -244,6 +277,14 @@ def _render_markdown(
 
 
 def _latex_escape(text: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        text: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")

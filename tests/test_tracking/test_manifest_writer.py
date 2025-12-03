@@ -18,6 +18,11 @@ from robot_sf.telemetry.run_registry import RunRegistry
 
 
 def test_manifest_writer_appends_and_reads_records(run_tracker_config: RunTrackerConfig) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_tracker_config: TODO docstring.
+    """
     registry = RunRegistry(run_tracker_config)
     writer = ManifestWriter(run_tracker_config, run_id="demo-run", registry=registry)
     step = StepExecutionEntry(
@@ -44,6 +49,11 @@ def test_manifest_writer_appends_and_reads_records(run_tracker_config: RunTracke
 
 
 def test_run_registry_enforces_unique_ids(run_tracker_config: RunTrackerConfig) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_tracker_config: TODO docstring.
+    """
     registry = RunRegistry(run_tracker_config)
     registry.create_run_directory("dupe-run")
     with pytest.raises(FileExistsError):
@@ -51,6 +61,11 @@ def test_run_registry_enforces_unique_ids(run_tracker_config: RunTrackerConfig) 
 
 
 def test_run_registry_prunes_old_runs(tmp_path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     config = RunTrackerConfig(artifact_root=tmp_path / "artifacts", retain_runs=2)
     registry = RunRegistry(config)
     for idx in range(3):

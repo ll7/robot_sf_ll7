@@ -23,6 +23,12 @@ class CommandContext:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description="Robot SF run tracker CLI")
     parser.add_argument(
         "--artifact-root", type=Path, help="Override artifact root for tracker output"
@@ -40,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def add_status_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser("status", help="Show the latest state of a run")
     parser.add_argument(
         "run_id",
@@ -48,6 +59,11 @@ def add_status_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
 
 
 def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser("list", help="List historical runs")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument(
@@ -64,6 +80,11 @@ def add_list_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
 
 def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser(
         "summary",
         aliases=["show"],
@@ -79,6 +100,11 @@ def add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentP
 
 
 def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser("watch", help="Tail manifest updates for a run")
     parser.add_argument("run_id")
     parser.add_argument(
@@ -90,6 +116,11 @@ def add_watch_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 
 
 def add_perf_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser("perf-tests", help="Execute the telemetry performance wrapper")
     parser.add_argument("--scenario", help="Optional scenario config override")
     parser.add_argument(
@@ -106,6 +137,11 @@ def add_perf_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
 
 def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser(
         "enable-tensorboard", help="Mirror metrics to TensorBoard logdir"
     )
@@ -114,6 +150,11 @@ def add_tensorboard_parser(subparsers: argparse._SubParsersAction[argparse.Argum
 
 
 def add_export_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        subparsers: TODO docstring.
+    """
     parser = subparsers.add_parser("export", help="Export a run summary to a file")
     parser.add_argument("run_id")
     parser.add_argument(
@@ -131,6 +172,15 @@ def add_export_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
 
 
 def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     handlers = {
         "status": handle_status,
         "list": handle_list,
@@ -146,6 +196,15 @@ def dispatch(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     run_hint = getattr(args, "run_id", context.run_id)
     message = (
         "Command not implemented yet. Refer to specs/001-performance-tracking/tasks.md "
@@ -156,6 +215,15 @@ def handle_placeholder(context: CommandContext, args: argparse.Namespace) -> int
 
 
 def handle_perf_tests(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         from scripts.telemetry.run_perf_tests import run_perf_tests
     except ModuleNotFoundError as exc:  # pragma: no cover - dev only
@@ -178,6 +246,15 @@ def handle_perf_tests(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_enable_tensorboard(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         run_dir = _resolve_run_directory(context.config, args.run_id)
     except FileNotFoundError as exc:
@@ -203,6 +280,15 @@ def handle_enable_tensorboard(context: CommandContext, args: argparse.Namespace)
 
 
 def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         run_dir = _resolve_run_directory(context.config, args.run_id)
         steps = _load_step_entries(context.config, run_dir)
@@ -215,6 +301,15 @@ def handle_status(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         since = _parse_since(args.since)
     except ValueError as exc:
@@ -236,6 +331,15 @@ def handle_list(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_summary(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         entry = load_run(context.config, args.run_id)
     except FileNotFoundError as exc:
@@ -252,6 +356,15 @@ def handle_summary(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_export(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         entry = load_run(context.config, args.run_id)
     except FileNotFoundError as exc:
@@ -268,6 +381,15 @@ def handle_export(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def handle_watch(context: CommandContext, args: argparse.Namespace) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        context: TODO docstring.
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     interval = max(args.interval, 0.5)
     try:
         while True:
@@ -281,12 +403,29 @@ def handle_watch(context: CommandContext, args: argparse.Namespace) -> int:
 
 
 def build_context(args: argparse.Namespace) -> CommandContext:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     base_root = args.artifact_root if args.artifact_root else None
     config = RunTrackerConfig(artifact_root=base_root)
     return CommandContext(config=config)
 
 
 def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        run_hint: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     candidate = Path(run_hint).expanduser()
     if candidate.is_dir():
         return candidate
@@ -298,6 +437,15 @@ def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
 
 
 def _load_step_entries(config: RunTrackerConfig, run_dir: Path) -> list[dict[str, Any]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        run_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     steps_path = run_dir / config.steps_filename
     if not steps_path.is_file():
         raise FileNotFoundError(steps_path)
@@ -308,6 +456,14 @@ def _load_step_entries(config: RunTrackerConfig, run_dir: Path) -> list[dict[str
 
 
 def _summarize_steps(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entries: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     completed = 0
     current = None
     last_completed = None
@@ -328,6 +484,12 @@ def _summarize_steps(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _print_status(run_dir: Path, summary: dict[str, Any]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_dir: TODO docstring.
+        summary: TODO docstring.
+    """
     total = summary["total"]
     completed = summary["completed"]
     current = summary["current"]
@@ -360,6 +522,11 @@ def _print_status(run_dir: Path, summary: dict[str, Any]) -> None:
 
 
 def _print_run_table(entries: list[RunHistoryEntry]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        entries: TODO docstring.
+    """
     if not entries:
         print("No run tracker entries found.")
         return
@@ -378,11 +545,24 @@ def _print_run_table(entries: list[RunHistoryEntry]) -> None:
 
 
 def _print_run_summary(entry: RunHistoryEntry) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+    """
     for line in _iter_run_summary_lines(entry):
         print(line)
 
 
 def _iter_run_summary_lines(entry: RunHistoryEntry) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     header = _format_run_header(entry)
     summary_section = _format_summary_section(entry.summary)
     steps_section = _format_steps_section(entry.steps)
@@ -392,6 +572,14 @@ def _iter_run_summary_lines(entry: RunHistoryEntry) -> list[str]:
 
 
 def _format_run_header(entry: RunHistoryEntry) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
     completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
     return [
@@ -404,6 +592,14 @@ def _format_run_header(entry: RunHistoryEntry) -> list[str]:
 
 
 def _format_summary_section(summary: dict[str, Any] | None) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        summary: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not summary:
         return ["Summary: (none)"]
     lines = ["Summary:"]
@@ -417,6 +613,14 @@ def _format_summary_section(summary: dict[str, Any] | None) -> list[str]:
 
 
 def _format_telemetry_lines(values: dict[str, Any]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     lines = ["  - Telemetry:"]
     for key, value in values.items():
         lines.append(f"      * {key}: {_format_summary_value(value)}")
@@ -424,6 +628,14 @@ def _format_telemetry_lines(values: dict[str, Any]) -> list[str]:
 
 
 def _format_steps_section(steps: list[dict[str, Any]]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        steps: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     lines = ["Steps:"]
     for step in steps:
         status = step.get("status", "unknown").upper()
@@ -435,6 +647,14 @@ def _format_steps_section(steps: list[dict[str, Any]]) -> list[str]:
 
 
 def _format_recommendation_section(recommendations: tuple[dict[str, Any], ...]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        recommendations: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not recommendations:
         return []
     lines = ["Recommendations:"]
@@ -448,6 +668,14 @@ def _format_recommendation_section(recommendations: tuple[dict[str, Any], ...]) 
 
 
 def _format_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        perf_tests: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not perf_tests:
         return []
     lines = ["Performance tests:"]
@@ -461,12 +689,28 @@ def _format_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
 
 
 def _format_numeric(value: Any) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if isinstance(value, int | float):
         return f"{value:.2f}"
     return str(value)
 
 
 def _render_markdown(entry: RunHistoryEntry) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     lines: list[str] = []
     lines.extend(_markdown_header_lines(entry))
     lines.extend(_markdown_summary_sections(entry))
@@ -477,6 +721,14 @@ def _render_markdown(entry: RunHistoryEntry) -> str:
 
 
 def _markdown_header_lines(entry: RunHistoryEntry) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     created = entry.created_at.isoformat(timespec="seconds") if entry.created_at else "--"
     completed = entry.completed_at.isoformat(timespec="seconds") if entry.completed_at else "--"
     return [
@@ -490,6 +742,14 @@ def _markdown_header_lines(entry: RunHistoryEntry) -> list[str]:
 
 
 def _markdown_summary_sections(entry: RunHistoryEntry) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     lines = ["", "## Summary"]
     summary_lines = _markdown_summary_lines(entry.summary)
     lines.extend(summary_lines or ["- _(none)_"])
@@ -502,6 +762,14 @@ def _markdown_summary_sections(entry: RunHistoryEntry) -> list[str]:
 
 
 def _markdown_summary_lines(summary: dict[str, Any] | None) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        summary: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(summary, dict):
         return []
     lines: list[str] = []
@@ -513,10 +781,26 @@ def _markdown_summary_lines(summary: dict[str, Any] | None) -> list[str]:
 
 
 def _markdown_telemetry_lines(values: dict[str, Any]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return [f"- **{key}:** {_format_summary_value(value)}" for key, value in values.items()]
 
 
 def _markdown_steps_section(steps: list[dict[str, Any]]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        steps: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     lines = ["", "## Steps"]
     for step in steps:
         status = step.get("status", "unknown").upper()
@@ -527,6 +811,14 @@ def _markdown_steps_section(steps: list[dict[str, Any]]) -> list[str]:
 
 
 def _markdown_recommendations_section(recommendations: tuple[dict[str, Any], ...]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        recommendations: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not recommendations:
         return []
     lines = ["", "## Recommendations"]
@@ -541,6 +833,14 @@ def _markdown_recommendations_section(recommendations: tuple[dict[str, Any], ...
 
 
 def _markdown_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        perf_tests: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not perf_tests:
         return []
     lines = ["", "## Performance Tests"]
@@ -556,6 +856,14 @@ def _markdown_perf_section(perf_tests: tuple[dict[str, Any], ...]) -> list[str]:
 
 
 def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     started_at = entry.get("started_at")
     if not started_at:
         return None
@@ -566,6 +874,14 @@ def _current_elapsed_seconds(entry: dict[str, Any]) -> float | None:
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not value:
         return None
     try:
@@ -575,6 +891,14 @@ def _parse_timestamp(value: str | None) -> datetime | None:
 
 
 def _format_seconds(value: float | None) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None:
         return "--"
     seconds = int(max(value, 0))
@@ -588,6 +912,14 @@ def _format_seconds(value: float | None) -> str:
 
 
 def _format_summary_value(value: object) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None:
         return "--"
     if isinstance(value, float):
@@ -596,6 +928,14 @@ def _format_summary_value(value: object) -> str:
 
 
 def _parse_since(value: str | None) -> datetime | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not value:
         return None
     try:
@@ -610,6 +950,14 @@ def _parse_since(value: str | None) -> datetime | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     context = build_context(args)

@@ -25,6 +25,11 @@ ITERATIONS = 2  # keep light for CI; baseline may have been generated with more
 
 
 def _time_once(fn):  # minimal inline timing to avoid importing heavy script
+    """TODO docstring. Document this function.
+
+    Args:
+        fn: TODO docstring.
+    """
     import time
 
     start = time.perf_counter()
@@ -45,6 +50,11 @@ def _time_once(fn):  # minimal inline timing to avoid importing heavy script
 )
 def test_factory_creation_mean_within_budget(monkeypatch):
     # Disable fast demo shortcut if present
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.delenv("ROBOT_SF_FAST_DEMO", raising=False)
 
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))

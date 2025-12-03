@@ -50,6 +50,16 @@ class AnalysisTracker:
         enable_tensorboard: bool,
         tensorboard_logdir: Path | None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            tracker_root: TODO docstring.
+            run_id_hint: TODO docstring.
+            initiator: TODO docstring.
+            enable_report_step: TODO docstring.
+            enable_tensorboard: TODO docstring.
+            tensorboard_logdir: TODO docstring.
+        """
         self.enabled = bool(tracker_root or run_id_hint or enable_tensorboard)
         self.config: RunTrackerConfig | None = None
         self.writer: ManifestWriter | None = None
@@ -94,6 +104,14 @@ class AnalysisTracker:
         self._sampler.start()
 
     def has_step(self, step_id: str) -> bool:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return bool(
             self.enabled
             and self.progress
@@ -102,12 +120,23 @@ class AnalysisTracker:
 
     @property
     def run_directory(self) -> Path | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         if not self.enabled or not self.writer:
             return None
         return self.writer.run_directory
 
     @contextmanager
     def step(self, step_id: str):
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+        """
         if not self.enabled or not self.progress or not self.has_step(step_id):
             yield
             return
@@ -122,18 +151,33 @@ class AnalysisTracker:
             self.progress.complete_step(step_id)
 
     def finish(self, summary: dict[str, Any] | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            summary: TODO docstring.
+        """
         if not self.enabled:
             return
         self._write_run_record(PipelineRunStatus.COMPLETED, summary=summary)
         self._close()
 
     def fail(self, summary: dict[str, Any] | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            summary: TODO docstring.
+        """
         if not self.enabled:
             return
         self._write_run_record(PipelineRunStatus.FAILED, summary=summary or {})
         self._close()
 
     def _heartbeat(self, status: PipelineRunStatus) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            status: TODO docstring.
+        """
         if not self.enabled:
             return
         self._write_run_record(status)
@@ -144,6 +188,12 @@ class AnalysisTracker:
         *,
         summary: dict[str, Any] | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            status: TODO docstring.
+            summary: TODO docstring.
+        """
         if not self.enabled or not self.progress:
             return
         record = PipelineRunRecord(
@@ -159,6 +209,7 @@ class AnalysisTracker:
         self.writer.append_run_record(record)
 
     def _close(self) -> None:
+        """TODO docstring. Document this function."""
         if self._sampler:
             self._sampler.stop(flush_final=True)
             self._sampler = None

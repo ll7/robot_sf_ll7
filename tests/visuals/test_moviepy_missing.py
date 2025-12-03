@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -29,6 +31,12 @@ class Cfg:
 
 def test_moviepy_missing_sim_view_forced(tmp_path: Path, monkeypatch):
     # Pretend SimulationView available
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
     # Force moviepy missing

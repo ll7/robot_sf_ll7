@@ -21,6 +21,7 @@ from typing import Any
 
 
 def _get_numpy():
+    """TODO docstring. Document this function."""
     return importlib.import_module("numpy")
 
 
@@ -33,5 +34,14 @@ class StubRobotModel:  # pragma: no cover - trivial
     """
 
     def predict(self, _obs: Any, **_ignored: Any) -> tuple[object, None]:
+        """TODO docstring. Document this function.
+
+        Args:
+            _obs: TODO docstring.
+            _ignored: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         np = _get_numpy()
         return np.zeros(2, dtype=float), None

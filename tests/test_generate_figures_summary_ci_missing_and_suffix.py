@@ -16,6 +16,15 @@ if TYPE_CHECKING:
 
 
 def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        episodes: TODO docstring.
+        out_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return [
         "uv",
         "run",
@@ -38,6 +47,11 @@ def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
 
 
 def test_missing_ci_warning(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")
     # Summary without mean_ci
@@ -61,6 +75,11 @@ def test_missing_ci_warning(tmp_path: Path):
 
 
 def test_custom_ci_suffix(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")
     summary = {"algoA": {"collisions": {"mean": 0.2, "mean_ci": [0.1, 0.3]}}}

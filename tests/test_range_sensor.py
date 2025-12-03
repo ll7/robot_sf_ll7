@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import numpy as np
 
 from robot_sf.sensor.range_sensor import (
@@ -10,6 +12,7 @@ from robot_sf.sensor.range_sensor import (
 
 
 def test_intersection_at_origin():
+    """TODO docstring. Document this function."""
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (0.0, 0.0)  # Ray starts at origin
     ray_vec = (1.0, 0.0)  # Ray points along the x-axis
@@ -17,6 +20,7 @@ def test_intersection_at_origin():
 
 
 def test_no_intersection():
+    """TODO docstring. Document this function."""
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (2.0, 2.0)  # Ray starts outside the circle
     ray_vec = (1.0, 0.0)  # Ray points along the x-axis
@@ -24,6 +28,7 @@ def test_no_intersection():
 
 
 def test_intersection_at_circle_perimeter():
+    """TODO docstring. Document this function."""
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (0.0, 0.0)  # Ray starts at origin
     ray_vec = (1.0, 1.0)  # Ray points diagonally
@@ -31,6 +36,7 @@ def test_intersection_at_circle_perimeter():
 
 
 def test_negative_ray_direction():
+    """TODO docstring. Document this function."""
     circle = ((0.0, 0.0), 1.0)  # Circle centered at origin with radius 1
     origin = (1.0, 0.0)  # Ray starts at x=1
     ray_vec = (-1.0, 0.0)  # Ray points along the negative x-axis
@@ -42,24 +48,28 @@ def test_negative_ray_direction():
 
 
 def test_same_point():
+    """TODO docstring. Document this function."""
     vec_1 = (0.0, 0.0)
     vec_2 = (0.0, 0.0)
     assert euclid_dist(vec_1, vec_2) == 0.0
 
 
 def test_unit_distance():
+    """TODO docstring. Document this function."""
     vec_1 = (0.0, 0.0)
     vec_2 = (1.0, 0.0)
     assert euclid_dist(vec_1, vec_2) == 1.0
 
 
 def test_negative_coordinates():
+    """TODO docstring. Document this function."""
     vec_1 = (0.0, 0.0)
     vec_2 = (-1.0, -1.0)
     assert euclid_dist(vec_1, vec_2) == (2**0.5)
 
 
 def test_non_integer_distance():
+    """TODO docstring. Document this function."""
     vec_1 = (0.0, 0.0)
     vec_2 = (1.0, 1.0)
     assert euclid_dist(vec_1, vec_2) == (2**0.5)
@@ -89,6 +99,7 @@ def test_non_integer_distance():
 
 
 def test_pedestrian_in_range():
+    """TODO docstring. Document this function."""
     out_ranges = np.array([10.0, 10.0])
     scanner_pos = (0.0, 0.0)
     max_scan_range = 10.0
@@ -110,6 +121,7 @@ def test_pedestrian_in_range():
 
 
 def test_pedestrian_out_of_range():
+    """TODO docstring. Document this function."""
     out_ranges = np.array([10.0, 10.0])
     scanner_pos = (0.0, 0.0)
     max_scan_range = 10.0

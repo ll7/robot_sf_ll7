@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from math import cos, pi, sin
 
 import numpy as np
@@ -11,6 +13,16 @@ NO_SCAN_NOISE = [0.0, 0.0]
 
 
 def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D:
+    """TODO docstring. Document this function.
+
+    Args:
+        point: TODO docstring.
+        rot_center: TODO docstring.
+        rot_angle_rad: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     x, y = point[0] - rot_center[0], point[1] - rot_center[1]
     s, c = sin(rot_angle_rad), cos(rot_angle_rad)
     x, y = x * c - y * s, x * s + y * c
@@ -18,6 +30,7 @@ def rotate(point: Point2D, rot_center: Point2D, rot_angle_rad: float) -> Point2D
 
 
 def test_scanner_detects_single_pedestrian():
+    """TODO docstring. Document this function."""
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -41,6 +54,7 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
     # construct 360 pedestrian circles arranges as isosceles,
     # scanned from the map's center where each ray hits a circle
     # orthogonally after a distance of 2.0
+    """TODO docstring. Document this function."""
     lidar_n_rays = 360
     cached_angles = np.linspace(0, 2 * pi, lidar_n_rays + 1)[:-1]
     ped_pos = np.array([rotate((2.4, 0), (0, 0), rot) for rot in cached_angles])
@@ -62,6 +76,7 @@ def test_scanner_detects_multiple_equidist_pedestrians_from_center():
 
 
 def test_scanner_detects_only_closest_pedestrian():
+    """TODO docstring. Document this function."""
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0], [3.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -82,6 +97,7 @@ def test_scanner_detects_only_closest_pedestrian():
 
 
 def test_scanner_detects_nothing_when_there_is_nothing():
+    """TODO docstring. Document this function."""
     lidar_n_rays = 1
     occupancy = ContinuousOccupancy(
         10,
@@ -101,6 +117,7 @@ def test_scanner_detects_nothing_when_there_is_nothing():
 
 
 def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
+    """TODO docstring. Document this function."""
     lidar_n_rays = 1
     pedestrians = np.array([[2.4, 0]])
     occupancy = ContinuousOccupancy(
@@ -121,6 +138,7 @@ def test_scanner_detects_nothing_when_ray_pointing_to_other_side():
 
 
 def test_scanner_detect_robot():
+    """TODO docstring. Document this function."""
     lidar_n_rays = 1
     occupancy = EgoPedContinuousOccupancy(
         10,
@@ -142,6 +160,7 @@ def test_scanner_detect_robot():
 
 
 def test_scanner_robot_detect_ego_ped():
+    """TODO docstring. Document this function."""
     lidar_n_rays = 1
     ped_pos = np.array([[3.4, 0], [4.4, 0]])
     ego_ped_pos = (2.4, 0)

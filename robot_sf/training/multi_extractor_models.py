@@ -40,6 +40,12 @@ class HardwareProfile:
     cuda_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "platform": self.platform,
             "arch": self.arch,
@@ -70,6 +76,12 @@ class ExtractorRunRecord:
     reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "config_name": self.config_name,
             "status": self.status,
@@ -100,6 +112,12 @@ class TrainingRunSummary:
     notes: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "run_id": self.run_id,
             "created_at": self.created_at,

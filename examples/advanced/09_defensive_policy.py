@@ -42,6 +42,11 @@ def run_simulation() -> None:
     model = load_trained_policy("./model/run_023")
 
     def obs_adapter(orig_obs):
+        """TODO docstring. Document this function.
+
+        Args:
+            orig_obs: TODO docstring.
+        """
         drive_state = orig_obs[OBS_DRIVE_STATE]
         ray_state = orig_obs[OBS_RAYS]
         drive_state = drive_state[:, :-1]
@@ -64,6 +69,7 @@ def run_simulation() -> None:
 
 
 def prepare_gym_spaces():
+    """TODO docstring. Document this function."""
     obs_low = np.array(
         [
             0.0,

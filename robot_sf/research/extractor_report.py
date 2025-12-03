@@ -26,10 +26,19 @@ configure_matplotlib_backend()
 
 
 def _get_pyplot():
+    """TODO docstring. Document this function."""
     return importlib.import_module("matplotlib.pyplot")
 
 
 def _latex_escape(text: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        text: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")
@@ -43,6 +52,8 @@ def _latex_escape(text: str) -> str:
 
 @dataclass
 class ReportConfig:
+    """TODO docstring. Document this class."""
+
     experiment_name: str
     hypothesis: str | None
     significance_level: float
@@ -51,10 +62,24 @@ class ReportConfig:
 
 
 def _timestamp() -> str:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
@@ -62,6 +87,15 @@ def _load_summary(path: Path) -> dict[str, Any]:
 
 
 def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        config_path: TODO docstring.
+        target_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if config_path is None or not config_path.exists():
         return None
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -71,6 +105,12 @@ def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | Non
 
 
 def _git_hash() -> str:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     try:
         return (
             subprocess.check_output(
@@ -88,6 +128,15 @@ def _git_hash() -> str:
 
 
 def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        key: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     vals: list[float] = []
     for rec in records:
         metrics = rec.get("metrics") or {}
@@ -98,12 +147,29 @@ def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
 
 
 def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[str, Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        figures_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     plt = _get_pyplot()
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
 
     def _collect_named_metric(metric_key: str) -> list[tuple[str, float]]:
+        """TODO docstring. Document this function.
+
+        Args:
+            metric_key: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         aligned: list[tuple[str, float]] = []
         for idx, rec in enumerate(records):
             metrics = rec.get("metrics") or {}
@@ -152,10 +218,30 @@ def _render_markdown(
     figures: dict[str, Path],
     metadata_path: Path,
 ) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        summary: TODO docstring.
+        config: TODO docstring.
+        stats: TODO docstring.
+        figures: TODO docstring.
+        metadata_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     run_id = summary.get("run_id", "unknown")
     output_dir = metadata_path.parent
 
     def _fmt_stat(value: float | None) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            value: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return "n/a" if value is None else f"{value:.4f}"
 
     lines = [
@@ -215,7 +301,26 @@ def _render_latex(
     metadata_path: Path,
     output_path: Path,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        summary: TODO docstring.
+        config: TODO docstring.
+        stats: TODO docstring.
+        figures: TODO docstring.
+        metadata_path: TODO docstring.
+        output_path: TODO docstring.
+    """
+
     def _fmt_stat(value: float | None) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            value: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return "n/a" if value is None else f"{value:.4f}"
 
     run_id = summary.get("run_id", "unknown")
@@ -285,6 +390,15 @@ def _stats_against_baseline(
     baseline_vals: list[float],
     candidate_vals: list[float],
 ) -> tuple[float | None, float | None]:
+    """TODO docstring. Document this function.
+
+    Args:
+        baseline_vals: TODO docstring.
+        candidate_vals: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     test_result = welch_t_test(baseline_vals, candidate_vals)
     effect = cohen_d_independent(baseline_vals, candidate_vals)
     return test_result.get("p_value"), effect
@@ -297,6 +411,17 @@ def generate_extractor_report(
     config: ReportConfig,
     config_path: Path | None = None,
 ) -> dict[str, Path | None]:
+    """TODO docstring. Document this function.
+
+    Args:
+        summary_path: TODO docstring.
+        output_root: TODO docstring.
+        config: TODO docstring.
+        config_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     summary = _load_summary(summary_path)
     run_id = summary.get("run_id", "unknown")
     output_dir = output_root / f"{config.experiment_name}_{run_id}"

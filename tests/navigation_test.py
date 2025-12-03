@@ -1,11 +1,15 @@
+"""TODO docstring. Document this module."""
+
 from robot_sf.nav.navigation import RouteNavigator
 
 
 def west_east_route():
+    """TODO docstring. Document this function."""
     return [(0, 1), (2, 1), (4, 1), (6, 1)]
 
 
 def test_can_detect_when_waypoint_reached():
+    """TODO docstring. Document this function."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((0.5, 1.5))
@@ -13,6 +17,7 @@ def test_can_detect_when_waypoint_reached():
 
 
 def test_can_detect_when_waypoint_not_reached():
+    """TODO docstring. Document this function."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((-0.5, -1.5))
@@ -20,6 +25,7 @@ def test_can_detect_when_waypoint_not_reached():
 
 
 def test_can_detect_when_destination_reached():
+    """TODO docstring. Document this function."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((6.5, 1.5))
@@ -27,6 +33,7 @@ def test_can_detect_when_destination_reached():
 
 
 def test_can_detect_when_destination_not_reached():
+    """TODO docstring. Document this function."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((0.5, 1.5))
@@ -34,6 +41,7 @@ def test_can_detect_when_destination_not_reached():
 
 
 def test_can_drive_route_from_start_to_finish():
+    """TODO docstring. Document this function."""
     route = west_east_route()
     navi = RouteNavigator(route)
     step = 0.1

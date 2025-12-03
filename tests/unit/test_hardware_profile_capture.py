@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import platform
 import sys
 
@@ -9,6 +11,12 @@ from robot_sf.training.hardware_probe import collect_hardware_profile
 
 @pytest.mark.parametrize("worker_count", [1, 4])
 def test_collect_hardware_profile_cpu_only(monkeypatch, worker_count):
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+        worker_count: TODO docstring.
+    """
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", lambda: (None, None))
 
     profile = collect_hardware_profile(worker_count=worker_count)
@@ -23,6 +31,11 @@ def test_collect_hardware_profile_cpu_only(monkeypatch, worker_count):
 
 
 def test_collect_hardware_profile_with_gpu(monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setattr(hardware_probe, "_collect_gpu_metadata", lambda: ("Fake GPU", "12.3"))
 
     profile = collect_hardware_profile(worker_count=2)

@@ -15,6 +15,11 @@ class SimpleRobotEnv(gymnasium.Env):
     """
 
     def __init__(self, env_config: EnvSettings = EnvSettings()):
+        """TODO docstring. Document this function.
+
+        Args:
+            env_config: TODO docstring.
+        """
         self.info = {}
 
         # Action space
@@ -54,10 +59,20 @@ class SimpleRobotEnv(gymnasium.Env):
         return self.info
 
     def step(self, action):
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+        """
         pass
 
     def reset(self, seed=None):
         # seed for self.np_random
+        """TODO docstring. Document this function.
+
+        Args:
+            seed: TODO docstring.
+        """
         super().reset(seed=seed)
 
         observation = self._get_observation()
@@ -65,7 +80,13 @@ class SimpleRobotEnv(gymnasium.Env):
         return observation, info
 
     def render(self, mode="human"):
+        """TODO docstring. Document this function.
+
+        Args:
+            mode: TODO docstring.
+        """
         pass
 
     def close(self):
+        """TODO docstring. Document this function."""
         pass

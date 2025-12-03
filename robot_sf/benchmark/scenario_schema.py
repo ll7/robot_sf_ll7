@@ -30,11 +30,25 @@ SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json
 
 
 def load_scenario_schema() -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def _json_pointer(path_elems: Iterable[Any]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        path_elems: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parts: list[str] = []
     for p in path_elems:
         if isinstance(p, int):

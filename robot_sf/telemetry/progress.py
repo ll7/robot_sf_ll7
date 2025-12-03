@@ -53,6 +53,14 @@ class ProgressTracker:
         log_fn: LogFunction | None = None,
         time_provider: TimeProvider | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            steps: TODO docstring.
+            writer: TODO docstring.
+            log_fn: TODO docstring.
+            time_provider: TODO docstring.
+        """
         if not steps:
             raise ValueError("ProgressTracker requires at least one step definition")
         self._definitions = list(steps)
@@ -89,6 +97,11 @@ class ProgressTracker:
             return deepcopy(self._entries)
 
     def start_step(self, step_id: str) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             if entry.status not in (StepStatus.PENDING, StepStatus.SKIPPED):
@@ -109,6 +122,11 @@ class ProgressTracker:
         self._log_once(step_id, message)
 
     def complete_step(self, step_id: str) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             if entry.status not in (StepStatus.RUNNING, StepStatus.PENDING):
@@ -133,6 +151,12 @@ class ProgressTracker:
         self._log_once(step_id, message)
 
     def fail_step(self, step_id: str, *, reason: str | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+            reason: TODO docstring.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             now = self._clock()
@@ -152,6 +176,12 @@ class ProgressTracker:
         self._emit_log(message)
 
     def skip_step(self, step_id: str, *, reason: str | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+            reason: TODO docstring.
+        """
         with self._lock:
             entry = self._get_entry_locked(step_id)
             if entry.status != StepStatus.PENDING:
@@ -175,14 +205,32 @@ class ProgressTracker:
         self._emit_log(message)
 
     def current_step(self) -> StepExecutionEntry | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         with self._lock:
             return self._current_step_locked()
 
     def completed_steps(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         with self._lock:
             return sum(1 for entry in self._entries if entry.status == StepStatus.COMPLETED)
 
     def total_steps(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         with self._lock:
             return len(self._entries)
 
@@ -237,6 +285,13 @@ class ProgressTracker:
         mark_failed: bool = False,
         reason: str | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            status: TODO docstring.
+            mark_failed: TODO docstring.
+            reason: TODO docstring.
+        """
         log_message: str | None = None
         with self._lock:
             if mark_failed:
@@ -249,6 +304,14 @@ class ProgressTracker:
             callback(status)
 
     def _mark_running_step_failed_locked(self, reason: str | None) -> str | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            reason: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         entry = self._current_step_locked()
         if entry is None or entry.status == StepStatus.FAILED:
             return None
@@ -267,21 +330,47 @@ class ProgressTracker:
         )
 
     def _current_step_locked(self) -> StepExecutionEntry | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         for entry in self._entries:
             if entry.status == StepStatus.RUNNING:
                 return entry
         return None
 
     def _has_active_steps(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         with self._lock:
             return self._has_active_steps_locked()
 
     def _has_active_steps_locked(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return any(
             entry.status in (StepStatus.PENDING, StepStatus.RUNNING) for entry in self._entries
         )
 
     def _get_entry_locked(self, step_id: str) -> StepExecutionEntry:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         for entry in self._entries:
             if entry.step_id == step_id:
                 return entry
@@ -317,6 +406,17 @@ class ProgressTracker:
         extra: str | None = None,
         total_steps_hint: int | None = None,
     ) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            entry: TODO docstring.
+            prefix: TODO docstring.
+            extra: TODO docstring.
+            total_steps_hint: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         total = total_steps_hint if total_steps_hint is not None else self.total_steps()
         elapsed = self._format_duration(entry.duration_seconds)
         eta = self._format_duration(entry.eta_snapshot_seconds)
@@ -329,6 +429,12 @@ class ProgressTracker:
         return message
 
     def _log_once(self, step_id: str, message: str) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step_id: TODO docstring.
+            message: TODO docstring.
+        """
         with self._log_lock:
             last = self._last_log_messages.get(step_id)
             if last == message:
@@ -337,19 +443,34 @@ class ProgressTracker:
         self._emit_log(message)
 
     def _emit_log(self, message: str) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            message: TODO docstring.
+        """
         self._log_fn(message)
 
     def _write_index(self) -> None:
+        """TODO docstring. Document this function."""
         with self._lock:
             self._write_index_locked()
 
     def _write_index_locked(self) -> None:
+        """TODO docstring. Document this function."""
         if self._writer is None:
             return
         self._writer.write_step_index(self._entries)
 
     @staticmethod
     def _format_duration(value: float | None) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            value: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if value is None:
             return "--"
         seconds = int(max(value, 0))
@@ -385,6 +506,15 @@ class _FailureSafeGuard:
         flush_interval: float,
         signals: Sequence[int | signal.Signals] | None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            has_work: TODO docstring.
+            flush_running: TODO docstring.
+            flush_failed: TODO docstring.
+            flush_interval: TODO docstring.
+            signals: TODO docstring.
+        """
         self._has_work = has_work
         self._flush_running = flush_running
         self._flush_failed = flush_failed
@@ -402,12 +532,14 @@ class _FailureSafeGuard:
         self._install_signal_handlers()
 
         def _cleanup() -> None:
+            """TODO docstring. Document this function."""
             self.close()
 
         self._atexit_callback = _cleanup
         atexit.register(self._atexit_callback)
 
     def close(self) -> None:
+        """TODO docstring. Document this function."""
         if self._shutdown.is_set():
             return
         self._shutdown.set()
@@ -420,12 +552,14 @@ class _FailureSafeGuard:
             self._atexit_callback = None
 
     def _run(self) -> None:
+        """TODO docstring. Document this function."""
         while not self._shutdown.wait(self._flush_interval):
             if not self._has_work():
                 continue
             self._flush_running()
 
     def _install_signal_handlers(self) -> None:
+        """TODO docstring. Document this function."""
         if not self._signals:
             return
         if threading.current_thread() is not threading.main_thread():
@@ -439,6 +573,7 @@ class _FailureSafeGuard:
             self._previous_handlers[signum] = previous
 
     def _restore_signal_handlers(self) -> None:
+        """TODO docstring. Document this function."""
         if not self._previous_handlers:
             return
         for signum, handler in self._previous_handlers.items():
@@ -447,6 +582,12 @@ class _FailureSafeGuard:
         self._previous_handlers.clear()
 
     def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            signum: TODO docstring.
+            frame: TODO docstring.
+        """
         signal_name = self._signal_name(signum)
         self._flush_failed(f"Signal {signal_name}")
         previous = self._previous_handlers.get(signum)
@@ -460,6 +601,14 @@ class _FailureSafeGuard:
 
     @staticmethod
     def _signal_name(signum: int) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            signum: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         try:
             return signal.Signals(signum).name
         except ValueError:
@@ -467,6 +616,14 @@ class _FailureSafeGuard:
 
     @staticmethod
     def _normalize_signals(signals: Sequence[int | signal.Signals] | None) -> tuple[int, ...]:
+        """TODO docstring. Document this function.
+
+        Args:
+            signals: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if signals is None:
             return tuple(int(sig) for sig in _DEFAULT_FAILURE_SIGNALS)
         normalized: list[int] = []

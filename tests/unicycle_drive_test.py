@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from math import pi
 
 from robot_sf.ped_ego.unicycle_drive import (
@@ -9,6 +11,14 @@ from robot_sf.ped_ego.unicycle_drive import (
 
 
 def norm_angle(angle: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        angle: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     while angle < 0:
         angle += 2 * pi
     while angle >= 2 * pi:
@@ -17,6 +27,7 @@ def norm_angle(angle: float) -> float:
 
 
 def test_unicycle_can_drive_right_curve():
+    """TODO docstring. Document this function."""
     motion = UnicycleMotion(UnicycleDriveSettings())
     pose_before, vel_before = ((0, 0), 0), 1
     state = UnicycleDriveState(pose_before, vel_before)
@@ -33,6 +44,7 @@ def test_unicycle_can_drive_right_curve():
 
 
 def test_unicycle_can_drive_left_curve():
+    """TODO docstring. Document this function."""
     motion = UnicycleMotion(UnicycleDriveSettings())
     pose_before, vel_before = ((0, 0), 0), 1
     state = UnicycleDriveState(pose_before, vel_before)
@@ -49,6 +61,7 @@ def test_unicycle_can_drive_left_curve():
 
 
 def test_unicycle_acceleration():
+    """TODO docstring. Document this function."""
     motion = UnicycleMotion(UnicycleDriveSettings(allow_backwards=True))
     pose_before, vel_before = ((0, 0), 0), 0
     state = UnicycleDriveState(pose_before, vel_before)

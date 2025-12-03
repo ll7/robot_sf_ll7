@@ -14,6 +14,14 @@ from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestra
 
 
 def _synthetic_records(seeds: list[int]) -> list[dict[str, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        seeds: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     records = []
     for s in seeds:
         records.append(
@@ -38,6 +46,14 @@ def _synthetic_records(seeds: list[int]) -> list[dict[str, float]]:
 
 
 def build_report(out_dir: Path) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     seeds = [1, 2, 3]
     records = _synthetic_records(seeds)
     baseline_ts = [r["timesteps_to_convergence"] for r in records if r["policy_type"] == "baseline"]
@@ -60,6 +76,14 @@ def build_report(out_dir: Path) -> Path:
 
 
 def build_ablation(out_dir: Path) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     params = {"bc_epochs": [5, 10], "dataset_size": [100, 200]}
     ab_orch = AblationOrchestrator(
         experiment_name="demo_ablation",
@@ -73,6 +97,7 @@ def build_ablation(out_dir: Path) -> Path:
 
 
 def main() -> None:
+    """TODO docstring. Document this function."""
     parser = argparse.ArgumentParser(description="Demo: generate research report + ablation")
     parser.add_argument("--out", type=Path, required=True, help="Output directory root")
     args = parser.parse_args()

@@ -232,6 +232,7 @@ class PedestrianEnv(Env):
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
+        """TODO docstring. Document this function."""
         robot_action = (
             None
             if not self.last_action_robot

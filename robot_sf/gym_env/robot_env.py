@@ -39,6 +39,14 @@ from robot_sf.sim.simulator import (
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
 def _stable_config_hash(cfg: EnvSettings) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         payload = json.dumps(
             asdict(cfg) if is_dataclass(cfg) else cfg.__dict__,
@@ -258,6 +266,7 @@ class RobotEnv(BaseEnv):
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
+        """TODO docstring. Document this function."""
         action = (
             None
             if not self.last_action

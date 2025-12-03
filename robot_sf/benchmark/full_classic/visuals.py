@@ -58,6 +58,8 @@ except ImportError:
 
 @dataclass
 class PlotArtifact:
+    """TODO docstring. Document this class."""
+
     kind: str
     path_pdf: str
     status: str
@@ -66,6 +68,8 @@ class PlotArtifact:
 
 @dataclass
 class VideoArtifact:
+    """TODO docstring. Document this class."""
+
     artifact_id: str
     scenario_id: str
     episode_id: str
@@ -83,6 +87,12 @@ class VideoArtifact:
 
 
 def _write_json(path: Path, obj: Any) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        obj: TODO docstring.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
@@ -91,6 +101,14 @@ def _write_json(path: Path, obj: Any) -> None:
 
 
 def _convert_plot_artifacts(raw_list) -> list[dict]:
+    """TODO docstring. Document this function.
+
+    Args:
+        raw_list: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: list[dict] = []
     for a in raw_list:
         out.append(
@@ -108,6 +126,12 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
     """Return (success_count, status_note) for video artifacts."""
 
     def _get(item, key):
+        """TODO docstring. Document this function.
+
+        Args:
+            item: TODO docstring.
+            key: TODO docstring.
+        """
         if isinstance(item, dict):
             return item.get(key)
         return getattr(item, key, None)
@@ -131,6 +155,17 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
 
 
 def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[VideoArtifact]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        out_dir: TODO docstring.
+        cfg: TODO docstring.
+        replay_map: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not _SIM_VIEW_AVAILABLE or not simulation_view_ready():
         return []
     if not bool(getattr(cfg, "capture_replay", False)):
@@ -204,6 +239,16 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
 
 
 def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> list[VideoArtifact]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        out_dir: TODO docstring.
+        cfg: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     raw = generate_fallback_videos(records, out_dir, cfg)
     out: list[VideoArtifact] = []
     for a in raw:
@@ -222,6 +267,15 @@ def _synthetic_fallback_videos(records, out_dir: Path, cfg) -> list[VideoArtifac
 
 
 def _select_records(records, cfg) -> list[dict]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        cfg: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     max_videos = int(getattr(cfg, "max_videos", 1))
     return records[: max_videos or 1]
 
@@ -233,6 +287,18 @@ def _build_video_artifacts(
     replay_map: dict,
 ) -> list[VideoArtifact]:
     # --- Inner helpers (local to keep namespace clean) ------------------
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+        records: TODO docstring.
+        videos_dir: TODO docstring.
+        replay_map: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
+
     def _normalize_mode(raw) -> str:
         """Normalize renderer mode string.
 
@@ -357,6 +423,13 @@ def _build_video_artifacts(
 
 
 def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: list[VideoArtifact]):
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+        records: TODO docstring.
+        video_artifacts: TODO docstring.
+    """
     if not bool(getattr(cfg, "capture_replay", False)):
         return
     mode = str(getattr(cfg, "video_renderer", "auto")).strip().lower()
@@ -380,6 +453,17 @@ def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: lis
 
 
 def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+        cfg: TODO docstring.
+        groups: TODO docstring.
+        records: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     plots_dir = root / "plots"
     videos_dir = root / "videos"
     reports_dir = root / "reports"

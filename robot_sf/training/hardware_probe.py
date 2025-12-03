@@ -11,6 +11,7 @@ from robot_sf.training.multi_extractor_models import HardwareProfile
 
 
 def _load_torch():
+    """TODO docstring. Document this function."""
     try:
         return importlib.import_module("torch")
     except ModuleNotFoundError:  # pragma: no cover

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import numpy as np
 from pysocialforce import Simulator
 
@@ -7,6 +9,7 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 def make_simple_sim():
     # Create a minimal simulator with two pedestrians and a small obstacle
     # state shape for 2 peds: [x, y, vx, vy, goalx, goaly, tau]
+    """TODO docstring. Document this function."""
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
@@ -21,6 +24,7 @@ def make_simple_sim():
 
 
 def test_get_forces_at_point():
+    """TODO docstring. Document this function."""
     sim = make_simple_sim()
     wrapper = FastPysfWrapper(sim)
 
@@ -31,6 +35,7 @@ def test_get_forces_at_point():
 
 
 def test_get_force_field():
+    """TODO docstring. Document this function."""
     sim = make_simple_sim()
     wrapper = FastPysfWrapper(sim)
 

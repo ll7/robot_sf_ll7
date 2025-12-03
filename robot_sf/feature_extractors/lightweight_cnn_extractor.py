@@ -45,6 +45,15 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            observation_space: TODO docstring.
+            num_filters: TODO docstring.
+            kernel_sizes: TODO docstring.
+            dropout_rate: TODO docstring.
+            drive_hidden_dims: TODO docstring.
+        """
         if num_filters is None:
             num_filters = [32, 16]
         if kernel_sizes is None:

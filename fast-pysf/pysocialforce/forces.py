@@ -29,13 +29,31 @@ class SimEntitiesProvider(Protocol):
     """Not implemented!!!"""
 
     def get_obstacles(self) -> list[np.ndarray]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         raise NotImplementedError()
 
     def get_raw_obstacles(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         raise NotImplementedError()
 
     @property
     def peds(self) -> PedState:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         raise NotImplementedError()
 
 
@@ -43,6 +61,11 @@ class DebuggableForce:
     """A wrapper class that adds debugging functionality to a given force."""
 
     def __init__(self, force: Force):
+        """TODO docstring. Document this function.
+
+        Args:
+            force: TODO docstring.
+        """
         self.force = force
 
     def __call__(self, debug: bool = False):
@@ -83,6 +106,12 @@ class DesiredForce:
     """
 
     def __init__(self, config: DesiredForceConfig, peds: PedState):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            peds: TODO docstring.
+        """
         self.config = config
         self.peds = peds
 
@@ -136,10 +165,22 @@ class SocialForce:
     """
 
     def __init__(self, config: SocialForceConfig, peds: PedState):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            peds: TODO docstring.
+        """
         self.config = config
         self.peds = peds
 
     def __call__(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
         forces = social_force(
@@ -310,6 +351,14 @@ def social_force_ped_ped(
 
 @njit(fastmath=True)
 def norm_vec(vec: Point2D) -> tuple[Point2D, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        vec: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if vec[0] == 0 and vec[1] == 0:
         return vec, 0
     vec_len = (vec[0] ** 2 + vec[1] ** 2) ** 0.5
@@ -323,6 +372,12 @@ class ObstacleForce:
     """
 
     def __init__(self, config: ObstacleForceConfig, sim: SimEntitiesProvider):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            sim: TODO docstring.
+        """
         self.config = config
         self.get_obstacles = sim.get_raw_obstacles
         self.get_peds = sim.peds.pos
@@ -350,18 +405,7 @@ class ObstacleForce:
 def all_obstacle_forces(
     out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
 ):
-    """
-    Calculates the forces exerted by all obstacles on each pedestrian.
-
-    Parameters:
-    - out_forces (np.ndarray): Array to store the resulting forces for each pedestrian.
-    - ped_positions (np.ndarray): Array of shape (num_peds, 2) containing the positions of all pedestrians.
-    - obstacles (np.ndarray): Array of shape (num_obstacles, 6) containing the obstacle line segments and their orthogonal vectors.
-    - ped_radius (float): Radius of the pedestrians.
-
-    Returns:
-    None
-    """
+    """Populate `out_forces` with the total obstacle force applied to each pedestrian."""
     # Extract obstacle line segments and their orthogonal vectors
     obstacle_segments = obstacles[:, :4]
     ortho_vecs = obstacles[:, 4:]
@@ -468,23 +512,65 @@ def obstacle_force(
 def potential_field_force(
     obst_dist: float, dx_obst_dist: float, dy_obst_dist: float
 ) -> tuple[float, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        obst_dist: TODO docstring.
+        dx_obst_dist: TODO docstring.
+        dy_obst_dist: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     der_potential = 1 / pow(obst_dist, 3)
     return der_potential * dx_obst_dist, der_potential * dy_obst_dist
 
 
 @njit(fastmath=True)
 def euclid_dist(x1: float, y1: float, x2: float, y2: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        x1: TODO docstring.
+        y1: TODO docstring.
+        x2: TODO docstring.
+        y2: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return pow(pow(x2 - x1, 2) + pow(y2 - y1, 2), 0.5)
 
 
 @njit(fastmath=True)
 def euclid_dist_sq(x1: float, y1: float, x2: float, y2: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        x1: TODO docstring.
+        y1: TODO docstring.
+        x2: TODO docstring.
+        y2: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return pow(x2 - x1, 2) + pow(y2 - y1, 2)
 
 
 @njit(fastmath=True)
 def der_euclid_dist(p1: Point2D, p2: Point2D, distance: float) -> tuple[float, float]:
     # info: distance is an expensive operation and therefore pre-computed
+    """TODO docstring. Document this function.
+
+    Args:
+        p1: TODO docstring.
+        p2: TODO docstring.
+        distance: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
     return dx1_dist, dy1_dist
@@ -515,6 +601,12 @@ class GroupCoherenceForceAlt:
 
     def __call__(self) -> np.ndarray:
         # Initialize an array to store coherence forces for each pedestrian with zero values.
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         forces = np.zeros((self.peds.size(), 2))
 
         # If no groups exist within the pedestrian data, return the initialized zero-forces array.
@@ -569,6 +661,12 @@ class GroupRepulsiveForce:
 
     def __call__(self) -> np.ndarray:
         # Retrieve the distance threshold from configuration where repulsive force is effective.
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         threshold = self.config.threshold
         # Initialize a zero np.array to store repulsive forces for each pedestrian.
         forces = np.zeros((self.peds.size(), 2))
@@ -710,6 +808,15 @@ def group_gaze_force(
 
 @njit
 def vec_len_2d(vec_x: float, vec_y: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        vec_x: TODO docstring.
+        vec_y: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return (vec_x**2 + vec_y**2) ** 0.5
 
 

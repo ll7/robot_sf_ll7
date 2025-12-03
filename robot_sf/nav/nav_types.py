@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass
 
 from robot_sf.common.types import Vec2D, Zone

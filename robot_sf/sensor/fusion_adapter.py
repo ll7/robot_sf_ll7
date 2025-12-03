@@ -195,6 +195,15 @@ class MergedObservationFusion:
         sim: Any | None = None,
         robot_id: int | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            base_fusion: TODO docstring.
+            sensors: TODO docstring.
+            sensor_names: TODO docstring.
+            sim: TODO docstring.
+            robot_id: TODO docstring.
+        """
         self._base = base_fusion
         self._sensors = sensors
         self._names = sensor_names
@@ -202,6 +211,12 @@ class MergedObservationFusion:
         self._robot_id = robot_id
 
     def next_obs(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         obs = self._base.next_obs()
         state = {"sim": self._sim, "robot_id": self._robot_id}
         for name, sensor in zip(self._names, self._sensors, strict=True):
@@ -215,6 +230,7 @@ class MergedObservationFusion:
 
     # Pass-through API used by RobotState
     def reset_cache(self) -> None:
+        """TODO docstring. Document this function."""
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()
         for sensor in self._sensors:

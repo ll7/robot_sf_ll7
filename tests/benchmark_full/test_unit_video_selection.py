@@ -9,12 +9,15 @@ from robot_sf.benchmark.full_classic.videos import generate_videos
 
 
 class _Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = True
     disable_videos = False
     max_videos = 2
 
 
 def test_video_selection_smoke_skip():
+    """TODO docstring. Document this function."""
     records = []
     for i in range(5):
         records.append(

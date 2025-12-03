@@ -56,6 +56,16 @@ class TelemetrySampler:
         time_provider: Callable[[], datetime] | None = None,
         step_rate_provider: Callable[[], float | None] | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            writer: TODO docstring.
+            progress_tracker: TODO docstring.
+            started_at: TODO docstring.
+            interval_seconds: TODO docstring.
+            time_provider: TODO docstring.
+            step_rate_provider: TODO docstring.
+        """
         self._writer = writer
         self._progress_tracker = progress_tracker
         self._started_at = started_at
@@ -97,10 +107,23 @@ class TelemetrySampler:
         self.stop()
 
     def __enter__(self) -> TelemetrySampler:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         self.start()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
+        """TODO docstring. Document this function.
+
+        Args:
+            exc_type: TODO docstring.
+            exc: TODO docstring.
+            tb: TODO docstring.
+        """
         self.stop()
 
     def add_consumer(self, consumer: SnapshotConsumer) -> None:
@@ -133,6 +156,7 @@ class TelemetrySampler:
         return snapshot
 
     def _run_loop(self) -> None:
+        """TODO docstring. Document this function."""
         while not self._stop_event.is_set():
             start = time.perf_counter()
             with contextlib.suppress(Exception):
@@ -142,6 +166,12 @@ class TelemetrySampler:
             self._stop_event.wait(timeout=sleep_for)
 
     def _collect_snapshot(self) -> TelemetrySnapshot:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         timestamp = self._clock()
         timestamp_ms = int(timestamp.timestamp() * 1000)
         step_id = self._resolve_current_step()
@@ -174,6 +204,12 @@ class TelemetrySampler:
         return snapshot
 
     def _resolve_current_step(self) -> str | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         tracker = self._progress_tracker
         if tracker is None:
             return None
@@ -184,6 +220,12 @@ class TelemetrySampler:
         return None
 
     def _default_step_rate(self) -> float | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         tracker = self._progress_tracker
         if tracker is None:
             return None
@@ -194,6 +236,14 @@ class TelemetrySampler:
         return completed / elapsed
 
     def _sample_process_cpu(self, notes: set[str]) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            notes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if self._process is None:
             notes.add("psutil-unavailable")
             return None
@@ -205,6 +255,14 @@ class TelemetrySampler:
             return None
 
     def _sample_system_cpu(self, notes: set[str]) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            notes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not self._system_cpu_fn:
             notes.add("system-cpu-unavailable")
             return None
@@ -216,6 +274,14 @@ class TelemetrySampler:
             return None
 
     def _sample_memory_mb(self, notes: set[str]) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            notes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if self._process is not None:
             try:
                 memory_info = self._process.memory_info()
@@ -227,6 +293,14 @@ class TelemetrySampler:
 
     @staticmethod
     def _resource_memory_mb(notes: set[str]) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            notes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if resource is None:  # pragma: no cover - platform without resource
             notes.add("resource-module-unavailable")
             return None
@@ -238,6 +312,14 @@ class TelemetrySampler:
 
     @staticmethod
     def _safe_call(func: Callable[[], float | None] | None) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            func: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if func is None:
             return None
         with contextlib.suppress(Exception):
@@ -245,6 +327,7 @@ class TelemetrySampler:
         return None
 
     def _init_process_handle(self):
+        """TODO docstring. Document this function."""
         if psutil is None:
             logger.debug("psutil not available; telemetry sampler will skip CPU/memory metrics")
             return None

@@ -17,6 +17,13 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        path: TODO docstring.
+        default: TODO docstring.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:  # type: ignore[redundant-expr]
@@ -26,6 +33,16 @@ def _get_dotted(d: dict[str, object], path: str, default=None):
 
 
 def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        rec: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     g = _get_dotted(rec, group_by)
     if g is None:
         g = _get_dotted(rec, fallback_group_by)
@@ -34,6 +51,8 @@ def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None
 
 @dataclass
 class TableRow:
+    """TODO docstring. Document this class."""
+
     group: str
     values: dict[str, float | None]
 
@@ -44,6 +63,17 @@ def compute_table(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
 ) -> list[TableRow]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        metrics: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     sums: dict[str, dict[str, float]] = {}
     counts: dict[str, dict[str, int]] = {}
     for rec in records:
@@ -79,6 +109,15 @@ def compute_table(
 
 
 def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        rows: TODO docstring.
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     headers = ["Group", *metrics]
     lines = [
         "| " + " | ".join(headers) + " |",
@@ -94,6 +133,15 @@ def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        rows: TODO docstring.
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Group", *metrics])
@@ -108,6 +156,14 @@ def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def to_json(rows: Sequence[TableRow]) -> list[dict[str, object]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        rows: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: list[dict[str, object]] = []
     for r in rows:
         out.append({"group": r.group, **r.values})

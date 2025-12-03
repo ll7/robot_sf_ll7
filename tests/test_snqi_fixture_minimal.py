@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import json
 from pathlib import Path
 
@@ -8,6 +10,11 @@ FIXTURE_DIR = Path(__file__).parent / "data" / "snqi"
 
 
 def test_snqi_minimal_grid(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes = FIXTURE_DIR / "episodes_small.jsonl"
     baseline = FIXTURE_DIR / "baseline_stats.json"
     out = tmp_path / "result.json"

@@ -44,4 +44,12 @@ def default_guidance(duration_seconds: float, breach_type: str) -> list[str]:
 
 
 def format_guidance_lines(lines: Iterable[str]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        lines: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return "\n".join(f"  - {line}" for line in lines)

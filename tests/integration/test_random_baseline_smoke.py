@@ -1,9 +1,12 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from robot_sf.baselines import get_baseline
 
 
 def _obs():
+    """TODO docstring. Document this function."""
     return {
         "dt": 0.1,
         "robot": {
@@ -18,6 +21,7 @@ def _obs():
 
 
 def test_random_velocity_mode_step():
+    """TODO docstring. Document this function."""
     Random = get_baseline("random")
     policy = Random({"mode": "velocity", "v_max": 1.5}, seed=123)
     act = policy.step(_obs())
@@ -27,6 +31,7 @@ def test_random_velocity_mode_step():
 
 
 def test_random_unicycle_mode_step():
+    """TODO docstring. Document this function."""
     Random = get_baseline("random")
     policy = Random({"mode": "unicycle", "v_max": 1.0, "omega_max": 2.0}, seed=42)
     act = policy.step(_obs())

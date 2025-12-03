@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -27,6 +29,12 @@ class Cfg:
 
 def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
     # Provide simple record with minimal replay (synthetic path ignores replay)
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     records = [
         {
             "episode_id": "ep1",
@@ -41,7 +49,10 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 
     # Monkeypatch build to simulate long encode time & over-budget plots
     class FakeVideoArtifact:
+        """TODO docstring. Document this class."""
+
         def __init__(self):
+            """TODO docstring. Document this function."""
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -53,6 +64,14 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
             self.peak_rss_mb = 30.0
 
     def fake_build(_cfg, _recs, _vdir, _rmap):
+        """TODO docstring. Document this function.
+
+        Args:
+            _cfg: TODO docstring.
+            _recs: TODO docstring.
+            _vdir: TODO docstring.
+            _rmap: TODO docstring.
+        """
         return [FakeVideoArtifact()]
 
     monkeypatch.setattr(visuals_mod, "_build_video_artifacts", fake_build)
@@ -61,6 +80,7 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
     timeline = [base, base + 3.1, base + 3.2, base + 3.25]
 
     def fake_perf_counter2():
+        """TODO docstring. Document this function."""
         if len(timeline) == 1:
             return timeline[0]
         return timeline.pop(0)
@@ -76,8 +96,19 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 @pytest.mark.parametrize("peak", [101.0, 150.0])
 def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
     # Monkeypatch encoding to inject a synthetic success with high peak memory
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+        peak: TODO docstring.
+    """
+
     class FakeVideoArtifact:
+        """TODO docstring. Document this class."""
+
         def __init__(self):
+            """TODO docstring. Document this function."""
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -89,6 +120,14 @@ def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
             self.peak_rss_mb = peak
 
     def fake_build_video(_cfg, _records, _videos_dir, _replay_map):
+        """TODO docstring. Document this function.
+
+        Args:
+            _cfg: TODO docstring.
+            _records: TODO docstring.
+            _videos_dir: TODO docstring.
+            _replay_map: TODO docstring.
+        """
         return [FakeVideoArtifact()]
 
     monkeypatch.setattr(visuals_mod, "_build_video_artifacts", fake_build_video)

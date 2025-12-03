@@ -36,6 +36,12 @@ if TYPE_CHECKING:  # pragma: no cover - import surface for type checkers only
 
 
 def _artifact_root() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return get_artifact_root().resolve(strict=False)
 
 
@@ -53,6 +59,14 @@ def _path_to_manifest(path: Path) -> str:
 
 
 def _serialize_metric(metric: MetricAggregate) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        metric: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     payload: dict[str, Any] = {
         "mean": metric.mean,
         "median": metric.median,
@@ -64,6 +78,14 @@ def _serialize_metric(metric: MetricAggregate) -> dict[str, Any]:
 
 
 def _to_json_ready(value: Any) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None or isinstance(value, str | int | float | bool):
         return value
     if isinstance(value, Path):
@@ -85,10 +107,24 @@ def _to_json_ready(value: Any) -> Any:
 
 
 def _serialize_metrics_map(metrics: Mapping[str, MetricAggregate]) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return {name: _serialize_metric(metric) for name, metric in sorted(metrics.items())}
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        payload: TODO docstring.
+    """
     path = path.resolve(strict=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_fd, tmp_name = tempfile.mkstemp(prefix=f"{path.name}.", dir=str(path.parent))

@@ -529,6 +529,12 @@ def load_weights(file_path: Path) -> dict[str, float]:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description="SNQI Sensitivity Analysis")
     parser.add_argument(
         "--episodes",
@@ -591,6 +597,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _load_inputs(
     args: argparse.Namespace,
 ) -> tuple[list[dict], dict[str, dict[str, float]], dict[str, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         episodes = load_episodes_data(args.episodes)
         baseline_stats = load_baseline_stats(args.baseline)
@@ -605,6 +619,11 @@ def _load_inputs(
 
 
 def _apply_seed_if_any(seed: int | None) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        seed: TODO docstring.
+    """
     if seed is not None:
         np.random.seed(seed)
 
@@ -615,6 +634,17 @@ def _run_analyses(
     sweep_points: int,
     pairwise_points: int,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        analyzer: TODO docstring.
+        weights: TODO docstring.
+        sweep_points: TODO docstring.
+        pairwise_points: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     results: dict[str, Any] = {}
     logger.info("Running weight sweep analysis")
     results["weight_sweep"] = analyzer.weight_sweep_analysis(weights, n_points=sweep_points)
@@ -631,6 +661,12 @@ def _run_analyses(
 
 
 def _git_commit() -> str:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     try:
         return (
             subprocess.check_output(
@@ -650,6 +686,17 @@ def _build_metadata(
     end_iso: str,
     runtime_seconds: float,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+        start_iso: TODO docstring.
+        end_iso: TODO docstring.
+        runtime_seconds: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return {
         "schema_version": 1,
         "generated_at": end_iso,
@@ -671,6 +718,15 @@ def _build_metadata(
 
 
 def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        validate: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         if validate:
             validate_snqi(results, "sensitivity", check_finite=True)
@@ -683,6 +739,12 @@ def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
 
 
 def _write_results(results: dict[str, Any], output_dir: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        output_dir: TODO docstring.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
@@ -698,6 +760,21 @@ def _build_summary(
     end_iso: str,
     metadata: dict[str, Any],
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        total_episodes: TODO docstring.
+        weights: TODO docstring.
+        args: TODO docstring.
+        runtime_seconds: TODO docstring.
+        start_iso: TODO docstring.
+        end_iso: TODO docstring.
+        metadata: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     summary: dict[str, Any] = {
         "analysis_summary": {
             "total_episodes": total_episodes,
@@ -746,6 +823,12 @@ def _build_summary(
 
 
 def _write_summary(summary: dict[str, Any], output_dir: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        summary: TODO docstring.
+        output_dir: TODO docstring.
+    """
     with open(output_dir / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
@@ -756,6 +839,17 @@ def _handle_visualizations(
     output_dir: Path,
     skip_visualizations: bool,
 ) -> int | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        analyzer: TODO docstring.
+        results: TODO docstring.
+        output_dir: TODO docstring.
+        skip_visualizations: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if skip_visualizations:
         return None
     try:
@@ -774,6 +868,12 @@ def _handle_visualizations(
 
 
 def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        total_episodes: TODO docstring.
+    """
     logger.info("Sensitivity analysis completed.")
     print("\nSensitivity Analysis Summary:")
     print(f"Episodes analyzed: {total_episodes}")
@@ -795,6 +895,12 @@ def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
 

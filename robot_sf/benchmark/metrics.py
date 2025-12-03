@@ -603,6 +603,15 @@ def snqi(
     """
 
     def _norm(name: str, value: float) -> float:
+        """TODO docstring. Document this function.
+
+        Args:
+            name: TODO docstring.
+            value: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if baseline_stats is None or name not in baseline_stats:
             return 0.0
         med = baseline_stats[name].get("med", 0.0)
@@ -616,6 +625,15 @@ def snqi(
         return float(norm)
 
     def _safe(val: float | None, default: float = 0.0) -> float:
+        """TODO docstring. Document this function.
+
+        Args:
+            val: TODO docstring.
+            default: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         v = float(val) if val is not None else default
         return v if math.isfinite(v) else default
 

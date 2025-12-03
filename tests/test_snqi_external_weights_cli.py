@@ -42,6 +42,11 @@ INVALID_WEIGHTS_NON_NUMERIC = {
 
 @pytest.fixture
 def snqi_small_dataset(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
     episodes = [
@@ -85,6 +90,12 @@ def snqi_small_dataset(tmp_path: Path):
 
 
 def _write_weights(path: Path, weights: dict):
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        weights: TODO docstring.
+    """
     path.write_text(json.dumps(weights), encoding="utf-8")
 
 
@@ -105,6 +116,15 @@ def test_cli_external_initial_weights_validation(
     expect_success,
     script_kind,
 ):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        snqi_small_dataset: TODO docstring.
+        weights: TODO docstring.
+        expect_success: TODO docstring.
+        script_kind: TODO docstring.
+    """
     episodes_path, baseline_path = snqi_small_dataset
     weights_file = tmp_path / "weights.json"
     _write_weights(weights_file, weights)

@@ -214,6 +214,17 @@ class SvgMapConverter:
         # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create
         # minimal synthetic zones around first/last waypoint so downstream logic still works.
         def _safe_zone(index: int, zones: list[Rect], waypoint, kind: str) -> Rect:
+            """TODO docstring. Document this function.
+
+            Args:
+                index: TODO docstring.
+                zones: TODO docstring.
+                waypoint: TODO docstring.
+                kind: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             if zones and 0 <= index < len(zones):
                 return zones[index]
             logger.warning(
@@ -503,6 +514,14 @@ class SvgMapConverter:
 
     def __get_path_number(self, route: str) -> tuple[int, int]:
         # routes have a label of the form 'ped_route_<spawn>_<goal>'
+        """TODO docstring. Document this function.
+
+        Args:
+            route: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         numbers = re.findall(r"\d+", route)
         if numbers:
             spawn = int(numbers[0])
@@ -551,6 +570,15 @@ def convert_map(svg_file: str):
 
 
 def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
+    """TODO docstring. Document this function.
+
+    Args:
+        file_path: TODO docstring.
+        strict: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if file_path.suffix.lower() != ".svg":
         raise ValueError(f"Expected an SVG file, got: {file_path}")
     try:
@@ -566,6 +594,16 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
 
 
 def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str, MapDefinition]:
+    """TODO docstring. Document this function.
+
+    Args:
+        dir_path: TODO docstring.
+        pattern: TODO docstring.
+        strict: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     svg_files = sorted(dir_path.glob(pattern))
     if not svg_files:
         raise ValueError(f"No SVG files found in directory {dir_path} with pattern '{pattern}'")

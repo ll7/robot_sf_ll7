@@ -32,6 +32,11 @@ MANIFEST_FILES = {
 
 
 def _load_json(path: Path):  # type: ignore[no-untyped-def]
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 

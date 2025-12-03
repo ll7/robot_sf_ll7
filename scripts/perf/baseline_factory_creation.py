@@ -31,12 +31,27 @@ except Exception as e:  # pragma: no cover - baseline script bootstrap
 
 @runtime_checkable
 class _EnvLike(Protocol):  # minimal protocol to appease static checks
-    def reset(self) -> Any: ...
+    """TODO docstring. Document this class."""
 
-    def close(self) -> None: ...
+    def reset(self) -> Any:
+        """TODO docstring. Document this function."""
+        ...
+
+    def close(self) -> None:
+        """TODO docstring. Document this function."""
+        ...
 
 
 def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        fn: TODO docstring.
+        iterations: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     times: list[float] = []
     for _ in range(iterations):
         start = time.perf_counter()
@@ -60,6 +75,15 @@ def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, flo
 
 
 def _percentile(values: list[float], p: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+        p: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not values:
         return 0.0
     values_sorted = sorted(values)
@@ -74,6 +98,7 @@ def _percentile(values: list[float], p: float) -> float:
 
 
 def main() -> None:
+    """TODO docstring. Document this function."""
     parser = argparse.ArgumentParser(description="Baseline factory creation timing")
     parser.add_argument("--iterations", type=int, default=30, help="Creations per factory")
     parser.add_argument(

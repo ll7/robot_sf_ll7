@@ -40,7 +40,7 @@ def plot_single_splitted_traj(
             route.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ped_idx (int): Which simulation pedestrian is inspected
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -102,7 +102,7 @@ def plot_all_splitted_traj(
     Split when the distance between two consecutive points is greater than normal.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
         map_def (MapDefinition, optional): Map definition to plot obstacles
@@ -217,7 +217,7 @@ def subplot_single_splitted_traj_acc(
     Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ped_idx (int): Which simulation pedestrian is inspected
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -301,7 +301,7 @@ def plot_acceleration_distribution(
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
@@ -366,7 +366,7 @@ def plot_velocity_distribution(
     Calculate and plot the probability distribution of the velocity of all pedestrians.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
@@ -431,7 +431,7 @@ def subplot_velocity_distribution_with_ego_ped(
     in comparison to the ego pedestrian.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_positions (np.ndarray): shape: (timesteps, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -505,7 +505,7 @@ def subplot_acceleration_distribution(
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_positions (np.ndarray): shape: (timesteps, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -587,7 +587,7 @@ def velocity_colorcoded_with_positions(
     Plot the positions of NPC pedestrians color-coded by their velocities.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
         map_def (MapDefinition, optional): Map definition to plot obstacles

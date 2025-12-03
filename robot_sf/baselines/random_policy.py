@@ -16,6 +16,8 @@ import numpy as np
 
 @dataclass
 class RandomPlannerConfig:
+    """TODO docstring. Document this class."""
+
     mode: str = "velocity"  # "velocity" or "unicycle"
     v_max: float = 2.0
     omega_max: float = 1.0
@@ -26,6 +28,8 @@ class RandomPlannerConfig:
 
 @dataclass
 class Observation:
+    """TODO docstring. Document this class."""
+
     dt: float
     robot: dict[str, Any]
     agents: list[dict[str, Any]]
@@ -33,12 +37,20 @@ class Observation:
 
 
 class RandomPlanner:
+    """TODO docstring. Document this class."""
+
     def __init__(
         self,
         config: dict[str, Any] | RandomPlannerConfig,
         *,
         seed: int | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            seed: TODO docstring.
+        """
         self.config = self._parse_config(config)
         self._rng = np.random.default_rng(seed)
 
@@ -46,6 +58,14 @@ class RandomPlanner:
         self,
         config: dict[str, Any] | RandomPlannerConfig,
     ) -> RandomPlannerConfig:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(config, dict):
             return RandomPlannerConfig(**config)  # type: ignore[arg-type]
         if isinstance(config, RandomPlannerConfig):
@@ -53,14 +73,32 @@ class RandomPlanner:
         raise TypeError(f"Invalid config type: {type(config)}")
 
     def reset(self, *, seed: int | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            seed: TODO docstring.
+        """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
 
     def configure(self, config: dict[str, Any] | RandomPlannerConfig) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         # Support dict-style Observation
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
 
@@ -96,9 +134,16 @@ class RandomPlanner:
         raise ValueError(f"Unknown mode: {self.config.mode}")
 
     def close(self) -> None:  # For API symmetry
+        """TODO docstring. Document this function."""
         pass
 
     def get_metadata(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         cfg = asdict(self.config)
         cfg_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
         return {"algorithm": "random", "config": cfg, "config_hash": cfg_hash}

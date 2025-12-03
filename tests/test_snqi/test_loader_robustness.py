@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import argparse
@@ -24,6 +26,11 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
     # - module_from_spec returns a lightweight module-like object with run() -> 0
     # - spec_from_file_location returns a dummy spec with a no-op loader
     def fake_module_from_spec(spec):  # type: ignore[no-untyped-def]
+        """TODO docstring. Document this function.
+
+        Args:
+            spec: TODO docstring.
+        """
         mod = types.SimpleNamespace()
         # mimic minimal module attrs the loader might expect
         mod.__spec__ = spec
@@ -32,16 +39,39 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
         return mod
 
     class _DummyLoader:  # minimal loader; exec_module is a no-op
+        """TODO docstring. Document this class."""
+
         def exec_module(self, _mod):  # type: ignore[no-untyped-def]
+            """TODO docstring. Document this function.
+
+            Args:
+                _mod: TODO docstring.
+            """
             return None
 
     class _DummySpec:
+        """TODO docstring. Document this class."""
+
         def __init__(self, name, origin):
+            """TODO docstring. Document this function.
+
+            Args:
+                name: TODO docstring.
+                origin: TODO docstring.
+            """
             self.name = name
             self.origin = str(origin)
             self.loader = _DummyLoader()
 
     def fake_spec_from_file_location(name, path, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+        """TODO docstring. Document this function.
+
+        Args:
+            name: TODO docstring.
+            path: TODO docstring.
+            _args: TODO docstring.
+            _kwargs: TODO docstring.
+        """
         return _DummySpec(name, path)
 
     monkeypatch.setattr(importlib_util, "module_from_spec", fake_module_from_spec, raising=True)

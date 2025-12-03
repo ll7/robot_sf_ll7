@@ -18,7 +18,21 @@ from robot_sf.benchmark.snqi import compute_snqi
 # Legacy inline implementation copied (logic only) to assert parity.
 # NOTE: Keep this in sync only for parity testing; do NOT import elsewhere.
 def _legacy_compute_snqi(metrics, weight_map, baseline_map):  # type: ignore[missing-type-doc]
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics: TODO docstring.
+        weight_map: TODO docstring.
+        baseline_map: TODO docstring.
+    """
+
     def _normalize(name: str, value: float):
+        """TODO docstring. Document this function.
+
+        Args:
+            name: TODO docstring.
+            value: TODO docstring.
+        """
         if name not in baseline_map:
             return 0.0
         med = baseline_map[name].get("med", 0.0)
@@ -55,6 +69,7 @@ def _legacy_compute_snqi(metrics, weight_map, baseline_map):  # type: ignore[mis
 
 @pytest.fixture
 def baseline_stats():  # Representative synthetic stats
+    """TODO docstring. Document this function."""
     return {
         "collisions": {"med": 0.0, "p95": 3.0},
         "near_misses": {"med": 1.0, "p95": 6.0},
@@ -65,6 +80,7 @@ def baseline_stats():  # Representative synthetic stats
 
 @pytest.fixture
 def weights():
+    """TODO docstring. Document this function."""
     return {
         "w_success": 2.0,
         "w_time": 1.2,

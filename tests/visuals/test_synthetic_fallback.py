@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -25,6 +27,11 @@ class Cfg:
 
 def test_synthetic_fallback_when_sim_view_unavailable(tmp_path: Path):
     # Force SimulationView unavailable
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     visuals_mod._SIM_VIEW_AVAILABLE = False  # type: ignore[attr-defined]
     records = [
         {"episode_id": "ep1", "scenario_id": "sc1"},

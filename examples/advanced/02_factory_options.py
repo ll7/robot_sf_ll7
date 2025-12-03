@@ -34,6 +34,7 @@ from robot_sf.render.helper_catalog import ensure_output_dir
 
 def demo_minimal():
     # Use helper catalog for basic environment setup
+    """TODO docstring. Document this function."""
     env, _ = prepare_classic_env()
     env.reset()
     env.close()
@@ -42,6 +43,11 @@ def demo_minimal():
 
 def demo_convenience_recording(tmp_path: str = "./results"):
     # Use render helper to ensure output directory exists
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     output_dir = ensure_output_dir(Path(tmp_path))
     env = make_robot_env(record_video=True, video_path=f"{output_dir}/episode.mp4")
     env.reset()
@@ -51,6 +57,7 @@ def demo_convenience_recording(tmp_path: str = "./results"):
 
 def demo_structured():
     # Use render helper to ensure output directory exists
+    """TODO docstring. Document this function."""
     output_dir = ensure_output_dir(Path("results"))
     render_opts = RenderOptions(max_fps_override=20)
     rec_opts = RecordingOptions(record=True, video_path=f"{output_dir}/structured_episode.mp4")
@@ -61,6 +68,7 @@ def demo_structured():
 
 
 def demo_image():
+    """TODO docstring. Document this function."""
     img_env = make_image_robot_env(render_options=RenderOptions(max_fps_override=15))
     img_env.reset()
     img_env.close()

@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class SFPlannerConfig:
+    """TODO docstring. Document this class."""
+
     # Kinematics
     mode: str = "velocity"  # "velocity" or "unicycle"
     v_max: float = 2.0
@@ -79,6 +81,8 @@ class SFPlannerConfig:
 
 @dataclass
 class Observation:
+    """TODO docstring. Document this class."""
+
     dt: float
     robot: dict[str, Any]
     agents: list[dict[str, Any]]
@@ -86,23 +90,52 @@ class Observation:
 
 
 class BasePolicy:
+    """TODO docstring. Document this class."""
+
     def __init__(self, config: Any, *, seed: int | None = None):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            seed: TODO docstring.
+        """
         raise NotImplementedError
 
     def reset(self, *, seed: int | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            seed: TODO docstring.
+        """
         raise NotImplementedError
 
     def configure(self, config: Any) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         raise NotImplementedError
 
     def step(self, obs: Any) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         raise NotImplementedError
 
     def close(self) -> None:
+        """TODO docstring. Document this function."""
         raise NotImplementedError
 
 
 class SocialForcePlanner(BasePolicy):
+    """TODO docstring. Document this class."""
+
     # Numerical stability epsilon used for safe division and small-magnitude checks.
     EPSILON: float = 1e-9
 
@@ -110,6 +143,11 @@ class SocialForcePlanner(BasePolicy):
         """Expose randint() and normal() using numpy's Generator."""
 
         def __init__(self, seed: int | None):
+            """TODO docstring. Document this function.
+
+            Args:
+                seed: TODO docstring.
+            """
             self._gen = np.random.default_rng(seed)
 
         def randint(
@@ -118,6 +156,13 @@ class SocialForcePlanner(BasePolicy):
             high: int | None = None,
             size: int | tuple[int, ...] | None = None,
         ):
+            """TODO docstring. Document this function.
+
+            Args:
+                low: TODO docstring.
+                high: TODO docstring.
+                size: TODO docstring.
+            """
             return self._gen.integers(low, high=high, size=size)
 
         def normal(
@@ -126,9 +171,22 @@ class SocialForcePlanner(BasePolicy):
             scale: float = 1.0,
             size: int | tuple[int, ...] | None = None,
         ):
+            """TODO docstring. Document this function.
+
+            Args:
+                loc: TODO docstring.
+                scale: TODO docstring.
+                size: TODO docstring.
+            """
             return self._gen.normal(loc, scale, size)
 
     def __init__(self, config: dict[str, Any] | SFPlannerConfig, *, seed: int | None = None):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            seed: TODO docstring.
+        """
         self.config = self._parse_config(config)
         self._rng = self._RNGCompat(seed)
         self._sim: Any | None = None
@@ -138,6 +196,14 @@ class SocialForcePlanner(BasePolicy):
         self._robot_state: dict[str, Any] | None = None
 
     def _parse_config(self, config: dict[str, Any] | SFPlannerConfig) -> SFPlannerConfig:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(config, dict):
             return SFPlannerConfig(**config)  # type: ignore[arg-type]
         if isinstance(config, SFPlannerConfig):
@@ -145,6 +211,11 @@ class SocialForcePlanner(BasePolicy):
         raise TypeError(f"Invalid config type: {type(config)}")
 
     def reset(self, *, seed: int | None = None) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            seed: TODO docstring.
+        """
         if seed is not None:
             self._rng = self._RNGCompat(seed)
         self._sim = None
@@ -154,9 +225,22 @@ class SocialForcePlanner(BasePolicy):
         self._robot_state = None
 
     def configure(self, config: dict[str, Any] | SFPlannerConfig) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         self.config = self._parse_config(config)
 
     def step(self, obs: Observation | dict) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -189,6 +273,11 @@ class SocialForcePlanner(BasePolicy):
         return action
 
     def _setup_simulation(self, obs: Observation) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+        """
         agent_states = getattr(obs, "agents", [])
         n_agents = len(agent_states)
 
@@ -218,6 +307,12 @@ class SocialForcePlanner(BasePolicy):
         self._wrapper = FastPysfWrapper(self._sim)
 
     def _create_pysf_config(self) -> SimulatorConfig:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return SimulatorConfig(
             scene_config=SceneConfig(
                 agent_radius=0.35,
@@ -304,6 +399,18 @@ class SocialForcePlanner(BasePolicy):
         robot_goal: np.ndarray,
         dt: float,
     ) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            force: TODO docstring.
+            robot_pos: TODO docstring.
+            robot_vel: TODO docstring.
+            robot_goal: TODO docstring.
+            dt: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if self.config.action_space == "velocity":
             return self._force_to_velocity_action(force, robot_vel)
         if self.config.action_space == "unicycle":
@@ -315,6 +422,15 @@ class SocialForcePlanner(BasePolicy):
         force: np.ndarray,
         robot_vel: np.ndarray,
     ) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            force: TODO docstring.
+            robot_vel: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         desired_vel = robot_vel + force * self.config.tau
         if self.config.safety_clamp:
             speed = float(np.linalg.norm(desired_vel))
@@ -330,6 +446,18 @@ class SocialForcePlanner(BasePolicy):
         robot_goal: np.ndarray,
         dt: float,
     ) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            force: TODO docstring.
+            robot_pos: TODO docstring.
+            robot_vel: TODO docstring.
+            robot_goal: TODO docstring.
+            dt: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         mag = float(np.linalg.norm(force))
         if mag < 1e-6:
             return {"v": 0.0, "omega": 0.0}
@@ -361,10 +489,17 @@ class SocialForcePlanner(BasePolicy):
         return {"v": float(v), "omega": float(omega)}
 
     def close(self) -> None:
+        """TODO docstring. Document this function."""
         self._sim = None
         self._wrapper = None
 
     def get_metadata(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         config_dict = asdict(self.config)
         config_hash = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[
             :16

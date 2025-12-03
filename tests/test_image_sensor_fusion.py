@@ -398,5 +398,11 @@ class RobotEnvWithImage(RobotEnv):
     """
 
     def __init__(self, env_config, debug=False):
+        """TODO docstring. Document this function.
+
+        Args:
+            env_config: TODO docstring.
+            debug: TODO docstring.
+        """
         super().__init__(env_config, debug)
         self.sim_ui = None if not hasattr(self, "sim_view") else self.sim_view

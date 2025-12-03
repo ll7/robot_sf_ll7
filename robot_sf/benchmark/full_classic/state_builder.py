@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class _MinimalState:
+    """TODO docstring. Document this class."""
+
     timestep: int
     robot_pose: tuple[tuple[float, float], float]
 
@@ -40,6 +42,14 @@ def build_minimal_states(ep: ReplayEpisode) -> Iterable[_MinimalState]:
 
 
 def iter_states(ep: ReplayEpisode) -> Generator[_MinimalState, None, None]:  # thin alias
+    """Yield fully materialized states for downstream visualization and metrics.
+
+    Args:
+        ep: Replay episode containing raw trajectory data.
+
+    Yields:
+        _MinimalState: Snapshot representing a single timestep of the replay episode.
+    """
     yield from build_minimal_states(ep)
 
 

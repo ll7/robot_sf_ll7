@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import os
@@ -43,6 +45,7 @@ def restore_torch_determinism():
 
 
 def test_set_global_seed_determinism():
+    """TODO docstring. Document this function."""
     rep1 = set_global_seed(123, deterministic=True)
     s1 = get_seed_state_sample(n=5)
     rep2 = set_global_seed(123, deterministic=True)
@@ -57,6 +60,7 @@ essential = object()
 
 
 def test_seed_changes_sequences():
+    """TODO docstring. Document this function."""
     set_global_seed(111, deterministic=True)
     a = [random.random() for _ in range(3)]
     set_global_seed(222, deterministic=True)
@@ -65,11 +69,13 @@ def test_seed_changes_sequences():
 
 
 def test_matplotlib_headless_default():
+    """TODO docstring. Document this function."""
     set_global_seed(0, deterministic=True)
     assert os.environ.get("MPLBACKEND") == "Agg"
 
 
 def test_torch_optional_behavior():
+    """TODO docstring. Document this function."""
     torch = _import_torch()
     rep = set_global_seed(7, deterministic=True)
     if torch is not None:

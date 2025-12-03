@@ -23,9 +23,19 @@ from robot_sf.gym_env._factory_compat import (
 
 @contextmanager
 def capture_loguru(level: str = "WARNING"):
+    """TODO docstring. Document this function.
+
+    Args:
+        level: TODO docstring.
+    """
     messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
+        """TODO docstring. Document this function.
+
+        Args:
+            msg: TODO docstring.
+        """
         if msg.record["level"].name == level:
             messages.append(msg.record["message"])
 
@@ -37,6 +47,7 @@ def capture_loguru(level: str = "WARNING"):
 
 
 def test_mapping_known_legacy_parameters():
+    """TODO docstring. Document this function."""
     raw = {"record_video": True, "fps": 30, "video_output_path": "out.mp4"}
     with capture_loguru() as warnings:
         normalized, emitted = apply_legacy_kwargs(raw, strict=True)
@@ -50,6 +61,7 @@ def test_mapping_known_legacy_parameters():
 
 
 def test_strict_mode_unknown_legacy_raises():
+    """TODO docstring. Document this function."""
     raw = {"record_video": True, "fps": 10, "video_output_path": "x.mp4", "videp_path": "typo.mp4"}
     # 'videp_path' should trigger unknown parameter in strict mode
     with pytest.raises(UnknownLegacyParameterError):
@@ -57,6 +69,11 @@ def test_strict_mode_unknown_legacy_raises():
 
 
 def test_permissive_mode_unknown_ignored(monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv(LEGACY_PERMISSIVE_ENV, "1")
     raw = {"record_video": True, "fps": 10, "video_output_path": "x.mp4", "videp_path": "typo.mp4"}
     with capture_loguru() as warnings:
@@ -73,6 +90,7 @@ def test_permissive_mode_unknown_ignored(monkeypatch):
 
 def test_strict_false_behaves_like_permissive():
     # Even without env var, strict=False allows unknown ignore
+    """TODO docstring. Document this function."""
     raw = {"fps": 20, "unknown_leg": 5}
     with capture_loguru() as warnings:
         normalized, emitted = apply_legacy_kwargs(raw, strict=False)

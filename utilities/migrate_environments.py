@@ -17,6 +17,11 @@ class EnvironmentMigrator:
     """Automates migration to new environment patterns."""
 
     def __init__(self, project_root: str):
+        """TODO docstring. Document this function.
+
+        Args:
+            project_root: TODO docstring.
+        """
         self.project_root = Path(project_root)
         self.changes_made = []
 
@@ -277,6 +282,7 @@ class EnvironmentMigrator:
 
 
 def main():
+    """TODO docstring. Document this function."""
     parser = argparse.ArgumentParser(
         description="Migrate Robot SF environments to new factory pattern",
     )

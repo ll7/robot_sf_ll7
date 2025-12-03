@@ -35,7 +35,7 @@ def extract_ped_positions(sim_states: list[VisualizableSimState]) -> np.ndarray:
     Extract pedestrian positions from a list of simulation states.
 
     Args:
-        states (List[Any]): List of VisualizableSimStates containing simulation data.
+        sim_states (List[VisualizableSimState]): Simulation states containing pedestrian data.
 
     Returns:
         np.ndarray: A numpy array with shape (timesteps, num_pedestrians, 2)
@@ -71,7 +71,7 @@ def extract_ped_actions(sim_states: list[VisualizableSimState]) -> list[list]:
     Extract pedestrian actions from a list of simulation states.
 
     Args:
-        states (List[Any]): List of VisualizableSimStates containing simulation data.
+        sim_states (List[VisualizableSimState]): Simulation states containing pedestrian action data.
 
     Returns:
         List[List]: A list of lists containing the pedestrian actions at each timestep.

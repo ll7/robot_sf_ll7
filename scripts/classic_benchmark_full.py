@@ -20,6 +20,11 @@ try:
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - during early scaffolding
 
     def run_full_benchmark(cfg):  # fallback placeholder
+        """TODO docstring. Document this function.
+
+        Args:
+            cfg: TODO docstring.
+        """
         raise NotImplementedError("Full benchmark not yet implemented. Follow tasks T022+.")
 
 
@@ -58,6 +63,12 @@ class BenchmarkCLIConfig:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     # Generate timestamp for default output directory
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     default_output = f"tmp/results/full_classic_run_{timestamp}"
 
@@ -173,6 +184,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
+    """TODO docstring. Document this function.
+
+    Args:
+        ns: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     horizon_override = ns.horizon if ns.horizon and ns.horizon > 0 else None
     return BenchmarkCLIConfig(
         scenario_matrix_path=ns.scenarios,
@@ -197,6 +216,14 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     # Configure loguru level early

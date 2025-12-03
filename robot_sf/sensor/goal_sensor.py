@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from math import atan2, dist
 
 import numpy as np
@@ -7,6 +9,14 @@ from robot_sf.common.types import PolarVec2D, RobotPose, Vec2D
 
 
 def norm_angle(angle: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        angle: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
 

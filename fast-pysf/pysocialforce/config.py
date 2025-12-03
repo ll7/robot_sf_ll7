@@ -7,6 +7,8 @@ from pysocialforce.ped_population import PedSpawnConfig
 
 @dataclass
 class SceneConfig:
+    """TODO docstring. Document this class."""
+
     enable_group: bool = True
     agent_radius: float = 0.35
     dt_secs: float = 0.1
@@ -17,23 +19,31 @@ class SceneConfig:
 
 @dataclass
 class GroupCoherenceForceConfig:
+    """TODO docstring. Document this class."""
+
     factor: float = 3.0
 
 
 @dataclass
 class GroupReplusiveForceConfig:
+    """TODO docstring. Document this class."""
+
     factor: float = 1.0
     threshold: float = 0.55
 
 
 @dataclass
 class GroupGazeForceConfig:
+    """TODO docstring. Document this class."""
+
     factor: float = 4.0
     fov_phi: float = 90.0
 
 
 @dataclass
 class DesiredForceConfig:
+    """TODO docstring. Document this class."""
+
     factor: float = 1.0
     relaxation_time: float = 0.5
     goal_threshold: float = 0.2
@@ -41,6 +51,8 @@ class DesiredForceConfig:
 
 @dataclass
 class SocialForceConfig:
+    """TODO docstring. Document this class."""
+
     factor: float = 5.1
     lambda_importance: float = 2.0
     gamma: float = 0.35
@@ -51,6 +63,8 @@ class SocialForceConfig:
 
 @dataclass
 class ObstacleForceConfig:
+    """TODO docstring. Document this class."""
+
     factor: float = 10.0
     sigma: float = 0.0
     threshold: float = -0.57
@@ -58,6 +72,8 @@ class ObstacleForceConfig:
 
 @dataclass
 class SimulatorConfig:
+    """TODO docstring. Document this class."""
+
     scene_config: SceneConfig = field(default_factory=SceneConfig)
     group_coherence_force_config: GroupCoherenceForceConfig = field(
         default_factory=GroupCoherenceForceConfig

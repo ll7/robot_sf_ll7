@@ -59,11 +59,21 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class _Stat:
+    """TODO docstring. Document this class."""
+
     size: int
     mtime_ns: int
 
 
 def _stat_of(path: Path) -> _Stat:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     st = path.stat()
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))
 
@@ -142,14 +152,15 @@ def save_manifest(
 ) -> None:
     """Write or update the manifest to reflect the current on-disk state.
 
-    Parameters
-    - out_path: Path to the JSONL episodes file.
-    - episode_ids: Iterable of episode_id strings present in the file.
+    Args:
+        out_path: Path to the JSONL episodes file managed by the manifest.
+        episode_ids: All episode ids currently present in the JSONL file.
+        identity_hash: Optional content hash written for tamper detection.
+        schema_version: Episode schema version recorded in the manifest.
 
-    Behavior
-    - If the JSONL file does not exist, the function returns without writing.
-    - The sidecar's stat is captured from the JSONL at save time to bind the
-      manifest to the exact file content.
+    Notes:
+        - If the JSONL file does not exist, the function returns without writing.
+        - The sidecar captures the target file's stat for change detection.
     """
     if not out_path.exists():
         return

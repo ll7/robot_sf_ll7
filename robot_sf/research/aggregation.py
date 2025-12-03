@@ -275,6 +275,14 @@ def compute_completeness_score(
     """
 
     def _seed_sort_key(value: str) -> tuple[int, str]:
+        """TODO docstring. Document this function.
+
+        Args:
+            value: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         try:
             return (0, str(int(value)))
         except ValueError:

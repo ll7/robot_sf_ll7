@@ -17,6 +17,14 @@ from robot_sf.nav.svg_map_parser import convert_map
 
 
 def _load_yaml_documents(path: Path) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
@@ -89,6 +97,12 @@ def _apply_simulation_overrides(
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        overrides: TODO docstring.
+    """
     if not isinstance(overrides, Mapping):
         return
     if "max_episode_steps" in overrides:
@@ -114,6 +128,13 @@ def _apply_map_pool(
     map_file: str | None,
     scenario_path: Path,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        map_file: TODO docstring.
+        scenario_path: TODO docstring.
+    """
     if not map_file:
         return
     candidate = Path(map_file)

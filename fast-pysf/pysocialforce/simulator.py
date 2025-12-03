@@ -34,9 +34,23 @@ class ForceContext(Protocol):
 
     peds: PedState
 
-    def get_obstacles(self) -> list[np.ndarray]: ...
+    def get_obstacles(self) -> list[np.ndarray]:
+        """TODO docstring. Document this function.
 
-    def get_raw_obstacles(self) -> np.ndarray: ...
+
+        Returns:
+            TODO docstring.
+        """
+        ...
+
+    def get_raw_obstacles(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
+        ...
 
 
 ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
@@ -59,6 +73,8 @@ def make_forces(sim: ForceContext, config: SimulatorConfig) -> list[forces.Force
 
 
 class Simulator_v2:
+    """TODO docstring. Document this class."""
+
     def __init__(
         self,
         map_definition: MapDefinition = EMPTY_MAP,
@@ -165,6 +181,8 @@ class Simulator_v2:
 
 
 class Simulator:
+    """TODO docstring. Document this class."""
+
     def __init__(
         self,
         state: np.ndarray,
@@ -174,6 +192,16 @@ class Simulator:
         make_forces: ForceFactory = make_forces,
         on_step: Callable[[int, SimState], None] = lambda t, s: None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+            groups: TODO docstring.
+            obstacles: TODO docstring.
+            config: TODO docstring.
+            make_forces: TODO docstring.
+            on_step: TODO docstring.
+        """
         self.config = config
         self.on_step = on_step
         resolution = self.config.scene_config.resolution
@@ -188,9 +216,16 @@ class Simulator:
 
     @property
     def current_state(self) -> SimState:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.peds.state, self.peds.groups
 
     def get_states(self):
+        """TODO docstring. Document this function."""
         warn(
             "For performance reasons This function does not retrieve the whole \
               state history (it used to facilitate video recordings). \
@@ -205,9 +240,21 @@ class Simulator:
         return len(self.get_states()[0])
 
     def get_obstacles(self) -> list[np.ndarray]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.env.obstacles
 
     def get_raw_obstacles(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.env.obstacles_raw
 
     def step_once(self) -> None:

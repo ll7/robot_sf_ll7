@@ -33,6 +33,7 @@ BASE_PARAMS = {
 
 
 def test_determinism_same_seed():
+    """TODO docstring. Document this function."""
     p = {**BASE_PARAMS}
     a = generate_scenario(p, seed=123)
     b = generate_scenario(p, seed=123)
@@ -43,6 +44,7 @@ def test_determinism_same_seed():
 
 
 def test_variation_different_seed():
+    """TODO docstring. Document this function."""
     p = {**BASE_PARAMS}
     a = generate_scenario(p, seed=1)
     c = generate_scenario(p, seed=2)
@@ -51,6 +53,7 @@ def test_variation_different_seed():
 
 
 def test_density_counts():
+    """TODO docstring. Document this function."""
     for density, expected in {"low": 10, "med": 25, "high": 40}.items():
         p = {**BASE_PARAMS, "density": density}
         scen = generate_scenario(p, seed=42)
@@ -60,6 +63,7 @@ def test_density_counts():
 
 
 def test_obstacle_layouts():
+    """TODO docstring. Document this function."""
     kinds_expected = {"open": 0, "bottleneck": 2, "maze": 3}
     for kind, exp in kinds_expected.items():
         p = {**BASE_PARAMS, "obstacle": kind}
@@ -69,6 +73,7 @@ def test_obstacle_layouts():
 
 def test_goal_topology_swap_and_circulate():
     # swap reverses ordering of positions for goals
+    """TODO docstring. Document this function."""
     p_swap = {**BASE_PARAMS, "flow": "uni", "goal_topology": "swap"}
     scen_swap = generate_scenario(p_swap, seed=5)
     positions = scen_swap.state[:, :2]
@@ -85,6 +90,7 @@ def test_goal_topology_swap_and_circulate():
 
 def test_group_assignment_fraction():
     # Use high density for better sample size
+    """TODO docstring. Document this function."""
     p = {**BASE_PARAMS, "density": "high", "groups": 0.4}
     scen = generate_scenario(p, seed=7)
     grouped = sum(g >= 0 for g in scen.groups)
@@ -93,6 +99,7 @@ def test_group_assignment_fraction():
 
 
 def test_speed_variance_metadata():
+    """TODO docstring. Document this function."""
     p_low = {**BASE_PARAMS, "speed_var": "low"}
     scen_low = generate_scenario(p_low, seed=11)
     assert np.isclose(scen_low.metadata["speed_std"], 0.2)
@@ -103,6 +110,7 @@ def test_speed_variance_metadata():
 
 def test_flow_goal_geometries():
     # bi-directional
+    """TODO docstring. Document this function."""
     p_bi = {**BASE_PARAMS, "flow": "bi", "goal_topology": "point", "density": "med"}
     scen_bi = generate_scenario(p_bi, seed=21)
     pos_bi = scen_bi.state[:, 0:2]

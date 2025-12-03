@@ -41,6 +41,11 @@ logger = get_logger(__name__)
 
 
 def _optional_import(module: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        module: TODO docstring.
+    """
     try:
         return importlib.import_module(module)
     except ModuleNotFoundError:

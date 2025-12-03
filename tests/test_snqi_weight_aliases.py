@@ -8,6 +8,7 @@ from robot_sf.benchmark.snqi.weights_validation import validate_weights_mapping
 
 
 def _base_weights():
+    """TODO docstring. Document this function."""
     return {
         "w_success": 1.0,
         "w_time": 1.0,
@@ -20,6 +21,7 @@ def _base_weights():
 
 
 def test_alias_w_near_misses_alone_maps_to_w_near():
+    """TODO docstring. Document this function."""
     raw = _base_weights()
     # Remove canonical and provide alias
     del raw["w_near"]
@@ -31,6 +33,7 @@ def test_alias_w_near_misses_alone_maps_to_w_near():
 
 
 def test_alias_ignored_when_canonical_present():
+    """TODO docstring. Document this function."""
     raw = _base_weights()
     raw["w_near"] = 3.0
     raw["w_near_misses"] = 2.0  # Should be ignored since canonical present

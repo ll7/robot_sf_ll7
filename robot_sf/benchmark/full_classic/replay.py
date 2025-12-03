@@ -72,9 +72,20 @@ class ReplayEpisode:
     map_path: str | None = None
 
     def __len__(self) -> int:  # pragma: no cover - trivial
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return len(self.steps)
 
     def append(self, step: ReplayStep) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step: TODO docstring.
+        """
         self.steps.append(step)
 
 
@@ -105,6 +116,20 @@ class ReplayCapture:
         ped_actions: list[tuple[float, float]] | None = None,
         robot_goal: tuple[float, float] | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            t: TODO docstring.
+            x: TODO docstring.
+            y: TODO docstring.
+            heading: TODO docstring.
+            speed: TODO docstring.
+            ped_positions: TODO docstring.
+            action: TODO docstring.
+            ray_vecs: TODO docstring.
+            ped_actions: TODO docstring.
+            robot_goal: TODO docstring.
+        """
         self._steps.append(
             ReplayStep(
                 t=t,
@@ -121,6 +146,12 @@ class ReplayCapture:
         )
 
     def finalize(self) -> ReplayEpisode:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return ReplayEpisode(
             episode_id=self.episode_id,
             scenario_id=self.scenario_id,

@@ -167,6 +167,7 @@ class SensorFusion:
 
     def __post_init__(self):
         # Initialize the number of steps to cache based on the LiDAR observation space
+        """TODO docstring. Document this function."""
         self.cache_steps = self.unnormed_obs_space[OBS_RAYS].shape[0]
         self.stacked_drive_state = np.zeros((self.cache_steps, 5), dtype=np.float32)
         self.stacked_lidar_state = np.zeros(

@@ -25,6 +25,12 @@ from robot_sf.research.orchestrator import AblationOrchestrator
 
 
 def parse_args() -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     p = argparse.ArgumentParser(description="Run ablation matrix and generate report")
     p.add_argument("--config", required=True, type=Path, help="Path to ablation YAML config")
     p.add_argument("--experiment-name", required=True, help="Experiment name label")
@@ -41,6 +47,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """TODO docstring. Document this function."""
     args = parse_args()
     # Parse params first (use a temporary orchestrator for parser only)
     temp = AblationOrchestrator(

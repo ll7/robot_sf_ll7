@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -10,6 +12,11 @@ from robot_sf.training.imitation_analysis import _generate_figures
 
 
 def test_generate_figures_creates_all_expected_files(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     baseline_metrics = {
         "timesteps_to_convergence": 1000.0,
         "timesteps_samples": [900.0, 1000.0, 1100.0],
@@ -50,6 +57,7 @@ def test_generate_figures_creates_all_expected_files(tmp_path: Path):
 
 
 def test_metric_samples_handles_suffix_and_filtering():
+    """TODO docstring. Document this function."""
     payload = {
         "metrics": {
             "foo_samples": [1, 2.0, "bad", None],

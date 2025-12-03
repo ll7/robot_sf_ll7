@@ -12,6 +12,11 @@ class MarkdownReportRenderer:
     """Renders research report as Markdown with optional LaTeX export."""
 
     def __init__(self, output_dir: Path):
+        """TODO docstring. Document this function.
+
+        Args:
+            output_dir: TODO docstring.
+        """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -252,6 +257,14 @@ class MarkdownReportRenderer:
                 pdf = Path(pdf_path) if pdf_path else None
 
                 def _rel_safe(path: Path) -> str:
+                    """TODO docstring. Document this function.
+
+                    Args:
+                        path: TODO docstring.
+
+                    Returns:
+                        TODO docstring.
+                    """
                     if not path.is_absolute():
                         return path.as_posix()
                     try:

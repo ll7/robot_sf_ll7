@@ -7,8 +7,11 @@ from loguru import logger
 
 
 def timeit(f):
+    """Decorator logging how long a function call took."""
+
     @wraps(f)
     def wrap(*args, **kw):
+        """Measure duration of the wrapped function and emit a debug log."""
         ts = time()
         result = f(*args, **kw)
         te = time()

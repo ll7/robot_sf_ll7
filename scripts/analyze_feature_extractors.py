@@ -49,6 +49,14 @@ class FeatureExtractorAnalyzer:
         self.analysis_dir.mkdir(exist_ok=True)
 
     def _load_from_summary(self, payload: dict) -> tuple[dict, dict]:
+        """TODO docstring. Document this function.
+
+        Args:
+            payload: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         records = payload.get("extractor_results", [])
         results: dict[str, dict] = {}
         for record in records:
@@ -211,6 +219,7 @@ class FeatureExtractorAnalyzer:
 
     # ---- Visualization helpers (kept small for C901 compliance) ----
     def _set_plot_style(self) -> None:
+        """TODO docstring. Document this function."""
         preferred_styles = ["seaborn-v0_8", "seaborn"]
         for style in preferred_styles:
             if style in plt.style.available:
@@ -222,6 +231,14 @@ class FeatureExtractorAnalyzer:
             warnings.warn(f"Could not apply matplotlib style: {exc}", stacklevel=2)
 
     def _plot_reward_bar(self, df: pd.DataFrame) -> str | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            df: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if "best_reward" not in df.columns or not df["best_reward"].notna().any():
             return None
         _fig, ax = plt.subplots(figsize=(12, 6))
@@ -254,6 +271,14 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_parameter_efficiency(self, df: pd.DataFrame) -> str | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            df: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not all(col in df.columns for col in ["total_parameters", "best_reward"]):
             return None
         _fig, ax = plt.subplots(figsize=(10, 6))
@@ -285,6 +310,14 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_training_time(self, df: pd.DataFrame) -> str | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            df: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if "training_time" not in df.columns or not df["training_time"].notna().any():
             return None
         _fig, ax = plt.subplots(figsize=(12, 6))
@@ -317,6 +350,14 @@ class FeatureExtractorAnalyzer:
         return str(plot_path)
 
     def _plot_multi_metric_radar(self, df: pd.DataFrame) -> str | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            df: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if len(df) <= 1:
             return None
         try:
@@ -395,6 +436,12 @@ class FeatureExtractorAnalyzer:
 
     # ---- Report helper methods ----
     def _build_report_header(self) -> list[str]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return [
             "# Feature Extractor Comparison Analysis Report",
             f"Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -410,6 +457,14 @@ class FeatureExtractorAnalyzer:
         ]
 
     def _build_rankings_section(self, analysis: dict) -> list[str]:
+        """TODO docstring. Document this function.
+
+        Args:
+            analysis: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         lines: list[str] = ["### Performance Rankings", ""]
         rankings = analysis.get("rankings", {})
         # Best reward
@@ -439,6 +494,14 @@ class FeatureExtractorAnalyzer:
         return lines
 
     def _build_detailed_results_table(self, df: pd.DataFrame) -> list[str]:
+        """TODO docstring. Document this function.
+
+        Args:
+            df: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         lines: list[str] = [
             "### Detailed Results",
             "",
@@ -459,6 +522,14 @@ class FeatureExtractorAnalyzer:
         return lines
 
     def _build_insights_section(self, df: pd.DataFrame) -> list[str]:
+        """TODO docstring. Document this function.
+
+        Args:
+            df: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         lines: list[str] = ["", "## Key Insights", ""]
         if df.empty or "best_reward" not in df.columns:
             return lines

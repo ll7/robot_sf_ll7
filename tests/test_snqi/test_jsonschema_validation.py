@@ -21,6 +21,15 @@ BIN = ["uv", "run", "robot_sf_bench"]
 
 
 def _write_minimal_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        n: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
     baseline.write_text(
@@ -54,6 +63,14 @@ def _write_minimal_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     env = os.environ.copy()
     # Ensure we do not trip any LIGHT_TEST fast path (want real code paths)
     env.pop("ROBOT_SF_SNQI_LIGHT_TEST", None)
@@ -61,6 +78,12 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 
 
 def _load_schema() -> dict:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     schema_path = Path("docs/snqi-weight-tools/snqi_output.schema.json")
     assert schema_path.exists(), f"Schema file missing: {schema_path}"
     return json.loads(schema_path.read_text(encoding="utf-8"))
@@ -68,6 +91,12 @@ def _load_schema() -> dict:
 
 @pytest.mark.parametrize("cmd", ["optimize", "recompute"])  # keep runtime tiny
 def test_snqi_outputs_conform_to_jsonschema(tmp_path: Path, cmd: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        cmd: TODO docstring.
+    """
     episodes, baseline = _write_minimal_inputs(tmp_path)
     out = tmp_path / f"snqi_{cmd}.json"
     base = [

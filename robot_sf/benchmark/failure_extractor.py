@@ -21,6 +21,16 @@ if TYPE_CHECKING:
 
 
 def _metric(rec: dict[str, Any], name: str, default: float = 0.0) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        rec: TODO docstring.
+        name: TODO docstring.
+        default: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     m = rec.get("metrics") or {}
     v = m.get(name, default)
     try:

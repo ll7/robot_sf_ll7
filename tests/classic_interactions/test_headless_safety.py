@@ -11,6 +11,7 @@ import os
 
 
 def test_headless_dummy_driver_runs():
+    """TODO docstring. Document this function."""
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     mod = importlib.import_module("examples.classic_interactions_pygame")
     if hasattr(mod, "DRY_RUN"):

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
 
@@ -69,15 +71,38 @@ def sample_group_spawn_on_route(
     start, end = route.sections[sec_id]
 
     def add_vecs(v1, v2):
+        """TODO docstring. Document this function.
+
+        Args:
+            v1: TODO docstring.
+            v2: TODO docstring.
+        """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
     def sub_vecs(v1, v2):
+        """TODO docstring. Document this function.
+
+        Args:
+            v1: TODO docstring.
+            v2: TODO docstring.
+        """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
     def scale_vec(v, f):
+        """TODO docstring. Document this function.
+
+        Args:
+            v: TODO docstring.
+            f: TODO docstring.
+        """
         return (v[0] * f, v[1] * f)
 
     def clip_spread(v):
+        """TODO docstring. Document this function.
+
+        Args:
+            v: TODO docstring.
+        """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
     center = add_vecs(start, scale_vec(sub_vecs(end, start), sec_offset / sec_len))
@@ -105,6 +130,7 @@ class ZonePointsGenerator:
     _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
         total_area = sum(self.zone_areas)
         self._zone_probs = [area / total_area for area in self.zone_areas]
@@ -126,23 +152,46 @@ class ZonePointsGenerator:
 
 @dataclass
 class RoutePointsGenerator:
+    """TODO docstring. Document this class."""
+
     routes: list[GlobalRoute]
     sidewalk_width: float
     _route_probs: list[float] = field(init=False)
 
     def __post_init__(self):
         # info: distribute proportionally by zone area; area ~ route length * sidewalk width
+        """TODO docstring. Document this function."""
         self._zone_probs = [r.total_length / self.total_length for r in self.routes]
 
     @property
     def total_length(self) -> float:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return sum(r.total_length for r in self.routes)
 
     @property
     def total_sidewalks_area(self) -> float:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.total_length * self.sidewalk_width
 
     def generate(self, num_samples: int) -> tuple[list[Vec2D], int, int]:
+        """TODO docstring. Document this function.
+
+        Args:
+            num_samples: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         route_id = np.random.choice(len(self.routes), size=1, p=self._zone_probs)[0]
         spawn_pos, sec_id = sample_group_spawn_on_route(
             self.routes[route_id], num_samples, self.sidewalk_width

@@ -93,6 +93,16 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
 
 
 def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_positions, dt):
+    """TODO docstring. Document this function.
+
+    Args:
+        ObservationCls: TODO docstring.
+        robot_pos: TODO docstring.
+        robot_vel: TODO docstring.
+        robot_goal: TODO docstring.
+        ped_positions: TODO docstring.
+        dt: TODO docstring.
+    """
     agents = [
         {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
     ]
@@ -116,6 +126,12 @@ FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 def _git_hash_fallback() -> str:
     # Best effort; avoid importing subprocess if not needed later
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     try:
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
         return out.decode().strip()
@@ -130,6 +146,14 @@ def _git_hash_fallback() -> str:
 
 
 def _config_hash(obj: Any) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        obj: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(data).hexdigest()[:16]
 
@@ -196,6 +220,14 @@ def index_existing(out_path: Path) -> set[str]:
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with Path(path).open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
     # Allow either YAML stream of docs or a single list
@@ -218,6 +250,15 @@ def _prepare_robot_points(
     robot_start: Sequence[float] | None,
     robot_goal: Sequence[float] | None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """TODO docstring. Document this function.
+
+    Args:
+        robot_start: TODO docstring.
+        robot_goal: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if robot_start is None:
         rs = np.array([0.3, 3.0], dtype=float)
     else:
@@ -260,6 +301,21 @@ def _build_episode_data(
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
+    """TODO docstring. Document this function.
+
+    Args:
+        robot_pos_traj: TODO docstring.
+        robot_vel_traj: TODO docstring.
+        robot_acc_traj: TODO docstring.
+        peds_pos_traj: TODO docstring.
+        ped_forces_traj: TODO docstring.
+        goal: TODO docstring.
+        dt: TODO docstring.
+        reached_goal_step: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_acc = _stack_or_zero(robot_acc_traj, stack_fn=np.vstack, empty_shape=(0, 2))
@@ -282,6 +338,8 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     """Create a robot policy function based on the specified algorithm."""
 
     def _simple_policy_adapter():
+        """TODO docstring. Document this function."""
+
         def policy(
             robot_pos: np.ndarray,
             _robot_vel: np.ndarray,
@@ -289,6 +347,18 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             _ped_positions: np.ndarray,
             _dt: float,
         ) -> np.ndarray:
+            """TODO docstring. Document this function.
+
+            Args:
+                robot_pos: TODO docstring.
+                _robot_vel: TODO docstring.
+                robot_goal: TODO docstring.
+                _ped_positions: TODO docstring.
+                _dt: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
         return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
@@ -299,6 +369,14 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
     def _clamp_speed(vel: np.ndarray) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+        Args:
+            vel: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         speed = float(np.linalg.norm(vel))
         if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
             return vel / speed * FINAL_SPEED_CLAMP
@@ -310,6 +388,17 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         robot_vel: np.ndarray,
         robot_goal: np.ndarray,
     ) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+            robot_pos: TODO docstring.
+            robot_vel: TODO docstring.
+            robot_goal: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if "vx" in action and "vy" in action:
             return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
         if "v" in action and "omega" in action:
@@ -338,6 +427,7 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
 
         # Execute planner.step with a small timeout to avoid stalls
         def _do_step():
+            """TODO docstring. Document this function."""
             return planner.step(obs)
 
         try:
@@ -366,6 +456,12 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
 
 
 def _append_video_skip_note(record: dict[str, Any], note: str) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        note: TODO docstring.
+    """
     existing = record.get("notes")
     if existing:
         record["notes"] = f"{existing}; {note}"
@@ -384,6 +480,18 @@ def _emit_video_skip(
     steps: int | None,
     error: str | None = None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        episode_id: TODO docstring.
+        scenario_id: TODO docstring.
+        seed: TODO docstring.
+        renderer: TODO docstring.
+        reason: TODO docstring.
+        steps: TODO docstring.
+        error: TODO docstring.
+    """
     context = {
         "episode_id": episode_id,
         "scenario_id": scenario_id,
@@ -461,6 +569,15 @@ def _try_encode_synthetic_video(
 
     def to_px(x: float, y: float) -> tuple[int, int]:
         # Normalize to [0,1] then scale to pixels; y inverted for image coords
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+            y: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         nx = 0.0 if max_x == min_x else (x - min_x) / (max_x - min_x)
         ny = 0.0 if max_y == min_y else (y - min_y) / (max_y - min_y)
         px = int(nx * (W - 1))
@@ -669,6 +786,21 @@ def _simulate_episode_with_policy(
     np.ndarray,
     int | None,
 ]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario_params: TODO docstring.
+        seed: TODO docstring.
+        robot_policy: TODO docstring.
+        horizon: TODO docstring.
+        dt: TODO docstring.
+        robot_start: TODO docstring.
+        robot_goal: TODO docstring.
+        record_forces: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     gen = generate_scenario(scenario_params, seed=seed)
     sim = gen.simulator
     if sim is None:
@@ -695,6 +827,16 @@ def _simulate_episode_with_policy(
         curr_vel: np.ndarray,
         ped_positions: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """TODO docstring. Document this function.
+
+        Args:
+            curr_pos: TODO docstring.
+            curr_vel: TODO docstring.
+            ped_positions: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
         new_pos = curr_pos + new_vel * dt
         acc_vec = (new_vel - curr_vel) / dt
@@ -741,6 +883,17 @@ def _compute_metrics(
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        ep: TODO docstring.
+        horizon: TODO docstring.
+        snqi_weights: TODO docstring.
+        snqi_baseline: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
     return _post_process_metrics(
         metrics_raw,
@@ -756,6 +909,18 @@ def _build_episode_record(
     algo_metadata: dict[str, Any],
     ts_start: str,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario_params: TODO docstring.
+        seed: TODO docstring.
+        metrics: TODO docstring.
+        algo_metadata: TODO docstring.
+        ts_start: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episode_id = compute_episode_id(scenario_params, seed)
     return {
         "episode_id": episode_id,
@@ -857,6 +1022,13 @@ def validate_and_write(
     schema_path: str | Path,
     out_path: str | Path,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        schema_path: TODO docstring.
+        out_path: TODO docstring.
+    """
     schema = load_schema(schema_path)
     validate_episode(record, schema)
     out_path = Path(out_path)
@@ -879,6 +1051,16 @@ def _post_process_metrics(
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics_raw: TODO docstring.
+        snqi_weights: TODO docstring.
+        snqi_baseline: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     metrics: dict[str, Any] = dict(metrics_raw.items())
     metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
     fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
@@ -923,6 +1105,16 @@ def _expand_jobs(
     base_seed: int = 0,
     repeats_override: int | None = None,
 ) -> list[tuple[dict[str, Any], int]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenarios: TODO docstring.
+        base_seed: TODO docstring.
+        repeats_override: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     jobs: list[tuple[dict[str, Any], int]] = []
     for sc in scenarios:
         reps = int(sc.get("repeats", 1)) if repeats_override is None else int(repeats_override)
@@ -955,6 +1147,13 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
 
 
 def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[str, Any]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_path: TODO docstring.
+        schema: TODO docstring.
+        rec: TODO docstring.
+    """
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
@@ -969,6 +1168,19 @@ def _run_batch_sequential(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        jobs: TODO docstring.
+        out_path: TODO docstring.
+        schema: TODO docstring.
+        fixed_params: TODO docstring.
+        progress_cb: TODO docstring.
+        fail_fast: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)
@@ -1010,6 +1222,20 @@ def _run_batch_parallel(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        jobs: TODO docstring.
+        out_path: TODO docstring.
+        schema: TODO docstring.
+        fixed_params: TODO docstring.
+        workers: TODO docstring.
+        progress_cb: TODO docstring.
+        fail_fast: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)

@@ -8,6 +8,7 @@ from robot_sf.benchmark import cli
 
 
 def test_log_level_parsing_debug():
+    """TODO docstring. Document this function."""
     parser = cli.get_parser()
     args = parser.parse_args(["list-algorithms", "--log-level", "DEBUG"])  # type: ignore[arg-type]
     assert args.log_level == "DEBUG"
@@ -17,6 +18,7 @@ def test_log_level_parsing_debug():
 
 
 def test_quiet_overrides_log_level():
+    """TODO docstring. Document this function."""
     parser = cli.get_parser()
     args = parser.parse_args(["list-algorithms", "--log-level", "DEBUG", "--quiet"])  # type: ignore[arg-type]
     cli.configure_logging(args.quiet, args.log_level)

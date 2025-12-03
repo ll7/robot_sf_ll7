@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import ceil, cos, pi, sin
 from random import sample, uniform
@@ -274,17 +276,36 @@ class PedSimulator(Simulator):
 
     @property
     def ego_ped_pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.ego_ped.pos
 
     @property
     def ego_ped_pose(self) -> PedPose:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.ego_ped.pose
 
     @property
     def ego_ped_goal_pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.robots[0].pos
 
     def reset_state(self):
+        """TODO docstring. Document this function."""
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
@@ -298,6 +319,12 @@ class PedSimulator(Simulator):
         self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
     def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]):
+        """TODO docstring. Document this function.
+
+        Args:
+            actions: TODO docstring.
+            ego_ped_actions: TODO docstring.
+        """
         for behavior in self.peds_behaviors:
             behavior.step()
         ped_forces = self.pysf_sim.compute_forces()
@@ -366,14 +393,14 @@ def init_ped_simulators(
     """
     Initialize simulators for the pedestrian environment.
 
-    Parameters:
-    env_config (PedEnvSettings): Configuration settings for the environment.
-    map_def (MapDefinition): Definition of the map for the environment.
-    num_robots (int): Number of robots in the environment.
-    random_start_pos (bool): Whether to start the robots at random positions.
+    Args:
+        env_config: Configuration settings for the environment.
+        map_def: Map definition used for collisions and spawn zones.
+        random_start_pos: When True, spawn robots and pedestrians randomly.
+        peds_have_obstacle_forces: Whether to enable pedestrian-obstacle forces.
 
     Returns:
-    sim (PedSimulator): A Simulator object for the pedestrian environment.
+        list[PedSimulator]: Single-element list containing the initialized simulator.
     """
 
     # Calculate the proximity to the goal based on the robot radius and goal radius

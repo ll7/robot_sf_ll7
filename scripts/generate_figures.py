@@ -44,10 +44,23 @@ SCRIPT_VERSION = "0.1.0"
 
 
 def _ensure_dir(p: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        p: TODO docstring.
+    """
     p.mkdir(parents=True, exist_ok=True)
 
 
 def _git_sha_short(length: int = 7) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        length: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         sha = (
             subprocess.check_output(
@@ -63,6 +76,15 @@ def _git_sha_short(length: int = 7) -> str:
 
 
 def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        episodes: TODO docstring.
+        base_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     stem = episodes.stem
     sha = _git_sha_short()
     version = _infer_schema_version(episodes) or SCHEMA_VERSION
@@ -72,6 +94,13 @@ def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
 
 
 def _write_meta(out_dir: Path, episodes: Path, args: argparse.Namespace) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_dir: TODO docstring.
+        episodes: TODO docstring.
+        args: TODO docstring.
+    """
     meta = {
         "episodes_path": str(episodes),
         "generated_at": datetime.now(UTC).isoformat(),
@@ -118,6 +147,16 @@ def _load_snqi_inputs(
     weights_from: Path | None,
     baseline_path: Path | None,
 ) -> tuple[dict | None, dict | None]:
+    """TODO docstring. Document this function.
+
+    Args:
+        weights_path: TODO docstring.
+        weights_from: TODO docstring.
+        baseline_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     weights = None
     baseline = None
     try:
@@ -146,6 +185,13 @@ def _load_snqi_inputs(
 
 
 def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | None) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        weights: TODO docstring.
+        baseline: TODO docstring.
+    """
     if not isinstance(weights, dict):
         return
     for rec in records:
@@ -163,6 +209,12 @@ def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | Non
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     ap = argparse.ArgumentParser(
         description="Generate benchmark figures from episodes JSONL (and optional thumbnails)",
     )
@@ -345,6 +397,13 @@ def _generate_pareto(records, out_dir, args) -> None:
 
 
 def _generate_distributions(records, out_dir: Path, args) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        out_dir: TODO docstring.
+        args: TODO docstring.
+    """
     dmetrics = [m.strip() for m in str(args.dmetrics).split(",") if m.strip()]
     grouped = collect_grouped_values(
         records,
@@ -362,6 +421,13 @@ def _generate_distributions(records, out_dir: Path, args) -> None:
 
 
 def _generate_table(records, out_dir: Path, args) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        out_dir: TODO docstring.
+        args: TODO docstring.
+    """
     if args.table_summary:
         rows, metric_cols = _rows_from_summary(
             summary_path=Path(args.table_summary),
@@ -390,6 +456,12 @@ def _generate_table(records, out_dir: Path, args) -> None:
 
 
 def _maybe_thumbnails(out_dir: Path, args) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_dir: TODO docstring.
+        args: TODO docstring.
+    """
     if not args.thumbs_matrix:
         return
     thumbs_out = Path(args.thumbs_out_dir) if args.thumbs_out_dir else (out_dir / "scenarios")
@@ -406,6 +478,12 @@ def _maybe_thumbnails(out_dir: Path, args) -> None:
 
 
 def _maybe_force_field(out_dir: Path, args) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_dir: TODO docstring.
+        args: TODO docstring.
+    """
     if not bool(args.force_field):
         return
     ff_png = Path(args.ff_png) if args.ff_png else (out_dir / "fig-force-field.png")
@@ -430,6 +508,17 @@ def _summary_build_columns(
     include_ci: bool,
     ci_suffix: str,
 ) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics: TODO docstring.
+        stats: TODO docstring.
+        include_ci: TODO docstring.
+        ci_suffix: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cols: list[str] = []
     for m in metrics:
         for st in stats:
@@ -463,6 +552,20 @@ def _summary_extract_row(
     ci_suffix: str,
     missing: set[str],
 ) -> TableRow:
+    """TODO docstring. Document this function.
+
+    Args:
+        group: TODO docstring.
+        metrics_map: TODO docstring.
+        metrics: TODO docstring.
+        stats: TODO docstring.
+        include_ci: TODO docstring.
+        ci_suffix: TODO docstring.
+        missing: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     values: dict[str, float] = {}
     for m in metrics:
         mm = metrics_map.get(m)

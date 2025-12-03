@@ -34,6 +34,16 @@ if TYPE_CHECKING:
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        path: TODO docstring.
+        default: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -44,6 +54,14 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
 
 
 def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: dict[str, float] = {}
     for k, v in d.items():
         if k in ("episode_id", "scenario_id", "seed"):
@@ -60,6 +78,16 @@ def _group_rows(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
         g = _get_nested(rec, group_by)
@@ -75,6 +103,15 @@ def _collect_metric_names(
     groups: dict[str, list[dict[str, Any]]],
     metrics: Sequence[str] | None,
 ) -> set[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        groups: TODO docstring.
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if metrics is not None:
         return set(metrics)
     names: set[str] = set()
@@ -85,6 +122,14 @@ def _collect_metric_names(
 
 
 def _stats_for_vals(vals: list[float]) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        vals: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not vals:
         return {"mean": float("nan"), "std": float("nan"), "cv": float("nan"), "count": 0.0}
     arr = np.asarray(vals, dtype=float)

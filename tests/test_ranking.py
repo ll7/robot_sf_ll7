@@ -1,9 +1,17 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markdown
 
 
 def _rec(g, **m):
+    """TODO docstring. Document this function.
+
+    Args:
+        g: TODO docstring.
+        m: TODO docstring.
+    """
     return {
         "scenario_params": {"algo": g},
         "algo": g,
@@ -13,6 +21,7 @@ def _rec(g, **m):
 
 
 def test_compute_ranking_basic():
+    """TODO docstring. Document this function."""
     records = [
         _rec("a", collisions=1),
         _rec("a", collisions=3),
@@ -27,6 +36,7 @@ def test_compute_ranking_basic():
 
 
 def test_compute_ranking_top_and_desc():
+    """TODO docstring. Document this function."""
     records = [
         _rec("a", comfort_exposure=0.1),
         _rec("a", comfort_exposure=0.4),
@@ -43,6 +53,7 @@ def test_compute_ranking_top_and_desc():
 
 
 def test_formatters_return_strings():
+    """TODO docstring. Document this function."""
     records = [_rec("a", collisions=1), _rec("a", collisions=3)]
     rows = compute_ranking(records, metric="collisions")
     md = format_markdown(rows, "collisions")

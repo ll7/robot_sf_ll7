@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,11 @@ from robot_sf.research.extractor_report import ReportConfig, generate_extractor_
 
 
 def test_generate_extractor_report_smoke(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     summary = {
         "run_id": "demo-run",
         "extractor_results": [

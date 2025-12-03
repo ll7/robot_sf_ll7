@@ -49,6 +49,8 @@ __all__ = [
 
 @dataclass
 class AggregateMetric:  # mirrors spec (subset for current needs)
+    """TODO docstring. Document this class."""
+
     name: str
     mean: float
     median: float
@@ -59,6 +61,8 @@ class AggregateMetric:  # mirrors spec (subset for current needs)
 
 @dataclass
 class AggregateMetricsGroup:
+    """TODO docstring. Document this class."""
+
     archetype: str
     density: str
     count: int
@@ -66,6 +70,15 @@ class AggregateMetricsGroup:
 
 
 def _percentile(sorted_vals: list[float], p: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        sorted_vals: TODO docstring.
+        p: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not sorted_vals:
         return math.nan
     if p <= 0:
@@ -88,6 +101,17 @@ def _bootstrap_ci(
     conf: float,
     rng: random.Random,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+        samples: TODO docstring.
+        conf: TODO docstring.
+        rng: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not values:
         nan_pair = (math.nan, math.nan)
         return nan_pair, nan_pair
@@ -114,6 +138,12 @@ def _bootstrap_ci(
 
 
 def aggregate_metrics(records: Iterable[dict], cfg):  # T030
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        cfg: TODO docstring.
+    """
     groups_raw = _group_records(records)
     if not groups_raw:
         return []
@@ -144,6 +174,14 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
 
 
 def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     groups: dict[tuple[str, str], list[dict]] = {}
     for rec in records:
         try:
@@ -160,6 +198,14 @@ def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]
 
 
 def _bootstrap_params(cfg) -> tuple[int, float, int]:
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
     if getattr(cfg, "smoke", False):
         samples = min(samples, 300)
@@ -169,6 +215,14 @@ def _bootstrap_params(cfg) -> tuple[int, float, int]:
 
 
 def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        recs: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     vals: dict[str, list[float]] = {}
     for r in recs:
         for k, v in r.get("metrics", {}).items():
@@ -187,6 +241,20 @@ def _aggregate_single_metric(
     bootstrap_samples: int,
     conf: float,
 ) -> AggregateMetric:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+        arch: TODO docstring.
+        dens: TODO docstring.
+        metric_name: TODO docstring.
+        master_seed: TODO docstring.
+        bootstrap_samples: TODO docstring.
+        conf: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     finite_values = [v for v in values if math.isfinite(v)]
     non_finite = len(values) - len(finite_values)
     if non_finite:
@@ -255,6 +323,14 @@ def _wilson_interval(p: float, n: int, conf: float) -> tuple[float, float]:  # T
 
 def _z_from_conf(conf: float) -> float:
     # Map a set of common confidence levels; fallback to 0.95 if unknown.
+    """TODO docstring. Document this function.
+
+    Args:
+        conf: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     mapping = {
         0.90: 1.6448536269514722,
         0.95: 1.959963984540054,

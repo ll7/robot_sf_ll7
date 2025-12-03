@@ -15,6 +15,12 @@ from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 @pytest.mark.parametrize("cap", [3, 5])
 def test_frame_cap_enforced(cap, monkeypatch):
     # Force headless
+    """TODO docstring. Document this function.
+
+    Args:
+        cap: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
 
     view = SimulationView(record_video=True, video_path=None, max_frames=cap, width=64, height=64)
@@ -25,6 +31,11 @@ def test_frame_cap_enforced(cap, monkeypatch):
     ped_actions = np.zeros((0, 2, 2))
 
     def make_state(t):
+        """TODO docstring. Document this function.
+
+        Args:
+            t: TODO docstring.
+        """
         return VisualizableSimState(
             timestep=t,
             robot_action=None,

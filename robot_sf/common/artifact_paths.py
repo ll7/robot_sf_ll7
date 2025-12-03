@@ -34,6 +34,12 @@ class ArtifactCategory:
 
 
 def _canonical_repository_root() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return Path(__file__).resolve().parents[2]
 
 
@@ -45,6 +51,12 @@ def get_repository_root() -> Path:
 
 @lru_cache(maxsize=1)
 def _default_artifact_root() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return _canonical_repository_root() / _ARTIFACT_ROOT_NAME
 
 

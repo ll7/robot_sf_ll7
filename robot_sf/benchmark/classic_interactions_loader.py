@@ -25,6 +25,14 @@ if TYPE_CHECKING:
 
 
 def load_classic_matrix(path: str) -> list[dict]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     p = Path(path)
     if not p.exists():  # explicit fast failure
         raise FileNotFoundError(f"Scenario matrix not found: {path}")
@@ -37,6 +45,15 @@ def load_classic_matrix(path: str) -> list[dict]:
 
 
 def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenarios: TODO docstring.
+        name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not scenarios:
         raise ValueError("No scenarios available")
     if name is None:
@@ -49,6 +66,14 @@ def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
 
 
 def iter_episode_seeds(scenario: dict) -> list[int]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     seeds = scenario.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError(f"Scenario '{scenario.get('name')}' missing non-empty seeds list")

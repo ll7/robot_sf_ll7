@@ -35,22 +35,46 @@ except ImportError:
 
     # Mock numpy for basic functionality
     class MockNumpy:
+        """TODO docstring. Document this class."""
+
         def array(self, data, dtype=None):
+            """TODO docstring. Document this function.
+
+            Args:
+                data: TODO docstring.
+                dtype: TODO docstring.
+            """
             return data
 
         # Mock ndarray attribute for type hints
         ndarray = list
 
         def linalg(self):
+            """TODO docstring. Document this function."""
             return self
 
         def norm(self, vec):
+            """TODO docstring. Document this function.
+
+            Args:
+                vec: TODO docstring.
+            """
             return math.sqrt(sum(x * x for x in vec))
 
         def mean(self, data):
+            """TODO docstring. Document this function.
+
+            Args:
+                data: TODO docstring.
+            """
             return sum(data) / len(data)
 
         def max(self, data):
+            """TODO docstring. Document this function.
+
+            Args:
+                data: TODO docstring.
+            """
             return max(data)
 
     np = MockNumpy()  # type: ignore[assignment]
@@ -72,15 +96,32 @@ except ImportError as e:
 
     # Mock implementations for demo purposes
     class Observation:
+        """TODO docstring. Document this class."""
+
         def __init__(self, dt, robot, agents, obstacles=None):
+            """TODO docstring. Document this function.
+
+            Args:
+                dt: TODO docstring.
+                robot: TODO docstring.
+                agents: TODO docstring.
+                obstacles: TODO docstring.
+            """
             self.dt = dt
             self.robot = robot
             self.agents = agents or []
             self.obstacles = obstacles or []
 
     class SFPlannerConfig:
+        """TODO docstring. Document this class."""
+
         def __init__(self, **kwargs):
             # Default configuration values
+            """TODO docstring. Document this function.
+
+            Args:
+                kwargs: TODO docstring.
+            """
             self.action_space = kwargs.get("action_space", "velocity")
             self.v_max = kwargs.get("v_max", 2.0)
             self.omega_max = kwargs.get("omega_max", 1.0)
@@ -98,6 +139,12 @@ except ImportError as e:
         """Mock Social Force Planner for demonstration purposes."""
 
         def __init__(self, config, seed=None):
+            """TODO docstring. Document this function.
+
+            Args:
+                config: TODO docstring.
+                seed: TODO docstring.
+            """
             if isinstance(config, dict):
                 self.config = SFPlannerConfig(**config)
             else:
@@ -169,18 +216,34 @@ except ImportError as e:
             return {"vx": total_vel[0], "vy": total_vel[1]}
 
         def reset(self, seed=None):
+            """TODO docstring. Document this function.
+
+            Args:
+                seed: TODO docstring.
+            """
             if seed is not None:
                 self.seed = seed
 
         def configure(self, new_config):
+            """TODO docstring. Document this function.
+
+            Args:
+                new_config: TODO docstring.
+            """
             if isinstance(new_config, dict):
                 for key, value in new_config.items():
                     setattr(self.config, key, value)
 
         def close(self):
+            """TODO docstring. Document this function."""
             pass
 
     def get_baseline(name):
+        """TODO docstring. Document this function.
+
+        Args:
+            name: TODO docstring.
+        """
         if name == "baseline_sf":
             return MockSocialForcePlanner
         else:
@@ -194,11 +257,25 @@ if "MockSocialForcePlanner" not in globals():
         """Lightweight mock Social Force Planner (fallback when real deps present)."""
 
         def __init__(self, config, seed=None):
+            """TODO docstring. Document this function.
+
+            Args:
+                config: TODO docstring.
+                seed: TODO docstring.
+            """
             self.config = config
             self.seed = seed
 
         def step(self, obs) -> dict[str, float]:
             # Trivial straight-line goal seeker with zero avoidance
+            """TODO docstring. Document this function.
+
+            Args:
+                obs: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             goal = obs.robot["goal"]
             pos = obs.robot["position"]
             dx = goal[0] - pos[0]
@@ -217,13 +294,24 @@ if "MockSocialForcePlanner" not in globals():
             return {"vx": ux * speed, "vy": uy * speed}
 
         def reset(self, seed=None):
+            """TODO docstring. Document this function.
+
+            Args:
+                seed: TODO docstring.
+            """
             if seed is not None:
                 self.seed = seed
 
         def configure(self, new_config):
+            """TODO docstring. Document this function.
+
+            Args:
+                new_config: TODO docstring.
+            """
             pass
 
         def close(self):
+            """TODO docstring. Document this function."""
             pass
 
 
@@ -574,6 +662,11 @@ class SFPDemo:
             # Create observation
             # Convert container types safely
             def _to_list(x):
+                """TODO docstring. Document this function.
+
+                Args:
+                    x: TODO docstring.
+                """
                 if hasattr(x, "tolist"):
                     return x.tolist()
                 if isinstance(x, list | tuple):

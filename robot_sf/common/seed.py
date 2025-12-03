@@ -28,10 +28,17 @@ class SeedReport:
     notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return asdict(self)
 
 
 def _import_torch():
+    """TODO docstring. Document this function."""
     try:
         return importlib.import_module("torch")  # type: ignore
     except ImportError:  # pragma: no cover - optional dependency

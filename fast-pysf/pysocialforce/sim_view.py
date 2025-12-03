@@ -43,6 +43,15 @@ class VisualizableSimState:
 
 
 def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimState:
+    """TODO docstring. Document this function.
+
+    Args:
+        step: TODO docstring.
+        sim_state: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     state, _groups = sim_state
     ped_pos = np.array(state[:, 0:2])
     ped_vel = np.array(state[:, 2:4])
@@ -88,9 +97,16 @@ class SimulationView:
 
     @property
     def timestep_text_pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return (16, 16)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
@@ -101,6 +117,12 @@ class SimulationView:
 
     def preprocess_obstacles(self) -> pygame.Surface:
         # Scale the vertices of the obstacles
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
 
         # Initialize the minimum and maximum x and y coordinates
@@ -147,12 +169,19 @@ class SimulationView:
         self.ui_events_thread.start()
 
         def handle_sigint(signum, frame):
+            """TODO docstring. Document this function.
+
+            Args:
+                signum: TODO docstring.
+                frame: TODO docstring.
+            """
             self.is_exit_requested = True
             self.is_abortion_requested = True
 
         signal(SIGINT, handle_sigint)
 
     def exit(self):
+        """TODO docstring. Document this function."""
         self.is_exit_requested = True
         self.ui_events_thread.join()
 
@@ -250,16 +279,30 @@ class SimulationView:
         pygame.display.update()
 
     def _resize_window(self):
+        """TODO docstring. Document this function."""
         old_surface = self.screen
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
     def _scale_pedestrian_state(self, state: VisualizableSimState) -> VisualizableSimState:
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
         return state
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
+        """TODO docstring. Document this function.
+
+        Args:
+            ped_pos: TODO docstring.
+        """
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(
                 self.screen,
@@ -270,6 +313,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
+        """TODO docstring. Document this function."""
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [
@@ -309,6 +353,11 @@ class SimulationView:
             )
 
     def _add_text(self, timestep: int):
+        """TODO docstring. Document this function.
+
+        Args:
+            timestep: TODO docstring.
+        """
         text_lines = [
             f"step: {timestep}",
             f"scaling: {self.scaling}",

@@ -14,6 +14,7 @@ from robot_sf.research.aggregation import bootstrap_ci
 
 
 def _get_pyplot():
+    """TODO docstring. Document this function."""
     return importlib.import_module("matplotlib.pyplot")
 
 

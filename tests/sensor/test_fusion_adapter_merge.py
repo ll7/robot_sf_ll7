@@ -22,17 +22,26 @@ class _BaseFusionStub:
     """Minimal stand-in for SensorFusion with compatible API."""
 
     def __init__(self) -> None:
+        """TODO docstring. Document this function."""
         self._reset_called = False
 
     def next_obs(self) -> dict[str, np.ndarray]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return {"drive_state": np.array([1.0], dtype=np.float32)}
 
     def reset_cache(self) -> None:
+        """TODO docstring. Document this function."""
         self._reset_called = True
 
 
 @pytest.fixture
 def _clean_registry():
+    """TODO docstring. Document this function."""
     original = set(list_sensors().keys())
     yield
     current = set(list_sensors().keys())
@@ -43,6 +52,11 @@ def _clean_registry():
 def test_merged_observation_fusion_adds_custom_keys(_clean_registry):
     # Arrange: register a constant sensor and build via adapter
     # (sensor may already be registered via __init__.py)
+    """TODO docstring. Document this function.
+
+    Args:
+        _clean_registry: TODO docstring.
+    """
     register_sensor("dummy_constant", DummyConstantSensor, override=True)
     cfgs = [
         {

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -10,6 +12,8 @@ from robot_sf.common.types import Vec2D
 
 @dataclass
 class PedRobotForceConfig:
+    """TODO docstring. Document this class."""
+
     is_active: bool = True
     robot_radius: float = 1.0
     activation_threshold: float = 2.0
@@ -29,12 +33,20 @@ class PedRobotForce:
         peds: PedState,
         get_robot_pos: Callable[[], Vec2D],
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            peds: TODO docstring.
+            get_robot_pos: TODO docstring.
+        """
         self.config = config
         self.peds = peds
         self.get_robot_pos = get_robot_pos
         self.last_forces = 0.0
 
     def __call__(self) -> np.ndarray:
+        """Return the latest robot-to-pedestrian forces computed for the simulation step."""
         threshold = (
             self.config.activation_threshold + self.peds.agent_radius + self.config.robot_radius
         )
@@ -54,28 +66,16 @@ def ped_robot_force(
     robot_pos: Vec2D,
     threshold: float,
 ):
-    """
-    Compute the forces exerted on pedestrians by a robot.
+    """Compute repulsive forces applied by the robot to each nearby pedestrian.
 
-    This function uses the potential field method to compute the forces. The force is
-    computed for each pedestrian and stored in the `out_forces` array.
+    Args:
+        out_forces: Output array mutated in-place with per-pedestrian force vectors.
+        ped_positions: Current pedestrian positions, shape ``(num_peds, 2)``.
+        robot_pos: Robot position in world coordinates.
+        threshold: Distance cutoff beyond which forces are not applied.
 
-    Parameters
-    ----------
-    out_forces : np.ndarray
-        An array where the computed forces will be stored. The array should have the same
-        length as `ped_positions`.
-    ped_positions : np.ndarray
-        An array of the positions of the pedestrians.
-    robot_pos : Vec2D
-        The position of the robot.
-    threshold : float
-        The distance threshold for computing the force. If a pedestrian is farther than
-        this distance from the robot, the force is not computed.
-
-    Returns
-    -------
-    None
+    Notes:
+        ``out_forces`` is modified in place and not returned.
     """
     # Iterate over all pedestrians
     for i, ped_pos in enumerate(ped_positions):
@@ -125,6 +125,16 @@ def euclid_dist(v_1: Vec2D, v_2: Vec2D) -> float:
 @numba.njit(fastmath=True)
 def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
     # info: distance is an expensive operation and therefore pre-computed
+    """TODO docstring. Document this function.
+
+    Args:
+        p1: TODO docstring.
+        p2: TODO docstring.
+        distance: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     dx1_dist = (p1[0] - p2[0]) / distance
     dy1_dist = (p1[1] - p2[1]) / distance
     return dx1_dist, dy1_dist
@@ -132,5 +142,15 @@ def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
 
 @numba.njit(fastmath=True)
 def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> tuple[float, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        dist: TODO docstring.
+        dx_dist: TODO docstring.
+        dy_dist: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     der_potential = 1 / pow(dist, 3)
     return der_potential * dx_dist, der_potential * dy_dist

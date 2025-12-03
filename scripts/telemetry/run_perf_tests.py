@@ -113,6 +113,17 @@ def _write_summary(
     scenario: str | None,
     result: performance_smoke_test.SmokeTestResult,
 ) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_directory: TODO docstring.
+        run_id: TODO docstring.
+        scenario: TODO docstring.
+        result: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     payload = result.to_dict()
     payload["run_id"] = run_id
     if scenario is not None:
@@ -130,6 +141,18 @@ def _build_manifest_summary(
     num_resets: int,
     recommendation_count: int,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        result: TODO docstring.
+        summary_path: TODO docstring.
+        scenario: TODO docstring.
+        num_resets: TODO docstring.
+        recommendation_count: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     summary: dict[str, Any] = {
         "scenario": scenario or "default",
         "num_resets": num_resets,
@@ -150,6 +173,15 @@ def _resolve_output_destination(
     config: RunTrackerConfig,
     hint: str | None,
 ) -> tuple[RunTrackerConfig, str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        hint: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     run_id = generate_run_id("perf")
     if not hint:
         return config, run_id
@@ -172,6 +204,14 @@ def _resolve_output_destination(
 
 
 def _map_test_status(label: str) -> PerformanceTestStatus:
+    """TODO docstring. Document this function.
+
+    Args:
+        label: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     normalized = label.strip().upper() if label else "FAIL"
     if normalized == "PASS":
         return PerformanceTestStatus.PASSED
@@ -181,6 +221,14 @@ def _map_test_status(label: str) -> PerformanceTestStatus:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--scenario",
@@ -207,6 +255,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     args = parse_args(argv)
     try:
         exit_code, run_dir = run_perf_tests(

@@ -30,6 +30,8 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class GeneratedManifest:
+    """TODO docstring. Document this class."""
+
     path: Path
     run_id: str
     seed: int
@@ -37,6 +39,14 @@ class GeneratedManifest:
 
 
 def _now_run_id(prefix: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        prefix: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return f"{time.strftime('%Y%m%d_%H%M%S')}_{prefix}"
 
 
@@ -47,6 +57,18 @@ def create_minimal_manifest(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_id: TODO docstring.
+        seed: TODO docstring.
+        policy_type: TODO docstring.
+        output_dir: TODO docstring.
+        episode_count: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(episode_count, int) or episode_count <= 0:
         raise ValueError("episode_count must be a positive integer")
     if policy_type not in {"baseline", "pretrained"}:
@@ -104,6 +126,17 @@ def create_seed_set(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> list[Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        policy_type: TODO docstring.
+        seeds: TODO docstring.
+        output_dir: TODO docstring.
+        episode_count: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     paths: list[Path] = []
     for seed in seeds:
         paths.append(

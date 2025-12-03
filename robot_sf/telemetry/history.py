@@ -142,6 +142,14 @@ def _iter_run_directories(config: RunTrackerConfig) -> list[Path]:
 
 
 def _history_sort_key(entry: RunHistoryEntry) -> tuple[datetime, str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        entry: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     tzinfo = (entry.completed_at or entry.created_at or datetime.now().astimezone()).tzinfo
     if tzinfo is None:
         tzinfo = datetime.now().astimezone().tzinfo
@@ -158,6 +166,18 @@ def _build_entry(
     recommendations: list[dict[str, Any]] | None = None,
     perf_tests: list[dict[str, Any]] | None = None,
 ) -> RunHistoryEntry:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        manifest_path: TODO docstring.
+        run_dir: TODO docstring.
+        recommendations: TODO docstring.
+        perf_tests: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     run_id = str(record.get("run_id") or run_dir.name)
     status = _normalize_status(record.get("status")) or PipelineRunStatus.PENDING
     created_at = _parse_datetime(record.get("created_at"))
@@ -185,6 +205,14 @@ def _build_entry(
 def _load_manifest_bundle(
     manifest_path: Path,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        manifest_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not manifest_path.is_file():
         return None, [], []
     content = manifest_path.read_text(encoding="utf-8")
@@ -216,6 +244,14 @@ def _load_manifest_bundle(
 
 
 def _parse_datetime(value: Any) -> datetime | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not value:
         return None
     if isinstance(value, datetime):
@@ -227,12 +263,28 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 
 def _format_datetime(value: datetime | None) -> str | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None:
         return None
     return value.isoformat()
 
 
 def _normalize_status(value: str | PipelineRunStatus | None) -> PipelineRunStatus | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None:
         return None
     if isinstance(value, PipelineRunStatus):
@@ -244,6 +296,15 @@ def _normalize_status(value: str | PipelineRunStatus | None) -> PipelineRunStatu
 
 
 def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        run_hint: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     candidate = Path(run_hint).expanduser()
     if candidate.is_dir():
         return candidate

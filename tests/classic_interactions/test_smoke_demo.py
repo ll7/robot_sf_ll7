@@ -14,11 +14,13 @@ REQUIRED_KEYS = {"scenario", "seed", "steps", "outcome", "recorded"}
 
 
 def _import_demo_module():
+    """TODO docstring. Document this function."""
     mod = importlib.import_module("examples.classic_interactions_pygame")
     return mod
 
 
 def test_smoke_run_demo_produces_episode_summaries():
+    """TODO docstring. Document this function."""
     mod = _import_demo_module()
     # Force non-dry run by temporarily patching DRY_RUN constant if present
     if hasattr(mod, "DRY_RUN"):

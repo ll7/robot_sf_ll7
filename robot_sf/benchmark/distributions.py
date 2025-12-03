@@ -25,6 +25,13 @@ Record = Mapping[str, object]
 
 
 def _get_dotted(d: Mapping[str, object], path: str, default=None):
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        path: TODO docstring.
+        default: TODO docstring.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, Mapping) or part not in cur:  # type: ignore[operator]
@@ -46,6 +53,14 @@ def collect_grouped_values(
     """
 
     def _to_float(x: object | None) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         try:
             v = float(x)  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -74,15 +89,25 @@ def collect_grouped_values(
 
 @dataclass
 class DistPlotMeta:
+    """TODO docstring. Document this class."""
+
     wrote: list[str]
     pdfs: list[str]
 
 
 def _apply_rcparams() -> None:
+    """TODO docstring. Document this function."""
     apply_latex_style()
 
 
 def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        ax: TODO docstring.
+        data: TODO docstring.
+        color: TODO docstring.
+    """
     try:
         stats_module = importlib.import_module("scipy.stats")
         gaussian_kde = stats_module.gaussian_kde

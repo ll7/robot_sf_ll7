@@ -26,10 +26,17 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def test_snqi_weights_invalid_sample_fails():
+    """TODO docstring. Document this function."""
     schema = _load_schema()
     invalid = {"weights": {"w_success": 1.0, "w_time": -1.0}}  # missing version, negative weight
     with pytest.raises(Exception):
@@ -37,6 +44,7 @@ def test_snqi_weights_invalid_sample_fails():
 
 
 def test_snqi_weights_minimal_valid_passes_when_ready():
+    """TODO docstring. Document this function."""
     schema = _load_schema()
     minimal = {
         "version": "v1",

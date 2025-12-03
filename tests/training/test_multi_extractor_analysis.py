@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,12 +14,24 @@ from scripts.multi_extractor_training import (
 
 
 def _write_eval_history(path, timesteps, rewards):
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        timesteps: TODO docstring.
+        rewards: TODO docstring.
+    """
     eval_dir = path / "eval_logs"
     eval_dir.mkdir(parents=True, exist_ok=True)
     np.savez(eval_dir / "evaluations.npz", timesteps=np.array(timesteps), results=np.array(rewards))
 
 
 def test_enrich_records_computes_convergence_and_figures(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     base_dir = run_dir / "extractors" / "base"

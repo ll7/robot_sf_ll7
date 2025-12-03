@@ -20,6 +20,15 @@ if TYPE_CHECKING:
 
 
 def _get_nested(d: dict[str, Any], dotted: str) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        dotted: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cur: Any = d
     for part in dotted.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -30,6 +39,14 @@ def _get_nested(d: dict[str, Any], dotted: str) -> Any:
 
 
 def _to_float(x: Any) -> float | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        x: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         if x is None:
             return None
@@ -40,6 +57,8 @@ def _to_float(x: Any) -> float | None:
 
 @dataclass
 class RankingRow:
+    """TODO docstring. Document this class."""
+
     group: str
     mean: float
     count: int

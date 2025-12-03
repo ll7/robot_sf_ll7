@@ -37,6 +37,14 @@ class MultiRobotEnv(MultiAgentEnv):
         debug: bool = False,
         num_robots: int | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            env_config: TODO docstring.
+            reward_func: TODO docstring.
+            debug: TODO docstring.
+            num_robots: TODO docstring.
+        """
         if isinstance(env_config, MultiRobotConfig):
             resolved_num_robots = env_config.num_robots
             if num_robots is not None and num_robots != resolved_num_robots:
@@ -155,6 +163,11 @@ class MultiRobotEnv(MultiAgentEnv):
         pass
 
     def close_extras(self, **kwargs):
+        """TODO docstring. Document this function.
+
+        Args:
+            kwargs: TODO docstring.
+        """
         if getattr(self, "sim_worker_pool", None) is not None:
             try:
                 self.sim_worker_pool.close()

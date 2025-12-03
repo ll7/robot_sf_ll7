@@ -192,6 +192,7 @@ def format_test_results(
         t_test: Result dict from paired_t_test
         effect_size: Cohen's d value (may be None)
         alpha: Significance threshold
+
     Returns:
         Dict with standardized keys: t_stat, p_value, effect_size, significance, interpretation
     """
@@ -267,16 +268,40 @@ class HypothesisEvaluator:
     """
 
     def __init__(self, threshold: float = 40.0):
+        """TODO docstring. Document this function.
+
+        Args:
+            threshold: TODO docstring.
+        """
         self.threshold = threshold
 
     def evaluate_variant(
         self, baseline: list[float], pretrained: list[float], variant_id: str
     ) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+        Args:
+            baseline: TODO docstring.
+            pretrained: TODO docstring.
+            variant_id: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         result = compare_to_threshold(baseline, pretrained, self.threshold)
         result["variant_id"] = variant_id
         return result
 
     def export_hypothesis_json(self, path: str | Path, results: list[dict[str, Any]]) -> Path:
+        """TODO docstring. Document this function.
+
+        Args:
+            path: TODO docstring.
+            results: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:

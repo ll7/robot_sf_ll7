@@ -37,6 +37,23 @@ class BaseEnv(Env):
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            env_config: TODO docstring.
+            debug: TODO docstring.
+            recording_enabled: TODO docstring.
+            record_video: TODO docstring.
+            video_path: TODO docstring.
+            video_fps: TODO docstring.
+            peds_have_obstacle_forces: TODO docstring.
+            use_jsonl_recording: TODO docstring.
+            recording_dir: TODO docstring.
+            suite_name: TODO docstring.
+            scenario_name: TODO docstring.
+            algorithm_name: TODO docstring.
+            recording_seed: TODO docstring.
+        """
         super().__init__()
 
         # Environment configuration details
@@ -121,9 +138,15 @@ class BaseEnv(Env):
             )
 
     def render(self):
+        """TODO docstring. Document this function."""
         raise NotImplementedError
 
     def step(self, action):
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+        """
         raise NotImplementedError
 
     def exit(self):

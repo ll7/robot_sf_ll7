@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -34,6 +36,12 @@ class Cfg:
 
 def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
     # Force SimulationView + moviepy readiness
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
     monkeypatch.setattr(visuals_mod, "moviepy_ready", lambda: True)
@@ -66,6 +74,14 @@ def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
 
     def _stub_attempt(records, out_dir, cfg, replay_map):
         # Return list with our success artifact
+        """TODO docstring. Document this function.
+
+        Args:
+            records: TODO docstring.
+            out_dir: TODO docstring.
+            cfg: TODO docstring.
+            replay_map: TODO docstring.
+        """
         return [stub_artifact]
 
     monkeypatch.setattr(visuals_mod, "_attempt_sim_view_videos", _stub_attempt)
@@ -95,6 +111,8 @@ def test_simulation_view_encode_path(tmp_path: Path, monkeypatch):
     """Exercise real sim-view encode path (adapter -> frames -> encode)."""
 
     class AutoCfg(Cfg):
+        """TODO docstring. Document this class."""
+
         video_renderer = "auto"
 
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
@@ -111,17 +129,36 @@ def test_simulation_view_encode_path(tmp_path: Path, monkeypatch):
     frames = [np.zeros((4, 4, 3), dtype=np.uint8) for _ in range(3)]
 
     def fake_generate_frames(ep, *, fps: int = 10, max_frames=None):
+        """TODO docstring. Document this function.
+
+        Args:
+            ep: TODO docstring.
+            fps: TODO docstring.
+            max_frames: TODO docstring.
+        """
         assert ep is replay_ep
         yield from frames
 
     class DummyEncodeResult:
+        """TODO docstring. Document this class."""
+
         def __init__(self):
+            """TODO docstring. Document this function."""
             self.status = "success"
             self.note = None
             self.encode_time_s = 0.0123
             self.peak_rss_mb = 5.0
 
     def fake_encode_frames(frame_iter, path, *, fps: int = 10, sample_memory: bool = False, **_kw):
+        """TODO docstring. Document this function.
+
+        Args:
+            frame_iter: TODO docstring.
+            path: TODO docstring.
+            fps: TODO docstring.
+            sample_memory: TODO docstring.
+            _kw: TODO docstring.
+        """
         list(frame_iter)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ok")

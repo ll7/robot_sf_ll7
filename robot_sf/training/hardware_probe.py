@@ -11,7 +11,11 @@ from robot_sf.training.multi_extractor_models import HardwareProfile
 
 
 def _load_torch():
-    """TODO docstring. Document this function."""
+    """Attempt to import the ``torch`` module.
+
+    Returns:
+        module | None: The imported ``torch`` module when available, otherwise ``None``.
+    """
     try:
         return importlib.import_module("torch")
     except ModuleNotFoundError:  # pragma: no cover
@@ -48,7 +52,12 @@ def _collect_gpu_metadata() -> tuple[str | None, str | None]:
 
 
 def collect_hardware_profile(*, worker_count: int, skip_gpu: bool = False) -> HardwareProfile:
-    """Capture hardware traits for logging and summary reproduction."""
+    """Capture hardware traits for logging and summary reproduction.
+
+    Returns:
+        HardwareProfile: Structured hardware metadata including platform, arch,
+        Python version, worker count, and optional GPU details.
+    """
 
     if worker_count < 1:
         raise ValueError("worker_count must be >= 1")

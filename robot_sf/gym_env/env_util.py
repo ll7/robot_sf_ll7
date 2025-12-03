@@ -83,18 +83,24 @@ def init_collision_and_sensors(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
-            """TODO docstring. Document this function.
+            """Capture lidar ray scan for the specified robot.
 
             Args:
-                r_id: TODO docstring.
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Ray scan distances from lidar.
             """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
-            """TODO docstring. Document this function.
+            """Capture target/goal sensor observations for the specified robot.
 
             Args:
-                r_id: TODO docstring.
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Target sensor observation (goal direction and distances).
             """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
@@ -103,10 +109,13 @@ def init_collision_and_sensors(
             )
 
         def speed_sensor(r_id=r_id):
-            """TODO docstring. Document this function.
+            """Capture current speed for the specified robot.
 
             Args:
-                r_id: TODO docstring.
+                r_id: Robot index in the simulation.
+
+            Returns:
+                float: Current speed of the robot.
             """
             return sim.robots[r_id].current_speed
 
@@ -180,12 +189,15 @@ def create_spaces(
     agent_type: AgentType = AgentType.ROBOT,
 ):
     # Create a agent using the factory method in the environment configuration
-    """TODO docstring. Document this function.
+    """Create observation and action spaces for the specified agent type.
 
     Args:
-        env_config: TODO docstring.
-        map_def: TODO docstring.
-        agent_type: TODO docstring.
+        env_config: Environment configuration containing agent factories.
+        map_def: Map definition for spatial bounds.
+        agent_type: Type of agent (ROBOT or PEDESTRIAN).
+
+    Returns:
+        tuple: (observation_space, action_space) gymnasium Space objects.
     """
     if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
@@ -329,26 +341,35 @@ def init_ped_collision_and_sensors(
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     def ray_sensor(r_id=0):
-        """TODO docstring. Document this function.
+        """Capture lidar ray scan for the robot.
 
         Args:
-            r_id: TODO docstring.
+            r_id: Robot index (default 0 for single-robot env).
+
+        Returns:
+            np.ndarray: Ray scan distances from lidar.
         """
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
     def target_sensor(r_id=0):
-        """TODO docstring. Document this function.
+        """Capture target/goal sensor observations for the robot.
 
         Args:
-            r_id: TODO docstring.
+            r_id: Robot index (default 0 for single-robot env).
+
+        Returns:
+            np.ndarray: Target sensor observation (goal direction and distances).
         """
         return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
     def speed_sensor(r_id=0):
-        """TODO docstring. Document this function.
+        """Capture current speed for the robot.
 
         Args:
-            r_id: TODO docstring.
+            r_id: Robot index (default 0 for single-robot env).
+
+        Returns:
+            float: Current speed of the robot.
         """
         return sim.robots[r_id].current_speed
 
@@ -381,11 +402,19 @@ def init_ped_collision_and_sensors(
     )
 
     def ray_sensor_ego_ped():
-        """TODO docstring. Document this function."""
+        """Capture lidar ray scan for the ego pedestrian.
+
+        Returns:
+            np.ndarray: Ray scan distances from lidar for ego pedestrian.
+        """
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
     def target_sensor_ego_ped():
-        """TODO docstring. Document this function."""
+        """Capture target/goal sensor observations for the ego pedestrian.
+
+        Returns:
+            np.ndarray: Target sensor observation (goal direction and distances).
+        """
         return target_sensor_obs(
             sim.ego_ped.pose,
             sim.ego_ped_goal_pos,
@@ -393,7 +422,11 @@ def init_ped_collision_and_sensors(
         )  # TODO: What next goal to choose?
 
     def speed_sensor_ego_ped():
-        """TODO docstring. Document this function."""
+        """Capture current speed for the ego pedestrian.
+
+        Returns:
+            float: Current speed of the ego pedestrian.
+        """
         return sim.ego_ped.current_speed
 
     sensor_fusions.append(
@@ -531,18 +564,24 @@ def init_collision_and_sensors_with_image(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
-            """TODO docstring. Document this function.
+            """Capture lidar ray scan for the specified robot.
 
             Args:
-                r_id: TODO docstring.
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Ray scan distances from lidar.
             """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
-            """TODO docstring. Document this function.
+            """Capture target/goal sensor observations for the specified robot.
 
             Args:
-                r_id: TODO docstring.
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Target sensor observation (goal direction and distances).
             """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
@@ -551,10 +590,13 @@ def init_collision_and_sensors_with_image(
             )
 
         def speed_sensor(r_id=r_id):
-            """TODO docstring. Document this function.
+            """Capture current speed for the specified robot.
 
             Args:
-                r_id: TODO docstring.
+                r_id: Robot index in the simulation.
+
+            Returns:
+                float: Current speed of the robot.
             """
             return sim.robots[r_id].current_speed
 

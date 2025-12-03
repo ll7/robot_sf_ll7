@@ -70,7 +70,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
             raise ValueError("Robot configuration must be initialized!")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
-        """Create a robot instance based on configuration."""
+        """Create a robot instance based on configuration.
+
+        Returns:
+            Robot instance (DifferentialDriveRobot or BicycleDriveRobot) from config.
+        """
         if isinstance(self.robot_config, DifferentialDriveSettings):
             return DifferentialDriveRobot(self.robot_config)
         elif isinstance(self.robot_config, BicycleDriveSettings):
@@ -119,7 +123,11 @@ class PedestrianSimulationConfig(RobotSimulationConfig):
         self.ego_ped_config.radius = self.sim_config.ped_radius
 
     def pedestrian_factory(self) -> "UnicycleDrivePedestrian":
-        """Create a pedestrian instance based on configuration."""
+        """Create a pedestrian instance based on configuration.
+
+        Returns:
+            UnicycleDrivePedestrian instance created from ego_ped_config.
+        """
         module = importlib.import_module("robot_sf.ped_ego.unicycle_drive")
         UnicycleDrivePedestrian = module.UnicycleDrivePedestrian
 

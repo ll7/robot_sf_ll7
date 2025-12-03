@@ -104,7 +104,11 @@ def list_runs(
 
 
 def load_run(config: RunTrackerConfig, run_hint: str) -> RunHistoryEntry:
-    """Load a specific run, resolving either a run ID or explicit path."""
+    """Load a specific run, resolving either a run ID or explicit path.
+
+    Returns:
+        RunHistoryEntry: Materialized run history entry for the resolved run.
+    """
 
     run_dir = _resolve_run_directory(config, run_hint)
     manifest_path = run_dir / config.manifest_filename
@@ -126,6 +130,9 @@ def _iter_run_directories(config: RunTrackerConfig) -> list[Path]:
 
     Scans both direct children and nested subdirectories (e.g., perf-tests/latest)
     to ensure runs written with nested output hints are discoverable.
+
+    Returns:
+        list[Path]: Discovered run directories containing a manifest file.
     """
     root = config.run_tracker_root
     if not root.exists():
@@ -142,13 +149,13 @@ def _iter_run_directories(config: RunTrackerConfig) -> list[Path]:
 
 
 def _history_sort_key(entry: RunHistoryEntry) -> tuple[datetime, str]:
-    """TODO docstring. Document this function.
+    """Sorting key for history entries (completed/created time, then run_id).
 
     Args:
-        entry: TODO docstring.
+        entry: Run history entry to sort.
 
     Returns:
-        TODO docstring.
+        tuple[datetime, str]: Primary timestamp then run_id for stable sort.
     """
     tzinfo = (entry.completed_at or entry.created_at or datetime.now().astimezone()).tzinfo
     if tzinfo is None:
@@ -166,17 +173,17 @@ def _build_entry(
     recommendations: list[dict[str, Any]] | None = None,
     perf_tests: list[dict[str, Any]] | None = None,
 ) -> RunHistoryEntry:
-    """TODO docstring. Document this function.
+    """Build a RunHistoryEntry from a manifest record and auxiliary bundles.
 
     Args:
-        record: TODO docstring.
-        manifest_path: TODO docstring.
-        run_dir: TODO docstring.
-        recommendations: TODO docstring.
-        perf_tests: TODO docstring.
+        record: Parsed manifest record (latest line).
+        manifest_path: Path to the manifest JSONL file.
+        run_dir: Directory containing artifacts for this run.
+        recommendations: Extracted recommendation payloads, if any.
+        perf_tests: Extracted performance test payloads, if any.
 
     Returns:
-        TODO docstring.
+        RunHistoryEntry: The structured run history entry.
     """
     run_id = str(record.get("run_id") or run_dir.name)
     status = _normalize_status(record.get("status")) or PipelineRunStatus.PENDING
@@ -205,13 +212,13 @@ def _build_entry(
 def _load_manifest_bundle(
     manifest_path: Path,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]:
-    """TODO docstring. Document this function.
+    """Load the latest record and companion bundles from a manifest JSONL.
 
     Args:
-        manifest_path: TODO docstring.
+        manifest_path: Path to the run's manifest JSONL file.
 
     Returns:
-        TODO docstring.
+        tuple: ``(latest_record, recommendations, perf_tests)`` where lists may be empty.
     """
     if not manifest_path.is_file():
         return None, [], []
@@ -244,13 +251,13 @@ def _load_manifest_bundle(
 
 
 def _parse_datetime(value: Any) -> datetime | None:
-    """TODO docstring. Document this function.
+    """Parse ISO8601-like datetime strings into datetime objects when possible.
 
     Args:
-        value: TODO docstring.
+        value: Datetime or string to parse; falsy returns None.
 
     Returns:
-        TODO docstring.
+        datetime | None: Parsed datetime or None when not parseable.
     """
     if not value:
         return None
@@ -263,13 +270,13 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 
 def _format_datetime(value: datetime | None) -> str | None:
-    """TODO docstring. Document this function.
+    """Format a datetime as ISO string or return None for missing values.
 
     Args:
-        value: TODO docstring.
+        value: Datetime to format or None.
 
     Returns:
-        TODO docstring.
+        str | None: ISO8601 string or None.
     """
     if value is None:
         return None
@@ -277,13 +284,13 @@ def _format_datetime(value: datetime | None) -> str | None:
 
 
 def _normalize_status(value: str | PipelineRunStatus | None) -> PipelineRunStatus | None:
-    """TODO docstring. Document this function.
+    """Coerce status payloads into PipelineRunStatus enum values when valid.
 
     Args:
-        value: TODO docstring.
+        value: Enum value or string name of a status; None allowed.
 
     Returns:
-        TODO docstring.
+        PipelineRunStatus | None: Normalized enum or None when invalid.
     """
     if value is None:
         return None
@@ -296,14 +303,14 @@ def _normalize_status(value: str | PipelineRunStatus | None) -> PipelineRunStatu
 
 
 def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
-    """TODO docstring. Document this function.
+    """Resolve a run directory from a run_id or explicit path.
 
     Args:
-        config: TODO docstring.
-        run_hint: TODO docstring.
+        config: Run tracker configuration (provides root and filenames).
+        run_hint: Run ID or a path-like hint to locate the run.
 
     Returns:
-        TODO docstring.
+        Path: The resolved run directory containing the manifest.
     """
     candidate = Path(run_hint).expanduser()
     if candidate.is_dir():
@@ -319,7 +326,11 @@ def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
 
 
 def _match_run_directory_by_manifest(config: RunTrackerConfig, run_hint: str) -> Path | None:
-    """Fallback: scan manifests to match by recorded run_id."""
+    """Fallback: scan manifests to match by recorded run_id.
+
+    Returns:
+        Path | None: Matching directory when run_id matches; otherwise None.
+    """
 
     for run_dir in _iter_run_directories(config):
         manifest_path = run_dir / config.manifest_filename

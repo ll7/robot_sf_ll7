@@ -144,7 +144,11 @@ class TelemetrySampler:
         return self._last_snapshot
 
     def emit_snapshot(self) -> TelemetrySnapshot:
-        """Collect a snapshot immediately and persist it."""
+        """Collect a snapshot immediately and persist it.
+
+        Returns:
+            TelemetrySnapshot: The collected snapshot that was written and broadcast to consumers.
+        """
 
         snapshot = self._collect_snapshot()
         self._writer.append_telemetry_snapshot(snapshot)
@@ -327,7 +331,12 @@ class TelemetrySampler:
         return None
 
     def _init_process_handle(self):
-        """TODO docstring. Document this function."""
+        """Initialize and prime the psutil process handle if available.
+
+        Returns:
+            object | None: A ``psutil.Process`` handle ready for sampling, or ``None`` when
+            psutil is unavailable or initialization fails.
+        """
         if psutil is None:
             logger.debug("psutil not available; telemetry sampler will skip CPU/memory metrics")
             return None

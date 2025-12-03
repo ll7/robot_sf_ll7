@@ -24,7 +24,11 @@ def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:
 def make_run_directory(
     run_id: str, *, env: dict[str, str] | None = None, timestamp: str | None = None
 ) -> Path:
-    """Create and return the timestamped directory for a training run."""
+    """Create and return the timestamped directory for a training run.
+
+    Returns:
+        Path: The created run directory path.
+    """
 
     if not run_id:
         raise ValueError("run_id must be a non-empty string")
@@ -41,7 +45,11 @@ def make_run_directory(
 
 
 def make_extractor_directory(run_dir: Path, extractor_name: str) -> Path:
-    """Ensure the per-extractor subdirectory exists and return it."""
+    """Ensure the per-extractor subdirectory exists and return it.
+
+    Returns:
+        Path: The path to the extractor-specific directory.
+    """
 
     if not extractor_name:
         raise ValueError("extractor_name must be provided")

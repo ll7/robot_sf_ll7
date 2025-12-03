@@ -44,7 +44,11 @@ class RunRegistry:
         return Path(self._config.run_tracker_root)
 
     def create_run_directory(self, run_id: str, *, allow_existing: bool = False) -> RunDirectory:
-        """Create the directory for ``run_id`` and materialize a lock file."""
+        """Create the directory for ``run_id`` and materialize a lock file.
+
+        Returns:
+            RunDirectory: The allocated run directory metadata.
+        """
 
         target = self.base_dir / run_id
         if target.exists() and not allow_existing:

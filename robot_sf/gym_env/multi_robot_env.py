@@ -105,7 +105,11 @@ class MultiRobotEnv(MultiAgentEnv):
         self.obs_worker_pool = ThreadPool(resolved_num_robots)
 
     def step(self, action: Any) -> tuple[Any, float, bool, bool, dict[str, Any]]:
-        """Execute one environment step with multi-agent actions."""
+        """Execute one environment step with multi-agent actions.
+
+        Returns:
+            Tuple of (observation, reward, terminated, truncated, info) following Gymnasium API.
+        """
         actions = action  # Rename for clarity in multi-agent context
         actions = [self.simulators[0].robots[0].parse_action(a) for a in actions]
         i = 0
@@ -147,7 +151,11 @@ class MultiRobotEnv(MultiAgentEnv):
         return obs_dict, total_reward, any_terminated, False, {"agents": masked_metas_tuple}
 
     def reset(self, **kwargs) -> tuple[Any, dict[str, Any]]:
-        """Reset the environment."""
+        """Reset the environment.
+
+        Returns:
+            Tuple of (observation, info) after environment reset.
+        """
         self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
         obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
 
@@ -188,6 +196,9 @@ class MultiRobotEnv(MultiAgentEnv):
         We intentionally keep this lightweight because the full simulator
         and per-agent states are initialized later in the concrete
         constructor. This satisfies the abstract contract.
+
+        Returns:
+            None (setup is deferred to __init__).
         """
         # no-op: actual simulator initialization happens in __init__ below
         return None
@@ -198,6 +209,9 @@ class MultiRobotEnv(MultiAgentEnv):
         The factory path computes these before calling the base ctor; if
         they are not yet available, compute them on-demand from the
         environment config.
+
+        Returns:
+            Tuple of (action_space, observation_space) for a single agent.
         """
         try:
             return self.single_action_space, self.single_observation_space
@@ -211,6 +225,9 @@ class MultiRobotEnv(MultiAgentEnv):
         """Hook to initialise agents; already done in __init__, so keep no-op.
 
         Implemented to satisfy abstract base requirements.
+
+        Returns:
+            None (agents already initialized in __init__).
         """
         return None
 
@@ -219,6 +236,9 @@ class MultiRobotEnv(MultiAgentEnv):
 
         This delegates to the environment's `step` implementation to avoid
         duplicating logic.
+
+        Returns:
+            Tuple of ([observations], [rewards], [terminated], [info_dicts]) for all agents.
         """
         obs, reward, terminated, _truncated, info = self.step(actions)
         # Convert single values back to lists for multi-agent interface

@@ -30,7 +30,11 @@ def _load_yaml_documents(path: Path) -> Any:
 
 
 def load_scenarios(path: Path) -> list[Mapping[str, Any]]:
-    """Load raw scenario definitions from a YAML file."""
+    """Load raw scenario definitions from a YAML file.
+
+    Returns:
+        list[Mapping[str, Any]]: Parsed scenario entries from the file.
+    """
 
     data = _load_yaml_documents(path)
     if isinstance(data, dict) and "scenarios" in data:
@@ -61,7 +65,11 @@ def select_scenario(
 
 @lru_cache(maxsize=8)
 def _load_map_definition(map_path: str) -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path."""
+    """Load and convert a map definition, caching by absolute path.
+
+    Returns:
+        MapDefinition | None: Parsed map definition for supported formats, else ``None``.
+    """
 
     path = Path(map_path)
     if not path.exists():
@@ -85,7 +93,11 @@ def build_robot_config_from_scenario(
     *,
     scenario_path: Path,
 ) -> RobotSimulationConfig:
-    """Create a ``RobotSimulationConfig`` derived from a scenario definition."""
+    """Create a ``RobotSimulationConfig`` derived from a scenario definition.
+
+    Returns:
+        RobotSimulationConfig: Config populated with overrides and map pool.
+    """
 
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))

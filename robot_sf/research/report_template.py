@@ -12,10 +12,10 @@ class MarkdownReportRenderer:
     """Renders research report as Markdown with optional LaTeX export."""
 
     def __init__(self, output_dir: Path):
-        """TODO docstring. Document this function.
+        """Initialize a Markdown renderer writing into the given directory.
 
         Args:
-            output_dir: TODO docstring.
+            output_dir: Root output directory for rendered artifacts.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -32,9 +32,10 @@ class MarkdownReportRenderer:
         ablation_variants: list[dict[str, Any]] | None = None,
         telemetry: dict[str, Any] | None = None,
     ) -> Path:
-        """
-        Render full Markdown report.
-        Returns path to report.md file.
+        """Render the full Markdown report.
+
+        Returns:
+            Path: Path to the generated `report.md` file.
         """
         sections = []
 
@@ -81,7 +82,11 @@ class MarkdownReportRenderer:
     def _render_abstract(
         self, hypothesis_result: dict[str, Any], aggregated_metrics: list[dict[str, Any]]
     ) -> str:
-        """Auto-populate Abstract section based on hypothesis and key metrics."""
+        """Auto-populate Abstract section based on hypothesis and key metrics.
+
+        Returns:
+            str: Markdown string for the Abstract section.
+        """
         decision = hypothesis_result.get("decision", "INCOMPLETE")
         measured = hypothesis_result.get("measured_value")
         threshold = hypothesis_result.get("threshold_value", 40.0)
@@ -118,7 +123,11 @@ class MarkdownReportRenderer:
         return abstract + "\n"
 
     def _render_hypothesis_section(self, hypothesis_result: dict[str, Any]) -> str:
-        """Render hypothesis evaluation results."""
+        """Render hypothesis evaluation results.
+
+        Returns:
+            str: Markdown string for the Hypothesis section.
+        """
         section = "## Hypothesis Evaluation\n\n"
         section += f"**Hypothesis**: {hypothesis_result.get('description', 'N/A')}\n\n"
         section += f"**Decision**: **{hypothesis_result.get('decision', 'INCOMPLETE')}**\n\n"
@@ -142,6 +151,9 @@ class MarkdownReportRenderer:
 
         Returns empty string when no seed data is provided to avoid spurious
         sections in reports that do not orchestrate multiple seeds.
+
+        Returns:
+            str: Markdown for the Seed Summary section, or empty string.
         """
 
         if not seed_status and not completeness:
@@ -175,7 +187,11 @@ class MarkdownReportRenderer:
         return section + "\n"
 
     def _render_results_section(self, aggregated_metrics: list[dict[str, Any]]) -> str:
-        """Render aggregated metrics as table."""
+        """Render aggregated metrics as table.
+
+        Returns:
+            str: Markdown string for the Results section.
+        """
         section = "## Results\n\n"
         # Optional stats table if effect sizes present
         stats_table = self._render_stats_table(aggregated_metrics)
@@ -212,6 +228,9 @@ class MarkdownReportRenderer:
         - effect_size (optional)
         - mean, ci_low, ci_high (optional)
         Returns empty string if no effect sizes present.
+
+        Returns:
+            str: Markdown table string, or empty string if no effect sizes.
         """
         effect_entries = [m for m in aggregated_metrics if m.get("effect_size") is not None]
         if not effect_entries:
@@ -245,7 +264,11 @@ class MarkdownReportRenderer:
         return table
 
     def _render_figures_section(self, figures: list[dict[str, Any]]) -> str:
-        """Render figures section with captions and links."""
+        """Render figures section with captions and links.
+
+        Returns:
+            str: Markdown string for the Figures section.
+        """
         section = "## Figures\n\n"
         for fig in figures:
             caption = fig.get("caption", "Figure")
@@ -284,7 +307,11 @@ class MarkdownReportRenderer:
         return section
 
     def _render_reproducibility_section(self, metadata: dict[str, Any]) -> str:
-        """Render reproducibility metadata."""
+        """Render reproducibility metadata.
+
+        Returns:
+            str: Markdown string for the Reproducibility section.
+        """
         section = "## Reproducibility\n\n"
         repro = metadata.get("reproducibility", {})
 
@@ -317,6 +344,9 @@ class MarkdownReportRenderer:
 
         Expected variant dict keys: variant_id, improvement_pct, decision (PASS/FAIL/INCOMPLETE),
         bc_epochs (optional), dataset_size (optional).
+
+        Returns:
+            str: Markdown string for the Ablation Matrix section, or empty string.
         """
         if not variants:
             return ""
@@ -337,6 +367,9 @@ class MarkdownReportRenderer:
 
         Expects a flat dict of key→value pairs (already aggregated). Missing
         telemetry data returns an empty section upstream.
+
+        Returns:
+            str: Markdown string for the Telemetry section, or empty string.
         """
         if not telemetry:
             return ""
@@ -347,9 +380,10 @@ class MarkdownReportRenderer:
         return section + "\n"
 
     def export_latex(self, markdown_path: Path) -> Path | None:
-        """
-        Export Markdown report to LaTeX format.
-        Returns path to .tex file, or None if conversion fails.
+        """Export Markdown report to LaTeX format.
+
+        Returns:
+            Path | None: Path to generated `.tex` file, or None on failure.
         """
         # Placeholder: would use pandoc or manual conversion
         # For now, create a simple LaTeX wrapper

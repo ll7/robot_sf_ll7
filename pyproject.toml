@@ -355,6 +355,9 @@ docstring-code-format = true
 # enabled.
 docstring-code-line-length = "dynamic"
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.coverage.run]
 source = ["robot_sf", "fast-pysf/pysocialforce"]
 

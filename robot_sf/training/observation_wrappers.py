@@ -22,6 +22,9 @@ def maybe_flatten_env_observations(env: Any, *, context: str = "training") -> An
     PPO fine-tuning runs with a flattened space, every subsequent consumer must
     recreate the same shape before calling ``PPO.load``. This helper provides a
     single place to apply the wrapper and emit consistent logging.
+
+    Returns:
+        Any: The original environment or a ``FlattenObservation``-wrapped instance.
     """
 
     if isinstance(getattr(env, "observation_space", None), gym_spaces.Dict):

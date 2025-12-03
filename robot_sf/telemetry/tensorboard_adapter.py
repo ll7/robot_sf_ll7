@@ -86,7 +86,11 @@ class TensorBoardAdapter:
                 self._writer.add_scalar(tag, value, global_step=step)
 
     def mirror_file(self, telemetry_file: Path) -> int:
-        """Stream a telemetry JSONL file into TensorBoard, returning sample count."""
+        """Stream a telemetry JSONL file into TensorBoard.
+
+        Returns:
+            int: The number of telemetry snapshots mirrored into TensorBoard.
+        """
 
         count = 0
         for snapshot in iter_telemetry_snapshots(telemetry_file):

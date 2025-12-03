@@ -74,7 +74,11 @@ class SeedSummary:
     note: str | None = None
 
     def as_dict(self) -> dict[str, Any]:  # serialization
-        """Return a dict representation for serialization."""
+        """Return a dict representation for serialization.
+
+        Returns:
+            dict[str, Any]: Serializable mapping containing seed status fields.
+        """
 
         return {
             "seed": self.seed,
@@ -98,7 +102,11 @@ class ReportOrchestrator:
     # Small helpers
     # ------------------------------------------------------------------
     def _prepare_output_dirs(self) -> tuple[Path, Path, Path]:
-        """Create and return figure/data/config directories under output root."""
+        """Create and return figure/data/config directories under output root.
+
+        Returns:
+            tuple[Path, Path, Path]: Tuple of `(figures_dir, data_dir, configs_dir)`.
+        """
         figures_dir = self.output_dir / "figures"
         data_dir = self.output_dir / "data"
         configs_dir = self.output_dir / "configs"  # tests expect this directory
@@ -113,7 +121,11 @@ class ReportOrchestrator:
         threshold: float,
         data_dir: Path,
     ) -> dict[str, Any]:
-        """Persist hypothesis evaluation to disk and return payload."""
+        """Persist hypothesis evaluation to disk and return payload.
+
+        Returns:
+            dict[str, Any]: Hypothesis evaluation payload written to disk.
+        """
         if baseline_timesteps and pretrained_timesteps:
             hypothesis = evaluate_hypothesis(baseline_timesteps, pretrained_timesteps, threshold)
         else:
@@ -129,7 +141,11 @@ class ReportOrchestrator:
         completeness: dict[str, Any] | None,
         data_dir: Path,
     ) -> dict[str, Any]:
-        """Compute completeness (if needed) and persist to disk."""
+        """Compute completeness (if needed) and persist to disk.
+
+        Returns:
+            dict[str, Any]: Completeness summary payload written to disk.
+        """
         if completeness is None:
             completed = [
                 record["seed"]
@@ -149,7 +165,11 @@ class ReportOrchestrator:
         pretrained_rewards: list[list[float]] | None,
         figures_dir: Path,
     ) -> list[dict[str, Any]]:
-        """Generate requested figures, tolerating missing or partial inputs."""
+        """Generate requested figures, tolerating missing or partial inputs.
+
+        Returns:
+            list[dict[str, Any]]: List of figure descriptors including output paths.
+        """
         figures: list[dict[str, Any]] = []
         safe_exceptions = (OSError, RuntimeError, ValueError)
 
@@ -176,16 +196,20 @@ class ReportOrchestrator:
         return figures
 
     def _write_artifact_manifest(self, report_path: Path, data_dir: Path) -> list[dict[str, Any]]:
-        """Build artifact manifest entries relative to the output directory."""
+        """Build artifact manifest entries relative to the output directory.
+
+        Returns:
+            list[dict[str, Any]]: Artifact records written to `artifacts_manifest.json`.
+        """
 
         def _relative(path: Path) -> str:
-            """TODO docstring. Document this function.
+            """Return path relative to the orchestrator's output directory.
 
             Args:
-                path: TODO docstring.
+                path: Filesystem path to normalize.
 
             Returns:
-                TODO docstring.
+                str: Relative path (or original path string on fallback).
             """
             try:
                 return str(path.relative_to(self.output_dir))
@@ -221,7 +245,11 @@ class ReportOrchestrator:
         return manifest
 
     def _canonical_run_id(self, run_id: str, experiment_name: str) -> str:
-        """Normalize or generate a run identifier safe for filenames."""
+        """Normalize or generate a run identifier safe for filenames.
+
+        Returns:
+            str: Canonical run identifier string.
+        """
         if re.match(r"^\d{8}_\d{6}_[a-z0-9_-]+$", run_id):
             return run_id
         safe_name = re.sub(r"[^a-z0-9_-]", "-", experiment_name.lower().replace(" ", "_"))
@@ -256,14 +284,22 @@ class ReportOrchestrator:
     def collect_metadata(
         self, seeds: Sequence[int] | None = None, config_paths: dict[str, Path] | None = None
     ) -> dict[str, Any]:
-        """Collect reproducibility metadata following the data model schema."""
+        """Collect reproducibility metadata following the data model schema.
+
+        Returns:
+            dict[str, Any]: Metadata document with git, hardware, packages, and configs.
+        """
 
         repro = collect_reproducibility_metadata(
             seeds=list(seeds) if seeds else None, config_paths=config_paths
         )
 
         def _safe(cmd: list[str]) -> str:
-            """Execute git command safely, returning 'unknown' if not in a git repo."""
+            """Execute git command safely, returning 'unknown' if not in a git repo.
+
+            Returns:
+                str: Command output on success, or 'unknown' on failure.
+            """
             try:
                 return subprocess.check_output(cmd, text=True).strip()
             except (subprocess.CalledProcessError, FileNotFoundError, OSError):  # pragma: no cover
@@ -311,16 +347,20 @@ class ReportOrchestrator:
     def _load_manifest_map(
         self, manifests: Sequence[Path], label: str
     ) -> dict[int, dict[str, Any]]:
-        """Load manifests into a seed→payload map, skipping invalid entries."""
+        """Load manifests into a seed→payload map, skipping invalid entries.
+
+        Returns:
+            dict[int, dict[str, Any]]: Mapping from seed to parsed manifest payload.
+        """
 
         def _load(path: Path) -> dict[str, Any] | None:
-            """TODO docstring. Document this function.
+            """Load a single manifest JSON file.
 
             Args:
-                path: TODO docstring.
+                path: Path to JSON manifest file.
 
             Returns:
-                TODO docstring.
+                dict[str, Any] | None: Parsed JSON dict or None on error.
             """
             try:
                 with path.open(encoding="utf-8") as f:
@@ -355,7 +395,12 @@ class ReportOrchestrator:
         *,
         expected_seeds: Sequence[int],
     ) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
-        """Load manifests for all seeds and build records/completeness summaries."""
+        """Load manifests for all seeds and build records/completeness summaries.
+
+        Returns:
+            tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+                Tuple of `(records, completeness, seed_summaries)`.
+        """
         records: list[dict[str, Any]] = []
         seed_summaries: list[SeedSummary] = []
 
@@ -423,7 +468,11 @@ class ReportOrchestrator:
         telemetry: dict[str, Any] | None = None,
         generate_figures: bool = True,
     ) -> Path:
-        """Render the research report and return the path to the generated Markdown file."""
+        """Render the research report and return the path to the generated Markdown file.
+
+        Returns:
+            Path: Path to the generated `report.md` file.
+        """
         figures_dir, data_dir, _ = self._prepare_output_dirs()
 
         aggregated = aggregate_metrics(
@@ -479,7 +528,11 @@ class ReportOrchestrator:
         run_id: str,
         threshold: float = 40.0,
     ) -> Path:
-        """Convenience wrapper that orchestrates multi-seed load and report generation."""
+        """Convenience wrapper that orchestrates multi-seed load and report generation.
+
+        Returns:
+            Path: Path to the generated `report.md` file.
+        """
         records, completeness, seed_status = self.orchestrate_multi_seed(
             baseline_manifests, pretrained_manifests, expected_seeds=expected_seeds
         )
@@ -532,6 +585,9 @@ class AblationOrchestrator:
 
         The config may contain a top-level ``ablation_params`` mapping or directly
         provide the parameter name → list of values mapping.
+
+        Returns:
+            dict[str, list[Any]]: Mapping of parameter names to lists of values.
         """
 
         if yaml is None:  # pragma: no cover - optional dependency guard
@@ -556,7 +612,11 @@ class AblationOrchestrator:
         return parsed
 
     def run_ablation_matrix(self) -> list[dict[str, Any]]:
-        """Evaluate ablation matrix deterministically based on configured params."""
+        """Evaluate ablation matrix deterministically based on configured params.
+
+        Returns:
+            list[dict[str, Any]]: List of variant result dicts with decisions.
+        """
 
         variants: list[dict[str, Any]] = []
         for bc in self.params.get("bc_epochs", []):
@@ -586,7 +646,11 @@ class AblationOrchestrator:
 
     # Parameter matrix only (no evaluation). Used by tests to simulate incomplete variants.
     def generate_matrix(self) -> list[dict[str, Any]]:
-        """Return the parameter grid without running evaluations."""
+        """Return the parameter grid without running evaluations.
+
+        Returns:
+            list[dict[str, Any]]: List of variant descriptors (variant_id and params).
+        """
         variants: list[dict[str, Any]] = []
         for bc in self.params.get("bc_epochs", []):
             for ds in self.params.get("dataset_size", []):
@@ -601,7 +665,11 @@ class AblationOrchestrator:
         return variants
 
     def handle_incomplete_variants(self, variants: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Mark variants lacking improvement results as INCOMPLETE."""
+        """Mark variants lacking improvement results as INCOMPLETE.
+
+        Returns:
+            list[dict[str, Any]]: Updated variants with missing results marked.
+        """
         for v in variants:
             # Mark as INCOMPLETE if improvement_pct is missing or None
             if "improvement_pct" not in v or v.get("improvement_pct") is None:
@@ -609,7 +677,11 @@ class AblationOrchestrator:
         return variants
 
     def generate_ablation_report(self, variants: list[dict[str, Any]] | None = None) -> Path:
-        """Write a simple Markdown report summarizing ablation variants."""
+        """Write a simple Markdown report summarizing ablation variants.
+
+        Returns:
+            Path: Path to the generated `report.md` file.
+        """
         variants = variants or self.run_ablation_matrix()
         figures_dir = self.output_dir / "figures"
         figures_dir.mkdir(exist_ok=True)

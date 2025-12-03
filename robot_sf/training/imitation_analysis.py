@@ -34,7 +34,11 @@ from robot_sf.training.multi_extractor_summary import write_summary_artifacts
 
 
 def _load_training_run(run_id: str) -> tuple[dict[str, Any], Path]:
-    """Load a training manifest for run_id with fallbacks to prefixed/nested variants."""
+    """Load a training manifest for run_id with fallbacks to prefixed/nested variants.
+
+    Returns:
+        tuple[dict[str, Any], Path]: The manifest payload and the resolved manifest path.
+    """
     manifest_path = get_training_run_manifest_path(run_id)
     base_runs_dir = manifest_path.parent
     if not manifest_path.exists():
@@ -77,7 +81,11 @@ def _metric_mean(manifest: dict[str, Any], key: str) -> float:
 
 
 def _status_to_summary(status: str | None) -> str:
-    """Normalize manifest statuses into schema-accepted success/failed values."""
+    """Normalize manifest statuses into schema-accepted success/failed values.
+
+    Returns:
+        str: "success" or "failed" according to schema expectations.
+    """
     if status == "failed":
         return "failed"
     if status == "partial":
@@ -86,7 +94,11 @@ def _status_to_summary(status: str | None) -> str:
 
 
 def _hardware_profile_from_manifest(manifest: dict[str, Any]) -> HardwareProfile:
-    """Extract hardware metadata from a manifest or return an 'unknown' placeholder."""
+    """Extract hardware metadata from a manifest or return an 'unknown' placeholder.
+
+    Returns:
+        HardwareProfile: Normalized hardware profile extracted from the manifest.
+    """
 
     def _as_profile(payload: dict[str, Any]) -> HardwareProfile | None:
         """TODO docstring. Document this function.
@@ -144,7 +156,11 @@ def _build_record(
     hardware: HardwareProfile,
     sample_efficiency_ratio: float,
 ) -> ExtractorRunRecord:
-    """Convert a training manifest into an ExtractorRunRecord for summary emission."""
+    """Convert a training manifest into an ExtractorRunRecord for summary emission.
+
+    Returns:
+        ExtractorRunRecord: Structured record for inclusion in the run summary.
+    """
     now = datetime.now(UTC).isoformat()
     timesteps = _metric_mean(manifest, "timesteps_to_convergence")
     success_rate = _metric_mean(manifest, "success_rate")
@@ -177,7 +193,11 @@ def _generate_figures(
     pretrained_metrics: dict[str, Any],
     output_dir: Path,
 ) -> dict[str, Path]:
-    """Generate comparison figures using research-standard helpers."""
+    """Generate comparison figures using research-standard helpers.
+
+    Returns:
+        dict[str, Path]: Mapping of figure identifiers to file paths.
+    """
 
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {"n_seeds": len(baseline_metrics.get("timesteps_samples") or [])}
@@ -233,7 +253,11 @@ def _build_metric_records(
     baseline_metrics: dict[str, Any],
     pretrained_metrics: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Expand per-metric sample lists into aggregator-friendly records."""
+    """Expand per-metric sample lists into aggregator-friendly records.
+
+    Returns:
+        list[dict[str, Any]]: Records suitable for aggregation by condition.
+    """
 
     records: list[dict[str, Any]] = []
     for condition, metrics in (
@@ -261,7 +285,11 @@ def analyze_imitation_results(
     pretrained_run_id: str,
     output_dir: Path | None = None,
 ) -> dict[str, Path]:
-    """Summarize baseline vs pretrained runs with metrics, figures, and schema-compliant JSON."""
+    """Summarize baseline vs pretrained runs with metrics, figures, and schema-compliant JSON.
+
+    Returns:
+        dict[str, Path]: Paths to produced artifacts and figures plus aggregate metrics.
+    """
     baseline_manifest, baseline_manifest_path = _load_training_run(baseline_run_id)
     pretrained_manifest, pretrained_manifest_path = _load_training_run(pretrained_run_id)
 

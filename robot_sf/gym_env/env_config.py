@@ -83,6 +83,9 @@ class RobotEnvSettings(BaseEnvSettings):
         Factory method to create a robot instance based on the type of robot
         configuration provided.
         :return: robot instance.
+
+        Returns:
+            Robot instance (DifferentialDriveRobot or BicycleDriveRobot) created from config.
         """
 
         if isinstance(self.robot_config, DifferentialDriveSettings):
@@ -124,6 +127,9 @@ class EnvSettings:
         Factory method to create a robot instance based on the type of robot
         configuration provided.
         :return: robot instance.
+
+        Returns:
+            Robot instance (DifferentialDriveRobot or BicycleDriveRobot) created from config.
         """
 
         if isinstance(self.robot_config, DifferentialDriveSettings):
@@ -159,6 +165,9 @@ class PedEnvSettings(EnvSettings):
         Factory method to create a pedestrian instance based on the type of pedestrian
         configuration provided.
         :return: pedestrian instance.
+
+        Returns:
+            UnicycleDrivePedestrian instance created from config.
         """
 
         if isinstance(self.ego_ped_config, UnicycleDriveSettings):

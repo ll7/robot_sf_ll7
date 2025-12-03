@@ -162,7 +162,11 @@ class VerificationContext:
         return self.mode == "ci"
 
     def get_validation_output_dir(self) -> Path:
-        """Get the validation artifact directory."""
+        """Get the validation artifact directory.
+
+        Returns:
+            Path: Path to the created/existing `validation` artifact directory.
+        """
         validation_dir = self.artifact_root / "validation"
         validation_dir.mkdir(parents=True, exist_ok=True)
         return validation_dir

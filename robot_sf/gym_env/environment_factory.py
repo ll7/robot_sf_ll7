@@ -80,34 +80,53 @@ if TYPE_CHECKING:
 
 
 def _load_robot_env_with_image():
-    """TODO docstring. Document this function."""
+    """Lazy-load the image-capable robot environment class.
+
+    Returns:
+        type: RobotEnvWithImage class from robot_env_with_image module.
+    """
     module = importlib.import_module("robot_sf.gym_env.robot_env_with_image")
     return module.RobotEnvWithImage
 
 
 def _load_pedestrian_env():
-    """TODO docstring. Document this function."""
+    """Lazy-load the pedestrian (adversarial) environment class.
+
+    Returns:
+        type: PedestrianEnv class from pedestrian_env module.
+    """
     module = importlib.import_module("robot_sf.gym_env.pedestrian_env")
     return module.PedestrianEnv
 
 
 def _load_multi_robot_env():
-    """TODO docstring. Document this function."""
+    """Lazy-load the multi-robot environment class.
+
+    Returns:
+        type: MultiRobotEnv class from multi_robot_env module.
+    """
     module = importlib.import_module("robot_sf.gym_env.multi_robot_env")
     return module.MultiRobotEnv
 
 
 def _load_stub_robot_model():
-    """TODO docstring. Document this function."""
+    """Lazy-load the stub robot model class for testing.
+
+    Returns:
+        type: StubRobotModel class providing zero-action fallback.
+    """
     module = importlib.import_module("robot_sf.gym_env._stub_robot_model")
     return module.StubRobotModel
 
 
 def _optional_import(module_name: str):
-    """TODO docstring. Document this function.
+    """Attempt to import a module, returning None if unavailable.
 
     Args:
-        module_name: TODO docstring.
+        module_name: Fully qualified module name to import.
+
+    Returns:
+        module | None: The imported module or None if import fails.
     """
     try:
         return importlib.import_module(module_name)
@@ -260,11 +279,14 @@ class EnvironmentFactory:
 
 
 def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
-    """TODO docstring. Document this function.
+    """Apply legacy render option overrides from mapped kwargs.
 
     Args:
-        mapped: TODO docstring.
-        render: TODO docstring.
+        mapped: Dictionary of mapped legacy kwargs (modified in-place).
+        render: Existing RenderOptions instance or None.
+
+    Returns:
+        RenderOptions | None: Updated or new RenderOptions if overrides found, else original.
     """
     if "render_options.max_fps_override" in mapped:
         ro = render or RenderOptions()
@@ -274,11 +296,14 @@ def _apply_render(mapped: dict[str, Any], render: RenderOptions | None):
 
 
 def _apply_recording(mapped: dict[str, Any], rec: RecordingOptions | None):
-    """TODO docstring. Document this function.
+    """Apply legacy recording option overrides from mapped kwargs.
 
     Args:
-        mapped: TODO docstring.
-        rec: TODO docstring.
+        mapped: Dictionary of mapped legacy kwargs (modified in-place).
+        rec: Existing RecordingOptions instance or None.
+
+    Returns:
+        RecordingOptions | None: Updated or new RecordingOptions if overrides found, else original.
     """
     keys = ("recording_options.record", "recording_options.video_path")
     if any(k in mapped for k in keys):
@@ -326,6 +351,9 @@ def _normalize_factory_inputs(
     strict, explicit signatures (T009 expectation). This helper now focuses
     purely on boolean/primitive convenience mapping which keeps complexity
     low (addresses C901 exceedance after refactor).
+
+    Returns:
+        Tuple of (render_options, recording_options, eff_record, eff_path, eff_fps).
     """
     if recording_options is None and (record_video or video_path):
         recording_options = RecordingOptions.from_bool_and_path(record_video, video_path, None)
@@ -531,6 +559,9 @@ def make_image_robot_env(
     Mirrors :func:`make_robot_env` adding an internal switch to select the image-capable
     environment implementation. All parameter semantics and precedence are identical.
     Lazy import defers expensive view initialization until first creation.
+
+    Returns:
+        Initialized SingleAgentEnv with image observation capabilities.
     """
     if legacy_kwargs:
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
@@ -613,6 +644,9 @@ def make_pedestrian_env(
         absent so tests and simple demos can still run.
     peds_have_obstacle_forces : bool
         Interaction force toggle for pedestrian physics.
+
+    Returns:
+        Initialized SingleAgentEnv for adversarial pedestrian training.
     """
     # Capture explicit override intent BEFORE normalization mutates structures.
     if legacy_kwargs:
@@ -705,7 +739,11 @@ def make_multi_robot_env(
     reward_func: Callable | None = None,
     debug: bool = False,
 ) -> MultiAgentEnv:
-    """Create a multi-robot environment."""
+    """Create a multi-robot environment.
+
+    Returns:
+        MultiAgentEnv: Configured multi-agent environment with specified number of robots.
+    """
     return EnvironmentFactory.create_multi_robot_env(
         config=config,
         num_robots=num_robots,

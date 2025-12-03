@@ -26,7 +26,11 @@ configure_matplotlib_backend()
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function."""
+    """TODO docstring. Document this function.
+
+    Returns:
+        matplotlib.pyplot module.
+    """
     return importlib.import_module("matplotlib.pyplot")
 
 

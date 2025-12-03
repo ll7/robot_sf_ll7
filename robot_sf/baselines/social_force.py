@@ -150,23 +150,30 @@ class SocialForcePlanner(BasePolicy):
             """
             self._gen = np.random.default_rng(seed)
 
-        def integers(
+        def randint(
             self,
             low: int,
             high: int | None = None,
             size: int | tuple[int, ...] | None = None,
         ):
-            """TODO docstring. Document this function.
+            """Generate random integers from low (inclusive) to high (exclusive).
+
+            Provides compatibility with legacy random.randint() where a single
+            argument means [0, low).
 
             Args:
-                low: TODO docstring.
-                high: TODO docstring.
-                size: TODO docstring.
+                low: Lower bound (inclusive) or upper bound (exclusive) if high is None.
+                high: Upper bound (exclusive). If None, low is treated as upper bound
+                    with lower bound of 0.
+                size: Output shape.
 
             Returns:
-                Random integers.
+                Random integer(s) in the specified range.
             """
-            return self._gen.integers(low, high=high, size=size)
+            if high is None:
+                # Compatibility mode: randint(n) -> integers in [0, n)
+                return self._gen.integers(0, low, size=size)
+            return self._gen.integers(low, high, size=size)
 
         def normal(
             self,

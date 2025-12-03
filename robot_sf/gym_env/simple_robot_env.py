@@ -33,6 +33,9 @@ class SimpleRobotEnv(gymnasium.Env):
         """
         Action Space:
         - 2 actions: move forward, turn
+
+        Returns:
+            Discrete action space with 2 actions.
         """
         return gymnasium.spaces.Discrete(2)
 
@@ -43,18 +46,27 @@ class SimpleRobotEnv(gymnasium.Env):
         - goal_x, goal_y
         - distance and angle to goal
         - lidar observations
+
+        Returns:
+            Discrete observation space with 5 states.
         """
         return gymnasium.spaces.Discrete(5)
 
     def _get_observation(self):
         """
         Get the current observation
+
+        Returns:
+            Current observation state from the environment.
         """
         return self.observation
 
     def _get_info(self):
         """
         Get the current info
+
+        Returns:
+            Dictionary containing metadata about the current state.
         """
         return self.info
 
@@ -72,6 +84,9 @@ class SimpleRobotEnv(gymnasium.Env):
 
         Args:
             seed: TODO docstring.
+
+        Returns:
+            Tuple of (observation, info) after resetting the environment.
         """
         super().reset(seed=seed)
 

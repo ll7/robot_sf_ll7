@@ -45,7 +45,7 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         cfg: TODO docstring.
 
     Returns:
-        TODO docstring.
+        16-character hexadecimal hash string representing the configuration.
     """
     try:
         payload = json.dumps(
@@ -59,7 +59,11 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
 
 
 def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
-    """Construct the info dict with collision/success flags for downstream consumers."""
+    """Construct the info dict with collision/success flags for downstream consumers.
+
+    Returns:
+        Dictionary containing step, meta, collision, success, and is_success flags.
+    """
 
     collision = bool(
         meta.get("is_pedestrian_collision")
@@ -256,7 +260,11 @@ class RobotEnv(BaseEnv):
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed
-        """TODO docstring. Document this function."""
+        """TODO docstring. Document this function.
+
+        Returns:
+            VisualizableSimState containing the current simulation state for rendering.
+        """
         action = (
             None
             if not self.last_action

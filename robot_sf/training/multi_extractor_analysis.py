@@ -28,7 +28,11 @@ if TYPE_CHECKING:
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function."""
+    """Import and return ``matplotlib.pyplot``.
+
+    Returns:
+        module: The ``matplotlib.pyplot`` module.
+    """
     return importlib.import_module("matplotlib.pyplot")
 
 
@@ -41,7 +45,11 @@ class EvalHistory:
 
 
 def load_eval_history(extractor_dir: Path) -> EvalHistory | None:
-    """Load evaluation timesteps and mean rewards from evaluations.npz if present."""
+    """Load evaluation timesteps and mean rewards from evaluations.npz if present.
+
+    Returns:
+        EvalHistory | None: Parsed evaluation history, or ``None`` when unavailable.
+    """
 
     path = extractor_dir / "eval_logs" / "evaluations.npz"
     if not path.exists():
@@ -83,7 +91,11 @@ def sample_efficiency_ratio(
     baseline_timestep: float,
     candidate_timestep: float,
 ) -> float:
-    """Compute baseline/candidate timestep ratio (higher = more sample efficient)."""
+    """Compute baseline/candidate timestep ratio (higher = more sample efficient).
+
+    Returns:
+        float: The ratio ``baseline_timestep / candidate_timestep`` or ``0.0`` if invalid.
+    """
 
     if candidate_timestep <= 0:
         return 0.0
@@ -95,7 +107,11 @@ def generate_figures(
     out_dir: Path,
     extractor_name: str,
 ) -> dict[str, Path]:
-    """Generate learning curve and reward distribution figures for an extractor."""
+    """Generate learning curve and reward distribution figures for an extractor.
+
+    Returns:
+        dict[str, Path]: Mapping of figure names to output file paths; empty if no data.
+    """
 
     if history is None or not history.timesteps:
         return {}

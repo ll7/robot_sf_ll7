@@ -46,6 +46,7 @@ def aggregate_metrics(
         ci_samples: Number of bootstrap samples
         ci_confidence: Confidence level for CIs
         seed: Optional random seed for reproducibility
+
     Returns:
         List of aggregated metric dicts (see AggregatedMetrics in data model)
     """

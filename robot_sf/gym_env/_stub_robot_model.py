@@ -21,7 +21,11 @@ from typing import Any
 
 
 def _get_numpy():
-    """TODO docstring. Document this function."""
+    """Lazy-import numpy to avoid import cost for non-test usage.
+
+    Returns:
+        module: The numpy module.
+    """
     return importlib.import_module("numpy")
 
 
@@ -34,14 +38,14 @@ class StubRobotModel:  # pragma: no cover - trivial
     """
 
     def predict(self, _obs: Any, **_ignored: Any) -> tuple[object, None]:
-        """TODO docstring. Document this function.
+        """Return a zero action mimicking RL model predict signatures.
 
         Args:
-            _obs: TODO docstring.
-            _ignored: TODO docstring.
+            _obs: Observation (ignored by stub).
+            _ignored: Additional kwargs (ignored by stub).
 
         Returns:
-            TODO docstring.
+            tuple[object, None]: Zero action array and None state (matches SB3 signature).
         """
         np = _get_numpy()
         return np.zeros(2, dtype=float), None

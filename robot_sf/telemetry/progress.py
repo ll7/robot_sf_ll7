@@ -382,7 +382,12 @@ class ProgressTracker:
         *,
         include_current: bool = True,
     ) -> float:
-        """Estimate remaining runtime based on expected durations and actuals."""
+        """Estimate remaining runtime based on expected durations and actuals.
+
+        Returns:
+            float: Estimated seconds remaining considering pending steps and
+            completed durations for the current run.
+        """
 
         remaining = 0.0
         for entry, definition in zip(self._entries, self._definitions, strict=True):
@@ -406,16 +411,16 @@ class ProgressTracker:
         extra: str | None = None,
         total_steps_hint: int | None = None,
     ) -> str:
-        """TODO docstring. Document this function.
+        """Format a human-readable status line for a step entry.
 
         Args:
-            entry: TODO docstring.
-            prefix: TODO docstring.
-            extra: TODO docstring.
-            total_steps_hint: TODO docstring.
+            entry: The step entry to summarize.
+            prefix: Message prefix (e.g., symbol/emote).
+            extra: Optional suffix information.
+            total_steps_hint: Optional total count override.
 
         Returns:
-            TODO docstring.
+            str: Formatted status string.
         """
         total = total_steps_hint if total_steps_hint is not None else self.total_steps()
         elapsed = self._format_duration(entry.duration_seconds)

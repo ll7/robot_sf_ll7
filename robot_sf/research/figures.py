@@ -14,7 +14,11 @@ from robot_sf.research.aggregation import bootstrap_ci
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function."""
+    """TODO docstring. Document this function.
+
+    Returns:
+        matplotlib.pyplot module.
+    """
     return importlib.import_module("matplotlib.pyplot")
 
 
@@ -106,6 +110,7 @@ def plot_learning_curve(
         rewards_pretrained: List of reward trajectories (one per seed) for pretrained
         output_dir: Directory to save figure
         metadata: Optional metadata for caption generation
+
     Returns:
         Dict with paths and caption
     """
@@ -248,6 +253,9 @@ def plot_distributions(
 ) -> dict[str, Any]:
     """
     Generate distribution comparison plot (histograms/violin) for a metric.
+
+    Returns:
+        Dict with paths and caption for the generated figure.
     """
     configure_matplotlib_backend(headless=True)
     plt = _get_pyplot()
@@ -333,6 +341,9 @@ def plot_improvement_summary(
     lower is better (e.g., timesteps_to_convergence) and (pretrained - baseline)/baseline*100
     where higher is better (e.g., success_rate). Heuristic: metrics containing 'timesteps' or
     'collision' treated as lower-is-better, otherwise higher-is-better.
+
+    Returns:
+        Dict with paths and caption for the improvement summary figure.
     """
     if not baseline_metrics or not pretrained_metrics:
         return {
@@ -393,6 +404,9 @@ def plot_sensitivity(
     """Plot sensitivity of a single parameter against improvement percentage.
 
     variants: list of variant dicts having keys param_name and improvement_pct.
+
+    Returns:
+        Dict with paths and caption for the sensitivity analysis figure.
     """
     if not variants:
         return {"paths": {}, "caption": "No variants", "figure_type": "sensitivity"}

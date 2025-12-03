@@ -90,7 +90,12 @@ def gpu_support_reason() -> str | None:
 
 
 def collect_gpu_sample() -> GpuSample | None:
-    """Collect aggregate GPU utilization metrics if NVML is available."""
+    """Collect aggregate GPU utilization metrics if NVML is available.
+
+    Returns:
+        GpuSample | None: Aggregated GPU metrics across devices, or None when
+        NVML support is unavailable.
+    """
 
     if pynvml is None:
         return None
@@ -125,7 +130,12 @@ def shutdown_gpu_telemetry() -> None:
 
 
 def with_gpu_support(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Decorator to run a callable only when GPU telemetry is available."""
+    """Decorator to run a callable only when GPU telemetry is available.
+
+    Returns:
+        Callable[..., Any]: A wrapper that returns None when GPU telemetry is
+        unavailable, otherwise forwards to the wrapped callable.
+    """
 
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         """TODO docstring. Document this function.

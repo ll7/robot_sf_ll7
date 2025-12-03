@@ -41,10 +41,13 @@ logger = get_logger(__name__)
 
 
 def _optional_import(module: str):
-    """TODO docstring. Document this function.
+    """Attempt to import a module, returning None if unavailable.
 
     Args:
-        module: TODO docstring.
+        module: Fully-qualified module name to import.
+
+    Returns:
+        The imported module object if present, otherwise None.
     """
     try:
         return importlib.import_module(module)
@@ -97,7 +100,11 @@ class ReproducibilityMetadata:
     timing: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
+        """Convert to dictionary for JSON serialization.
+
+        Returns:
+            Dictionary representation suitable for JSON encoding.
+        """
         data = {
             "timestamp": self.timestamp,
             "git": {
@@ -284,6 +291,10 @@ def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
     The parser is intentionally tolerant: it accepts both JSON and JSONL files,
     returning the most recent record for JSONL inputs. Steps are summarized so
     completeness can be calculated for the execution flow.
+
+    Returns:
+        Dictionary containing parsed manifest fields (run_id, status, steps, seeds,
+        summary) and a computed completeness score if enabled steps are present.
     """
 
     path = Path(manifest_path)

@@ -200,5 +200,9 @@ class MapInventory:
         return len(self._inventory)
 
     def __iter__(self):
-        """Iterate over all maps."""
+        """Iterate over all maps.
+
+        Returns:
+            Iterator[MapRecord]: Iterator over all map records in the inventory.
+        """
         return iter(self._inventory.values())

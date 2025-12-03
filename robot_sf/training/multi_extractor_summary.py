@@ -15,7 +15,11 @@ SUMMARY_MARKDOWN_FILENAME = "summary.md"
 
 
 def write_summary_artifacts(*, summary: TrainingRunSummary, destination: Path) -> dict[str, Path]:
-    """Persist JSON and Markdown summaries and return their paths."""
+    """Persist JSON and Markdown summaries and return their paths.
+
+    Returns:
+        dict[str, Path]: Mapping with keys ``json`` and ``markdown`` pointing to written files.
+    """
 
     destination.mkdir(parents=True, exist_ok=True)
 

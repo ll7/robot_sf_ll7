@@ -40,8 +40,8 @@ def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
 def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
     obstacles = poly_points
     all_points = [p for points in poly_points for p in points]
-    x_margin = [min([x for x, _ in all_points]), max([x for x, _ in all_points])]
-    y_margin = [min([y for _, y in all_points]), max([y for _, y in all_points])]
+    x_margin = [min(x for x, _ in all_points), max(x for x, _ in all_points)]
+    y_margin = [min(y for _, y in all_points), max(y for _, y in all_points)]
 
     map_obj = {"obstacles": obstacles, "x_margin": x_margin, "y_margin": y_margin}
 

@@ -78,7 +78,11 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim=total_features)
 
         def conv_block(in_channels: int, out_channels: int, kernel_size: int) -> list[nn.Module]:
-            """Create a lightweight convolutional block."""
+            """Create a lightweight convolutional block.
+
+            Returns:
+                list[nn.Module]: Layers comprising Conv1d → BatchNorm → ReLU → MaxPool → Dropout.
+            """
             padding = kernel_size // 2  # Maintain spatial dimension
             return [
                 nn.Conv1d(in_channels, out_channels, kernel_size, stride=1, padding=padding),

@@ -211,6 +211,9 @@ select = [
   "PGH",    # blanket noqa / useless noqa hygiene
   "TCH",    # move typing-only imports under TYPE_CHECKING
   "TID",    # tidy imports (relative vs absolute)
+
+  # Docstrings
+  "D100",  # Missing docstring in public module
 ]
 
 fixable = ["ALL"]

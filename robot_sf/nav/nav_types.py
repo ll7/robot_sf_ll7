@@ -31,6 +31,9 @@ class SvgRectangle:
     def get_zone(self) -> Zone:
         """
         Returns the zone of the rectangle.
+
+        Returns:
+            Zone: A tuple of 3 corner points defining the rectangular zone boundaries.
         """
         # TODO: Is this a correct zone definition?
         return (
@@ -59,7 +62,11 @@ class SvgCircle:
             raise ValueError("Radius needs to be a float > 0!")
 
     def get_center(self) -> Vec2D:
-        """Returns the center point of the circle."""
+        """Returns the center point of the circle.
+
+        Returns:
+            Vec2D: A tuple (cx, cy) representing the center coordinates.
+        """
         return (self.cx, self.cy)
 
 

@@ -318,6 +318,10 @@ class MapDefinition:
     def find_route(self, spawn_id: int, goal_id: int) -> GlobalRoute | None:
         """
         Returns the route for the given spawn id and goal id. If no route is found, returns None.
+
+        Returns:
+            GlobalRoute | None: The matching route object, or None if no route matches the
+                given spawn and goal IDs.
         """
         return next(
             filter(
@@ -414,6 +418,10 @@ class MapDefinitionPool:
     def _load_json_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
         """
         Load json map definitions from a folder in the maps_folder directory.
+
+        Returns:
+            dict[str, MapDefinition]: Dictionary mapping filenames (without extension) to
+                parsed MapDefinition objects for all .json files found in the folder.
         """
 
         # Check if the maps_folder directory exists
@@ -422,7 +430,10 @@ class MapDefinitionPool:
 
         # Function to load a JSON file
         def load_json(path: str) -> dict:
-            """TODO docstring. Document this function.
+            """Load and parse a JSON file from the given path.
+
+            Returns:
+                dict: Parsed JSON content as a Python dictionary.
 
             Args:
                 path: TODO docstring.

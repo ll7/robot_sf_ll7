@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -7,6 +9,8 @@ from scalene import scalene_profiler
 
 @dataclass
 class SimConfig:
+    """TODO docstring. Document this class."""
+
     sim_steps: int
     initial_state: np.ndarray
     groups: list[list[int]]
@@ -16,6 +20,8 @@ class SimConfig:
 
 @dataclass
 class SimSettings:
+    """TODO docstring. Document this class."""
+
     map_width: float
     map_height: float
     sim_steps: int
@@ -25,6 +31,12 @@ class SimSettings:
     num_obstacles: int
 
     def sample(self) -> SimConfig:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         spawned_peds = 0
         group_centroids = self.rand_2d_coords(self.num_groups)
         group_goals = self.rand_2d_coords(self.num_groups)
@@ -44,7 +56,7 @@ class SimSettings:
                 num_peds_on_group = remaining_peds
             else:
                 # Sample candidate, ensure at least 1, then clamp to leave at least 1 per remaining group
-                candidate = max(1, int(round(np.random.normal(avg_peds_on_group))))
+                candidate = max(1, round(np.random.normal(avg_peds_on_group)))
                 max_allowed = remaining_peds - (remaining_groups - 1)
                 num_peds_on_group = min(candidate, max_allowed)
 
@@ -57,7 +69,14 @@ class SimSettings:
                 ped_id = spawned_peds + i
                 ped_dyn = individual_dynamics[ped_id]
                 goal = group_goals[gid]
-                ped_features = [ped_pos[0], ped_pos[1], ped_dyn[0], ped_dyn[1], goal[0], goal[1]]
+                ped_features = [
+                    ped_pos[0],
+                    ped_pos[1],
+                    ped_dyn[0],
+                    ped_dyn[1],
+                    goal[0],
+                    goal[1],
+                ]
                 individuals[ped_id] = ped_features
             spawned_peds += num_peds_on_group
 
@@ -72,17 +91,31 @@ class SimSettings:
         return config
 
     def rand_2d_coords(self, num_coords: int) -> list[tuple[float, float]]:
+        """TODO docstring. Document this function.
+
+        Args:
+            num_coords: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         x = np.random.uniform(0, self.map_width, num_coords)
         y = np.random.uniform(0, self.map_height, num_coords)
         return list(zip(x, y, strict=False))
 
 
 def simulate(config: SimConfig):
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+    """
     s = psf.Simulator(config.initial_state, config.groups, config.obstacles)
     s.step(config.sim_steps)
 
 
 def benchmark():
+    """TODO docstring. Document this function."""
     num_simulations = 100
     settings = SimSettings(
         map_width=80,

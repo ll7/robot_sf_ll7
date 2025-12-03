@@ -56,7 +56,7 @@ class RobotState:
     @property
     def max_sim_steps(self) -> int:
         """Calculates the maximum number of simulation steps based on time limit."""
-        return int(ceil(self.sim_time_limit / self.d_t))
+        return ceil(self.sim_time_limit / self.d_t)
 
     @property
     def is_terminal(self) -> bool:
@@ -87,6 +87,9 @@ class RobotState:
         Resets the robot's state for a new simulation episode, incrementing the episode counter,
         resetting the timestep and elapsed time, clearing collision and goal flags, and refreshing
         sensor data for the initial observation.
+
+        Returns:
+            object: The initial observation produced by the sensor fusion after reset.
         """
         self.episode += 1
         self.timestep = 0
@@ -104,6 +107,9 @@ class RobotState:
         Advances the robot's state by one simulation timestep, updating the elapsed time,
         checking for collisions, goal achievement, and timeout. Returns the next observation
         from sensors.
+
+        Returns:
+            object: The next observation produced by the sensor fusion after advancing one step.
         """
         # TODO(#253): add check for robot-robot collisions as well
         # See: https://github.com/ll7/robot_sf_ll7/issues/253
@@ -121,6 +127,9 @@ class RobotState:
         monitoring purposes.
         Includes information such as episode number, current timestep, collision status,
         goal achievement, and completion status of the route.
+
+        Returns:
+            dict: A snapshot of the current state and flags for diagnostics/telemetry.
         """
         return {
             "step": self.episode * self.max_sim_steps,

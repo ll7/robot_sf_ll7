@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import dist
 from typing import Protocol
@@ -11,10 +13,14 @@ Zone = tuple[Vec2D, Vec2D, Vec2D]
 
 
 class PedestrianBehavior(Protocol):
+    """TODO docstring. Document this class."""
+
     def step(self):
+        """TODO docstring. Document this function."""
         raise NotImplementedError()
 
     def reset(self):
+        """TODO docstring. Document this function."""
         raise NotImplementedError()
 
 

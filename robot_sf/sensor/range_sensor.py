@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import cos, sin
 
@@ -13,15 +15,14 @@ from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupanc
 # See: https://github.com/ll7/robot_sf_ll7/issues/250
 @numba.njit(fastmath=True)
 def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
-    """
-    Calculate Euclidean distance between two 2D vectors.
+    """Calculate the Euclidean distance between two 2D vectors.
 
-    Parameters:
-    vec_1 (Vec2D): First 2D vector.
-    vec_2 (Vec2D): Second 2D vector.
+    Args:
+        vec_1: First 2D vector.
+        vec_2: Second 2D vector.
 
     Returns:
-    float: Euclidean distance between vec_1 and vec_2.
+        float: Euclidean distance between ``vec_1`` and ``vec_2``.
     """
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root
@@ -30,17 +31,15 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
 
 @numba.njit(fastmath=True)
 def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_vec: Vec2D) -> float:
-    """
-    Calculate the distance from the sensor position to the intersection point
-    between a line segment and a ray vector.
+    """Distance from sensor position to the intersection with a ray and segment.
 
-    Parameters:
-    segment (Line2D): The line segment.
-    sensor_pos (Vec2D): The sensor position.
-    ray_vec (Vec2D): The ray vector.
+    Args:
+        segment: Line segment represented by two endpoints.
+        sensor_pos: Origin of the ray.
+        ray_vec: Ray direction vector.
 
     Returns:
-    float: The distance to the intersection point, or infinity if no intersection.
+        float: Distance to the intersection point, or ``np.inf`` when no intersection exists.
     """
     # Unpack segment endpoints, sensor position, and ray vector
     # Line2D is ((x1, y1), (x2, y2))
@@ -74,18 +73,15 @@ def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_v
 
 @numba.njit(fastmath=True)
 def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
-    """
-    Calculate the distance from the origin to the intersection point between
-    a circle and a ray vector.
+    """Distance from origin to circle/ray intersection.
 
-    Parameters:
-    circle (Circle2D): The circle defined by its center and radius.
-    origin (Vec2D): The origin of the ray vector.
-    ray_vec (Vec2D): The ray vector.
+    Args:
+        circle: Circle defined by ``(center, radius)``.
+        origin: Origin of the ray.
+        ray_vec: Ray direction vector.
 
     Returns:
-    float: The distance to the nearest intersection point, or infinity if no
-    intersection.
+        float: Distance to the nearest valid intersection, or ``np.inf`` if the ray misses.
     """
     # Unpack circle center and radius, and ray vector
     (circle_x, circle_y), radius = circle
@@ -143,6 +139,7 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
         if self.max_scan_dist <= 0:
@@ -164,28 +161,18 @@ def raycast_pedestrians(
     ped_radius: float,
     ray_angles: np.ndarray,
 ):
-    """
-    Perform raycasting to detect pedestrians within the scanner's range.
+    """Perform raycasts to detect pedestrians within the scanner's range.
 
-    Parameters
-    ----------
-    out_ranges : np.ndarray
-        The output array to store the detected range for each ray.
-        ! This array is modified in place.
-    scanner_pos : Vec2D
-        The position of the scanner.
-    max_scan_range : float
-        The maximum range of the scanner.
-    ped_positions : np.ndarray
-        The positions of the pedestrians.
-    ped_radius : float
-        The radius of the pedestrians.
-    ray_angles : np.ndarray
-        The angles of the rays.
+    Args:
+        out_ranges: Output array modified in-place with the detected range per ray.
+        scanner_pos: Position of the LiDAR sensor in world coordinates.
+        max_scan_range: Maximum detection distance for each ray.
+        ped_positions: Pedestrian positions to test against the rays.
+        ped_radius: Radius used to approximate pedestrians as discs.
+        ray_angles: Ray directions in radians.
 
-    Returns
-    -------
-    output_ranges is modified in place.
+    Notes:
+        ``out_ranges`` is modified in place and no value is returned.
     """
 
     # Check if pedestrian positions array is empty or not 2D
@@ -236,6 +223,14 @@ def raycast_obstacles(
     obstacles: np.ndarray,
     ray_angles: np.ndarray,
 ):
+    """TODO docstring. Document this function.
+
+    Args:
+        out_ranges: TODO docstring.
+        scanner_pos: TODO docstring.
+        obstacles: TODO docstring.
+        ray_angles: TODO docstring.
+    """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
 
@@ -258,10 +253,15 @@ def raycast(
     enemy_pos: np.ndarray | None = None,
     enemy_radius: float = 0.0,
 ) -> np.ndarray:
-    """Cast rays in the directions of all given angles outgoing from
-    the scanner's position and detect the minimal collision distance
-    with either a pedestrian or an obstacle (or in case there's no collision,
-    just return the maximum scan range)."""
+    """Cast rays to compute minimal collision distances along given angles.
+
+    The scan originates from the scanner's position and considers pedestrians,
+    obstacles, and optionally an enemy agent. When no collision occurs, the
+    maximum scan range is returned for that ray.
+
+    Returns:
+        numpy.ndarray: Per-ray distances with shape ``(num_rays,)``.
+    """
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
@@ -298,11 +298,15 @@ def lidar_ray_scan(
     occ: ContinuousOccupancy,
     settings: LidarScannerSettings,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Representing a simulated radial LiDAR scanner operating
-    in a 2D plane on a continuous occupancy with explicit objects.
+    """Simulate a radial LiDAR scan on a continuous occupancy with objects.
 
     The occupancy contains the robot (as circle), a set of pedestrians
-    (as circles) and a set of static obstacles (as 2D lines)"""
+    (as circles) and a set of static obstacles (as 2D lines).
+
+    Returns:
+        tuple[numpy.ndarray, numpy.ndarray]: A pair ``(ranges, ray_angles)`` where
+        ``ranges`` are per-ray distances and ``ray_angles`` are absolute ray angles.
+    """
 
     (pos_x, pos_y), robot_orient = pose
     scan_noise = np.array(settings.scan_noise)
@@ -335,6 +339,15 @@ def lidar_ray_scan(
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
+    """TODO docstring. Document this function.
+
+    Args:
+        num_rays: TODO docstring.
+        max_scan_dist: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     high = np.full((num_rays), max_scan_dist, dtype=np.float32)
     low = np.zeros((num_rays), dtype=np.float32)
     return spaces.Box(low=low, high=high, dtype=np.float32)

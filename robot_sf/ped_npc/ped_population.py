@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
 
@@ -88,13 +90,39 @@ def sample_route(
 
     # Define helper functions for vector operations
     def add_vecs(v1, v2):
+        """Add two 2D vectors component-wise.
+
+        Args:
+            v1: First vector as a tuple ``(x, y)``.
+            v2: Second vector as a tuple ``(x, y)``.
+
+        Returns:
+            tuple[float, float]: The component-wise sum ``(v1.x + v2.x, v1.y + v2.y)``.
+        """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
     def sub_vecs(v1, v2):
+        """Subtract two 2D vectors component-wise.
+
+        Args:
+            v1: Minuend vector as a tuple ``(x, y)``.
+            v2: Subtrahend vector as a tuple ``(x, y)``.
+
+        Returns:
+            tuple[float, float]: The component-wise difference ``(v1.x - v2.x, v1.y - v2.y)``.
+        """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
     # Clip function to constrain random spread to the sidewalk width
     def clip_spread(v):
+        """Clip values to remain within the sidewalk half-width.
+
+        Args:
+            v: Scalar or array-like values to clip.
+
+        Returns:
+            numpy.ndarray: Values clipped to ``[-sidewalk_width/2, sidewalk_width/2]``.
+        """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
     # Calculate the center point between the start and end of the section
@@ -134,6 +162,7 @@ class ZonePointsGenerator:
     def __post_init__(self):
         # Calculate the area for each zone assuming zones are rectangular
         # This uses an external `dist` function to measure distances
+        """TODO docstring. Document this function."""
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
 
         # Sum the areas to use for normalizing probabilities
@@ -307,6 +336,15 @@ def populate_crowded_zones(
     config: PedSpawnConfig,
     crowded_zones: list[Zone],
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        crowded_zones: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
@@ -407,6 +445,18 @@ def populate_simulation(
     ped_crowded_zones: list[Zone],
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        tau: TODO docstring.
+        spawn_config: TODO docstring.
+        ped_routes: TODO docstring.
+        ped_crowded_zones: TODO docstring.
+        single_pedestrians: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,
         ped_crowded_zones,

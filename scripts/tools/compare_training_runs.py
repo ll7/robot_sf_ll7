@@ -39,6 +39,12 @@ def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
     base_runs_dir = canonical.parent
 
     def _manifest_summary() -> Path | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         candidate = get_imitation_report_dir() / run_id / "summary.json"
         return candidate if candidate.exists() else None
 

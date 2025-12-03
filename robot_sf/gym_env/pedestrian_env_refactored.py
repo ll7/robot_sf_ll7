@@ -76,6 +76,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             debug: Enable debug mode with visualization
             recording_enabled: Enable state recording
             peds_have_obstacle_forces: Whether pedestrians exert obstacle forces
+            **kwargs: Additional keyword arguments forwarded to ``SingleAgentEnv``.
         """
         if config is None:
             config = PedestrianSimulationConfig()
@@ -115,7 +116,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             self._setup_visualization()
 
     def _create_spaces(self):
-        """Create action and observation spaces."""
+        """Create action and observation spaces.
+
+        Returns:
+            Tuple of (action_space, observation_space, orig_obs_space) for the pedestrian.
+        """
         # Use existing utility function
         combined_action_space, combined_observation_space, orig_obs_space = init_ped_spaces(
             self.config,
@@ -176,7 +181,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         )
 
     def step(self, action):
-        """Execute one environment step."""
+        """Execute one environment step.
+
+        Returns:
+            Tuple of (observation, reward, terminated, truncated, info) following Gymnasium API.
+        """
         # Parse pedestrian action
         action_ped = self.simulator.ego_ped.parse_action(action)
         self.last_action_ped = action_ped
@@ -207,7 +216,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         return obs_ped, reward, terminated, False, {"step": meta["step"], "meta": meta}
 
     def reset(self, seed=None, options=None):
-        """Reset the environment."""
+        """Reset the environment.
+
+        Returns:
+            Tuple of (observation, info) after environment reset.
+        """
         super().reset(seed=seed)
 
         # Reset simulator
@@ -232,7 +245,11 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
         self.sim_ui.render(state)
 
     def _prepare_visualizable_state(self) -> VisualizableSimState:
-        """Prepare state for visualization."""
+        """Prepare state for visualization.
+
+        Returns:
+            VisualizableSimState containing current simulation state for rendering.
+        """
         # Prepare robot action visualization
         robot_action = (
             None

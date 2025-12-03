@@ -40,6 +40,12 @@ def _summarize_map(
     name: str,
     md,
 ) -> None:  # md: MapDefinition (duck-typed here to avoid import churn)
+    """TODO docstring. Document this function.
+
+    Args:
+        name: TODO docstring.
+        md: TODO docstring.
+    """
     logger.info(
         "Map '{n}': robot_routes={rr} ped_routes={pr} robot_spawn={rs} robot_goal={rg} ped_spawn={ps} ped_goal={pg} obstacles={ob}",
         n=name,
@@ -54,6 +60,14 @@ def _summarize_map(
 
 
 def _validate_single(path: str) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     logger.info("Validating single SVG: {p}", p=path)
     try:
         md = convert_map(path)
@@ -68,6 +82,15 @@ def _validate_single(path: str) -> bool:
 
 
 def _bulk_validate(directory: str, strict: bool) -> tuple[list[str], list[str]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        directory: TODO docstring.
+        strict: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     logger.info("Bulk validating directory: {d} (strict={s})", d=directory, s=strict)
     valid: list[str] = []
     invalid: list[str] = []
@@ -95,6 +118,12 @@ def _bulk_validate(directory: str, strict: bool) -> tuple[list[str], list[str]]:
 
 
 def _print_summary(header: str, collection: Iterable[str]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        header: TODO docstring.
+        collection: TODO docstring.
+    """
     items = list(collection)
     if not items:
         logger.info("{h}: none", h=header)
@@ -104,6 +133,8 @@ def _print_summary(header: str, collection: Iterable[str]) -> None:
 
 @dataclass
 class _Options:
+    """TODO docstring. Document this class."""
+
     single: str | None
     all: bool
     directory: str
@@ -144,6 +175,14 @@ def _parse_args(argv: list[str]) -> _Options:
 
 
 def main(argv: list[str]) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     opts = _parse_args(argv)
     strict = opts.strict or os.getenv("SVG_VALIDATE_STRICT") == "1"
 

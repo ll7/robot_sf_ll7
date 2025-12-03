@@ -79,6 +79,15 @@ def to_rank_rows(
 
 
 def write_csv(rows: list[dict[str, Any]], out_csv: str | Path) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        rows: TODO docstring.
+        out_csv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     import csv
 
     if not rows:
@@ -97,6 +106,15 @@ def write_csv(rows: list[dict[str, Any]], out_csv: str | Path) -> str:
 
 
 def write_markdown(rows: list[dict[str, Any]], out_md: str | Path) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        rows: TODO docstring.
+        out_md: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not rows:
         Path(out_md).parent.mkdir(parents=True, exist_ok=True)
         Path(out_md).write_text("| group | rank |\n|---|---|\n", encoding="utf-8")

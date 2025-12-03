@@ -30,10 +30,23 @@ class TrajectoryDatasetValidator:
     """Validate curated trajectory datasets for completeness and integrity."""
 
     def __init__(self, dataset_path: Path | str) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            dataset_path: TODO docstring.
+        """
         self.dataset_path = Path(dataset_path).resolve()
         self.dataset_id = self.dataset_path.stem
 
     def validate(self, *, minimum_episodes: int = 200) -> TrajectoryDatasetValidationResult:
+        """TODO docstring. Document this function.
+
+        Args:
+            minimum_episodes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not self.dataset_path.exists():
             raise FileNotFoundError(f"Dataset not found: {self.dataset_path}")
 
@@ -54,6 +67,15 @@ class TrajectoryDatasetValidator:
         file_size: int,
         minimum_episodes: int,
     ) -> TrajectoryDatasetValidationResult:
+        """TODO docstring. Document this function.
+
+        Args:
+            file_size: TODO docstring.
+            minimum_episodes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         with np.load(self.dataset_path, allow_pickle=True) as data:
             files = data.files
             arrays = {name: data[name] for name in files}
@@ -88,6 +110,15 @@ class TrajectoryDatasetValidator:
         file_size: int,
         minimum_episodes: int,
     ) -> TrajectoryDatasetValidationResult:
+        """TODO docstring. Document this function.
+
+        Args:
+            file_size: TODO docstring.
+            minimum_episodes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         lines = self.dataset_path.read_text(encoding="utf-8").strip().splitlines()
         episode_count = len(lines)
         report = {
@@ -112,6 +143,17 @@ class TrajectoryDatasetValidator:
         file_size: int,
         minimum_episodes: int,
     ) -> TrajectoryQuality:
+        """TODO docstring. Document this function.
+
+        Args:
+            episode_count: TODO docstring.
+            missing_arrays: TODO docstring.
+            file_size: TODO docstring.
+            minimum_episodes: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if file_size > MAX_DATASET_SIZE_BYTES:
             return TrajectoryQuality.QUARANTINED
         if missing_arrays:
@@ -122,6 +164,14 @@ class TrajectoryDatasetValidator:
 
     @staticmethod
     def _extract_episode_count(arrays: dict[str, Any]) -> int:
+        """TODO docstring. Document this function.
+
+        Args:
+            arrays: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         count_value = arrays.get("episode_count")
         if isinstance(count_value, np.ndarray):
             if count_value.size == 1:
@@ -138,6 +188,14 @@ class TrajectoryDatasetValidator:
 
     @staticmethod
     def _extract_metadata(arrays: dict[str, Any]) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+        Args:
+            arrays: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         raw = arrays.get("metadata")
         if isinstance(raw, np.ndarray):
             if raw.shape == ():

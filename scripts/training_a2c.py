@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from stable_baselines3 import A2C
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -6,6 +8,7 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def training():
+    """TODO docstring. Document this function."""
     env = make_vec_env(lambda: RobotEnv(), n_envs=50, vec_env_cls=SubprocVecEnv)
     model = A2C("MlpPolicy", env, tensorboard_log="./logs/a2c_logs/")
     model.learn(total_timesteps=50_000_000, progress_bar=True)

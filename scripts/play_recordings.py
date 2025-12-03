@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -43,6 +45,7 @@ def main():
     # Load the states from the file and view the recording
     # load_states_and_visualize(get_latest_file())
     # View all files
+    """TODO docstring. Document this function."""
     for file in get_all_files():
         load_states_and_visualize(file)
 

@@ -16,10 +16,16 @@ from robot_sf.gym_env.environment_factory import (
 
 
 def _param_names(func):
+    """TODO docstring. Document this function.
+
+    Args:
+        func: TODO docstring.
+    """
     return [p.name for p in inspect.signature(func).parameters.values()]
 
 
 def test_make_robot_env_signature_explicit():
+    """TODO docstring. Document this function."""
     params = _param_names(make_robot_env)
     assert "config" in params
     assert "reward_func" in params
@@ -39,16 +45,19 @@ def test_make_robot_env_signature_explicit():
 
 
 def test_make_image_robot_env_signature_explicit():
+    """TODO docstring. Document this function."""
     params = _param_names(make_image_robot_env)
     assert "config" in params
     assert "debug" in params
 
 
 def test_make_pedestrian_env_signature_explicit():
+    """TODO docstring. Document this function."""
     params = _param_names(make_pedestrian_env)
     assert "config" in params and "robot_model" in params
 
 
 def test_make_multi_robot_env_signature_explicit():
+    """TODO docstring. Document this function."""
     params = _param_names(make_multi_robot_env)
     assert "num_robots" in params and "config" in params

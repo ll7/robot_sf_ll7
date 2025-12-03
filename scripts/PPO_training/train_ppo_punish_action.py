@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.env_util import make_vec_env
@@ -11,11 +13,13 @@ from robot_sf.tb_logging import DrivingMetricsCallback
 
 
 def training():
+    """TODO docstring. Document this function."""
     n_envs = 32
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
     def make_env():
+        """TODO docstring. Document this function."""
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities
         config.sim_config.difficulty = difficulty

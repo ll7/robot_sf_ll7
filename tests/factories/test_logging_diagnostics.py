@@ -22,9 +22,15 @@ from robot_sf.gym_env.environment_factory import (
 
 @contextmanager
 def capture_logs():
+    """TODO docstring. Document this function."""
     messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
+        """TODO docstring. Document this function.
+
+        Args:
+            msg: TODO docstring.
+        """
         messages.append(f"{msg.record['level'].name}:{msg.record['message']}")
 
     sink_id = logger.add(_sink)
@@ -35,20 +41,32 @@ def capture_logs():
 
 
 def test_creation_logs_robot():
+    """TODO docstring. Document this function."""
     with capture_logs() as logs:
         make_robot_env()
     assert any(entry.startswith("INFO:Creating robot env") for entry in logs)
 
 
 def test_creation_logs_image():
+    """TODO docstring. Document this function."""
     with capture_logs() as logs:
         make_image_robot_env()
     assert any(entry.startswith("INFO:Creating image robot env") for entry in logs)
 
 
 def test_creation_logs_pedestrian_with_dummy_model():
+    """TODO docstring. Document this function."""
+
     class DummyPolicy:  # minimal stub sufficient for constructor usage paths
+        """TODO docstring. Document this class."""
+
         def predict(self, *_args, **_kwargs):  # pragma: no cover - simple stub
+            """TODO docstring. Document this function.
+
+            Args:
+                _args: TODO docstring.
+                _kwargs: TODO docstring.
+            """
             return 0, {}
 
     with capture_logs() as logs:
@@ -58,6 +76,11 @@ def test_creation_logs_pedestrian_with_dummy_model():
 
 
 def test_precedence_warning_and_creation_log(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     rec = RecordingOptions(record=False)
     with capture_logs() as logs:
         make_robot_env(record_video=True, recording_options=rec, video_path=str(tmp_path / "v.mp4"))

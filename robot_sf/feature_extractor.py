@@ -1,5 +1,5 @@
+"""TODO docstring. Document this module."""
 # WARNING: don't move this script or else loading trained SB3 policies might not work
-
 
 import numpy as np
 import torch as th
@@ -37,6 +37,15 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         dropout_rates: list[float] | None = None,
     ):
         # Extract the ray and drive state spaces from the observation space
+        """TODO docstring. Document this function.
+
+        Args:
+            observation_space: TODO docstring.
+            use_ray_conv: TODO docstring.
+            num_filters: TODO docstring.
+            kernel_sizes: TODO docstring.
+            dropout_rates: TODO docstring.
+        """
         if dropout_rates is None:
             dropout_rates = [0.3, 0.3, 0.3, 0.3]
         if kernel_sizes is None:
@@ -123,6 +132,14 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         self.drive_state_extractor = nn.Sequential(nn.Flatten())
 
     def forward(self, obs: dict) -> th.Tensor:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         ray_x = self.ray_extractor(obs[OBS_RAYS])
         drive_x = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
         return th.cat([ray_x, drive_x], dim=1)

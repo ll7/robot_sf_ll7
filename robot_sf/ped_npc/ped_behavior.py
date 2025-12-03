@@ -22,9 +22,11 @@ class PedestrianBehavior(Protocol):
     """
 
     def step(self):
+        """TODO docstring. Document this function."""
         raise NotImplementedError()
 
     def reset(self):
+        """TODO docstring. Document this function."""
         raise NotImplementedError()
 
 

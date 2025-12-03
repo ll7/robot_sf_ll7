@@ -34,10 +34,17 @@ class _NvmlHandle:
     """Lazy NVML initializer so callers do not pay the cost unless needed."""
 
     def __init__(self) -> None:
+        """TODO docstring. Document this function."""
         self._initialized = False
         self._failed_reason: str | None = _NVML_ERROR
 
     def ensure_initialized(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         if pynvml is None:
             return False
         if self._initialized:
@@ -51,6 +58,7 @@ class _NvmlHandle:
         return True
 
     def shutdown(self) -> None:
+        """TODO docstring. Document this function."""
         if not self._initialized or pynvml is None:
             return
         with contextlib.suppress(Exception):  # pragma: no cover - teardown best-effort only
@@ -59,6 +67,12 @@ class _NvmlHandle:
 
     @property
     def failed_reason(self) -> str | None:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self._failed_reason
 
 
@@ -76,7 +90,12 @@ def gpu_support_reason() -> str | None:
 
 
 def collect_gpu_sample() -> GpuSample | None:
-    """Collect aggregate GPU utilization metrics if NVML is available."""
+    """Collect aggregate GPU utilization metrics if NVML is available.
+
+    Returns:
+        GpuSample | None: Aggregated GPU metrics across devices, or None when
+        NVML support is unavailable.
+    """
 
     if pynvml is None:
         return None
@@ -111,9 +130,23 @@ def shutdown_gpu_telemetry() -> None:
 
 
 def with_gpu_support(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Decorator to run a callable only when GPU telemetry is available."""
+    """Decorator to run a callable only when GPU telemetry is available.
+
+    Returns:
+        Callable[..., Any]: A wrapper that returns None when GPU telemetry is
+        unavailable, otherwise forwards to the wrapped callable.
+    """
 
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        """TODO docstring. Document this function.
+
+        Args:
+            args: TODO docstring.
+            kwargs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if gpu_support_reason() is not None:
             return None
         return func(*args, **kwargs)

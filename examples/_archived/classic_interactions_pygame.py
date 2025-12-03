@@ -99,6 +99,12 @@ ENABLE_RECORDING = True
 
 
 def _default_output_dir() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return resolve_artifact_path(Path("tmp/vis_runs") / time.strftime("%Y%m%d_%H%M%S"))
 
 
@@ -119,6 +125,8 @@ _CACHED_MODEL_SENTINEL = object()
 
 
 class EpisodeSummary(TypedDict):  # (FR-020)
+    """TODO docstring. Document this class."""
+
     scenario: str
     seed: int
     steps: int
@@ -138,6 +146,7 @@ else:
 
 
 def _validate_constants() -> None:  # (FR-019)
+    """TODO docstring. Document this function."""
     if not SCENARIO_MATRIX_PATH.exists():
         raise FileNotFoundError(
             f"Scenario matrix not found: {SCENARIO_MATRIX_PATH}. Adjust SCENARIO_MATRIX_PATH constant.",
@@ -179,6 +188,18 @@ def _maybe_record(
     episode_index: int,
     out_dir: Path,
 ) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        frames: TODO docstring.
+        scenario_name: TODO docstring.
+        seed: TODO docstring.
+        episode_index: TODO docstring.
+        out_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not frames:
         return False
     try:
@@ -204,6 +225,20 @@ def run_episode(
     seed: int,
     episode_index: int,
 ) -> EpisodeSummary:
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+        policy: TODO docstring.
+        record: TODO docstring.
+        out_dir: TODO docstring.
+        scenario_name: TODO docstring.
+        seed: TODO docstring.
+        episode_index: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     obs, _ = env.reset(seed=seed)
     done = False
     step = 0
@@ -297,6 +332,11 @@ def _warn_if_no_frames(env, record: bool, frames: list[Any]) -> None:
 
         def frame_sum(frame_obj):
             # Prefer ndarray.sum if present, else construct array
+            """TODO docstring. Document this function.
+
+            Args:
+                frame_obj: TODO docstring.
+            """
             if hasattr(frame_obj, "sum") and callable(frame_obj.sum):
                 try:
                     return frame_obj.sum()  # type: ignore[no-any-return]
@@ -342,12 +382,24 @@ def _prepare_scenarios(scenario_name: str | None, sweep: bool) -> list[dict[str,
 
 
 def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario: TODO docstring.
+        seeds: TODO docstring.
+    """
     logger.debug(
         f"Dry run OK. Scenario={scenario.get('name')} seeds={seeds} model_exists={MODEL_PATH.exists()}",
     )
 
 
 def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-any]
+    """TODO docstring. Document this function.
+
+    Args:
+        fast_mode: TODO docstring.
+        eff_max: TODO docstring.
+    """
     explicit_fast_flag = bool(int(os.getenv("ROBOT_SF_FAST_DEMO", "0") or "0"))
     if fast_mode and eff_max <= 1:
         # Only fall back to stub if user explicitly requested fast demo; otherwise enforce model presence.
@@ -358,7 +410,15 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
         if explicit_fast_flag:
 
             class _StubPolicy:  # pragma: no cover - trivial
+                """TODO docstring. Document this class."""
+
                 def predict(self, _obs, **_kwargs):
+                    """TODO docstring. Document this function.
+
+                    Args:
+                        _obs: TODO docstring.
+                        _kwargs: TODO docstring.
+                    """
                     return np.zeros(2, dtype=float), None
 
             logger.info("FAST DEMO: Using stub policy (ROBOT_SF_FAST_DEMO=1)")
@@ -375,6 +435,11 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
 
 
 def _create_demo_env(fast_mode: bool):
+    """TODO docstring. Document this function.
+
+    Args:
+        fast_mode: TODO docstring.
+    """
     sim_cfg = RobotSimulationConfig()
     if fast_mode:
         sim_cfg.sim_config.sim_time_in_secs = min(sim_cfg.sim_config.sim_time_in_secs, 3.0)
@@ -422,6 +487,20 @@ def _run_episodes(
     eff_record: bool,
     out_dir: Path,
 ) -> list[EpisodeSummary]:
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+        model: TODO docstring.
+        scenario: TODO docstring.
+        seeds: TODO docstring.
+        eff_max: TODO docstring.
+        eff_record: TODO docstring.
+        out_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     results: list[EpisodeSummary] = []
     with contextlib.ExitStack() as stack:  # ensures close even on error
         stack.callback(env.close)
@@ -450,6 +529,12 @@ def _run_episodes(
 
 
 def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[override]
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+        record: TODO docstring.
+    """
     if record and not getattr(env, "sim_ui", None):  # user expects video but debug disabled
         logger.warning(
             "Recording enabled but environment created with debug=False: no real frames will be captured. "
@@ -458,6 +543,11 @@ def _warn_if_recording_without_ui(env, record: bool) -> None:  # type: ignore[ov
 
 
 def _maybe_print_summary(results: list[EpisodeSummary]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+    """
     if LOGGING_ENABLED:
         print("Summary:")
         # Guarantee at least a header line so logging toggle test observes difference.

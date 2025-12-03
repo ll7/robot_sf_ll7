@@ -28,6 +28,12 @@ from robot_sf.common.artifact_paths import (
 
 @pytest.fixture(name="metrics_summary")
 def _metrics_summary() -> dict[str, MetricAggregate]:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return {
         "success_rate": MetricAggregate(mean=0.92, median=0.93, p95=0.98, ci95=(0.90, 0.99)),
         "collision_rate": MetricAggregate(mean=0.03, median=0.02, p95=0.05, ci95=(0.01, 0.06)),
@@ -35,6 +41,14 @@ def _metrics_summary() -> dict[str, MetricAggregate]:
 
 
 def _sample_expert_artifact(metrics: dict[str, MetricAggregate]) -> ExpertPolicyArtifact:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     checkpoint = get_expert_policy_dir() / "ppo_expert_v1.zip"
     config_manifest = Path("configs/training/expert_ppo.yaml")
     return ExpertPolicyArtifact(
@@ -53,6 +67,11 @@ def _sample_expert_artifact(metrics: dict[str, MetricAggregate]) -> ExpertPolicy
 def test_serialize_expert_policy_makes_paths_relative(
     metrics_summary: dict[str, MetricAggregate],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics_summary: TODO docstring.
+    """
     artifact = _sample_expert_artifact(metrics_summary)
     record = imitation_manifest.serialize_expert_policy(artifact)
 
@@ -66,6 +85,11 @@ def test_serialize_expert_policy_makes_paths_relative(
 def test_write_expert_policy_manifest_round_trip(
     metrics_summary: dict[str, MetricAggregate],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics_summary: TODO docstring.
+    """
     artifact = _sample_expert_artifact(metrics_summary)
     expected = imitation_manifest.serialize_expert_policy(artifact)
 
@@ -77,6 +101,7 @@ def test_write_expert_policy_manifest_round_trip(
 
 
 def test_trajectory_manifest_serialization_handles_metadata() -> None:
+    """TODO docstring. Document this function."""
     dataset_dir = get_trajectory_dataset_dir()
     data_path = dataset_dir / "traj_v1.npz"
     metadata = {
@@ -108,6 +133,11 @@ def test_trajectory_manifest_serialization_handles_metadata() -> None:
 def test_training_run_manifest_writes_to_runs_folder(
     metrics_summary: dict[str, MetricAggregate],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics_summary: TODO docstring.
+    """
     episode_log = get_imitation_report_dir() / "ppo_imitation" / "episodes.jsonl"
     artifact = TrainingRunArtifact(
         run_id="run_001",
@@ -137,6 +167,11 @@ def test_training_run_manifest_writes_to_runs_folder(
     [None, Path("custom/output/expert.json")],
 )
 def test_write_trajectory_manifest_allows_custom_path(manifest_path: Path | None) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        manifest_path: TODO docstring.
+    """
     artifact = TrajectoryDatasetArtifact(
         dataset_id="traj_custom",
         source_policy_id="ppo_expert_v1",

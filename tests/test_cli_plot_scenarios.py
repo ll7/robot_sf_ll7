@@ -1,8 +1,16 @@
+"""TODO docstring. Document this module."""
+
 import json
 from pathlib import Path
 
 
 def test_cli_plot_scenarios_png_and_pdf(tmp_path: Path, capsys):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     out_dir = tmp_path / "thumbs"
     out_dir.mkdir(parents=True, exist_ok=True)
     from robot_sf.benchmark.cli import cli_main

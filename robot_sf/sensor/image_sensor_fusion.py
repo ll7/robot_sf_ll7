@@ -39,6 +39,7 @@ class ImageSensorFusion:
 
     def __post_init__(self):
         # Initialize the number of steps to cache based on the LiDAR observation space
+        """TODO docstring. Document this function."""
         rays_space = self.unnormed_obs_space[OBS_RAYS]
         if hasattr(rays_space, "shape") and rays_space.shape is not None:
             self.cache_steps = rays_space.shape[0]
@@ -74,7 +75,12 @@ class ImageSensorFusion:
         return self._build_observation(sensor_data)
 
     def _collect_sensor_data(self) -> dict:
-        """Collect data from all sensors."""
+        """Collect data from all sensors.
+
+        Returns:
+            dict: Unnormalized sensor payload with keys 'drive_state', 'lidar_state',
+            and optionally 'image_state'.
+        """
         # Get the current LiDAR state
         lidar_state = self.lidar_sensor()
 
@@ -121,7 +127,12 @@ class ImageSensorFusion:
         self.stacked_lidar_state[-1] = sensor_data["lidar_state"]
 
     def _build_observation(self, sensor_data: dict) -> dict[str, np.ndarray]:
-        """Build the final observation dictionary."""
+        """Build the final observation dictionary.
+
+        Returns:
+            dict[str, numpy.ndarray]: Normalized observation mapping for drive, lidar,
+            and optionally image keys.
+        """
         obs = {}
 
         # Normalize the stacked states by the maximum values in the observation space
@@ -154,7 +165,11 @@ class ImageSensorFusion:
         return obs
 
     def _get_normalization_max(self, space, default_shape: int):
-        """Get the maximum values for normalization from observation space."""
+        """Get the maximum values for normalization from observation space.
+
+        Returns:
+            numpy.ndarray: Vector of maximum values to use for normalization.
+        """
         if hasattr(space, "high") and space.high is not None:
             return space.high
         else:

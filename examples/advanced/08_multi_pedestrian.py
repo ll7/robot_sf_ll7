@@ -27,6 +27,12 @@ from robot_sf.nav.obstacle import Obstacle
 
 
 def create_multi_pedestrian_map() -> MapDefinition:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     width, height = 20.0, 20.0
     obstacles = [
         Obstacle([(5, 0), (6, 0), (6, 8), (5, 8)]),
@@ -38,7 +44,7 @@ def create_multi_pedestrian_map() -> MapDefinition:
     ped_goal_zones = []
     ped_crowded_zones = []
     bounds = cast(
-        list[Line2D],
+        "list[Line2D]",
         [
             (0.0, width, 0.0, 0.0),  # bottom
             (0.0, width, height, height),  # top
@@ -94,6 +100,7 @@ def create_multi_pedestrian_map() -> MapDefinition:
 
 
 def run_multi_pedestrian_simulation():
+    """TODO docstring. Document this function."""
     map_def = create_multi_pedestrian_map()
     pool = MapDefinitionPool(map_defs={"multi_ped": map_def})
     config = RobotSimulationConfig()

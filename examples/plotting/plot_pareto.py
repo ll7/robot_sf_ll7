@@ -34,6 +34,7 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def _synthetic_records():
+    """TODO docstring. Document this function."""
     return [
         {
             "scenario_id": "s1",
@@ -59,6 +60,14 @@ def _synthetic_records():
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default=None)
     ap.add_argument("--out", default="results/pareto_demo.png")

@@ -84,7 +84,7 @@ class TestCreateSpacesWithImage:
         map_pool = MapDefinitionPool()
         map_def = map_pool.choose_random_map()
 
-        action_space, obs_space, orig_obs_space = create_spaces_with_image(settings, map_def)
+        _action_space, obs_space, orig_obs_space = create_spaces_with_image(settings, map_def)
 
         # Should not contain image observations
         assert OBS_IMAGE not in obs_space.spaces
@@ -108,7 +108,7 @@ class TestCreateSpacesWithImage:
         map_pool = MapDefinitionPool()
         map_def = map_pool.choose_random_map()
 
-        action_space, obs_space, orig_obs_space = create_spaces_with_image(settings, map_def)
+        _action_space, obs_space, _orig_obs_space = create_spaces_with_image(settings, map_def)
 
         # Should contain all observation types
         assert OBS_DRIVE_STATE in obs_space.spaces
@@ -211,7 +211,7 @@ class TestInitCollisionAndSensorsWithImage:
         assert hasattr(sensor, "robot_speed_sensor")
         assert hasattr(sensor, "target_sensor")
 
-    @patch("robot_sf.sensor.image_sensor.ImageSensor")
+    @patch("robot_sf.gym_env.env_util.ImageSensor")
     @patch("robot_sf.gym_env.env_util.ImageSensorFusion")
     def test_init_with_image_observations(
         self,
@@ -304,7 +304,7 @@ class TestImageObservationIntegration:
 
             # Use RobotEnvSettings which properly supports image observations
             env_settings = RobotEnvSettings(use_image_obs=True)
-            action_space, obs_space, orig_obs_space = create_spaces_with_image(
+            _action_space, obs_space, _orig_obs_space = create_spaces_with_image(
                 env_settings,
                 map_def,
             )

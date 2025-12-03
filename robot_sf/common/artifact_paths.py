@@ -34,17 +34,31 @@ class ArtifactCategory:
 
 
 def _canonical_repository_root() -> Path:
+    """Return the repository root directory resolved from this file location.
+
+    Returns:
+        Path: Absolute path to the repository root.
+    """
     return Path(__file__).resolve().parents[2]
 
 
 def get_repository_root() -> Path:
-    """Expose the repository root path for tooling consumers."""
+    """Expose the repository root path for tooling consumers.
+
+    Returns:
+        Path: Absolute path to the repository root.
+    """
 
     return _canonical_repository_root()
 
 
 @lru_cache(maxsize=1)
 def _default_artifact_root() -> Path:
+    """Return the default artifact root directory under the repository root.
+
+    Returns:
+        Path: Absolute path to the canonical artifact root (`output/`).
+    """
     return _canonical_repository_root() / _ARTIFACT_ROOT_NAME
 
 
@@ -120,7 +134,11 @@ LEGACY_MIGRATION_TARGETS: dict[Path, Path] = {
 
 
 def get_artifact_override_root() -> Path | None:
-    """Return the artifact override root when configured via the environment."""
+    """Return the artifact override root when configured via the environment.
+
+    Returns:
+        Path | None: Expanded and resolved override path, or None when unset.
+    """
 
     override = os.environ.get(_OVERRIDE_ENV)
     if not override:
@@ -129,7 +147,11 @@ def get_artifact_override_root() -> Path | None:
 
 
 def get_artifact_root() -> Path:
-    """Return the canonical artifact root, respecting overrides when present."""
+    """Return the canonical artifact root, respecting overrides when present.
+
+    Returns:
+        Path: Artifact root path (override when set, else default).
+    """
 
     override = get_artifact_override_root()
     if override is not None:
@@ -138,7 +160,11 @@ def get_artifact_root() -> Path:
 
 
 def get_artifact_category(name: str) -> ArtifactCategory:
-    """Look up artifact category metadata by name."""
+    """Look up artifact category metadata by name.
+
+    Returns:
+        ArtifactCategory: Metadata record for the requested category.
+    """
 
     try:
         return DEFAULT_ARTIFACT_CATEGORIES[name]
@@ -147,7 +173,11 @@ def get_artifact_category(name: str) -> ArtifactCategory:
 
 
 def get_artifact_category_path(name: str) -> Path:
-    """Return the absolute path for the given artifact category."""
+    """Return the absolute path for the given artifact category.
+
+    Returns:
+        Path: Resolved absolute path to the category directory.
+    """
 
     category = get_artifact_category(name)
     return (get_artifact_root() / category.relative_path).resolve()
@@ -157,7 +187,11 @@ def ensure_canonical_tree(
     root: Path | None = None,
     categories: Iterable[str] | None = None,
 ) -> Path:
-    """Create the canonical artifact tree and return the root path."""
+    """Create the canonical artifact tree and return the root path.
+
+    Returns:
+        Path: Resolved root path where categories were ensured.
+    """
 
     target_root = Path(root).expanduser().resolve() if root is not None else get_artifact_root()
     target_root.mkdir(parents=True, exist_ok=True)
@@ -172,7 +206,11 @@ def ensure_run_tracker_tree(
     run_id: str | None = None,
     base_root: Path | None = None,
 ) -> Path:
-    """Ensure the run-tracker directory exists and optionally create a child run folder."""
+    """Ensure the run-tracker directory exists and optionally create a child run folder.
+
+    Returns:
+        Path: Path to the tracker root or the specific run directory.
+    """
 
     target_root = ensure_canonical_tree(root=base_root, categories=(_RUN_TRACKER_CATEGORY,))
     tracker_category = get_artifact_category(_RUN_TRACKER_CATEGORY)
@@ -186,7 +224,11 @@ def ensure_run_tracker_tree(
 
 
 def find_legacy_artifact_paths(base_root: Path | None = None) -> list[Path]:
-    """Return a list of legacy artifact paths that still exist under ``base_root``."""
+    """Return a list of legacy artifact paths that still exist under ``base_root``.
+
+    Returns:
+        list[Path]: Existing legacy paths detected under the given base root.
+    """
 
     root = Path(base_root).resolve() if base_root is not None else _canonical_repository_root()
     results: list[Path] = []
@@ -198,13 +240,21 @@ def find_legacy_artifact_paths(base_root: Path | None = None) -> list[Path]:
 
 
 def get_legacy_migration_plan() -> dict[Path, Path]:
-    """Return a copy of the legacy path migration mapping."""
+    """Return a copy of the legacy path migration mapping.
+
+    Returns:
+        dict[Path, Path]: Mapping from legacy path to its canonical destination.
+    """
 
     return dict(LEGACY_MIGRATION_TARGETS)
 
 
 def resolve_artifact_path(path: str | Path) -> Path:
-    """Resolve ``path`` to its on-disk location, honoring overrides when set."""
+    """Resolve ``path`` to its on-disk location, honoring overrides when set.
+
+    Returns:
+        Path: Absolute path after applying override and legacy rules.
+    """
 
     candidate = Path(path)
     override_root = get_artifact_override_root()
@@ -235,13 +285,21 @@ def resolve_artifact_path(path: str | Path) -> Path:
 
 
 def iter_artifact_categories() -> Iterable[ArtifactCategory]:
-    """Iterate over known artifact categories."""
+    """Iterate over known artifact categories.
+
+    Returns:
+        Iterable[ArtifactCategory]: View over category metadata objects.
+    """
 
     return DEFAULT_ARTIFACT_CATEGORIES.values()
 
 
 def get_expert_policy_dir() -> Path:
-    """Return the directory that stores expert policy manifests and checkpoints."""
+    """Return the directory that stores expert policy manifests and checkpoints.
+
+    Returns:
+        Path: Directory path ensured to exist.
+    """
 
     base = get_artifact_category_path("benchmarks") / "expert_policies"
     base.mkdir(parents=True, exist_ok=True)
@@ -249,13 +307,21 @@ def get_expert_policy_dir() -> Path:
 
 
 def get_expert_policy_manifest_path(policy_id: str, extension: str = ".json") -> Path:
-    """Return the manifest path for a given expert policy identifier."""
+    """Return the manifest path for a given expert policy identifier.
+
+    Returns:
+        Path: File path under the expert policy directory.
+    """
 
     return get_expert_policy_dir() / f"{policy_id}{extension}"
 
 
 def get_trajectory_dataset_dir() -> Path:
-    """Return the directory that stores curated trajectory datasets."""
+    """Return the directory that stores curated trajectory datasets.
+
+    Returns:
+        Path: Directory path ensured to exist.
+    """
 
     base = get_artifact_category_path("benchmarks") / "expert_trajectories"
     base.mkdir(parents=True, exist_ok=True)
@@ -263,13 +329,21 @@ def get_trajectory_dataset_dir() -> Path:
 
 
 def get_trajectory_dataset_path(dataset_id: str, extension: str = ".npz") -> Path:
-    """Return the storage path for a trajectory dataset identifier."""
+    """Return the storage path for a trajectory dataset identifier.
+
+    Returns:
+        Path: File path under the trajectory dataset directory.
+    """
 
     return get_trajectory_dataset_dir() / f"{dataset_id}{extension}"
 
 
 def get_imitation_report_dir() -> Path:
-    """Return the directory for comparative imitation reports."""
+    """Return the directory for comparative imitation reports.
+
+    Returns:
+        Path: Directory path ensured to exist.
+    """
 
     base = get_artifact_category_path("benchmarks") / "ppo_imitation"
     base.mkdir(parents=True, exist_ok=True)

@@ -32,6 +32,14 @@ if TYPE_CHECKING:
 
 
 def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        paths: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if isinstance(paths, str | Path):
         path_list = [paths]
     else:
@@ -55,6 +63,16 @@ def read_jsonl(paths: Sequence[str | Path] | str | Path) -> list[dict[str, Any]]
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        path: TODO docstring.
+        default: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -68,6 +86,14 @@ _EFFECTIVE_GROUP_KEY = "scenario_params.algo | algo | scenario_id"
 
 
 def _normalize_algo(value: Any) -> str | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if isinstance(value, str):
         trimmed = value.strip()
         if trimmed:
@@ -76,6 +102,13 @@ def _normalize_algo(value: Any) -> str | None:
 
 
 def _ensure_mapping(record: dict[str, Any], key: str, episode_id: str | None) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        key: TODO docstring.
+        episode_id: TODO docstring.
+    """
     value = record.get(key)
     if value is not None and not isinstance(value, dict):
         raise AggregationMetadataError(
@@ -92,6 +125,16 @@ def _resolve_group_key(
     group_by: str,
     fallback_group_by: str,
 ) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episode_id = record.get("episode_id")
     episode_ref = str(episode_id) if episode_id is not None else None
 
@@ -131,6 +174,14 @@ def _resolve_group_key(
 
 
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        rec: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     base = {
         "episode_id": rec.get("episode_id"),
         "scenario_id": rec.get("scenario_id"),
@@ -152,6 +203,13 @@ def _ensure_snqi(
     weights: dict[str, float] | None,
     baseline: dict[str, dict[str, float]] | None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        rec: TODO docstring.
+        weights: TODO docstring.
+        baseline: TODO docstring.
+    """
     if rec.get("metrics") is None:
         return
     if "snqi" in rec["metrics"]:
@@ -173,6 +231,17 @@ def write_episode_csv(
     snqi_baseline: dict[str, dict[str, float]] | None = None,
 ) -> str:
     # Optionally compute SNQI per record if missing
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        out_csv: TODO docstring.
+        snqi_weights: TODO docstring.
+        snqi_baseline: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
 
@@ -197,6 +266,14 @@ def write_episode_csv(
 
 
 def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: dict[str, float] = {}
     for k, v in d.items():
         if k in ("episode_id", "scenario_id", "seed"):
@@ -219,6 +296,20 @@ def compute_aggregates(
     logger_ctx=None,
 ) -> dict[str, dict[str, dict[str, float]]]:
     # Optionally compute SNQI per record if missing
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+        snqi_weights: TODO docstring.
+        snqi_baseline: TODO docstring.
+        expected_algorithms: TODO docstring.
+        logger_ctx: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     for rec in records:
         _ensure_snqi(rec, snqi_weights, snqi_baseline)
 
@@ -286,14 +377,15 @@ def _bootstrap_ci(
 ) -> tuple[float, float]:
     """Percentile bootstrap confidence interval for a statistic.
 
-    Parameters
-    - data: 1D numpy array (NaNs will be ignored).
-    - stat_fn: callable computing a scalar statistic on a 1D array.
-    - samples: number of bootstrap resamples (B).
-    - confidence: confidence level (e.g., 0.95).
-    - seed: optional RNG seed for reproducibility.
+    Args:
+        data: One-dimensional array of samples; NaNs are ignored.
+        stat_fn: Callable that computes a scalar statistic over a 1D array.
+        samples: Number of bootstrap resamples to draw.
+        confidence: Confidence level for the returned interval (e.g., 0.95).
+        seed: Optional RNG seed for reproducibility.
 
-    Returns (low, high) CI bounds; (nan, nan) if insufficient data or samples=0.
+    Returns:
+        tuple[float, float]: ``(low, high)`` bounds, ``(nan, nan)`` when insufficient data.
     """
     if samples <= 0:
         return (float("nan"), float("nan"))
@@ -326,6 +418,16 @@ def _group_flattened(
     group_by: str,
     fallback_group_by: str,
 ) -> dict[str, list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
         key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
@@ -341,16 +443,49 @@ def _attach_ci_for_group(
     bootstrap_confidence: float,
     bootstrap_seed: int | None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        dst_group: TODO docstring.
+        values_by_metric: TODO docstring.
+        bootstrap_samples: TODO docstring.
+        bootstrap_confidence: TODO docstring.
+        bootstrap_seed: TODO docstring.
+    """
     for metric_name, values in values_by_metric.items():
         arr = np.asarray(values, dtype=float)
 
         def mean_fn(a: np.ndarray) -> float:
+            """TODO docstring. Document this function.
+
+            Args:
+                a: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return float(np.mean(a))
 
         def median_fn(a: np.ndarray) -> float:
+            """TODO docstring. Document this function.
+
+            Args:
+                a: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return float(np.median(a))
 
         def p95_fn(a: np.ndarray) -> float:
+            """TODO docstring. Document this function.
+
+            Args:
+                a: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return float(np.percentile(a, 95))
 
         lo_hi_mean = _bootstrap_ci(
@@ -399,6 +534,9 @@ def compute_aggregates_with_ci(
     This preserves the original aggregate keys (mean, median, p95) and, when
     return_ci is True and bootstrap_samples>0, adds parallel keys 'mean_ci',
     'median_ci', 'p95_ci' with [low, high] bounds using percentile bootstrap.
+
+    Returns:
+        Nested dictionary mapping group names to metric names to aggregate statistics.
     """
     # Start from base aggregates (no CI) for consistency
     base = compute_aggregates(
@@ -412,7 +550,7 @@ def compute_aggregates_with_ci(
     )
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
-        return cast(dict[str, dict[str, dict[str, Any]]], base)
+        return cast("dict[str, dict[str, dict[str, Any]]]", base)
 
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:

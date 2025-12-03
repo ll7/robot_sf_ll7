@@ -29,6 +29,14 @@ DEFAULT_PERF_SCENARIO = "configs/validation/minimal.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(
         description="Run the manifest-driven examples smoke test (pytest harness).",
         epilog=(
@@ -86,6 +94,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     args = parse_args(argv)
     manifest = load_manifest(validate_paths=True)
     ci_examples = tuple(manifest.iter_ci_enabled_examples())
@@ -121,6 +137,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if args.dry_run or args.skip_tracker_check:
         return True
     script_path = _resolve_pipeline_example()
@@ -164,6 +188,12 @@ def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
 
 
 def _resolve_pipeline_example() -> Path | None:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     candidate = REPO_ROOT / PIPELINE_EXAMPLE
     if candidate.is_file():
         return candidate
@@ -171,6 +201,12 @@ def _resolve_pipeline_example() -> Path | None:
 
 
 def _build_example_env() -> dict[str, str]:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -184,6 +220,14 @@ def _build_example_env() -> dict[str, str]:
 
 
 def _maybe_run_perf_tests(args: argparse.Namespace) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if args.dry_run or args.skip_perf_tests:
         return True
     try:
@@ -216,6 +260,15 @@ def _maybe_run_perf_tests(args: argparse.Namespace) -> bool:
 
 
 def _merge_pythonpath(root: Path, existing: str | None) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+        existing: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parts: list[str] = [str(root)]
     if existing:
         parts.extend(element for element in existing.split(os.pathsep) if element)
@@ -229,6 +282,12 @@ def _merge_pythonpath(root: Path, existing: str | None) -> str:
 
 
 def _assert_progress_output(stdout: str | None, stderr: str | None) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        stdout: TODO docstring.
+        stderr: TODO docstring.
+    """
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lowered = combined.lower()
     if "step 1/" not in lowered or "eta=" not in lowered:
@@ -238,6 +297,16 @@ def _assert_progress_output(stdout: str | None, stderr: str | None) -> None:
 
 
 def _tail_output(stdout: str | None, stderr: str | None, limit: int = 20) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        stdout: TODO docstring.
+        stderr: TODO docstring.
+        limit: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lines = [line.rstrip() for line in combined.splitlines()]
     if len(lines) <= limit:

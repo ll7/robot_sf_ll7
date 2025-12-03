@@ -33,6 +33,11 @@ logger.info("Running ego pedestrian simulation with random actions and recording
 
 
 def test_simulation(map_definition: MapDefinition):
+    """TODO docstring. Document this function.
+
+    Args:
+        map_definition: TODO docstring.
+    """
     logger.info("Creating the environment.")
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
@@ -75,6 +80,7 @@ def get_file():
 
 
 def main():
+    """TODO docstring. Document this function."""
     map_def = convert_map("maps/svg_maps/narrow_corridor2.svg")
 
     test_simulation(map_def)

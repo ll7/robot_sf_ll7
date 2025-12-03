@@ -13,20 +13,21 @@ Deferred (future): true SimulationView renderer, memory peak measurement, stream
 
 from __future__ import annotations
 
+import io
 import math
 import random
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import numpy as np
+import numpy as np
 
 try:  # Optional dependencies
     import matplotlib.pyplot as plt  # type: ignore
+    from matplotlib import image as mpimg  # type: ignore
 except ImportError:
     plt = None  # type: ignore
+    mpimg = None  # type: ignore[assignment]
 
 try:  # moviepy for encoding
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
@@ -54,10 +55,16 @@ class _VideoArtifact:
     # Backward compatibility for older tests expecting .path_mp4
     @property
     def path_mp4(self) -> str:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.filename or ""
 
 
-def _canvas_to_rgb_simple(fig) -> np.ndarray:  # type: ignore[name-defined]
+def _canvas_to_rgb_simple(fig) -> np.ndarray:
     """Return RGB array from figure using the simplest, backend-agnostic path.
 
     We intentionally avoid complex HiDPI / ARGB logic here; on macOS the default
@@ -65,25 +72,24 @@ def _canvas_to_rgb_simple(fig) -> np.ndarray:  # type: ignore[name-defined]
     harness) should set MPLBACKEND=Agg before importing matplotlib to ensure
     `tostring_rgb` is available. If absent we raise a clear error directing the
     user to set MPLBACKEND=Agg.
-    """
-    import numpy as _np  # local import
 
+    Returns:
+        RGB numpy array with shape (height, width, 3) and dtype uint8.
+    """
     fig.canvas.draw()  # type: ignore[attr-defined]
     w, h = fig.canvas.get_width_height()  # type: ignore[attr-defined]
     if hasattr(fig.canvas, "tostring_rgb"):
         buf = fig.canvas.tostring_rgb()  # type: ignore[attr-defined]
-        return _np.frombuffer(buf, dtype="uint8").reshape((h, w, 3))
+        return np.frombuffer(buf, dtype="uint8").reshape((h, w, 3))
     # Portable fallback: render figure to PNG in-memory and decode with matplotlib.image
-    import io
-
-    from matplotlib import image as mpimg  # type: ignore
-
+    if mpimg is None:
+        raise RuntimeError("matplotlib.image not available; ensure matplotlib installed")
     bio = io.BytesIO()
     fig.savefig(bio, format="png", dpi=100)  # type: ignore[attr-defined]
     bio.seek(0)
     png_arr = mpimg.imread(bio)
     # mpimg may return float [0,1] array; convert to uint8 RGB (drop alpha if present)
-    if png_arr.dtype != _np.uint8:
+    if png_arr.dtype != np.uint8:
         png_arr = (png_arr * 255).astype("uint8")
     if png_arr.shape[-1] == 4:  # RGBA -> RGB
         png_arr = png_arr[:, :, :3]
@@ -91,13 +97,25 @@ def _canvas_to_rgb_simple(fig) -> np.ndarray:  # type: ignore[name-defined]
 
 
 def _render_episode_frames(seed: int, N: int) -> tuple[list, list[float], list[float]]:
-    """Generate synthetic (x,y) path coordinates for episode rendering."""
+    """Generate synthetic (x,y) path coordinates for episode rendering.
+
+    Returns:
+        Tuple of (empty list, x coordinates, y coordinates).
+    """
     xs = [math.cos((seed + i) * 0.15) for i in range(N)]
     ys = [math.sin((seed + i) * 0.15) for i in range(N)]
     return [], xs, ys
 
 
 def _build_outcome(rec) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        rec: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     collision_flag = bool(rec.get("collisions") or rec.get("collision"))
     success_flag = bool(rec.get("success", not collision_flag))
     timeout_flag = bool(rec.get("timeout")) and not success_flag and not collision_flag
@@ -123,6 +141,9 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
         - disable_videos / no_video (bool): skip with note 'disabled'
         - max_videos (int)
         - video_renderer (str): synthetic | sim-view | none
+
+    Returns:
+        List of _VideoArtifact objects containing metadata for generated videos.
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -137,6 +158,15 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
 
     def _mk_skip(rec, note: str):  # helper
         # Provide deterministic filename even when skipped (legacy expectation)
+        """TODO docstring. Document this function.
+
+        Args:
+            rec: TODO docstring.
+            note: TODO docstring.
+
+        Returns:
+            _VideoArtifact object with skipped status and provided note.
+        """
         episode_id = rec.get("episode_id", "unknown")
         mp4_name = f"video_{episode_id}.mp4"
         return _VideoArtifact(
@@ -186,7 +216,12 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
             t0 = time.perf_counter()
             for idx in range(N):
                 fig, ax = plt.subplots(figsize=(3, 3))  # type: ignore
-                ax.plot(xs_full[: idx + 1], ys_full[: idx + 1], color="tab:blue", linewidth=1.5)
+                ax.plot(
+                    xs_full[: idx + 1],
+                    ys_full[: idx + 1],
+                    color="tab:blue",
+                    linewidth=1.5,
+                )
                 ax.scatter(xs_full[idx], ys_full[idx], color="red", s=20)
                 ax.set_xlim(-1.2, 1.2)
                 ax.set_ylim(-1.2, 1.2)
@@ -238,7 +273,11 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
 
 
 def artifacts_to_manifest(artifacts: list[_VideoArtifact]):
-    """Convert internal artifacts list to manifest dict for JSON dumping."""
+    """Convert internal artifacts list to manifest dict for JSON dumping.
+
+    Returns:
+        Dictionary with 'artifacts' key containing list of artifact dictionaries.
+    """
     return {
         "artifacts": [
             {k: v for k, v in asdict(a).items() if k not in {"artifact_id"}} for a in artifacts

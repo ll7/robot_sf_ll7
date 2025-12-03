@@ -11,6 +11,7 @@ Rule Categories
 - Instantiation: Runtime environment creation compatibility
 """
 
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -90,7 +91,11 @@ class ValidationRule:
 
 
 def check_file_readable(map_path: Path) -> list[RuleViolation]:
-    """Check that the SVG file is readable."""
+    """Check that the SVG file is readable.
+
+    Returns:
+        list[RuleViolation]: Violations for unreadable or invalid file path state.
+    """
     violations = []
 
     if not map_path.exists():
@@ -116,8 +121,11 @@ def check_file_readable(map_path: Path) -> list[RuleViolation]:
 
 
 def check_valid_svg(map_path: Path) -> list[RuleViolation]:
-    """Check that the file is valid XML/SVG."""
-    import xml.etree.ElementTree as ET
+    """Check that the file is valid XML/SVG.
+
+    Returns:
+        list[RuleViolation]: Violations if XML parsing fails or encounters errors.
+    """
 
     violations = []
 
@@ -146,7 +154,11 @@ def check_valid_svg(map_path: Path) -> list[RuleViolation]:
 
 
 def check_file_size(map_path: Path) -> list[RuleViolation]:
-    """Check that file size is within reasonable limits."""
+    """Check that file size is within reasonable limits.
+
+    Returns:
+        list[RuleViolation]: Warning violation when size exceeds threshold; empty otherwise.
+    """
     violations = []
 
     MAX_SIZE_MB = 5
@@ -172,8 +184,10 @@ def check_required_layers(map_path: Path) -> list[RuleViolation]:
     - Adds layer statistics (labeled vs total groups).
     - Emits INFO rule R005 when labels exist to surface improvement hints.
     - Warns (R004) only when there are zero labeled groups.
+
+    Returns:
+        list[RuleViolation]: Info or warning about layer labeling; empty on success.
     """
-    import xml.etree.ElementTree as ET
 
     violations: list[RuleViolation] = []
 
@@ -248,7 +262,11 @@ VALIDATION_RULES: list[ValidationRule] = [
 
 
 def get_rule_by_id(rule_id: str) -> ValidationRule | None:
-    """Get a rule by its ID."""
+    """Get a rule by its ID.
+
+    Returns:
+        ValidationRule | None: Matching rule if found, else None.
+    """
     for rule in VALIDATION_RULES:
         if rule.rule_id == rule_id:
             return rule

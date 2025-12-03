@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -7,6 +9,11 @@ from robot_sf.benchmark.summary import summarize_to_plots
 
 
 def _write_sample_jsonl(path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+    """
     records = [
         {
             "episode_id": "e1",
@@ -27,6 +34,11 @@ def _write_sample_jsonl(path: Path) -> None:
 
 
 def test_summary_creates_pngs(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     src = tmp_path / "episodes.jsonl"
     _write_sample_jsonl(src)
     out_dir = tmp_path / "figs"

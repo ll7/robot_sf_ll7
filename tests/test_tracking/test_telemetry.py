@@ -14,14 +14,27 @@ from robot_sf.telemetry.sampler import TelemetrySampler
 
 
 class _DummyWriter:
+    """TODO docstring. Document this class."""
+
     def __init__(self) -> None:
+        """TODO docstring. Document this function."""
         self.snapshots: list[TelemetrySnapshot] = []
 
     def append_telemetry_snapshot(self, snapshot: TelemetrySnapshot) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            snapshot: TODO docstring.
+        """
         self.snapshots.append(snapshot)
 
 
 def test_sampler_emits_fallback_notes_when_psutil_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+    """
     writer = _DummyWriter()
     fake_resource = SimpleNamespace(
         RUSAGE_SELF=0,
@@ -54,6 +67,7 @@ def test_sampler_emits_fallback_notes_when_psutil_missing(monkeypatch: pytest.Mo
 
 
 def test_recommendation_engine_triggers_all_rules() -> None:
+    """TODO docstring. Document this function."""
     engine = RecommendationEngine(
         rules=RecommendationRules(
             throughput_baseline=10.0,

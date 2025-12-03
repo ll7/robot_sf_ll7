@@ -43,11 +43,21 @@ class VisualizableSimState:
 
 
 def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimState:
-    state, groups = sim_state
+    """TODO docstring. Document this function.
+
+    Args:
+        step: TODO docstring.
+        sim_state: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
+    state, _groups = sim_state
     ped_pos = np.array(state[:, 0:2])
     ped_vel = np.array(state[:, 2:4])
     actions = np.concatenate(
-        (np.expand_dims(ped_pos, axis=1), np.expand_dims(ped_pos + ped_vel, axis=1)), axis=1
+        (np.expand_dims(ped_pos, axis=1), np.expand_dims(ped_pos + ped_vel, axis=1)),
+        axis=1,
     )
     return VisualizableSimState(step, ped_pos, actions)
 
@@ -87,9 +97,16 @@ class SimulationView:
 
     @property
     def timestep_text_pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return (16, 16)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         pygame.init()
         pygame.font.init()
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
@@ -100,6 +117,12 @@ class SimulationView:
 
     def preprocess_obstacles(self) -> pygame.Surface:
         # Scale the vertices of the obstacles
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         obst_vertices = [o.vertices_np * self.scaling for o in self.map_def.obstacles]
 
         # Initialize the minimum and maximum x and y coordinates
@@ -107,8 +130,14 @@ class SimulationView:
 
         # Find the minimum and maximum x and y coordinates among all the obstacles
         for vertices in obst_vertices:
-            min_x, max_x = min(np.min(vertices[:, 0]), min_x), max(np.max(vertices[:, 0]), max_x)
-            min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
+            min_x, max_x = (
+                min(np.min(vertices[:, 0]), min_x),
+                max(np.max(vertices[:, 0]), max_x),
+            )
+            min_y, max_y = (
+                min(np.min(vertices[:, 1]), min_y),
+                max(np.max(vertices[:, 1]), max_y),
+            )
 
         # Calculate the width and height of the surface needed to draw the obstacles
         width, height = max_x - min_x, max_y - min_y
@@ -140,12 +169,19 @@ class SimulationView:
         self.ui_events_thread.start()
 
         def handle_sigint(signum, frame):
+            """TODO docstring. Document this function.
+
+            Args:
+                signum: TODO docstring.
+                frame: TODO docstring.
+            """
             self.is_exit_requested = True
             self.is_abortion_requested = True
 
         signal(SIGINT, handle_sigint)
 
     def exit(self):
+        """TODO docstring. Document this function."""
         self.is_exit_requested = True
         self.ui_events_thread.join()
 
@@ -243,16 +279,30 @@ class SimulationView:
         pygame.display.update()
 
     def _resize_window(self):
+        """TODO docstring. Document this function."""
         old_surface = self.screen
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         self.screen.blit(old_surface, (0, 0))
 
     def _scale_pedestrian_state(self, state: VisualizableSimState) -> VisualizableSimState:
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         state.pedestrian_positions *= self.scaling
         state.ped_actions *= self.scaling
         return state
 
     def _draw_pedestrians(self, ped_pos: np.ndarray):
+        """TODO docstring. Document this function.
+
+        Args:
+            ped_pos: TODO docstring.
+        """
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(
                 self.screen,
@@ -263,6 +313,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
+        """TODO docstring. Document this function."""
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [
@@ -276,7 +327,11 @@ class SimulationView:
         """Draw the actions of the pedestrians as lines."""
         for p1, p2 in ped_actions:
             pygame.draw.line(
-                self.screen, PED_ACTION_COLOR, p1 + self.offset, p2 + self.offset, width=3
+                self.screen,
+                PED_ACTION_COLOR,
+                p1 + self.offset,
+                p2 + self.offset,
+                width=3,
             )
 
     def _draw_pedestrian_routes(self):
@@ -289,12 +344,20 @@ class SimulationView:
                 (0, 0, 255),
                 False,
                 [
-                    (x * self.scaling + self.offset[0], y * self.scaling + self.offset[1])
+                    (
+                        x * self.scaling + self.offset[0],
+                        y * self.scaling + self.offset[1],
+                    )
                     for x, y in route.waypoints
                 ],
             )
 
     def _add_text(self, timestep: int):
+        """TODO docstring. Document this function.
+
+        Args:
+            timestep: TODO docstring.
+        """
         text_lines = [
             f"step: {timestep}",
             f"scaling: {self.scaling}",
@@ -323,7 +386,10 @@ class SimulationView:
         end_x = int(self.width - self.offset[0])
         for x in range(start_x, end_x, scaled_grid_size):
             pygame.draw.line(
-                self.screen, grid_color, (x + self.offset[0], 0), (x + self.offset[0], self.height)
+                self.screen,
+                grid_color,
+                (x + self.offset[0], 0),
+                (x + self.offset[0], self.height),
             )
             label = font.render(str(int(x / self.scaling)), 1, grid_color)
             self.screen.blit(label, (x + self.offset[0], 0))
@@ -333,7 +399,10 @@ class SimulationView:
         end_y = int(self.height - self.offset[1])
         for y in range(start_y, end_y, scaled_grid_size):
             pygame.draw.line(
-                self.screen, grid_color, (0, y + self.offset[1]), (self.width, y + self.offset[1])
+                self.screen,
+                grid_color,
+                (0, y + self.offset[1]),
+                (self.width, y + self.offset[1]),
             )
             label = font.render(str(int(y / self.scaling)), 1, grid_color)
             self.screen.blit(label, (0, y + self.offset[1]))

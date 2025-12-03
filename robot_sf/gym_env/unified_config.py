@@ -5,6 +5,7 @@ This module provides a unified configuration hierarchy that eliminates
 duplication and provides clear separation of concerns.
 """
 
+import importlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -14,7 +15,10 @@ if TYPE_CHECKING:
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
-from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
+from robot_sf.robot.differential_drive import (
+    DifferentialDriveRobot,
+    DifferentialDriveSettings,
+)
 from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -66,7 +70,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
             raise ValueError("Robot configuration must be initialized!")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
-        """Create a robot instance based on configuration."""
+        """Create a robot instance based on configuration.
+
+        Returns:
+            Robot instance (DifferentialDriveRobot or BicycleDriveRobot) from config.
+        """
         if isinstance(self.robot_config, DifferentialDriveSettings):
             return DifferentialDriveRobot(self.robot_config)
         elif isinstance(self.robot_config, BicycleDriveSettings):
@@ -115,8 +123,13 @@ class PedestrianSimulationConfig(RobotSimulationConfig):
         self.ego_ped_config.radius = self.sim_config.ped_radius
 
     def pedestrian_factory(self) -> "UnicycleDrivePedestrian":
-        """Create a pedestrian instance based on configuration."""
-        from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
+        """Create a pedestrian instance based on configuration.
+
+        Returns:
+            UnicycleDrivePedestrian instance created from ego_ped_config.
+        """
+        module = importlib.import_module("robot_sf.ped_ego.unicycle_drive")
+        UnicycleDrivePedestrian = module.UnicycleDrivePedestrian
 
         if isinstance(self.ego_ped_config, UnicycleDriveSettings):
             return UnicycleDrivePedestrian(self.ego_ped_config)

@@ -55,6 +55,8 @@ except ImportError:
 
 @dataclass
 class BenchmarkManifest:
+    """TODO docstring. Document this class."""
+
     output_root: Path
     git_hash: str
     scenario_matrix_hash: str
@@ -77,7 +79,11 @@ def _ensure_algo_metadata(
     episode_id: str | None,
     logger_ctx=None,
 ) -> dict[str, Any]:
-    """Mirror the algorithm identifier into scenario_params and validate payloads."""
+    """Mirror the algorithm identifier into scenario_params and validate payloads.
+
+    Returns:
+        Updated record dictionary with algorithm metadata injected.
+    """
 
     log = logger_ctx or logger
     algo_value = algo.strip() if isinstance(algo, str) else ""
@@ -123,6 +129,9 @@ def _compute_git_hash(root: Path) -> str:
 
     Falls back to 'unknown' if repository metadata is inaccessible. Separated to keep
     orchestration function lean (polish phase refactor for C901).
+
+    Returns:
+        Short git hash (12 characters) or 'unknown' if not retrievable.
     """
     git_hash = "unknown"
     try:  # pragma: no cover - environment dependent
@@ -146,6 +155,14 @@ def _compute_git_hash(root: Path) -> str:
 
 
 def _prepare_output_dirs(cfg):
+    """TODO docstring. Document this function.
+
+    Args:
+        cfg: TODO docstring.
+
+    Returns:
+        Tuple of (root, episodes_dir, aggregates_dir, reports_dir, plots_dir) Path objects.
+    """
     root = Path(cfg.output_root)
     episodes_dir = root / "episodes"
     aggregates_dir = root / "aggregates"
@@ -162,6 +179,17 @@ def _init_manifest(
     cfg,
     scenario_matrix_hash: str,
 ) -> BenchmarkManifest:
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+        episodes_path: TODO docstring.
+        cfg: TODO docstring.
+        scenario_matrix_hash: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return BenchmarkManifest(
         output_root=root,
         git_hash=_compute_git_hash(root),
@@ -172,7 +200,11 @@ def _init_manifest(
 
 
 def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
-    """Update runtime, throughput and synthetic parallel efficiency stats in manifest."""
+    """Update runtime, throughput and synthetic parallel efficiency stats in manifest.
+
+    Returns:
+        Updated scaling_efficiency dictionary from the manifest.
+    """
     now = time.time()
     manifest.runtime_sec = max(0.0, now - manifest.created_at)
     manifest.workers = int(getattr(cfg, "workers", 1) or 1)
@@ -194,6 +226,15 @@ def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
 
 
 def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+        groups: TODO docstring.
+        effects: TODO docstring.
+        precision_report: TODO docstring.
+
+    """
     _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
     _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
     _write_json(
@@ -208,11 +249,22 @@ def _episode_id_from_job(job) -> str:
     Contract (early phase): scenario_id + '-' + seed. Horizon intentionally excluded
     to keep reproducibility with initial tests; may evolve later when multi‑horizon
     episodes are introduced.
+
+    Returns:
+        Episode ID string in format "scenario_id-seed".
     """
     return f"{job.scenario_id}-{job.seed}"
 
 
 def _scan_existing_episode_ids(path: Path) -> set[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        Set of episode IDs found in the episodes file.
+    """
     ids: set[str] = set()
     if not path.exists():
         return ids
@@ -250,6 +302,14 @@ _DEFAULT_SNQI_WEIGHTS = {
 
 @lru_cache(maxsize=4)
 def _load_snqi_weights(path: str | None):
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        Dictionary of SNQI weights, either from file or default values.
+    """
     if not path:
         return dict(_DEFAULT_SNQI_WEIGHTS)
     p = Path(path)
@@ -264,6 +324,15 @@ def _load_snqi_weights(path: str | None):
 
 
 def _resolve_horizon(job, cfg) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        job: TODO docstring.
+        cfg: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     horizon = int(getattr(job, "horizon", 0) or 0)
     if getattr(cfg, "smoke", False):
         cap = int(getattr(cfg, "smoke_horizon_cap", 40) or 40)
@@ -272,6 +341,16 @@ def _resolve_horizon(job, cfg) -> int:
 
 
 def _build_env_config(scenario, cfg, horizon: int):
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario: TODO docstring.
+        cfg: TODO docstring.
+        horizon: TODO docstring.
+
+    Returns:
+        Robot environment configuration object.
+    """
     raw = dict(getattr(scenario, "raw", {}))
     matrix_path = Path(cfg.scenario_matrix_path)
     matrix_dir = matrix_path.parent
@@ -299,6 +378,14 @@ def _build_env_config(scenario, cfg, horizon: int):
 
 
 def _simple_goal_policy(simulator) -> np.ndarray:
+    """TODO docstring. Document this function.
+
+    Args:
+        simulator: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     robot_pos = np.asarray(simulator.robot_pos[0], dtype=float)
     goal = np.asarray(simulator.goal_pos[0], dtype=float)
     heading = float(simulator.robot_poses[0][1])
@@ -314,6 +401,15 @@ def _simple_goal_policy(simulator) -> np.ndarray:
 
 
 def _stack_ped_positions(series: list[np.ndarray], fill_value: float = 0.0) -> np.ndarray:
+    """TODO docstring. Document this function.
+
+    Args:
+        series: TODO docstring.
+        fill_value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     max_len = max((len(p) for p in series), default=0)
     if max_len == 0:
         return np.zeros((len(series), 0, 2), dtype=float)
@@ -335,6 +431,9 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
     Returns an array shaped like ``ped_pos``. Missing or mismatched force data is
     filled with NaNs so downstream metrics can flag absent samples instead of
     silently reporting zeros.
+
+    Returns:
+        Array of pedestrian forces with same shape as ped_pos, NaN-filled if unavailable.
     """
 
     forces = getattr(simulator, "last_ped_forces", None)
@@ -357,6 +456,15 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
 
 
 def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+    """TODO docstring. Document this function.
+
+    Args:
+        pos: TODO docstring.
+        dt: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if len(pos) == 0:
         return np.zeros((0, 2), dtype=float), np.zeros((0, 2), dtype=float)
     if len(pos) == 1 or dt <= 0:
@@ -373,6 +481,14 @@ def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _capture_visual_state(env):
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+
+    Returns:
+        Tuple of (ray_vecs, ped_actions, robot_goal) or (None, None, None) if unavailable.
+    """
     if not hasattr(env, "_prepare_visualizable_state"):
         return None, None, None
     try:
@@ -414,6 +530,25 @@ def _compute_episode_metrics(
     goal: np.ndarray,
     horizon: int,
 ) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        job: TODO docstring.
+        scenario: TODO docstring.
+        cfg: TODO docstring.
+        robot_pos: TODO docstring.
+        robot_vel: TODO docstring.
+        robot_acc: TODO docstring.
+        ped_pos: TODO docstring.
+        ped_forces: TODO docstring.
+        dt: TODO docstring.
+        reached_goal_step: TODO docstring.
+        goal: TODO docstring.
+        horizon: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     shortest_path = float(np.linalg.norm(robot_pos[0] - goal)) if len(robot_pos) else float("nan")
     if not math.isfinite(shortest_path):
         logger.bind(
@@ -459,6 +594,18 @@ def _compute_episode_metrics(
 
 
 def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
+    """TODO docstring. Document this function.
+
+    Args:
+        job: TODO docstring.
+        cfg: TODO docstring.
+        horizon: TODO docstring.
+        episode_id: TODO docstring.
+        scenario: TODO docstring.
+
+    Returns:
+        Tuple of (env, dt, replay_cap, goal_vec).
+    """
     config = _build_env_config(scenario, cfg, horizon)
     capture_replay = bool(getattr(cfg, "capture_replay", False))
     record_dir = Path(cfg.output_root)
@@ -510,6 +657,17 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
 
 
 def _rollout_episode(env, horizon: int, dt: float, replay_cap):
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+        horizon: TODO docstring.
+        dt: TODO docstring.
+        replay_cap: TODO docstring.
+
+    Returns:
+        Tuple of (robot_positions, ped_positions, ped_forces, reached_goal_step, terminated, truncated, info).
+    """
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
     ped_forces: list[np.ndarray] = []
@@ -557,6 +715,11 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
 
 
 def _close_env(env):
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+    """
     try:
         env.exit()
     except Exception:  # pragma: no cover
@@ -568,7 +731,11 @@ def _close_env(env):
 
 
 def _make_episode_record(job, cfg) -> dict[str, Any]:
-    """Execute a real episode using the environment factory and compute metrics."""
+    """Execute a real episode using the environment factory and compute metrics.
+
+    Returns:
+        Episode record dictionary containing metrics, status, and metadata.
+    """
 
     episode_id = _episode_id_from_job(job)
     if bool(getattr(cfg, "fast_stub", False)):
@@ -723,6 +890,15 @@ def _make_episode_record(job, cfg) -> dict[str, Any]:
 
 
 def _partition_jobs(existing_ids: set[str], job_iter: Iterable[object]) -> tuple[list[object], int]:
+    """TODO docstring. Document this function.
+
+    Args:
+        existing_ids: TODO docstring.
+        job_iter: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     run_list: list[object] = []
     skip_count = 0
     for jb in job_iter:
@@ -740,6 +916,18 @@ def _execute_seq(
     cfg,
     manifest,
 ) -> Iterator[dict]:
+    """Execute episode jobs sequentially while appending JSONL output.
+
+    Args:
+        job_list: Episode configurations to run.
+        existing_ids: Episode ids that already exist on disk (used to skip duplicates).
+        episodes_path: Target JSONL path for appending completed episode records.
+        cfg: Benchmark configuration namespace.
+        manifest: Mutable manifest object for accounting (executed_jobs, etc.).
+
+    Yields:
+        dict: Episode record emitted after each job finishes.
+    """
     for jb in job_list:
         start = time.time()
         rec = _make_episode_record(jb, cfg)
@@ -753,8 +941,25 @@ def _execute_seq(
 
 
 def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
+    """TODO docstring. Document this function.
+
+    Args:
+        job: TODO docstring.
+        cfg_payload: TODO docstring.
+
+    Returns:
+        Episode record dictionary with wall_time_sec added.
+    """
+
     class _TempCfg:
+        """TODO docstring. Document this class."""
+
         def __init__(self, payload):
+            """TODO docstring. Document this function.
+
+            Args:
+                payload: TODO docstring.
+            """
             for k, v in payload.items():
                 setattr(self, k, v)
 
@@ -772,6 +977,19 @@ def _execute_parallel(
     manifest,
     workers: int,
 ) -> Iterator[dict]:
+    """Execute episode jobs in parallel worker processes with deterministic appends.
+
+    Args:
+        job_list: Episode configurations to run.
+        existing_ids: Episode ids to skip (already present on disk).
+        episodes_path: Target JSONL path for appending completed episode records.
+        cfg: Benchmark configuration namespace.
+        manifest: Mutable manifest object for accounting (executed_jobs, etc.).
+        workers: Number of process-pool workers to launch.
+
+    Yields:
+        dict: Episode record emitted once the parent process appends the result.
+    """
     logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
     cfg_payload = vars(cfg).copy() if hasattr(cfg, "__dict__") else {}
     if "disable_videos" not in cfg_payload:
@@ -826,6 +1044,9 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     Future iterations (T034) will incorporate precision evaluation. Seeds are derived
     by extending scenario.planned_seeds with deterministic incremental integers if
     needed (placeholder logic) to avoid blocking on full seeding strategy.
+
+    Returns:
+        Tuple of (done_flag, new_jobs_list).
     """
     # Touch manifest to avoid unused param lint (future: record iteration stats)
     _ = manifest
@@ -892,6 +1113,9 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     Refactored to reduce cyclomatic complexity (extracting helpers for setup, manifest
     initialization, scaling efficiency instrumentation, artifact writes). Public
     semantics preserved for existing tests.
+
+    Returns:
+        Final BenchmarkManifest object with execution statistics and artifact paths.
     """
     # Output & planning
     root, episodes_dir, _aggregates_dir, _reports_dir, _plots_dir = _prepare_output_dirs(cfg)
@@ -1023,6 +1247,12 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
 
 
 def _write_json(path: Path, obj):  # helper
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        obj: TODO docstring.
+    """
     try:
         tmp = path.with_suffix(path.suffix + ".tmp")
         with tmp.open("w", encoding="utf-8") as f:
@@ -1033,6 +1263,14 @@ def _write_json(path: Path, obj):  # helper
 
 
 def _serialize_groups(groups):
+    """TODO docstring. Document this function.
+
+    Args:
+        groups: TODO docstring.
+
+    Returns:
+        List of serialized group dictionaries.
+    """
     out = []
     for g in groups:
         out.append(
@@ -1056,6 +1294,14 @@ def _serialize_groups(groups):
 
 
 def _serialize_effects(effects):
+    """TODO docstring. Document this function.
+
+    Args:
+        effects: TODO docstring.
+
+    Returns:
+        List of serialized effect size report dictionaries.
+    """
     out = []
     for rep in effects:
         out.append(
@@ -1077,6 +1323,14 @@ def _serialize_effects(effects):
 
 
 def _serialize_precision(report):
+    """TODO docstring. Document this function.
+
+    Args:
+        report: TODO docstring.
+
+    Returns:
+        Dictionary containing serialized precision report.
+    """
     return {
         "final_pass": report.final_pass,
         "evaluations": [

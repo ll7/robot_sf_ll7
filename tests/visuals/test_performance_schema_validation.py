@@ -16,18 +16,26 @@ if jsonschema_spec:  # type: ignore
 
 
 def _schema():
+    """TODO docstring. Document this function."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def _validate(inst):
+    """TODO docstring. Document this function.
+
+    Args:
+        inst: TODO docstring.
+    """
     jsonschema.validate(instance=inst, schema=_schema())  # type: ignore
 
 
 def test_valid_minimal():
+    """TODO docstring. Document this function."""
     _validate({"plots_time_s": 0.5, "plots_over_budget": False, "video_over_budget": False})
 
 
 def test_missing_required_field():
+    """TODO docstring. Document this function."""
     import pytest as _pytest
 
     with _pytest.raises(Exception):

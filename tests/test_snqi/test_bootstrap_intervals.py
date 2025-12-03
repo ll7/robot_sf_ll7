@@ -24,6 +24,15 @@ BIN = ["uv", "run", "robot_sf_bench"]
 
 
 def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        n: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
     baseline.write_text(
@@ -56,6 +65,14 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     env = os.environ.copy()
     # Ensure we do not trip any LIGHT_TEST fast path (want real code paths)
     env.pop("ROBOT_SF_SNQI_LIGHT_TEST", None)
@@ -64,6 +81,12 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 
 @pytest.mark.parametrize("cmd", ["optimize", "recompute"])  # keep runtime tiny
 def test_bootstrap_ci_interval_contains_mean(tmp_path: Path, cmd: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        cmd: TODO docstring.
+    """
     episodes, baseline = _write_synthetic_inputs(tmp_path)
     out = tmp_path / f"out_{cmd}.json"
     base = BIN + [

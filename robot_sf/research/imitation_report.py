@@ -33,6 +33,8 @@ from robot_sf.research.statistics import (
 
 @dataclass
 class ImitationReportConfig:
+    """TODO docstring. Document this class."""
+
     experiment_name: str
     hypothesis: str | None = "BC pre-training reduces timesteps by ≥30%"
     alpha: float = 0.05
@@ -47,10 +49,24 @@ class ImitationReportConfig:
 
 
 def _timestamp() -> str:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
@@ -73,7 +89,11 @@ def _select_records(
     baseline_id: str | None,
     pretrained_id: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Choose baseline and pretrained records, validating ambiguity."""
+    """Choose baseline and pretrained records, validating ambiguity.
+
+    Returns:
+        Tuple of (baseline_record, pretrained_record) dictionaries.
+    """
 
     records = summary.get("extractor_results") or []
     if not records or not isinstance(records, list):
@@ -99,6 +119,15 @@ def _select_records(
 
 
 def _metric(record: dict[str, Any], key: str) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        key: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
     return float(val) if isinstance(val, (int, float)) else 0.0
@@ -122,11 +151,23 @@ def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
 
 
 def _fmt_stat(value: float | None | str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
 
 def _fmt_ci(value: tuple[float, float] | str | None) -> str:
-    """Format confidence interval tuples consistently."""
+    """Format confidence interval tuples consistently.
+
+    Returns:
+        Formatted CI string or 'n/a' if unavailable.
+    """
 
     if value is None or value == "n/a":
         return "n/a"
@@ -147,7 +188,11 @@ def _render_markdown(
     seeds: list[int] | None = None,
     total_duration: float | None = None,
 ) -> str:
-    """Render a Markdown report from summary + stats."""
+    """Render a Markdown report from summary + stats.
+
+    Returns:
+        Markdown-formatted report string.
+    """
 
     run_id = summary.get("run_id", "unknown")
     baseline_id = baseline.get("config_name", "baseline")
@@ -244,6 +289,14 @@ def _render_markdown(
 
 
 def _latex_escape(text: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        text: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return (
         text.replace("&", r"\&")
         .replace("%", r"\%")
@@ -355,7 +408,11 @@ def _render_latex(
 
 
 def _figure_paths(summary_path: Path) -> dict[str, Path]:
-    """Collect available analysis figures relative to summary path."""
+    """Collect available analysis figures relative to summary path.
+
+    Returns:
+        Dictionary mapping figure names to their paths.
+    """
 
     fig_dir = summary_path.parent / "figures"
     if not fig_dir.exists():
@@ -406,7 +463,11 @@ def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path
 
 
 def _extract_seeds(summary: dict[str, Any]) -> list[int]:
-    """Extract seed values from summary if present."""
+    """Extract seed values from summary if present.
+
+    Returns:
+        List of integer seed values.
+    """
 
     seeds_raw = summary.get("seeds")
     seeds: list[int] = []
@@ -420,7 +481,11 @@ def _extract_seeds(summary: dict[str, Any]) -> list[int]:
 
 
 def _extract_timings(summary: dict[str, Any]) -> tuple[float | None, dict[str, float]]:
-    """Extract total and per-run duration from extractor records if available."""
+    """Extract total and per-run duration from extractor records if available.
+
+    Returns:
+        Tuple of (total_duration, per_run_durations_dict).
+    """
 
     total = 0.0
     per_run: dict[str, float] = {}
@@ -441,7 +506,11 @@ def generate_imitation_report(
     output_root: Path,
     config: ImitationReportConfig,
 ) -> dict[str, Path | None]:
-    """Generate Markdown/optional LaTeX imitation report from a training summary."""
+    """Generate Markdown/optional LaTeX imitation report from a training summary.
+
+    Returns:
+        Dictionary with paths to generated report files (markdown, latex, metadata).
+    """
 
     summary = _load_summary(summary_path)
     baseline_rec, pretrained_rec = _select_records(

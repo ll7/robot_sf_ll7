@@ -14,6 +14,7 @@ and may include a "details" field with structured info.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,13 +30,25 @@ SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json
 
 
 def load_scenario_schema() -> dict[str, Any]:
-    with SCHEMA_FILE.open("r", encoding="utf-8") as f:
-        import json
+    """TODO docstring. Document this function.
 
+
+    Returns:
+        TODO docstring.
+    """
+    with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def _json_pointer(path_elems: Iterable[Any]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        path_elems: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parts: list[str] = []
     for p in path_elems:
         if isinstance(p, int):
@@ -50,6 +63,11 @@ def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, An
 
     Returns a list of error dicts; empty when valid. Also checks for duplicate
     scenario IDs and repeats>=1 constraint (also in schema, but kept defensively).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        List of validation error dictionaries; empty list indicates valid input.
     """
     schema = load_scenario_schema()
     item_schema = schema.get("items", {})

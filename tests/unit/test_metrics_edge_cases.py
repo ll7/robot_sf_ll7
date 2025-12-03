@@ -40,6 +40,16 @@ def _episode(
     peds_pos: np.ndarray,
     ped_forces: np.ndarray | None = None,
 ) -> EpisodeData:
+    """TODO docstring. Document this function.
+
+    Args:
+        robot_pos: TODO docstring.
+        peds_pos: TODO docstring.
+        ped_forces: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     T = robot_pos.shape[0]
     K = peds_pos.shape[1]
     if ped_forces is None:

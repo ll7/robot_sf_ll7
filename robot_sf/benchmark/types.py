@@ -41,6 +41,12 @@ class ScenarioSpec:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:  # stable conversion
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return asdict(self)
 
 
@@ -55,9 +61,24 @@ class MetricsBundle:
     values: dict[str, float]
 
     def get(self, name: str, default: float | None = None) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            name: TODO docstring.
+            default: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return self.values.get(name, default)
 
     def to_dict(self) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return dict(self.values)
 
 
@@ -82,6 +103,12 @@ class EpisodeRecord:
     raw: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         d = asdict(self)
         # flatten metrics bundle for JSON writing
         d["metrics"] = self.metrics.to_dict()
@@ -97,6 +124,12 @@ class SNQIWeights:
     meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return {"version": self.version, "weights": dict(self.weights), "meta": self.meta or {}}
 
 
@@ -115,6 +148,12 @@ class ResumeManifest:
     )
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return {
             "version": self.version,
             "episodes": list(self.episodes),

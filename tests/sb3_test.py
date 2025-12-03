@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import os
 
 from stable_baselines3.common.env_util import make_vec_env
@@ -9,6 +11,7 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def test_can_load_model_snapshot():
+    """TODO docstring. Document this function."""
     MODEL_PATH = "./temp/ppo_model"
     MODEL_FILE = f"{MODEL_PATH}.zip"
 
@@ -28,7 +31,7 @@ def test_can_load_model_snapshot():
     inf_env = RobotEnv()
     model2 = PPO.load(MODEL_PATH, env=inf_env)
 
-    obs, info = inf_env.reset()
+    obs, _info = inf_env.reset()
     action, _ = model2.predict(obs, deterministic=True)
 
     assert action.shape == inf_env.action_space.shape

@@ -21,6 +21,7 @@ from scripts.recompute_snqi_weights import SNQIWeightRecomputer
 
 @pytest.fixture(scope="module", name="synthetic_episodes")
 def _synthetic_episodes_fixture():
+    """TODO docstring. Document this function."""
     rng = np.random.default_rng(42)
     episodes = []
     for i in range(12):
@@ -45,6 +46,11 @@ def _synthetic_episodes_fixture():
 @pytest.fixture(scope="module", name="baseline_stats")
 def _baseline_stats_fixture(synthetic_episodes):
     # Build baseline median/p95 stats matching compute_snqi expectations
+    """TODO docstring. Document this function.
+
+    Args:
+        synthetic_episodes: TODO docstring.
+    """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for ep in synthetic_episodes:
         m = ep["metrics"]
@@ -63,6 +69,13 @@ def _baseline_stats_fixture(synthetic_episodes):
 )
 def test_recompute_strategies_structure(strategy, synthetic_episodes, baseline_stats):
     # Seed NumPy RNG for deterministic pareto sampling
+    """TODO docstring. Document this function.
+
+    Args:
+        strategy: TODO docstring.
+        synthetic_episodes: TODO docstring.
+        baseline_stats: TODO docstring.
+    """
     np.random.seed(123)
     recomputer = SNQIWeightRecomputer(synthetic_episodes, baseline_stats)
     result = recomputer.recompute_with_strategy(strategy)

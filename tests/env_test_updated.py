@@ -46,11 +46,11 @@ def test_can_create_env_new():
 def test_can_return_valid_observation_legacy():
     """Test observations with legacy pattern."""
     env = RobotEnv()
-    obs_dict = cast(spaces.Dict, env.observation_space)
-    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
-    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
+    obs_dict = cast("spaces.Dict", env.observation_space)
+    drive_state_spec = cast("spaces.Box", obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast("spaces.Box", obs_dict[OBS_RAYS])
 
-    obs, info = env.reset()
+    obs, _info = env.reset()
 
     assert isinstance(obs, dict)
     assert OBS_DRIVE_STATE in obs and OBS_RAYS in obs
@@ -61,11 +61,11 @@ def test_can_return_valid_observation_legacy():
 def test_can_return_valid_observation_new():
     """Test observations with new factory pattern."""
     env = make_robot_env()
-    obs_dict = cast(spaces.Dict, env.observation_space)
-    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
-    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
+    obs_dict = cast("spaces.Dict", env.observation_space)
+    drive_state_spec = cast("spaces.Box", obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast("spaces.Box", obs_dict[OBS_RAYS])
 
-    obs, info = env.reset()
+    obs, _info = env.reset()
 
     assert isinstance(obs, dict)
     assert OBS_DRIVE_STATE in obs and OBS_RAYS in obs
@@ -108,7 +108,7 @@ def test_image_robot_env():
     assert env.config.use_image_obs  # type: ignore[attr-defined]
 
     # Should have image observations in observation space
-    obs_space = cast(spaces.Dict, env.observation_space)
+    obs_space = cast("spaces.Dict", env.observation_space)
     obs_space_keys = set(obs_space.spaces.keys())
     expected_keys = {OBS_DRIVE_STATE, OBS_RAYS, "image"}
     assert expected_keys.issubset(obs_space_keys)

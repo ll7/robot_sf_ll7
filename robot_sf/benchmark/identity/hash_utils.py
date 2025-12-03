@@ -24,13 +24,20 @@ def canonical_dumps(obj: Any) -> str:
     - Sorted keys for mapping objects
     - No whitespace differences (separators set tightly)
     - Recursively processes nested dict/list structures
+
+    Returns:
+        Canonical JSON string representation.
     """
 
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def stable_hash(obj: Any, *, algo: str = "sha256") -> str:
-    """Return hex digest of canonical serialization with chosen algorithm."""
+    """Return hex digest of canonical serialization with chosen algorithm.
+
+    Returns:
+        Hexadecimal digest string of the canonical representation.
+    """
 
     data = canonical_dumps(obj).encode("utf-8")
     h = hashlib.new(algo)
@@ -54,6 +61,11 @@ def episode_identity_components(
         Episode initial seed.
     extra : Mapping[str, Any] | None
         Optional additional identity-affecting values (e.g., algorithm version).
+
+    Returns
+    -------
+    dict
+        Dictionary containing scenario, seed, and optional extra components.
     """
 
     base = {"scenario": scenario_params, "seed": seed}
@@ -67,6 +79,9 @@ def make_episode_id(scenario_params: Mapping[str, Any], seed: int, prefix: str =
 
     Format: ``{prefix}_{first12hex}`` where `first12hex` are the first 12 hex
     characters of the sha256 digest of canonical identity components.
+
+    Returns:
+        Episode identifier string in format 'prefix_hash'.
     """
 
     comp = episode_identity_components(scenario_params, seed)

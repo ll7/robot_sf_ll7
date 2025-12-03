@@ -17,12 +17,24 @@ from robot_sf.nav.svg_map_parser import convert_map
 
 
 def _load_yaml_documents(path: Path) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
 
 
 def load_scenarios(path: Path) -> list[Mapping[str, Any]]:
-    """Load raw scenario definitions from a YAML file."""
+    """Load raw scenario definitions from a YAML file.
+
+    Returns:
+        list[Mapping[str, Any]]: Parsed scenario entries from the file.
+    """
 
     data = _load_yaml_documents(path)
     if isinstance(data, dict) and "scenarios" in data:
@@ -53,7 +65,11 @@ def select_scenario(
 
 @lru_cache(maxsize=8)
 def _load_map_definition(map_path: str) -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path."""
+    """Load and convert a map definition, caching by absolute path.
+
+    Returns:
+        MapDefinition | None: Parsed map definition for supported formats, else ``None``.
+    """
 
     path = Path(map_path)
     if not path.exists():
@@ -77,7 +93,11 @@ def build_robot_config_from_scenario(
     *,
     scenario_path: Path,
 ) -> RobotSimulationConfig:
-    """Create a ``RobotSimulationConfig`` derived from a scenario definition."""
+    """Create a ``RobotSimulationConfig`` derived from a scenario definition.
+
+    Returns:
+        RobotSimulationConfig: Config populated with overrides and map pool.
+    """
 
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
@@ -89,6 +109,12 @@ def _apply_simulation_overrides(
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        overrides: TODO docstring.
+    """
     if not isinstance(overrides, Mapping):
         return
     if "max_episode_steps" in overrides:
@@ -114,6 +140,13 @@ def _apply_map_pool(
     map_file: str | None,
     scenario_path: Path,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        map_file: TODO docstring.
+        scenario_path: TODO docstring.
+    """
     if not map_file:
         return
     candidate = Path(map_file)

@@ -20,6 +20,15 @@ if TYPE_CHECKING:
 
 
 def _get_nested(d: dict[str, Any], dotted: str) -> Any:
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        dotted: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cur: Any = d
     for part in dotted.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -30,6 +39,14 @@ def _get_nested(d: dict[str, Any], dotted: str) -> Any:
 
 
 def _to_float(x: Any) -> float | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        x: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         if x is None:
             return None
@@ -40,6 +57,8 @@ def _to_float(x: Any) -> float | None:
 
 @dataclass
 class RankingRow:
+    """TODO docstring. Document this class."""
+
     group: str
     mean: float
     count: int
@@ -59,6 +78,9 @@ def compute_ranking(
     - Missing/non-numeric metric values are ignored.
     - Groups with no valid values are omitted.
     - Sorting is ascending by default (smaller-is-better). Use ascending=False for higher-is-better metrics.
+
+    Returns:
+        List of RankingRow objects sorted by mean metric value, optionally limited to top N.
     """
     by_group: dict[str, list[float]] = {}
     for rec in records:
@@ -86,7 +108,11 @@ def compute_ranking(
 
 
 def format_markdown(rows: Sequence[RankingRow], metric: str) -> str:
-    """Return a Markdown table for the ranking rows."""
+    """Return a Markdown table for the ranking rows.
+
+    Returns:
+        Markdown-formatted table string with rank, group, mean, and count columns.
+    """
     header = f"| Rank | Group | mean({metric}) | count |\n|---:|---|---:|---:|"
     lines = [header]
     for i, r in enumerate(rows, start=1):
@@ -95,7 +121,11 @@ def format_markdown(rows: Sequence[RankingRow], metric: str) -> str:
 
 
 def format_csv(rows: Sequence[RankingRow], metric: str) -> str:
-    """Return a CSV string for the ranking rows."""
+    """Return a CSV string for the ranking rows.
+
+    Returns:
+        CSV-formatted string with rank, group, mean_<metric>, and count columns.
+    """
     lines = ["rank,group,mean_" + metric + ",count"]
     for i, r in enumerate(rows, start=1):
         lines.append(f"{i},{r.group},{r.mean:.6g},{r.count}")

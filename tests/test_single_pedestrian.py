@@ -161,7 +161,7 @@ class TestSimulatorIntegration:
         tau = 0.5
         spawn_config = PedSpawnConfig(peds_per_area_m2=0.01, max_group_members=2)
 
-        pysf_state, groups, behaviors = populate_simulation(
+        pysf_state, _groups, _behaviors = populate_simulation(
             tau,
             spawn_config,
             simple_map_def.ped_routes,

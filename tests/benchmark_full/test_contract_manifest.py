@@ -15,12 +15,21 @@ from robot_sf.benchmark.full_classic.io_utils import write_manifest
 
 
 def test_write_manifest_creates_file(temp_results_dir):
+    """TODO docstring. Document this function.
+
+    Args:
+        temp_results_dir: TODO docstring.
+    """
     manifest_path = Path(temp_results_dir) / "manifest.json"
 
     class _Config:
+        """TODO docstring. Document this class."""
+
         algo = "ppo"
 
     class _Manifest:
+        """TODO docstring. Document this class."""
+
         git_hash = "deadbeef"
         scenario_matrix_hash = "cafebabe"
         config = _Config()

@@ -18,13 +18,19 @@ Future extensions (not in T031 scope):
 
 from __future__ import annotations
 
+import importlib
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.render.sim_view import MOVIEPY_AVAILABLE, VisualizableSimState
+from robot_sf.render.sim_view import (
+    MOVIEPY_AVAILABLE,
+    VisualizableAction,
+    VisualizableSimState,
+)
 
 from .visual_deps import has_pygame, simulation_view_ready
 
@@ -49,6 +55,7 @@ else:  # pragma: no cover - trivial branch
 
 
 def _assert_ready() -> None:
+    """TODO docstring. Document this function."""
     if not has_pygame() or SimulationView is None or not simulation_view_ready():  # type: ignore
         raise RuntimeError(
             "SimulationView not available (pygame or probe failed); caller should fallback",
@@ -81,13 +88,17 @@ def generate_frames(
             map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
         except Exception as exc:  # pragma: no cover - fallback path
             try:
-                from loguru import logger
-
+                logger = importlib.import_module("loguru").logger
                 logger.debug("convert_map failed for %s: %s", episode.map_path, exc)
             except Exception:
                 pass
             map_def = None
-    view_kwargs: dict = {"record_video": False, "video_fps": fps, "width": 640, "height": 360}
+    view_kwargs: dict = {
+        "record_video": False,
+        "video_fps": fps,
+        "width": 640,
+        "height": 360,
+    }
     if map_def is not None:
         view_kwargs["map_def"] = map_def
         view_kwargs["obstacles"] = getattr(map_def, "obstacles", [])
@@ -98,8 +109,6 @@ def generate_frames(
         for idx, step in enumerate(episode.steps):
             ped_positions = np.asarray(step.ped_positions or [], dtype=float)
             try:
-                from robot_sf.render.sim_view import VisualizableSimState
-
                 state = VisualizableSimState(  # type: ignore[call-arg]
                     timestep=idx,
                     robot_action=None,
@@ -114,7 +123,7 @@ def generate_frames(
             try:
                 if hasattr(_sim_view, "render"):
                     _sim_view.render(state)  # type: ignore[arg-type]
-                    import pygame  # type: ignore
+                    pygame = importlib.import_module("pygame")
 
                     if hasattr(_sim_view, "screen") and isinstance(
                         _sim_view.screen,
@@ -131,8 +140,7 @@ def generate_frames(
                 frame = np.zeros((360, 640, 3), dtype=np.uint8)
             except Exception as exc:  # pragma: no cover - defensive
                 try:
-                    from loguru import logger
-
+                    logger = importlib.import_module("loguru").logger
                     logger.debug("generate_frames render capture failed: %s", exc)
                 except ImportError:
                     pass
@@ -154,6 +162,16 @@ __all__ = ["generate_frames"]
 
 
 def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
+    """TODO docstring. Document this function.
+
+    Args:
+        step: TODO docstring.
+        idx: TODO docstring.
+        dt: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     ped_positions = np.asarray(step.ped_positions or [], dtype=float)
     ray_vecs = (
         np.asarray(step.ray_vecs, dtype=float) if step.ray_vecs is not None else np.zeros((0, 2))
@@ -163,8 +181,6 @@ def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
         if step.ped_actions is not None
         else np.zeros_like(ped_positions)
     )
-    from robot_sf.render.sim_view import VisualizableAction
-
     robot_action = None
     if step.robot_goal is not None and step.action is not None:
         robot_action = VisualizableAction(
@@ -185,6 +201,14 @@ def _build_state(step, idx: int, dt: float) -> VisualizableSimState:
 
 def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
     # Try to reuse already converted map from episode if present
+    """TODO docstring. Document this function.
+
+    Args:
+        ep: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if hasattr(ep, "_map_def_cache"):
         return ep._map_def_cache
     map_def = None
@@ -201,6 +225,16 @@ def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
 
 
 def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        episode: TODO docstring.
+        fps: TODO docstring.
+        video_path: TODO docstring.
+
+    Returns:
+        SimulationView instance configured for video recording.
+    """
     map_def = _load_map_def(episode)
     view_kwargs: dict = {
         "record_video": True,
@@ -222,7 +256,12 @@ def generate_video_file(
     fps: int = 10,
     max_frames: int | None = None,
 ) -> dict[str, object]:
-    """Render a ReplayEpisode via SimulationView's native recorder and write mp4."""
+    """Render a ReplayEpisode via SimulationView's native recorder and write mp4.
+
+    Returns:
+        Dictionary containing video generation metadata including status, frames produced,
+        and encoding time.
+    """
     _assert_ready()
     dt = episode.dt if episode.dt is not None else (1.0 / fps if fps > 0 else 0.1)
     view = _build_view(episode, fps, video_path)
@@ -237,11 +276,9 @@ def generate_video_file(
             produced += 1
             if max_frames is not None and produced >= max_frames:
                 break
-        import time as _time
-
-        t0 = _time.perf_counter()
+        t0 = time.perf_counter()
         view.exit_simulation()  # writes video when record_video=True
-        encode_time = _time.perf_counter() - t0
+        encode_time = time.perf_counter() - t0
         size = Path(video_path).stat().st_size if Path(video_path).exists() else 0
         status = "success" if size > 0 else "skipped"
         if size == 0:

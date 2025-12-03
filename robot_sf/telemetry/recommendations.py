@@ -47,6 +47,12 @@ class RecommendationEngine:
         rules: RecommendationRules | None = None,
         total_memory_mb: float | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            rules: TODO docstring.
+            total_memory_mb: TODO docstring.
+        """
         self._rules = rules or RecommendationRules()
         self._snapshots: list[TelemetrySnapshot] = []
         self._total_memory_mb = total_memory_mb or self._detect_total_memory()
@@ -72,7 +78,13 @@ class RecommendationEngine:
         }
 
     def generate_recommendations(self) -> list[PerformanceRecommendation]:
-        """Evaluate all rules and return triggered recommendations."""
+        """Evaluate all rules and return triggered recommendations.
+
+        Returns:
+            list[PerformanceRecommendation]: All recommendations triggered by the
+            currently observed snapshots. Returns an empty list when no rules
+            are met or no snapshots have been observed.
+        """
 
         if not self._snapshots:
             return []
@@ -84,6 +96,11 @@ class RecommendationEngine:
         return recommendations
 
     def _evaluate_throughput(self) -> list[PerformanceRecommendation]:
+        """Check average throughput against baseline and emit recommendations.
+
+        Returns:
+            list[PerformanceRecommendation]: Recommendations when throughput is low.
+        """
         rules = self._rules
         baseline = rules.throughput_baseline
         average = _avg(snapshot.steps_per_sec for snapshot in self._snapshots)
@@ -119,6 +136,11 @@ class RecommendationEngine:
         ]
 
     def _evaluate_cpu(self) -> list[PerformanceRecommendation]:
+        """Evaluate CPU metrics and emit warnings/criticals if saturated.
+
+        Returns:
+            list[PerformanceRecommendation]: CPU-related recommendations.
+        """
         rules = self._rules
         process_max = _max(snapshot.cpu_percent_process for snapshot in self._snapshots)
         system_max = _max(snapshot.cpu_percent_system for snapshot in self._snapshots)
@@ -151,6 +173,11 @@ class RecommendationEngine:
         ]
 
     def _evaluate_memory(self) -> list[PerformanceRecommendation]:
+        """Evaluate memory usage against absolute and ratio thresholds.
+
+        Returns:
+            list[PerformanceRecommendation]: Memory pressure recommendations.
+        """
         memory_max = _max(snapshot.memory_rss_mb for snapshot in self._snapshots)
         if memory_max is None:
             return []
@@ -185,6 +212,11 @@ class RecommendationEngine:
         ]
 
     def _evaluate_gpu_idle(self) -> list[PerformanceRecommendation]:
+        """Detect idle GPU while CPU remains busy and emit an info hint.
+
+        Returns:
+            list[PerformanceRecommendation]: GPU idle recommendation if applicable.
+        """
         gpu_utils = [
             snapshot.gpu_util_percent
             for snapshot in self._snapshots
@@ -214,6 +246,11 @@ class RecommendationEngine:
         ]
 
     def _last_timestamp(self) -> int:
+        """Return the last snapshot timestamp or current time in milliseconds.
+
+        Returns:
+            int: Milliseconds since epoch.
+        """
         last = self._snapshots[-1]
         if last.timestamp_ms:
             return last.timestamp_ms
@@ -221,6 +258,11 @@ class RecommendationEngine:
 
     @staticmethod
     def _detect_total_memory() -> float | None:
+        """Detect total system memory in MB if psutil is available.
+
+        Returns:
+            float | None: Total memory (MB) or None when unavailable.
+        """
         if psutil is None:  # pragma: no cover - psutil missing
             return None
         with contextlib.suppress(psutil.Error):  # type: ignore[attr-defined]
@@ -230,6 +272,14 @@ class RecommendationEngine:
 
 
 def _avg(values: Iterable[float | None]) -> float | None:
+    """Average of non-None values or None when empty.
+
+    Args:
+        values: Iterable containing optional floats.
+
+    Returns:
+        float | None: Mean of values or None.
+    """
     filtered = [value for value in values if value is not None]
     if not filtered:
         return None
@@ -237,6 +287,14 @@ def _avg(values: Iterable[float | None]) -> float | None:
 
 
 def _max(values: Iterable[float | None]) -> float | None:
+    """Maximum of non-None values or None when empty.
+
+    Args:
+        values: Iterable containing optional floats.
+
+    Returns:
+        float | None: Max of values or None.
+    """
     filtered = [value for value in values if value is not None]
     if not filtered:
         return None

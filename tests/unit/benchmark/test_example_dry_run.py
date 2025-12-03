@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import os
 
 from examples.classic_interactions_pygame import run_demo

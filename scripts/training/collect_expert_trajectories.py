@@ -45,6 +45,15 @@ def _resolve_scenario_config(
     scenario_arg: Path | None,
     training_config: Path | None,
 ) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario_arg: TODO docstring.
+        training_config: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if scenario_arg is not None:
         return scenario_arg.resolve()
     if training_config is None:
@@ -62,6 +71,12 @@ def _resolve_scenario_config(
 
 
 def _git_commit_hash() -> str | None:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -75,10 +90,24 @@ def _git_commit_hash() -> str | None:
 
 
 def _command_line() -> str:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return " ".join(shlex.quote(arg) for arg in sys.argv)
 
 
 def _zero_action(space: Any) -> np.ndarray:
+    """TODO docstring. Document this function.
+
+    Args:
+        space: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     shape = getattr(space, "shape", ())
     dtype = float
     return np.zeros(shape, dtype=dtype)
@@ -90,6 +119,16 @@ def _record_episode(
     policy: PPO | None,
     dry_run: bool,
 ) -> tuple[list[Any], list[Any], list[Any]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+        policy: TODO docstring.
+        dry_run: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     obs, _ = env.reset()
     done = False
     positions: list[Any] = []
@@ -123,6 +162,19 @@ def _record_dataset(
     scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> tuple[dict[str, list[np.ndarray]], dict[str, int]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        policy: TODO docstring.
+        dry_run: TODO docstring.
+        scenario_label: TODO docstring.
+        scenario: TODO docstring.
+        scenario_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     dataset: dict[str, list[np.ndarray]] = {
         "positions": [],
         "actions": [],
@@ -151,6 +203,14 @@ def _write_dataset(
     episode_count: int,
     metadata: Mapping[str, Any],
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        arrays: TODO docstring.
+        episode_count: TODO docstring.
+        metadata: TODO docstring.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         path,
@@ -163,6 +223,12 @@ def _write_dataset(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(
         description="Collect expert trajectory datasets using an expert PPO policy."
     )
@@ -220,6 +286,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

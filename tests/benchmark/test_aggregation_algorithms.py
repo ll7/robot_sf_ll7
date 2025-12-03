@@ -16,6 +16,17 @@ def _make_record(
     scenario_id: str = "scenario-1",
     success_rate: float = 1.0,
 ) -> dict[str, object]:
+    """TODO docstring. Document this function.
+
+    Args:
+        algo: TODO docstring.
+        include_nested: TODO docstring.
+        scenario_id: TODO docstring.
+        success_rate: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     record: dict[str, object] = {
         "episode_id": f"{scenario_id}-{algo or 'none'}",
         "scenario_id": scenario_id,

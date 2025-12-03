@@ -25,6 +25,13 @@ from robot_sf.benchmark.full_classic.videos import generate_videos
     reason="matplotlib not available; cannot test failure path",
 )
 def test_video_generation_error_path(temp_results_dir, synthetic_episode_record, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        temp_results_dir: TODO docstring.
+        synthetic_episode_record: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     records = [
         synthetic_episode_record(
             episode_id="ep_fail",
@@ -34,6 +41,8 @@ def test_video_generation_error_path(temp_results_dir, synthetic_episode_record,
     ]
 
     class _Cfg:
+        """TODO docstring. Document this class."""
+
         smoke = False
         disable_videos = False
         max_videos = 1
@@ -42,12 +51,23 @@ def test_video_generation_error_path(temp_results_dir, synthetic_episode_record,
     if videos_mod.ImageSequenceClip is not None:
 
         def _boom(*args, **kwargs):
+            """TODO docstring. Document this function.
+
+            Args:
+                args: TODO docstring.
+                kwargs: TODO docstring.
+            """
             raise RuntimeError("boom clip")
 
         monkeypatch.setattr(videos_mod, "ImageSequenceClip", _boom)
     else:
         # Monkeypatch math.cos to raise to trigger the except block early
         def _cos_fail(x):
+            """TODO docstring. Document this function.
+
+            Args:
+                x: TODO docstring.
+            """
             raise RuntimeError("boom cos")
 
         monkeypatch.setattr(videos_mod.math, "cos", _cos_fail)

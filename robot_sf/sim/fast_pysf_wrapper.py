@@ -39,27 +39,60 @@ class FastPysfWrapper:
     """
 
     def __init__(self, simulator: pysf.Simulator):
+        """TODO docstring. Document this function.
+
+        Args:
+            simulator: TODO docstring.
+        """
         self.sim = simulator
         # Named caches for precomputed force grids. Each cache is a dict with
         # keys: 'xs' (1D array), 'ys' (1D array), 'field' (H,W,2 array).
         self._force_grid_caches: dict[str, dict] = {}
 
     def _ped_positions_and_velocities(self) -> tuple[np.ndarray, np.ndarray]:
-        """Return arrays (N,2) positions and velocities for all pedestrians."""
+        """Return arrays (N,2) positions and velocities for all pedestrians.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: A pair of (N, 2) arrays containing positions
+                and velocities for all N pedestrians in the simulation.
+        """
         pos = self.sim.peds.pos()
         vel = self.sim.peds.vel()
         return pos, vel
 
     def _social_params(self):
+        """Extract Social Force model parameters from simulator configuration.
+
+        Returns:
+            tuple[float, float, float, float, float]: Social Force parameters
+                (n, n_prime, lambda_importance, gamma, factor) used for pedestrian
+                repulsion calculations.
+        """
         cfg = self.sim.config.social_force_config
         return cfg.n, cfg.n_prime, cfg.lambda_importance, cfg.gamma, cfg.factor
 
     def _get_obstacles_raw(self) -> np.ndarray:
         # Returns array shape (M,6) where cols 0:4 are line endpoints and 4:6 orthovec
+        """Extract raw obstacle line segments from the simulation environment.
+
+        Returns:
+            np.ndarray: Array of shape (M, 6) where each row contains a line segment
+                with columns [start_x, start_y, end_x, end_y, ortho_x, ortho_y].
+        """
         return self.sim.get_raw_obstacles()
 
     # --- small helper functions to reduce complexity ---
     def _compute_desired_force(self, p: np.ndarray, desired_goal: Sequence[float]) -> np.ndarray:
+        """Compute the goal-directed desired force at a given point.
+
+        Args:
+            p: 2D position array [x, y] where force is evaluated.
+            desired_goal: 2D goal position [x, y] that attracts the pedestrian.
+
+        Returns:
+            np.ndarray: 2D force vector [fx, fy] pointing toward the goal, scaled by
+                desired speed and relaxation time from configuration.
+        """
         goal = np.asarray(desired_goal, dtype=float).reshape(2)
         dir_vec = goal - p
         dist = np.linalg.norm(dir_vec)
@@ -83,6 +116,15 @@ class FastPysfWrapper:
         return f_des
 
     def _compute_social_force_at_point(self, p: np.ndarray) -> np.ndarray:
+        """Compute the repulsive social force from all pedestrians at a point.
+
+        Args:
+            p: 2D position array [x, y] where force is evaluated.
+
+        Returns:
+            np.ndarray: 2D force vector [fx, fy] representing the total repulsive force
+                from all pedestrians using Social Force model parameters.
+        """
         total = np.zeros(2, dtype=float)
         ped_pos, ped_vel = self._ped_positions_and_velocities()
         if ped_pos.shape[0] == 0:
@@ -112,6 +154,15 @@ class FastPysfWrapper:
         return total
 
     def _compute_obstacle_force_at_point(self, p: np.ndarray) -> np.ndarray:
+        """Compute the repulsive obstacle force at a given point.
+
+        Args:
+            p: 2D position array [x, y] where force is evaluated.
+
+        Returns:
+            np.ndarray: 2D force vector [fx, fy] representing the total repulsive force
+                from all static obstacle line segments in the environment.
+        """
         total = np.zeros(2, dtype=float)
         raw_obs = self._get_obstacles_raw()
         if raw_obs is None or len(raw_obs) == 0:
@@ -133,6 +184,15 @@ class FastPysfWrapper:
 
     def _compute_robot_force_at_point(self, p: np.ndarray, robot_state: dict) -> np.ndarray:
         # Defensive: try common names for robot interaction functions
+        """TODO docstring. Document this function.
+
+        Args:
+            p: TODO docstring.
+            robot_state: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         for name in ("robot_force", "robot_interaction_force_on_point", "force_robot"):
             if hasattr(pf_forces, name):
                 fn = getattr(pf_forces, name)
@@ -158,6 +218,10 @@ class FastPysfWrapper:
 
         This function composes smaller helpers; keep it short to satisfy complexity
         limits from linters.
+
+        Returns:
+            np.ndarray: 2D force vector [fx, fy] representing the combined force from
+                social interactions, obstacles, and optionally desired goal and robot repulsion.
         """
         p = np.asarray(point, dtype=float).reshape(2)
         total = np.zeros(2, dtype=float)
@@ -176,8 +240,9 @@ class FastPysfWrapper:
     def get_force_field(self, xs: Sequence[float], ys: Sequence[float], **kwargs) -> np.ndarray:
         """Sample forces on the grid defined by 1D arrays `xs`, `ys`.
 
-        Returns an array shaped (len(ys), len(xs), 2) suitable for plotting with
-        `matplotlib.quiver`.
+        Returns:
+            np.ndarray: Force field array shaped (len(ys), len(xs), 2) suitable for
+                plotting with `matplotlib.quiver`, where each grid cell contains a 2D force vector.
         """
         xs = np.asarray(xs, dtype=float)
         ys = np.asarray(ys, dtype=float)
@@ -206,6 +271,9 @@ class FastPysfWrapper:
         """Return bilinearly interpolated force at (x, y) using cached grid `name`.
 
         Raises ValueError if `name` is not present.
+
+        Returns:
+            np.ndarray: 2D force vector [fx, fy] interpolated from the cached grid.
         """
         if name not in self._force_grid_caches:
             raise ValueError(

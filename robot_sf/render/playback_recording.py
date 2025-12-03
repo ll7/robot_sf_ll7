@@ -98,27 +98,15 @@ def load_states_and_visualize(filename: str):
 
 
 def load_states_and_record_video(state_file: str, video_save_path: str, video_fps: float = 10):
-    """
-    Load robot states from a file and create a video recording of the simulation.
-
-    This function reads saved robot states from a file, initializes a simulation view,
-    and records each state to create a video visualization of the robot's movement.
+    """Create a video recording from serialized simulation states.
 
     Args:
-        state_file (str): Path to the file containing saved robot states and map definition
-        video_save_path (str): Path where the output video file should be saved
-        video_fps (float, optional): Frames per second for the output video. Defaults to 10.
+        state_file: Path to the pickle file containing serialized states and the map definition.
+        video_save_path: Destination path for the rendered video file.
+        video_fps: Frames per second for the output video. Defaults to 10.
 
-    Returns:
-        None
-
-    Note:
-        The states file should contain both the robot states and map definition in a
-            compatible format.
-        The video will be written when the simulation view is closed via exit_simulation().
-
-    Example:
-        >>> load_states_and_record_video("states.pkl", "output.mp4", video_fps=30)
+    Notes:
+        The video is finalized when ``SimulationView.exit_simulation`` closes the renderer.
     """
     logger.info(f"Loading states from {state_file}")
     states, map_def = load_states(state_file)

@@ -69,13 +69,21 @@ class ScopeResolver:
             return self._resolve_specific(f"{scope}.svg")
 
     def _resolve_all(self) -> list[MapRecord]:
-        """Resolve 'all' scope."""
+        """Resolve 'all' scope.
+
+        Returns:
+            list[MapRecord]: All maps discovered in the inventory.
+        """
         maps = self.inventory.get_all_maps()
         logger.info(f"Scope 'all': {len(maps)} maps")
         return maps
 
     def _resolve_ci(self) -> list[MapRecord]:
-        """Resolve 'ci' scope."""
+        """Resolve 'ci' scope.
+
+        Returns:
+            list[MapRecord]: CI-enabled maps from the inventory.
+        """
         maps = self.inventory.get_ci_enabled_maps()
         logger.info(f"Scope 'ci': {len(maps)} CI-enabled maps")
         return maps

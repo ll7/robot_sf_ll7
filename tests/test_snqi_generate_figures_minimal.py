@@ -31,6 +31,12 @@ SCHEMA_PATH = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.j
 
 @pytest.mark.parametrize("success_vals", [[1.0, 0.0]])
 def test_snqi_minimal_generate_figures(tmp_path: Path, success_vals):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        success_vals: TODO docstring.
+    """
     episodes_path = tmp_path / "episodes_test.jsonl"
     weights_path = tmp_path / "weights.json"
     baseline_path = tmp_path / "baseline.json"

@@ -35,6 +35,12 @@ def project_root() -> Path:
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     root = project_root()
     matrix = root / "configs/baselines/example_matrix.yaml"
     ppo_cfg = root / "configs/baselines/ppo.yaml"

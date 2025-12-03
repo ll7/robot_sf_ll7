@@ -11,13 +11,17 @@ once downstream consumers migrate.
 from __future__ import annotations
 
 # Standard library
+import gc
+import importlib
+import importlib.util
 import json
 import os
+import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional, cast
+from typing import Literal, cast
 
 # Third-party
 import numpy as np
@@ -30,6 +34,9 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
     Looks for width/height attributes on the root <svg> element. If missing,
     attempts to parse viewBox and derive width/height. Raises FileNotFoundError
     when the file doesn't exist and ValueError for invalid SVG content.
+
+    Returns:
+        Tuple of (width_pixels, height_pixels) parsed from the SVG.
     """
     with open(map_svg_path, encoding="utf-8") as f:
         data = f.read()
@@ -62,7 +69,7 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
     raise ValueError("SVG missing width/height or valid viewBox")
 
 
-def overlay_text(canvas, text: str, pos: tuple[int, int], font: Optional[str] = None) -> None:
+def overlay_text(canvas, text: str, pos: tuple[int, int], font: str | None = None) -> None:
     """Draw text on a duck-typed canvas object.
 
     The canvas must provide a `draw_text(text, pos, font=None)` method. This
@@ -86,6 +93,47 @@ avoid importing matplotlib at module import time (see Constitution XII).
 
 # Default robot speed for replay episodes when speed data is not available
 DEFAULT_ROBOT_SPEED = 0.5
+_MATPLOTLIB_INITIALIZED = False
+
+
+def _ensure_matplotlib_backend() -> None:
+    """TODO docstring. Document this function."""
+    global _MATPLOTLIB_INITIALIZED
+    if _MATPLOTLIB_INITIALIZED:
+        return
+    mpl = importlib.import_module("matplotlib")
+    mpl.use("Agg")
+    _MATPLOTLIB_INITIALIZED = True
+
+
+def _get_pyplot():
+    """TODO docstring. Document this function.
+
+    Returns:
+        The matplotlib.pyplot module.
+    """
+    _ensure_matplotlib_backend()
+    return importlib.import_module("matplotlib.pyplot")
+
+
+def _load_replay_types():
+    """TODO docstring. Document this function.
+
+    Returns:
+        Tuple of (ReplayEpisode, ReplayStep) classes from replay module.
+    """
+    module = importlib.import_module("robot_sf.benchmark.full_classic.replay")
+    return module.ReplayEpisode, module.ReplayStep
+
+
+def _load_image_sequence_clip():
+    """TODO docstring. Document this function.
+
+    Returns:
+        The ImageSequenceClip class from moviepy.
+    """
+    module = importlib.import_module("moviepy.video.io.ImageSequenceClip")
+    return module.ImageSequenceClip
 
 
 @dataclass
@@ -116,6 +164,13 @@ class VisualizationError(Exception):
     """Raised when visualization generation fails."""
 
     def __init__(self, message: str, artifact_type: str, details: dict | None = None):
+        """TODO docstring. Document this function.
+
+        Args:
+            message: TODO docstring.
+            artifact_type: TODO docstring.
+            details: TODO docstring.
+        """
         super().__init__(message)
         self.artifact_type = artifact_type
         self.details = details or {}
@@ -271,14 +326,14 @@ def generate_benchmark_plots(
     # Handle backward compatibility: if episodes_data is a path, load it
     if isinstance(episodes_data, str | Path):
         return generate_benchmark_plots_from_file(
-            cast(str | Path, episodes_data),
+            cast("str | Path", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
         )
     else:
         return generate_benchmark_plots_from_data(
-            cast(list[dict], episodes_data),
+            cast("list[dict]", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -288,15 +343,15 @@ def generate_benchmark_plots(
 def _check_matplotlib_available() -> None:
     """Check if matplotlib is available, raise VisualizationError if not."""
     _check_dependencies(["matplotlib"])
-
-    # Set non-interactive backend
-    import matplotlib as mpl
-
-    mpl.use("Agg")
+    _ensure_matplotlib_backend()
 
 
 def _load_episodes(episodes_path: str) -> list[dict]:
-    """Load episodes from JSONL file."""
+    """Load episodes from JSONL file.
+
+    Returns:
+        List of episode dictionaries loaded from JSONL.
+    """
     episodes = []
     try:
         with open(episodes_path, encoding="utf-8") as f:
@@ -329,7 +384,11 @@ def _filter_episodes(
     scenario_filter: str | None,
     baseline_filter: str | None,
 ) -> list[dict]:
-    """Filter episodes based on scenario and baseline filters."""
+    """Filter episodes based on scenario and baseline filters.
+
+    Returns:
+        Filtered list of episode dictionaries.
+    """
     filtered_episodes = episodes
 
     if scenario_filter:
@@ -353,8 +412,12 @@ def _filter_episodes(
 
 
 def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
-    """Generate metrics distribution plot and return artifact."""
-    import matplotlib.pyplot as plt
+    """Generate metrics distribution plot and return artifact.
+
+    Returns:
+        VisualArtifact metadata object for the generated plot.
+    """
+    plt = _get_pyplot()
 
     try:
         # Extract metrics
@@ -363,7 +426,7 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in episodes]
 
         # Create plot
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+        _fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
 
         # Plot 1: Collision distribution
         ax1.hist(collisions, bins=20, alpha=0.7, color="red")
@@ -395,11 +458,9 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         plot_filename = "metrics_distribution.pdf"
         plot_path = Path(output_dir) / plot_filename
         plt.savefig(plot_path, format="pdf", bbox_inches="tight")
-        plt.close()
+        plt.close(_fig)
         # Ensure figures are fully released and memory returned to OS where possible
         try:
-            import gc
-
             gc.collect()
         except Exception:
             pass
@@ -427,8 +488,12 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
 
 
 def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
-    """Generate scenario comparison plot and return artifact."""
-    import matplotlib.pyplot as plt
+    """Generate scenario comparison plot and return artifact.
+
+    Returns:
+        VisualArtifact metadata object for the generated comparison plot.
+    """
+    plt = _get_pyplot()
 
     try:
         # Group episodes by scenario
@@ -456,7 +521,7 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
             success_rates.append(sum(successes) / len(successes))
 
         # Create plot
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+        _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
 
         # Plot 1: Average SNQI by scenario
         ax1.bar(scenarios, avg_snqi, color="blue", alpha=0.7)
@@ -482,11 +547,9 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
         plot_filename = "scenario_comparison.pdf"
         plot_path = Path(output_dir) / plot_filename
         plt.savefig(plot_path, format="pdf", bbox_inches="tight")
-        plt.close()
+        plt.close(_fig)
         # Ensure figures are fully released and memory returned to OS where possible
         try:
-            import gc
-
             gc.collect()
         except Exception:
             pass
@@ -696,7 +759,7 @@ def generate_benchmark_videos(
     # Handle backward compatibility: if episodes_data is a path, load it
     if isinstance(episodes_data, str | Path):
         return generate_benchmark_videos_from_file(
-            cast(str | Path, episodes_data),
+            cast("str | Path", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -705,7 +768,7 @@ def generate_benchmark_videos(
         )
     else:
         return generate_benchmark_videos_from_data(
-            cast(list[dict], episodes_data),
+            cast("list[dict]", episodes_data),
             output_dir,
             scenario_filter,
             baseline_filter,
@@ -720,11 +783,15 @@ def _check_moviepy_available() -> None:
 
 
 def _episode_record_to_replay_episode(episode: dict):
-    """Convert an episode record with replay data to a ReplayEpisode object."""
+    """Convert an episode record with replay data to a ReplayEpisode object.
+
+    Returns:
+        ReplayEpisode object constructed from the episode dictionary.
+    """
     try:
-        from robot_sf.benchmark.full_classic.replay import ReplayEpisode, ReplayStep
-    except ImportError:
-        raise VisualizationError("ReplayEpisode not available", "video")
+        ReplayEpisode, ReplayStep = _load_replay_types()
+    except (ImportError, ModuleNotFoundError) as exc:
+        raise VisualizationError("ReplayEpisode not available", "video") from exc
 
     episode_id = episode["episode_id"]
     scenario_id = episode["scenario_id"]
@@ -790,7 +857,11 @@ def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> l
 
 
 def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
-    """Calculate the bounding box for all trajectory positions."""
+    """Calculate the bounding box for all trajectory positions.
+
+    Returns:
+        Tuple of (min_x, max_x, min_y, max_y) bounding box coordinates with padding.
+    """
     positions: list[tuple[float, float]] = []
     for step in steps:
         positions.append((step.x, step.y))
@@ -814,13 +885,26 @@ def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
 
 
 def _create_pixel_converter(bounds: tuple[float, float, float, float]):
-    """Create a function to convert world coordinates to pixel coordinates."""
+    """Create a function to convert world coordinates to pixel coordinates.
+
+    Returns:
+        Callable that converts (x, y) world coordinates to (row, col) pixel coordinates.
+    """
     min_x, max_x, min_y, max_y = bounds
     span_x = max(max_x - min_x, 1e-3)
     span_y = max(max_y - min_y, 1e-3)
     height, width = 320, 320
 
     def to_pixel(x: float, y: float) -> tuple[int, int]:
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+            y: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         norm_x = (x - min_x) / span_x
         norm_y = (y - min_y) / span_y
         col = int(np.clip(norm_x * (width - 1), 0, width - 1))
@@ -835,7 +919,11 @@ def _generate_frames_from_pixels(
     ped_pixels: list[list[tuple[int, int]]],
     max_frames: int,
 ) -> list[np.ndarray]:
-    """Generate video frames from pre-computed pixel positions."""
+    """Generate video frames from pre-computed pixel positions.
+
+    Returns:
+        List of numpy arrays representing video frames (height x width x 3 RGB).
+    """
     height, width = 320, 320
     background = np.array([22, 26, 30], dtype=np.uint8)
     trail_color = (72, 188, 110)
@@ -900,12 +988,11 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
         raise VisualizationError("No frames to encode", "video")
 
     try:
-        import tempfile
-
-        from moviepy import ImageSequenceClip
+        ImageSequenceClip = _load_image_sequence_clip()
 
         # Use a generator to avoid loading all frames into memory at once
         def frame_generator():
+            """TODO docstring. Document this function."""
             yield from frames
 
         # Create a temporary audio file path (even though audio=False, moviepy expects it)
@@ -992,8 +1079,6 @@ def _check_dependencies(required_deps: list[str]) -> None:
     Raises:
         VisualizationError: If any required dependencies are missing
     """
-    import importlib.util
-
     missing_deps = []
 
     for dep in required_deps:

@@ -32,11 +32,24 @@ DEFAULT_SCHEMA = "docs/dev/issues/social-navigation-benchmark/episode_schema.jso
 
 
 def _run(cmd: list[str]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        cmd: TODO docstring.
+    """
     print("[run]", " ".join(cmd))
     subprocess.check_call(cmd)
 
 
 def _ensure_weights(path: Path) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if path.exists():
         return path.resolve()
 
@@ -61,6 +74,12 @@ def _ensure_weights(path: Path) -> Path:
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     ap = argparse.ArgumentParser(description="Full SNQI pipeline example")
     ap.add_argument(
         "--episodes",

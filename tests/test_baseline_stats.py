@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -17,6 +19,11 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 def test_compute_baseline_stats_from_records(tmp_path: Path):
     # Create a tiny JSONL with two records and known metrics
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     p = tmp_path / "episodes.jsonl"
     recs = [
         {
@@ -62,6 +69,11 @@ ess_min_matrix = [
 
 
 def test_run_and_compute_baseline(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out_json = tmp_path / "baseline_stats.json"
     out_jsonl = tmp_path / "episodes.jsonl"
     stats = run_and_compute_baseline(

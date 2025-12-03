@@ -12,6 +12,11 @@ import pytest
 
 @pytest.mark.timeout(30)
 def test_snqi_weight_recompute_cli_with_normalization(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
     output_path = tmp_path / "recompute.json"

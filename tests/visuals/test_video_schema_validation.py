@@ -25,6 +25,7 @@ if jsonschema_spec:  # type: ignore
 
 
 def load_schema():  # pragma: no cover - trivial IO helper
+    """TODO docstring. Document this function."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
@@ -35,10 +36,12 @@ def validate(instance):
 
 
 def test_valid_minimal_manifest():
+    """TODO docstring. Document this function."""
     validate({"artifacts": []})  # empty list allowed
 
 
 def test_valid_success_entry():
+    """TODO docstring. Document this function."""
     validate(
         {
             "artifacts": [
@@ -55,11 +58,13 @@ def test_valid_success_entry():
 
 def test_missing_required_field():
     # Expect schema validation failure due to missing required 'episode_id' field
+    """TODO docstring. Document this function."""
     with pytest.raises(jsonschema.ValidationError):  # type: ignore[name-defined]
         validate({"artifacts": [{"renderer": "synthetic", "status": "skipped"}]})
 
 
 def test_success_without_filename_fails():
     # Success status requires a filename according to schema
+    """TODO docstring. Document this function."""
     with pytest.raises(jsonschema.ValidationError):  # type: ignore[name-defined]
         validate({"artifacts": [{"episode_id": "1", "renderer": "synthetic", "status": "success"}]})

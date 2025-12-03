@@ -43,11 +43,19 @@ class FeatureExtractorConfig:
     params: dict[str, Any] = field(default_factory=dict)
 
     def get_extractor_class(self) -> type[BaseFeaturesExtractor]:
-        """Get the feature extractor class for this configuration."""
+        """Get the feature extractor class for this configuration.
+
+        Returns:
+            type[BaseFeaturesExtractor]: Class object for the configured extractor.
+        """
         return _EXTRACTOR_REGISTRY[self.extractor_type]
 
     def get_policy_kwargs(self) -> dict[str, Any]:
-        """Get policy kwargs suitable for StableBaselines3."""
+        """Get policy kwargs suitable for StableBaselines3.
+
+        Returns:
+            dict[str, Any]: Policy kwargs with extractor class and parameters.
+        """
         return {
             "features_extractor_class": self.get_extractor_class(),
             "features_extractor_kwargs": self.params.copy(),
@@ -69,19 +77,31 @@ class FeatureExtractorPresets:
 
     @staticmethod
     def dynamics_original() -> FeatureExtractorConfig:
-        """Original DynamicsExtractor with default parameters."""
+        """Original DynamicsExtractor with default parameters.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(extractor_type=FeatureExtractorType.DYNAMICS, params={})
 
     @staticmethod
     def dynamics_no_conv() -> FeatureExtractorConfig:
-        """Original DynamicsExtractor without convolution (flatten only)."""
+        """Original DynamicsExtractor without convolution (flatten only).
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.DYNAMICS, params={"use_ray_conv": False}
         )
 
     @staticmethod
     def mlp_small() -> FeatureExtractorConfig:
-        """Small MLP extractor for fast training."""
+        """Small MLP extractor for fast training.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.MLP,
             params={"ray_hidden_dims": [64, 32], "drive_hidden_dims": [16, 8], "dropout_rate": 0.1},
@@ -89,7 +109,11 @@ class FeatureExtractorPresets:
 
     @staticmethod
     def mlp_large() -> FeatureExtractorConfig:
-        """Large MLP extractor for better performance."""
+        """Large MLP extractor for better performance.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.MLP,
             params={
@@ -101,7 +125,11 @@ class FeatureExtractorPresets:
 
     @staticmethod
     def attention_small() -> FeatureExtractorConfig:
-        """Small attention extractor."""
+        """Small attention extractor.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.ATTENTION,
             params={"embed_dim": 32, "num_heads": 2, "num_layers": 1, "dropout_rate": 0.1},
@@ -109,7 +137,11 @@ class FeatureExtractorPresets:
 
     @staticmethod
     def attention_large() -> FeatureExtractorConfig:
-        """Large attention extractor."""
+        """Large attention extractor.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.ATTENTION,
             params={"embed_dim": 128, "num_heads": 8, "num_layers": 3, "dropout_rate": 0.1},
@@ -117,7 +149,11 @@ class FeatureExtractorPresets:
 
     @staticmethod
     def lightweight_cnn() -> FeatureExtractorConfig:
-        """Lightweight CNN extractor."""
+        """Lightweight CNN extractor.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
         return FeatureExtractorConfig(
             extractor_type=FeatureExtractorType.LIGHTWEIGHT_CNN,
             params={"num_filters": [32, 16], "kernel_sizes": [5, 3], "dropout_rate": 0.1},
@@ -135,7 +171,7 @@ def create_feature_extractor_config(
         **params: Additional parameters for the extractor
 
     Returns:
-        FeatureExtractorConfig instance
+        FeatureExtractorConfig: Created configuration instance.
 
     Example:
         config = create_feature_extractor_config("mlp", ray_hidden_dims=[128, 64])

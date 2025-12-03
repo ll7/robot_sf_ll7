@@ -37,11 +37,18 @@ SCHEMA_PATH = (
 
 
 def _load_schema() -> dict:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     text = SCHEMA_PATH.read_text()  # may raise FileNotFoundError (expected red)
     return json.loads(text)
 
 
 def test_episode_schema_invalid_sample_fails():
+    """TODO docstring. Document this function."""
     schema = _load_schema()
     invalid_record = {  # missing many required keys by design
         "episode_id": "abc123",
@@ -52,6 +59,7 @@ def test_episode_schema_invalid_sample_fails():
 
 
 def test_episode_schema_minimal_valid_passes_when_ready():
+    """TODO docstring. Document this function."""
     schema = _load_schema()
     minimal = {
         # Placeholder minimal fields; update once schema is defined.

@@ -17,6 +17,13 @@ class PedState:
     """Tracks the state of pedstrains and social groups"""
 
     def __init__(self, state: np.ndarray, groups: list[Group], config: SceneConfig):
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+            groups: TODO docstring.
+            config: TODO docstring.
+        """
         self.default_tau = config.tau
         self.d_t = config.dt_secs
         self.agent_radius = config.agent_radius
@@ -27,10 +34,21 @@ class PedState:
         self.update(state, groups)
 
     def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+            groups: TODO docstring.
+        """
         self.state = state
         self.groups = groups
 
     def _update_state(self, state: np.ndarray) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+        """
         tau = np.full((state.shape[0]), self.default_tau)
         if state.shape[1] < 7:
             self._state = np.concatenate((state, np.expand_dims(tau, -1)), axis=-1)
@@ -42,28 +60,75 @@ class PedState:
 
     @property
     def state(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self._state
 
     @state.setter
     def state(self, state: np.ndarray):
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+        """
         self._update_state(state)
 
     def get_states(self) -> tuple[np.ndarray, list[list[list[int]]]]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return np.array([self.state]), [self.groups]
 
     def size(self) -> int:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state.shape[0]
 
     def pos(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state[:, 0:2]
 
     def vel(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state[:, 2:4]
 
     def goal(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state[:, 4:6]
 
     def tau(self) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state[:, 6:7]
 
     def speeds(self) -> np.ndarray:
@@ -95,16 +160,33 @@ class PedState:
 
     @property
     def groups(self) -> list[list]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self._groups
 
     @groups.setter
     def groups(self, groups: list[list]):
+        """TODO docstring. Document this function.
+
+        Args:
+            groups: TODO docstring.
+        """
         if groups is None:
             self._groups = []
         else:
             self._groups = groups
 
     def has_group(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.groups is not None
 
     def which_group(self, index: int) -> int:
@@ -125,6 +207,7 @@ class EnvState:
     _obstacles_raw: np.ndarray = field(init=False)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         self._obstacles_raw = self._update_obstacles_raw(self._orig_obstacles)
         self._obstacles_linspace = self._update_obstacles_linspace(self._orig_obstacles)
 
@@ -150,6 +233,14 @@ class EnvState:
         self._obstacles_linspace = self._update_obstacles_linspace(obstacles)
 
     def _update_obstacles_linspace(self, obs_lines: list[Line2D]) -> list[np.ndarray]:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs_lines: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if obs_lines is None:
             obstacles = []
         else:
@@ -169,12 +260,31 @@ class EnvState:
         return obstacles
 
     def _update_obstacles_raw(self, obs_lines: list[Line2D]) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs_lines: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
+
         def orient(line):
+            """TODO docstring. Document this function.
+
+            Args:
+                line: TODO docstring.
+            """
             start_x, end_x, start_y, end_y = line
             vec_x, vec_y = end_x - start_x, end_y - start_y
             return (atan2(vec_y, vec_x) + 2 * pi) % (2 * pi)
 
         def unit_vec(orient):
+            """TODO docstring. Document this function.
+
+            Args:
+                orient: TODO docstring.
+            """
             return cos(orient), sin(orient)
 
         if obs_lines is None or len(obs_lines) == 0:

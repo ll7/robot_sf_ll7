@@ -232,6 +232,7 @@ class TestIntegrationWithStableBaselines3:
         config.sim_config.sim_time_in_secs = 10
 
         def make_env():
+            """TODO docstring. Document this function."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)
@@ -271,6 +272,7 @@ class TestIntegrationWithStableBaselines3:
         config.sim_config.sim_time_in_secs = 2
 
         def make_env():
+            """TODO docstring. Document this function."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)
@@ -305,6 +307,7 @@ class TestIntegrationWithStableBaselines3:
         config.sim_config.sim_time_in_secs = 10
 
         def make_env():
+            """TODO docstring. Document this function."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)
@@ -329,6 +332,7 @@ class TestIntegrationWithStableBaselines3:
         config.sim_config.sim_time_in_secs = 10
 
         def make_env():
+            """TODO docstring. Document this function."""
             return RobotEnv(config)
 
         env = make_vec_env(make_env, n_envs=1)

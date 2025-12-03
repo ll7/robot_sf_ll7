@@ -12,6 +12,7 @@ FACTORY_PATH = Path("robot_sf/gym_env/environment_factory.py")
 
 
 def test_no_raw_print_statements():
+    """TODO docstring. Document this function."""
     text = FACTORY_PATH.read_text(encoding="utf-8")
     # Naive scan: split lines and ignore those starting with comment or inside triple quotes state
     in_doc = False

@@ -38,10 +38,24 @@ SVG_MAPS = [
 
 
 def _fast_demo_enabled() -> bool:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return os.environ.get("ROBOT_SF_FAST_DEMO", "0") == "1" or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def _step_budget(default: int) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        default: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
     if override:
         try:
@@ -57,6 +71,12 @@ STEPS_PER_SCENARIO = _step_budget(200)
 
 
 def run_svg_scenario(name: str, svg_path: str) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        name: TODO docstring.
+        svg_path: TODO docstring.
+    """
     print(f"\n=== Scenario: {name} ===")
     map_def = convert_map(svg_path)
     pool = MapDefinitionPool(map_defs={name: map_def})
@@ -78,6 +98,7 @@ def run_svg_scenario(name: str, svg_path: str) -> None:
 
 
 def main() -> None:
+    """TODO docstring. Document this function."""
     for name, svg_path in SVG_MAPS:
         run_svg_scenario(name, svg_path)
     print("\nAll scenarios completed.")

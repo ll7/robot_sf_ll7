@@ -16,21 +16,30 @@ if jsonschema_spec:  # type: ignore
 
 
 def _schema():
+    """TODO docstring. Document this function."""
     return json.loads(SCHEMA_PATH.read_text())
 
 
 def _validate(inst):
+    """TODO docstring. Document this function.
+
+    Args:
+        inst: TODO docstring.
+    """
     jsonschema.validate(instance=inst, schema=_schema())  # type: ignore
 
 
 def test_valid_empty():
+    """TODO docstring. Document this function."""
     _validate({"artifacts": []})
 
 
 def test_success_entry():
+    """TODO docstring. Document this function."""
     _validate({"artifacts": [{"name": "plot1", "status": "success", "filename": "plot1.pdf"}]})
 
 
 def test_success_missing_filename():
+    """TODO docstring. Document this function."""
     with pytest.raises(Exception):
         _validate({"artifacts": [{"name": "p1", "status": "success"}]})

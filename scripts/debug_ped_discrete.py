@@ -20,6 +20,14 @@ NO_OP = (0.0, 0.0)
 
 
 def select_action(obs: dict) -> UnicycleAction:
+    """TODO docstring. Document this function.
+
+    Args:
+        obs: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     drive_state = obs["drive_state"][0]
     target_angle = drive_state[3]
 
@@ -35,6 +43,7 @@ def select_action(obs: dict) -> UnicycleAction:
 
 
 def make_env():
+    """TODO docstring. Document this function."""
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map("maps/svg_maps/debug_02.svg")
@@ -55,6 +64,7 @@ def make_env():
 
 
 def run():
+    """TODO docstring. Document this function."""
     env = make_env()
 
     obs = env.reset()

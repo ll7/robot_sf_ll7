@@ -65,6 +65,12 @@ class SmokeTestResult:
     exit_code: int = 0
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "timestamp": self.timestamp.isoformat(timespec="seconds"),
             "environment_creation_sec": self.creation_seconds,
@@ -153,6 +159,22 @@ def run_performance_smoke_test(
     enforce: bool | None = None,
     on_ci: bool | None = None,
 ) -> SmokeTestResult:
+    """TODO docstring. Document this function.
+
+    Args:
+        num_resets: TODO docstring.
+        scenario: TODO docstring.
+        include_recommendations: TODO docstring.
+        creation_soft: TODO docstring.
+        creation_hard: TODO docstring.
+        reset_soft: TODO docstring.
+        reset_hard: TODO docstring.
+        enforce: TODO docstring.
+        on_ci: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     creation_soft = (
         creation_soft
         if creation_soft is not None
@@ -234,6 +256,12 @@ def run_performance_smoke_test(
 
 
 def parse_args() -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--num-resets",
@@ -265,6 +293,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     print("Social Navigation Benchmark - Performance Smoke Test")
     print("=" * 60)
 
@@ -334,11 +368,27 @@ def main() -> int:
 
 
 def _default_summary_path() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     ensure_canonical_tree(categories=("benchmarks",))
     return get_artifact_category_path("benchmarks") / "performance_smoke_test.json"
 
 
 def _status_label(soft_ok: bool, hard_ok: bool, enforce: bool) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        soft_ok: TODO docstring.
+        hard_ok: TODO docstring.
+        enforce: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if hard_ok and soft_ok:
         return "PASS"
     if hard_ok and not soft_ok:
@@ -354,6 +404,17 @@ def _build_recommendations(
     resets_per_sec: float,
     thresholds: dict[str, float | bool],
 ) -> tuple[PerformanceRecommendation, ...]:
+    """TODO docstring. Document this function.
+
+    Args:
+        statuses: TODO docstring.
+        creation_time: TODO docstring.
+        resets_per_sec: TODO docstring.
+        thresholds: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     recommendations: list[PerformanceRecommendation] = []
     timestamp_ms = int(time.time() * 1000)
     if statuses["creation"] != "PASS":
@@ -406,6 +467,12 @@ def _build_recommendations(
 
 
 def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        result: TODO docstring.
+    """
     payload = {
         "timestamp_ms": int(result.timestamp.timestamp() * 1000),
         "step_id": "performance_smoke_test",
@@ -418,6 +485,15 @@ def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
 
 
 def _env_float(name: str, default: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        name: TODO docstring.
+        default: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         return float(os.environ.get(name, "").strip() or default)
     except ValueError:

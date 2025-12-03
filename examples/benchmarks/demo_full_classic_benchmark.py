@@ -61,10 +61,22 @@ from scripts.classic_benchmark_full import BenchmarkCLIConfig, run_full_benchmar
 
 
 def _project_root() -> Path:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return Path(__file__).resolve().parents[2]
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     root = _project_root()
 
     # Scenario matrix (choose one appropriate to your local setup)

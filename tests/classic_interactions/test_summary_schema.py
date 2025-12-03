@@ -12,10 +12,12 @@ REQUIRED_KEYS = {"scenario", "seed", "steps", "success", "collision", "timeout"}
 
 
 def _demo():
+    """TODO docstring. Document this function."""
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_episode_summary_schema():
+    """TODO docstring. Document this function."""
     mod = _demo()
     if hasattr(mod, "DRY_RUN"):
         original = mod.DRY_RUN

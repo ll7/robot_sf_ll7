@@ -15,6 +15,11 @@ class SimpleRobotEnv(gymnasium.Env):
     """
 
     def __init__(self, env_config: EnvSettings = EnvSettings()):
+        """TODO docstring. Document this function.
+
+        Args:
+            env_config: TODO docstring.
+        """
         self.info = {}
 
         # Action space
@@ -28,6 +33,9 @@ class SimpleRobotEnv(gymnasium.Env):
         """
         Action Space:
         - 2 actions: move forward, turn
+
+        Returns:
+            Discrete action space with 2 actions.
         """
         return gymnasium.spaces.Discrete(2)
 
@@ -38,26 +46,48 @@ class SimpleRobotEnv(gymnasium.Env):
         - goal_x, goal_y
         - distance and angle to goal
         - lidar observations
+
+        Returns:
+            Discrete observation space with 5 states.
         """
         return gymnasium.spaces.Discrete(5)
 
     def _get_observation(self):
         """
         Get the current observation
+
+        Returns:
+            Current observation state from the environment.
         """
         return self.observation
 
     def _get_info(self):
         """
         Get the current info
+
+        Returns:
+            Dictionary containing metadata about the current state.
         """
         return self.info
 
     def step(self, action):
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+        """
         pass
 
     def reset(self, seed=None):
         # seed for self.np_random
+        """TODO docstring. Document this function.
+
+        Args:
+            seed: TODO docstring.
+
+        Returns:
+            Tuple of (observation, info) after resetting the environment.
+        """
         super().reset(seed=seed)
 
         observation = self._get_observation()
@@ -65,7 +95,13 @@ class SimpleRobotEnv(gymnasium.Env):
         return observation, info
 
     def render(self, mode="human"):
+        """TODO docstring. Document this function.
+
+        Args:
+            mode: TODO docstring.
+        """
         pass
 
     def close(self):
+        """TODO docstring. Document this function."""
         pass

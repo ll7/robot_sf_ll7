@@ -19,13 +19,25 @@ class AggregationMetadataError(ValueError):
         missing_fields: Iterable[str] | None = None,
         advice: str | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            message: TODO docstring.
+            episode_id: TODO docstring.
+            missing_fields: TODO docstring.
+            advice: TODO docstring.
+        """
         super().__init__(message)
         self.episode_id = episode_id
         self.missing_fields: tuple[str, ...] = tuple(missing_fields or ())
         self.advice = advice
 
     def to_dict(self) -> dict[str, object]:
-        """Structured representation suitable for logging or JSON responses."""
+        """Structured representation suitable for logging or JSON responses.
+
+        Returns:
+            Dictionary containing error details (message, episode_id, missing_fields, advice).
+        """
 
         payload: dict[str, object] = {
             "message": str(self),

@@ -133,8 +133,8 @@ class TestVersionDetectionIntegration:
 
     def _is_version_compatible(self, current_version, check_version):
         """Helper method to check version compatibility."""
-        current_major, current_minor, current_patch = current_version
-        check_major, check_minor, check_patch = check_version
+        current_major, _current_minor, _current_patch = current_version
+        check_major, _check_minor, _check_patch = check_version
 
         # Major version changes break compatibility
         if check_major != current_major:

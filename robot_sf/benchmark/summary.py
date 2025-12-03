@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import matplotlib as mpl
+import numpy as np
 
 # Use headless backend for CI/non-GUI
 mpl.use("Agg", force=True)
@@ -21,6 +22,14 @@ if TYPE_CHECKING:
 
 
 def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str, Any]]:
+    """Iterate over JSONL episode records stored at one or more paths.
+
+    Args:
+        paths: Single path or collection of JSONL file paths to scan.
+
+    Yields:
+        dict[str, Any]: Parsed JSON record for each non-empty line across the provided files.
+    """
     if isinstance(paths, str | Path):
         path_list = [paths]
     else:
@@ -41,6 +50,16 @@ def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
+    """Fetch a dotted-path value from a nested dict, returning a default when missing.
+
+    Args:
+        d: Arbitrary nested mapping object to inspect.
+        path: Dotted key path (e.g. ``metrics.min_distance``).
+        default: Value to return when the path cannot be resolved.
+
+    Returns:
+        Any: Resolved value when present; otherwise ``default``.
+    """
     cur: Any = d
     for part in path.split("."):
         if isinstance(cur, dict) and part in cur:
@@ -51,6 +70,14 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
 
 
 def _safe_number(x: Any) -> float | None:
+    """Convert input to ``float`` while filtering invalid or NaN values.
+
+    Args:
+        x: Value to coerce into a float.
+
+    Returns:
+        float | None: Parsed float when finite; otherwise ``None``.
+    """
     try:
         v = float(x)
         if math.isnan(v):
@@ -60,12 +87,19 @@ def _safe_number(x: Any) -> float | None:
         return None
 
 
-def collect_values(records: Iterable[dict[str, Any]]) -> tuple[list[float], list[float]]:
+def collect_values(
+    records: Iterable[dict[str, Any]],
+) -> tuple[list[float], list[float]]:
     """Collect min_distance and avg_speed from episode records.
 
     Falls back to computing avg speed from robot_vel if present under
     record["trajectory"]["robot_vel"] as a list of [vx, vy]. If not available,
     the avg_speed entry may be missing.
+
+    Returns
+    -------
+    tuple[list[float], list[float]]
+        Tuple of (min_distances, avg_speeds) collected from records.
     """
     mins: list[float] = []
     speeds: list[float] = []
@@ -84,8 +118,6 @@ def collect_values(records: Iterable[dict[str, Any]]) -> tuple[list[float], list
             rv = traj.get("robot_vel")
             if isinstance(rv, list) and rv and isinstance(rv[0], list | tuple):
                 try:
-                    import numpy as np
-
                     arr = np.asarray(rv, dtype=float)
                     s = np.linalg.norm(arr, axis=1).mean()
                     if np.isfinite(s):
@@ -102,11 +134,31 @@ def plot_histograms(
     *,
     bins: int = 30,
 ) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        mins: TODO docstring.
+        speeds: TODO docstring.
+        out_dir: TODO docstring.
+        bins: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out_paths: list[str] = []
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     def _save(fig, name: str) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            fig: TODO docstring.
+            name: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         path = str(Path(out_dir) / name)
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
@@ -133,6 +185,15 @@ def plot_histograms(
 
 
 def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | Path) -> list[str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        paths: TODO docstring.
+        out_dir: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     mins, speeds = collect_values(_iter_records(paths))
     return plot_histograms(mins, speeds, out_dir)
 
@@ -185,8 +246,6 @@ def bootstrap_metric_confidence(
     Returns:
         Dictionary with keys: mean, median, ci_low, ci_high
     """
-    import numpy as np
-
     if not values:
         return {
             "mean": 0.0,

@@ -42,6 +42,8 @@ from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 
 @dataclass
 class PPOPlannerConfig:
+    """TODO docstring. Document this class."""
+
     # Required
     model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"
 
@@ -79,6 +81,12 @@ class PPOPlanner:
         *,
         seed: int | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            seed: TODO docstring.
+        """
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
@@ -86,6 +94,14 @@ class PPOPlanner:
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
+        """TODO docstring. Document this function.
+
+        Args:
+            cfg: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(cfg, PPOPlannerConfig):
             return cfg
         if isinstance(cfg, dict):
@@ -93,6 +109,7 @@ class PPOPlanner:
         raise TypeError(f"Invalid config type: {type(cfg)}")
 
     def _load_model(self) -> None:
+        """TODO docstring. Document this function."""
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
             warn_soft_degrade(
                 "PPO",
@@ -136,10 +153,16 @@ class PPOPlanner:
 
     def reset(self, *, seed: int | None = None) -> None:
         # No RNN state; just update seed and keep model
+        """TODO docstring. Document this function.
+
+        Args:
+            seed: TODO docstring.
+        """
         if seed is not None:
             self._seed = seed
 
     def close(self) -> None:
+        """TODO docstring. Document this function."""
         self._model = None
 
     def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
@@ -150,6 +173,14 @@ class PPOPlanner:
 
     # --- API -----------------------------------------------------------
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
         assert isinstance(obs, Observation)
@@ -168,6 +199,14 @@ class PPOPlanner:
 
     # --- Helpers -------------------------------------------------------
     def _predict_action(self, obs: Observation) -> np.ndarray | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if self._model is None:
             return None
 
@@ -192,6 +231,14 @@ class PPOPlanner:
             return None
 
     def _build_model_obs(self, obs: Observation) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if self.config.obs_mode == "image":
             img = obs.robot.get("image") if isinstance(obs.robot, dict) else None
             if img is None:
@@ -201,6 +248,14 @@ class PPOPlanner:
         return self._vectorize(obs)
 
     def _vectorize(self, obs: Observation) -> np.ndarray:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rv = np.asarray(obs.robot["velocity"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
@@ -225,6 +280,15 @@ class PPOPlanner:
         return vec
 
     def _action_vec_to_dict(self, act: np.ndarray, _obs: Observation) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            act: TODO docstring.
+            _obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0
@@ -244,6 +308,14 @@ class PPOPlanner:
         return {"vx": vx, "vy": vy}
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
         vec = rg - rp
@@ -262,6 +334,12 @@ class PPOPlanner:
 
     # --- Metadata ------------------------------------------------------
     def get_metadata(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata
         cfg["model_path"] = str(Path(self.config.model_path))

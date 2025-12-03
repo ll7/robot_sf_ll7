@@ -10,6 +10,11 @@ from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestra
 
 
 def test_success_criteria_report(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     seeds = [1, 2]
     metric_records = [
         {
@@ -59,6 +64,11 @@ def test_success_criteria_report(tmp_path):
 
 
 def test_success_criteria_ablation(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     ab_orch = AblationOrchestrator(
         experiment_name="sc_ablation",
         seeds=[1],

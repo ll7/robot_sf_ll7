@@ -7,6 +7,7 @@ figures for summaries.
 
 from __future__ import annotations
 
+import importlib
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -26,14 +27,29 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _get_pyplot():
+    """Import and return ``matplotlib.pyplot``.
+
+    Returns:
+        module: The ``matplotlib.pyplot`` module.
+    """
+    return importlib.import_module("matplotlib.pyplot")
+
+
 @dataclass
 class EvalHistory:
+    """TODO docstring. Document this class."""
+
     timesteps: list[float]
     mean_rewards: list[float]
 
 
 def load_eval_history(extractor_dir: Path) -> EvalHistory | None:
-    """Load evaluation timesteps and mean rewards from evaluations.npz if present."""
+    """Load evaluation timesteps and mean rewards from evaluations.npz if present.
+
+    Returns:
+        EvalHistory | None: Parsed evaluation history, or ``None`` when unavailable.
+    """
 
     path = extractor_dir / "eval_logs" / "evaluations.npz"
     if not path.exists():
@@ -75,7 +91,11 @@ def sample_efficiency_ratio(
     baseline_timestep: float,
     candidate_timestep: float,
 ) -> float:
-    """Compute baseline/candidate timestep ratio (higher = more sample efficient)."""
+    """Compute baseline/candidate timestep ratio (higher = more sample efficient).
+
+    Returns:
+        float: The ratio ``baseline_timestep / candidate_timestep`` or ``0.0`` if invalid.
+    """
 
     if candidate_timestep <= 0:
         return 0.0
@@ -87,12 +107,16 @@ def generate_figures(
     out_dir: Path,
     extractor_name: str,
 ) -> dict[str, Path]:
-    """Generate learning curve and reward distribution figures for an extractor."""
+    """Generate learning curve and reward distribution figures for an extractor.
+
+    Returns:
+        dict[str, Path]: Mapping of figure names to output file paths; empty if no data.
+    """
 
     if history is None or not history.timesteps:
         return {}
     try:
-        import matplotlib.pyplot as plt
+        plt = _get_pyplot()
 
         out_dir.mkdir(parents=True, exist_ok=True)
         learning_curve = out_dir / f"{extractor_name}_learning_curve.png"
@@ -126,6 +150,14 @@ def generate_figures(
 
 
 def summarize_metric(values: Iterable[float]) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        values: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     items = [v for v in values if math.isfinite(v)]
     if not items:
         return {"mean": 0.0, "median": 0.0}

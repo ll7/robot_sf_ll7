@@ -144,6 +144,15 @@ def _compute_aggregates_payload(
     *,
     expected_algorithms: set[str] | None,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        expected_algorithms: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     aggregate_kwargs: dict[str, Any] = {
         "records": records,
         "group_by": "scenario_params.algo",
@@ -167,6 +176,15 @@ def _compute_aggregates_payload(
 
 
 def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        output_root: TODO docstring.
+        aggregates: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     aggregates_file = Path(output_root) / "aggregated_results.json"
     with open(aggregates_file, "w", encoding="utf-8") as f:
         json.dump(aggregates, f, indent=2)

@@ -16,14 +16,24 @@ from robot_sf.sensor.fusion_adapter import (
     create_sensors_from_config,
 )
 from robot_sf.sensor.goal_sensor import target_sensor_obs, target_sensor_space
-from robot_sf.sensor.image_sensor import image_sensor_space
+from robot_sf.sensor.image_sensor import (
+    ImageSensor,
+    ImageSensorSettings,
+    image_sensor_space,
+)
 from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
 from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
-from robot_sf.sensor.sensor_fusion import SensorFusion, fused_sensor_space
+from robot_sf.sensor.sensor_fusion import (
+    SensorFusion,
+    fused_sensor_space,
+    fused_sensor_space_with_image,
+)
 from robot_sf.sim.simulator import PedSimulator, Simulator
 
 
 class AgentType(Enum):
+    """TODO docstring. Document this class."""
+
     ROBOT = 1
     PEDESTRIAN = 2
 
@@ -33,19 +43,16 @@ def init_collision_and_sensors(
     env_config: EnvSettings | RobotSimulationConfig,
     orig_obs_space: spaces.Dict,
 ):
-    """
-    Initialize collision detection and sensor fusion for the robots in the
-    simulator.
+    """Initialize collision detection and sensor fusion for each robot.
 
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
+    Args:
+        sim: Initialized simulator providing map and actor state.
+        env_config: Environment/simulation configuration used to size sensors and occupancies.
+        orig_obs_space: Baseline observation space passed to ``SensorFusion``.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy], list[SensorFusion]]: Collision detectors and matching
+        sensor fusion wrappers indexed by robot id.
     """
 
     # Get the number of robots, simulation configuration,
@@ -76,9 +83,25 @@ def init_collision_and_sensors(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """Capture lidar ray scan for the specified robot.
+
+            Args:
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Ray scan distances from lidar.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """Capture target/goal sensor observations for the specified robot.
+
+            Args:
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Target sensor observation (goal direction and distances).
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
                 sim.goal_pos[r_id],
@@ -86,6 +109,14 @@ def init_collision_and_sensors(
             )
 
         def speed_sensor(r_id=r_id):
+            """Capture current speed for the specified robot.
+
+            Args:
+                r_id: Robot index in the simulation.
+
+            Returns:
+                float: Current speed of the robot.
+            """
             return sim.robots[r_id].current_speed
 
         # Create the sensor fusion object and add it to the list
@@ -158,6 +189,16 @@ def create_spaces(
     agent_type: AgentType = AgentType.ROBOT,
 ):
     # Create a agent using the factory method in the environment configuration
+    """Create observation and action spaces for the specified agent type.
+
+    Args:
+        env_config: Environment configuration containing agent factories.
+        map_def: Map definition for spatial bounds.
+        agent_type: Type of agent (ROBOT or PEDESTRIAN).
+
+    Returns:
+        tuple: (observation_space, action_space) gymnasium Space objects.
+    """
     if agent_type == AgentType.ROBOT:
         agent = env_config.robot_factory()
     elif agent_type == AgentType.PEDESTRIAN:
@@ -259,19 +300,16 @@ def init_ped_collision_and_sensors(
     env_config: PedEnvSettings,
     orig_obs_space: list[spaces.Dict],
 ):
-    """
-    Initialize collision detection and sensor fusion for the robot and the pedestrian in the
-    simulator.
+    """Initialize collision detection and sensor fusion for robot + ego pedestrian.
 
-    Parameters:
-    sim (PedSimulator): The simulator object.
-    env_config (PedEnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
+    Args:
+        sim: Pedestrian simulator containing the controlled robot and ego pedestrian.
+        env_config: Pedestrian environment settings driving occupancy radii and sensors.
+        orig_obs_space: Original observation spaces for robot and ego pedestrian.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy | EgoPedContinuousOccupancy], list[SensorFusion]]: Ordered
+        occupancies and sensor fusion helpers for ``[robot, ego_pedestrian]``.
     """
 
     # Get the simulation configuration, pedestrian configuration,
@@ -303,12 +341,36 @@ def init_ped_collision_and_sensors(
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
     def ray_sensor(r_id=0):
+        """Capture lidar ray scan for the robot.
+
+        Args:
+            r_id: Robot index (default 0 for single-robot env).
+
+        Returns:
+            np.ndarray: Ray scan distances from lidar.
+        """
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
     def target_sensor(r_id=0):
+        """Capture target/goal sensor observations for the robot.
+
+        Args:
+            r_id: Robot index (default 0 for single-robot env).
+
+        Returns:
+            np.ndarray: Target sensor observation (goal direction and distances).
+        """
         return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
     def speed_sensor(r_id=0):
+        """Capture current speed for the robot.
+
+        Args:
+            r_id: Robot index (default 0 for single-robot env).
+
+        Returns:
+            float: Current speed of the robot.
+        """
         return sim.robots[r_id].current_speed
 
     # Initialize a sensor fusion object for the robot for sensor data handling
@@ -340,9 +402,19 @@ def init_ped_collision_and_sensors(
     )
 
     def ray_sensor_ego_ped():
+        """Capture lidar ray scan for the ego pedestrian.
+
+        Returns:
+            np.ndarray: Ray scan distances from lidar for ego pedestrian.
+        """
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
     def target_sensor_ego_ped():
+        """Capture target/goal sensor observations for the ego pedestrian.
+
+        Returns:
+            np.ndarray: Target sensor observation (goal direction and distances).
+        """
         return target_sensor_obs(
             sim.ego_ped.pose,
             sim.ego_ped_goal_pos,
@@ -350,6 +422,11 @@ def init_ped_collision_and_sensors(
         )  # TODO: What next goal to choose?
 
     def speed_sensor_ego_ped():
+        """Capture current speed for the ego pedestrian.
+
+        Returns:
+            float: Current speed of the ego pedestrian.
+        """
         return sim.ego_ped.current_speed
 
     sensor_fusions.append(
@@ -414,8 +491,6 @@ def create_spaces_with_image(
 
     # Extend the agent's observation space with additional sensors
     if image_obs_space is not None:
-        from robot_sf.sensor.sensor_fusion import fused_sensor_space_with_image
-
         observation_space, orig_obs_space = fused_sensor_space_with_image(
             env_config.sim_config.stack_steps,
             agent.observation_space,
@@ -446,19 +521,17 @@ def init_collision_and_sensors_with_image(
     orig_obs_space: spaces.Dict,
     sim_view=None,
 ):
-    """
-    Initialize collision detection and sensor fusion including image sensors for the robots.
+    """Initialize collision detection and sensor fusion with optional image sensors.
 
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
-    sim_view: The simulation view for capturing images (optional).
+    Args:
+        sim: Simulator instance controlling the robots.
+        env_config: Environment settings that determine sensor layout and image configuration.
+        orig_obs_space: Baseline observation space for non-image sensors.
+        sim_view: Optional ``SimulationView`` used when capturing rendered frames.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[Union[SensorFusion, ImageSensorFusion]]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy], list[SensorFusion | ImageSensorFusion]]: Occupancy and
+        sensor fusion objects for each robot.
     """
     # Get the number of robots, simulation configuration,
     # robot configuration, and lidar configuration
@@ -491,9 +564,25 @@ def init_collision_and_sensors_with_image(
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
         def ray_sensor(r_id=r_id):
+            """Capture lidar ray scan for the specified robot.
+
+            Args:
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Ray scan distances from lidar.
+            """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
         def target_sensor(r_id=r_id):
+            """Capture target/goal sensor observations for the specified robot.
+
+            Args:
+                r_id: Robot index in the simulation.
+
+            Returns:
+                np.ndarray: Target sensor observation (goal direction and distances).
+            """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
                 sim.goal_pos[r_id],
@@ -501,19 +590,23 @@ def init_collision_and_sensors_with_image(
             )
 
         def speed_sensor(r_id=r_id):
+            """Capture current speed for the specified robot.
+
+            Args:
+                r_id: Robot index in the simulation.
+
+            Returns:
+                float: Current speed of the robot.
+            """
             return sim.robots[r_id].current_speed
 
         # Create appropriate sensor fusion based on configuration
         if use_image_obs and sim_view is not None:
-            from robot_sf.sensor.image_sensor import ImageSensor
-
             # Create image sensor
             image_config = getattr(env_config, "image_config", None)
             if image_config is not None:
                 image_sensor = ImageSensor(image_config, sim_view)
             else:
-                from robot_sf.sensor.image_sensor import ImageSensorSettings
-
                 image_sensor = ImageSensor(ImageSensorSettings(), sim_view)
 
             # Create image sensor fusion

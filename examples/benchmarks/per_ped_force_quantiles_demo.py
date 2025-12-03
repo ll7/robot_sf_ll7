@@ -17,6 +17,15 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
+    """TODO docstring. Document this function.
+
+    Args:
+        T: TODO docstring.
+        K: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
     robot_acc = np.zeros((T, 2))
@@ -36,6 +45,7 @@ def _make_episode(T: int, K: int) -> EpisodeData:
 
 
 def main() -> None:
+    """TODO docstring. Document this function."""
     T, K = 5, 3
     ep = _make_episode(T=T, K=K)
 

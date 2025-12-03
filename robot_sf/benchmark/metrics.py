@@ -97,6 +97,9 @@ def has_force_data(data: EpisodeData) -> bool:
     Force-based metrics are meaningless when the episode contains pedestrians
     but ``ped_forces`` is either missing, all zeros, or entirely non-finite.
     The helper treats the K=0 case as valid (no force data expected).
+
+    Returns:
+        True if valid force data is available, False otherwise.
     """
 
     if data.peds_pos.shape[1] == 0:
@@ -178,6 +181,9 @@ def success(data: EpisodeData, *, horizon: int) -> float:
     """Return 1 if goal reached before horizon with zero collisions else 0.
 
     Uses `reached_goal_step` if provided; if absent returns 0 (unknown / not reached).
+
+    Returns:
+        1.0 if successful (goal reached without collisions), 0.0 otherwise.
     """
     if data.reached_goal_step is None:
         return 0.0
@@ -193,6 +199,9 @@ def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
     """Normalized time to goal; 1.0 if not successful.
 
     success definition mirrors `success` metric (no collision + reached early).
+
+    Returns:
+        Normalized time to goal (0.0-1.0), or 1.0 if not successful.
     """
     if success(data, horizon=horizon) == 1.0:
         assert data.reached_goal_step is not None
@@ -204,6 +213,9 @@ def collisions(data: EpisodeData) -> float:
     """Count timesteps where min pedestrian distance < D_COLL.
 
     If no pedestrians are present (K=0) returns 0.0.
+
+    Returns:
+        Number of collision timesteps.
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
@@ -217,6 +229,9 @@ def near_misses(data: EpisodeData) -> float:
     """Count timesteps with d_coll <= min distance < d_near.
 
     If no pedestrians present returns 0.0.
+
+    Returns:
+        Number of near-miss timesteps.
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
@@ -231,6 +246,9 @@ def min_distance(data: EpisodeData) -> float:
     """Return global minimum distance to any pedestrian.
 
     Returns NaN when there are no pedestrians.
+
+    Returns:
+        Minimum distance in meters, or NaN if no pedestrians.
     """
     if data.peds_pos.shape[1] == 0:
         return float("nan")
@@ -244,6 +262,9 @@ def mean_distance(data: EpisodeData) -> float:
 
     At each timestep t, compute d_t = min_k ||peds_pos[t, k] - robot_pos[t]||.
     Return mean_t d_t. Returns NaN if there are no pedestrians.
+
+    Returns:
+        Mean minimum distance in meters, or NaN if no pedestrians.
     """
     # If no pedestrians (K==0), undefined -> NaN to mirror min_distance behavior
     if data.peds_pos.shape[1] == 0:
@@ -259,6 +280,9 @@ def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
 
     Actual path taken: positions up to goal step (inclusive) if reached, else full horizon.
     If actual length is ~0 (stationary) returns 1.0.
+
+    Returns:
+        Path efficiency ratio (0.0 to 1.0).
     """
     if data.robot_pos.shape[0] < 2:
         return 1.0
@@ -284,6 +308,9 @@ def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -
     """Compute quantiles of pedestrian force magnitudes.
 
     Returns NaN for each quantile if there are no pedestrians or timesteps.
+
+    Returns:
+        Dictionary mapping quantile labels to force magnitudes.
     """
     K = data.peds_pos.shape[1]
     T = data.peds_pos.shape[0]
@@ -359,6 +386,9 @@ def force_exceed_events(data: EpisodeData, threshold: float = COMFORT_FORCE_THRE
     """Count (t,k) events where |F| > threshold.
 
     Returns 0 if no pedestrians.
+
+    Returns:
+        Number of force threshold exceedance events.
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
@@ -372,6 +402,9 @@ def comfort_exposure(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHO
     """Normalized exposure to high force events.
 
     force_exceed_events / (K * T) where K=#peds, T=#timesteps. 0 if K==0 or T==0.
+
+    Returns:
+        Normalized comfort exposure ratio (0.0 to 1.0).
     """
     K = data.peds_pos.shape[1]
     T = data.peds_pos.shape[0]
@@ -384,18 +417,17 @@ def comfort_exposure(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHO
 
 
 def jerk_mean(data: EpisodeData) -> float:
-    """
-    Mean magnitude of jerk (time derivative of acceleration).
+    """Mean magnitude of jerk (time derivative of acceleration).
 
     Computes jerk vectors as consecutive differences of acceleration: j_t = a_{t+1} - a_t.
     The function averages the norms of the first T-2 jerk vectors (i.e., uses diffs[:-1]) so the denominator is T-2.
     Returns 0.0 if there are fewer than three acceleration samples.
 
-    Parameters:
-        data (EpisodeData): episode container; this function reads data.robot_acc.
+    Args:
+        data: Episode container providing ``robot_acc`` samples.
 
     Returns:
-        float: mean jerk magnitude (0.0 when insufficient timesteps).
+        float: Mean jerk magnitude (0.0 when insufficient timesteps).
     """
     acc = data.robot_acc
     T = acc.shape[0]
@@ -418,6 +450,9 @@ def curvature_mean(data: EpisodeData) -> float:
     where v is velocity and a is acceleration, both computed from position differences.
     For T position samples there are T-1 velocity samples and T-2 acceleration samples.
     If fewer than 4 timesteps, returns 0.0.
+
+    Returns:
+        Mean path curvature, or 0.0 if insufficient data.
     """
     pos = data.robot_pos
     T = pos.shape[0]
@@ -466,6 +501,9 @@ def energy(data: EpisodeData) -> float:
     """Sum of acceleration magnitudes over time.
 
     If no timesteps returns 0.0.
+
+    Returns:
+        Total energy (sum of acceleration magnitudes).
     """
     acc = data.robot_acc
     if acc.size == 0:
@@ -479,6 +517,9 @@ def avg_speed(data: EpisodeData) -> float:
 
     Uses all available timesteps up to the recorded trajectory length.
     Returns 0.0 if there are no velocity samples.
+
+    Returns:
+        Mean speed in meters per second.
     """
     vel = data.robot_vel
     if vel.size == 0:
@@ -490,7 +531,11 @@ def avg_speed(data: EpisodeData) -> float:
 
 
 def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -> float:
-    """Bilinear interpolate V on grid defined by X,Y (both shape (ny,nx))."""
+    """Bilinear interpolate V on grid defined by X,Y (both shape (ny,nx)).
+
+    Returns:
+        Interpolated value, or NaN if point is outside grid bounds.
+    """
     # Assume rectilinear grid aligned so X,Y vary independently
     xs = X[0]
     ys = Y[:, 0]
@@ -521,6 +566,9 @@ def force_gradient_norm_mean(data: EpisodeData) -> float:
 
     Requires `force_field_grid` with keys X,Y,Fx,Fy containing uniform rectilinear grid.
     Returns NaN if grid not present or insufficient points.
+
+    Returns:
+        Mean force gradient norm, or NaN if grid data unavailable.
     """
     grid = data.force_field_grid
     if grid is None:
@@ -561,48 +609,35 @@ def snqi(
     baseline_stats: dict[str, dict[str, float]] | None = None,
     eps: float = 1e-6,
 ) -> float:
-    """
-    Compute the Social Navigation Quality Index (SNQI) from raw metric values.
+    """Compute the Social Navigation Quality Index (SNQI).
 
-    One-line summary:
-        Aggregates multiple navigation metrics into a single scalar quality score using
-        weighted positive and penalized components.
+    Aggregates multiple navigation metrics into a single scalar by rewarding success, penalizing
+    slow progress, and subtracting normalized comfort/safety penalties.
 
-    Detailed behavior:
-        - Expects metric_values produced by compute_all_metrics; uses the following keys (with defaults):
-          "success" (default 0.0), "time_to_goal_norm" (default 1.0), "collisions",
-          "near_misses", "comfort_exposure" (default 0.0), "force_exceed_events",
-          "jerk_mean", "curvature_mean".
-        - Success contributes positively; time-to-goal and other listed metrics are treated as penalties.
-        - Penalized metrics (collisions, near_misses, force_exceed_events, jerk_mean, curvature_mean)
-          are optionally normalized to [0, 1] using baseline_stats. If baseline_stats is None or a
-          metric is missing from baseline_stats, its normalized value defaults to 0.0 (optimistic).
-          Normalization for a metric uses median ('med') and 95th percentile ('p95') from baseline_stats;
-          normalized = clamp((value - med) / max(p95 - med, eps), 0, 1).
-        - Each component is multiplied by its weight (weights dict). Missing weight entries default to 1.0.
-        - The final SNQI is: w_success*success - w_time*time_norm - sum(weights * normalized_penalties)
-          and is returned as a float.
-
-    Parameters:
-        metric_values: dict
-            Raw metric values from compute_all_metrics.
-        weights: dict
-            Per-component weights. Expected keys include (but are not limited to):
-            "w_success", "w_time", "w_collisions", "w_near", "w_comfort",
-            "w_force_exceed", "w_jerk", "w_curvature". Missing weights default to 1.0.
-        baseline_stats: dict | None
-            Optional mapping from metric name to {'med': float, 'p95': float} used to normalize
-            penalized metrics into [0,1]. If None or a metric entry is missing, that metric's
-            normalized contribution is treated as 0.0.
-        eps: float
-            Small number to avoid division-by-zero when computing normalization denominators.
+    Args:
+        metric_values: Raw metric values produced by ``compute_all_metrics``. Relevant keys include
+            ``success`` (defaults to 0.0), ``time_to_goal_norm`` (defaults to 1.0), ``collisions``,
+            ``near_misses``, ``comfort_exposure`` (defaults to 0.0), ``force_exceed_events``,
+            ``jerk_mean``, and ``curvature_mean``.
+        weights: Per-component weights, e.g., ``w_success``, ``w_time``, ``w_collisions``,
+            ``w_near``, ``w_comfort``, ``w_force_exceed``, ``w_jerk``, ``w_curvature``. Missing
+            weights default to ``1.0``.
+        baseline_stats: Optional normalization statistics mapping metric name to
+            ``{"med": float, "p95": float}``. When provided, each penalized metric is normalized to
+            ``[0, 1]`` via ``(value - med) / max(p95 - med, eps)`` before weighting. Missing entries
+            default to ``0.0`` contribution, effectively optimistic.
+        eps: Small epsilon to avoid divide-by-zero when ``p95 == med`` during normalization.
 
     Returns:
-        float
-            The aggregated SNQI score (higher is better).
+        float: Aggregated SNQI score (higher is better).
     """
 
     def _norm(name: str, value: float) -> float:
+        """Normalize a penalized metric to ``[0, 1]`` based on baseline stats.
+
+        Returns:
+            Normalized metric value clipped to [0, 1].
+        """
         if baseline_stats is None or name not in baseline_stats:
             return 0.0
         med = baseline_stats[name].get("med", 0.0)
@@ -616,6 +651,11 @@ def snqi(
         return float(norm)
 
     def _safe(val: float | None, default: float = 0.0) -> float:
+        """Return a finite float, falling back to ``default`` when input is None/NaN.
+
+        Returns:
+            Validated finite float value or default.
+        """
         v = float(val) if val is not None else default
         return v if math.isfinite(v) else default
 
@@ -1707,26 +1747,20 @@ def compute_all_metrics(
     horizon: int,
     shortest_path_len: float | None = None,
 ) -> dict[str, float]:
-    """
-    Compute all defined social-navigation metrics for an episode and return them as a mapping.
+    """Compute all defined metrics for an episode and return them as a mapping.
 
-    Calls each metric implementation on the provided EpisodeData and collects their scalar results into a dict keyed by metric name.
+    Calls each metric implementation on the provided ``EpisodeData`` instance and collects scalar
+    outputs keyed by metric name.
 
-    Parameters:
-        data: EpisodeData
-            Episode trajectory and auxiliary data used by the metrics.
-        horizon: int
-            Episode horizon (number of timesteps) used by time-normalized metrics.
-        shortest_path_len: float | None
-            Precomputed shortest-path length from start to goal. If None, the Euclidean
-            distance from the episode start to the goal is used as a fallback.
+    Args:
+        data: Episode trajectory and auxiliary data consumed by the metric functions.
+        horizon: Episode horizon (number of timesteps) used by normalized metrics.
+        shortest_path_len: Optional precomputed shortest path length from start to goal. When
+            ``None``, the Euclidean distance between initial pose and goal acts as fallback.
 
     Returns:
-        Dict[str, float]: A mapping from metric name to its computed scalar value. Keys include
-        "success", "time_to_goal_norm", "collisions", "near_misses", "min_distance",
-        "path_efficiency", force quantile keys (e.g. "force_q50"), "force_exceed_events",
-        "comfort_exposure", "jerk_mean", "curvature_mean", "energy", "avg_speed",
-        and "force_gradient_norm_mean".
+        dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
+        ``force_gradient_norm_mean``) to the computed scalar value.
     """
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback

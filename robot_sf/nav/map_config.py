@@ -318,6 +318,10 @@ class MapDefinition:
     def find_route(self, spawn_id: int, goal_id: int) -> GlobalRoute | None:
         """
         Returns the route for the given spawn id and goal id. If no route is found, returns None.
+
+        Returns:
+            GlobalRoute | None: The matching route object, or None if no route matches the
+                given spawn and goal IDs.
         """
         return next(
             filter(
@@ -414,6 +418,10 @@ class MapDefinitionPool:
     def _load_json_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
         """
         Load json map definitions from a folder in the maps_folder directory.
+
+        Returns:
+            dict[str, MapDefinition]: Dictionary mapping filenames (without extension) to
+                parsed MapDefinition objects for all .json files found in the folder.
         """
 
         # Check if the maps_folder directory exists
@@ -422,6 +430,17 @@ class MapDefinitionPool:
 
         # Function to load a JSON file
         def load_json(path: str) -> dict:
+            """Load and parse a JSON file from the given path.
+
+            Returns:
+                dict: Parsed JSON content as a Python dictionary.
+
+            Args:
+                path: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             with open(path, encoding="utf-8") as file:
                 return json.load(file)
 
@@ -482,6 +501,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Function to normalize a position
     def norm_pos(pos: Vec2D) -> Vec2D:
+        """TODO docstring. Document this function.
+
+        Args:
+            pos: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return (pos[0] - min_x, pos[1] - min_y)
 
     # Normalize the obstacles
@@ -491,6 +518,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Function to normalize a zone
     def norm_zone(rect: Rect) -> Rect:
+        """TODO docstring. Document this function.
+
+        Args:
+            rect: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
     # Normalize the zones
@@ -524,6 +559,14 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
     # Function to reverse a route
     def reverse_route(route: GlobalRoute) -> GlobalRoute:
+        """TODO docstring. Document this function.
+
+        Args:
+            route: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return GlobalRoute(
             route.goal_id,
             route.spawn_id,

@@ -7,6 +7,7 @@ runners and scripts to harden reproducibility guarantees.
 
 from __future__ import annotations
 
+import importlib
 import os
 import random
 from dataclasses import asdict, dataclass
@@ -27,28 +28,37 @@ class SeedReport:
     notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the dataclass as a regular dictionary for logging/JSON.
+
+        Returns:
+            dict[str, Any]: Dictionary representation suitable for serialization.
+        """
         return asdict(self)
 
 
 def _import_torch():
-    try:
-        import torch  # type: ignore
+    """Import torch lazily and return the module when available.
 
-        return torch
+    Returns:
+        Any | None: Imported torch module when available, otherwise None.
+    """
+    try:
+        return importlib.import_module("torch")  # type: ignore
     except ImportError:  # pragma: no cover - optional dependency
         return None
 
 
 def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
-    """Set global seeds for random, numpy, and torch (if available).
+    """Set global seeds for ``random``, ``numpy``, and torch (if available).
 
-    Parameters
-    - seed: Global seed to apply.
-    - deterministic: If True, set torch.backends.cudnn.deterministic True and
-      disable CUDNN benchmarking for deterministic convs (if torch available).
+    Args:
+        seed: Global seed applied to all supported generators.
+        deterministic: When ``True``, request deterministic torch behavior
+            (CUDNN deterministic kernels, ``use_deterministic_algorithms``) and disable
+            the CUDNN autotuner. Ignored when torch is unavailable.
 
-    Returns
-    - SeedReport with applied settings.
+    Returns:
+        SeedReport: Summary of the applied settings for logging/debugging.
     """
     # Core RNGs
     random.seed(seed)
@@ -86,7 +96,11 @@ def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
 
 
 def get_seed_state_sample(n: int = 5) -> dict[str, Any]:
-    """Return small sample sequences for quick sanity checks."""
+    """Return small sample sequences for quick sanity checks.
+
+    Returns:
+        dict[str, Any]: Example sequences for Python's `random` and NumPy RNGs.
+    """
     # Python random
     rand_seq = [random.random() for _ in range(n)]
     # NumPy

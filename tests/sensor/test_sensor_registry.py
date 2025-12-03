@@ -1,5 +1,5 @@
 """Tests for sensor registry and fusion adapter."""
-# ruff: noqa: F811  # Pytest fixtures intentionally shadow fixture names
+# Pytest fixtures intentionally shadow fixture names
 
 import pytest
 
@@ -19,16 +19,28 @@ class DummySensor:
     """Test sensor implementation."""
 
     def __init__(self, config):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         self.config = config
         self.observation = None
 
     def reset(self) -> None:
+        """TODO docstring. Document this function."""
         self.observation = None
 
     def step(self, state) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            state: TODO docstring.
+        """
         self.observation = state
 
     def get_observation(self):
+        """TODO docstring. Document this function."""
         return self.observation
 
 
@@ -62,6 +74,11 @@ def test_register_duplicate_raises_error(clean_registry):
     """Test that registering duplicate sensor name raises error."""
 
     def dummy_factory(config):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         return DummySensor(config)
 
     register_sensor("test_duplicate", dummy_factory)
@@ -74,9 +91,19 @@ def test_register_duplicate_with_override(clean_registry):
     """Test that override=True allows re-registration."""
 
     def factory1(config):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         return DummySensor(config)
 
     def factory2(config):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         return DummySensor({**config, "overridden": True})
 
     register_sensor("test_override", factory1)

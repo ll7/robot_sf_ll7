@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import numpy as np
 
 from robot_sf.common.types import Vec2D, Zone

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,16 @@ if TYPE_CHECKING:
 
 
 def _write_manifest(run_id: str, root: Path, metrics: dict[str, float]) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_id: TODO docstring.
+        root: TODO docstring.
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     path = get_training_run_manifest_path(run_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     metric_payload: dict[str, Any] = {}
@@ -35,6 +47,12 @@ def _write_manifest(run_id: str, root: Path, metrics: dict[str, float]) -> Path:
 
 
 def test_analyze_imitation_results_generates_summary(tmp_path: Path, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     baseline_metrics = {
         "timesteps_to_convergence": 1000.0,

@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import robot_sf
 from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
 
 logger = logging.getLogger(__name__)
@@ -104,8 +105,6 @@ class SchemaReference:
             FileNotFoundError: If resolved path doesn't exist
         """
         # Get the robot_sf package root
-        import robot_sf
-
         package_root = Path(robot_sf.__file__).parent
 
         # Resolve the relative path
@@ -165,20 +164,36 @@ class SchemaReference:
         return self._loaded_schema.get_property_schema(property_name)
 
     def __str__(self) -> str:
-        """String representation."""
+        """String representation.
+
+        Returns:
+            Human-readable string showing path, version, and load status.
+        """
         status = "loaded" if self.is_loaded else "not loaded"
         return f"SchemaReference(path={self.schema_path}, version={self.version}, status={status})"
 
     def __repr__(self) -> str:
-        """Detailed string representation."""
+        """Detailed string representation.
+
+        Returns:
+            Detailed constructor-style representation of the schema reference.
+        """
         return f"SchemaReference(schema_path='{self.schema_path}', version='{self.version}')"
 
     def __eq__(self, other: object) -> bool:
-        """Check equality based on path and version."""
+        """Check equality based on path and version.
+
+        Returns:
+            True if other is a SchemaReference with same path and version.
+        """
         if not isinstance(other, SchemaReference):
             return False
         return self.schema_path == other.schema_path and self.version == other.version
 
     def __hash__(self) -> int:
-        """Hash based on path and version."""
+        """Hash based on path and version.
+
+        Returns:
+            Hash value computed from schema path and version tuple.
+        """
         return hash((self.schema_path, self.version))

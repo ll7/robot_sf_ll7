@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 
 def test_generate_table_from_summary_with_ci(tmp_path: Path):
     # Minimal episodes (still required for other steps, but table will use summary)
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")  # dummy line; table not derived from it
 

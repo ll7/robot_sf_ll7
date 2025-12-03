@@ -15,9 +15,12 @@ multi-processing are future work.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import math
 import os
+import platform
+import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -26,11 +29,27 @@ from datetime import (
     datetime,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import yaml
 from loguru import logger
+
+try:
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    ImageSequenceClip = None  # type: ignore[assignment]
+
+try:
+    from robot_sf.baselines import get_baseline, list_baselines
+    from robot_sf.baselines.social_force import Observation
+except ImportError as exc:  # pragma: no cover - optional baseline dependency
+    get_baseline = None  # type: ignore[assignment]
+    list_baselines = None  # type: ignore[assignment]
+    Observation = None  # type: ignore[assignment]
+    _BASELINE_IMPORT_ERROR = exc
+else:
+    _BASELINE_IMPORT_ERROR = None
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
@@ -47,19 +66,17 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
     """Load and construct a baseline planner from the registry.
 
     Returns (planner, ObservationCls, config_dict).
+
+    Returns:
+        Tuple of (planner instance, Observation class, config dict).
     """
-    try:
-        from robot_sf.baselines import get_baseline
-        from robot_sf.baselines.social_force import Observation
-    except ImportError as e:
-        raise RuntimeError(f"Failed to import baseline algorithms: {e}")
+    if get_baseline is None or Observation is None:
+        raise RuntimeError(f"Failed to import baseline algorithms: {_BASELINE_IMPORT_ERROR}")
 
     try:
         planner_class = get_baseline(algo)
     except KeyError:
-        from robot_sf.baselines import list_baselines
-
-        available = list_baselines()
+        available = list_baselines() if list_baselines is not None else []
         raise ValueError(f"Unknown algorithm '{algo}'. Available: {available}")
 
     # Load configuration if provided
@@ -79,6 +96,19 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
 
 
 def _build_observation(ObservationCls, robot_pos, robot_vel, robot_goal, ped_positions, dt):
+    """Build an Observation instance from robot and pedestrian state.
+
+    Args:
+        ObservationCls: The Observation class to instantiate.
+        robot_pos: Current robot position array.
+        robot_vel: Current robot velocity array.
+        robot_goal: Robot goal position array.
+        ped_positions: Array of pedestrian positions.
+        dt: Timestep duration.
+
+    Returns:
+        Observation instance with current state data.
+    """
     agents = [
         {"position": pos.tolist(), "velocity": [0.0, 0.0], "radius": 0.35} for pos in ped_positions
     ]
@@ -102,18 +132,34 @@ FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 def _git_hash_fallback() -> str:
     # Best effort; avoid importing subprocess if not needed later
-    try:
-        import subprocess
+    """TODO docstring. Document this function.
 
+
+    Returns:
+        TODO docstring.
+    """
+    try:
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
         return out.decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        OSError,
+    ) as exc:  # pragma: no cover
         # Best-effort fallback when git is unavailable or fails; retain behavior
         logger.debug("_git_hash_fallback failed: %s", exc)
         return "unknown"
 
 
 def _config_hash(obj: Any) -> str:
+    """Return a stable, deterministic 16-char hash from JSON serialization.
+
+    Args:
+        obj: Object to hash (must be JSON-serializable).
+
+    Returns:
+        16-character hex hash string.
+    """
     data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(data).hexdigest()[:16]
 
@@ -125,6 +171,9 @@ def compute_episode_id(scenario_params: dict[str, Any], seed: int) -> str:  # le
     prefix by embedding scenario id when available. Existing manifests that
     relied on the old format will naturally diverge (different ids) — identity
     hash below ensures resume manifests invalidate cleanly.
+
+    Returns:
+        Episode ID string in format <scenario_id>--<seed>.
     """
     scenario_id = scenario_params.get("id", "unknown")
     # For current test suite compatibility and simple resume semantics we use
@@ -139,10 +188,11 @@ def _episode_identity_hash() -> str:
     Intentionally small and stable across runs of the same code. If the
     implementation of ``compute_episode_id`` changes, this hash will change
     as well, which invalidates any previously saved manifest sidecars.
+
+    Returns:
+        12-character hex hash of compute_episode_id implementation.
     """
     try:
-        import inspect
-
         src = inspect.getsource(compute_episode_id)
     except (OSError, TypeError):
         # Fallback to function name when source isn't available (e.g., pyc only)
@@ -155,6 +205,9 @@ def index_existing(out_path: Path) -> set[str]:
 
     Tolerates malformed lines and missing keys; logs are not emitted here to keep
     the function side-effect free (caller may log if desired).
+
+    Returns:
+        Set of episode IDs found in the JSONL file.
     """
     ids: set[str] = set()
     try:
@@ -182,6 +235,14 @@ def index_existing(out_path: Path) -> set[str]:
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with Path(path).open("r", encoding="utf-8") as f:
         docs = list(yaml.safe_load_all(f))
     # Allow either YAML stream of docs or a single list
@@ -190,7 +251,11 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
 
 
 def _simple_robot_policy(robot_pos: np.ndarray, goal: np.ndarray, speed: float = 1.0) -> np.ndarray:
-    """Return a velocity vector pointing toward goal with capped speed."""
+    """Return a velocity vector pointing toward goal with capped speed.
+
+    Returns:
+        Velocity vector as 2D numpy array.
+    """
     vec = goal - robot_pos
     dist = float(np.linalg.norm(vec))
     if dist < 1e-9:
@@ -204,6 +269,15 @@ def _prepare_robot_points(
     robot_start: Sequence[float] | None,
     robot_goal: Sequence[float] | None,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Convert robot start/goal to numpy arrays with defaults.
+
+    Args:
+        robot_start: Robot starting position or None for default.
+        robot_goal: Robot goal position or None for default.
+
+    Returns:
+        Tuple of (start position array, goal position array).
+    """
     if robot_start is None:
         rs = np.array([0.3, 3.0], dtype=float)
     else:
@@ -224,6 +298,9 @@ def _stack_or_zero(
     """Stack recorded trajectory data or return a zero-length array of known shape.
 
     Note: To avoid unnecessary memory allocation, `empty_shape` should have zero in the first dimension.
+
+    Returns:
+        Stacked trajectory array or empty array with specified shape.
     """
     if traj:
         return stack_fn(traj)
@@ -246,6 +323,21 @@ def _build_episode_data(
     dt: float,
     reached_goal_step: int | None,
 ) -> EpisodeData:
+    """TODO docstring. Document this function.
+
+    Args:
+        robot_pos_traj: TODO docstring.
+        robot_vel_traj: TODO docstring.
+        robot_acc_traj: TODO docstring.
+        peds_pos_traj: TODO docstring.
+        ped_forces_traj: TODO docstring.
+        goal: TODO docstring.
+        dt: TODO docstring.
+        reached_goal_step: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     robot_pos = _stack_or_zero(robot_pos_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_vel = _stack_or_zero(robot_vel_traj, stack_fn=np.vstack, empty_shape=(0, 2))
     robot_acc = _stack_or_zero(robot_acc_traj, stack_fn=np.vstack, empty_shape=(0, 2))
@@ -265,9 +357,19 @@ def _build_episode_data(
 
 
 def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  # noqa: C901
-    """Create a robot policy function based on the specified algorithm."""
+    """Create a robot policy function based on the specified algorithm.
+
+    Returns:
+        Tuple of (policy function, metadata dict).
+    """
 
     def _simple_policy_adapter():
+        """Create simple policy that navigates directly toward goal.
+
+        Returns:
+            Tuple of (policy function, metadata dict).
+        """
+
         def policy(
             robot_pos: np.ndarray,
             _robot_vel: np.ndarray,
@@ -275,6 +377,18 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             _ped_positions: np.ndarray,
             _dt: float,
         ) -> np.ndarray:
+            """Compute velocity command toward goal.
+
+            Args:
+                robot_pos: Current robot position.
+                _robot_vel: Current robot velocity (unused).
+                robot_goal: Target goal position.
+                _ped_positions: Pedestrian positions (unused).
+                _dt: Timestep duration (unused).
+
+            Returns:
+                Velocity command as 2D array.
+            """
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
         return policy, {"algorithm": "simple_policy", "config": {}, "config_hash": "na"}
@@ -285,6 +399,14 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
     planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
     def _clamp_speed(vel: np.ndarray) -> np.ndarray:
+        """Clamp velocity magnitude to maximum allowed speed.
+
+        Args:
+            vel: Velocity vector to clamp.
+
+        Returns:
+            Clamped velocity vector.
+        """
         speed = float(np.linalg.norm(vel))
         if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
             return vel / speed * FINAL_SPEED_CLAMP
@@ -296,6 +418,17 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         robot_vel: np.ndarray,
         robot_goal: np.ndarray,
     ) -> np.ndarray:
+        """Convert planner action dict to velocity vector.
+
+        Args:
+            action: Action dict with either (vx, vy) or (v, omega) keys.
+            robot_pos: Current robot position.
+            robot_vel: Current robot velocity.
+            robot_goal: Target goal position.
+
+        Returns:
+            Velocity vector as 2D array.
+        """
         if "vx" in action and "vy" in action:
             return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
         if "v" in action and "omega" in action:
@@ -319,11 +452,20 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         ped_positions: np.ndarray,
         dt: float,
     ) -> np.ndarray:
-        """Policy function that uses the baseline planner."""
+        """Policy function that uses the baseline planner.
+
+        Returns:
+            Velocity command as 2D array.
+        """
         obs = _build_observation(Observation, robot_pos, robot_vel, robot_goal, ped_positions, dt)
 
         # Execute planner.step with a small timeout to avoid stalls
         def _do_step():
+            """Execute planner step in thread pool.
+
+            Returns:
+                Action dict from planner.
+            """
             return planner.step(obs)
 
         try:
@@ -352,6 +494,12 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
 
 
 def _append_video_skip_note(record: dict[str, Any], note: str) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        note: TODO docstring.
+    """
     existing = record.get("notes")
     if existing:
         record["notes"] = f"{existing}; {note}"
@@ -370,6 +518,18 @@ def _emit_video_skip(
     steps: int | None,
     error: str | None = None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        episode_id: TODO docstring.
+        scenario_id: TODO docstring.
+        seed: TODO docstring.
+        renderer: TODO docstring.
+        reason: TODO docstring.
+        steps: TODO docstring.
+        error: TODO docstring.
+    """
     context = {
         "episode_id": episode_id,
         "scenario_id": scenario_id,
@@ -381,21 +541,16 @@ def _emit_video_skip(
     if error:
         context["error"] = error
     try:
-        from loguru import logger  # type: ignore
-    except ImportError:
-        logger = None  # type: ignore
-    if logger is not None:
-        try:
-            logger.warning(
-                (
-                    "Video skipped: reason={reason} episode_id={episode_id} "
-                    "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
-                ),
-                **context,
-            )
-        except (AttributeError, TypeError):
-            # Logging failure -> ignore
-            pass
+        logger.warning(
+            (
+                "Video skipped: reason={reason} episode_id={episode_id} "
+                "scenario_id={scenario_id} seed={seed} renderer={renderer} steps={steps}"
+            ),
+            **context,
+        )
+    except (AttributeError, TypeError):
+        # Logging failure -> ignore
+        pass
 
     note_parts = [f"video skipped ({renderer}): {reason}"]
     if steps is not None:
@@ -418,10 +573,11 @@ def _try_encode_synthetic_video(
 
     - Draws a simple red dot for the robot position per frame on a black canvas.
     - Uses moviepy ImageSequenceClip if available; returns None when unavailable.
+
+    Returns:
+        Tuple of (video metadata dict or None, error info dict or None).
     """
-    try:
-        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip  # type: ignore
-    except (ImportError, ModuleNotFoundError):
+    if ImageSequenceClip is None:
         _skip_info = {
             "reason": "moviepy-missing",
             "renderer": "synthetic",
@@ -429,8 +585,6 @@ def _try_encode_synthetic_video(
         }
         return None, _skip_info
     # Successfully imported moviepy; proceed with encoding attempt
-
-    import numpy as _np  # local alias to avoid confusion
 
     N = len(robot_pos_traj)
     if N == 0:
@@ -442,8 +596,8 @@ def _try_encode_synthetic_video(
         return None, _skip_info
     H, W = 128, 128
     # Determine bounds for simple normalization
-    xs = _np.array([p[0] for p in robot_pos_traj], dtype=float)
-    ys = _np.array([p[1] for p in robot_pos_traj], dtype=float)
+    xs = np.array([p[0] for p in robot_pos_traj], dtype=float)
+    ys = np.array([p[1] for p in robot_pos_traj], dtype=float)
     min_x, max_x = float(xs.min()), float(xs.max())
     min_y, max_y = float(ys.min()), float(ys.max())
     # Pad 10%
@@ -456,21 +610,30 @@ def _try_encode_synthetic_video(
 
     def to_px(x: float, y: float) -> tuple[int, int]:
         # Normalize to [0,1] then scale to pixels; y inverted for image coords
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+            y: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         nx = 0.0 if max_x == min_x else (x - min_x) / (max_x - min_x)
         ny = 0.0 if max_y == min_y else (y - min_y) / (max_y - min_y)
         px = int(nx * (W - 1))
         py = int((1.0 - ny) * (H - 1))
         return px, py
 
-    frames: list[_np.ndarray] = []
+    frames: list[np.ndarray] = []
     for i in range(N):
-        img = _np.zeros((H, W, 3), dtype=_np.uint8)
+        img = np.zeros((H, W, 3), dtype=np.uint8)
         x, y = robot_pos_traj[i]
         px, py = to_px(float(x), float(y))
         # Draw small 3x3 red square centered at (px,py)
         x0, x1 = max(0, px - 1), min(W, px + 2)
         y0, y1 = max(0, py - 1), min(H, py + 2)
-        img[y0:y1, x0:x1, :] = _np.array([220, 30, 30], dtype=_np.uint8)
+        img[y0:y1, x0:x1, :] = np.array([220, 30, 30], dtype=np.uint8)
         frames.append(img)
     mp4_path = out_dir / f"video_{episode_id}.mp4"
     try:
@@ -554,8 +717,6 @@ def _annotate_and_check_video_perf(
             )
         else:
             try:
-                from loguru import logger  # type: ignore
-
                 logger.warning(
                     (
                         "Video overhead hard breach but continue: "
@@ -578,8 +739,6 @@ def _annotate_and_check_video_perf(
             )
         else:
             try:
-                from loguru import logger  # type: ignore
-
                 logger.warning(
                     (
                         "Video overhead soft breach: "
@@ -668,6 +827,21 @@ def _simulate_episode_with_policy(
     np.ndarray,
     int | None,
 ]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario_params: TODO docstring.
+        seed: TODO docstring.
+        robot_policy: TODO docstring.
+        horizon: TODO docstring.
+        dt: TODO docstring.
+        robot_start: TODO docstring.
+        robot_goal: TODO docstring.
+        record_forces: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     gen = generate_scenario(scenario_params, seed=seed)
     sim = gen.simulator
     if sim is None:
@@ -694,6 +868,16 @@ def _simulate_episode_with_policy(
         curr_vel: np.ndarray,
         ped_positions: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """TODO docstring. Document this function.
+
+        Args:
+            curr_pos: TODO docstring.
+            curr_vel: TODO docstring.
+            ped_positions: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
         new_pos = curr_pos + new_vel * dt
         acc_vec = (new_vel - curr_vel) / dt
@@ -740,6 +924,17 @@ def _compute_metrics(
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        ep: TODO docstring.
+        horizon: TODO docstring.
+        snqi_weights: TODO docstring.
+        snqi_baseline: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
     return _post_process_metrics(
         metrics_raw,
@@ -755,6 +950,18 @@ def _build_episode_record(
     algo_metadata: dict[str, Any],
     ts_start: str,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenario_params: TODO docstring.
+        seed: TODO docstring.
+        metrics: TODO docstring.
+        algo_metadata: TODO docstring.
+        ts_start: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episode_id = compute_episode_id(scenario_params, seed)
     return {
         "episode_id": episode_id,
@@ -790,6 +997,9 @@ def run_episode(
     """Run a single episode and return a metrics record dict.
 
     The robot can use different algorithms based on the 'algo' parameter.
+
+    Returns:
+        Episode record dictionary with metrics, trajectories, and metadata.
     """
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
@@ -856,6 +1066,13 @@ def validate_and_write(
     schema_path: str | Path,
     out_path: str | Path,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        record: TODO docstring.
+        schema_path: TODO docstring.
+        out_path: TODO docstring.
+    """
     schema = load_schema(schema_path)
     validate_episode(record, schema)
     out_path = Path(out_path)
@@ -878,6 +1095,16 @@ def _post_process_metrics(
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
 ) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        metrics_raw: TODO docstring.
+        snqi_weights: TODO docstring.
+        snqi_baseline: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     metrics: dict[str, Any] = dict(metrics_raw.items())
     metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
     fq = {k: v for k, v in metrics.items() if k.startswith("force_q")}
@@ -902,7 +1129,11 @@ def _post_process_metrics(
 
 
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
-    """Remove NaN/inf metric entries to keep JSON serialization clean."""
+    """Remove NaN/inf metric entries to keep JSON serialization clean.
+
+    Returns:
+        Cleaned metrics dictionary with NaN/inf values removed.
+    """
 
     clean: dict[str, Any] = {}
     for key, val in metrics.items():
@@ -922,6 +1153,16 @@ def _expand_jobs(
     base_seed: int = 0,
     repeats_override: int | None = None,
 ) -> list[tuple[dict[str, Any], int]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenarios: TODO docstring.
+        base_seed: TODO docstring.
+        repeats_override: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     jobs: list[tuple[dict[str, Any], int]] = []
     for sc in scenarios:
         reps = int(sc.get("repeats", 1)) if repeats_override is None else int(repeats_override)
@@ -935,6 +1176,9 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
 
     Accepts a tuple of (scenario_dict, seed, fixed_params_dict) and returns a record dict.
     This must remain at module top-level for multiprocessing 'spawn' pickling.
+
+    Returns:
+        Episode record dictionary.
     """
     sc, seed, params = job
     return run_episode(
@@ -954,6 +1198,13 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
 
 
 def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[str, Any]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        out_path: TODO docstring.
+        schema: TODO docstring.
+        rec: TODO docstring.
+    """
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
@@ -968,6 +1219,19 @@ def _run_batch_sequential(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        jobs: TODO docstring.
+        out_path: TODO docstring.
+        schema: TODO docstring.
+        fixed_params: TODO docstring.
+        progress_cb: TODO docstring.
+        fail_fast: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)
@@ -983,7 +1247,11 @@ def _run_batch_sequential(
                     pass
         except Exception as e:  # pragma: no cover - error path
             failures.append(
-                {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)},
+                {
+                    "scenario_id": sc.get("id", "unknown"),
+                    "seed": seed,
+                    "error": repr(e),
+                },
             )
             if progress_cb is not None:
                 try:
@@ -1005,6 +1273,20 @@ def _run_batch_parallel(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        jobs: TODO docstring.
+        out_path: TODO docstring.
+        schema: TODO docstring.
+        fixed_params: TODO docstring.
+        workers: TODO docstring.
+        progress_cb: TODO docstring.
+        fail_fast: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)
@@ -1027,7 +1309,11 @@ def _run_batch_parallel(
                         pass
             except Exception as e:  # pragma: no cover
                 failures.append(
-                    {"scenario_id": sc.get("id", "unknown"), "seed": seed, "error": repr(e)},
+                    {
+                        "scenario_id": sc.get("id", "unknown"),
+                        "seed": seed,
+                        "error": repr(e),
+                    },
                 )
                 if progress_cb is not None:
                     try:
@@ -1048,16 +1334,18 @@ def _prepare_batch_setup(
     schema_path: str | Path,
     append: bool,
 ) -> tuple[list[dict[str, Any]], Path, dict[str, Any]]:
-    """Prepare scenarios, output path, and schema for batch processing."""
-    # Load scenarios
-    from typing import cast
+    """Prepare scenarios, output path, and schema for batch processing.
 
+    Returns:
+        Tuple of (scenarios list, output path, schema dict).
+    """
+    # Load scenarios
     scenarios_is_path = isinstance(scenarios_or_path, str | Path)
     if scenarios_is_path:
-        scenarios = load_scenario_matrix(cast(str | Path, scenarios_or_path))
+        scenarios = load_scenario_matrix(cast("str | Path", scenarios_or_path))
     else:
         # scenarios_or_path is already list[dict[str, Any]]
-        scenarios = cast(list[dict[str, Any]], scenarios_or_path)
+        scenarios = cast("list[dict[str, Any]]", scenarios_or_path)
 
     # Prepare output
     out_path = Path(out_path)
@@ -1081,7 +1369,11 @@ def _setup_fixed_params(
     algo: str,
     algo_config_path: str | None,
 ) -> dict[str, Any]:
-    """Set up the fixed parameters dict for job execution."""
+    """Set up the fixed parameters dict for job execution.
+
+    Returns:
+        Dictionary with fixed parameters for all episodes.
+    """
     videos_dir = (out_path.parent / "videos").as_posix()
     return {
         "horizon": horizon,
@@ -1102,7 +1394,11 @@ def _filter_resume_jobs(
     out_path: Path,
     resume: bool,
 ) -> list[tuple[dict[str, Any], int]]:
-    """Filter jobs based on resume logic, skipping existing episodes."""
+    """Filter jobs based on resume logic, skipping existing episodes.
+
+    Returns:
+        Filtered list of (scenario dict, seed) tuples excluding completed episodes.
+    """
     if not resume or not out_path.exists():
         return jobs
 
@@ -1133,7 +1429,11 @@ def _run_jobs(
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Execute jobs using sequential or parallel processing."""
+    """Execute jobs using sequential or parallel processing.
+
+    Returns:
+        Tuple of (number of records written, list of failed jobs).
+    """
     if workers <= 1:
         return _run_batch_sequential(
             jobs,
@@ -1160,7 +1460,11 @@ def _finalize_batch(
     wrote: int,
     resume: bool,
 ) -> dict[str, Any]:
-    """Finalize batch processing: save manifest and optional performance snapshot."""
+    """Finalize batch processing: save manifest and optional performance snapshot.
+
+    Returns:
+        Summary dictionary with episode counts and outcome statistics.
+    """
     # Save/update manifest to speed up future resume if we wrote anything
     if resume and wrote > 0 and out_path.exists():
         # Re-index by scanning (cheap) to ensure we capture exactly what's on disk
@@ -1174,8 +1478,6 @@ def _finalize_batch(
     # Optional: write a small performance snapshot for video encoding if requested
     try:
         if os.getenv("ROBOT_SF_VIDEO_PERF_SNAPSHOT"):
-            import platform
-
             vids: list[dict] = []
             try:
                 with out_path.open("r", encoding="utf-8") as f:
@@ -1250,6 +1552,9 @@ def run_batch(
 
     scenarios_or_path: either a list of scenario dicts or a YAML file path.
     Returns a summary dict with counts and failures.
+
+    Returns:
+        Summary dictionary with episode counts, failures, and execution metadata.
     """
     # Prepare batch setup
     scenarios, out_path, schema = _prepare_batch_setup(

@@ -11,8 +11,19 @@ from robot_sf.benchmark.full_classic.precision import evaluate_precision
 
 
 def test_evaluate_precision_structure():
+    """TODO docstring. Document this function."""
+
     class _Metric:
+        """TODO docstring. Document this class."""
+
         def __init__(self, name, mean, mean_ci):
+            """TODO docstring. Document this function.
+
+            Args:
+                name: TODO docstring.
+                mean: TODO docstring.
+                mean_ci: TODO docstring.
+            """
             self.name = name
             self.mean = mean
             self.median = mean
@@ -21,7 +32,15 @@ def test_evaluate_precision_structure():
             self.median_ci = None
 
     class _Group:
+        """TODO docstring. Document this class."""
+
         def __init__(self, archetype, density):
+            """TODO docstring. Document this function.
+
+            Args:
+                archetype: TODO docstring.
+                density: TODO docstring.
+            """
             self.archetype = archetype
             self.density = density
             self.count = 40
@@ -33,6 +52,8 @@ def test_evaluate_precision_structure():
     groups = [_Group("crossing", "low")]
 
     class _Cfg:
+        """TODO docstring. Document this class."""
+
         smoke = True
         collision_ci = 0.05
         success_ci = 0.05

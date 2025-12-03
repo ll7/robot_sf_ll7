@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,12 @@ SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schema.json"
 
 def test_cli_run_subcommand(tmp_path: Path, capsys):
     # Minimal scenario matrix YAML
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        capsys: TODO docstring.
+    """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {

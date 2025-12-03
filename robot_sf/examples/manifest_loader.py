@@ -40,6 +40,7 @@ class ExampleCategory:
     ci_default: bool = True
 
     def __post_init__(self) -> None:
+        """TODO docstring. Document this function."""
         if not self.slug:
             raise ManifestValidationError("Category slug cannot be empty.")
         if "/" in self.slug or "\\" in self.slug:
@@ -75,6 +76,7 @@ class ExampleScript:
     tags: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
+        """TODO docstring. Document this function."""
         normalized_path = PurePosixPath(str(self.path))
         if normalized_path.is_absolute():
             raise ManifestValidationError(
@@ -130,6 +132,7 @@ class ExampleManifest:
     _categories_by_slug: dict[str, ExampleCategory] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
+        """TODO docstring. Document this function."""
         if not self.version:
             raise ManifestValidationError("Manifest version string cannot be empty.")
         if not self.manifest_path.is_file():
@@ -248,6 +251,14 @@ def load_manifest(
 
 
 def _resolve_manifest_path(manifest_path: str | Path | None) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        manifest_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if manifest_path is not None:
         path = Path(manifest_path).expanduser().resolve()
         if not path.is_file():
@@ -262,6 +273,14 @@ def _resolve_manifest_path(manifest_path: str | Path | None) -> Path:
 
 
 def _read_manifest_yaml(path: Path) -> Mapping[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
     if not isinstance(data, Mapping):
@@ -270,6 +289,14 @@ def _read_manifest_yaml(path: Path) -> Mapping[str, Any]:
 
 
 def _parse_categories(raw_categories: Any) -> dict[str, ExampleCategory]:
+    """TODO docstring. Document this function.
+
+    Args:
+        raw_categories: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(raw_categories, Sequence):
         raise ManifestValidationError("Manifest 'categories' must be a list.")
 
@@ -300,6 +327,15 @@ def _parse_examples(
     raw_examples: Any,
     categories: Mapping[str, ExampleCategory],
 ) -> tuple[ExampleScript, ...]:
+    """TODO docstring. Document this function.
+
+    Args:
+        raw_examples: TODO docstring.
+        categories: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(raw_examples, Sequence):
         raise ManifestValidationError("Manifest 'examples' must be a list.")
 
@@ -343,24 +379,59 @@ def _parse_examples(
 
 
 def _expect_string(value: Any, field_name: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+        field_name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(value, str) or not value:
         raise ManifestValidationError(f"Field '{field_name}' must be a non-empty string.")
     return value
 
 
 def _expect_int(value: Any, field_name: str) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+        field_name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(value, int):
         raise ManifestValidationError(f"Field '{field_name}' must be an integer.")
     return value
 
 
 def _expect_bool(value: Any, field_name: str) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+        field_name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if not isinstance(value, bool):
         raise ManifestValidationError(f"Field '{field_name}' must be a boolean.")
     return value
 
 
 def _optional_string(value: Any) -> str | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None:
         return None
     if not isinstance(value, str):
@@ -370,6 +441,15 @@ def _optional_string(value: Any) -> str | None:
 
 
 def _optional_string_sequence(value: Any, field_name: str) -> tuple[str, ...]:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+        field_name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if value is None:
         return ()
     return _validate_string_sequence(value, field_name)
@@ -380,6 +460,16 @@ def _validate_string_sequence(
     field_name: str,
     context: PurePosixPath | None = None,
 ) -> tuple[str, ...]:
+    """TODO docstring. Document this function.
+
+    Args:
+        value: TODO docstring.
+        field_name: TODO docstring.
+        context: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if isinstance(value, str):
         raise ManifestValidationError(
             f"Field '{field_name}' must be a list of strings, not a single string."

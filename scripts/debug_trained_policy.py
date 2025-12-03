@@ -1,9 +1,12 @@
+"""TODO docstring. Document this module."""
+
 from stable_baselines3 import PPO
 
 from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def training():
+    """TODO docstring. Document this function."""
     env = RobotEnv(debug=True)
     model = PPO.load("./model/ppo_model", env=env)
 

@@ -20,6 +20,14 @@ except ImportError as e:  # pragma: no cover
 
 
 def load_schema(path: str | Path) -> dict[str, Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     path = Path(path)
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)

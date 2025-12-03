@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import os
 import sys
 from dataclasses import dataclass, field
@@ -56,6 +58,9 @@ def _empty_map_definition() -> MapDefinition:
     This avoids needing callers to always supply a map and keeps SimulationView
     construction lightweight for utility or test contexts. The map is a 1x1 square
     with a single spawn/goal triangle; routes are empty.
+
+    Returns:
+        MapDefinition: A 1x1 minimal map with single spawn/goal triangle and empty routes.
     """
     rect = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
     bounds = [
@@ -81,6 +86,8 @@ def _empty_map_definition() -> MapDefinition:
 
 @dataclass
 class VisualizableAction:
+    """TODO docstring. Document this class."""
+
     pose: RobotPose
     action: DifferentialDriveAction | BicycleAction | UnicycleAction
     goal: Vec2D
@@ -279,6 +286,9 @@ class SimulationView:
         2) On Linux, consider headless only when both DISPLAY and WAYLAND_DISPLAY
            are missing or empty (covers X11 and Wayland).
         3) Do not use MPLBACKEND as a signal for pygame headless decisions.
+
+        Returns:
+            bool: True if environment is headless (dummy driver or missing display on Linux).
         """
         sdl_driver = os.environ.get("SDL_VIDEODRIVER", "")
         display = os.environ.get("DISPLAY", "")
@@ -457,16 +467,30 @@ class SimulationView:
 
     @property
     def _timestep_text_pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            tuple[int, int]: Default ray vector rendering size (16, 16) pixels.
+        """
         return (16, 16)
 
     def _scale_tuple(self, tup: tuple[float, float]) -> tuple[float, float]:
-        """scales a tuple of floats by the scaling factor and adds the offset."""
+        """scales a tuple of floats by the scaling factor and adds the offset.
+
+        Returns:
+            tuple[float, float]: Scaled and offset-adjusted (x, y) coordinates.
+        """
         x = tup[0] * self.scaling + self.offset[0]
         y = tup[1] * self.scaling + self.offset[1]
         return (x, y)
 
     def exit_simulation(self, return_frames: bool = False):
-        """Exit the simulation."""
+        """Exit the simulation.
+
+        Returns:
+            list | None: Captured video frames if return_frames=True, otherwise None (implicit).
+        """
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
         # Diagnostic guard: warn if recording requested but no frames captured
@@ -592,6 +616,7 @@ class SimulationView:
             pygame.display.update()
 
     def _resize_window(self):
+        """TODO docstring. Document this function."""
         logger.debug("Resizing the window.")
         old_surface = self.screen
         if self._use_display:
@@ -615,6 +640,11 @@ class SimulationView:
     def _draw_robot(self, pose: RobotPose):
         # TODO(#252): display robot with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
+        """TODO docstring. Document this function.
+
+        Args:
+            pose: TODO docstring.
+        """
         pygame.draw.circle(
             self.screen,
             ROBOT_COLOR,
@@ -625,6 +655,11 @@ class SimulationView:
     def _draw_ego_ped(self, pose: PedPose):
         # TODO(#252): display ego ped with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
+        """TODO docstring. Document this function.
+
+        Args:
+            pose: TODO docstring.
+        """
         pygame.draw.circle(
             self.screen,
             EGO_PED_COLOR,
@@ -635,6 +670,11 @@ class SimulationView:
     def _draw_pedestrians(self, ped_pos: np.ndarray):
         # TODO(#252): display pedestrians with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
+        """TODO docstring. Document this function.
+
+        Args:
+            ped_pos: TODO docstring.
+        """
         for ped_x, ped_y in ped_pos:
             pygame.draw.circle(
                 self.screen,
@@ -645,6 +685,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
+        """TODO docstring. Document this function."""
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [(self._scale_tuple((x, y))) for x, y in obstacle.vertices_np]
@@ -653,6 +694,7 @@ class SimulationView:
 
     def _draw_spawn_zones(self):
         # Iterate over each spawn_zone in the list of spawn_zones
+        """TODO docstring. Document this function."""
         for spawn_zone in self.map_def.ped_spawn_zones:
             # Scale and offset the vertices of the zones
             vertices_np = np.array(spawn_zone)
@@ -662,6 +704,7 @@ class SimulationView:
 
     def _draw_goal_zones(self):
         # Iterate over each goal_zone in the list of goal_zones
+        """TODO docstring. Document this function."""
         for goal_zone in self.map_def.ped_goal_zones:
             # Scale and offset the vertices of the goal zones
             vertices_np = np.array(goal_zone)
@@ -670,6 +713,11 @@ class SimulationView:
             pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
 
     def _augment_goal_position(self, robot_goal: Vec2D):
+        """TODO docstring. Document this function.
+
+        Args:
+            robot_goal: TODO docstring.
+        """
         pygame.draw.circle(
             self.screen,
             ROBOT_GOAL_COLOR,
@@ -701,15 +749,39 @@ class SimulationView:
             )
 
     def _augment_action(self, action: VisualizableAction, color):
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+            color: TODO docstring.
+        """
         r_x, r_y = action.pose[0]
         # scale vector length to be always visible
         vec_length = action.action[0] * self.scaling
         vec_orient = action.pose[1]
 
         def from_polar(length: float, orient: float) -> Vec2D:
+            """TODO docstring. Document this function.
+
+            Args:
+                length: TODO docstring.
+                orient: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return cos(orient) * length, sin(orient) * length
 
         def add_vec(v_1: Vec2D, v_2: Vec2D) -> Vec2D:
+            """TODO docstring. Document this function.
+
+            Args:
+                v_1: TODO docstring.
+                v_2: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return v_1[0] + v_2[0], v_1[1] + v_2[1]
 
         vec_x, vec_y = add_vec((r_x, r_y), from_polar(vec_length, vec_orient))
@@ -774,12 +846,22 @@ class SimulationView:
         self.screen.blit(text, (x, y))
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
+        """TODO docstring. Document this function.
+
+        Args:
+            timestep: TODO docstring.
+            state: TODO docstring.
+        """
         info_lines = self._get_display_info_lines(state)
         text_lines = self._build_text_lines(timestep, state, info_lines)
         self._render_text_display(text_lines)
 
     def _get_display_info_lines(self, state: VisualizableSimState) -> list[str]:
-        """Get lines for robot/pedestrian info display based on display mode."""
+        """Get lines for robot/pedestrian info display based on display mode.
+
+        Returns:
+            list[str]: Info lines for robot (mode 1), pedestrian (mode 2), or empty (mode 0).
+        """
         if self.display_robot_info == 1:
             return self._get_robot_info_lines(state)
         elif self.display_robot_info == 2:
@@ -787,7 +869,11 @@ class SimulationView:
         return []
 
     def _get_robot_info_lines(self, state: VisualizableSimState) -> list[str]:
-        """Get robot information lines for display."""
+        """Get robot information lines for display.
+
+        Returns:
+            list[str]: Robot pose, action, and goal info lines, or empty list if unavailable.
+        """
         if hasattr(state, "robot_action") and state.robot_action:
             return [
                 f"RobotPose: {state.robot_pose}",
@@ -797,7 +883,11 @@ class SimulationView:
         return []
 
     def _get_pedestrian_info_lines(self, state: VisualizableSimState) -> list[str]:
-        """Get pedestrian information lines for display."""
+        """Get pedestrian information lines for display.
+
+        Returns:
+            list[str]: Ego pedestrian pose, action, goal, and distance info, or empty list if unavailable.
+        """
         if self._has_pedestrian_data(state):
             assert state.ego_ped_pose is not None, "ego_ped_pose must be set"
             distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
@@ -813,7 +903,11 @@ class SimulationView:
             return []
 
     def _has_pedestrian_data(self, state: VisualizableSimState) -> bool:
-        """Check if the state has complete pedestrian data."""
+        """Check if the state has complete pedestrian data.
+
+        Returns:
+            bool: True if state has valid ego_ped_pose and ego_ped_action.
+        """
         return bool(
             hasattr(state, "ego_ped_pose")
             and state.ego_ped_pose
@@ -824,7 +918,11 @@ class SimulationView:
     def _build_text_lines(
         self, timestep: int, state: VisualizableSimState, info_lines: list[str]
     ) -> list[str]:
-        """Build the complete list of text lines for display."""
+        """Build the complete list of text lines for display.
+
+        Returns:
+            list[str]: Combined list of timestep, scaling, speedup, and optional robot/ped info lines.
+        """
         # Calculate speedup factor safely
         actual_fps = self.clock.get_fps()
         time_per_step = getattr(state, "time_per_step_in_secs", 0.1)
@@ -907,6 +1005,11 @@ class SimulationView:
         self.screen.blit(hint_surface, (16, 16))
 
     def _add_help_text(self):
+        """Render the help text overlay showing keyboard shortcuts.
+
+        Returns:
+            None: Help text is rendered directly to the screen surface.
+        """
         text_lines = [
             "Move camera: arrow keys",
             "Move fast: CTRL + arrow keys",

@@ -27,6 +27,8 @@ RATE_TARGET_MAP = {
 
 @dataclass
 class PrecisionEntry:
+    """TODO docstring. Document this class."""
+
     metric: str
     half_width: float
     target: float
@@ -35,6 +37,8 @@ class PrecisionEntry:
 
 @dataclass
 class ScenarioPrecisionStatus:
+    """TODO docstring. Document this class."""
+
     scenario_id: str  # For aggregated group we synthesize id archetype-density
     archetype: str
     density: str
@@ -45,12 +49,23 @@ class ScenarioPrecisionStatus:
 
 @dataclass
 class StatisticalSufficiencyReport:
+    """TODO docstring. Document this class."""
+
     evaluations: list[ScenarioPrecisionStatus]
     final_pass: bool
     scaling_efficiency: dict  # placeholder, populated later (T041)
 
 
 def evaluate_precision(groups, cfg):  # T033
+    """TODO docstring. Document this function.
+
+    Args:
+        groups: TODO docstring.
+        cfg: TODO docstring.
+
+    Returns:
+        PrecisionSummary with evaluations and final pass/fail status.
+    """
     evaluations: list[ScenarioPrecisionStatus] = []
     for g in groups:
         entries: list[PrecisionEntry] = []

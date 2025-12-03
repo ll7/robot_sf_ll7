@@ -72,9 +72,20 @@ class ReplayEpisode:
     map_path: str | None = None
 
     def __len__(self) -> int:  # pragma: no cover - trivial
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return len(self.steps)
 
     def append(self, step: ReplayStep) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            step: TODO docstring.
+        """
         self.steps.append(step)
 
 
@@ -105,6 +116,20 @@ class ReplayCapture:
         ped_actions: list[tuple[float, float]] | None = None,
         robot_goal: tuple[float, float] | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            t: TODO docstring.
+            x: TODO docstring.
+            y: TODO docstring.
+            heading: TODO docstring.
+            speed: TODO docstring.
+            ped_positions: TODO docstring.
+            action: TODO docstring.
+            ray_vecs: TODO docstring.
+            ped_actions: TODO docstring.
+            robot_goal: TODO docstring.
+        """
         self._steps.append(
             ReplayStep(
                 t=t,
@@ -121,6 +146,12 @@ class ReplayCapture:
         )
 
     def finalize(self) -> ReplayEpisode:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return ReplayEpisode(
             episode_id=self.episode_id,
             scenario_id=self.scenario_id,
@@ -136,6 +167,9 @@ def validate_replay_episode(ep: ReplayEpisode, min_length: int = 2) -> bool:
     - Has at least `min_length` steps
     - All steps contain finite numeric coordinates (basic check)
     - Timestamps non‑decreasing (monotonic tolerance: strictly increasing or equal)
+
+    Returns:
+        True if the episode meets all validation criteria, False otherwise.
     """
     if len(ep.steps) < min_length:
         return False
@@ -161,18 +195,23 @@ def build_replay_episode(
     *,
     dt: float | None = None,
     map_path: str | None = None,
-) -> ReplayEpisode:
-    """Convenience constructor from basic sequences.
+):
+    """Construct a ``ReplayEpisode`` from raw sequences.
 
-    Parameters
-    ----------
-    seq : sequence of (t, x, y, heading)
-        Core robot kinematic samples.
-    ped_seq : optional sequence parallel to seq with pedestrian position lists.
-    action_seq : optional sequence parallel to seq with action tuples.
-    ray_seq : optional sequence parallel to seq with ray vectors for lidar.
-    ped_action_seq : optional sequence parallel to seq with ped action vectors.
-    goal_seq : optional sequence parallel to seq with robot goal tuples.
+    Args:
+        episode_id: Unique identifier used for manifests and playback.
+        scenario_id: Identifier for the scenario that produced the replay.
+        seq: Sequence of ``(t, x, y, heading)`` tuples describing robot poses.
+        ped_seq: Optional pedestrian positions aligned with ``seq`` (list per timestep).
+        action_seq: Optional robot action tuples per timestep.
+        ray_seq: Optional ray vectors (e.g., lidar) per timestep.
+        ped_action_seq: Optional pedestrian action tuples per timestep.
+        goal_seq: Optional robot goal coordinates per timestep.
+        dt: Optional timestep duration for the replay metadata.
+        map_path: Optional source map path for reference when replaying.
+
+    Returns:
+        ReplayEpisode: Ready-to-serialize episode container.
     """
     steps: list[ReplayStep] = []
     for i, (t, x, y, h) in enumerate(seq):
@@ -214,6 +253,9 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
     Returns mapping episode_id -> ReplayEpisode for those with a valid
     `replay_steps` list of (t,x,y,heading) tuples. Invalid or too-short
     sequences are ignored (caller may apply skip logic per FR-008).
+
+    Returns:
+        Dictionary mapping episode IDs to validated ReplayEpisode objects.
     """
     out: dict[str, ReplayEpisode] = {}
     for rec in records:

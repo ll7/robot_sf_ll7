@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import numpy as np
 import pytest
 
@@ -6,6 +8,7 @@ from robot_sf.render.lidar_visual import render_lidar
 
 def test_render_lidar_basic():
     # Basic test with simple values
+    """TODO docstring. Document this function."""
     robot_pos = [0, 0]
     distances = np.array([1, 2, 3])
     directions = np.array([0, np.pi / 2, np.pi])
@@ -26,6 +29,7 @@ def test_render_lidar_basic():
 
 def test_render_lidar_zero_distances():
     # When distances are all zeros, the endpoints should equal the robot_pos.
+    """TODO docstring. Document this function."""
     robot_pos = [5, -3]
     distances = np.array([0, 0, 0])
     directions = np.array([0, 1, 2])
@@ -38,6 +42,7 @@ def test_render_lidar_zero_distances():
 
 def test_render_lidar_empty_input():
     # When lists are empty, expect an empty array.
+    """TODO docstring. Document this function."""
     robot_pos = [1, 1]
     distances = np.array([])
     directions = np.array([])
@@ -50,6 +55,7 @@ def test_render_lidar_empty_input():
 
 def test_render_lidar_negative_values():
     # Test with negative distances and directions values.
+    """TODO docstring. Document this function."""
     robot_pos = [0, 0]
     distances = np.array([-1, -2])
     directions = np.array([-np.pi / 4, -np.pi / 2])
@@ -67,6 +73,7 @@ def test_render_lidar_negative_values():
 
 def test_render_lidar_nonzero_robot_pos():
     # Test with a non-zero robot position.
+    """TODO docstring. Document this function."""
     robot_pos = [10, 20]
     distances = np.array([3])
     directions = np.array([np.pi / 3])
@@ -83,6 +90,7 @@ def test_render_lidar_nonzero_robot_pos():
 
 def test_render_lidar_output_dtype():
     # Ensure the returned value is a numpy array with correct dtype.
+    """TODO docstring. Document this function."""
     robot_pos = [0, 0]
     distances = np.array([1.5, 2.5])
     directions = np.array([0.0, np.pi / 2])
@@ -103,6 +111,13 @@ def test_render_lidar_output_dtype():
 )
 def test_render_lidar_parametrized(robot_pos, distances, directions):
     # Compute expected endpoints for each parameter set
+    """TODO docstring. Document this function.
+
+    Args:
+        robot_pos: TODO docstring.
+        distances: TODO docstring.
+        directions: TODO docstring.
+    """
     expected_list = []
     for d, theta in zip(distances, directions, strict=False):
         expected_list.append(
@@ -118,6 +133,7 @@ def test_render_lidar_parametrized(robot_pos, distances, directions):
 
 
 def test_render_lidar_invalid_inputs():
+    """TODO docstring. Document this function."""
     robot_pos = [0, 0]
     # Test mismatched lengths
     distances = np.array([1, 2])

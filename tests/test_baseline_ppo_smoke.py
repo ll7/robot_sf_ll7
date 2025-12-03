@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,11 +11,18 @@ from robot_sf.benchmark.runner import run_episode
 
 def _default_model_path() -> Path:
     # Must mirror PPOPlannerConfig default
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     return Path("model/ppo_model_retrained_10m_2025-02-01.zip")
 
 
 @pytest.mark.timeout(30)
 def test_ppo_baseline_smoke_runs_or_skips():
+    """TODO docstring. Document this function."""
     model_path = _default_model_path()
     algo_cfg_path = None
 

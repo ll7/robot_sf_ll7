@@ -1,25 +1,38 @@
 """Baseline navigation algorithms for benchmarking."""
 
+from __future__ import annotations
+
+import importlib
+
 
 def _get_social_force_planner():
-    """Lazy import to avoid circular dependencies."""
-    from robot_sf.baselines.social_force import SocialForcePlanner
+    """Lazy import to avoid circular dependencies.
 
-    return SocialForcePlanner
+    Returns:
+        The SocialForcePlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.social_force")
+    return module.SocialForcePlanner
 
 
 def _get_ppo_planner():
-    """Lazy import for PPO baseline adapter."""
-    from robot_sf.baselines.ppo import PPOPlanner
+    """Lazy import for PPO baseline adapter.
 
-    return PPOPlanner
+    Returns:
+        The PPOPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.ppo")
+    return module.PPOPlanner
 
 
 def _get_random_planner():
-    """Lazy import for Random baseline."""
-    from robot_sf.baselines.random_policy import RandomPlanner
+    """Lazy import for Random baseline.
 
-    return RandomPlanner
+    Returns:
+        The RandomPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.random_policy")
+    return module.RandomPlanner
 
 
 # Registry of available baseline algorithms
@@ -55,7 +68,11 @@ def get_baseline(name: str) -> type:
 
 
 def list_baselines() -> list[str]:
-    """List available baseline algorithm names."""
+    """List available baseline algorithm names.
+
+    Returns:
+        List of baseline algorithm names.
+    """
     return list(BASELINES.keys())
 
 

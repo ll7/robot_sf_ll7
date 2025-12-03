@@ -17,10 +17,17 @@ from robot_sf.benchmark.full_classic import planning
 
 @dataclass
 class _Cfg:
+    """TODO docstring. Document this class."""
+
     horizon_override: int | None = 300
 
 
 def _scenario_descriptor(seed_count: int = 3):
+    """TODO docstring. Document this function.
+
+    Args:
+        seed_count: TODO docstring.
+    """
     return planning.ScenarioDescriptor(
         scenario_id="scenario_a",
         archetype="crossing",
@@ -35,6 +42,7 @@ def _scenario_descriptor(seed_count: int = 3):
 
 
 def test_expand_jobs_count_and_horizon():
+    """TODO docstring. Document this function."""
     cfg = _Cfg(horizon_override=250)
     scenarios = [_scenario_descriptor(seed_count=4)]
     jobs = planning.expand_episode_jobs(scenarios, cfg)

@@ -16,6 +16,7 @@ from contextlib import redirect_stderr, redirect_stdout
 
 def test_environment_factory_import_is_pure():
     # Remove module if already imported to force re-execution of top-level code
+    """TODO docstring. Document this function."""
     sys.modules.pop("robot_sf.gym_env.environment_factory", None)
     stdout_buf = io.StringIO()
     stderr_buf = io.StringIO()

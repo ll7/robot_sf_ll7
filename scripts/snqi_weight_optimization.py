@@ -73,6 +73,16 @@ try:  # pragma: no cover - optional dependency
         desc: str | None = None,
         total: int | None = None,
     ) -> Iterator:  # type: ignore[name-defined]
+        """TODO docstring. Document this function.
+
+        Args:
+            iterable: TODO docstring.
+            desc: TODO docstring.
+            total: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return tqdm(iterable, desc=desc, total=total)  # type: ignore[no-any-return]
 
     _TQDM_AVAILABLE = True
@@ -84,6 +94,16 @@ except Exception:
         total: int | None = None,
     ) -> Iterator:  # type: ignore[unused-argument]
         # Fallback: ignore progress parameters when tqdm unavailable
+        """TODO docstring. Document this function.
+
+        Args:
+            iterable: TODO docstring.
+            desc: TODO docstring.
+            total: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return iter(iterable)
 
     _TQDM_AVAILABLE = False
@@ -112,6 +132,12 @@ class SNQIWeightOptimizer:
     """
 
     def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
+        """TODO docstring. Document this function.
+
+        Args:
+            episodes_data: TODO docstring.
+            baseline_stats: TODO docstring.
+        """
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
         self.weight_names = list(WEIGHT_NAMES)
@@ -122,6 +148,16 @@ class SNQIWeightOptimizer:
         simplex: bool,
         total: float = 10.0,
     ) -> dict[str, float]:
+        """TODO docstring. Document this function.
+
+        Args:
+            weights: TODO docstring.
+            simplex: TODO docstring.
+            total: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if not simplex:
             return weights
         s = sum(weights.values())
@@ -130,9 +166,26 @@ class SNQIWeightOptimizer:
         return {k: (v / s) * total for k, v in weights.items()}
 
     def _episode_snqi(self, metrics: dict[str, float], weights: dict[str, float]) -> float:
+        """TODO docstring. Document this function.
+
+        Args:
+            metrics: TODO docstring.
+            weights: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return compute_snqi(metrics, weights, self.baseline_stats)
 
     def compute_ranking_stability(self, weights: dict[str, float]) -> float:
+        """TODO docstring. Document this function.
+
+        Args:
+            weights: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if len(self.episodes) < 2:
             return 1.0
         algo_groups: dict[str, list] = {}
@@ -222,7 +275,7 @@ class SNQIWeightOptimizer:
                 best_stability = self.compute_ranking_stability(weights)
             evaluations += 1
         if best_weights is None:  # Fallback (should not happen)
-            best_weights = {k: 1.0 for k in self.weight_names}
+            best_weights = dict.fromkeys(self.weight_names, 1.0)
         # Convert objective back to positive score (we minimized negative)
         positive_score = -best_obj
         best_scores = [
@@ -272,6 +325,15 @@ class SNQIWeightOptimizer:
         stagnant_iters = 0
 
         def _callback(xk: np.ndarray, _convergence: float) -> bool:
+            """TODO docstring. Document this function.
+
+            Args:
+                xk: TODO docstring.
+                _convergence: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             nonlocal best_positive_obj, stagnant_iters
             current_positive = -self.objective_function(xk, simplex=simplex)
             improved = (
@@ -365,6 +427,19 @@ class SNQIWeightOptimizer:
         early_stop_patience: int,
         early_stop_min_delta: float,
     ) -> OptimizationResult:
+        """TODO docstring. Document this function.
+
+        Args:
+            maxiter: TODO docstring.
+            seed: TODO docstring.
+            show_progress: TODO docstring.
+            simplex: TODO docstring.
+            early_stop_patience: TODO docstring.
+            early_stop_min_delta: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         bounds = [(0.1, 3.0)] * len(self.weight_names)
         callback, pbar = self._build_de_callback(
             maxiter=maxiter,
@@ -394,6 +469,14 @@ class SNQIWeightOptimizer:
         """Execute SciPy differential_evolution with provided configuration."""
 
         def _wrapped(vec: np.ndarray) -> float:
+            """TODO docstring. Document this function.
+
+            Args:
+                vec: TODO docstring.
+
+            Returns:
+                TODO docstring.
+            """
             return self.objective_function(vec, simplex=simplex)
 
         result = differential_evolution(
@@ -444,6 +527,14 @@ class SNQIWeightOptimizer:
 
 
 def _load_initial_weights(path: Path) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with open(path, encoding="utf-8") as f:
         raw = json.load(f)
     if not isinstance(raw, dict):  # pragma: no cover - defensive
@@ -476,6 +567,14 @@ def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):  # basic validation
@@ -487,12 +586,26 @@ def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
 def _load_inputs(
     args: argparse.Namespace,
 ) -> tuple[list[dict], dict[str, dict[str, float]], int]:
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes, skipped = load_episodes_data(args.episodes)
     baseline_stats = load_baseline_stats(args.baseline)
     return episodes, baseline_stats, skipped
 
 
 def _select_best(results: dict[str, Any], method: str) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        method: TODO docstring.
+    """
     if method == "both":
         best_method = "grid_search"
         if "differential_evolution" in results and results["differential_evolution"][
@@ -518,7 +631,25 @@ def _augment_metadata(
     original_episode_count: int | None = None,
     used_episode_count: int | None = None,
 ) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        args: TODO docstring.
+        start_iso: TODO docstring.
+        start_perf: TODO docstring.
+        phase_timings: TODO docstring.
+        original_episode_count: TODO docstring.
+        used_episode_count: TODO docstring.
+    """
+
     def _git_commit() -> str:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         try:
             return (
                 subprocess.check_output(
@@ -632,6 +763,12 @@ def _detect_missing_baseline_metrics(
 
 
 def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        results: TODO docstring.
+        args: TODO docstring.
+    """
     recommended = results["recommended"]
     print("\nOptimization Summary:")
     print(f"Method: {recommended['method_used']}")
@@ -654,6 +791,14 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
 
 # ----------------------------- Main runner --------------------------- #
 def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decomposition
+    """TODO docstring. Document this function.
+
+    Args:
+        args: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
     phase_start = start_perf
@@ -855,6 +1000,14 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901 - acceptable after decom
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description="Optimize SNQI weights")
     parser.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
     parser.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
@@ -962,6 +1115,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))
     return run(args)

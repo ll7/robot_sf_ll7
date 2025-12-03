@@ -41,6 +41,11 @@ def generate_fallback_videos(records: list[dict[str, Any]], out_dir: Path, cfg):
         Target directory for mp4 outputs.
     cfg : Any
         Benchmark configuration object (fields inspected by legacy generator).
+
+    Returns
+    -------
+    list
+        Video artifact metadata from the legacy generator.
     """
     return _legacy_videos.generate_videos(records, out_dir, cfg)
 

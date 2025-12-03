@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = False
     max_videos = 1
@@ -26,10 +28,22 @@ class Cfg:
 
 
 def test_schema_validation_mode_raises(tmp_path: Path, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv("ROBOT_SF_VALIDATE_VISUALS", "1")
 
     # Force validation to raise
     def fake_validate(*_a, **_k):
+        """TODO docstring. Document this function.
+
+        Args:
+            _a: TODO docstring.
+            _k: TODO docstring.
+        """
         raise RuntimeError("forced-error")
 
     # Patch the imported symbol inside visuals module

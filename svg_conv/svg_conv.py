@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import json
 import os
 import sys
@@ -18,10 +20,27 @@ your own use case."""
 
 
 def paths_of_svg(svg: SVG) -> list[Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        svg: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return [e for e in svg.elements() if isinstance(e, Path)]
 
 
 def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
+    """TODO docstring. Document this function.
+
+    Args:
+        paths: TODO docstring.
+        color: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     red, green, blue = color
     paths = [
         e for e in paths if e.fill.red == red and e.fill.green == green and e.fill.blue == blue
@@ -30,6 +49,14 @@ def filter_paths_by_color(paths: list[Path], color: RgbColor) -> list[Path]:
 
 
 def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        paths: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     all_lines = []
     for path in paths:
         points: list[Point] = list(path.as_points())
@@ -38,10 +65,18 @@ def points_of_paths(paths: list[Path]) -> list[list[Vec2D]]:
 
 
 def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        poly_points: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     obstacles = poly_points
     all_points = [p for points in poly_points for p in points]
-    x_margin = [min([x for x, _ in all_points]), max([x for x, _ in all_points])]
-    y_margin = [min([y for _, y in all_points]), max([y for _, y in all_points])]
+    x_margin = [min(x for x, _ in all_points), max(x for x, _ in all_points)]
+    y_margin = [min(y for _, y in all_points), max(y for _, y in all_points)]
 
     map_obj = {"obstacles": obstacles, "x_margin": x_margin, "y_margin": y_margin}
 
@@ -49,10 +84,25 @@ def serialize_mapjson(poly_points: list[list[Vec2D]]) -> str:
 
 
 def scale(p: Vec2D, factor: float) -> Vec2D:
+    """TODO docstring. Document this function.
+
+    Args:
+        p: TODO docstring.
+        factor: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return p[0] * factor, p[1] * factor
 
 
 def convert_map(input_svg_file: str, output_json_file: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        input_svg_file: TODO docstring.
+        output_json_file: TODO docstring.
+    """
     svg = SVG.parse(input_svg_file)
     house_color = (217, 208, 201)
     paths = paths_of_svg(svg)
@@ -65,10 +115,23 @@ def convert_map(input_svg_file: str, output_json_file: str):
 
 
 def main():
+    """TODO docstring. Document this function."""
+
     def file_exists(path):
+        """TODO docstring. Document this function.
+
+        Args:
+            path: TODO docstring.
+        """
         return os.path.exists(path) and os.path.isfile(path)
 
     def has_fileext(path, ext):
+        """TODO docstring. Document this function.
+
+        Args:
+            path: TODO docstring.
+            ext: TODO docstring.
+        """
         return "." + path.split(".")[-1] == ext
 
     if (

@@ -15,17 +15,42 @@ class FakeClock:
     """Deterministic clock helper for tracker tests."""
 
     def __init__(self) -> None:
+        """TODO docstring. Document this function."""
         self._current = datetime(2025, 1, 1, tzinfo=UTC)
 
     def __call__(self) -> datetime:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self._current
 
     def advance(self, seconds: float) -> datetime:
+        """TODO docstring. Document this function.
+
+        Args:
+            seconds: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         self._current = self._current + timedelta(seconds=seconds)
         return self._current
 
 
 def _make_tracker(*, writer, log_fn, time_provider) -> ProgressTracker:
+    """TODO docstring. Document this function.
+
+    Args:
+        writer: TODO docstring.
+        log_fn: TODO docstring.
+        time_provider: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return ProgressTracker(
         [
             PipelineStepDefinition("collect", "Collect Trajectories", expected_duration_seconds=10),
@@ -38,6 +63,11 @@ def _make_tracker(*, writer, log_fn, time_provider) -> ProgressTracker:
 
 
 def test_progress_tracker_emits_eta_and_writes_index(run_tracker_config) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_tracker_config: TODO docstring.
+    """
     logs: list[str] = []
     clock = FakeClock()
     writer = ManifestWriter(run_tracker_config, run_id="eta-demo")
@@ -65,6 +95,11 @@ def test_progress_tracker_emits_eta_and_writes_index(run_tracker_config) -> None
 
 
 def test_progress_tracker_handles_skip_and_fail(run_tracker_config) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        run_tracker_config: TODO docstring.
+    """
     writer = ManifestWriter(run_tracker_config, run_id="skip-demo")
     tracker = _make_tracker(
         writer=writer,

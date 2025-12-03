@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import datetime
 
 import loguru
@@ -19,11 +21,17 @@ logger = loguru.logger
 
 
 def training(svg_map_path: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        svg_map_path: TODO docstring.
+    """
     n_envs = 20
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
     def make_env():
+        """TODO docstring. Document this function."""
         map_definition = convert_map(svg_map_path)
         robot_model = PPO.load("./model/run_043", env=None)
 

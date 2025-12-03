@@ -24,16 +24,31 @@ class RunRegistry:
     """Create per-run directories and prune historical runs when necessary."""
 
     def __init__(self, config: RunTrackerConfig) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+        """
         if not isinstance(config, RunTrackerConfig):  # pragma: no cover - runtime guard
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
         self._config = config
 
     @property
     def base_dir(self) -> Path:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return Path(self._config.run_tracker_root)
 
     def create_run_directory(self, run_id: str, *, allow_existing: bool = False) -> RunDirectory:
-        """Create the directory for ``run_id`` and materialize a lock file."""
+        """Create the directory for ``run_id`` and materialize a lock file.
+
+        Returns:
+            RunDirectory: The allocated run directory metadata.
+        """
 
         target = self.base_dir / run_id
         if target.exists() and not allow_existing:

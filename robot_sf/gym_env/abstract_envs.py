@@ -10,6 +10,7 @@ from typing import Any
 
 from gymnasium import Env, spaces
 
+from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.unified_config import BaseSimulationConfig
 from robot_sf.render.sim_view import VisualizableSimState
 
@@ -35,6 +36,17 @@ class BaseSimulationEnv(Env, ABC):
         video_fps: float | None = None,
         **kwargs,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            debug: TODO docstring.
+            recording_enabled: TODO docstring.
+            record_video: TODO docstring.
+            video_path: TODO docstring.
+            video_fps: TODO docstring.
+            kwargs: TODO docstring.
+        """
         super().__init__()
         self.config = config
         self.debug = debug
@@ -84,8 +96,6 @@ class BaseSimulationEnv(Env, ABC):
 
     def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to file."""
-        from robot_sf.gym_env.base_env import BaseEnv
-
         # Reuse existing implementation
         base_env = BaseEnv.__new__(BaseEnv)
         base_env.recorded_states = self.recorded_states
@@ -104,6 +114,12 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, **kwargs):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            kwargs: TODO docstring.
+        """
         self.state = None
         self.simulator = None
         self.last_action = None
@@ -138,6 +154,13 @@ class MultiAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, num_agents: int, **kwargs):
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            num_agents: TODO docstring.
+            kwargs: TODO docstring.
+        """
         super().__init__(config, **kwargs)
         self.num_agents = num_agents
         self.agents = []

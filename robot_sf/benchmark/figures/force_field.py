@@ -20,11 +20,16 @@ __all__ = ["generate_force_field_figure", "main"]
 
 
 def _latex_rcparams() -> None:
+    """TODO docstring. Document this function."""
     apply_latex_style()
 
 
 def make_demo_sim() -> Simulator:
-    """Return a minimal simulator with two pedestrians and one obstacle."""
+    """Return a minimal simulator with two pedestrians and one obstacle.
+
+    Returns:
+        Configured Simulator instance with demo scenario.
+    """
 
     state = np.array(
         [
@@ -107,6 +112,12 @@ def generate_force_field_figure(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description="Generate force-field figure outputs")
     parser.add_argument("--png", default="docs/img/fig-force-field.png")
     parser.add_argument("--pdf", default="docs/figures/fig-force-field.pdf")
@@ -120,6 +131,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     args = build_arg_parser().parse_args(argv)
     generate_force_field_figure(
         out_png=args.png,

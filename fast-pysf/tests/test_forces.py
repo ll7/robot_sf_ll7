@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import numpy as np
 import pytest
 from pysocialforce import Simulator_v2 as Simulator
@@ -9,12 +11,19 @@ from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 
 @pytest.fixture()
 def generate_scene():
+    """TODO docstring. Document this function."""
     raw_states = np.zeros((5, 7))
     raw_states[:, :4] = np.array(
         [[1, 1, 1, 0], [1, 1.1, 0, 1], [3, 3, 1, 1], [3, 3.01, 1, 2], [3, 4, 3, 1]]
     )
 
     def populate(sim_config: SimulatorConfig, map_def: MapDefinition):
+        """TODO docstring. Document this function.
+
+        Args:
+            sim_config: TODO docstring.
+            map_def: TODO docstring.
+        """
         states = PedestrianStates(raw_states)
         groupings = PedestrianGroupings(states, {})
         return states, groupings, []
@@ -25,6 +34,7 @@ def generate_scene():
 
 @pytest.fixture()
 def generate_scene_with_groups():
+    """TODO docstring. Document this function."""
     groups = {0: {1, 0}, 1: {3, 2}}
     raw_states = np.zeros((5, 7))
     raw_states[:, :4] = np.array(
@@ -32,6 +42,12 @@ def generate_scene_with_groups():
     )
 
     def populate(sim_config: SimulatorConfig, map_def: MapDefinition):
+        """TODO docstring. Document this function.
+
+        Args:
+            sim_config: TODO docstring.
+            map_def: TODO docstring.
+        """
         states = PedestrianStates(raw_states)
         groupings = PedestrianGroupings(states, groups)
         return states, groupings, []
@@ -41,6 +57,11 @@ def generate_scene_with_groups():
 
 
 def test_desired_force(generate_scene: Simulator):
+    """TODO docstring. Document this function.
+
+    Args:
+        generate_scene: TODO docstring.
+    """
     scene = generate_scene
     config = scene.config
     f = forces.DebuggableForce(forces.DesiredForce(config.desired_force_config, scene.peds))
@@ -59,6 +80,11 @@ def test_desired_force(generate_scene: Simulator):
 
 
 def test_social_force(generate_scene: Simulator):
+    """TODO docstring. Document this function.
+
+    Args:
+        generate_scene: TODO docstring.
+    """
     scene = generate_scene
     config = scene.config
     f = forces.DebuggableForce(forces.SocialForce(config.social_force_config, scene.peds))
@@ -77,6 +103,11 @@ def test_social_force(generate_scene: Simulator):
 
 
 def test_group_rep_force(generate_scene_with_groups: Simulator):
+    """TODO docstring. Document this function.
+
+    Args:
+        generate_scene_with_groups: TODO docstring.
+    """
     scene = generate_scene_with_groups
     print(scene)
     config = scene.config

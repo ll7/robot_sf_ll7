@@ -9,6 +9,12 @@ display = pysf.SimulationView(map_def=map_def, scaling=10)
 
 
 def render_step(t, s):
+    """TODO docstring. Document this function.
+
+    Args:
+        t: TODO docstring.
+        s: TODO docstring.
+    """
     return display.render(pysf.to_visualizable_state(t, s))
 
 

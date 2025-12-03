@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import json
 import re
 from pathlib import Path
@@ -10,6 +12,15 @@ from robot_sf.benchmark.cli import cli_main
 
 
 def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        action: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out = tmp_path / f"snqi_{action}_small.json"
     episodes = Path("tests/data/snqi/episodes_small.jsonl").absolute()
     baseline = Path("tests/data/snqi/baseline_stats.json").absolute()
@@ -42,6 +53,13 @@ def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
 
 @pytest.mark.parametrize("action", ["recompute", "optimize"])
 def test_small_dataset_warning_emitted_and_exit_zero(tmp_path: Path, caplog, action: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        caplog: TODO docstring.
+        action: TODO docstring.
+    """
     caplog.set_level("WARNING")
     code, _ = _run_cli(tmp_path, action)
     assert code == 0

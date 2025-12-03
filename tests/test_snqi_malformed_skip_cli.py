@@ -13,6 +13,12 @@ import pytest
 @pytest.mark.timeout(30)
 @pytest.mark.parametrize("script_kind", ["optimization", "recompute"])
 def test_snqi_cli_malformed_skip_count(tmp_path: Path, script_kind: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        script_kind: TODO docstring.
+    """
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
     output_path = tmp_path / "out.json"

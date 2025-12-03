@@ -115,7 +115,24 @@ def _make_training_env(
     scenario: Mapping[str, Any],
     scenario_path: Path,
 ) -> Callable[[], Any]:
+    """TODO docstring. Document this function.
+
+    Args:
+        seed: TODO docstring.
+        scenario: TODO docstring.
+        scenario_path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
+
     def _factory() -> Any:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         env_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
         return make_robot_env(config=env_config, seed=seed)
 
@@ -127,6 +144,15 @@ def _train_model(
     *,
     scenario: Mapping[str, Any],
 ) -> tuple[PPO, DummyVecEnv]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+        scenario: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     seeds = config.seeds or (0,)
     env_fns = [
         _make_training_env(int(seed), scenario=scenario, scenario_path=config.scenario_config)
@@ -151,6 +177,14 @@ def _train_model(
 
 
 def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        meta: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     steps_taken = float(meta.get("step_of_episode", 0) or 0)
     max_steps = float(meta.get("max_sim_steps", steps_taken if steps_taken > 0 else 1))
     if max_steps <= 0:
@@ -160,9 +194,17 @@ def _estimate_path_efficiency(meta: Mapping[str, object]) -> float:
 
 
 def _gather_episode_metrics(info: Mapping[str, object]) -> dict[str, float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        info: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     raw_meta = info.get("meta", {}) if isinstance(info, Mapping) else {}
     if isinstance(raw_meta, Mapping):
-        meta: Mapping[str, object] = cast(Mapping[str, object], raw_meta)
+        meta: Mapping[str, object] = cast("Mapping[str, object]", raw_meta)
     else:
         meta = {}
     success = 1.0 if bool(meta.get("is_route_complete")) else 0.0
@@ -192,6 +234,16 @@ def _evaluate_policy(
     *,
     scenario: Mapping[str, Any],
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        model: TODO docstring.
+        config: TODO docstring.
+        scenario: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
         "success_rate": [],
@@ -239,6 +291,14 @@ def _evaluate_policy(
 def _simulate_dry_run_metrics(
     config: ExpertTrainingConfig,
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        config: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes = max(1, config.evaluation.evaluation_episodes)
     metrics: MetricSamples = {
         "success_rate": [],
@@ -282,6 +342,14 @@ def _simulate_dry_run_metrics(
 
 
 def _aggregate_metrics(samples: MetricSamples) -> dict[str, common.MetricAggregate]:
+    """TODO docstring. Document this function.
+
+    Args:
+        samples: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     aggregates: dict[str, common.MetricAggregate] = {}
     rng = np.random.default_rng(12345)
     for name, values in samples.items():
@@ -308,6 +376,12 @@ def _aggregate_metrics(samples: MetricSamples) -> dict[str, common.MetricAggrega
 
 
 def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        records: TODO docstring.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
@@ -480,6 +554,12 @@ def run_expert_training(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(
         description="Train an expert PPO policy with manifest outputs."
     )
@@ -501,6 +581,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        argv: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

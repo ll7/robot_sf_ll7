@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +13,12 @@ from scripts.training.train_expert_ppo import (
 
 
 def test_expert_training_dry_run(tmp_path, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     config_path = Path("configs/training/ppo_imitation/expert_ppo.yaml").resolve()
     config = load_expert_training_config(config_path)

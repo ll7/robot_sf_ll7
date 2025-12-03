@@ -45,6 +45,15 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         dropout_rate: float = 0.1,
         drive_hidden_dims: list[int] | None = None,
     ):
+        """TODO docstring. Document this function.
+
+        Args:
+            observation_space: TODO docstring.
+            num_filters: TODO docstring.
+            kernel_sizes: TODO docstring.
+            dropout_rate: TODO docstring.
+            drive_hidden_dims: TODO docstring.
+        """
         if num_filters is None:
             num_filters = [32, 16]
         if kernel_sizes is None:
@@ -52,8 +61,8 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]
         # Extract observation spaces
-        rays_space = cast(spaces.Box, observation_space.spaces[OBS_RAYS])
-        drive_state_space = cast(spaces.Box, observation_space.spaces[OBS_DRIVE_STATE])
+        rays_space = cast("spaces.Box", observation_space.spaces[OBS_RAYS])
+        drive_state_space = cast("spaces.Box", observation_space.spaces[OBS_DRIVE_STATE])
 
         # Calculate dimensions
         drive_input_dim = int(np.prod(drive_state_space.shape))
@@ -69,7 +78,11 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim=total_features)
 
         def conv_block(in_channels: int, out_channels: int, kernel_size: int) -> list[nn.Module]:
-            """Create a lightweight convolutional block."""
+            """Create a lightweight convolutional block.
+
+            Returns:
+                list[nn.Module]: Layers comprising Conv1d → BatchNorm → ReLU → MaxPool → Dropout.
+            """
             padding = kernel_size // 2  # Maintain spatial dimension
             return [
                 nn.Conv1d(in_channels, out_channels, kernel_size, stride=1, padding=padding),

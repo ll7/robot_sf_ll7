@@ -21,6 +21,8 @@ from robot_sf.benchmark.full_classic.orchestrator import run_episode_jobs
 
 @dataclass
 class _Job:
+    """TODO docstring. Document this class."""
+
     job_id: str
     scenario_id: str
     seed: int
@@ -32,14 +34,31 @@ class _Job:
 
 @dataclass
 class _Manifest:
+    """TODO docstring. Document this class."""
+
     episodes_path: str
 
 
 def _episode_id(job: _Job) -> str:  # simplistic deterministic id for test
+    """TODO docstring. Document this function.
+
+    Args:
+        job: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return f"{job.scenario_id}-{job.seed}"
 
 
 def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, monkeypatch):
+    """TODO docstring. Document this function.
+
+    Args:
+        temp_results_dir: TODO docstring.
+        synthetic_episode_record: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     episodes_dir = Path(temp_results_dir) / "episodes"
     episodes_dir.mkdir()
     episodes_file = episodes_dir / "episodes.jsonl"
@@ -66,6 +85,12 @@ def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, mon
     cfg.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
 
     def _stub_make_episode(job, _cfg):
+        """TODO docstring. Document this function.
+
+        Args:
+            job: TODO docstring.
+            _cfg: TODO docstring.
+        """
         return synthetic_episode_record(
             episode_id=_episode_id(job),
             scenario_id=job.scenario_id,

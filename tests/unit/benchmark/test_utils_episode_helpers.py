@@ -224,6 +224,7 @@ class TestFormatEpisodeSummaryTable:
         """Test function works with iterators."""
 
         def episode_generator():
+            """TODO docstring. Document this function."""
             yield {
                 "scenario": "test",
                 "seed": 1,

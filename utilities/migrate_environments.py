@@ -9,6 +9,7 @@ suggest or make changes automatically.
 
 import argparse
 import re
+from datetime import datetime
 from pathlib import Path
 
 
@@ -16,6 +17,11 @@ class EnvironmentMigrator:
     """Automates migration to new environment patterns."""
 
     def __init__(self, project_root: str):
+        """TODO docstring. Document this function.
+
+        Args:
+            project_root: TODO docstring.
+        """
         self.project_root = Path(project_root)
         self.changes_made = []
 
@@ -224,8 +230,6 @@ class EnvironmentMigrator:
         """Generate a comprehensive migration report."""
         files = self.find_python_files(directories)
 
-        from datetime import datetime
-
         current_date = datetime.now().strftime("%B %d, %Y")
 
         report = ["# Migration Report for Robot SF Environment Refactoring\n\n"]
@@ -278,6 +282,7 @@ class EnvironmentMigrator:
 
 
 def main():
+    """TODO docstring. Document this function."""
     parser = argparse.ArgumentParser(
         description="Migrate Robot SF environments to new factory pattern",
     )

@@ -56,6 +56,12 @@ DEFAULT_OUT = get_artifact_category_path("benchmarks") / "classic_interactions/e
 
 
 def parse_args() -> argparse.Namespace:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     parser = argparse.ArgumentParser(description="Run classic interaction scenarios")
     parser.add_argument("--algo", default="simple_policy", help="Baseline algorithm name")
     parser.add_argument(
@@ -104,6 +110,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     args = parse_args()
 
     snqi_weights = load_optional_json(args.snqi_weights)

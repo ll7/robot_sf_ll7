@@ -5,7 +5,9 @@ Compute per-group means for a set of metrics and format as Markdown/CSV/JSON.
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
+from io import StringIO
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,6 +17,16 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
+    """Get nested dict value via dotted path.
+
+    Args:
+        d: Dictionary to navigate.
+        path: Dot-separated key path (e.g., "metrics.success").
+        default: Value to return if path is not found.
+
+    Returns:
+        The value at the dotted path, or default if not found.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:  # type: ignore[redundant-expr]
@@ -24,6 +36,16 @@ def _get_dotted(d: dict[str, object], path: str, default=None):
 
 
 def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None:
+    """TODO docstring. Document this function.
+
+    Args:
+        rec: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     g = _get_dotted(rec, group_by)
     if g is None:
         g = _get_dotted(rec, fallback_group_by)
@@ -32,6 +54,8 @@ def _group_key(rec: Record, group_by: str, fallback_group_by: str) -> str | None
 
 @dataclass
 class TableRow:
+    """TODO docstring. Document this class."""
+
     group: str
     values: dict[str, float | None]
 
@@ -42,6 +66,17 @@ def compute_table(
     group_by: str = "scenario_params.algo",
     fallback_group_by: str = "scenario_id",
 ) -> list[TableRow]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        metrics: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     sums: dict[str, dict[str, float]] = {}
     counts: dict[str, dict[str, int]] = {}
     for rec in records:
@@ -77,8 +112,20 @@ def compute_table(
 
 
 def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        rows: TODO docstring.
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     headers = ["Group", *metrics]
-    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join(["---"] * len(headers)) + " |"]
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
     for r in rows:
         vals = [r.group]
         for name in metrics:
@@ -89,9 +136,15 @@ def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
-    import csv
-    from io import StringIO
+    """TODO docstring. Document this function.
 
+    Args:
+        rows: TODO docstring.
+        metrics: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     buf = StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Group", *metrics])
@@ -106,6 +159,14 @@ def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def to_json(rows: Sequence[TableRow]) -> list[dict[str, object]]:
+    """Return JSON-serializable list of dicts for the table rows.
+
+    Args:
+        rows: Table rows to serialize.
+
+    Returns:
+        List of dicts with group and metric values.
+    """
     out: list[dict[str, object]] = []
     for r in rows:
         out.append({"group": r.group, **r.values})
@@ -113,7 +174,11 @@ def to_json(rows: Sequence[TableRow]) -> list[dict[str, object]]:
 
 
 def _latex_escape(text: str) -> str:
-    """Escape special LaTeX characters in text cells."""
+    """Escape special LaTeX characters in text cells.
+
+    Returns:
+        Text with special LaTeX characters escaped.
+    """
     replacements = {
         "\\": r"\textbackslash{}",
         "&": r"\&",
@@ -138,6 +203,9 @@ def format_latex_booktabs(rows: Sequence[TableRow], metrics: Sequence[str]) -> s
     - Assumes the caller includes \usepackage{booktabs} in the preamble.
     - Column spec: l for Group, r for each numeric metric column.
     - Values are formatted to 4 decimals; missing values render as empty.
+
+    Returns:
+        LaTeX table source code using booktabs package.
     """
     # Column alignment: one 'l' plus one 'r' per metric
     col_spec = "l" + ("r" * len(metrics))

@@ -16,6 +16,14 @@ import yaml  # type: ignore
 
 
 def _parse_yaml_file(p: Path) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        p: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     try:
         with p.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f)
@@ -24,6 +32,14 @@ def _parse_yaml_file(p: Path) -> dict:
 
 
 def _extract_scenarios(root: dict) -> list[dict]:
+    """TODO docstring. Document this function.
+
+    Args:
+        root: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     scenarios = root.get("scenarios") if isinstance(root, dict) else None
     if not isinstance(scenarios, list) or not scenarios:
         raise ValueError("Scenario matrix missing non-empty 'scenarios' list")
@@ -34,6 +50,11 @@ _REQUIRED_SC_KEYS = {"name", "map_file", "simulation_config", "metadata"}
 
 
 def _validate_scenario_dicts(scenarios: list[dict]) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        scenarios: TODO docstring.
+    """
     for idx, sc in enumerate(scenarios):
         if not isinstance(sc, dict):
             raise ValueError(f"Scenario index {idx} not a mapping")
@@ -53,6 +74,8 @@ def _validate_scenario_dicts(scenarios: list[dict]) -> None:
 # Minimal placeholder dataclasses matching data-model (subset for scaffolding)
 @dataclass
 class ScenarioDescriptor:  # duplicated light form; real version will live centrally later
+    """TODO docstring. Document this class."""
+
     scenario_id: str
     archetype: str
     density: str
@@ -66,6 +89,8 @@ class ScenarioDescriptor:  # duplicated light form; real version will live centr
 
 @dataclass
 class EpisodeJob:  # lightweight form for planning layer
+    """TODO docstring. Document this class."""
+
     job_id: str
     scenario_id: str
     seed: int
@@ -79,6 +104,9 @@ def load_scenario_matrix(path: str) -> list[dict]:  # T022
     """Load scenario matrix YAML returning the raw scenario dictionaries.
 
     Public function kept intentionally thin for low cyclomatic complexity.
+
+    Returns:
+        List of raw scenario dictionaries loaded from the YAML file.
     """
     p = Path(path)
     if not p.exists():  # contract: FileNotFoundError path missing
@@ -93,6 +121,9 @@ def _normalise_raw_scenario(index: int, sc: dict) -> tuple[str, str, str, int, s
     """Return (name, archetype, density, max_steps, map_file, params_source).
 
     Supports both the full matrix shape and the simplified contract test shape.
+
+    Returns:
+        Tuple of (name, archetype, density, max_steps, map_file, params_source).
     """
     if "metadata" in sc and "simulation_config" in sc:  # full matrix shape
         name = str(sc.get("name", f"sc{index}"))
@@ -118,6 +149,15 @@ def _normalise_raw_scenario(index: int, sc: dict) -> tuple[str, str, str, int, s
 
 
 def _plan_unique_seeds(rng, count: int) -> list[int]:  # small helper for clarity
+    """TODO docstring. Document this function.
+
+    Args:
+        rng: TODO docstring.
+        count: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     seeds: list[int] = []
     while len(seeds) < count:
         val = rng.randrange(0, 2**31 - 1)
@@ -127,6 +167,16 @@ def _plan_unique_seeds(rng, count: int) -> list[int]:  # small helper for clarit
 
 
 def _resolve_map_path(map_file: str, cfg, name: str) -> Path:
+    """TODO docstring. Document this function.
+
+    Args:
+        map_file: TODO docstring.
+        cfg: TODO docstring.
+        name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     matrix_dir = Path(cfg.scenario_matrix_path).parent
     map_path = Path(map_file)
     if not map_path.is_absolute():
@@ -137,6 +187,16 @@ def _resolve_map_path(map_file: str, cfg, name: str) -> Path:
 
 
 def _plan_seeds(sc: dict, cfg, rng) -> list[int]:
+    """TODO docstring. Document this function.
+
+    Args:
+        sc: TODO docstring.
+        cfg: TODO docstring.
+        rng: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     cfg_seeds = getattr(cfg, "seeds", None)
     seeds_from_matrix = sc.get("seeds")
     planned: list[int] = []
@@ -153,13 +213,40 @@ def _plan_seeds(sc: dict, cfg, rng) -> list[int]:
 
 
 def _scenario_id(archetype: str, density: str, name: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        archetype: TODO docstring.
+        density: TODO docstring.
+        name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
+
     def _san(s: str) -> str:
+        """TODO docstring. Document this function.
+
+        Args:
+            s: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return "".join(c if c.isalnum() or c in {"-", "_"} else "_" for c in s.lower())
 
     return f"{_san(archetype)}__{_san(density)}__{_san(name)}"
 
 
 def _hash_fragment(payload: dict) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        payload: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     hash_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(hash_bytes).hexdigest()[:10]
 
@@ -177,6 +264,9 @@ def plan_scenarios(raw: list[dict], cfg, *, rng) -> list[ScenarioDescriptor]:  #
     Assumptions:
     - `cfg` exposes attributes: initial_episodes, scenario_matrix_path.
     - `rng` is an instance of `random.Random` seeded by caller (master seed) for determinism.
+
+    Returns:
+        List of validated ScenarioDescriptor objects with generated seeds and identifiers.
     """
 
     if not isinstance(raw, list) or not raw:
@@ -230,6 +320,9 @@ def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg) -> list[Episod
     - One job per planned seed per scenario.
     - Horizon override: if cfg.horizon_override provided, use it; else scenario.max_episode_steps.
     - job_id construction: sha1 of scenario_id + seed + horizon for determinism; truncated.
+
+    Returns:
+        List of EpisodeJob objects, one per seed per scenario.
     """
     jobs: list[EpisodeJob] = []
     for sc in scenarios:

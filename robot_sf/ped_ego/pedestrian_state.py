@@ -56,7 +56,7 @@ class PedestrianState:
     @property
     def max_sim_steps(self) -> int:
         """Calculates the maximum number of simulation steps based on time limit."""
-        return int(ceil(self.sim_time_limit / self.d_t))
+        return ceil(self.sim_time_limit / self.d_t)
 
     @property
     def is_terminal(self) -> bool:
@@ -79,6 +79,9 @@ class PedestrianState:
         Resets the pedestrians state for a new simulation episode, incrementing the episode counter,
         resetting the timestep and elapsed time, clearing collision and goal flags, and refreshing
         sensor data for the initial observation.
+
+        Returns:
+            object: The initial observation produced by the sensor fusion after reset.
         """
         self.episode += 1
         self.timestep = 0
@@ -99,6 +102,9 @@ class PedestrianState:
         Advances the pedestrian's state by one simulation timestep, updating the elapsed time,
         checking for collisions, goal achievement, and timeout. Returns the next observation
         from sensors.
+
+        Returns:
+            object: The next observation produced by the sensor fusion after advancing one step.
         """
         self.timestep += 1
         self.sim_time_elapsed += self.d_t
@@ -118,6 +124,9 @@ class PedestrianState:
         monitoring purposes.
         Includes information such as episode number, current timestep, collision status,
         goal achievement.
+
+        Returns:
+            dict: A snapshot of the current state and flags for diagnostics/telemetry.
         """
         return {
             "step": self.episode * self.max_sim_steps,

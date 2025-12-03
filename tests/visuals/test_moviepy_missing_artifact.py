@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from pathlib import Path
 
 import pytest
@@ -7,7 +9,15 @@ from robot_sf.benchmark.full_classic.visual_constants import NOTE_MOVIEPY_MISSIN
 
 
 class DummyEnc:
+    """TODO docstring. Document this class."""
+
     def __init__(self, status: str, note: str | None):
+        """TODO docstring. Document this function.
+
+        Args:
+            status: TODO docstring.
+            note: TODO docstring.
+        """
         self.status = status
         self.note = note
         self.encode_time_s = None
@@ -16,17 +26,39 @@ class DummyEnc:
 
 def fake_generate_frames(_ep, *, fps: int = 10, max_frames=None, **_kwargs):
     # Yield minimal frames; encoder result will mark skipped/moviepy-missing.
+    """TODO docstring. Document this function.
+
+    Args:
+        _ep: TODO docstring.
+        fps: TODO docstring.
+        max_frames: TODO docstring.
+        _kwargs: TODO docstring.
+    """
     for _ in range(2):
         yield None
 
 
 def fake_encode_frames(_frame_iter, _path, *, fps: int = 10, sample_memory: bool = False, **_kw):
+    """TODO docstring. Document this function.
+
+    Args:
+        _frame_iter: TODO docstring.
+        _path: TODO docstring.
+        fps: TODO docstring.
+        sample_memory: TODO docstring.
+        _kw: TODO docstring.
+    """
     return DummyEnc(status="skipped", note=NOTE_MOVIEPY_MISSING)
 
 
 @pytest.fixture(autouse=True)
 def patch_dependencies(monkeypatch):
     # Force simulation view available and replay capture active
+    """TODO docstring. Document this function.
+
+    Args:
+        monkeypatch: TODO docstring.
+    """
     monkeypatch.setattr(visuals_mod, "_SIM_VIEW_AVAILABLE", True)
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
     monkeypatch.setattr(visuals_mod, "generate_frames", fake_generate_frames)
@@ -41,6 +73,8 @@ def patch_dependencies(monkeypatch):
 
 
 class Cfg:
+    """TODO docstring. Document this class."""
+
     capture_replay = True
     video_fps = 5
     smoke = False
@@ -52,6 +86,12 @@ class Cfg:
 
 def test_moviepy_missing_yields_skipped_artifact(tmp_path: Path, monkeypatch):
     # Provide replay episodes; we bypass validation by monkeypatching validate_replay_episode
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+        monkeypatch: TODO docstring.
+    """
     records = [
         {"episode_id": "ep1", "scenario_id": "sc1"},
         {"episode_id": "ep2", "scenario_id": "sc1"},

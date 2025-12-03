@@ -12,11 +12,22 @@ from scripts.tools.migrate_artifacts import migrate_artifacts
 
 
 def _create_file(path: Path, content: str = "test") -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+        content: TODO docstring.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
 def test_migrate_artifacts_moves_known_paths(tmp_path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     repo_root = tmp_path / "repo"
     artifact_root = repo_root / "output"
     repo_root.mkdir()
@@ -58,6 +69,11 @@ def test_migrate_artifacts_moves_known_paths(tmp_path: Path) -> None:
 
 
 def test_migrate_artifacts_dry_run_does_not_modify(tmp_path: Path) -> None:
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     repo_root = tmp_path / "repo"
     artifact_root = repo_root / "output"
     repo_root.mkdir()

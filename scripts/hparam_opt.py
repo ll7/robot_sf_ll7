@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import logging
 import sys
 
@@ -17,7 +19,16 @@ optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout)
 
 
 class DriveQualityCallback(BaseCallback):
+    """TODO docstring. Document this class."""
+
     def __init__(self, metrics: VecEnvMetrics, thresholds: list[float], max_steps: int):
+        """TODO docstring. Document this function.
+
+        Args:
+            metrics: TODO docstring.
+            thresholds: TODO docstring.
+            max_steps: TODO docstring.
+        """
         super().__init__()
         self.metrics = metrics
         self.completion_thresholds = thresholds
@@ -27,6 +38,12 @@ class DriveQualityCallback(BaseCallback):
 
     @property
     def score(self) -> float:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         steps_per_threshold = zip(
             self.completion_thresholds,
             self.steps_to_reach_threshold,
@@ -34,14 +51,21 @@ class DriveQualityCallback(BaseCallback):
         )
         reached_thresholds = [(t, s) for t, s in steps_per_threshold if s < self.max_steps]
         threshold_scores = sum(
-            [t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds],
+            t * (2 + (self.max_steps - s) / self.max_steps) for t, s in reached_thresholds
         )
         return threshold_scores / (sum(self.completion_thresholds) * 3)
 
     def _on_training_start(self):
+        """TODO docstring. Document this function."""
         pass
 
     def _on_step(self) -> bool:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         curr_step = self.n_calls
         if curr_step % self.log_freq == 0:
             for i, completion_threshold in enumerate(self.completion_thresholds):
@@ -60,10 +84,20 @@ def training_score(
     difficulty: int = 1,
     route_completion_thresholds: list[float] | None = None,
 ):
+    """TODO docstring. Document this function.
+
+    Args:
+        study_name: TODO docstring.
+        hparams: TODO docstring.
+        max_steps: TODO docstring.
+        difficulty: TODO docstring.
+        route_completion_thresholds: TODO docstring.
+    """
     if route_completion_thresholds is None:
         route_completion_thresholds = [i / 100 for i in range(1, 101)]
 
     def make_env():
+        """TODO docstring. Document this function."""
         config = EnvSettings()
         config.sim_config.difficulty = difficulty
         config.sim_config.stack_steps = hparams["num_stacked_steps"]
@@ -71,6 +105,11 @@ def training_score(
         config.sim_config.use_next_goal = hparams["use_next_goal"]
 
         def reward_func(meta):
+            """TODO docstring. Document this function.
+
+            Args:
+                meta: TODO docstring.
+            """
             return simple_reward(
                 meta,
                 hparams["step_discount"],
@@ -114,6 +153,15 @@ def training_score(
 
 
 def suggest_ppo_params(trial: optuna.Trial, tune: bool = False) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        trial: TODO docstring.
+        tune: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if tune:
         n_envs = trial.suggest_categorical("n_envs", [32, 40, 48, 56, 64])
         n_epochs = trial.suggest_int("n_epochs", 2, 20)
@@ -156,6 +204,15 @@ def suggest_ppo_params(trial: optuna.Trial, tune: bool = False) -> dict:
 
 
 def suggest_simulation_params(trial: optuna.Trial, tune: bool = False) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        trial: TODO docstring.
+        tune: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if tune:
         num_stacked_steps = trial.suggest_int("num_stacked_steps", 1, 5)
         num_lidar_rays = trial.suggest_categorical("num_lidar_rays", [144, 176, 208, 272])
@@ -176,6 +233,15 @@ def suggest_simulation_params(trial: optuna.Trial, tune: bool = False) -> dict:
 
 
 def suggest_reward_params(trial: optuna.Trial, tune: bool = False) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        trial: TODO docstring.
+        tune: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if tune:
         ped_coll_penalty = trial.suggest_int("ped_coll_penalty", -10, -1)
         obst_coll_penalty = trial.suggest_int("obst_coll_penalty", -10, -1)
@@ -197,11 +263,28 @@ def suggest_reward_params(trial: optuna.Trial, tune: bool = False) -> dict:
 
 
 def objective(trial: optuna.Trial, study_name: str) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        trial: TODO docstring.
+        study_name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     ppo_params = suggest_ppo_params(trial, tune=False)
     sim_params = suggest_simulation_params(trial, tune=False)
     rew_params = suggest_reward_params(trial, tune=True)
 
     def merge_dicts(dicts: list[dict]) -> dict:
+        """TODO docstring. Document this function.
+
+        Args:
+            dicts: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return {k: d[k] for d in dicts for k in d}
 
     sugg_params = merge_dicts([ppo_params, sim_params, rew_params])
@@ -209,10 +292,23 @@ def objective(trial: optuna.Trial, study_name: str) -> float:
 
 
 def generate_storage_url(study_name: str) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        study_name: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return f"sqlite:///logs/{study_name}.db"
 
 
 def tune_hparams(study_name: str):
+    """TODO docstring. Document this function.
+
+    Args:
+        study_name: TODO docstring.
+    """
     study = optuna.create_study(
         study_name=study_name,
         direction="maximize",

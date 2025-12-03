@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from typing import cast
 
 from gymnasium import spaces
@@ -9,16 +11,18 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 
 def test_can_create_env():
+    """TODO docstring. Document this function."""
     env = RobotEnv()
     assert env is not None
 
 
 def test_can_return_valid_observation():
+    """TODO docstring. Document this function."""
     env = RobotEnv()
     # Cast observation_space to spaces.Dict for static type checkers
-    obs_dict = cast(spaces.Dict, env.observation_space)
-    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
-    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
+    obs_dict = cast("spaces.Dict", env.observation_space)
+    drive_state_spec = cast("spaces.Box", obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast("spaces.Box", obs_dict[OBS_RAYS])
 
     obs, _ = env.reset()
 
@@ -29,6 +33,7 @@ def test_can_return_valid_observation():
 
 
 def test_can_simulate_with_pedestrians():
+    """TODO docstring. Document this function."""
     total_steps = 1000
     env = RobotEnv()
     env.reset()
@@ -41,6 +46,7 @@ def test_can_simulate_with_pedestrians():
 
 
 def test_ego_ped_env():
+    """TODO docstring. Document this function."""
     total_steps = 1000
     robot_model = PPO.load("./model/run_043", env=None)
     env = PedestrianEnv(robot_model=robot_model)

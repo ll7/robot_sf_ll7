@@ -24,7 +24,11 @@ from robot_sf.benchmark.snqi.types import SNQIWeights
 
 
 def cmd_recompute_weights(args: argparse.Namespace) -> int:
-    """Implement weight recompute CLI command."""
+    """Implement weight recompute CLI command.
+
+    Returns:
+        Exit code: 0 on success, 1 on failure.
+    """
     try:
         # Load baseline statistics
         baseline_stats_path = Path(args.baseline_stats)
@@ -83,6 +87,14 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
 
 def _load_episodes_jsonl(path: Path) -> list[dict]:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     episodes: list[dict] = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
@@ -97,6 +109,15 @@ def _load_episodes_jsonl(path: Path) -> list[dict]:
 
 
 def _extract_metric_values(episodes: Iterable[dict], metric: str) -> list[float]:
+    """TODO docstring. Document this function.
+
+    Args:
+        episodes: TODO docstring.
+        metric: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     vals = []
     for ep in episodes:
         metrics = ep.get("metrics", {})
@@ -114,6 +135,9 @@ def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]
 
     Metrics chosen align with those referenced in compute_snqi(): collisions, near_misses,
     force_exceed_events, jerk_mean. Missing metrics default to med=0, p95=1 for neutral scaling.
+
+    Returns:
+        Dictionary mapping metric names to {'med': float, 'p95': float} statistics.
     """
     metric_names = [
         "collisions",
@@ -130,7 +154,7 @@ def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]
         values_sorted = sorted(values)
         med = statistics.median(values_sorted)
         # p95 index calculation
-        idx = min(len(values_sorted) - 1, max(0, int(round(0.95 * (len(values_sorted) - 1)))))
+        idx = min(len(values_sorted) - 1, max(0, round(0.95 * (len(values_sorted) - 1))))
         p95 = float(values_sorted[idx])
         if abs(p95 - med) < 1e-12:  # ensure non-zero span for normalization downstream
             p95 = med + 1.0
@@ -144,6 +168,9 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
     This implementation loads episodes from JSONL, derives baseline statistics on-the-fly
     (unless future extension supplies an external stats file), and computes the impact on
     mean SNQI when zeroing each component weight individually.
+
+    Returns:
+        Exit code: 0 on success, 1 on failure.
     """
     try:
         episodes_path = Path(args.episodes)
@@ -211,7 +238,11 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create argument parser for SNQI CLI tools."""
+    """Create argument parser for SNQI CLI tools.
+
+    Returns:
+        Configured ArgumentParser with subcommands for SNQI operations.
+    """
     parser = argparse.ArgumentParser(
         prog="robot_sf_snqi",
         description="SNQI weight management and analysis tools",
@@ -291,7 +322,11 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    """Main entry point for SNQI CLI tools."""
+    """Main entry point for SNQI CLI tools.
+
+    Returns:
+        Exit code: 0 on success, 1 on failure or invalid command.
+    """
     parser = create_parser()
     args = parser.parse_args()
 

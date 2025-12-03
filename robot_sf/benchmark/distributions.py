@@ -11,6 +11,7 @@ CLI wiring is done in robot_sf.benchmark.cli (plot-distributions).
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,16 @@ Record = Mapping[str, object]
 
 
 def _get_dotted(d: Mapping[str, object], path: str, default=None):
+    """TODO docstring. Document this function.
+
+    Args:
+        d: TODO docstring.
+        path: TODO docstring.
+        default: TODO docstring.
+
+    Returns:
+        The value at the dotted path, or default if not found.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, Mapping) or part not in cur:  # type: ignore[operator]
@@ -42,9 +53,20 @@ def collect_grouped_values(
     """Collect values per metric per group.
 
     Returns dict[group][metric] -> List[float]
+
+    Returns:
+        Nested dictionary mapping group names to metric names to value lists.
     """
 
     def _to_float(x: object | None) -> float | None:
+        """TODO docstring. Document this function.
+
+        Args:
+            x: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         try:
             v = float(x)  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -73,22 +95,38 @@ def collect_grouped_values(
 
 @dataclass
 class DistPlotMeta:
+    """TODO docstring. Document this class."""
+
     wrote: list[str]
     pdfs: list[str]
 
 
 def _apply_rcparams() -> None:
+    """TODO docstring. Document this function."""
     apply_latex_style()
 
 
 def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
-    try:
-        from scipy.stats import gaussian_kde  # type: ignore
+    """TODO docstring. Document this function.
 
+    Args:
+        ax: TODO docstring.
+        data: TODO docstring.
+        color: TODO docstring.
+    """
+    try:
+        stats_module = importlib.import_module("scipy.stats")
+        gaussian_kde = stats_module.gaussian_kde
         kde = gaussian_kde(data)
         xs = np.linspace(data.min(), data.max(), 200)
         ys = kde(xs)
-        ax.plot(xs, ys * (len(data) * (xs[1] - xs[0])), color=color, alpha=0.8, linewidth=1.0)
+        ax.plot(
+            xs,
+            ys * (len(data) * (xs[1] - xs[0])),
+            color=color,
+            alpha=0.8,
+            linewidth=1.0,
+        )
     except (ImportError, ModuleNotFoundError):
         # scipy optional; silently skip KDE if unavailable
         pass
@@ -108,6 +146,9 @@ def _compute_hist_ci(
     """Bootstrap histogram-count confidence band for given values.
 
     Returns (centers, low, high) or None if not enough/invalid data.
+
+    Returns:
+        Tuple of (bin_centers, lower_bound, upper_bound) or None if insufficient data.
     """
     if vals.size < 5:
         return None
@@ -185,7 +226,11 @@ def _render_metric(
 
 
 def _metrics_in_grouped(grouped: dict[str, dict[str, list[float]]]) -> list[str]:
-    """Return sorted unique metric names present in grouped dict."""
+    """Return sorted unique metric names present in grouped dict.
+
+    Returns:
+        Sorted list of unique metric names found across all groups.
+    """
     return sorted({m for gv in grouped.values() for m in gv})
 
 
@@ -203,7 +248,11 @@ def _save_one_metric(
     palette: Sequence[str],
     out_pdf: bool,
 ) -> tuple[str, str | None]:
-    """Render and save a single metric to PNG and optionally PDF; returns paths."""
+    """Render and save a single metric to PNG and optionally PDF; returns paths.
+
+    Returns:
+        Tuple of (png_path, pdf_path) where pdf_path is None if not generated.
+    """
     # PNG
     fig, ax = plt.subplots(figsize=(6, 4))
     _render_metric(
@@ -268,6 +317,9 @@ def save_distributions(
     """Save per-group per-metric histograms (and optional KDE overlays).
 
     If out_pdf is True, also export a vector PDF with LaTeX-friendly rcParams.
+
+    Returns:
+        DistPlotMeta containing lists of written PNG and PDF paths.
     """
     _apply_rcparams()
     out_dir = str(out_dir)

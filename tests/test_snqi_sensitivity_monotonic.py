@@ -15,6 +15,11 @@ from robot_sf.benchmark.snqi.compute import compute_snqi
 
 
 def _synthetic_eps(num: int = 12):
+    """TODO docstring. Document this function.
+
+    Args:
+        num: TODO docstring.
+    """
     rng = np.random.default_rng(123)
     episodes = []
     for i in range(num):
@@ -36,6 +41,11 @@ def _synthetic_eps(num: int = 12):
 
 
 def _baseline(episodes):
+    """TODO docstring. Document this function.
+
+    Args:
+        episodes: TODO docstring.
+    """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for ep in episodes:
         m = ep["metrics"]
@@ -49,6 +59,7 @@ def _baseline(episodes):
 
 
 def test_collision_weight_monotonicity():
+    """TODO docstring. Document this function."""
     eps = _synthetic_eps()
     base = _baseline(eps)
 

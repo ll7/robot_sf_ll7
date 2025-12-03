@@ -10,10 +10,12 @@ import importlib
 
 
 def _load():
+    """TODO docstring. Document this function."""
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_seed_order_reproducible():
+    """TODO docstring. Document this function."""
     mod = _load()
     # Force non-dry execution
     if hasattr(mod, "DRY_RUN"):

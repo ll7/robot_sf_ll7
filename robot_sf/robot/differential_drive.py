@@ -52,6 +52,8 @@ class DifferentialDriveSettings:
 
 @dataclass
 class DifferentialDriveState:
+    """TODO docstring. Document this class."""
+
     pose: RobotPose = ((0.0, 0.0), 0.0)
     velocity: PolarVec2D = (0.0, 0.0)
     last_wheel_speeds: WheelSpeedState = (0.0, 0.0)
@@ -90,9 +92,12 @@ class DifferentialDriveMotion:
         Computes the new polar velocity vector from the current velocity and
         the action applied.
 
-        :param velocity: The current velocity of the robot (linear speed, angular speed).
-        :param action: The action to apply on the velocity (dV, dTheta).
-        :return: The clipped new velocity as per max speeds.
+        Args:
+            velocity: The current velocity of the robot (linear speed, angular speed).
+            action: The action to apply on the velocity (dV, dTheta).
+
+        Returns:
+            PolarVec2D: The new velocity clipped by configured maximum speeds.
         """
         dot_x = velocity[0] + action[0]
         dot_orient = velocity[1] + action[1]
@@ -105,8 +110,11 @@ class DifferentialDriveMotion:
         """
         Calculates the wheel speeds resulting from a given robot movement.
 
-        :param movement: The movement of the robot encoded as a polar vector (speed, orientation).
-        :return: The calculated wheel speeds (left wheel speed, right wheel speed).
+        Args:
+            movement: The robot movement as a polar vector ``(speed, orientation)``.
+
+        Returns:
+            tuple[float, float]: The wheel speeds ``(left, right)`` in radians/sec.
         """
         dot_x, dot_orient = movement
         diff = self.config.interaxis_length * dot_orient / 2
@@ -121,12 +129,15 @@ class DifferentialDriveMotion:
         d_t: float,
     ) -> float:
         """
-        Computes the distance covered by the robot over the time interval `d_t`.
+        Computes the distance covered by the robot over the time interval ``d_t``.
 
-        :param last_wheel_speeds: The previous wheel speeds.
-        :param new_wheel_speeds: The updated wheel speeds.
-        :param d_t: The time elapsed since last speeds measurement.
-        :return: The covered distance during `d_t`.
+        Args:
+            last_wheel_speeds: The previous wheel speeds.
+            new_wheel_speeds: The updated wheel speeds.
+            d_t: The time elapsed since last speeds measurement.
+
+        Returns:
+            float: The covered distance during ``d_t`` (meters).
         """
         avg_left_speed = (last_wheel_speeds[0] + new_wheel_speeds[0]) / 2
         avg_right_speed = (last_wheel_speeds[1] + new_wheel_speeds[1]) / 2
@@ -145,11 +156,14 @@ class DifferentialDriveMotion:
         """
         Determines the new orientation of the robot after updating its wheel speeds.
 
-        :param robot_orient: The prior orientation angle of the robot.
-        :param last_wheel_speeds: The previous left and right wheel speeds.
-        :param new_wheel_speeds: The new left and right wheel speeds.
-        :param d_t: Time elapsed.
-        :return: The new orientation of the robot.
+        Args:
+            robot_orient: The prior orientation angle of the robot (radians).
+            last_wheel_speeds: The previous left and right wheel speeds.
+            wheel_speeds: The new left and right wheel speeds.
+            d_t: Time elapsed (seconds).
+
+        Returns:
+            float: The updated orientation angle (radians).
         """
         last_wheel_speed_left, last_wheel_speed_right = last_wheel_speeds
         wheel_speed_left, wheel_speed_right = wheel_speeds
@@ -167,9 +181,12 @@ class DifferentialDriveMotion:
         """
         Computes and returns the new odometry of the robot.
 
-        :param old_pose: The previous pose of the robot (x, y, orientation).
-        :param movement: The movement made by the robot (distance, new orientation).
-        :return: The updated pose of the robot.
+        Args:
+            old_pose: The previous pose of the robot ``((x, y), orientation)``.
+            movement: The movement made by the robot ``(distance, new orientation)``.
+
+        Returns:
+            RobotPose: The updated pose ``((x, y), orientation)``.
         """
         distance_covered, new_orient = movement
         (robot_x, robot_y), old_orient = old_pose

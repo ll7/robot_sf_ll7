@@ -149,6 +149,10 @@ def serialize_payload(payload: Any) -> Any:
 
 
 def serialize_many(items: Iterable[Any]) -> list[Any]:
-    """Serialize an iterable of payloads for JSON emission."""
+    """Serialize an iterable of payloads for JSON emission.
+
+    Returns:
+        list[Any]: Serialized payloads ready for JSON encoding.
+    """
 
     return [serialize_payload(item) for item in items]

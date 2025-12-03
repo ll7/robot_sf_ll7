@@ -17,6 +17,11 @@ if TYPE_CHECKING:
 
 def test_collision_sanity(tmp_path: Path):
     # Prepare output path under pytest tmp dir
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out_path = tmp_path / "episodes_collision_sanity.jsonl"
 
     # Run a single episode with a short horizon (10 steps is more than enough)

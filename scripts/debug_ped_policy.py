@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import os
 from pathlib import Path
 
@@ -15,6 +17,7 @@ logger = loguru.logger
 
 
 def make_env():
+    """TODO docstring. Document this function."""
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map("maps/svg_maps/debug_03.svg")
@@ -42,6 +45,7 @@ def get_file():
 
 
 def run():
+    """TODO docstring. Document this function."""
     env = make_env()
     filename = get_file()
     # filename = "./model_ped/ppo_2024-09-06_23-52-17.zip"
@@ -69,6 +73,15 @@ def run():
 
 
 def extract_info(meta: dict, reward: float) -> str:
+    """TODO docstring. Document this function.
+
+    Args:
+        meta: TODO docstring.
+        reward: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     meta = meta["meta"]
     eps_num = meta["episode"]
     steps = meta["step_of_episode"]

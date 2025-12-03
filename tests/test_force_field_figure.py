@@ -1,9 +1,16 @@
+"""TODO docstring. Document this module."""
+
 from pathlib import Path
 
 from robot_sf.benchmark.figures.force_field import generate_force_field_figure
 
 
 def test_force_field_figure_runs(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     png = tmp_path / "ff.png"
     pdf = tmp_path / "ff.pdf"
 

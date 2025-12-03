@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from __future__ import annotations
 
 from robot_sf.benchmark.plots import (
@@ -8,6 +10,16 @@ from robot_sf.benchmark.plots import (
 
 
 def _rec(g: str, x: float, y: float) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        g: TODO docstring.
+        x: TODO docstring.
+        y: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return {
         "scenario_id": f"scn-{g}",
         "scenario_params": {"algo": g},
@@ -17,6 +29,7 @@ def _rec(g: str, x: float, y: float) -> dict:
 
 
 def test_compute_points_and_front():
+    """TODO docstring. Document this function."""
     records = [
         _rec("A", 1.0, 0.5),
         _rec("A", 1.0, 0.6),
@@ -31,6 +44,11 @@ def test_compute_points_and_front():
 
 
 def test_save_png_creates_file(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     records = [
         _rec("A", 1.0, 0.5),
         _rec("B", 0.8, 0.9),
@@ -44,6 +62,11 @@ def test_save_png_creates_file(tmp_path):
 
 
 def test_save_pdf_option(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     records = [
         _rec("A", 1.0, 0.5),
         _rec("B", 0.8, 0.9),

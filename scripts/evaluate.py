@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 import json
 from dataclasses import dataclass
 from typing import Union
@@ -25,6 +27,8 @@ VehicleConfig = Union[DifferentialDriveSettings, BicycleDriveSettings]
 
 @dataclass
 class GymAdapterSettings:
+    """TODO docstring. Document this class."""
+
     obs_space: spaces.Space
     action_space: spaces.Space
     obs_timesteps: int
@@ -33,6 +37,11 @@ class GymAdapterSettings:
     return_dict: bool
 
     def obs_adapter(self, obs):
+        """TODO docstring. Document this function.
+
+        Args:
+            obs: TODO docstring.
+        """
         if self.return_dict:
             return obs
         else:
@@ -52,6 +61,8 @@ class GymAdapterSettings:
 
 @dataclass
 class EvalSettings:
+    """TODO docstring. Document this class."""
+
     num_episodes: int
     ped_densities: list[float]
     vehicle_config: VehicleConfig
@@ -61,28 +72,48 @@ class EvalSettings:
 
 @dataclass
 class AdaptedEnv(gymnasium.Env):
+    """TODO docstring. Document this class."""
+
     orig_env: RobotEnv
     config: GymAdapterSettings
 
     @property
     def observation_space(self):
+        """TODO docstring. Document this function."""
         return self.config.obs_space
 
     @property
     def action_space(self):
+        """TODO docstring. Document this function."""
         return self.config.action_space
 
     def step(self, action):
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+        """
         obs, reward, done, meta = self.orig_env.step(action)
         obs = self.config.obs_adapter(obs)
         return obs, reward, done, meta
 
     def reset(self):
+        """TODO docstring. Document this function."""
         obs = self.orig_env.reset()
         return self.config.obs_adapter(obs)
 
 
 def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
+    """TODO docstring. Document this function.
+
+    Args:
+        env: TODO docstring.
+        model: TODO docstring.
+        num_episodes: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     eval_metrics = EnvMetrics(cache_size=num_episodes)
 
     iterator = tqdm(range(num_episodes)) if tqdm is not None else range(num_episodes)
@@ -109,6 +140,15 @@ def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMet
 
 
 def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
+    """TODO docstring. Document this function.
+
+    Args:
+        settings: TODO docstring.
+        difficulty: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     env_settings = EnvSettings()
     env_settings.sim_config.prf_config = settings.prf_config
     env_settings.sim_config.ped_density_by_difficulty = settings.ped_densities
@@ -120,10 +160,25 @@ def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
 
 
 def prepare_model(model_path: str, env: gymnasium.Env) -> DriveModel:
+    """TODO docstring. Document this function.
+
+    Args:
+        model_path: TODO docstring.
+        env: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return A2C.load(model_path, env=env)
 
 
 def evaluation_series(model_path: str, settings: EvalSettings):
+    """TODO docstring. Document this function.
+
+    Args:
+        model_path: TODO docstring.
+        settings: TODO docstring.
+    """
     all_metrics = {}
 
     for difficulty in range(len(settings.ped_densities)):
@@ -145,6 +200,7 @@ def evaluation_series(model_path: str, settings: EvalSettings):
 
 
 def main():
+    """TODO docstring. Document this function."""
     model_path = "./model/a2c_model"
     obs_space, action_space = prepare_gym_spaces()
 
@@ -184,6 +240,7 @@ def main():
 
 
 def prepare_gym_spaces():
+    """TODO docstring. Document this function."""
     obs_low = np.array([])
     obs_high = np.array([])
     action_low = np.array([])

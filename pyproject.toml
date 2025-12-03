@@ -169,6 +169,10 @@ indent-width = 4
 target-version = "py312"
 
 [tool.ruff.lint]
+# https://docs.astral.sh/ruff/preview/#selecting-single-preview-rules
+preview = true
+explicit-preview-rules = true
+
 select = [
   # you already have:
   "E4","E7","E9","F","W","C901","I001",
@@ -207,7 +211,25 @@ select = [
   "PGH",    # blanket noqa / useless noqa hygiene
   "TCH",    # move typing-only imports under TYPE_CHECKING
   "TID",    # tidy imports (relative vs absolute)
+
+  # Docstrings
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D104",  # Missing docstring in public package
+    "D105",  # Missing docstring in magic method
+    "D106",  # Missing docstring in public nested class
+    "D107",  # Missing docstring in __init__
+    "D417",  # Missing argument descriptions in the docstring
+    "D419",  # Empty docstring
+    "DOC102",  # Documented parameter {id} is not in the function's signature
+    "DOC201",  # `return` is not documented in docstring
+    "DOC202",  # Docstring should not have a returns section because the function doesn't return anything
 ]
+
+fixable = ["ALL"]
+unfixable = []
 
 ignore = [
     # Research/scientific computing patterns that are acceptable
@@ -251,17 +273,34 @@ ignore = [
     "PLC0206",  # Extracting value from dictionary without calling `.items()`
     "RUF005",   # Consider iterable unpacking instead of concatenation
     "COM812",  # Missing trailing comma in a multi-line collection
-    "UP038",    # Removed
+    "RUF043",   # while this is harmless to fix, it creates noise for every new assertion
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests: allow asserts, prints, some magic values & security test scaffolding
-"tests/**/*" = ["S101","T201","PLR2004","BLE001"]
-# One-off scripts / notebooks exports: allow prints
-"scripts/**/*" = ["T201","BLE001"]
-# Examples and docs: allow prints and other leniencies
-"examples/**/*" = ["T201","BLE001"]
-"docs/**/*" = ["T201","BLE001"]
+# Tests: allow asserts, prints, magic values, and lazy imports for optional deps
+"tests/**/*.py" = [
+    "S101",
+    "T201",
+    "PLR2004",
+    "BLE001",
+    "PLC0415",
+    "TC001",
+    "TC002",
+]
+"test_pygame/**/*.py" = [
+    "S101",
+    "T201",
+    "BLE001",
+    "PLC0415",
+    "TC001",
+    "TC002",
+]
+# One-off scripts / notebooks exports: allow prints and local imports for heavy deps
+"scripts/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+# Examples, docs, and specs: similar leniencies for tutorial-style code
+"examples/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+"docs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+"specs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
 # CLI tools: allow prints to stdout
 "robot_sf/benchmark/cli.py" = ["T201"]
 "robot_sf/benchmark/**/*" = ["BLE001"]
@@ -275,14 +314,16 @@ ignore = [
     "PLR0913", # Too many arguments
     "PLR0915", # Too many statements
 ]
-"fast-pysf/examples/**/*" = ["T201"]  # Allow prints in examples
-"fast-pysf/benchmarks/**/*" = ["T201"]  # Allow prints in benchmarks
-"fast-pysf/tests/**/*" = ["S101", "T201"]  # Allow asserts and prints in tests
+"fast-pysf/examples/**/*.py" = ["T201"]  # Allow prints in examples
+"fast-pysf/benchmarks/**/*.py" = ["T201"]  # Allow prints in benchmarks
+"fast-pysf/tests/**/*.py" = ["S101", "T201"]  # Allow asserts and prints in tests
 "fast-pysf/pysocialforce/__init__.py" = ["F401"]  # Public API re-exports
+# Enforce Docstring rules in robot-sf
+"!robot_sf/**/*.py" = [
+    "D417",
+    "DOC201",
+]
 
-# Allow fix for all enabled rules (when `--fix`) is provided.
-fixable = ["ALL"]
-unfixable = []
 
 # Allow unused variables when underscore-prefixed.
 # dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
@@ -313,6 +354,9 @@ docstring-code-format = true
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.coverage.run]
 source = ["robot_sf", "fast-pysf/pysocialforce"]

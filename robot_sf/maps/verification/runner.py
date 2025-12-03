@@ -12,6 +12,7 @@ Primary Entry Point
 verify_maps() : Main orchestrator function
 """
 
+import subprocess
 import time
 import uuid
 from datetime import datetime
@@ -28,6 +29,7 @@ from robot_sf.maps.verification.context import (
     VerificationRunSummary,
     VerificationStatus,
 )
+from robot_sf.maps.verification.manifest import write_manifest
 from robot_sf.maps.verification.map_inventory import MapInventory, MapRecord
 from robot_sf.maps.verification.rules import RuleSeverity, apply_all_rules
 from robot_sf.maps.verification.scope_resolver import ScopeResolver
@@ -149,8 +151,6 @@ def _write_summary_manifest(summary: VerificationRunSummary, output_path: Path |
         return
 
     try:
-        from robot_sf.maps.verification.manifest import write_manifest
-
         write_manifest(summary, output_path)
         logger.debug(f"Manifest written to: {output_path}")
     except Exception as write_err:  # noqa: BLE001 - manifest write failure should not abort reporting
@@ -266,8 +266,6 @@ def verify_maps(
     # Get git SHA if available
     git_sha = None
     try:
-        import subprocess
-
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             capture_output=True,

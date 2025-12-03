@@ -24,7 +24,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import loguru
 
@@ -44,9 +44,9 @@ class EpisodeMetadata:
     seed: int
     config_hash: str
     schema_version: str = "1.0"
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
-    total_steps: Optional[int] = None
+    start_time: float | None = None
+    end_time: float | None = None
+    total_steps: int | None = None
 
 
 @dataclass
@@ -58,7 +58,7 @@ class JSONLRecord:
     event: str  # "episode_start", "step", "episode_end", "entity_reset"
     timestamp: float
     state: dict[str, Any]
-    entity_ids: Optional[list[int]] = None  # For entity_reset events
+    entity_ids: list[int] | None = None  # For entity_reset events
 
 
 class JSONLRecorder:
@@ -87,6 +87,8 @@ class JSONLRecorder:
             scenario: Scenario name for file naming
             algorithm: Algorithm name for file naming
             seed: Random seed for file naming
+            flush_every_n: Flush interval in number of records (``None`` disables periodic flushes).
+            flush_on_episode_end: Whether to flush buffers when an episode ends.
         """
         resolved_output = resolve_artifact_path(output_dir)
         self.output_dir = Path(resolved_output)
@@ -109,19 +111,32 @@ class JSONLRecorder:
         self.schema_version = "1.0"
 
     def _get_episode_filename(self, episode_id: int) -> Path:
-        """Generate standardized filename for episode."""
+        """Generate standardized filename for episode.
+
+        Returns:
+            Path: Standardized episode filename including suite, scenario, algorithm, seed, and episode ID.
+        """
         filename = (
             f"{self.suite}_{self.scenario}_{self.algorithm}_{self.seed}_ep{episode_id:04d}.jsonl"
         )
         return self.output_dir / filename
 
     def _get_metadata_filename(self, episode_id: int) -> Path:
-        """Generate sidecar metadata filename for episode."""
+        """Generate sidecar metadata filename for episode.
+
+        Returns:
+            Path: Metadata JSON filename with .meta.json suffix.
+        """
         filename = f"{self.suite}_{self.scenario}_{self.algorithm}_{self.seed}_ep{episode_id:04d}.meta.json"
         return self.output_dir / filename
 
     def _serialize_state(self, state: VisualizableSimState) -> dict[str, Any]:
-        """Serialize a VisualizableSimState to dictionary format."""
+        """Serialize a VisualizableSimState to dictionary format.
+
+        Returns:
+            dict[str, Any]: State dictionary with timestep and optional robot_pose, pedestrian_positions,
+                ego_ped_pose, ray_vecs, and robot_action fields.
+        """
         state_dict: dict[str, Any] = {"timestep": getattr(state, "timestep", 0.0)}
 
         # Delegate serialization of optional components to small helpers to keep
@@ -150,8 +165,12 @@ class JSONLRecorder:
         return state_dict
 
     # --- Serialization helpers (each intentionally small & focused) ---
-    def _serialize_robot_pose(self, state: VisualizableSimState) -> Optional[list[Any]]:
-        """Return robot pose [[x, y], theta] if available else None."""
+    def _serialize_robot_pose(self, state: VisualizableSimState) -> list[Any] | None:
+        """Return robot pose [[x, y], theta] if available else None.
+
+        Returns:
+            list[Any] | None: Robot pose as [[x, y], theta] or None if unavailable/malformed.
+        """
         if not hasattr(state, "robot_pose") or state.robot_pose is None:
             return None
         try:
@@ -164,8 +183,13 @@ class JSONLRecorder:
 
     def _serialize_pedestrian_positions(
         self, state: VisualizableSimState
-    ) -> Optional[list[list[float]]]:
-        """Return list of pedestrian positions [[x,y], ...] or None if absent."""
+    ) -> list[list[float]] | None:
+        """Return list of pedestrian positions [[x,y], ...] or None if absent.
+
+        Returns:
+            list[list[float]] | None: List of pedestrian 2D positions, empty list if container empty,
+                or None if attribute absent.
+        """
         if not hasattr(state, "pedestrian_positions") or state.pedestrian_positions is None:
             return None
         positions = state.pedestrian_positions
@@ -176,8 +200,12 @@ class JSONLRecorder:
         except (TypeError, ValueError, IndexError):
             return []
 
-    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> Optional[list[Any]]:
-        """Return ego pedestrian pose [[x,y], theta] if available else None."""
+    def _serialize_ego_ped_pose(self, state: VisualizableSimState) -> list[Any] | None:
+        """Return ego pedestrian pose [[x,y], theta] if available else None.
+
+        Returns:
+            list[Any] | None: Ego pedestrian pose as [[x, y], theta] or None if unavailable/malformed.
+        """
         if not hasattr(state, "ego_ped_pose") or state.ego_ped_pose is None:
             return None
         try:
@@ -188,8 +216,13 @@ class JSONLRecorder:
         except (TypeError, ValueError, IndexError):
             return None
 
-    def _serialize_ray_vecs(self, state: VisualizableSimState) -> Optional[list[Any]]:
-        """Return ray vectors list representation or None if absent."""
+    def _serialize_ray_vecs(self, state: VisualizableSimState) -> list[Any] | None:
+        """Return ray vectors list representation or None if absent.
+
+        Returns:
+            list[Any] | None: List representation of ray vectors, empty list if container empty,
+                or None if attribute absent.
+        """
         if not hasattr(state, "ray_vecs") or state.ray_vecs is None:
             return None
         ray_vecs = state.ray_vecs
@@ -202,8 +235,12 @@ class JSONLRecorder:
         except (TypeError, ValueError):
             return []
 
-    def _serialize_robot_action(self, state: VisualizableSimState) -> Optional[dict[str, float]]:
-        """Return robot action dict {'linear_velocity':..,'angular_velocity':..} or None."""
+    def _serialize_robot_action(self, state: VisualizableSimState) -> dict[str, float] | None:
+        """Return robot action dict {'linear_velocity':..,'angular_velocity':..} or None.
+
+        Returns:
+            dict[str, float] | None: Action dictionary with velocity fields, or None if unavailable/empty.
+        """
         if not hasattr(state, "robot_action") or state.robot_action is None:
             return None
         action = state.robot_action
@@ -220,10 +257,13 @@ class JSONLRecorder:
                 pass
         return action_dict or None
 
-    def _normalize_flush_interval(self, flush_every_n: int | None) -> Optional[int]:
+    def _normalize_flush_interval(self, flush_every_n: int | None) -> int | None:
         """Validate and normalize the flush interval setting.
 
         Returns ``None`` when periodic flushing is disabled.
+
+        Returns:
+            int | None: Validated flush interval (min 1) or None when disabled.
         """
 
         if flush_every_n is None:

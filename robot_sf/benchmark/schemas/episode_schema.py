@@ -191,19 +191,35 @@ class EpisodeSchema:
             return False
 
     def __str__(self) -> str:
-        """String representation of the schema."""
+        """String representation of the schema.
+
+        Returns:
+            Human-readable string showing version and title.
+        """
         return f"EpisodeSchema(version={self.version}, title={self.title})"
 
     def __repr__(self) -> str:
-        """Detailed string representation."""
+        """Detailed string representation.
+
+        Returns:
+            Constructor-style representation showing schema path and version.
+        """
         return f"EpisodeSchema(schema_path={self.schema_path}, version={self.version})"
 
     def __eq__(self, other: object) -> bool:
-        """Check equality based on schema content."""
+        """Check equality based on schema content.
+
+        Returns:
+            True if both schemas have identical content.
+        """
         if not isinstance(other, EpisodeSchema):
             return False
         return self._schema_data == other._schema_data
 
     def __hash__(self) -> int:
-        """Hash based on schema content."""
+        """Hash based on schema content.
+
+        Returns:
+            Hash value computed from JSON-serialized schema data.
+        """
         return hash(json.dumps(self._schema_data, sort_keys=True))

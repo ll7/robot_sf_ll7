@@ -120,6 +120,9 @@ class RecordingOptions:
         unless record_video=True and existing.record is False, in which case
         the returned object is a shallow copy with record flipped to True.
         (Final precedence rules may adjust in T006.)
+
+        Returns:
+            RecordingOptions instance with normalized settings.
         """
         if existing is not None:
             if record_video and not existing.record:

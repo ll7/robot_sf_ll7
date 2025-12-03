@@ -121,6 +121,12 @@ def test_reproducibility_same_seed(
     hard_timeout_sec = 60
 
     def _timeout_handler(signum, frame):  # pragma: no cover - timeout path rarely triggered
+        """TODO docstring. Document this function.
+
+        Args:
+            signum: TODO docstring.
+            frame: TODO docstring.
+        """
         raise TimeoutError(
             f"Reproducibility test exceeded hard timeout of {hard_timeout_sec}s (signal).",
         )

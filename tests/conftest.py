@@ -35,6 +35,7 @@ if root_str not in sys.path:
 
 
 def _import_torch_optional():
+    """TODO docstring. Document this function."""
     try:
         return importlib.import_module("torch")  # type: ignore
     except Exception:  # pragma: no cover - torch optional in some envs
@@ -42,6 +43,11 @@ def _import_torch_optional():
 
 
 def _snapshot_torch_determinism(torch_module):
+    """TODO docstring. Document this function.
+
+    Args:
+        torch_module: TODO docstring.
+    """
     state: dict[str, object | None] = {
         "algos": None,
         "cudnn_backend": None,
@@ -62,6 +68,12 @@ def _snapshot_torch_determinism(torch_module):
 
 
 def _apply_nondeterministic(torch_module, cudnn_backend):
+    """TODO docstring. Document this function.
+
+    Args:
+        torch_module: TODO docstring.
+        cudnn_backend: TODO docstring.
+    """
     try:
         if hasattr(torch_module, "use_deterministic_algorithms"):
             torch_module.use_deterministic_algorithms(False)
@@ -73,6 +85,12 @@ def _apply_nondeterministic(torch_module, cudnn_backend):
 
 
 def _restore_torch_determinism(torch_module, state):
+    """TODO docstring. Document this function.
+
+    Args:
+        torch_module: TODO docstring.
+        state: TODO docstring.
+    """
     try:
         prev_algos = state.get("algos")
         cudnn_backend = state.get("cudnn_backend")
@@ -91,6 +109,7 @@ def _restore_torch_determinism(torch_module, state):
 
 @pytest.fixture(scope="session", autouse=True)
 def headless_pygame_environment() -> Generator[None, None, None]:
+    """Force pygame/matplotlib to run headlessly for the duration of the test session."""
     originals: dict[str, str | None] = {
         "DISPLAY": os.environ.get("DISPLAY"),
         "SDL_VIDEODRIVER": os.environ.get("SDL_VIDEODRIVER"),
@@ -117,6 +136,11 @@ def headless_pygame_environment() -> Generator[None, None, None]:
 
 @pytest.fixture(scope="session", autouse=True)
 def reroute_artifact_root(tmp_path_factory: pytest.TempPathFactory) -> Generator[None, None, None]:
+    """Override ROBOT_SF_ARTIFACT_ROOT so tests keep the repo tree clean.
+
+    Args:
+        tmp_path_factory: Pytest factory used to create a persistent temp directory.
+    """
     original = os.environ.get("ROBOT_SF_ARTIFACT_ROOT")
     override_dir = tmp_path_factory.mktemp("robot_sf_artifacts")
     os.environ["ROBOT_SF_ARTIFACT_ROOT"] = str(override_dir)
@@ -150,6 +174,7 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
 
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
+    """TODO docstring. Document this function."""
     if PerformanceBudgetPolicy is not None:
         try:
             return PerformanceBudgetPolicy()
@@ -157,12 +182,19 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
             pass
 
     class _Fallback:  # pragma: no cover - only used when perf utils missing
+        """TODO docstring. Document this class."""
+
         soft_threshold_seconds = 20.0
         hard_timeout_seconds = 60.0
         report_count = 10
         relax_env_var = "ROBOT_SF_PERF_RELAX"
 
         def classify(self, duration_seconds: float):
+            """TODO docstring. Document this function.
+
+            Args:
+                duration_seconds: TODO docstring.
+            """
             if duration_seconds >= self.hard_timeout_seconds:
                 return "hard"
             if duration_seconds >= self.soft_threshold_seconds:
@@ -177,6 +209,11 @@ _SLOW_SAMPLES: list[tuple[str, float]] = []
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
+    """TODO docstring. Document this function.
+
+    Args:
+        item: TODO docstring.
+    """
     start = time.perf_counter()
     try:
         outcome = yield

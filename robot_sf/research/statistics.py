@@ -7,7 +7,7 @@ export_hypothesis_json
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -74,7 +74,7 @@ def welch_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
     }
 
 
-def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
+def cohen_d(x: list[float], y: list[float]) -> float | None:
     """Compute Cohen's d effect size for paired samples.
 
     Args:
@@ -100,8 +100,13 @@ def cohen_d(x: list[float], y: list[float]) -> Optional[float]:
     return float(np.mean(diff) / np.std(diff, ddof=1)) if np.std(diff, ddof=1) > 0 else None
 
 
-def cohen_d_independent(x: list[float], y: list[float]) -> Optional[float]:
-    """Compute Cohen's d for two independent samples using pooled variance."""
+def cohen_d_independent(x: list[float], y: list[float]) -> float | None:
+    """Compute Cohen's d for two independent samples using pooled variance.
+
+    Returns:
+        Cohen's d value (standardized mean difference) or None when inputs are
+        too small (n < 2 per sample) or when the pooled variance is zero.
+    """
 
     if len(x) < 2 or len(y) < 2:
         return None
@@ -173,8 +178,10 @@ def evaluate_hypothesis(
 def validate_sample_size(x: list[float], y: list[float]) -> dict[str, Any]:
     """Validate that samples are suitable for paired tests.
 
-    Returns a dict with 'valid' flag and 'reason' when invalid.
-    Criteria: lengths equal and >=2.
+    Returns:
+        Dictionary with a 'valid' flag and auxiliary fields. When invalid,
+        includes a 'reason' key (e.g., 'mismatched_lengths', 'insufficient_samples').
+        Criteria: lengths equal and >= 2.
     """
     if len(x) != len(y):
         return {"valid": False, "reason": "mismatched_lengths", "n_x": len(x), "n_y": len(y)}
@@ -184,7 +191,7 @@ def validate_sample_size(x: list[float], y: list[float]) -> dict[str, Any]:
 
 
 def format_test_results(
-    t_test: dict[str, Any], effect_size: Optional[float], alpha: float = 0.05
+    t_test: dict[str, Any], effect_size: float | None, alpha: float = 0.05
 ) -> dict[str, Any]:
     """Format statistical test results into standardized structure.
 
@@ -192,6 +199,7 @@ def format_test_results(
         t_test: Result dict from paired_t_test
         effect_size: Cohen's d value (may be None)
         alpha: Significance threshold
+
     Returns:
         Dict with standardized keys: t_stat, p_value, effect_size, significance, interpretation
     """
@@ -240,7 +248,9 @@ def compare_to_threshold(
 ) -> dict[str, Any]:
     """Compute improvement percentage and compare to threshold.
 
-    Returns dict with improvement_pct and decision PASS/FAIL/INCOMPLETE.
+    Returns:
+        Dictionary with 'improvement_pct', 'decision' (PASS/FAIL/INCOMPLETE),
+        and summary statistics such as baseline/treatment means.
     """
     if not baseline or not treatment:
         return {"decision": "INCOMPLETE", "improvement_pct": None, "threshold": threshold}
@@ -267,16 +277,43 @@ class HypothesisEvaluator:
     """
 
     def __init__(self, threshold: float = 40.0):
+        """Initialize the evaluator with a pass threshold.
+
+        Args:
+            threshold: Minimum improvement percentage required to pass the
+                hypothesis (default: 40.0).
+        """
         self.threshold = threshold
 
     def evaluate_variant(
         self, baseline: list[float], pretrained: list[float], variant_id: str
     ) -> dict[str, Any]:
+        """Evaluate a single variant and attach its identifier.
+
+        Args:
+            baseline: Baseline timesteps to convergence.
+            pretrained: Pre-trained timesteps to convergence.
+            variant_id: Identifier of the evaluated variant.
+
+        Returns:
+            Dictionary with threshold comparison results (decision,
+            improvement percentage, summary stats) including the
+            provided `variant_id` key.
+        """
         result = compare_to_threshold(baseline, pretrained, self.threshold)
         result["variant_id"] = variant_id
         return result
 
     def export_hypothesis_json(self, path: str | Path, results: list[dict[str, Any]]) -> Path:
+        """Export hypothesis evaluation results as a JSON file.
+
+        Args:
+            path: Output file path.
+            results: List of per-variant hypothesis results to serialize.
+
+        Returns:
+            Path to the written JSON file (ensured parent directories created).
+        """
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
@@ -285,6 +322,14 @@ class HypothesisEvaluator:
 
 
 def export_hypothesis_json(path: str | Path, results: list[dict[str, Any]]) -> Path:
-    """Helper function for exporting hypothesis results outside evaluator context."""
+    """Helper to export hypothesis results outside the evaluator context.
+
+    Args:
+        path: Output file path.
+        results: List of per-variant hypothesis results to serialize.
+
+    Returns:
+        Path to the written JSON file.
+    """
     evaluator = HypothesisEvaluator()  # threshold unused for export
     return evaluator.export_hypothesis_json(path, results)

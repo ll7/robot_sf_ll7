@@ -55,6 +55,8 @@ _DENSITY_COUNTS = {"low": 10, "med": 25, "high": 40}
 
 @dataclass
 class GeneratedScenario:
+    """TODO docstring. Document this class."""
+
     simulator: Any
     state: np.ndarray
     obstacles: list[tuple[float, float, float, float]]
@@ -63,12 +65,29 @@ class GeneratedScenario:
 
 
 def _select_counts(params: dict[str, Any]) -> int:
+    """TODO docstring. Document this function.
+
+    Args:
+        params: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     density = params.get("density", "med")
     return int(_DENSITY_COUNTS.get(density, _DENSITY_COUNTS["med"]))
 
 
 def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
     # Uniform in central bounding box with small margin
+    """TODO docstring. Document this function.
+
+    Args:
+        rng: TODO docstring.
+        n: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     margin = 0.5
     xs = rng.uniform(margin, AREA_WIDTH - margin, size=n)
     ys = rng.uniform(margin, AREA_HEIGHT - margin, size=n)
@@ -76,6 +95,14 @@ def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
 
 
 def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        kind: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if kind == "open":
         return []
     if kind == "bottleneck":
@@ -98,6 +125,16 @@ def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
 
 
 def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
+    """TODO docstring. Document this function.
+
+    Args:
+        flow: TODO docstring.
+        goal_topology: TODO docstring.
+        pos: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     n = pos.shape[0]
     goals = np.zeros_like(pos)
     if flow == "uni":
@@ -132,9 +169,19 @@ def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
 
 
 def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[int]:
+    """TODO docstring. Document this function.
+
+    Args:
+        rng: TODO docstring.
+        n: TODO docstring.
+        fraction: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if fraction <= 0:
         return [-1] * n
-    num_grouped = int(round(n * fraction))
+    num_grouped = round(n * fraction)
     indices = rng.permutation(n)[:num_grouped]
     group_ids = [-1] * n
     current_gid = 0
@@ -150,6 +197,14 @@ def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[in
 
 
 def _speed_variation(speed_var: str) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        speed_var: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return 0.2 if speed_var == "low" else 0.5
 
 
@@ -162,6 +217,11 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         Scenario parameter dictionary (see module docstring).
     seed : int
         RNG seed for reproducibility.
+
+    Returns
+    -------
+    GeneratedScenario
+        Object containing generated state, map definition, and robot configuration.
     """
     # Special preset for testing/validation: guaranteed contact at t=0
     # Places one pedestrian exactly at the default robot start (0.3, 3.0)
@@ -179,7 +239,12 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         state[:, 6] = 1.0
         obstacles: list[tuple[float, float, float, float]] = []
         groups: list[int] = [-1]
-        metadata = {**params, "n_agents": n, "area": AREA_WIDTH * AREA_HEIGHT, "seed": seed}
+        metadata = {
+            **params,
+            "n_agents": n,
+            "area": AREA_WIDTH * AREA_HEIGHT,
+            "seed": seed,
+        }
         simulator = None if pysf is None else pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
         return GeneratedScenario(
             simulator=simulator,

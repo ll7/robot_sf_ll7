@@ -29,16 +29,35 @@ if TYPE_CHECKING:
 
 
 def _write_jsonl(tmp: Path, lines: list[dict]):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp: TODO docstring.
+        lines: TODO docstring.
+    """
     with tmp.open("w", encoding="utf-8") as f:
         for rec in lines:
             f.write(json.dumps(rec) + "\n")
 
 
 def _basic_episode(eid: str) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        eid: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return {"episode_id": eid}
 
 
 def test_manifest_valid_roundtrip(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0"), _basic_episode("sc1--1")]
     _write_jsonl(out, lines)
@@ -48,6 +67,11 @@ def test_manifest_valid_roundtrip(tmp_path: Path):
 
 
 def test_invalidate_on_size_change(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)
@@ -59,6 +83,11 @@ def test_invalidate_on_size_change(tmp_path: Path):
 
 
 def test_invalidate_on_mtime_change(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)
@@ -71,6 +100,11 @@ def test_invalidate_on_mtime_change(tmp_path: Path):
 
 
 def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)
@@ -91,6 +125,11 @@ def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
 
 
 def test_invalidate_on_episodes_count_mismatch(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0"), _basic_episode("sc1--1")]
     _write_jsonl(out, lines)
@@ -103,6 +142,11 @@ def test_invalidate_on_episodes_count_mismatch(tmp_path: Path):
 
 
 def test_invalidate_on_identity_hash_mismatch(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
     _write_jsonl(out, lines)

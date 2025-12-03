@@ -31,6 +31,13 @@ class ManifestWriter:
         *,
         registry: RunRegistry | None = None,
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            config: TODO docstring.
+            run_id: TODO docstring.
+            registry: TODO docstring.
+        """
         if not isinstance(config, RunTrackerConfig):  # defensive gate for early adopters
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
         self._config = config
@@ -45,19 +52,43 @@ class ManifestWriter:
 
     @property
     def run_directory(self) -> Path:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self._run_dir
 
     def append_run_record(self, record: PipelineRunRecord | dict[str, object]) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            record: TODO docstring.
+        """
         payload = self._prepare_payload(record)
         with self._lock:
             self._append_json_line(self._manifest_path, payload)
 
     def append_telemetry_snapshot(self, snapshot: TelemetrySnapshot | dict[str, object]) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            snapshot: TODO docstring.
+        """
         payload = self._prepare_payload(snapshot)
         with self._lock:
             self._append_json_line(self._telemetry_path, payload)
 
     def write_step_index(self, entries: list[StepExecutionEntry]) -> Path:
+        """TODO docstring. Document this function.
+
+        Args:
+            entries: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         payload = serialize_many(entries)
         with self._lock:
             self._steps_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -67,17 +98,33 @@ class ManifestWriter:
         self,
         recommendations: list[PerformanceRecommendation] | list[dict[str, object]],
     ) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            recommendations: TODO docstring.
+        """
         serialized = [self._prepare_payload(item) for item in recommendations]
         with self._lock:
             for recommendation in serialized:
                 self._append_json_line(self._manifest_path, {"recommendation": recommendation})
 
     def append_performance_test(self, result: PerformanceTestResult | dict[str, object]) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            result: TODO docstring.
+        """
         payload = self._prepare_payload(result)
         with self._lock:
             self._append_json_line(self._manifest_path, {"perf_test": payload})
 
     def iter_run_records(self) -> list[dict[str, object]]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         if not self._manifest_path.exists():
             return []
         return [
@@ -88,14 +135,28 @@ class ManifestWriter:
 
     @staticmethod
     def _append_json_line(target: Path, payload: dict[str, Any]) -> None:
+        """TODO docstring. Document this function.
+
+        Args:
+            target: TODO docstring.
+            payload: TODO docstring.
+        """
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
 
     @staticmethod
     def _prepare_payload(payload: object) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+        Args:
+            payload: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
+            return cast("dict[str, Any]", payload)
         if is_dataclass(payload):
             serialized = serialize_payload(payload)
             if not isinstance(serialized, dict):  # pragma: no cover - defensive guard

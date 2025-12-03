@@ -14,16 +14,31 @@ if TYPE_CHECKING:
 
 
 class DummyCfg:
+    """TODO docstring. Document this class."""
+
     smoke = False
     disable_videos = True
     max_videos = 3
 
 
 def _record(ep_id: int) -> dict:
+    """TODO docstring. Document this function.
+
+    Args:
+        ep_id: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     return {"episode_id": f"ep{ep_id}", "scenario_id": "scA"}
 
 
 def test_selection_order(tmp_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     records = [_record(i) for i in range(10)]
     out = generate_visual_artifacts(tmp_path, DummyCfg(), groups=[], records=records)
     vids = out["videos"]

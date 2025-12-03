@@ -14,9 +14,15 @@ from robot_sf.gym_env.environment_factory import RecordingOptions, make_robot_en
 
 @contextmanager
 def capture_warnings():
+    """TODO docstring. Document this function."""
     messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
+        """TODO docstring. Document this function.
+
+        Args:
+            msg: TODO docstring.
+        """
         if msg.record["level"].name in {"WARNING", "INFO"}:
             messages.append(msg.record["message"])
 
@@ -28,6 +34,11 @@ def capture_warnings():
 
 
 def test_boolean_and_options_conflict_flipped(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     rec = RecordingOptions(record=False)
     with capture_warnings() as logs:
         env = make_robot_env(

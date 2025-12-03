@@ -59,7 +59,11 @@ class SvgMapConverter:
     def _parse_path_element(
         self, path: ET.Element, coordinate_pattern: re.Pattern
     ) -> SvgPath | None:
-        """Parse a single SVG path element into a SvgPath object."""
+        """Parse a single SVG path element into a SvgPath object.
+
+        Returns:
+            SvgPath | None: Parsed path with coordinates and labels, or None if no coordinates found.
+        """
         input_string = path.attrib.get("d")
         if not input_string:
             return None
@@ -88,7 +92,11 @@ class SvgMapConverter:
         )
 
     def _parse_rect_element(self, rect: ET.Element) -> SvgRectangle:
-        """Parse a single SVG rectangle element into a SvgRectangle object."""
+        """Parse a single SVG rectangle element into a SvgRectangle object.
+
+        Returns:
+            SvgRectangle: Parsed rectangle with position, dimensions, label, and ID.
+        """
         rect_label = rect.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
         rect_id = rect.attrib.get("id")
         if rect_label is None and rect_id is None:
@@ -106,7 +114,11 @@ class SvgMapConverter:
         )
 
     def _parse_circle_element(self, circle: ET.Element) -> SvgCircle | None:
-        """Parse a single SVG circle element into a SvgCircle object."""
+        """Parse a single SVG circle element into a SvgCircle object.
+
+        Returns:
+            SvgCircle | None: Parsed circle with center, radius, label, and ID, or None if parsing fails.
+        """
         try:
             cx = float(circle.attrib.get("cx", 0))
             cy = float(circle.attrib.get("cy", 0))
@@ -189,7 +201,11 @@ class SvgMapConverter:
         self.circle_info = circle_info
 
     def _process_obstacle_path(self, path: SvgPath) -> Obstacle:
-        """Process a path labeled as obstacle."""
+        """Process a path labeled as obstacle.
+
+        Returns:
+            Obstacle: Processed obstacle with closed polygon vertices.
+        """
         # SvgPath.coordinates is a Tuple[Vec2D]; convert to list of tuples
         vertices = list(path.coordinates)
 
@@ -207,13 +223,28 @@ class SvgMapConverter:
         spawn_zones: list[Rect],
         goal_zones: list[Rect],
     ) -> GlobalRoute:
-        """Process a path labeled as route (pedestrian or robot)."""
+        """Process a path labeled as route (pedestrian or robot).
+
+        Returns:
+            GlobalRoute: Route with spawn/goal zones and waypoints extracted from path.
+        """
         vertices = list(path.coordinates)
         spawn, goal = self.__get_path_number(path.label)
 
         # Defensive fallback: if spawn/goal indices are out of range (or missing zones), create
         # minimal synthetic zones around first/last waypoint so downstream logic still works.
         def _safe_zone(index: int, zones: list[Rect], waypoint, kind: str) -> Rect:
+            """Get a zone by index or create a synthetic fallback zone around waypoint.
+
+            Args:
+                index: Index into zones list.
+                zones: Available spawn or goal zones.
+                waypoint: Fallback (x, y) position if index is invalid.
+                kind: Description string ('spawn' or 'goal') for logging.
+
+            Returns:
+                Rect: Zone from list if valid index, otherwise synthetic 0.1x0.1 zone around waypoint.
+            """
             if zones and 0 <= index < len(zones):
                 return zones[index]
             logger.warning(
@@ -238,7 +269,11 @@ class SvgMapConverter:
         )
 
     def _process_crowded_zone_path(self, path: SvgPath) -> Zone:
-        """Process a path labeled as crowded zone."""
+        """Process a path labeled as crowded zone.
+
+        Returns:
+            Zone: Zone polygon defined by path coordinates.
+        """
         return Zone(list(path.coordinates))
 
     def _process_single_pedestrians_from_circles(self) -> list[SinglePedestrianDefinition]:
@@ -249,7 +284,9 @@ class SvgMapConverter:
         - "single_ped_<id>_start" for start positions
         - "single_ped_<id>_goal" for goal positions
 
-        Returns a list of SinglePedestrianDefinition objects.
+        Returns:
+            list[SinglePedestrianDefinition]: List of pedestrian definitions with matched
+                start/goal positions, filtered to exclude incomplete pairs.
         """
         # Group circles by pedestrian ID
         ped_data: dict[str, dict[str, tuple[float, float]]] = {}
@@ -491,6 +528,9 @@ class SvgMapConverter:
     def get_map_definition(self) -> MapDefinition:
         """
         Return the MapDefinition object.
+
+        Returns:
+            MapDefinition: The validated map definition created from SVG parsing.
         """
         # verify that the map definition is the correct type
         try:
@@ -503,6 +543,14 @@ class SvgMapConverter:
 
     def __get_path_number(self, route: str) -> tuple[int, int]:
         # routes have a label of the form 'ped_route_<spawn>_<goal>'
+        """TODO docstring. Document this function.
+
+        Args:
+            route: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         numbers = re.findall(r"\d+", route)
         if numbers:
             spawn = int(numbers[0])
@@ -519,6 +567,10 @@ def convert_map(svg_file: str):
     Returns None on conversion failure; raises no exceptions outward (they are logged) except
     for the explicit validation error on missing robot routes which is also logged then rethrown
     so callers can decide to fallback to a default map pool.
+
+    Returns:
+        MapDefinition | None: Parsed map definition on success, or None if conversion fails
+            (except for validation errors which are re-raised).
     """
 
     logger.debug("Converting SVG map to MapDefinition object.")
@@ -551,6 +603,15 @@ def convert_map(svg_file: str):
 
 
 def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
+    """TODO docstring. Document this function.
+
+    Args:
+        file_path: TODO docstring.
+        strict: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if file_path.suffix.lower() != ".svg":
         raise ValueError(f"Expected an SVG file, got: {file_path}")
     try:
@@ -566,6 +627,16 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
 
 
 def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str, MapDefinition]:
+    """TODO docstring. Document this function.
+
+    Args:
+        dir_path: TODO docstring.
+        pattern: TODO docstring.
+        strict: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     svg_files = sorted(dir_path.glob(pattern))
     if not svg_files:
         raise ValueError(f"No SVG files found in directory {dir_path} with pattern '{pattern}'")
@@ -585,7 +656,12 @@ def load_svg_maps(
     pattern: str = "*.svg",
     strict: bool = False,
 ) -> dict[str, MapDefinition]:
-    """Load one or many SVG maps into a dict keyed by filename stem."""
+    """Load one or many SVG maps into a dict keyed by filename stem.
+
+    Returns:
+        dict[str, MapDefinition]: Dictionary mapping filenames (without .svg extension) to
+            parsed MapDefinition objects. Empty dict if no valid maps found (unless strict=True).
+    """
     p = Path(path)
     if not p.exists():  # pragma: no cover
         raise FileNotFoundError(f"Path does not exist: {path}")

@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from robot_sf.training.multi_extractor_models import (
     ExtractorRunRecord,
     HardwareProfile,
@@ -7,6 +9,11 @@ from robot_sf.training.multi_extractor_summary import write_summary_artifacts
 
 
 def test_summary_markdown_contains_required_sections(tmp_path):
+    """TODO docstring. Document this function.
+
+    Args:
+        tmp_path: TODO docstring.
+    """
     base_dir = tmp_path / "run_outputs"
     base_dir.mkdir()
 

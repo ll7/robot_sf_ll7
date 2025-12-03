@@ -8,6 +8,7 @@ from robot_sf.gym_env.robot_env import RobotEnv
 
 
 def benchmark():
+    """TODO docstring. Document this function."""
     total_steps = 20000
     env = RobotEnv(debug=True)
     env.reset()

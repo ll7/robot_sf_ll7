@@ -39,6 +39,8 @@ __all__ = ["EffectSizeEntry", "EffectSizeReport", "compute_effect_sizes"]
 
 @dataclass
 class EffectSizeEntry:  # matches data model
+    """TODO docstring. Document this class."""
+
     metric: str
     density_low: str
     density_high: str
@@ -48,11 +50,22 @@ class EffectSizeEntry:  # matches data model
 
 @dataclass
 class EffectSizeReport:
+    """TODO docstring. Document this class."""
+
     archetype: str
     comparisons: list[EffectSizeEntry]
 
 
 def compute_effect_sizes(groups, cfg):  # T032
+    """TODO docstring. Document this function.
+
+    Args:
+        groups: TODO docstring.
+        cfg: TODO docstring.
+
+    Returns:
+        List of EffectSizeReport objects containing comparisons for each archetype.
+    """
     by_arch = _group_by_archetype(groups)
     reference_density = getattr(cfg, "effect_size_reference_density", "low")
     reports: list[EffectSizeReport] = []
@@ -69,6 +82,14 @@ def compute_effect_sizes(groups, cfg):  # T032
 
 
 def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        groups: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     result: dict[str, dict[str, object]] = {}
     for g in groups:
         result.setdefault(g.archetype, {})[g.density] = g
@@ -76,6 +97,16 @@ def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
 
 
 def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
+    """TODO docstring. Document this function.
+
+    Args:
+        ref_group: TODO docstring.
+        density_map: TODO docstring.
+        reference_density: TODO docstring.
+
+    Returns:
+        List of EffectSizeEntry objects from comparing reference to other densities.
+    """
     comparisons: list[EffectSizeEntry] = []
     for density_key, group in sorted(density_map.items()):
         if density_key == reference_density:
@@ -88,6 +119,17 @@ def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
 
 
 def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
+    """TODO docstring. Document this function.
+
+    Args:
+        ref_group: TODO docstring.
+        other_group: TODO docstring.
+        ref_density: TODO docstring.
+        other_density: TODO docstring.
+
+    Returns:
+        List of EffectSizeEntry objects for rate-based metrics.
+    """
     entries: list[EffectSizeEntry] = []
     for metric in RATE_METRICS:
         ref_metric = ref_group.metrics.get(metric)
@@ -113,6 +155,17 @@ def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
 
 
 def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density):
+    """TODO docstring. Document this function.
+
+    Args:
+        ref_group: TODO docstring.
+        other_group: TODO docstring.
+        ref_density: TODO docstring.
+        other_density: TODO docstring.
+
+    Returns:
+        List of EffectSizeEntry objects for continuous metrics.
+    """
     entries: list[EffectSizeEntry] = []
     for metric in CONT_METRICS:
         ref_metric = ref_group.metrics.get(metric)
@@ -136,6 +189,16 @@ def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density)
 
 
 def _glass_delta(ref_metric, diff, n):
+    """TODO docstring. Document this function.
+
+    Args:
+        ref_metric: TODO docstring.
+        diff: TODO docstring.
+        n: TODO docstring.
+
+    Returns:
+        Glass's Delta standardized effect size, or 0.0 if cannot be computed.
+    """
     ci = getattr(ref_metric, "mean_ci", None)
     if not ci or n <= 1:
         if not ci:

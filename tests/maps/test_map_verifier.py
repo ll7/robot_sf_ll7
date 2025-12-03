@@ -54,6 +54,11 @@ def test_ci_mode_failure_simulation(monkeypatch):
     from robot_sf.maps.verification.rules import RuleSeverity, RuleViolation
 
     def fake_apply_all_rules(_map_path: Path):  # force one error per map
+        """TODO docstring. Document this function.
+
+        Args:
+            _map_path: TODO docstring.
+        """
         return [
             RuleViolation(
                 rule_id="TEST_ERR",

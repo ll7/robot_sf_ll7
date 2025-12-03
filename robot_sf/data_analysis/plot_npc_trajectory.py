@@ -40,14 +40,14 @@ def plot_single_splitted_traj(
             route.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ped_idx (int): Which simulation pedestrian is inspected
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
         map_def (MapDefinition, optional): Map definition to plot obstacles
     """
     # Create figure and axes for better control
-    fig, ax = plt.subplots(figsize=(10, 8))
+    _fig, ax = plt.subplots(figsize=(10, 8))
 
     x_vals = ped_positions_array[:, ped_idx, 0]
     y_vals = ped_positions_array[:, ped_idx, 1]
@@ -102,7 +102,7 @@ def plot_all_splitted_traj(
     Split when the distance between two consecutive points is greater than normal.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
         map_def (MapDefinition, optional): Map definition to plot obstacles
@@ -110,7 +110,7 @@ def plot_all_splitted_traj(
     _, num_pedestrians, _ = ped_positions_array.shape
 
     # Create figure and axes for better control
-    fig, ax = plt.subplots(figsize=(10, 8))
+    _fig, ax = plt.subplots(figsize=(10, 8))
 
     for ped_idx in range(num_pedestrians):
         # Extract x and y for this ped_idx across all timesteps
@@ -133,7 +133,11 @@ def plot_all_splitted_traj(
                 start_idx = i + 1
 
         # Plot the last segment
-        ax.plot(x_vals[start_idx:], y_vals[start_idx:], label=f"Pedestrian {ped_idx} Segment")
+        ax.plot(
+            x_vals[start_idx:],
+            y_vals[start_idx:],
+            label=f"Pedestrian {ped_idx} Segment",
+        )
         ax.scatter(x_vals[start_idx], y_vals[start_idx], color="green", marker="o")
         ax.scatter(x_vals[-1], y_vals[-1], color="red", marker="x")
 
@@ -162,7 +166,11 @@ def calculate_velocity(
     y_vals: np.ndarray,
     time_interval: float | None = None,
 ) -> np.ndarray:
-    """Calculate the velocity of a pedestrian given their x and y positions."""
+    """Calculate the velocity of a pedestrian given their x and y positions.
+
+    Returns:
+        np.ndarray: Velocity magnitudes between consecutive points.
+    """
     global time_interval_warning_logged
     if time_interval is None:
         if time_interval_warning_logged is False:
@@ -185,7 +193,11 @@ def calculate_acceleration(
     velocities: np.ndarray,
     time_interval: float | None = None,
 ) -> np.ndarray:
-    """Calculate the acceleration of a pedestrian given their velocities."""
+    """Calculate the acceleration of a pedestrian given their velocities.
+
+    Returns:
+        np.ndarray: Acceleration magnitudes between consecutive velocities.
+    """
     # Calculate the differences between consecutive velocities
     global time_interval_warning_logged
     if time_interval is None:
@@ -213,7 +225,7 @@ def subplot_single_splitted_traj_acc(
     Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ped_idx (int): Which simulation pedestrian is inspected
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -240,7 +252,11 @@ def subplot_single_splitted_traj_acc(
             velocities = calculate_velocity(x_vals[start_idx : i + 1], y_vals[start_idx : i + 1])
             accelerations = calculate_acceleration(velocities)
             axes[1].plot(range(len(velocities)), velocities, label=f"Pedestrian {start_idx}")
-            axes[2].plot(range(len(accelerations)), accelerations, label=f"Pedestrian {start_idx}")
+            axes[2].plot(
+                range(len(accelerations)),
+                accelerations,
+                label=f"Pedestrian {start_idx}",
+            )
 
             counter += 1
             start_idx = i + 1
@@ -293,7 +309,7 @@ def plot_acceleration_distribution(
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
@@ -358,7 +374,7 @@ def plot_velocity_distribution(
     Calculate and plot the probability distribution of the velocity of all pedestrians.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
     """
@@ -423,7 +439,7 @@ def subplot_velocity_distribution_with_ego_ped(
     in comparison to the ego pedestrian.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_positions (np.ndarray): shape: (timesteps, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -497,7 +513,7 @@ def subplot_acceleration_distribution(
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         ego_positions (np.ndarray): shape: (timesteps, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
@@ -579,7 +595,7 @@ def velocity_colorcoded_with_positions(
     Plot the positions of NPC pedestrians color-coded by their velocities.
 
     Args:
-        ped_position_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
+        ped_positions_array (np.ndarray): shape: (timesteps, num_pedestrians, 2)
         interactive (bool): If True, show the plot interactively
         unique_id (str): Unique identifier for the plot filename, usually the timestamp
         map_def (MapDefinition, optional): Map definition to plot obstacles
@@ -603,7 +619,11 @@ def velocity_colorcoded_with_positions(
                 )
                 all_npc_velocities.extend(velocities)
                 all_npc_positions.extend(
-                    zip(x_vals[start_idx + 1 : i + 1], y_vals[start_idx + 1 : i + 1], strict=False),
+                    zip(
+                        x_vals[start_idx + 1 : i + 1],
+                        y_vals[start_idx + 1 : i + 1],
+                        strict=False,
+                    ),
                 )
                 start_idx = i + 1
 

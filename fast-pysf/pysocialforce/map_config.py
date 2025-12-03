@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import dist
 
@@ -65,6 +67,7 @@ class Obstacle:
     vertices_np: np.ndarray = field(init=False)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         if not self.vertices:
             raise ValueError("No vertices specified for obstacle!")
 

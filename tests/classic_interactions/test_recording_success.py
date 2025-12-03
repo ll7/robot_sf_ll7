@@ -22,6 +22,7 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 
 def test_recording_creates_mp4_when_enabled():
+    """TODO docstring. Document this function."""
     mod = importlib.import_module("examples.classic_interactions_pygame")
     # Skip if moviepy not available
     if not getattr(mod, "MOVIEPY_AVAILABLE", False):  # type: ignore[attr-defined]

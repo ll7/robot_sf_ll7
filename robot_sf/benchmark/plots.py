@@ -5,6 +5,7 @@ Create Pareto scatter plots to visualize trade-offs between two metrics.
 
 from __future__ import annotations
 
+import gc
 import os
 from typing import TYPE_CHECKING
 
@@ -14,10 +15,25 @@ import numpy as np
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+try:
+    from robot_sf.benchmark.plotting_style import apply_latex_style
+except ImportError:  # pragma: no cover - optional styling helper
+    apply_latex_style = None  # type: ignore[assignment]
+
 Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
+    """Get nested dict value via dotted path.
+
+    Args:
+        d: Dictionary to navigate.
+        path: Dot-separated key path (e.g., "metrics.success").
+        default: Value to return if path is not found.
+
+    Returns:
+        The value at the dotted path, or default if not found.
+    """
     cur: object = d
     for part in path.split("."):
         if not isinstance(cur, dict) or part not in cur:
@@ -32,6 +48,17 @@ def _group_values(
     fallback_group_by: str,
     metric: str,
 ) -> dict[str, list[float]]:
+    """TODO docstring. Document this function.
+
+    Args:
+        records: TODO docstring.
+        group_by: TODO docstring.
+        fallback_group_by: TODO docstring.
+        metric: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     out: dict[str, list[float]] = {}
     for r in records:
         g = _get_dotted(r, group_by)
@@ -68,6 +95,14 @@ def compute_pareto_points(
     points: list[tuple[float, float]] = []
 
     def reducer(vals: list[float]) -> float:
+        """Aggregate values using configured aggregation method.
+
+        Args:
+            vals: List of metric values to aggregate.
+
+        Returns:
+            Aggregated value (mean or median based on agg parameter).
+        """
         if agg == "median":
             return float(np.median(vals))
         return float(np.mean(vals))
@@ -87,15 +122,12 @@ def _maybe_apply_latex_style() -> None:
     Kept as a separate helper to reduce complexity in plotting functions and to
     isolate optional dependency handling.
     """
+    if apply_latex_style is None:
+        return
     try:
-        from robot_sf.benchmark.plotting_style import apply_latex_style
-
-        try:
-            apply_latex_style()
-        except (AttributeError, TypeError, ValueError, RuntimeError):
-            # If the helper misbehaves, silently continue using defaults.
-            return
-    except ImportError:
+        apply_latex_style()
+    except (AttributeError, TypeError, ValueError, RuntimeError):
+        # If the helper misbehaves, silently continue using defaults.
         return
 
 
@@ -105,6 +137,17 @@ def _dominates(
     x_higher_better: bool,
     y_higher_better: bool,
 ) -> bool:
+    """TODO docstring. Document this function.
+
+    Args:
+        a: TODO docstring.
+        b: TODO docstring.
+        x_higher_better: TODO docstring.
+        y_higher_better: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     ax, ay = a
     bx, by = b
     # Normalize to "lower is better" by flipping signs if higher is better
@@ -120,7 +163,11 @@ def pareto_front_indices(
     x_higher_better: bool = False,
     y_higher_better: bool = False,
 ) -> list[int]:
-    """Return indices of non-dominated points using simple O(n^2) check."""
+    """Return indices of non-dominated points using simple O(n^2) check.
+
+    Returns:
+        List of indices corresponding to Pareto-optimal points.
+    """
     n = len(points)
     idxs = []
     for i in range(n):
@@ -152,6 +199,9 @@ def save_pareto_png(
     """Render and save a Pareto scatter with non-dominated points highlighted.
 
     When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
+
+    Returns:
+        Metadata dict with plot info, point counts, and output paths.
     """
     os.environ.setdefault("MPLBACKEND", "Agg")
     # Apply optional LaTeX plotting style if available.
@@ -192,8 +242,6 @@ def save_pareto_png(
     plt.savefig(out_path, dpi=150)
     # Force garbage collection to reduce memory footprint in long CI runs
     try:
-        import gc
-
         gc.collect()
     except Exception:
         pass

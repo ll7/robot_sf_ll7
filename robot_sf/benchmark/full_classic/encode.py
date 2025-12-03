@@ -16,6 +16,9 @@ Design notes:
 
 from __future__ import annotations
 
+import importlib
+import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -36,6 +39,8 @@ except ImportError:
 
 @dataclass
 class EncodeResult:
+    """TODO docstring. Document this class."""
+
     path: Path
     status: str  # success|skipped|failed
     note: str | None
@@ -43,11 +48,16 @@ class EncodeResult:
     peak_rss_mb: float | None = None  # populated when memory sampling enabled & psutil present
 
 
-def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, Iterator[np.ndarray]]:
+def _iter_first(
+    frame_iter: Iterable[np.ndarray],
+) -> tuple[np.ndarray | None, Iterator[np.ndarray]]:
     """Peek first frame without materializing the rest.
 
     Returns (first_frame_or_none, iterator_starting_from_first) so we can
     validate dimensions before constructing an ImageSequenceClip.
+
+    Returns:
+        Tuple of (first frame or None if empty, iterator starting from first frame).
     """
     it = iter(frame_iter)
     try:
@@ -56,6 +66,7 @@ def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, It
         return None, iter(())
 
     def chain_first():  # local generator
+        """TODO docstring. Document this function."""
         yield first
         yield from it
 
@@ -63,14 +74,15 @@ def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, It
 
 
 def _start_memory_sampler(sample: bool, interval: float):
-    """Return (stop_callable, peak_container) starting sampler if psutil available else no-op."""
+    """Return (stop_callable, peak_container) starting sampler if psutil available else no-op.
+
+    Returns:
+        Tuple of (stop function, list containing peak RSS in MB or [None]).
+    """
     if not sample:
         return (lambda: None), [None]
-    import threading
-    import time
-
     try:
-        import psutil  # type: ignore
+        psutil = importlib.import_module("psutil")  # type: ignore
     except ImportError:
         return (lambda: None), [None]
 
@@ -83,6 +95,7 @@ def _start_memory_sampler(sample: bool, interval: float):
     stop_flag: list[bool] = [False]
 
     def _sampler():
+        """TODO docstring. Document this function."""
         while not stop_flag[0]:
             try:
                 rss = process.memory_info().rss / (1024 * 1024)
@@ -97,6 +110,7 @@ def _start_memory_sampler(sample: bool, interval: float):
     th.start()
 
     def _stop():
+        """TODO docstring. Document this function."""
         stop_flag[0] = True
         try:
             th.join(timeout=0.5)
@@ -108,6 +122,14 @@ def _start_memory_sampler(sample: bool, interval: float):
 
 
 def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
+    """TODO docstring. Document this function.
+
+    Args:
+        first: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     if first is None:
         return False, "no-frames"
     if first.dtype != np.uint8 or first.ndim != 3 or first.shape[2] != 3:
@@ -116,7 +138,11 @@ def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
 
 
 def _materialize_frames(first: np.ndarray, rest: Iterable[np.ndarray]) -> list[np.ndarray]:
-    """Return full frame list including first frame."""
+    """Return full frame list including first frame.
+
+    Returns:
+        List of all frames starting with the first frame followed by remaining frames.
+    """
     remaining = list(rest)
     return [first, *remaining]
 
@@ -220,13 +246,16 @@ def encode_frames(
         peak_rss_mb to result (T034 / FR-012). If psutil missing this is ignored.
     sample_interval_s: float, default 0.1
         Interval between memory samples.
+
+    Returns
+    -------
+    EncodeResult
+        Result object containing output path, status, encoding time, and optional peak memory.
     """
     if not moviepy_ready() or ImageSequenceClip is None:
         return EncodeResult(path=out_path, status="skipped", note=NOTE_MOVIEPY_MISSING)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    import time  # local import to keep module import light
 
     stop_sampler, peak_container = _start_memory_sampler(sample_memory, sample_interval_s)
 

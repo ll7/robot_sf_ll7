@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from dataclasses import dataclass, field
 from math import atan2, cos, sin, tan
 
@@ -40,6 +42,12 @@ class BicycleDriveState:
 
     @property
     def pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.pose[0]
 
     @property
@@ -63,17 +71,15 @@ class BicycleMotion:
     config: BicycleDriveSettings
 
     def move(self, state: BicycleDriveState, action: BicycleAction, d_t: float):
-        """
-        Update the state of the bicycle given an action and time duration.
+        """Update the bicycle state by applying the provided action for ``d_t`` seconds.
 
         Args:
-            state (BicycleDriveState): The current state of the bicycle.
-            action (BicycleAction): The action to take, contains acceleration
-                                    and steering angle.
-            d_t (float): The time duration for which to apply the action.
+            state (BicycleDriveState): The current bicycle state (mutated in place).
+            action (BicycleAction): Tuple with acceleration and steering commands.
+            d_t (float): Duration in seconds for which the action is applied.
 
-        Returns:
-            None: The method updates the state in-place.
+        Notes:
+            This method mutates ``state`` directly and does not return a value.
         """
         acceleration, steering_angle = action
         (x, y), orient = state.pose
@@ -126,37 +132,87 @@ class BicycleDriveRobot:
     movement: BicycleMotion = field(init=False)
 
     def __post_init__(self):
+        """TODO docstring. Document this function."""
         self.movement = BicycleMotion(self.config)
 
     @property
     def observation_space(self) -> spaces.Box:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def action_space(self) -> spaces.Box:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property
     def pos(self) -> Vec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state.pose[0]
 
     @property
     def pose(self) -> RobotPose:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state.pose
 
     @property
     def current_speed(self) -> PolarVec2D:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         return self.state.current_speed
 
     def apply_action(self, action: BicycleAction, d_t: float):
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+            d_t: TODO docstring.
+        """
         self.movement.move(self.state, action, d_t)
 
     def reset_state(self, new_pose: RobotPose):
+        """TODO docstring. Document this function.
+
+        Args:
+            new_pose: TODO docstring.
+        """
         self.state = BicycleDriveState(new_pose, 0)
 
     def parse_action(self, action: np.ndarray) -> BicycleAction:
+        """TODO docstring. Document this function.
+
+        Args:
+            action: TODO docstring.
+
+        Returns:
+            TODO docstring.
+        """
         return (action[0], action[1])

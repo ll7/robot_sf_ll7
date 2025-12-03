@@ -51,7 +51,11 @@ class ExpertTrainingConfig:
         evaluation: EvaluationSchedule,
         scenario_id: str | None = None,
     ) -> ExpertTrainingConfig:
-        """Create a config while coercing seeds to a canonical tuple."""
+        """Create a config while coercing seeds to a canonical tuple.
+
+        Returns:
+            ExpertTrainingConfig: Constructed configuration instance.
+        """
 
         return cls(
             scenario_config=scenario_config,
@@ -90,7 +94,11 @@ class TrajectoryCollectionConfig:
         random_seeds: tuple[int, ...] | list[int],
         scenario_id: str | None = None,
     ) -> TrajectoryCollectionConfig:
-        """Create a config while coercing sequences to canonical tuples."""
+        """Create a config while coercing sequences to canonical tuples.
+
+        Returns:
+            TrajectoryCollectionConfig: Constructed configuration instance.
+        """
 
         return cls(
             dataset_id=dataset_id,
@@ -139,7 +147,11 @@ class BCPretrainingConfig:
         learning_rate: float,
         random_seeds: tuple[int, ...] | list[int],
     ) -> BCPretrainingConfig:
-        """Create a config while coercing seeds to a canonical tuple."""
+        """Create a config while coercing seeds to a canonical tuple.
+
+        Returns:
+            BCPretrainingConfig: Constructed configuration instance.
+        """
 
         return cls(
             run_id=run_id,
@@ -172,7 +184,11 @@ class PPOFineTuningConfig:
         random_seeds: tuple[int, ...] | list[int],
         learning_rate: float = 0.0003,
     ) -> PPOFineTuningConfig:
-        """Create a config while coercing seeds to a canonical tuple."""
+        """Create a config while coercing seeds to a canonical tuple.
+
+        Returns:
+            PPOFineTuningConfig: Constructed configuration instance.
+        """
 
         return cls(
             run_id=run_id,
@@ -205,7 +221,11 @@ class PPOFineTuneConfig:
         comparison_baseline_id: str,
         evaluation: EvaluationSchedule,
     ) -> PPOFineTuneConfig:
-        """Create a config while coercing seeds to a canonical tuple."""
+        """Create a config while coercing seeds to a canonical tuple.
+
+        Returns:
+            PPOFineTuneConfig: Constructed configuration instance.
+        """
 
         return cls(
             scenario_config=scenario_config,

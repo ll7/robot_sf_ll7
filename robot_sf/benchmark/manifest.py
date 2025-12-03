@@ -59,11 +59,21 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class _Stat:
+    """TODO docstring. Document this class."""
+
     size: int
     mtime_ns: int
 
 
 def _stat_of(path: Path) -> _Stat:
+    """TODO docstring. Document this function.
+
+    Args:
+        path: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     st = path.stat()
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))
 
@@ -73,6 +83,9 @@ def manifest_path_for(out_path: Path) -> Path:
 
     The sidecar naming pattern appends ``.manifest.json`` to the original
     suffix, e.g., ``episodes.jsonl`` → ``episodes.jsonl.manifest.json``.
+
+    Returns:
+        Path to the manifest sidecar file.
     """
     return out_path.with_suffix(out_path.suffix + ".manifest.json")
 
@@ -83,7 +96,11 @@ def _validate_manifest_data(
     expected_identity_hash: str | None,
     expected_schema_version: str,
 ) -> set[str] | None:
-    """Return set of ids if manifest data passes all validation checks else None."""
+    """Return set of ids if manifest data passes all validation checks else None.
+
+    Returns:
+        Set of episode IDs if validation succeeds, None otherwise.
+    """
     stat = data.get("stat")
     if not isinstance(stat, dict):
         return None
@@ -119,6 +136,9 @@ def load_manifest(
     - if schema_version present, must equal expected_schema_version
     - episodes_count (if present) must equal len(episode_ids)
     Any failure returns None to trigger fallback scanning.
+
+    Returns:
+        Set of cached episode IDs if validation succeeds, None otherwise.
     """
     sidecar = manifest_path_for(out_path)
     if not sidecar.exists() or not out_path.exists():
@@ -142,14 +162,15 @@ def save_manifest(
 ) -> None:
     """Write or update the manifest to reflect the current on-disk state.
 
-    Parameters
-    - out_path: Path to the JSONL episodes file.
-    - episode_ids: Iterable of episode_id strings present in the file.
+    Args:
+        out_path: Path to the JSONL episodes file managed by the manifest.
+        episode_ids: All episode ids currently present in the JSONL file.
+        identity_hash: Optional content hash written for tamper detection.
+        schema_version: Episode schema version recorded in the manifest.
 
-    Behavior
-    - If the JSONL file does not exist, the function returns without writing.
-    - The sidecar's stat is captured from the JSONL at save time to bind the
-      manifest to the exact file content.
+    Notes:
+        - If the JSONL file does not exist, the function returns without writing.
+        - The sidecar captures the target file's stat for change detection.
     """
     if not out_path.exists():
         return

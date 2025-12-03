@@ -17,6 +17,8 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 class _Cfg:  # minimal config stub
+    """TODO docstring. Document this class."""
+
     bootstrap_samples = 300
     bootstrap_confidence = 0.95
     master_seed = 123
@@ -25,6 +27,7 @@ class _Cfg:  # minimal config stub
 
 
 def test_wilson_zero_collision_upper_bound_nonzero():
+    """TODO docstring. Document this function."""
     records = []
     # Create 50 episodes with zero collisions (collision_rate metric = 0 for each sample, interpreted as Bernoulli mean 0)
     for i in range(50):
@@ -51,6 +54,7 @@ def test_wilson_zero_collision_upper_bound_nonzero():
 def test_glass_delta_zero_when_ci_missing():
     # Construct two groups manually bypassing CI to force missing mean_ci scenario
     # We simulate by aggregating with a single value (mean_ci collapses to identical bounds)
+    """TODO docstring. Document this function."""
     records = [
         {
             "episode_id": "ep1",

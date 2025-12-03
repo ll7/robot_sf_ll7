@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class BenchmarkConfig:  # lightweight test double; replaced by real implementation later
+    """TODO docstring. Document this class."""
+
     output_root: str
     scenario_matrix_path: str
     fast_stub: bool = True
@@ -44,6 +46,7 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
 
 @pytest.fixture()
 def temp_results_dir() -> Iterator[Path]:
+    """Yield a temporary directory for writing benchmark artifacts during tests."""
     with tempfile.TemporaryDirectory(prefix="classic_bench_") as d:
         yield Path(d)
 
@@ -53,6 +56,11 @@ def config_factory(temp_results_dir: Path):
     """Return factory producing BenchmarkConfig test doubles."""
 
     def _factory(**overrides):
+        """TODO docstring. Document this function.
+
+        Args:
+            overrides: TODO docstring.
+        """
         base = BenchmarkConfig(
             output_root=str(temp_results_dir),
             scenario_matrix_path="configs/scenarios/classic_interactions.yaml",
@@ -66,7 +74,14 @@ def config_factory(temp_results_dir: Path):
 
 @pytest.fixture()
 def synthetic_episode_record():
+    """TODO docstring. Document this function."""
+
     def _make(**overrides):
+        """TODO docstring. Document this function.
+
+        Args:
+            overrides: TODO docstring.
+        """
         rec = {
             "episode_id": overrides.get("episode_id", "ep-1"),
             "scenario_id": overrides.get("scenario_id", "scenario_a"),

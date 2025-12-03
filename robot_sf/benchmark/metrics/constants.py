@@ -33,6 +33,9 @@ def validate_metric_names(metric_dict: dict[str, float]) -> list[str]:
 
     Unrecognized keys are ignored (future-proofing). This function does not
     raise; callers wanting strictness can compare lengths externally.
+
+    Returns:
+        Sorted list of metric names from CORE_METRICS found in metric_dict.
     """
 
     present = [m for m in CORE_METRICS if m in metric_dict]

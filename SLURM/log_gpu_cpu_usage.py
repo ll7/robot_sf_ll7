@@ -41,6 +41,13 @@ def training(
     ped_densities: list[float] | None = None,
     difficulty: int = 2,
 ):
+    """TODO docstring. Document this function.
+
+    Args:
+        n_envs: TODO docstring.
+        ped_densities: TODO docstring.
+        difficulty: TODO docstring.
+    """
     if n_envs is None:
         n_envs = os.cpu_count() or 1
     """Train a robot in robot_sf.
@@ -54,6 +61,7 @@ def training(
         ped_densities = [0.01, 0.02, 0.04, 0.08]
 
     def make_env():
+        """TODO docstring. Document this function."""
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities
         config.sim_config.difficulty = difficulty

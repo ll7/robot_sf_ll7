@@ -3,11 +3,23 @@ Figure generator for research reporting (User Story 1)
 Implements: learning_curve, sample_efficiency_bar, distribution_plots, _generate_caption
 """
 
+import importlib
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import matplotlib
 import numpy as np
+
+from robot_sf.research.aggregation import bootstrap_ci
+
+
+def _get_pyplot():
+    """TODO docstring. Document this function.
+
+    Returns:
+        matplotlib.pyplot module.
+    """
+    return importlib.import_module("matplotlib.pyplot")
 
 
 def configure_matplotlib_backend(headless: bool = True) -> None:
@@ -88,7 +100,7 @@ def plot_learning_curve(
     rewards_baseline: list[list[float]],
     rewards_pretrained: list[list[float]],
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generate learning curve plot comparing baseline vs pretrained.
@@ -98,11 +110,12 @@ def plot_learning_curve(
         rewards_pretrained: List of reward trajectories (one per seed) for pretrained
         output_dir: Directory to save figure
         metadata: Optional metadata for caption generation
+
     Returns:
         Dict with paths and caption
     """
     configure_matplotlib_backend(headless=True)
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -166,7 +179,7 @@ def plot_sample_efficiency(
     baseline_timesteps: list[float],
     pretrained_timesteps: list[float],
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate bar chart comparing sample efficiency (timesteps to convergence).
 
@@ -187,7 +200,7 @@ def plot_sample_efficiency(
         Bars are colored C0 (baseline) and C1 (pretrained) from matplotlib cycle.
     """
     configure_matplotlib_backend(headless=True)
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     fig, ax = plt.subplots(figsize=(5, 4))
 
@@ -195,10 +208,14 @@ def plot_sample_efficiency(
     mean_pretrained = np.mean(pretrained_timesteps)
 
     # Bootstrap CI
-    from robot_sf.research.aggregation import bootstrap_ci
-
-    ci_low_b, ci_high_b = bootstrap_ci(baseline_timesteps) or (mean_baseline, mean_baseline)
-    ci_low_p, ci_high_p = bootstrap_ci(pretrained_timesteps) or (mean_pretrained, mean_pretrained)
+    ci_low_b, ci_high_b = bootstrap_ci(baseline_timesteps) or (
+        mean_baseline,
+        mean_baseline,
+    )
+    ci_low_p, ci_high_p = bootstrap_ci(pretrained_timesteps) or (
+        mean_pretrained,
+        mean_pretrained,
+    )
     # Normalize None outputs to means
     ci_low_b = ci_low_b if ci_low_b is not None else mean_baseline
     ci_high_b = ci_high_b if ci_high_b is not None else mean_baseline
@@ -232,13 +249,16 @@ def plot_distributions(
     pretrained_values: list[float],
     metric_name: str,
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generate distribution comparison plot (histograms/violin) for a metric.
+
+    Returns:
+        Dict with paths and caption for the generated figure.
     """
     configure_matplotlib_backend(headless=True)
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -269,7 +289,7 @@ def plot_distributions(
 def plot_effect_sizes(
     effect_sizes: dict[str, float],
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Plot effect sizes (Cohen's d) as horizontal bar chart.
 
@@ -281,9 +301,13 @@ def plot_effect_sizes(
         Dict with paths, caption, figure_type
     """
     if not effect_sizes:
-        return {"paths": {}, "caption": "No effect sizes available", "figure_type": "effect_sizes"}
+        return {
+            "paths": {},
+            "caption": "No effect sizes available",
+            "figure_type": "effect_sizes",
+        }
     configure_matplotlib_backend(headless=True)
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     fig, ax = plt.subplots(figsize=(6, 4))
     metrics = list(effect_sizes.keys())
@@ -309,7 +333,7 @@ def plot_improvement_summary(
     baseline_metrics: dict[str, float],
     pretrained_metrics: dict[str, float],
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Plot percentage improvements for selected metrics.
 
@@ -317,6 +341,9 @@ def plot_improvement_summary(
     lower is better (e.g., timesteps_to_convergence) and (pretrained - baseline)/baseline*100
     where higher is better (e.g., success_rate). Heuristic: metrics containing 'timesteps' or
     'collision' treated as lower-is-better, otherwise higher-is-better.
+
+    Returns:
+        Dict with paths and caption for the improvement summary figure.
     """
     if not baseline_metrics or not pretrained_metrics:
         return {
@@ -325,7 +352,7 @@ def plot_improvement_summary(
             "figure_type": "improvement_summary",
         }
     configure_matplotlib_backend(headless=True)
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     fig, ax = plt.subplots(figsize=(6, 4))
     improvements: list[float] = []
@@ -372,16 +399,19 @@ def plot_sensitivity(
     variants: list[dict[str, Any]],
     param_name: str,
     output_dir: Path,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Plot sensitivity of a single parameter against improvement percentage.
 
     variants: list of variant dicts having keys param_name and improvement_pct.
+
+    Returns:
+        Dict with paths and caption for the sensitivity analysis figure.
     """
     if not variants:
         return {"paths": {}, "caption": "No variants", "figure_type": "sensitivity"}
     configure_matplotlib_backend(headless=True)
-    import matplotlib.pyplot as plt
+    plt = _get_pyplot()
 
     fig, ax = plt.subplots(figsize=(6, 4))
     xs: list[float] = []
@@ -394,7 +424,11 @@ def plot_sensitivity(
         xs.append(float(v[param_name]))
         ys.append(float(v["improvement_pct"]))
     if not xs:
-        return {"paths": {}, "caption": "No complete variants", "figure_type": "sensitivity"}
+        return {
+            "paths": {},
+            "caption": "No complete variants",
+            "figure_type": "sensitivity",
+        }
     ax.plot(xs, ys, marker="o", color="C4")
     ax.set_xlabel(param_name.replace("_", " ").title())
     ax.set_ylabel("Improvement (%)")

@@ -26,6 +26,7 @@ from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 def make_demo_sim():
     # two pedestrians walking to the right, small vertical obstacle
+    """TODO docstring. Document this function."""
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 1.0],
@@ -40,6 +41,7 @@ def make_demo_sim():
 
 
 def main():
+    """TODO docstring. Document this function."""
     sim = make_demo_sim()
     wrapper = FastPysfWrapper(sim)
 
@@ -52,7 +54,7 @@ def main():
 
     X, Y = np.meshgrid(xs, ys)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    _fig, ax = plt.subplots(figsize=(8, 6))
     _q = ax.quiver(X, Y, U, V, scale=5, width=0.003)
     ax.set_title("Sampled force field from pysocialforce")
     ax.set_xlabel("x")

@@ -5,6 +5,7 @@ This hook scans staged files for schema files that would duplicate
 existing canonical schemas, preventing commits that introduce duplication.
 """
 
+import argparse
 import hashlib
 import logging
 import re
@@ -125,8 +126,6 @@ def _check_for_duplicate(staged_path: Path, canonical_dir: Path) -> dict | None:
 
 def main():
     """Main entry point for the git hook."""
-    import argparse
-
     parser = argparse.ArgumentParser(description="Prevent schema file duplication")
     parser.add_argument("staged_files", nargs="+", help="Files staged for commit")
     parser.add_argument(

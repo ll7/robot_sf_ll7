@@ -26,11 +26,17 @@ CLASSIC_PREFIX = "classic_"
 
 
 def _classic_svg_files():
+    """TODO docstring. Document this function."""
     return sorted(p for p in SVG_DIR.glob(f"{CLASSIC_PREFIX}*.svg") if p.is_file())
 
 
 @pytest.mark.parametrize("svg_path", _classic_svg_files())
 def test_classic_svg_parse(svg_path: Path):
+    """TODO docstring. Document this function.
+
+    Args:
+        svg_path: TODO docstring.
+    """
     converter = SvgMapConverter(str(svg_path))
     md = converter.get_map_definition()
     assert isinstance(md, MapDefinition), "Converter did not produce MapDefinition"

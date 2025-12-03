@@ -1,3 +1,5 @@
+"""TODO docstring. Document this module."""
+
 from math import pi
 
 from robot_sf.robot.differential_drive import (
@@ -8,6 +10,14 @@ from robot_sf.robot.differential_drive import (
 
 
 def norm_angle(angle: float) -> float:
+    """TODO docstring. Document this function.
+
+    Args:
+        angle: TODO docstring.
+
+    Returns:
+        TODO docstring.
+    """
     while angle < 0:
         angle += 2 * pi
     while angle >= 2 * pi:
@@ -16,6 +26,7 @@ def norm_angle(angle: float) -> float:
 
 
 def test_can_drive_right_curve():
+    """TODO docstring. Document this function."""
     motion = DifferentialDriveMotion(DifferentialDriveSettings(1, 1, 1, 1))
     pose_before, vel_before, wheel_speeds = ((0, 0), 0), (1, 0), (1, 1)
     state = DifferentialDriveState(pose_before, vel_before, wheel_speeds, wheel_speeds)
@@ -27,6 +38,7 @@ def test_can_drive_right_curve():
 
 
 def test_can_drive_left_curve():
+    """TODO docstring. Document this function."""
     motion = DifferentialDriveMotion(DifferentialDriveSettings(1, 1, 1, 1))
     pose_before, vel_before, wheel_speeds = ((0, 0), 0), (1, 0), (1, 1)
     state = DifferentialDriveState(pose_before, vel_before, wheel_speeds, wheel_speeds)

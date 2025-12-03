@@ -12,10 +12,16 @@ from pathlib import Path
 
 from robot_sf.research.orchestrator import ReportOrchestrator
 
-TARGET_SECONDS = float(os.environ.get("RESEARCH_PERF_BUDGET", 120.0))
+TARGET_SECONDS = float(os.environ.get("RESEARCH_PERF_BUDGET", "120.0"))
 
 
 def main() -> int:
+    """TODO docstring. Document this function.
+
+
+    Returns:
+        TODO docstring.
+    """
     start = time.time()
     out_dir = Path(os.environ.get("RESEARCH_REPORT_PERF_DIR", "output/tmp/perf_research_report"))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -24,10 +30,20 @@ def main() -> int:
     metric_records = []
     for s in seeds:
         metric_records.append(
-            {"seed": s, "policy_type": "baseline", "reward": 50 + s, "timesteps": 1000 + s * 10}
+            {
+                "seed": s,
+                "policy_type": "baseline",
+                "reward": 50 + s,
+                "timesteps": 1000 + s * 10,
+            }
         )
         metric_records.append(
-            {"seed": s, "policy_type": "pretrained", "reward": 70 + s, "timesteps": 700 + s * 5}
+            {
+                "seed": s,
+                "policy_type": "pretrained",
+                "reward": 70 + s,
+                "timesteps": 700 + s * 5,
+            }
         )
     orchestrator.generate_report(
         experiment_name="perf-smoke",

@@ -8,7 +8,7 @@ and JSON artifacts without bespoke knowledge of the training script.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -16,11 +16,11 @@ class ExtractorConfigurationProfile:
     """Static metadata describing a feature extractor under evaluation."""
 
     name: str
-    description: Optional[str] = None
-    parameters: Optional[dict[str, Any]] = None
+    description: str | None = None
+    parameters: dict[str, Any] | None = None
     expected_resources: str = "cpu"
-    priority: Optional[int] = None
-    preset: Optional[str] = None
+    priority: int | None = None
+    preset: str | None = None
 
     def merged_parameters(self) -> dict[str, Any]:
         """Return parameters with a defensive copy for downstream mutation guard."""
@@ -36,10 +36,16 @@ class HardwareProfile:
     arch: str
     python_version: str
     workers: int
-    gpu_model: Optional[str] = None
-    cuda_version: Optional[str] = None
+    gpu_model: str | None = None
+    cuda_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "platform": self.platform,
             "arch": self.arch,
@@ -60,16 +66,22 @@ class ExtractorRunRecord:
     config_name: str
     status: str
     start_time: str
-    end_time: Optional[str]
-    duration_seconds: Optional[float]
+    end_time: str | None
+    duration_seconds: float | None
     hardware_profile: HardwareProfile
     worker_mode: str
     training_steps: int
     metrics: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
-    reason: Optional[str] = None
+    reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "config_name": self.config_name,
             "status": self.status,
@@ -97,9 +109,15 @@ class TrainingRunSummary:
     hardware_overview: list[HardwareProfile]
     extractor_results: list[ExtractorRunRecord]
     aggregate_metrics: dict[str, float]
-    notes: Optional[list[str]] = None
+    notes: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """TODO docstring. Document this function.
+
+
+        Returns:
+            TODO docstring.
+        """
         payload = {
             "run_id": self.run_id,
             "created_at": self.created_at,

@@ -1,11 +1,19 @@
+"""TODO docstring. Document this module."""
+
 from robot_sf.ped_npc.ped_zone import sample_zone
 
 
 def is_within_zone(p):
+    """TODO docstring. Document this function.
+
+    Args:
+        p: TODO docstring.
+    """
     return 0 <= p[0] <= 10 and 0 <= p[1] <= 10
 
 
 def prepare_zones():
+    """TODO docstring. Document this function."""
     zone_topleft = ((0, 0), (0, 10), (10, 10))
     zone_botleft = ((0, 10), (0, 0), (10, 0))
     zone_botright = ((0, 0), (10, 0), (10, 10))
@@ -16,6 +24,7 @@ def prepare_zones():
 
 
 def test_must_not_spawn_outside_of_topleft_zone():
+    """TODO docstring. Document this function."""
     (zone, zone_rev), _, _, _ = prepare_zones()
 
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
@@ -26,6 +35,7 @@ def test_must_not_spawn_outside_of_topleft_zone():
 
 
 def test_must_not_spawn_outside_of_botleft_zone():
+    """TODO docstring. Document this function."""
     _, (zone, zone_rev), _, _ = prepare_zones()
 
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
@@ -36,6 +46,7 @@ def test_must_not_spawn_outside_of_botleft_zone():
 
 
 def test_must_not_spawn_outside_of_botright_zone():
+    """TODO docstring. Document this function."""
     _, _, (zone, zone_rev), _ = prepare_zones()
 
     points = [sample_zone(zone, 1)[0] for i in range(1000)]
@@ -46,6 +57,7 @@ def test_must_not_spawn_outside_of_botright_zone():
 
 
 def test_must_not_spawn_outside_of_topright_zone():
+    """TODO docstring. Document this function."""
     _, _, _, (zone, zone_rev) = prepare_zones()
 
     points = [sample_zone(zone, 1)[0] for i in range(1000)]

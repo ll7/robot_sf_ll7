@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
@@ -12,7 +11,7 @@ ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
 DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
 
 
-def resolve_base_output_root(env: Optional[dict[str, str]] = None) -> Path:
+def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:
     """Return the base output directory, honoring environment overrides."""
 
     env = env or {}
@@ -23,9 +22,13 @@ def resolve_base_output_root(env: Optional[dict[str, str]] = None) -> Path:
 
 
 def make_run_directory(
-    run_id: str, *, env: Optional[dict[str, str]] = None, timestamp: Optional[str] = None
+    run_id: str, *, env: dict[str, str] | None = None, timestamp: str | None = None
 ) -> Path:
-    """Create and return the timestamped directory for a training run."""
+    """Create and return the timestamped directory for a training run.
+
+    Returns:
+        Path: The created run directory path.
+    """
 
     if not run_id:
         raise ValueError("run_id must be a non-empty string")
@@ -42,7 +45,11 @@ def make_run_directory(
 
 
 def make_extractor_directory(run_dir: Path, extractor_name: str) -> Path:
-    """Ensure the per-extractor subdirectory exists and return it."""
+    """Ensure the per-extractor subdirectory exists and return it.
+
+    Returns:
+        Path: The path to the extractor-specific directory.
+    """
 
     if not extractor_name:
         raise ValueError("extractor_name must be provided")

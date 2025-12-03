@@ -156,10 +156,10 @@ class TestFusedSensorSpaceWithImage:
         )
 
         # Drive state and LiDAR spaces should be identical
-        drive_img = cast(spaces.Box, norm_space_img.spaces[OBS_DRIVE_STATE])
-        drive_no_img = cast(spaces.Box, norm_space_no_img.spaces[OBS_DRIVE_STATE])
-        rays_img = cast(spaces.Box, norm_space_img.spaces[OBS_RAYS])
-        rays_no_img = cast(spaces.Box, norm_space_no_img.spaces[OBS_RAYS])
+        drive_img = cast("spaces.Box", norm_space_img.spaces[OBS_DRIVE_STATE])
+        drive_no_img = cast("spaces.Box", norm_space_no_img.spaces[OBS_DRIVE_STATE])
+        rays_img = cast("spaces.Box", norm_space_img.spaces[OBS_RAYS])
+        rays_no_img = cast("spaces.Box", norm_space_no_img.spaces[OBS_RAYS])
 
         assert np.array_equal(drive_img.low, drive_no_img.low)
         assert np.array_equal(drive_img.high, drive_no_img.high)
@@ -215,17 +215,17 @@ class TestFusedSensorSpaceWithImage:
             )
 
             # Drive state should be stacked according to timesteps
-            drive_shape = cast(spaces.Box, norm_space.spaces[OBS_DRIVE_STATE]).shape
+            drive_shape = cast("spaces.Box", norm_space.spaces[OBS_DRIVE_STATE]).shape
             expected_drive_features = len(robot_obs.low) + len(target_obs.low)  # 2 + 3 = 5
             assert drive_shape == (timesteps, expected_drive_features)
 
             # LiDAR should be stacked according to timesteps
-            lidar_shape = cast(spaces.Box, norm_space.spaces[OBS_RAYS]).shape
+            lidar_shape = cast("spaces.Box", norm_space.spaces[OBS_RAYS]).shape
             expected_lidar_features = len(lidar_obs.low)  # 4
             assert lidar_shape == (timesteps, expected_lidar_features)
 
             # Image should not be affected by timesteps
-            image_shape = cast(spaces.Box, norm_space.spaces[OBS_IMAGE]).shape
+            image_shape = cast("spaces.Box", norm_space.spaces[OBS_IMAGE]).shape
             assert image_shape == image_obs.shape
 
     def test_edge_cases(self, basic_spaces):
@@ -244,8 +244,8 @@ class TestFusedSensorSpaceWithImage:
             image_obs=image_obs,
         )
 
-        assert cast(spaces.Box, norm_space.spaces[OBS_DRIVE_STATE]).shape[0] == 1
-        assert cast(spaces.Box, norm_space.spaces[OBS_RAYS]).shape[0] == 1
+        assert cast("spaces.Box", norm_space.spaces[OBS_DRIVE_STATE]).shape[0] == 1
+        assert cast("spaces.Box", norm_space.spaces[OBS_RAYS]).shape[0] == 1
         assert OBS_IMAGE in norm_space.spaces
 
 

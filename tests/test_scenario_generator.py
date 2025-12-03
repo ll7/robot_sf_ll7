@@ -88,7 +88,7 @@ def test_group_assignment_fraction():
     p = {**BASE_PARAMS, "density": "high", "groups": 0.4}
     scen = generate_scenario(p, seed=7)
     grouped = sum(g >= 0 for g in scen.groups)
-    expected = int(round(40 * 0.4))
+    expected = round(40 * 0.4)
     assert grouped == expected, f"grouped {grouped} != {expected}"
 
 

@@ -32,7 +32,7 @@ def test_jsonl_recording_basic():
     with tempfile.TemporaryDirectory() as temp_dir:
         # Create environment with JSONL recording enabled
         env = cast(
-            RobotEnv,
+            "RobotEnv",
             make_robot_env(
                 recording_enabled=True,
                 use_jsonl_recording=True,

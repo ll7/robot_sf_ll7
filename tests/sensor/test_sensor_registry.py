@@ -1,5 +1,5 @@
 """Tests for sensor registry and fusion adapter."""
-# ruff: noqa: F811  # Pytest fixtures intentionally shadow fixture names
+# Pytest fixtures intentionally shadow fixture names
 
 import pytest
 

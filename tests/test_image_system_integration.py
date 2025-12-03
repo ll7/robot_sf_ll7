@@ -51,7 +51,7 @@ def test_image_system_integration():
 
     # Test step
     action = env_enabled.action_space.sample()
-    obs, reward, done, truncated, info = env_enabled.step(action)
+    obs, _reward, _done, _truncated, _info = env_enabled.step(action)
     assert "image" in obs, "Image should be in observation after step"
 
     env_enabled.exit()

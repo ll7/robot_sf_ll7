@@ -16,9 +16,9 @@ def test_can_create_env():
 def test_can_return_valid_observation():
     env = RobotEnv()
     # Cast observation_space to spaces.Dict for static type checkers
-    obs_dict = cast(spaces.Dict, env.observation_space)
-    drive_state_spec = cast(spaces.Box, obs_dict[OBS_DRIVE_STATE])
-    lidar_state_spec = cast(spaces.Box, obs_dict[OBS_RAYS])
+    obs_dict = cast("spaces.Dict", env.observation_space)
+    drive_state_spec = cast("spaces.Box", obs_dict[OBS_DRIVE_STATE])
+    lidar_state_spec = cast("spaces.Box", obs_dict[OBS_RAYS])
 
     obs, _ = env.reset()
 

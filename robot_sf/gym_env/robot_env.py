@@ -36,10 +36,11 @@ from robot_sf.sim.simulator import (
 )
 
 
-# Helper to compute a stable, short hash for env_config
-# Placed near imports for reuse and clarity
 def _stable_config_hash(cfg: EnvSettings) -> str:
     """Stable config hash.
+
+    Helper to compute a stable, short hash for env_config
+    Placed near imports for reuse and clarity
 
     Args:
         cfg: Configuration dictionary.

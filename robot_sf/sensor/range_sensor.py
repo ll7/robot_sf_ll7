@@ -253,10 +253,15 @@ def raycast(
     enemy_pos: np.ndarray | None = None,
     enemy_radius: float = 0.0,
 ) -> np.ndarray:
-    """Cast rays in the directions of all given angles outgoing from
-    the scanner's position and detect the minimal collision distance
-    with either a pedestrian or an obstacle (or in case there's no collision,
-    just return the maximum scan range)."""
+    """Cast rays to compute minimal collision distances along given angles.
+
+    The scan originates from the scanner's position and considers pedestrians,
+    obstacles, and optionally an enemy agent. When no collision occurs, the
+    maximum scan range is returned for that ray.
+
+    Returns:
+        numpy.ndarray: Per-ray distances with shape ``(num_rays,)``.
+    """
     out_ranges = np.full((ray_angles.shape[0]), np.inf)
     raycast_pedestrians(out_ranges, scanner_pos, max_scan_range, ped_pos, ped_radius, ray_angles)
     raycast_obstacles(out_ranges, scanner_pos, obstacles, ray_angles)
@@ -293,11 +298,15 @@ def lidar_ray_scan(
     occ: ContinuousOccupancy,
     settings: LidarScannerSettings,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Representing a simulated radial LiDAR scanner operating
-    in a 2D plane on a continuous occupancy with explicit objects.
+    """Simulate a radial LiDAR scan on a continuous occupancy with objects.
 
     The occupancy contains the robot (as circle), a set of pedestrians
-    (as circles) and a set of static obstacles (as 2D lines)"""
+    (as circles) and a set of static obstacles (as 2D lines).
+
+    Returns:
+        tuple[numpy.ndarray, numpy.ndarray]: A pair ``(ranges, ray_angles)`` where
+        ``ranges`` are per-ray distances and ``ray_angles`` are absolute ray angles.
+    """
 
     (pos_x, pos_y), robot_orient = pose
     scan_noise = np.array(settings.scan_noise)

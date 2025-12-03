@@ -26,6 +26,9 @@ def calculate_trajectory_angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
     moving straight towards the goal p2 and the straight trajectory from p2
     towards the next goal p3. For a smooth trajectory, the driving agent
     has to steer such that the angle is about 0.
+
+    Returns:
+        float: The signed angle difference (radians) between the two trajectories.
     """
 
     v1_x, v1_y = p_2[0] - p_1[0], p_2[1] - p_1[1]
@@ -37,6 +40,9 @@ def calculate_trajectory_angle(p_1: Vec2D, p_2: Vec2D, p_3: Vec2D) -> float:
 def rel_pos(pose: RobotPose, target_coords: Vec2D) -> PolarVec2D:
     """
     Compute the relative position of a target with respect to the robot.
+
+    Returns:
+        PolarVec2D: Distance and bearing to the target relative to robot pose.
     """
     # Extract the target coordinates
     t_x, t_y = target_coords

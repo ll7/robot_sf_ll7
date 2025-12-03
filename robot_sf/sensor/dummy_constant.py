@@ -81,5 +81,9 @@ class DummyConstantSensor(Sensor):
 
 
 def factory(config: dict[str, Any]) -> DummyConstantSensor:
-    """Factory function for registry."""
+    """Factory function for registry.
+
+    Returns:
+        DummyConstantSensor: An initialized sensor instance with constant output.
+    """
     return DummyConstantSensor(config)

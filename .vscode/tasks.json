@@ -97,10 +97,5 @@
 				"panel": "shared"
 			}
 		},
-		{
-			"label": "Ruff: Format and Fix",
-			"type": "shell",
-			"command": "uv run ruff check --fix . --output-format concise; uv run ruff format .; uv run ruff check . --statistics"
-		}
 	]
 }

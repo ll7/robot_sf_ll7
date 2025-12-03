@@ -25,7 +25,7 @@ class PedestrianBehavior(Protocol):
         """Step.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         raise NotImplementedError()
 
@@ -33,7 +33,7 @@ class PedestrianBehavior(Protocol):
         """Reset.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         raise NotImplementedError()
 

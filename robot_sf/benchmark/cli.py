@@ -49,10 +49,10 @@ def _handle_baseline(args) -> int:
     """Handle baseline.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         progress_cb = _progress_cb_factory(bool(args.quiet))
@@ -89,10 +89,10 @@ def _handle_list_algorithms(_args) -> int:
     """Handle list algorithms.
 
     Args:
-        _args: Auto-generated placeholder description.
+        _args: args.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         # Show built-in simple policy
@@ -119,10 +119,10 @@ def _load_snqi_inputs(args):
     """Load snqi inputs.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     snqi_weights = None
     snqi_baseline = None
@@ -151,10 +151,10 @@ def _progress_cb_factory(quiet: bool):
     """Progress cb factory.
 
     Args:
-        quiet: Auto-generated placeholder description.
+        quiet: Suppress verbose logging flag.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     # Try to use tqdm when available
     pbar = None
@@ -171,15 +171,15 @@ def _progress_cb_factory(quiet: bool):
         """Cb.
 
         Args:
-            i: Auto-generated placeholder description.
-            total: Auto-generated placeholder description.
-            sc: Auto-generated placeholder description.
-            seed: Auto-generated placeholder description.
-            ok: Auto-generated placeholder description.
-            err: Auto-generated placeholder description.
+            i: Loop index.
+            total: Aggregate total.
+            sc: Sub-command configuration.
+            seed: Random seed for deterministic behavior.
+            ok: Whether the operation succeeded.
+            err: Exception captured during processing.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if quiet:
             return
@@ -205,10 +205,10 @@ def _handle_run(args) -> int:
     """Handle run.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         # Optional: load SNQI weights/baseline for inline SNQI computation
@@ -251,10 +251,10 @@ def _handle_summary(args) -> int:
     """Handle summary.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         summarize_to_plots(args.in_path, args.out_dir)
@@ -271,10 +271,10 @@ def _handle_aggregate(args) -> int:
     """Handle aggregate.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         # Optional: load SNQI inputs to compute metrics.snqi during aggregation
@@ -327,10 +327,10 @@ def _handle_snqi_ablate(args) -> int:
     """Handle snqi ablate.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -381,10 +381,10 @@ def _handle_seed_variance(args) -> int:
     """Handle seed variance.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -415,10 +415,10 @@ def _handle_extract_failures(args) -> int:
     """Handle extract failures.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -454,10 +454,10 @@ def _handle_rank(args) -> int:
     """Handle rank.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -495,10 +495,10 @@ def _handle_table(args) -> int:
     """Handle table.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -537,10 +537,10 @@ def _handle_debug_seeds(args) -> int:
     """Handle debug seeds.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         report = _set_seed(int(args.seed), deterministic=bool(args.deterministic))
@@ -562,10 +562,10 @@ def _handle_plot_pareto(args) -> int:
     """Handle plot pareto.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -591,10 +591,10 @@ def _handle_plot_distributions(args) -> int:
     """Handle plot distributions.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         records = _agg_read_jsonl(args.in_path)
@@ -625,10 +625,10 @@ def _handle_plot_scenarios(args) -> int:
     """Handle plot scenarios.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         scenarios = load_scenario_matrix(args.matrix)
@@ -664,10 +664,10 @@ def _handle_list_scenarios(args) -> int:
     """Handle list scenarios.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         scenarios = load_scenario_matrix(args.matrix)
@@ -683,10 +683,10 @@ def _handle_validate_config(args) -> int:
     """Handle validate config.
 
     Args:
-        args: Auto-generated placeholder description.
+        args: Parsed CLI arguments.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     try:
         scenarios = load_scenario_matrix(args.matrix)
@@ -705,10 +705,10 @@ def _add_baseline_subparser(
     """Add baseline subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "baseline",
@@ -758,10 +758,10 @@ def _add_run_subparser(
     """Add run subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "run",
@@ -848,10 +848,10 @@ def _add_list_subparser(
     """Add list subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "list-algorithms",
@@ -881,10 +881,10 @@ def _add_summary_subparser(
     """Add summary subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "summary",
@@ -901,10 +901,10 @@ def _add_aggregate_subparser(
     """Add aggregate subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "aggregate",
@@ -959,10 +959,10 @@ def _add_snqi_ablate_subparser(
     """Add snqi ablate subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "snqi-ablate",
@@ -1011,10 +1011,10 @@ def _add_seed_variance_subparser(
     """Add seed variance subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "seed-variance",
@@ -1046,10 +1046,10 @@ def _add_extract_failures_subparser(
     """Add extract failures subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "extract-failures",
@@ -1096,10 +1096,10 @@ def _add_rank_subparser(
     """Add rank subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "rank",
@@ -1137,10 +1137,10 @@ def _add_table_subparser(
     """Add table subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "table",
@@ -1181,10 +1181,10 @@ def _add_debug_seeds_subparser(
     """Add debug seeds subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "debug-seeds",
@@ -1207,10 +1207,10 @@ def _add_plot_pareto_subparser(
     """Add plot pareto subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "plot-pareto",
@@ -1244,10 +1244,10 @@ def _add_plot_distributions_subparser(
     """Add plot distributions subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "plot-distributions",
@@ -1296,10 +1296,10 @@ def _add_plot_scenarios_subparser(
     """Add plot scenarios subparser.
 
     Args:
-        subparsers: Auto-generated placeholder description.
+        subparsers: ArgumentParser subparsers object.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     p = subparsers.add_parser(
         "plot-scenarios",
@@ -1320,7 +1320,7 @@ def _base_parser() -> argparse.ArgumentParser:
     """Base parser.
 
     Returns:
-        argparse.ArgumentParser: Auto-generated placeholder description.
+        argparse.ArgumentParser: ArgumentParser configured for this CLI.
     """
     parser = argparse.ArgumentParser(
         prog="robot_sf_bench",
@@ -1369,10 +1369,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     """Attach core subcommands.
 
     Args:
-        parser: Auto-generated placeholder description.
+        parser: Argument parser instance.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     subparsers = parser.add_subparsers(dest="cmd")
     _add_baseline_subparser(subparsers)
@@ -1403,10 +1403,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Add snqi optimize.
 
         Args:
-            sp: Auto-generated placeholder description.
+            sp: Subparser entry.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
@@ -1499,10 +1499,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Add snqi recompute.
 
         Args:
-            sp: Auto-generated placeholder description.
+            sp: Subparser entry.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         p = sp.add_parser("recompute", help="Recompute SNQI weights via predefined strategies")
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
@@ -1594,10 +1594,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Get opt run.
 
         Args:
-            mod: Auto-generated placeholder description.
+            mod: Module object.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return mod.run
 
@@ -1605,10 +1605,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Get recompute run.
 
         Args:
-            mod: Auto-generated placeholder description.
+            mod: Module object.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return mod.run
 
@@ -1651,10 +1651,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Invoke snqi opt.
 
         Args:
-            args: Auto-generated placeholder description.
+            args: Parsed CLI arguments.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         _ensure_snqi_opt_defaults(args)
         if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
@@ -1668,10 +1668,10 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Invoke snqi recompute.
 
         Args:
-            args: Auto-generated placeholder description.
+            args: Parsed CLI arguments.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         if os.environ.get("ROBOT_SF_SNQI_LIGHT_TEST") == "1":  # pragma: no cover - test helper
             return 0
@@ -1699,7 +1699,7 @@ def _configure_parser() -> argparse.ArgumentParser:
     """Configure parser.
 
     Returns:
-        argparse.ArgumentParser: Auto-generated placeholder description.
+        argparse.ArgumentParser: ArgumentParser configured for this CLI.
     """
     parser = _base_parser()
     _attach_core_subcommands(parser)
@@ -1711,11 +1711,11 @@ def _configure_parser() -> argparse.ArgumentParser:
             """Mixed parse.
 
             Args:
-                args: Auto-generated placeholder description.
-                namespace: Auto-generated placeholder description.
+                args: Parsed CLI arguments.
+                namespace: Namespace container.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             if args is not None:
                 # Allow global flags placed after the subcommand by hoisting them before parsing.
@@ -1790,11 +1790,11 @@ def get_parser() -> argparse.ArgumentParser:
             """Mixed parse.
 
             Args:
-                args: Auto-generated placeholder description.
-                namespace: Auto-generated placeholder description.
+                args: Parsed CLI arguments.
+                namespace: Namespace container.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             try:  # pragma: no cover - fallback path only hit if feature absent/fails
                 return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
@@ -1809,10 +1809,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     """Cli main.
 
     Args:
-        argv: Auto-generated placeholder description.
+        argv: Command-line argument list.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     parser = _configure_parser()
     args = parser.parse_args(argv)
@@ -1864,7 +1864,7 @@ def main() -> None:  # pragma: no cover - thin wrapper
     """Main.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     raise SystemExit(cli_main())
 

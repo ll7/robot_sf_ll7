@@ -425,10 +425,10 @@ class MapDefinitionPool:
             """Load json.
 
             Args:
-                path: Auto-generated placeholder description.
+                path: Filesystem path to the resource.
 
             Returns:
-                dict: Auto-generated placeholder description.
+                dict: Dictionary value.
             """
             with open(path, encoding="utf-8") as file:
                 return json.load(file)
@@ -493,10 +493,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         """Norm pos.
 
         Args:
-            pos: Auto-generated placeholder description.
+            pos: Position vector.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         return (pos[0] - min_x, pos[1] - min_y)
 
@@ -510,10 +510,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         """Norm zone.
 
         Args:
-            rect: Auto-generated placeholder description.
+            rect: Rectangle definition.
 
         Returns:
-            Rect: Auto-generated placeholder description.
+            Rect: Rectangle definition.
         """
         return (norm_pos(rect[0]), norm_pos(rect[1]), norm_pos(rect[2]))
 
@@ -551,10 +551,10 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         """Reverse route.
 
         Args:
-            route: Auto-generated placeholder description.
+            route: Route definition.
 
         Returns:
-            GlobalRoute: Auto-generated placeholder description.
+            GlobalRoute: Global route definition used by navigation.
         """
         return GlobalRoute(
             route.goal_id,

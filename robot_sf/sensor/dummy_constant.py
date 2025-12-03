@@ -36,10 +36,10 @@ class DummyConstantSensor(Sensor):
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self._config = config
         self._obs = self._build_value(config)
@@ -48,10 +48,10 @@ class DummyConstantSensor(Sensor):
         """Build value.
 
         Args:
-            cfg: Auto-generated placeholder description.
+            cfg: Configuration dictionary.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         dtype = np.float32 if cfg.get("dtype", "float32") == "float32" else np.int32
         value = cfg.get("value", 0.0)
@@ -65,7 +65,7 @@ class DummyConstantSensor(Sensor):
         """Reset.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         return None
 
@@ -73,10 +73,10 @@ class DummyConstantSensor(Sensor):
         """Step.
 
         Args:
-            state: Auto-generated placeholder description.
+            state: State payload.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         return None
 
@@ -84,7 +84,7 @@ class DummyConstantSensor(Sensor):
         """Get observation.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         return self._obs
 

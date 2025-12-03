@@ -37,7 +37,7 @@ def _canonical_repository_root() -> Path:
     """Canonical repository root.
 
     Returns:
-        Path: Auto-generated placeholder description.
+        Path: Path-like object pointing to a file or directory.
     """
     return Path(__file__).resolve().parents[2]
 
@@ -53,7 +53,7 @@ def _default_artifact_root() -> Path:
     """Default artifact root.
 
     Returns:
-        Path: Auto-generated placeholder description.
+        Path: Path-like object pointing to a file or directory.
     """
     return _canonical_repository_root() / _ARTIFACT_ROOT_NAME
 

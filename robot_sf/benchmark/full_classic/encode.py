@@ -61,7 +61,7 @@ def _iter_first(frame_iter: Iterable[np.ndarray]) -> tuple[np.ndarray | None, It
         """Chain first.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         yield first
         yield from it
@@ -93,7 +93,7 @@ def _start_memory_sampler(sample: bool, interval: float):
         """Sampler.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         while not stop_flag[0]:
             try:
@@ -112,7 +112,7 @@ def _start_memory_sampler(sample: bool, interval: float):
         """Stop.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         stop_flag[0] = True
         try:
@@ -128,10 +128,10 @@ def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
     """Validate first.
 
     Args:
-        first: Auto-generated placeholder description.
+        first: First element in the pair.
 
     Returns:
-        tuple[bool, str | None]: Auto-generated placeholder description.
+        tuple[bool, str | None]: tuple of bool, str | None.
     """
     if first is None:
         return False, "no-frames"

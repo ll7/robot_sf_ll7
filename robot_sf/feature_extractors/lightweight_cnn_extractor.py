@@ -48,14 +48,14 @@ class LightweightCNNExtractor(BaseFeaturesExtractor):
         """Init.
 
         Args:
-            observation_space: Auto-generated placeholder description.
-            num_filters: Auto-generated placeholder description.
-            kernel_sizes: Auto-generated placeholder description.
-            dropout_rate: Auto-generated placeholder description.
-            drive_hidden_dims: Auto-generated placeholder description.
+            observation_space: observation space.
+            num_filters: number of filters.
+            kernel_sizes: kernel sizes.
+            dropout_rate: dropout rate.
+            drive_hidden_dims: drive hidden dims.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if num_filters is None:
             num_filters = [32, 16]

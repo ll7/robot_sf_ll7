@@ -38,7 +38,7 @@ def _latex_rcparams():
     """Latex rcparams.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     # Maintain backward compatibility for existing imports; delegate to shared helper
     apply_latex_style(
@@ -57,11 +57,11 @@ def _scenario_seed(base_seed: int, scenario_id: str) -> int:
     """Scenario seed.
 
     Args:
-        base_seed: Auto-generated placeholder description.
-        scenario_id: Auto-generated placeholder description.
+        base_seed: random seed for base.
+        scenario_id: identifier for scenario.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     # Small stable hash to offset base seed per scenario
     import hashlib
@@ -74,11 +74,11 @@ def _draw_obstacles(ax, obstacles: Sequence[tuple[float, float, float, float]]):
     """Draw obstacles.
 
     Args:
-        ax: Auto-generated placeholder description.
-        obstacles: Auto-generated placeholder description.
+        ax: Matplotlib axes object.
+        obstacles: Obstacle data used for collision checks.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     for x1, y1, x2, y2 in obstacles:
         ax.plot([x1, x2], [y1, y2], color="#444", lw=1.2, alpha=0.9)
@@ -88,12 +88,12 @@ def _draw_agents(ax, pos: np.ndarray, goals: np.ndarray | None = None):
     """Draw agents.
 
     Args:
-        ax: Auto-generated placeholder description.
-        pos: Auto-generated placeholder description.
-        goals: Auto-generated placeholder description.
+        ax: Matplotlib axes object.
+        pos: Position vector.
+        goals: Goal definitions.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if pos.size == 0:
         return
@@ -114,10 +114,10 @@ def _extract_goals_from_state(state: np.ndarray) -> np.ndarray:
     """Extract goals from state.
 
     Args:
-        state: Auto-generated placeholder description.
+        state: State payload.
 
     Returns:
-        np.ndarray: Auto-generated placeholder description.
+        np.ndarray: NumPy array holding the relevant values.
     """
     # state cols: [x,y,vx,vy,goalx,goaly,tau]
     if state.shape[1] >= 6:
@@ -191,14 +191,14 @@ def save_scenario_thumbnails(
     """Save scenario thumbnails.
 
     Args:
-        scenarios: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
-        base_seed: Auto-generated placeholder description.
-        out_pdf: Auto-generated placeholder description.
-        figsize: Auto-generated placeholder description.
+        scenarios: Scenario list.
+        out_dir: directory for out.
+        base_seed: random seed for base.
+        out_pdf: out pdf.
+        figsize: Desired figure size.
 
     Returns:
-        list[ThumbMeta]: Auto-generated placeholder description.
+        list[ThumbMeta]: list of ThumbMeta.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -155,7 +155,7 @@ class PedestrianGroupings:
         """Groups as lists.
 
         Returns:
-            list[list[int]]: Auto-generated placeholder description.
+            list[list[int]]: list of list[int].
         """
         # info: this facilitates slicing over numpy arrays
         #       for some reason, numpy cannot slide over indices provided as set ...
@@ -166,7 +166,7 @@ class PedestrianGroupings:
         """Group ids.
 
         Returns:
-            set[int]: Auto-generated placeholder description.
+            set[int]: Set of integer identifiers.
         """
         # info: ignore empty groups
         return {k for k in self.groups if len(self.groups[k]) > 0}
@@ -175,10 +175,10 @@ class PedestrianGroupings:
         """Group centroid.
 
         Args:
-            group_id: Auto-generated placeholder description.
+            group_id: identifier for group.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         group = self.groups[group_id]
         positions = self.states.pos_of_many(group)
@@ -189,10 +189,10 @@ class PedestrianGroupings:
         """Group size.
 
         Args:
-            group_id: Auto-generated placeholder description.
+            group_id: identifier for group.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len(self.groups[group_id])
 
@@ -200,10 +200,10 @@ class PedestrianGroupings:
         """Goal of group.
 
         Args:
-            group_id: Auto-generated placeholder description.
+            group_id: identifier for group.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         any_ped_id_of_group = next(iter(self.groups[group_id]))
         return self.states.goal_of(any_ped_id_of_group)
@@ -212,10 +212,10 @@ class PedestrianGroupings:
         """New group.
 
         Args:
-            ped_ids: Auto-generated placeholder description.
+            ped_ids: identifiers for pedestrian.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         new_gid = max(self.groups.keys()) + 1 if self.groups.keys() else 0
         self.groups[new_gid] = ped_ids.copy()
@@ -230,10 +230,10 @@ class PedestrianGroupings:
         """Remove group.
 
         Args:
-            group_id: Auto-generated placeholder description.
+            group_id: identifier for group.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         ped_ids = deepcopy(self.groups[group_id])
         for ped_id in ped_ids:
@@ -244,11 +244,11 @@ class PedestrianGroupings:
         """Redirect group.
 
         Args:
-            group_id: Auto-generated placeholder description.
-            new_goal: Auto-generated placeholder description.
+            group_id: identifier for group.
+            new_goal: goal for new.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
@@ -257,11 +257,11 @@ class PedestrianGroupings:
         """Reposition group.
 
         Args:
-            group_id: Auto-generated placeholder description.
-            new_positions: Auto-generated placeholder description.
+            group_id: identifier for group.
+            new_positions: positions for new.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         for ped_id, new_pos in zip(self.groups[group_id], new_positions, strict=False):
             self.states.reposition(ped_id, new_pos)

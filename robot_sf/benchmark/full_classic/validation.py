@@ -34,10 +34,10 @@ def _load_json(path: Path):  # type: ignore[no-untyped-def]
     """Load json.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)

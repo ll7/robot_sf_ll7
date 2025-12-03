@@ -37,11 +37,11 @@ def _extract_metric_values(records: list[dict[str, Any]], key: str) -> list[floa
     """Extract metric values.
 
     Args:
-        records: Auto-generated placeholder description.
-        key: Auto-generated placeholder description.
+        records: List of serialized records.
+        key: Dictionary key.
 
     Returns:
-        list[float]: Auto-generated placeholder description.
+        list[float]: list of float.
     """
     vals: list[float] = []
     for rec in records:
@@ -59,11 +59,11 @@ def compute_baseline_stats_from_records(
     """Compute baseline stats from records.
 
     Args:
-        records: Auto-generated placeholder description.
-        metrics: Auto-generated placeholder description.
+        records: List of serialized records.
+        metrics: Dictionary of computed metrics.
 
     Returns:
-        dict[str, dict[str, float]]: Auto-generated placeholder description.
+        dict[str, dict[str, float]]: mapping of str, dict[str, float].
     """
     if metrics is None:
         metrics = tuple(DEFAULT_METRICS)
@@ -102,24 +102,24 @@ def run_and_compute_baseline(
     """Run and compute baseline.
 
     Args:
-        scenarios_or_path: Auto-generated placeholder description.
-        out_json: Auto-generated placeholder description.
-        out_jsonl: Auto-generated placeholder description.
-        schema_path: Auto-generated placeholder description.
-        base_seed: Auto-generated placeholder description.
-        repeats_override: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
-        record_forces: Auto-generated placeholder description.
-        metrics: Auto-generated placeholder description.
-        algo: Auto-generated placeholder description.
-        algo_config_path: Auto-generated placeholder description.
-        workers: Auto-generated placeholder description.
-        resume: Auto-generated placeholder description.
-        progress_cb: Auto-generated placeholder description.
+        scenarios_or_path: filesystem path for the scenarios or.
+        out_json: out json.
+        out_jsonl: out jsonl.
+        schema_path: filesystem path for the schema.
+        base_seed: random seed for base.
+        repeats_override: repeats override.
+        horizon: Episode horizon (max steps).
+        dt: Simulation time step.
+        record_forces: record forces.
+        metrics: Dictionary of computed metrics.
+        algo: Algorithm identifier.
+        algo_config_path: filesystem path for the algorithm config.
+        workers: Number of worker processes.
+        resume: Resume flag indicating incremental processing.
+        progress_cb: Progress callback.
 
     Returns:
-        dict[str, dict[str, float]]: Auto-generated placeholder description.
+        dict[str, dict[str, float]]: mapping of str, dict[str, float].
     """
     # Optionally run batch to collect JSONL
     tmp_jsonl: str | None = None

@@ -86,10 +86,10 @@ def _load_episodes_jsonl(path: Path) -> list[dict]:
     """Load episodes jsonl.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        list[dict]: Auto-generated placeholder description.
+        list[dict]: list of dict.
     """
     episodes: list[dict] = []
     with path.open("r", encoding="utf-8") as f:
@@ -108,11 +108,11 @@ def _extract_metric_values(episodes: Iterable[dict], metric: str) -> list[float]
     """Extract metric values.
 
     Args:
-        episodes: Auto-generated placeholder description.
-        metric: Auto-generated placeholder description.
+        episodes: Episode records consumed by the CLI.
+        metric: Metric identifier.
 
     Returns:
-        list[float]: Auto-generated placeholder description.
+        list[float]: list of float.
     """
     vals = []
     for ep in episodes:

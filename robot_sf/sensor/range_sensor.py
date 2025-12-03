@@ -147,7 +147,7 @@ class LidarScannerSettings:
         """Post init.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if not 0 < self.visual_angle_portion <= 1:
             raise ValueError("Scan angle portion needs to be within (0, 1]!")
@@ -245,13 +245,13 @@ def raycast_obstacles(
     """Raycast obstacles.
 
     Args:
-        out_ranges: Auto-generated placeholder description.
-        scanner_pos: Auto-generated placeholder description.
-        obstacles: Auto-generated placeholder description.
-        ray_angles: Auto-generated placeholder description.
+        out_ranges: out ranges.
+        scanner_pos: position for scanner.
+        obstacles: Obstacle data used for collision checks.
+        ray_angles: ray angles.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if len(obstacles.shape) != 2 or obstacles.shape[0] == 0 or obstacles.shape[1] != 4:
         return
@@ -355,11 +355,11 @@ def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:
     """Lidar sensor space.
 
     Args:
-        num_rays: Auto-generated placeholder description.
-        max_scan_dist: Auto-generated placeholder description.
+        num_rays: number of rays.
+        max_scan_dist: max scan dist.
 
     Returns:
-        spaces.Box: Auto-generated placeholder description.
+        spaces.Box: Gymnasium Box space describing limits.
     """
     high = np.full((num_rays), max_scan_dist, dtype=np.float32)
     low = np.zeros((num_rays), dtype=np.float32)

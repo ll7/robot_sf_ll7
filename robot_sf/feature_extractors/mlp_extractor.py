@@ -46,13 +46,13 @@ class MLPFeatureExtractor(BaseFeaturesExtractor):
         """Init.
 
         Args:
-            observation_space: Auto-generated placeholder description.
-            ray_hidden_dims: Auto-generated placeholder description.
-            drive_hidden_dims: Auto-generated placeholder description.
-            dropout_rate: Auto-generated placeholder description.
+            observation_space: observation space.
+            ray_hidden_dims: ray hidden dims.
+            drive_hidden_dims: drive hidden dims.
+            dropout_rate: dropout rate.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if ray_hidden_dims is None:
             ray_hidden_dims = [128, 64]

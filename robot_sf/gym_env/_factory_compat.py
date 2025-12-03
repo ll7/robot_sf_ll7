@@ -78,7 +78,7 @@ def is_permissive_mode() -> bool:
     """Is permissive mode.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     return os.getenv(LEGACY_PERMISSIVE_ENV, "0") not in ("", "0", "false", "False", "NO", "no")
 
@@ -87,7 +87,7 @@ def iter_deprecation_entries() -> Iterable[DeprecationEntry]:
     """Iter deprecation entries.
 
     Returns:
-        Iterable[DeprecationEntry]: Auto-generated placeholder description.
+        Iterable[DeprecationEntry]: Iterable of cataloged deprecation entries.
     """
     return iter(_DEPRECATION_TABLE)
 

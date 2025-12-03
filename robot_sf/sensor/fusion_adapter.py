@@ -198,14 +198,14 @@ class MergedObservationFusion:
         """Init.
 
         Args:
-            base_fusion: Auto-generated placeholder description.
-            sensors: Auto-generated placeholder description.
-            sensor_names: Auto-generated placeholder description.
-            sim: Auto-generated placeholder description.
-            robot_id: Auto-generated placeholder description.
+            base_fusion: base fusion.
+            sensors: Sensor collection wiring.
+            sensor_names: names of sensor.
+            sim: Simulator instance.
+            robot_id: identifier for robot.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._base = base_fusion
         self._sensors = sensors
@@ -217,7 +217,7 @@ class MergedObservationFusion:
         """Next obs.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         obs = self._base.next_obs()
         state = {"sim": self._sim, "robot_id": self._robot_id}
@@ -235,7 +235,7 @@ class MergedObservationFusion:
         """Reset cache.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if hasattr(self._base, "reset_cache"):
             self._base.reset_cache()

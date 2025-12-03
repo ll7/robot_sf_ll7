@@ -464,7 +464,7 @@ class SimulationView:
         """Timestep text pos.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         return (16, 16)
 
@@ -604,7 +604,7 @@ class SimulationView:
         """Resize window.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         logger.debug("Resizing the window.")
         old_surface = self.screen
@@ -630,10 +630,10 @@ class SimulationView:
         """Draw robot.
 
         Args:
-            pose: Auto-generated placeholder description.
+            pose: Pose tuple (position + heading).
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # TODO(#252): display robot with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
@@ -648,10 +648,10 @@ class SimulationView:
         """Draw ego ped.
 
         Args:
-            pose: Auto-generated placeholder description.
+            pose: Pose tuple (position + heading).
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # TODO(#252): display ego ped with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
@@ -666,10 +666,10 @@ class SimulationView:
         """Draw pedestrians.
 
         Args:
-            ped_pos: Auto-generated placeholder description.
+            ped_pos: position for pedestrian.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # TODO(#252): display pedestrians with an image instead of a circle
         # See: https://github.com/ll7/robot_sf_ll7/issues/252
@@ -685,7 +685,7 @@ class SimulationView:
         """Draw obstacles.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Iterate over each obstacle in the list of obstacles
         for obstacle in self.map_def.obstacles:
@@ -698,7 +698,7 @@ class SimulationView:
         """Draw spawn zones.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Iterate over each spawn_zone in the list of spawn_zones
         for spawn_zone in self.map_def.ped_spawn_zones:
@@ -712,7 +712,7 @@ class SimulationView:
         """Draw goal zones.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Iterate over each goal_zone in the list of goal_zones
         for goal_zone in self.map_def.ped_goal_zones:
@@ -726,10 +726,10 @@ class SimulationView:
         """Augment goal position.
 
         Args:
-            robot_goal: Auto-generated placeholder description.
+            robot_goal: goal for robot.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         pygame.draw.circle(
             self.screen,
@@ -765,11 +765,11 @@ class SimulationView:
         """Augment action.
 
         Args:
-            action: Auto-generated placeholder description.
-            color: Auto-generated placeholder description.
+            action: Action applied to the environment.
+            color: Color specification for plotting.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         r_x, r_y = action.pose[0]
         # scale vector length to be always visible
@@ -780,11 +780,11 @@ class SimulationView:
             """From polar.
 
             Args:
-                length: Auto-generated placeholder description.
-                orient: Auto-generated placeholder description.
+                length: Length value.
+                orient: Orientation value.
 
             Returns:
-                Vec2D: Auto-generated placeholder description.
+                Vec2D: 2D vector (x, y).
             """
             return cos(orient) * length, sin(orient) * length
 
@@ -792,11 +792,11 @@ class SimulationView:
             """Add vec.
 
             Args:
-                v_1: Auto-generated placeholder description.
-                v_2: Auto-generated placeholder description.
+                v_1: v 1.
+                v_2: v 2.
 
             Returns:
-                Vec2D: Auto-generated placeholder description.
+                Vec2D: 2D vector (x, y).
             """
             return v_1[0] + v_2[0], v_1[1] + v_2[1]
 
@@ -865,11 +865,11 @@ class SimulationView:
         """Add text.
 
         Args:
-            timestep: Auto-generated placeholder description.
-            state: Auto-generated placeholder description.
+            timestep: Simulation timestep metadata.
+            state: State payload.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         info_lines = self._get_display_info_lines(state)
         text_lines = self._build_text_lines(timestep, state, info_lines)
@@ -1007,7 +1007,7 @@ class SimulationView:
         """Add help text.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         text_lines = [
             "Move camera: arrow keys",

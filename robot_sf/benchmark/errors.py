@@ -22,13 +22,13 @@ class AggregationMetadataError(ValueError):
         """Init.
 
         Args:
-            message: Auto-generated placeholder description.
-            episode_id: Auto-generated placeholder description.
-            missing_fields: Auto-generated placeholder description.
-            advice: Auto-generated placeholder description.
+            message: Human-readable message.
+            episode_id: identifier for episode.
+            missing_fields: missing fields.
+            advice: Human-readable advice text.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         super().__init__(message)
         self.episode_id = episode_id

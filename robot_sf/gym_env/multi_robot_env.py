@@ -40,13 +40,13 @@ class MultiRobotEnv(MultiAgentEnv):
         """Init.
 
         Args:
-            env_config: Auto-generated placeholder description.
-            reward_func: Auto-generated placeholder description.
-            debug: Auto-generated placeholder description.
-            num_robots: Auto-generated placeholder description.
+            env_config: environment config.
+            reward_func: reward func.
+            debug: Debug mode flag.
+            num_robots: number of robots.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if isinstance(env_config, MultiRobotConfig):
             resolved_num_robots = env_config.num_robots
@@ -169,10 +169,10 @@ class MultiRobotEnv(MultiAgentEnv):
         """Close extras.
 
         Args:
-            kwargs: Auto-generated placeholder description.
+            kwargs: Additional keyword arguments forwarded downstream.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if getattr(self, "sim_worker_pool", None) is not None:
             try:

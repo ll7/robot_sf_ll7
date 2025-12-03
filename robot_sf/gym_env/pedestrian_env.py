@@ -231,7 +231,7 @@ class PedestrianEnv(Env):
         """Prepare visualizable state.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Prepare action visualization, if any action was executed
         robot_action = (

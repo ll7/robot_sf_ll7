@@ -44,7 +44,7 @@ class ScenarioSpec:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         return asdict(self)
 
@@ -63,11 +63,11 @@ class MetricsBundle:
         """Get.
 
         Args:
-            name: Auto-generated placeholder description.
-            default: Auto-generated placeholder description.
+            name: Human-friendly name.
+            default: Default fallback value.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         return self.values.get(name, default)
 
@@ -75,7 +75,7 @@ class MetricsBundle:
         """To dict.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         return dict(self.values)
 
@@ -104,7 +104,7 @@ class EpisodeRecord:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         d = asdict(self)
         # flatten metrics bundle for JSON writing
@@ -124,7 +124,7 @@ class SNQIWeights:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         return {"version": self.version, "weights": dict(self.weights), "meta": self.meta or {}}
 
@@ -147,7 +147,7 @@ class ResumeManifest:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         return {
             "version": self.version,

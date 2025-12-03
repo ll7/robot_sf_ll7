@@ -60,11 +60,11 @@ def compute_effect_sizes(groups, cfg):  # T032
     """Compute effect sizes.
 
     Args:
-        groups: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
+        cfg: Configuration dictionary.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     by_arch = _group_by_archetype(groups)
     reference_density = getattr(cfg, "effect_size_reference_density", "low")
@@ -85,10 +85,10 @@ def _group_by_archetype(groups) -> dict[str, dict[str, object]]:
     """Group by archetype.
 
     Args:
-        groups: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
 
     Returns:
-        dict[str, dict[str, object]]: Auto-generated placeholder description.
+        dict[str, dict[str, object]]: mapping of str, dict[str, object].
     """
     result: dict[str, dict[str, object]] = {}
     for g in groups:
@@ -100,12 +100,12 @@ def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
     """Build comparisons for archetype.
 
     Args:
-        ref_group: Auto-generated placeholder description.
-        density_map: Auto-generated placeholder description.
-        reference_density: Auto-generated placeholder description.
+        ref_group: ref group.
+        density_map: density map.
+        reference_density: reference density.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     comparisons: list[EffectSizeEntry] = []
     for density_key, group in sorted(density_map.items()):
@@ -122,13 +122,13 @@ def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
     """Rate effect sizes.
 
     Args:
-        ref_group: Auto-generated placeholder description.
-        other_group: Auto-generated placeholder description.
-        ref_density: Auto-generated placeholder description.
-        other_density: Auto-generated placeholder description.
+        ref_group: ref group.
+        other_group: other group.
+        ref_density: ref density.
+        other_density: other density.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     entries: list[EffectSizeEntry] = []
     for metric in RATE_METRICS:
@@ -158,13 +158,13 @@ def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density)
     """Continuous effect sizes.
 
     Args:
-        ref_group: Auto-generated placeholder description.
-        other_group: Auto-generated placeholder description.
-        ref_density: Auto-generated placeholder description.
-        other_density: Auto-generated placeholder description.
+        ref_group: ref group.
+        other_group: other group.
+        ref_density: ref density.
+        other_density: other density.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     entries: list[EffectSizeEntry] = []
     for metric in CONT_METRICS:
@@ -192,12 +192,12 @@ def _glass_delta(ref_metric, diff, n):
     """Glass delta.
 
     Args:
-        ref_metric: Auto-generated placeholder description.
-        diff: Auto-generated placeholder description.
-        n: Auto-generated placeholder description.
+        ref_metric: ref metric.
+        diff: Difference between baseline and comparison.
+        n: Number of requested samples.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     ci = getattr(ref_metric, "mean_ci", None)
     if not ci or n <= 1:

@@ -48,11 +48,11 @@ class RandomPlanner:
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
-            seed: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.config = self._parse_config(config)
         self._rng = np.random.default_rng(seed)
@@ -64,10 +64,10 @@ class RandomPlanner:
         """Parse config.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            RandomPlannerConfig: Auto-generated placeholder description.
+            RandomPlannerConfig: random planner configuration.
         """
         if isinstance(config, dict):
             return RandomPlannerConfig(**config)  # type: ignore[arg-type]
@@ -79,10 +79,10 @@ class RandomPlanner:
         """Reset.
 
         Args:
-            seed: Auto-generated placeholder description.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if seed is not None:
             self._rng = np.random.default_rng(seed)
@@ -91,10 +91,10 @@ class RandomPlanner:
         """Configure.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self.config = self._parse_config(config)
 
@@ -102,10 +102,10 @@ class RandomPlanner:
         """Step.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         # Support dict-style Observation
         if isinstance(obs, dict):
@@ -146,7 +146,7 @@ class RandomPlanner:
         """Close.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         pass
 
@@ -154,7 +154,7 @@ class RandomPlanner:
         """Get metadata.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         cfg = asdict(self.config)
         cfg_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]

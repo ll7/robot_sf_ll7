@@ -145,10 +145,10 @@ def _history_sort_key(entry: RunHistoryEntry) -> tuple[datetime, str]:
     """History sort key.
 
     Args:
-        entry: Auto-generated placeholder description.
+        entry: Individual manifest or tracker entry.
 
     Returns:
-        tuple[datetime, str]: Auto-generated placeholder description.
+        tuple[datetime, str]: tuple of datetime, str.
     """
     tzinfo = (entry.completed_at or entry.created_at or datetime.now().astimezone()).tzinfo
     if tzinfo is None:
@@ -169,14 +169,14 @@ def _build_entry(
     """Build entry.
 
     Args:
-        record: Auto-generated placeholder description.
-        manifest_path: Auto-generated placeholder description.
-        run_dir: Auto-generated placeholder description.
-        recommendations: Auto-generated placeholder description.
-        perf_tests: Auto-generated placeholder description.
+        record: Record being processed.
+        manifest_path: filesystem path for the manifest.
+        run_dir: directory for run.
+        recommendations: Recommendation objects emitted by telemetry.
+        perf_tests: perf tests.
 
     Returns:
-        RunHistoryEntry: Auto-generated placeholder description.
+        RunHistoryEntry: Entry describing a past run in the registry.
     """
     run_id = str(record.get("run_id") or run_dir.name)
     status = _normalize_status(record.get("status")) or PipelineRunStatus.PENDING
@@ -208,10 +208,10 @@ def _load_manifest_bundle(
     """Load manifest bundle.
 
     Args:
-        manifest_path: Auto-generated placeholder description.
+        manifest_path: filesystem path for the manifest.
 
     Returns:
-        tuple[dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]: Auto-generated placeholder description.
+        tuple[dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]]]: tuple of dict[str, Any] | None, list[dict[str, Any]], list[dict[str, Any]].
     """
     if not manifest_path.is_file():
         return None, [], []
@@ -247,10 +247,10 @@ def _parse_datetime(value: Any) -> datetime | None:
     """Parse datetime.
 
     Args:
-        value: Auto-generated placeholder description.
+        value: Scalar metric value.
 
     Returns:
-        datetime | None: Auto-generated placeholder description.
+        datetime | None: Optional datetime; ``None`` when the timestamp is unknown.
     """
     if not value:
         return None
@@ -266,10 +266,10 @@ def _format_datetime(value: datetime | None) -> str | None:
     """Format datetime.
 
     Args:
-        value: Auto-generated placeholder description.
+        value: Scalar metric value.
 
     Returns:
-        str | None: Auto-generated placeholder description.
+        str | None: Optional string value.
     """
     if value is None:
         return None
@@ -280,10 +280,10 @@ def _normalize_status(value: str | PipelineRunStatus | None) -> PipelineRunStatu
     """Normalize status.
 
     Args:
-        value: Auto-generated placeholder description.
+        value: Scalar metric value.
 
     Returns:
-        PipelineRunStatus | None: Auto-generated placeholder description.
+        PipelineRunStatus | None: Optional pipeline run status value.
     """
     if value is None:
         return None
@@ -299,11 +299,11 @@ def _resolve_run_directory(config: RunTrackerConfig, run_hint: str) -> Path:
     """Resolve run directory.
 
     Args:
-        config: Auto-generated placeholder description.
-        run_hint: Auto-generated placeholder description.
+        config: Configuration object controlling the component.
+        run_hint: run hint.
 
     Returns:
-        Path: Auto-generated placeholder description.
+        Path: Path-like object pointing to a file or directory.
     """
     candidate = Path(run_hint).expanduser()
     if candidate.is_dir():

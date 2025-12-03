@@ -20,10 +20,10 @@ def _load_yaml_documents(path: Path) -> Any:
     """Load yaml documents.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
@@ -100,11 +100,11 @@ def _apply_simulation_overrides(
     """Apply simulation overrides.
 
     Args:
-        config: Auto-generated placeholder description.
-        overrides: Auto-generated placeholder description.
+        config: Configuration object controlling the component.
+        overrides: Override dictionary.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     if not isinstance(overrides, Mapping):
         return
@@ -134,12 +134,12 @@ def _apply_map_pool(
     """Apply map pool.
 
     Args:
-        config: Auto-generated placeholder description.
-        map_file: Auto-generated placeholder description.
-        scenario_path: Auto-generated placeholder description.
+        config: Configuration object controlling the component.
+        map_file: map file.
+        scenario_path: filesystem path for the scenario.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     if not map_file:
         return

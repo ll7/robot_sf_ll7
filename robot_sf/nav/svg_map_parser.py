@@ -217,13 +217,13 @@ class SvgMapConverter:
             """Safe zone.
 
             Args:
-                index: Auto-generated placeholder description.
-                zones: Auto-generated placeholder description.
-                waypoint: Auto-generated placeholder description.
-                kind: Auto-generated placeholder description.
+                index: Index value.
+                zones: Configured zones for the scenario.
+                waypoint: Waypoint metadata.
+                kind: Kind selector.
 
             Returns:
-                Rect: Auto-generated placeholder description.
+                Rect: Rectangle definition.
             """
             if zones and 0 <= index < len(zones):
                 return zones[index]
@@ -516,10 +516,10 @@ class SvgMapConverter:
         """Get path number.
 
         Args:
-            route: Auto-generated placeholder description.
+            route: Route definition.
 
         Returns:
-            tuple[int, int]: Auto-generated placeholder description.
+            tuple[int, int]: tuple of int, int.
         """
         # routes have a label of the form 'ped_route_<spawn>_<goal>'
         numbers = re.findall(r"\d+", route)
@@ -573,11 +573,11 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
     """Load single svg.
 
     Args:
-        file_path: Auto-generated placeholder description.
-        strict: Auto-generated placeholder description.
+        file_path: filesystem path for the file.
+        strict: Whether strict validation is enabled.
 
     Returns:
-        dict[str, MapDefinition]: Auto-generated placeholder description.
+        dict[str, MapDefinition]: mapping of str, MapDefinition.
     """
     if file_path.suffix.lower() != ".svg":
         raise ValueError(f"Expected an SVG file, got: {file_path}")
@@ -597,12 +597,12 @@ def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str,
     """Load svg directory.
 
     Args:
-        dir_path: Auto-generated placeholder description.
-        pattern: Auto-generated placeholder description.
-        strict: Auto-generated placeholder description.
+        dir_path: Directory path containing relevant assets.
+        pattern: Glob or regex pattern.
+        strict: Whether strict validation is enabled.
 
     Returns:
-        dict[str, MapDefinition]: Auto-generated placeholder description.
+        dict[str, MapDefinition]: mapping of str, MapDefinition.
     """
     svg_files = sorted(dir_path.glob(pattern))
     if not svg_files:

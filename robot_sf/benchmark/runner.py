@@ -302,7 +302,7 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         """Simple policy adapter.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
 
         def policy(
@@ -315,14 +315,14 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             """Policy.
 
             Args:
-                robot_pos: Auto-generated placeholder description.
-                _robot_vel: Auto-generated placeholder description.
-                robot_goal: Auto-generated placeholder description.
-                _ped_positions: Auto-generated placeholder description.
-                _dt: Auto-generated placeholder description.
+                robot_pos: position for robot.
+                _robot_vel: velocity for robot.
+                robot_goal: goal for robot.
+                _ped_positions: positions for pedestrian.
+                _dt: time step.
 
             Returns:
-                np.ndarray: Auto-generated placeholder description.
+                np.ndarray: NumPy array holding the relevant values.
             """
             return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
 
@@ -337,10 +337,10 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         """Clamp speed.
 
         Args:
-            vel: Auto-generated placeholder description.
+            vel: Velocity vector.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         speed = float(np.linalg.norm(vel))
         if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
@@ -356,13 +356,13 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
         """Action to velocity.
 
         Args:
-            action: Auto-generated placeholder description.
-            robot_pos: Auto-generated placeholder description.
-            robot_vel: Auto-generated placeholder description.
-            robot_goal: Auto-generated placeholder description.
+            action: Action applied to the environment.
+            robot_pos: position for robot.
+            robot_vel: velocity for robot.
+            robot_goal: goal for robot.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         if "vx" in action and "vy" in action:
             return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
@@ -395,7 +395,7 @@ def _create_robot_policy(algo: str, algo_config_path: str | None, seed: int):  #
             """Do step.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return planner.step(obs)
 
@@ -428,11 +428,11 @@ def _append_video_skip_note(record: dict[str, Any], note: str) -> None:
     """Append video skip note.
 
     Args:
-        record: Auto-generated placeholder description.
-        note: Auto-generated placeholder description.
+        record: Record being processed.
+        note: Optional note for the record.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     existing = record.get("notes")
     if existing:
@@ -455,17 +455,17 @@ def _emit_video_skip(
     """Emit video skip.
 
     Args:
-        record: Auto-generated placeholder description.
-        episode_id: Auto-generated placeholder description.
-        scenario_id: Auto-generated placeholder description.
-        seed: Auto-generated placeholder description.
-        renderer: Auto-generated placeholder description.
-        reason: Auto-generated placeholder description.
-        steps: Auto-generated placeholder description.
-        error: Auto-generated placeholder description.
+        record: Record being processed.
+        episode_id: identifier for episode.
+        scenario_id: identifier for scenario.
+        seed: Random seed for deterministic behavior.
+        renderer: Renderer helper.
+        reason: Reason string recorded for diagnostics.
+        steps: Number of steps executed.
+        error: Exception or error payload.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     context = {
         "episode_id": episode_id,
@@ -555,11 +555,11 @@ def _try_encode_synthetic_video(
         """To px.
 
         Args:
-            x: Auto-generated placeholder description.
-            y: Auto-generated placeholder description.
+            x: X-axis value.
+            y: Y-axis value.
 
         Returns:
-            tuple[int, int]: Auto-generated placeholder description.
+            tuple[int, int]: tuple of int, int.
         """
         # Normalize to [0,1] then scale to pixels; y inverted for image coords
         nx = 0.0 if max_x == min_x else (x - min_x) / (max_x - min_x)
@@ -777,14 +777,14 @@ def _simulate_episode_with_policy(
     """Simulate episode with policy.
 
     Args:
-        scenario_params: Auto-generated placeholder description.
-        seed: Auto-generated placeholder description.
-        robot_policy: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
-        robot_start: Auto-generated placeholder description.
-        robot_goal: Auto-generated placeholder description.
-        record_forces: Auto-generated placeholder description.
+        scenario_params: scenario parameters.
+        seed: Random seed for deterministic behavior.
+        robot_policy: robot policy.
+        horizon: Episode horizon (max steps).
+        dt: Simulation time step.
+        robot_start: start value for robot.
+        robot_goal: goal for robot.
+        record_forces: record forces.
 
     Returns:
         tuple[
@@ -795,7 +795,7 @@ def _simulate_episode_with_policy(
         list[np.ndarray],
         np.ndarray,
         int | None,
-    ]: Auto-generated placeholder description.
+    ]: List of simple policy metadata entries.
     """
     gen = generate_scenario(scenario_params, seed=seed)
     sim = gen.simulator
@@ -826,12 +826,12 @@ def _simulate_episode_with_policy(
         """Step robot.
 
         Args:
-            curr_pos: Auto-generated placeholder description.
-            curr_vel: Auto-generated placeholder description.
-            ped_positions: Auto-generated placeholder description.
+            curr_pos: position for curr.
+            curr_vel: velocity for curr.
+            ped_positions: Pedestrian positions.
 
         Returns:
-            tuple[np.ndarray, np.ndarray, np.ndarray]: Auto-generated placeholder description.
+            tuple[np.ndarray, np.ndarray, np.ndarray]: Tuple of NumPy arrays containing position, velocity, and acceleration data.
         """
         new_vel = robot_policy(curr_pos, curr_vel, robot_goal_arr, ped_positions, dt)
         new_pos = curr_pos + new_vel * dt
@@ -882,13 +882,13 @@ def _compute_metrics(
     """Compute metrics.
 
     Args:
-        ep: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
-        snqi_weights: Auto-generated placeholder description.
-        snqi_baseline: Auto-generated placeholder description.
+        ep: Episode record.
+        horizon: Episode horizon (max steps).
+        snqi_weights: weights for snqi.
+        snqi_baseline: baseline data for snqi.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     metrics_raw = compute_all_metrics(ep, horizon=horizon)
     return _post_process_metrics(
@@ -908,14 +908,14 @@ def _build_episode_record(
     """Build episode record.
 
     Args:
-        scenario_params: Auto-generated placeholder description.
-        seed: Auto-generated placeholder description.
-        metrics: Auto-generated placeholder description.
-        algo_metadata: Auto-generated placeholder description.
-        ts_start: Auto-generated placeholder description.
+        scenario_params: scenario parameters.
+        seed: Random seed for deterministic behavior.
+        metrics: Dictionary of computed metrics.
+        algo_metadata: algorithm metadata.
+        ts_start: Timestamp when processing started.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     episode_id = compute_episode_id(scenario_params, seed)
     return {
@@ -1021,12 +1021,12 @@ def validate_and_write(
     """Validate and write.
 
     Args:
-        record: Auto-generated placeholder description.
-        schema_path: Auto-generated placeholder description.
-        out_path: Auto-generated placeholder description.
+        record: Record being processed.
+        schema_path: filesystem path for the schema.
+        out_path: Output path for generated artifacts.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     schema = load_schema(schema_path)
     validate_episode(record, schema)
@@ -1053,12 +1053,12 @@ def _post_process_metrics(
     """Post process metrics.
 
     Args:
-        metrics_raw: Auto-generated placeholder description.
-        snqi_weights: Auto-generated placeholder description.
-        snqi_baseline: Auto-generated placeholder description.
+        metrics_raw: metrics raw.
+        snqi_weights: weights for snqi.
+        snqi_baseline: baseline data for snqi.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     metrics: dict[str, Any] = dict(metrics_raw.items())
     metrics["success"] = bool(metrics.get("success", 0.0) == 1.0)
@@ -1107,12 +1107,12 @@ def _expand_jobs(
     """Expand jobs.
 
     Args:
-        scenarios: Auto-generated placeholder description.
-        base_seed: Auto-generated placeholder description.
-        repeats_override: Auto-generated placeholder description.
+        scenarios: Scenario list.
+        base_seed: random seed for base.
+        repeats_override: repeats override.
 
     Returns:
-        list[tuple[dict[str, Any], int]]: Auto-generated placeholder description.
+        list[tuple[dict[str, Any], int]]: list of tuple[dict[str, Any], int].
     """
     jobs: list[tuple[dict[str, Any], int]] = []
     for sc in scenarios:
@@ -1149,12 +1149,12 @@ def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[st
     """Write validated record.
 
     Args:
-        out_path: Auto-generated placeholder description.
-        schema: Auto-generated placeholder description.
-        rec: Auto-generated placeholder description.
+        out_path: Output path for generated artifacts.
+        schema: Schema definition.
+        rec: Single record dictionary.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     validate_episode(rec, schema)
     with out_path.open("a", encoding="utf-8") as f:
@@ -1173,15 +1173,15 @@ def _run_batch_sequential(
     """Run batch sequential.
 
     Args:
-        jobs: Auto-generated placeholder description.
-        out_path: Auto-generated placeholder description.
-        schema: Auto-generated placeholder description.
-        fixed_params: Auto-generated placeholder description.
-        progress_cb: Auto-generated placeholder description.
-        fail_fast: Auto-generated placeholder description.
+        jobs: Collection of jobs to execute.
+        out_path: Output path for generated artifacts.
+        schema: Schema definition.
+        fixed_params: fixed parameters.
+        progress_cb: Progress callback.
+        fail_fast: fail fast.
 
     Returns:
-        tuple[int, list[dict[str, Any]]]: Auto-generated placeholder description.
+        tuple[int, list[dict[str, Any]]]: tuple of int, list[dict[str, Any]].
     """
     wrote = 0
     failures: list[dict[str, Any]] = []
@@ -1223,16 +1223,16 @@ def _run_batch_parallel(
     """Run batch parallel.
 
     Args:
-        jobs: Auto-generated placeholder description.
-        out_path: Auto-generated placeholder description.
-        schema: Auto-generated placeholder description.
-        fixed_params: Auto-generated placeholder description.
-        workers: Auto-generated placeholder description.
-        progress_cb: Auto-generated placeholder description.
-        fail_fast: Auto-generated placeholder description.
+        jobs: Collection of jobs to execute.
+        out_path: Output path for generated artifacts.
+        schema: Schema definition.
+        fixed_params: fixed parameters.
+        workers: Number of worker processes.
+        progress_cb: Progress callback.
+        fail_fast: fail fast.
 
     Returns:
-        tuple[int, list[dict[str, Any]]]: Auto-generated placeholder description.
+        tuple[int, list[dict[str, Any]]]: tuple of int, list[dict[str, Any]].
     """
     wrote = 0
     failures: list[dict[str, Any]] = []

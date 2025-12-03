@@ -27,12 +27,12 @@ def _get_dotted(d: Mapping[str, object], path: str, default=None):
     """Get dotted.
 
     Args:
-        d: Auto-generated placeholder description.
-        path: Auto-generated placeholder description.
-        default: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        path: Filesystem path to the resource.
+        default: Default fallback value.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     cur: object = d
     for part in path.split("."):
@@ -58,10 +58,10 @@ def collect_grouped_values(
         """To float.
 
         Args:
-            x: Auto-generated placeholder description.
+            x: X-axis value.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         try:
             v = float(x)  # type: ignore[arg-type]
@@ -101,7 +101,7 @@ def _apply_rcparams() -> None:
     """Apply rcparams.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     apply_latex_style()
 
@@ -110,12 +110,12 @@ def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
     """Maybe kde.
 
     Args:
-        ax: Auto-generated placeholder description.
-        data: Auto-generated placeholder description.
-        color: Auto-generated placeholder description.
+        ax: Matplotlib axes object.
+        data: Data payload consumed by the helper.
+        color: Color specification for plotting.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     try:
         from scipy.stats import gaussian_kde  # type: ignore

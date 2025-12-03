@@ -34,10 +34,10 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
     """Safe fig close.
 
     Args:
-        fig: Auto-generated placeholder description.
+        fig: Matplotlib Figure.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     try:
         # Clear and fully close to avoid accumulating many open figures triggering warnings.
@@ -62,12 +62,12 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
     """Write placeholder text.
 
     Args:
-        path: Auto-generated placeholder description.
-        title: Auto-generated placeholder description.
-        lines: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
+        title: Plot title.
+        lines: Line objects plotted on the axes.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if plt is None:
         return False
@@ -103,11 +103,11 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     """Distribution plot.
 
     Args:
-        groups: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
+        out_dir: directory for out.
 
     Returns:
-        _PlotArtifact: Auto-generated placeholder description.
+        _PlotArtifact: PlotArtifact.
     """
     pdf_path = out_dir / "distributions_basic.pdf"
     if plt is None:
@@ -152,11 +152,11 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     """Trajectory plot.
 
     Args:
-        records: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
+        records: List of serialized records.
+        out_dir: directory for out.
 
     Returns:
-        _PlotArtifact: Auto-generated placeholder description.
+        _PlotArtifact: PlotArtifact.
     """
     pdf_path = out_dir / "trajectories_basic.pdf"
     if plt is None:
@@ -197,11 +197,11 @@ def _kde_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     """Kde plot placeholder.
 
     Args:
-        groups: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
+        out_dir: directory for out.
 
     Returns:
-        _PlotArtifact: Auto-generated placeholder description.
+        _PlotArtifact: PlotArtifact.
     """
     pdf_path = out_dir / "path_efficiency.pdf"
     if plt is None:
@@ -235,11 +235,11 @@ def _pareto_plot_placeholder(groups, out_dir: Path) -> _PlotArtifact:
     """Pareto plot placeholder.
 
     Args:
-        groups: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
+        out_dir: directory for out.
 
     Returns:
-        _PlotArtifact: Auto-generated placeholder description.
+        _PlotArtifact: PlotArtifact.
     """
     pdf_path = out_dir / "pareto_placeholder.pdf"
     if plt is None:
@@ -277,11 +277,11 @@ def _force_heatmap_placeholder(out_dir: Path, records: Iterable[dict]) -> _PlotA
     """Force heatmap placeholder.
 
     Args:
-        out_dir: Auto-generated placeholder description.
-        records: Auto-generated placeholder description.
+        out_dir: directory for out.
+        records: List of serialized records.
 
     Returns:
-        _PlotArtifact: Auto-generated placeholder description.
+        _PlotArtifact: PlotArtifact.
     """
     pdf_path = out_dir / "episode_lengths.pdf"
     if plt is None:

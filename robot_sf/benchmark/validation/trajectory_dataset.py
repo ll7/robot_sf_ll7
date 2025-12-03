@@ -33,10 +33,10 @@ class TrajectoryDatasetValidator:
         """Init.
 
         Args:
-            dataset_path: Auto-generated placeholder description.
+            dataset_path: filesystem path for the dataset.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self.dataset_path = Path(dataset_path).resolve()
         self.dataset_id = self.dataset_path.stem
@@ -45,10 +45,10 @@ class TrajectoryDatasetValidator:
         """Validate.
 
         Args:
-            minimum_episodes: Auto-generated placeholder description.
+            minimum_episodes: minimum episodes.
 
         Returns:
-            TrajectoryDatasetValidationResult: Auto-generated placeholder description.
+            TrajectoryDatasetValidationResult: Validation result for a trajectory dataset.
         """
         if not self.dataset_path.exists():
             raise FileNotFoundError(f"Dataset not found: {self.dataset_path}")
@@ -73,11 +73,11 @@ class TrajectoryDatasetValidator:
         """Validate npz.
 
         Args:
-            file_size: Auto-generated placeholder description.
-            minimum_episodes: Auto-generated placeholder description.
+            file_size: file size.
+            minimum_episodes: minimum episodes.
 
         Returns:
-            TrajectoryDatasetValidationResult: Auto-generated placeholder description.
+            TrajectoryDatasetValidationResult: Validation result for a trajectory dataset.
         """
         with np.load(self.dataset_path, allow_pickle=True) as data:
             files = data.files
@@ -116,11 +116,11 @@ class TrajectoryDatasetValidator:
         """Validate jsonl.
 
         Args:
-            file_size: Auto-generated placeholder description.
-            minimum_episodes: Auto-generated placeholder description.
+            file_size: file size.
+            minimum_episodes: minimum episodes.
 
         Returns:
-            TrajectoryDatasetValidationResult: Auto-generated placeholder description.
+            TrajectoryDatasetValidationResult: Validation result for a trajectory dataset.
         """
         lines = self.dataset_path.read_text(encoding="utf-8").strip().splitlines()
         episode_count = len(lines)
@@ -149,13 +149,13 @@ class TrajectoryDatasetValidator:
         """Determine quality.
 
         Args:
-            episode_count: Auto-generated placeholder description.
-            missing_arrays: Auto-generated placeholder description.
-            file_size: Auto-generated placeholder description.
-            minimum_episodes: Auto-generated placeholder description.
+            episode_count: count of episode.
+            missing_arrays: missing arrays.
+            file_size: file size.
+            minimum_episodes: minimum episodes.
 
         Returns:
-            TrajectoryQuality: Auto-generated placeholder description.
+            TrajectoryQuality: Trajectory quality classification tuple.
         """
         if file_size > MAX_DATASET_SIZE_BYTES:
             return TrajectoryQuality.QUARANTINED
@@ -170,10 +170,10 @@ class TrajectoryDatasetValidator:
         """Extract episode count.
 
         Args:
-            arrays: Auto-generated placeholder description.
+            arrays: Collection of NumPy arrays.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         count_value = arrays.get("episode_count")
         if isinstance(count_value, np.ndarray):
@@ -194,10 +194,10 @@ class TrajectoryDatasetValidator:
         """Extract metadata.
 
         Args:
-            arrays: Auto-generated placeholder description.
+            arrays: Collection of NumPy arrays.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         raw = arrays.get("metadata")
         if isinstance(raw, np.ndarray):

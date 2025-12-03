@@ -119,12 +119,12 @@ class VisualizationError(Exception):
         """Init.
 
         Args:
-            message: Auto-generated placeholder description.
-            artifact_type: Auto-generated placeholder description.
-            details: Auto-generated placeholder description.
+            message: Human-readable message.
+            artifact_type: artifact type.
+            details: Additional textual details.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         super().__init__(message)
         self.artifact_type = artifact_type
@@ -834,11 +834,11 @@ def _create_pixel_converter(bounds: tuple[float, float, float, float]):
         """To pixel.
 
         Args:
-            x: Auto-generated placeholder description.
-            y: Auto-generated placeholder description.
+            x: X-axis value.
+            y: Y-axis value.
 
         Returns:
-            tuple[int, int]: Auto-generated placeholder description.
+            tuple[int, int]: tuple of int, int.
         """
         norm_x = (x - min_x) / span_x
         norm_y = (y - min_y) / span_y
@@ -928,7 +928,7 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
             """Frame generator.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             yield from frames
 

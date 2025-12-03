@@ -25,12 +25,12 @@ def register_backend(key: str, factory: SimulatorFactory, *, override: bool = Fa
     """Register backend.
 
     Args:
-        key: Auto-generated placeholder description.
-        factory: Auto-generated placeholder description.
-        override: Auto-generated placeholder description.
+        key: Dictionary key.
+        factory: Factory callable used to construct components.
+        override: Override identifier.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     k = key.strip()
     if not k:
@@ -45,10 +45,10 @@ def get_backend(key: str) -> SimulatorFactory:
     """Get backend.
 
     Args:
-        key: Auto-generated placeholder description.
+        key: Dictionary key.
 
     Returns:
-        SimulatorFactory: Auto-generated placeholder description.
+        SimulatorFactory: Simulator factory callable.
     """
     try:
         return _REGISTRY[key]
@@ -61,7 +61,7 @@ def list_backends() -> list[str]:
     """List backends.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     return sorted(_REGISTRY.keys())
 
@@ -101,10 +101,10 @@ def select_best_backend(preferred: str | None = None) -> str:
         """Score.
 
         Args:
-            name: Auto-generated placeholder description.
+            name: Human-friendly name.
 
         Returns:
-            tuple[int, str]: Auto-generated placeholder description.
+            tuple[int, str]: tuple of int, str.
         """
         return (_BACKEND_PERFORMANCE_ORDER.get(name, _DEFAULT_PERFORMANCE_SCORE), name)
 

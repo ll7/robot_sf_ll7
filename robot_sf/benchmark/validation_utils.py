@@ -222,11 +222,11 @@ def validate_schema_references(schema: dict[str, Any]) -> list[str]:
         """Check refs.
 
         Args:
-            obj: Auto-generated placeholder description.
-            path: Auto-generated placeholder description.
+            obj: Generic object payload.
+            path: Filesystem path to the resource.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if isinstance(obj, dict):
             for key, value in obj.items():

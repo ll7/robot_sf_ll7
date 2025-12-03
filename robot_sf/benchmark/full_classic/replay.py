@@ -75,7 +75,7 @@ class ReplayEpisode:
         """Len.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len(self.steps)
 
@@ -83,10 +83,10 @@ class ReplayEpisode:
         """Append.
 
         Args:
-            step: Auto-generated placeholder description.
+            step: Step index.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self.steps.append(step)
 
@@ -121,19 +121,19 @@ class ReplayCapture:
         """Record.
 
         Args:
-            t: Auto-generated placeholder description.
-            x: Auto-generated placeholder description.
-            y: Auto-generated placeholder description.
-            heading: Auto-generated placeholder description.
-            speed: Auto-generated placeholder description.
-            ped_positions: Auto-generated placeholder description.
-            action: Auto-generated placeholder description.
-            ray_vecs: Auto-generated placeholder description.
-            ped_actions: Auto-generated placeholder description.
-            robot_goal: Auto-generated placeholder description.
+            t: Time index.
+            x: X-axis value.
+            y: Y-axis value.
+            heading: Heading angle.
+            speed: Speed scalar.
+            ped_positions: Pedestrian positions.
+            action: Action applied to the environment.
+            ray_vecs: ray vecs.
+            ped_actions: pedestrian actions.
+            robot_goal: goal for robot.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._steps.append(
             ReplayStep(
@@ -154,7 +154,7 @@ class ReplayCapture:
         """Finalize.
 
         Returns:
-            ReplayEpisode: Auto-generated placeholder description.
+            ReplayEpisode: Recorded replay episode payload.
         """
         return ReplayEpisode(
             episode_id=self.episode_id,

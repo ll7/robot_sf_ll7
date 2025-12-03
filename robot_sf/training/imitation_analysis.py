@@ -92,10 +92,10 @@ def _hardware_profile_from_manifest(manifest: dict[str, Any]) -> HardwareProfile
         """As profile.
 
         Args:
-            payload: Auto-generated placeholder description.
+            payload: Serialized payload passed between components.
 
         Returns:
-            HardwareProfile | None: Auto-generated placeholder description.
+            HardwareProfile | None: Optional hardware profile describing the host machine.
         """
         try:
             platform = str(payload.get("platform", "unknown"))

@@ -30,7 +30,7 @@ class SeedReport:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         return asdict(self)
 
@@ -39,7 +39,7 @@ def _import_torch():
     """Import torch.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     try:
         import torch  # type: ignore

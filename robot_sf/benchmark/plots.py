@@ -21,12 +21,12 @@ def _get_dotted(d: dict[str, object], path: str, default=None):
     """Get dotted.
 
     Args:
-        d: Auto-generated placeholder description.
-        path: Auto-generated placeholder description.
-        default: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        path: Filesystem path to the resource.
+        default: Default fallback value.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     cur: object = d
     for part in path.split("."):
@@ -45,13 +45,13 @@ def _group_values(
     """Group values.
 
     Args:
-        records: Auto-generated placeholder description.
-        group_by: Auto-generated placeholder description.
-        fallback_group_by: Auto-generated placeholder description.
-        metric: Auto-generated placeholder description.
+        records: List of serialized records.
+        group_by: group by.
+        fallback_group_by: fallback group by.
+        metric: Metric identifier.
 
     Returns:
-        dict[str, list[float]]: Auto-generated placeholder description.
+        dict[str, list[float]]: mapping of str, list[float].
     """
     out: dict[str, list[float]] = {}
     for r in records:
@@ -92,10 +92,10 @@ def compute_pareto_points(
         """Reducer.
 
         Args:
-            vals: Auto-generated placeholder description.
+            vals: Numeric values extracted from the dataset.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         if agg == "median":
             return float(np.median(vals))
@@ -137,13 +137,13 @@ def _dominates(
     """Dominates.
 
     Args:
-        a: Auto-generated placeholder description.
-        b: Auto-generated placeholder description.
-        x_higher_better: Auto-generated placeholder description.
-        y_higher_better: Auto-generated placeholder description.
+        a: First plotted array.
+        b: Second plotted array.
+        x_higher_better: x higher better.
+        y_higher_better: y higher better.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     ax, ay = a
     bx, by = b

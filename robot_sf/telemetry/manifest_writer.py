@@ -34,12 +34,12 @@ class ManifestWriter:
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
-            run_id: Auto-generated placeholder description.
-            registry: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
+            run_id: identifier for run.
+            registry: Run registry instance.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not isinstance(config, RunTrackerConfig):  # defensive gate for early adopters
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
@@ -58,7 +58,7 @@ class ManifestWriter:
         """Run directory.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         return self._run_dir
 
@@ -66,10 +66,10 @@ class ManifestWriter:
         """Append run record.
 
         Args:
-            record: Auto-generated placeholder description.
+            record: Record being processed.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         payload = self._prepare_payload(record)
         with self._lock:
@@ -79,10 +79,10 @@ class ManifestWriter:
         """Append telemetry snapshot.
 
         Args:
-            snapshot: Auto-generated placeholder description.
+            snapshot: Telemetry snapshot.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         payload = self._prepare_payload(snapshot)
         with self._lock:
@@ -92,10 +92,10 @@ class ManifestWriter:
         """Write step index.
 
         Args:
-            entries: Auto-generated placeholder description.
+            entries: Manifest entries to write.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         payload = serialize_many(entries)
         with self._lock:
@@ -109,10 +109,10 @@ class ManifestWriter:
         """Append recommendations.
 
         Args:
-            recommendations: Auto-generated placeholder description.
+            recommendations: Recommendation objects emitted by telemetry.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         serialized = [self._prepare_payload(item) for item in recommendations]
         with self._lock:
@@ -123,10 +123,10 @@ class ManifestWriter:
         """Append performance test.
 
         Args:
-            result: Auto-generated placeholder description.
+            result: Computation result.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         payload = self._prepare_payload(result)
         with self._lock:
@@ -136,7 +136,7 @@ class ManifestWriter:
         """Iter run records.
 
         Returns:
-            list[dict[str, object]]: Auto-generated placeholder description.
+            list[dict[str, object]]: list of dict[str, object].
         """
         if not self._manifest_path.exists():
             return []
@@ -151,11 +151,11 @@ class ManifestWriter:
         """Append json line.
 
         Args:
-            target: Auto-generated placeholder description.
-            payload: Auto-generated placeholder description.
+            target: Target path or identifier.
+            payload: Serialized payload passed between components.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a", encoding="utf-8") as handle:
@@ -166,10 +166,10 @@ class ManifestWriter:
         """Prepare payload.
 
         Args:
-            payload: Auto-generated placeholder description.
+            payload: Serialized payload passed between components.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         if isinstance(payload, dict):
             return cast(dict[str, Any], payload)

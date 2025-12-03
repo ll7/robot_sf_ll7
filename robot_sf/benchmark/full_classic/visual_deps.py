@@ -65,7 +65,7 @@ def has_pygame() -> bool:
     """Has pygame.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     try:
         import pygame  # type: ignore
@@ -84,7 +84,7 @@ def has_moviepy() -> bool:
     """Has moviepy.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     try:
         import moviepy  # type: ignore
@@ -103,7 +103,7 @@ def ffmpeg_in_path() -> bool:
     """Ffmpeg in path.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     return shutil.which("ffmpeg") is not None
 

@@ -232,10 +232,10 @@ def format_episode_summary_table(rows: Iterable[dict[str, Any]]) -> str:
         """Fmt row.
 
         Args:
-            r: Auto-generated placeholder description.
+            r: Random number generator.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         return " | ".join(str(cast(Any, r)[h]).ljust(col_widths[h]) for h in headers)
 

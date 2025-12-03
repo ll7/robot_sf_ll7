@@ -270,10 +270,10 @@ class HypothesisEvaluator:
         """Init.
 
         Args:
-            threshold: Auto-generated placeholder description.
+            threshold: Threshold value.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.threshold = threshold
 
@@ -283,12 +283,12 @@ class HypothesisEvaluator:
         """Evaluate variant.
 
         Args:
-            baseline: Auto-generated placeholder description.
-            pretrained: Auto-generated placeholder description.
-            variant_id: Auto-generated placeholder description.
+            baseline: Baseline statistics bundle.
+            pretrained: Whether the checkpoint is pretrained.
+            variant_id: identifier for variant.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         result = compare_to_threshold(baseline, pretrained, self.threshold)
         result["variant_id"] = variant_id
@@ -298,11 +298,11 @@ class HypothesisEvaluator:
         """Export hypothesis json.
 
         Args:
-            path: Auto-generated placeholder description.
-            results: Auto-generated placeholder description.
+            path: Filesystem path to the resource.
+            results: Collection of computation results.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)

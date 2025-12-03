@@ -18,10 +18,10 @@ class SimpleRobotEnv(gymnasium.Env):
         """Init.
 
         Args:
-            env_config: Auto-generated placeholder description.
+            env_config: environment config.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.info = {}
 
@@ -65,10 +65,10 @@ class SimpleRobotEnv(gymnasium.Env):
         """Step.
 
         Args:
-            action: Auto-generated placeholder description.
+            action: Action applied to the environment.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         pass
 
@@ -76,10 +76,10 @@ class SimpleRobotEnv(gymnasium.Env):
         """Reset.
 
         Args:
-            seed: Auto-generated placeholder description.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # seed for self.np_random
         super().reset(seed=seed)
@@ -92,10 +92,10 @@ class SimpleRobotEnv(gymnasium.Env):
         """Render.
 
         Args:
-            mode: Auto-generated placeholder description.
+            mode: Operating mode string.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         pass
 
@@ -103,6 +103,6 @@ class SimpleRobotEnv(gymnasium.Env):
         """Close.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         pass

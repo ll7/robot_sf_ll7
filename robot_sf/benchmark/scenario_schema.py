@@ -32,7 +32,7 @@ def load_scenario_schema() -> dict[str, Any]:
     """Load scenario schema.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         import json
@@ -44,10 +44,10 @@ def _json_pointer(path_elems: Iterable[Any]) -> str:
     """Json pointer.
 
     Args:
-        path_elems: Auto-generated placeholder description.
+        path_elems: path elems.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     parts: list[str] = []
     for p in path_elems:

@@ -84,11 +84,11 @@ class PPOPlanner:
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
-            seed: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.config = self._parse_config(config)
         self._seed = seed
@@ -100,10 +100,10 @@ class PPOPlanner:
         """Parse config.
 
         Args:
-            cfg: Auto-generated placeholder description.
+            cfg: Configuration dictionary.
 
         Returns:
-            PPOPlannerConfig: Auto-generated placeholder description.
+            PPOPlannerConfig: ppo planner configuration.
         """
         if isinstance(cfg, PPOPlannerConfig):
             return cfg
@@ -115,7 +115,7 @@ class PPOPlanner:
         """Load model.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if PPO is None:  # pragma: no cover - missing sb3 at runtime
             warn_soft_degrade(
@@ -162,10 +162,10 @@ class PPOPlanner:
         """Reset.
 
         Args:
-            seed: Auto-generated placeholder description.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         # No RNN state; just update seed and keep model
         if seed is not None:
@@ -175,7 +175,7 @@ class PPOPlanner:
         """Close.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._model = None
 
@@ -190,10 +190,10 @@ class PPOPlanner:
         """Step.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
@@ -216,10 +216,10 @@ class PPOPlanner:
         """Predict action.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            np.ndarray | None: Auto-generated placeholder description.
+            np.ndarray | None: Optional NumPy array; ``None`` indicates no data.
         """
         if self._model is None:
             return None
@@ -248,10 +248,10 @@ class PPOPlanner:
         """Build model obs.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         if self.config.obs_mode == "image":
             img = obs.robot.get("image") if isinstance(obs.robot, dict) else None
@@ -265,10 +265,10 @@ class PPOPlanner:
         """Vectorize.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rv = np.asarray(obs.robot["velocity"], dtype=float)
@@ -297,11 +297,11 @@ class PPOPlanner:
         """Action vec to dict.
 
         Args:
-            act: Auto-generated placeholder description.
-            _obs: Auto-generated placeholder description.
+            act: Action sampled from the policy.
+            _obs: obs.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
@@ -325,10 +325,10 @@ class PPOPlanner:
         """Fallback action.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         rp = np.asarray(obs.robot["position"], dtype=float)
         rg = np.asarray(obs.robot["goal"], dtype=float)
@@ -351,7 +351,7 @@ class PPOPlanner:
         """Get metadata.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         cfg = asdict(self.config)
         # Avoid leaking full paths in metadata

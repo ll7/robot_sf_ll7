@@ -131,10 +131,10 @@ def summarize_metric(values: Iterable[float]) -> dict[str, float]:
     """Summarize metric.
 
     Args:
-        values: Auto-generated placeholder description.
+        values: Collection of numeric values.
 
     Returns:
-        dict[str, float]: Auto-generated placeholder description.
+        dict[str, float]: mapping of str, float.
     """
     items = [v for v in values if math.isfinite(v)]
     if not items:

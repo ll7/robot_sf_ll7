@@ -40,22 +40,22 @@ class BaseEnv(Env):
         """Init.
 
         Args:
-            env_config: Auto-generated placeholder description.
-            debug: Auto-generated placeholder description.
-            recording_enabled: Auto-generated placeholder description.
-            record_video: Auto-generated placeholder description.
-            video_path: Auto-generated placeholder description.
-            video_fps: Auto-generated placeholder description.
-            peds_have_obstacle_forces: Auto-generated placeholder description.
-            use_jsonl_recording: Auto-generated placeholder description.
-            recording_dir: Auto-generated placeholder description.
-            suite_name: Auto-generated placeholder description.
-            scenario_name: Auto-generated placeholder description.
-            algorithm_name: Auto-generated placeholder description.
-            recording_seed: Auto-generated placeholder description.
+            env_config: environment config.
+            debug: Debug mode flag.
+            recording_enabled: recording enabled.
+            record_video: record video.
+            video_path: filesystem path for the video.
+            video_fps: video fps.
+            peds_have_obstacle_forces: pedestrians have obstacle forces.
+            use_jsonl_recording: use jsonl recording.
+            recording_dir: directory for recording.
+            suite_name: name of suite.
+            scenario_name: name of scenario.
+            algorithm_name: name of algorithm.
+            recording_seed: random seed for recording.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         super().__init__()
 
@@ -144,7 +144,7 @@ class BaseEnv(Env):
         """Render.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         raise NotImplementedError
 
@@ -152,10 +152,10 @@ class BaseEnv(Env):
         """Step.
 
         Args:
-            action: Auto-generated placeholder description.
+            action: Action applied to the environment.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         raise NotImplementedError
 

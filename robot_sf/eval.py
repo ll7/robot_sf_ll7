@@ -31,7 +31,7 @@ class EnvMetrics:
         """Total routes.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return max(len(self.route_outcomes), 1)
 
@@ -40,7 +40,7 @@ class EnvMetrics:
         """Total intermediate goals.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return max(len(self.intermediate_goal_outcomes), 1)
 
@@ -49,7 +49,7 @@ class EnvMetrics:
         """Pedestrian collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
 
@@ -58,7 +58,7 @@ class EnvMetrics:
         """Obstacle collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
 
@@ -67,7 +67,7 @@ class EnvMetrics:
         """Exceeded timesteps.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
 
@@ -76,7 +76,7 @@ class EnvMetrics:
         """Completed routes.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
 
@@ -85,7 +85,7 @@ class EnvMetrics:
         """Reached intermediate goals.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.intermediate_goal_outcomes if o == EnvOutcome.REACHED_GOAL])
 
@@ -94,7 +94,7 @@ class EnvMetrics:
         """Route completion rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.completed_routes / self.total_routes
 
@@ -103,7 +103,7 @@ class EnvMetrics:
         """Interm goal completion rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.reached_intermediate_goals / self.total_intermediate_goals
 
@@ -112,7 +112,7 @@ class EnvMetrics:
         """Timeout rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.exceeded_timesteps / self.total_routes
 
@@ -121,7 +121,7 @@ class EnvMetrics:
         """Obstacle collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.obstacle_collisions / self.total_routes
 
@@ -130,7 +130,7 @@ class EnvMetrics:
         """Pedestrian collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.pedestrian_collisions / self.total_routes
 
@@ -138,10 +138,10 @@ class EnvMetrics:
         """Update.
 
         Args:
-            meta: Auto-generated placeholder description.
+            meta: Metadata dictionary.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         is_end_of_interm_goal = (
             meta["is_pedestrian_collision"]
@@ -165,10 +165,10 @@ class EnvMetrics:
         """On next intermediate outcome.
 
         Args:
-            meta: Auto-generated placeholder description.
+            meta: Metadata dictionary.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
@@ -189,10 +189,10 @@ class EnvMetrics:
         """On next route outcome.
 
         Args:
-            meta: Auto-generated placeholder description.
+            meta: Metadata dictionary.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if meta["is_pedestrian_collision"]:
             outcome = EnvOutcome.PEDESTRIAN_COLLISION
@@ -221,7 +221,7 @@ class VecEnvMetrics:
         """Route completion rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.route_completion_rate for m in self.metrics) / len(self.metrics)
 
@@ -230,7 +230,7 @@ class VecEnvMetrics:
         """Interm goal completion rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.interm_goal_completion_rate for m in self.metrics) / len(self.metrics)
 
@@ -239,7 +239,7 @@ class VecEnvMetrics:
         """Timeout rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
@@ -248,7 +248,7 @@ class VecEnvMetrics:
         """Obstacle collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -257,7 +257,7 @@ class VecEnvMetrics:
         """Pedestrian collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -265,10 +265,10 @@ class VecEnvMetrics:
         """Update.
 
         Args:
-            metas: Auto-generated placeholder description.
+            metas: List of metadata entries.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)
@@ -287,7 +287,7 @@ class PedEnvMetrics:
         """Total routes.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return max(len(self.route_outcomes), 1)
 
@@ -296,7 +296,7 @@ class PedEnvMetrics:
         """Pedestrian collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.PEDESTRIAN_COLLISION])
 
@@ -305,7 +305,7 @@ class PedEnvMetrics:
         """Obstacle collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.OBSTACLE_COLLISION])
 
@@ -314,7 +314,7 @@ class PedEnvMetrics:
         """Exceeded timesteps.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.TIMEOUT])
 
@@ -323,7 +323,7 @@ class PedEnvMetrics:
         """Robot collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_COLLISION])
 
@@ -332,7 +332,7 @@ class PedEnvMetrics:
         """Robot at goal.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.REACHED_GOAL])
 
@@ -341,7 +341,7 @@ class PedEnvMetrics:
         """Robot obstacle collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_OBSTACLE_COLLISION])
 
@@ -350,7 +350,7 @@ class PedEnvMetrics:
         """Robot pedestrian collisions.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return len([o for o in self.route_outcomes if o == EnvOutcome.ROBOT_PEDESTRIAN_COLLISION])
 
@@ -359,7 +359,7 @@ class PedEnvMetrics:
         """Timeout rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.exceeded_timesteps / self.total_routes
 
@@ -368,7 +368,7 @@ class PedEnvMetrics:
         """Obstacle collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.obstacle_collisions / self.total_routes
 
@@ -377,7 +377,7 @@ class PedEnvMetrics:
         """Pedestrian collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.pedestrian_collisions / self.total_routes
 
@@ -386,7 +386,7 @@ class PedEnvMetrics:
         """Robot collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.robot_collisions / self.total_routes
 
@@ -395,7 +395,7 @@ class PedEnvMetrics:
         """Robot at goal rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.robot_at_goal / self.total_routes
 
@@ -404,7 +404,7 @@ class PedEnvMetrics:
         """Robot obstacle collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.robot_obstacle_collisions / self.total_routes
 
@@ -413,7 +413,7 @@ class PedEnvMetrics:
         """Robot pedestrian collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.robot_pedestrian_collisions / self.total_routes
 
@@ -422,7 +422,7 @@ class PedEnvMetrics:
         """Route end distance.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return mean(self.avg_distance) if self.avg_distance else 0.0
 
@@ -430,10 +430,10 @@ class PedEnvMetrics:
         """Update.
 
         Args:
-            meta: Auto-generated placeholder description.
+            meta: Metadata dictionary.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.route_distances.append(meta["distance_to_robot"])
 
@@ -507,7 +507,7 @@ class PedVecEnvMetrics:
         """Timeout rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.timeout_rate for m in self.metrics) / len(self.metrics)
 
@@ -516,7 +516,7 @@ class PedVecEnvMetrics:
         """Obstacle collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -525,7 +525,7 @@ class PedVecEnvMetrics:
         """Pedestrian collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -534,7 +534,7 @@ class PedVecEnvMetrics:
         """Robot collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.robot_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -543,7 +543,7 @@ class PedVecEnvMetrics:
         """Robot at goal rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.robot_at_goal_rate for m in self.metrics) / len(self.metrics)
 
@@ -552,7 +552,7 @@ class PedVecEnvMetrics:
         """Robot obstacle collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.robot_obstacle_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -561,7 +561,7 @@ class PedVecEnvMetrics:
         """Robot pedestrian collision rate.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.robot_pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
@@ -570,7 +570,7 @@ class PedVecEnvMetrics:
         """Route end distance.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return sum(m.route_end_distance for m in self.metrics) / len(self.metrics)
 
@@ -578,10 +578,10 @@ class PedVecEnvMetrics:
         """Update.
 
         Args:
-            metas: Auto-generated placeholder description.
+            metas: List of metadata entries.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         for metric, meta in zip(self.metrics, metas, strict=False):
             metric.update(meta)

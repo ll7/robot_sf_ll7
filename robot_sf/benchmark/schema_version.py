@@ -141,10 +141,10 @@ class SchemaVersion:
         """Le.
 
         Args:
-            other: Auto-generated placeholder description.
+            other: Comparison target value.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         return self < other or self == other
 
@@ -152,10 +152,10 @@ class SchemaVersion:
         """Gt.
 
         Args:
-            other: Auto-generated placeholder description.
+            other: Comparison target value.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         return not (self <= other)
 
@@ -163,10 +163,10 @@ class SchemaVersion:
         """Ge.
 
         Args:
-            other: Auto-generated placeholder description.
+            other: Comparison target value.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         return not (self < other)
 

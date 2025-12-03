@@ -151,10 +151,10 @@ def _prepare_output_dirs(cfg):
     """Prepare output dirs.
 
     Args:
-        cfg: Auto-generated placeholder description.
+        cfg: Configuration dictionary.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     root = Path(cfg.output_root)
     episodes_dir = root / "episodes"
@@ -175,13 +175,13 @@ def _init_manifest(
     """Init manifest.
 
     Args:
-        root: Auto-generated placeholder description.
-        episodes_path: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        scenario_matrix_hash: Auto-generated placeholder description.
+        root: Repository or workspace root path.
+        episodes_path: filesystem path for the episodes.
+        cfg: Configuration dictionary.
+        scenario_matrix_hash: scenario matrix hash.
 
     Returns:
-        BenchmarkManifest: Auto-generated placeholder description.
+        BenchmarkManifest: benchmark manifest.
     """
     return BenchmarkManifest(
         output_root=root,
@@ -218,13 +218,13 @@ def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
     """Write iteration artifacts.
 
     Args:
-        root: Auto-generated placeholder description.
-        groups: Auto-generated placeholder description.
-        effects: Auto-generated placeholder description.
-        precision_report: Auto-generated placeholder description.
+        root: Repository or workspace root path.
+        groups: Collection of grouped elements.
+        effects: List of effect descriptors.
+        precision_report: precision report.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
     _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
@@ -248,10 +248,10 @@ def _scan_existing_episode_ids(path: Path) -> set[str]:
     """Scan existing episode ids.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        set[str]: Auto-generated placeholder description.
+        set[str]: Set of string identifiers.
     """
     ids: set[str] = set()
     if not path.exists():
@@ -293,10 +293,10 @@ def _load_snqi_weights(path: str | None):
     """Load snqi weights.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if not path:
         return dict(_DEFAULT_SNQI_WEIGHTS)
@@ -315,11 +315,11 @@ def _resolve_horizon(job, cfg) -> int:
     """Resolve horizon.
 
     Args:
-        job: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
+        job: Job configuration entry.
+        cfg: Configuration dictionary.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     horizon = int(getattr(job, "horizon", 0) or 0)
     if getattr(cfg, "smoke", False):
@@ -332,12 +332,12 @@ def _build_env_config(scenario, cfg, horizon: int):
     """Build env config.
 
     Args:
-        scenario: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
+        scenario: Scenario definition dictionary.
+        cfg: Configuration dictionary.
+        horizon: Episode horizon (max steps).
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     raw = dict(getattr(scenario, "raw", {}))
     matrix_path = Path(cfg.scenario_matrix_path)
@@ -369,10 +369,10 @@ def _simple_goal_policy(simulator) -> np.ndarray:
     """Simple goal policy.
 
     Args:
-        simulator: Auto-generated placeholder description.
+        simulator: Simulator backend wrapper.
 
     Returns:
-        np.ndarray: Auto-generated placeholder description.
+        np.ndarray: NumPy array holding the relevant values.
     """
     robot_pos = np.asarray(simulator.robot_pos[0], dtype=float)
     goal = np.asarray(simulator.goal_pos[0], dtype=float)
@@ -392,11 +392,11 @@ def _stack_ped_positions(series: list[np.ndarray], fill_value: float = 0.0) -> n
     """Stack ped positions.
 
     Args:
-        series: Auto-generated placeholder description.
-        fill_value: Auto-generated placeholder description.
+        series: Time series data.
+        fill_value: fill value.
 
     Returns:
-        np.ndarray: Auto-generated placeholder description.
+        np.ndarray: NumPy array holding the relevant values.
     """
     max_len = max((len(p) for p in series), default=0)
     if max_len == 0:
@@ -444,11 +444,11 @@ def _vel_and_acc(pos: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
     """Vel and acc.
 
     Args:
-        pos: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
+        pos: Position vector.
+        dt: Simulation time step.
 
     Returns:
-        tuple[np.ndarray, np.ndarray]: Auto-generated placeholder description.
+        tuple[np.ndarray, np.ndarray]: Pair of NumPy arrays (typically start and goal).
     """
     if len(pos) == 0:
         return np.zeros((0, 2), dtype=float), np.zeros((0, 2), dtype=float)
@@ -469,10 +469,10 @@ def _capture_visual_state(env):
     """Capture visual state.
 
     Args:
-        env: Auto-generated placeholder description.
+        env: Environment instance.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if not hasattr(env, "_prepare_visualizable_state"):
         return None, None, None
@@ -518,21 +518,21 @@ def _compute_episode_metrics(
     """Compute episode metrics.
 
     Args:
-        job: Auto-generated placeholder description.
-        scenario: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        robot_pos: Auto-generated placeholder description.
-        robot_vel: Auto-generated placeholder description.
-        robot_acc: Auto-generated placeholder description.
-        ped_pos: Auto-generated placeholder description.
-        ped_forces: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
-        reached_goal_step: Auto-generated placeholder description.
-        goal: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
+        job: Job configuration entry.
+        scenario: Scenario definition dictionary.
+        cfg: Configuration dictionary.
+        robot_pos: position for robot.
+        robot_vel: velocity for robot.
+        robot_acc: acceleration for robot.
+        ped_pos: position for pedestrian.
+        ped_forces: pedestrian forces.
+        dt: Simulation time step.
+        reached_goal_step: reached goal step.
+        goal: Goal configuration.
+        horizon: Episode horizon (max steps).
 
     Returns:
-        dict[str, float]: Auto-generated placeholder description.
+        dict[str, float]: mapping of str, float.
     """
     shortest_path = float(np.linalg.norm(robot_pos[0] - goal)) if len(robot_pos) else float("nan")
     if not math.isfinite(shortest_path):
@@ -582,14 +582,14 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
     """Init env for job.
 
     Args:
-        job: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
-        episode_id: Auto-generated placeholder description.
-        scenario: Auto-generated placeholder description.
+        job: Job configuration entry.
+        cfg: Configuration dictionary.
+        horizon: Episode horizon (max steps).
+        episode_id: identifier for episode.
+        scenario: Scenario definition dictionary.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     config = _build_env_config(scenario, cfg, horizon)
     capture_replay = bool(getattr(cfg, "capture_replay", False))
@@ -645,13 +645,13 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
     """Rollout episode.
 
     Args:
-        env: Auto-generated placeholder description.
-        horizon: Auto-generated placeholder description.
-        dt: Auto-generated placeholder description.
-        replay_cap: Auto-generated placeholder description.
+        env: Environment instance.
+        horizon: Episode horizon (max steps).
+        dt: Simulation time step.
+        replay_cap: replay cap.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
@@ -703,10 +703,10 @@ def _close_env(env):
     """Close env.
 
     Args:
-        env: Auto-generated placeholder description.
+        env: Environment instance.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     try:
         env.exit()
@@ -877,11 +877,11 @@ def _partition_jobs(existing_ids: set[str], job_iter: Iterable[object]) -> tuple
     """Partition jobs.
 
     Args:
-        existing_ids: Auto-generated placeholder description.
-        job_iter: Auto-generated placeholder description.
+        existing_ids: identifiers for existing.
+        job_iter: job iter.
 
     Returns:
-        tuple[list[object], int]: Auto-generated placeholder description.
+        tuple[list[object], int]: tuple of list[object], int.
     """
     run_list: list[object] = []
     skip_count = 0
@@ -903,14 +903,14 @@ def _execute_seq(
     """Execute seq.
 
     Args:
-        job_list: Auto-generated placeholder description.
-        existing_ids: Auto-generated placeholder description.
-        episodes_path: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        manifest: Auto-generated placeholder description.
+        job_list: job list.
+        existing_ids: identifiers for existing.
+        episodes_path: filesystem path for the episodes.
+        cfg: Configuration dictionary.
+        manifest: Manifest payload.
 
     Returns:
-        Iterator[dict]: Auto-generated placeholder description.
+        Iterator[dict]: Iterator over serialized records.
     """
     for jb in job_list:
         start = time.time()
@@ -928,11 +928,11 @@ def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
     """Worker job wrapper.
 
     Args:
-        job: Auto-generated placeholder description.
-        cfg_payload: Auto-generated placeholder description.
+        job: Job configuration entry.
+        cfg_payload: config payload.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
 
     class _TempCfg:
@@ -942,10 +942,10 @@ def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
             """Init.
 
             Args:
-                payload: Auto-generated placeholder description.
+                payload: Serialized payload passed between components.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             for k, v in payload.items():
                 setattr(self, k, v)
@@ -967,15 +967,15 @@ def _execute_parallel(
     """Execute parallel.
 
     Args:
-        job_list: Auto-generated placeholder description.
-        existing_ids: Auto-generated placeholder description.
-        episodes_path: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        manifest: Auto-generated placeholder description.
-        workers: Auto-generated placeholder description.
+        job_list: job list.
+        existing_ids: identifiers for existing.
+        episodes_path: filesystem path for the episodes.
+        cfg: Configuration dictionary.
+        manifest: Manifest payload.
+        workers: Number of worker processes.
 
     Returns:
-        Iterator[dict]: Auto-generated placeholder description.
+        Iterator[dict]: Iterator over serialized records.
     """
     logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
     cfg_payload = vars(cfg).copy() if hasattr(cfg, "__dict__") else {}
@@ -1231,11 +1231,11 @@ def _write_json(path: Path, obj):  # helper
     """Write json.
 
     Args:
-        path: Auto-generated placeholder description.
-        obj: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
+        obj: Generic object payload.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     try:
         tmp = path.with_suffix(path.suffix + ".tmp")
@@ -1250,10 +1250,10 @@ def _serialize_groups(groups):
     """Serialize groups.
 
     Args:
-        groups: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     out = []
     for g in groups:
@@ -1281,10 +1281,10 @@ def _serialize_effects(effects):
     """Serialize effects.
 
     Args:
-        effects: Auto-generated placeholder description.
+        effects: List of effect descriptors.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     out = []
     for rep in effects:
@@ -1310,10 +1310,10 @@ def _serialize_precision(report):
     """Serialize precision.
 
     Args:
-        report: Auto-generated placeholder description.
+        report: Report payload.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     return {
         "final_pass": report.final_pass,

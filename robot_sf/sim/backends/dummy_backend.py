@@ -21,10 +21,10 @@ class DummySimulator:
         """Init.
 
         Args:
-            seed: Auto-generated placeholder description.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.seed = seed
         self.rng = np.random.default_rng(seed)

@@ -37,7 +37,7 @@ class _NvmlHandle:
         """Init.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._initialized = False
         self._failed_reason: str | None = _NVML_ERROR
@@ -46,7 +46,7 @@ class _NvmlHandle:
         """Ensure initialized.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         if pynvml is None:
             return False
@@ -64,7 +64,7 @@ class _NvmlHandle:
         """Shutdown.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not self._initialized or pynvml is None:
             return
@@ -77,7 +77,7 @@ class _NvmlHandle:
         """Failed reason.
 
         Returns:
-            str | None: Auto-generated placeholder description.
+            str | None: Optional string value.
         """
         return self._failed_reason
 
@@ -137,11 +137,11 @@ def with_gpu_support(func: Callable[..., Any]) -> Callable[..., Any]:
         """Wrapper.
 
         Args:
-            args: Auto-generated placeholder description.
-            kwargs: Auto-generated placeholder description.
+            args: Parsed CLI arguments.
+            kwargs: Additional keyword arguments forwarded downstream.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if gpu_support_reason() is not None:
             return None

@@ -57,7 +57,7 @@ class _VideoArtifact:
         """Path mp4.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         return self.filename or ""
 
@@ -106,10 +106,10 @@ def _build_outcome(rec) -> str:
     """Build outcome.
 
     Args:
-        rec: Auto-generated placeholder description.
+        rec: Single record dictionary.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     collision_flag = bool(rec.get("collisions") or rec.get("collision"))
     success_flag = bool(rec.get("success", not collision_flag))
@@ -152,11 +152,11 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
         """Mk skip.
 
         Args:
-            rec: Auto-generated placeholder description.
-            note: Auto-generated placeholder description.
+            rec: Single record dictionary.
+            note: Optional note for the record.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Provide deterministic filename even when skipped (legacy expectation)
         episode_id = rec.get("episode_id", "unknown")

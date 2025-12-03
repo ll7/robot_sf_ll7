@@ -56,13 +56,13 @@ class ProgressTracker:
         """Init.
 
         Args:
-            steps: Auto-generated placeholder description.
-            writer: Auto-generated placeholder description.
-            log_fn: Auto-generated placeholder description.
-            time_provider: Auto-generated placeholder description.
+            steps: Number of steps executed.
+            writer: Telemetry writer.
+            log_fn: log fn.
+            time_provider: time provider.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not steps:
             raise ValueError("ProgressTracker requires at least one step definition")
@@ -103,10 +103,10 @@ class ProgressTracker:
         """Start step.
 
         Args:
-            step_id: Auto-generated placeholder description.
+            step_id: identifier for step.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -131,10 +131,10 @@ class ProgressTracker:
         """Complete step.
 
         Args:
-            step_id: Auto-generated placeholder description.
+            step_id: identifier for step.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -163,11 +163,11 @@ class ProgressTracker:
         """Fail step.
 
         Args:
-            step_id: Auto-generated placeholder description.
-            reason: Auto-generated placeholder description.
+            step_id: identifier for step.
+            reason: Reason string recorded for diagnostics.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -191,11 +191,11 @@ class ProgressTracker:
         """Skip step.
 
         Args:
-            step_id: Auto-generated placeholder description.
-            reason: Auto-generated placeholder description.
+            step_id: identifier for step.
+            reason: Reason string recorded for diagnostics.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         with self._lock:
             entry = self._get_entry_locked(step_id)
@@ -223,7 +223,7 @@ class ProgressTracker:
         """Current step.
 
         Returns:
-            StepExecutionEntry | None: Auto-generated placeholder description.
+            StepExecutionEntry | None: Optional tracker step entry.
         """
         with self._lock:
             return self._current_step_locked()
@@ -232,7 +232,7 @@ class ProgressTracker:
         """Completed steps.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         with self._lock:
             return sum(1 for entry in self._entries if entry.status == StepStatus.COMPLETED)
@@ -241,7 +241,7 @@ class ProgressTracker:
         """Total steps.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         with self._lock:
             return len(self._entries)
@@ -300,12 +300,12 @@ class ProgressTracker:
         """Guard flush.
 
         Args:
-            status: Auto-generated placeholder description.
-            mark_failed: Auto-generated placeholder description.
-            reason: Auto-generated placeholder description.
+            status: Status string.
+            mark_failed: mark failed.
+            reason: Reason string recorded for diagnostics.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         log_message: str | None = None
         with self._lock:
@@ -322,10 +322,10 @@ class ProgressTracker:
         """Mark running step failed locked.
 
         Args:
-            reason: Auto-generated placeholder description.
+            reason: Reason string recorded for diagnostics.
 
         Returns:
-            str | None: Auto-generated placeholder description.
+            str | None: Optional string value.
         """
         entry = self._current_step_locked()
         if entry is None or entry.status == StepStatus.FAILED:
@@ -348,7 +348,7 @@ class ProgressTracker:
         """Current step locked.
 
         Returns:
-            StepExecutionEntry | None: Auto-generated placeholder description.
+            StepExecutionEntry | None: Optional tracker step entry.
         """
         for entry in self._entries:
             if entry.status == StepStatus.RUNNING:
@@ -359,7 +359,7 @@ class ProgressTracker:
         """Has active steps.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         with self._lock:
             return self._has_active_steps_locked()
@@ -368,7 +368,7 @@ class ProgressTracker:
         """Has active steps locked.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         return any(
             entry.status in (StepStatus.PENDING, StepStatus.RUNNING) for entry in self._entries
@@ -378,10 +378,10 @@ class ProgressTracker:
         """Get entry locked.
 
         Args:
-            step_id: Auto-generated placeholder description.
+            step_id: identifier for step.
 
         Returns:
-            StepExecutionEntry: Auto-generated placeholder description.
+            StepExecutionEntry: Entry describing a tracker step.
         """
         for entry in self._entries:
             if entry.step_id == step_id:
@@ -421,13 +421,13 @@ class ProgressTracker:
         """Format status.
 
         Args:
-            entry: Auto-generated placeholder description.
-            prefix: Auto-generated placeholder description.
-            extra: Auto-generated placeholder description.
-            total_steps_hint: Auto-generated placeholder description.
+            entry: Individual manifest or tracker entry.
+            prefix: String prefix used for labeling.
+            extra: Additional context payload.
+            total_steps_hint: total steps hint.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         total = total_steps_hint if total_steps_hint is not None else self.total_steps()
         elapsed = self._format_duration(entry.duration_seconds)
@@ -444,11 +444,11 @@ class ProgressTracker:
         """Log once.
 
         Args:
-            step_id: Auto-generated placeholder description.
-            message: Auto-generated placeholder description.
+            step_id: identifier for step.
+            message: Human-readable message.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         with self._log_lock:
             last = self._last_log_messages.get(step_id)
@@ -461,10 +461,10 @@ class ProgressTracker:
         """Emit log.
 
         Args:
-            message: Auto-generated placeholder description.
+            message: Human-readable message.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._log_fn(message)
 
@@ -472,7 +472,7 @@ class ProgressTracker:
         """Write index.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         with self._lock:
             self._write_index_locked()
@@ -481,7 +481,7 @@ class ProgressTracker:
         """Write index locked.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if self._writer is None:
             return
@@ -492,10 +492,10 @@ class ProgressTracker:
         """Format duration.
 
         Args:
-            value: Auto-generated placeholder description.
+            value: Scalar metric value.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         if value is None:
             return "--"
@@ -535,14 +535,14 @@ class _FailureSafeGuard:
         """Init.
 
         Args:
-            has_work: Auto-generated placeholder description.
-            flush_running: Auto-generated placeholder description.
-            flush_failed: Auto-generated placeholder description.
-            flush_interval: Auto-generated placeholder description.
-            signals: Auto-generated placeholder description.
+            has_work: has work.
+            flush_running: flush running.
+            flush_failed: flush failed.
+            flush_interval: flush interval.
+            signals: Signal set watched by the tracker.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._has_work = has_work
         self._flush_running = flush_running
@@ -564,7 +564,7 @@ class _FailureSafeGuard:
             """Cleanup.
 
             Returns:
-                None: Auto-generated placeholder description.
+                None: none.
             """
             self.close()
 
@@ -575,7 +575,7 @@ class _FailureSafeGuard:
         """Close.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if self._shutdown.is_set():
             return
@@ -592,7 +592,7 @@ class _FailureSafeGuard:
         """Run.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         while not self._shutdown.wait(self._flush_interval):
             if not self._has_work():
@@ -603,7 +603,7 @@ class _FailureSafeGuard:
         """Install signal handlers.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not self._signals:
             return
@@ -621,7 +621,7 @@ class _FailureSafeGuard:
         """Restore signal handlers.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not self._previous_handlers:
             return
@@ -634,11 +634,11 @@ class _FailureSafeGuard:
         """Handle signal.
 
         Args:
-            signum: Auto-generated placeholder description.
-            frame: Auto-generated placeholder description.
+            signum: Signal number as delivered to the handler.
+            frame: Frame index.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         signal_name = self._signal_name(signum)
         self._flush_failed(f"Signal {signal_name}")
@@ -656,10 +656,10 @@ class _FailureSafeGuard:
         """Signal name.
 
         Args:
-            signum: Auto-generated placeholder description.
+            signum: Signal number as delivered to the handler.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         try:
             return signal.Signals(signum).name
@@ -671,10 +671,10 @@ class _FailureSafeGuard:
         """Normalize signals.
 
         Args:
-            signals: Auto-generated placeholder description.
+            signals: Signal set watched by the tracker.
 
         Returns:
-            tuple[int, ...]: Auto-generated placeholder description.
+            tuple[int, ...]: tuple of int, .
         """
         if signals is None:
             return tuple(int(sig) for sig in _DEFAULT_FAILURE_SIGNALS)

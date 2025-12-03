@@ -13,7 +13,7 @@ class BaseMetricsCallback(BaseCallback):
         """Init.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         super().__init__()
         self.writer: SummaryWriter | None = None
@@ -24,7 +24,7 @@ class BaseMetricsCallback(BaseCallback):
         """Meta dicts.
 
         Returns:
-            list[dict]: Auto-generated placeholder description.
+            list[dict]: list of dict.
         """
         return [m["meta"] for m in self.locals["infos"]]
 
@@ -33,7 +33,7 @@ class BaseMetricsCallback(BaseCallback):
         """Is logging step.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         return self.n_calls % self._log_freq == 0
 
@@ -41,7 +41,7 @@ class BaseMetricsCallback(BaseCallback):
         """On training start.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if self.logger is not None:
             output_formats = self.logger.output_formats
@@ -59,7 +59,7 @@ class BaseMetricsCallback(BaseCallback):
         """On step.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         raise NotImplementedError
 
@@ -71,10 +71,10 @@ class DrivingMetricsCallback(BaseMetricsCallback):
         """Init.
 
         Args:
-            num_envs: Auto-generated placeholder description.
+            num_envs: number of environments.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         super().__init__()
         self.metrics = VecEnvMetrics([EnvMetrics() for _ in range(num_envs)])
@@ -83,7 +83,7 @@ class DrivingMetricsCallback(BaseMetricsCallback):
         """On step.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         self.metrics.update(self.meta_dicts)
 
@@ -124,10 +124,10 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
         """Init.
 
         Args:
-            num_envs: Auto-generated placeholder description.
+            num_envs: number of environments.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         super().__init__()
         self.metrics = PedVecEnvMetrics([PedEnvMetrics() for _ in range(num_envs)])
@@ -136,7 +136,7 @@ class AdversialPedestrianMetricsCallback(BaseMetricsCallback):
         """On step.
 
         Returns:
-            bool: Auto-generated placeholder description.
+            bool: Boolean flag.
         """
         self.metrics.update(self.meta_dicts)
 

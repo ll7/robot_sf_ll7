@@ -24,10 +24,10 @@ def _iter_records(paths: Sequence[str | Path] | str | Path) -> Iterable[dict[str
     """Iter records.
 
     Args:
-        paths: Auto-generated placeholder description.
+        paths: Multiple filesystem paths.
 
     Returns:
-        Iterable[dict[str, Any]]: Auto-generated placeholder description.
+        Iterable[dict[str, Any]]: Iterable containing mapping payloads.
     """
     if isinstance(paths, str | Path):
         path_list = [paths]
@@ -52,12 +52,12 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     """Get nested.
 
     Args:
-        d: Auto-generated placeholder description.
-        path: Auto-generated placeholder description.
-        default: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        path: Filesystem path to the resource.
+        default: Default fallback value.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     cur: Any = d
     for part in path.split("."):
@@ -72,10 +72,10 @@ def _safe_number(x: Any) -> float | None:
     """Safe number.
 
     Args:
-        x: Auto-generated placeholder description.
+        x: X-axis value.
 
     Returns:
-        float | None: Auto-generated placeholder description.
+        float | None: Optional floating-point value.
     """
     try:
         v = float(x)
@@ -131,13 +131,13 @@ def plot_histograms(
     """Plot histograms.
 
     Args:
-        mins: Auto-generated placeholder description.
-        speeds: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
-        bins: Auto-generated placeholder description.
+        mins: Per-metric minimums.
+        speeds: Speed measurements.
+        out_dir: directory for out.
+        bins: Histogram bin edges.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     out_paths: list[str] = []
     out_dir = str(out_dir)
@@ -147,11 +147,11 @@ def plot_histograms(
         """Save.
 
         Args:
-            fig: Auto-generated placeholder description.
-            name: Auto-generated placeholder description.
+            fig: Matplotlib Figure.
+            name: Human-friendly name.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         path = str(Path(out_dir) / name)
         fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -182,11 +182,11 @@ def summarize_to_plots(paths: Sequence[str | Path] | str | Path, out_dir: str | 
     """Summarize to plots.
 
     Args:
-        paths: Auto-generated placeholder description.
-        out_dir: Auto-generated placeholder description.
+        paths: Multiple filesystem paths.
+        out_dir: directory for out.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     mins, speeds = collect_values(_iter_records(paths))
     return plot_histograms(mins, speeds, out_dir)

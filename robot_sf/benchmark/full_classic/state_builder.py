@@ -45,10 +45,10 @@ def iter_states(ep: ReplayEpisode) -> Generator[_MinimalState, None, None]:  # t
     """Iter states.
 
     Args:
-        ep: Auto-generated placeholder description.
+        ep: Episode record.
 
     Returns:
-        Generator[_MinimalState, None, None]: Auto-generated placeholder description.
+        Generator[_MinimalState, None, None]: Generator yielding minimal state tuples.
     """
     yield from build_minimal_states(ep)
 

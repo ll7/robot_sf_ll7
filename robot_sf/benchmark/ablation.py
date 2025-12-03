@@ -29,12 +29,12 @@ def _get_nested(d: Mapping[str, Any], dotted: str, default: Any | None = None) -
     """Get nested.
 
     Args:
-        d: Auto-generated placeholder description.
-        dotted: Auto-generated placeholder description.
-        default: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        dotted: Matplotlib dotted-line style.
+        default: Default fallback value.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     cur: Any = d
     for part in dotted.split("."):
@@ -53,12 +53,12 @@ def _group_by(
     """Group by.
 
     Args:
-        records: Auto-generated placeholder description.
-        group_by: Auto-generated placeholder description.
-        fallback: Auto-generated placeholder description.
+        records: List of serialized records.
+        group_by: group by.
+        fallback: Fallback option when primary data is missing.
 
     Returns:
-        dict[str, list[Mapping[str, Any]]]: Auto-generated placeholder description.
+        dict[str, list[Mapping[str, Any]]]: mapping of str, list[Mapping[str, Any]].
     """
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for rec in records:
@@ -75,10 +75,10 @@ def _mean(values: Sequence[float]) -> float:
     """Mean.
 
     Args:
-        values: Auto-generated placeholder description.
+        values: Collection of numeric values.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     return float(sum(values) / len(values)) if values else float("nan")
 
@@ -91,12 +91,12 @@ def _episode_snqi(
     """Episode snqi.
 
     Args:
-        rec: Auto-generated placeholder description.
-        weights: Auto-generated placeholder description.
-        baseline: Auto-generated placeholder description.
+        rec: Single record dictionary.
+        weights: Weight dictionary.
+        baseline: Baseline statistics bundle.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     return float(compute_snqi(rec.get("metrics", {}), weights, baseline))
 
@@ -111,14 +111,14 @@ def _compute_group_means(
     """Compute group means.
 
     Args:
-        records: Auto-generated placeholder description.
-        weights: Auto-generated placeholder description.
-        baseline: Auto-generated placeholder description.
-        group_by: Auto-generated placeholder description.
-        fallback_group_by: Auto-generated placeholder description.
+        records: List of serialized records.
+        weights: Weight dictionary.
+        baseline: Baseline statistics bundle.
+        group_by: group by.
+        fallback_group_by: fallback group by.
 
     Returns:
-        dict[str, float]: Auto-generated placeholder description.
+        dict[str, float]: mapping of str, float.
     """
     groups = _group_by(records, group_by, fallback_group_by)
     means: dict[str, float] = {}
@@ -141,11 +141,11 @@ def _ranking_from_means(
     """Ranking from means.
 
     Args:
-        means: Auto-generated placeholder description.
-        ascending: Auto-generated placeholder description.
+        means: Mean metric values.
+        ascending: Whether sorting should be ascending.
 
     Returns:
-        list[tuple[str, float, int]]: Auto-generated placeholder description.
+        list[tuple[str, float, int]]: list of tuple[str, float, int].
     """
     # We treat higher SNQI as better -> descending by default; ascending flag kept for symmetry.
     items = [(g, float(m), 0) for g, m in means.items()]
@@ -218,10 +218,10 @@ def format_markdown(rows: Sequence[AblationRow]) -> str:
     """Format markdown.
 
     Args:
-        rows: Auto-generated placeholder description.
+        rows: Row definitions for table output.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     headers = ["Rank", "Group", "base_mean", *list(WEIGHT_NAMES)]
     # Only include weights that appear in any row
@@ -245,10 +245,10 @@ def format_csv(rows: Sequence[AblationRow]) -> str:
     """Format csv.
 
     Args:
-        rows: Auto-generated placeholder description.
+        rows: Row definitions for table output.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     used_weights = [w for w in WEIGHT_NAMES if any(w in r.deltas for r in rows)]
     headers = ["rank", "group", "base_mean"] + [f"delta_{w}" for w in used_weights]
@@ -265,10 +265,10 @@ def to_json(rows: Sequence[AblationRow]) -> list[dict[str, Any]]:
     """To json.
 
     Args:
-        rows: Auto-generated placeholder description.
+        rows: Row definitions for table output.
 
     Returns:
-        list[dict[str, Any]]: Auto-generated placeholder description.
+        list[dict[str, Any]]: list of dict[str, Any].
     """
     out: list[dict[str, Any]] = []
     for r in rows:

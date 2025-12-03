@@ -25,12 +25,12 @@ class MultiHeadAttention(nn.Module):
         """Init.
 
         Args:
-            embed_dim: Auto-generated placeholder description.
-            num_heads: Auto-generated placeholder description.
-            dropout: Auto-generated placeholder description.
+            embed_dim: embed dim.
+            num_heads: number of heads.
+            dropout: Dropout probability.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         super().__init__()
         self.embed_dim = embed_dim
@@ -50,10 +50,10 @@ class MultiHeadAttention(nn.Module):
         """Forward.
 
         Args:
-            x: Auto-generated placeholder description.
+            x: X-axis value.
 
         Returns:
-            th.Tensor: Auto-generated placeholder description.
+            th.Tensor: Torch tensor processed by the network.
         """
         batch_size, seq_len, embed_dim = x.shape
 
@@ -110,15 +110,15 @@ class AttentionFeatureExtractor(BaseFeaturesExtractor):
         """Init.
 
         Args:
-            observation_space: Auto-generated placeholder description.
-            embed_dim: Auto-generated placeholder description.
-            num_heads: Auto-generated placeholder description.
-            num_layers: Auto-generated placeholder description.
-            dropout_rate: Auto-generated placeholder description.
-            drive_hidden_dims: Auto-generated placeholder description.
+            observation_space: observation space.
+            embed_dim: embed dim.
+            num_heads: number of heads.
+            num_layers: number of layers.
+            dropout_rate: dropout rate.
+            drive_hidden_dims: drive hidden dims.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if drive_hidden_dims is None:
             drive_hidden_dims = [32, 16]

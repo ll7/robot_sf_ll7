@@ -24,12 +24,12 @@ def _metric(rec: dict[str, Any], name: str, default: float = 0.0) -> float:
     """Metric.
 
     Args:
-        rec: Auto-generated placeholder description.
-        name: Auto-generated placeholder description.
-        default: Auto-generated placeholder description.
+        rec: Single record dictionary.
+        name: Human-friendly name.
+        default: Default fallback value.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     m = rec.get("metrics") or {}
     v = m.get(name, default)

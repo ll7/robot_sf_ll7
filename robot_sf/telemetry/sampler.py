@@ -59,15 +59,15 @@ class TelemetrySampler:
         """Init.
 
         Args:
-            writer: Auto-generated placeholder description.
-            progress_tracker: Auto-generated placeholder description.
-            started_at: Auto-generated placeholder description.
-            interval_seconds: Auto-generated placeholder description.
-            time_provider: Auto-generated placeholder description.
-            step_rate_provider: Auto-generated placeholder description.
+            writer: Telemetry writer.
+            progress_tracker: progress tracker.
+            started_at: started at.
+            interval_seconds: interval seconds.
+            time_provider: time provider.
+            step_rate_provider: step rate provider.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._writer = writer
         self._progress_tracker = progress_tracker
@@ -113,7 +113,7 @@ class TelemetrySampler:
         """Enter.
 
         Returns:
-            TelemetrySampler: Auto-generated placeholder description.
+            TelemetrySampler: Telemetry sampler helper.
         """
         self.start()
         return self
@@ -122,12 +122,12 @@ class TelemetrySampler:
         """Exit.
 
         Args:
-            exc_type: Auto-generated placeholder description.
-            exc: Auto-generated placeholder description.
-            tb: Auto-generated placeholder description.
+            exc_type: exc type.
+            exc: Captured exception type.
+            tb: Traceback object.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self.stop()
 
@@ -164,7 +164,7 @@ class TelemetrySampler:
         """Run loop.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         while not self._stop_event.is_set():
             start = time.perf_counter()
@@ -178,7 +178,7 @@ class TelemetrySampler:
         """Collect snapshot.
 
         Returns:
-            TelemetrySnapshot: Auto-generated placeholder description.
+            TelemetrySnapshot: Snapshot emitted by the telemetry sampler.
         """
         timestamp = self._clock()
         timestamp_ms = int(timestamp.timestamp() * 1000)
@@ -215,7 +215,7 @@ class TelemetrySampler:
         """Resolve current step.
 
         Returns:
-            str | None: Auto-generated placeholder description.
+            str | None: Optional string value.
         """
         tracker = self._progress_tracker
         if tracker is None:
@@ -230,7 +230,7 @@ class TelemetrySampler:
         """Default step rate.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         tracker = self._progress_tracker
         if tracker is None:
@@ -245,10 +245,10 @@ class TelemetrySampler:
         """Sample process cpu.
 
         Args:
-            notes: Auto-generated placeholder description.
+            notes: Collection of textual notes.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         if self._process is None:
             notes.add("psutil-unavailable")
@@ -264,10 +264,10 @@ class TelemetrySampler:
         """Sample system cpu.
 
         Args:
-            notes: Auto-generated placeholder description.
+            notes: Collection of textual notes.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         if not self._system_cpu_fn:
             notes.add("system-cpu-unavailable")
@@ -283,10 +283,10 @@ class TelemetrySampler:
         """Sample memory mb.
 
         Args:
-            notes: Auto-generated placeholder description.
+            notes: Collection of textual notes.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         if self._process is not None:
             try:
@@ -302,10 +302,10 @@ class TelemetrySampler:
         """Resource memory mb.
 
         Args:
-            notes: Auto-generated placeholder description.
+            notes: Collection of textual notes.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         if resource is None:  # pragma: no cover - platform without resource
             notes.add("resource-module-unavailable")
@@ -321,10 +321,10 @@ class TelemetrySampler:
         """Safe call.
 
         Args:
-            func: Auto-generated placeholder description.
+            func: Callable invoked by the sampler.
 
         Returns:
-            float | None: Auto-generated placeholder description.
+            float | None: Optional floating-point value.
         """
         if func is None:
             return None
@@ -336,7 +336,7 @@ class TelemetrySampler:
         """Init process handle.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         if psutil is None:
             logger.debug("psutil not available; telemetry sampler will skip CPU/memory metrics")

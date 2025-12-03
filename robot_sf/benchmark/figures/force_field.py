@@ -23,7 +23,7 @@ def _latex_rcparams() -> None:
     """Latex rcparams.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     apply_latex_style()
 
@@ -115,7 +115,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build arg parser.
 
     Returns:
-        argparse.ArgumentParser: Auto-generated placeholder description.
+        argparse.ArgumentParser: ArgumentParser configured for this CLI.
     """
     parser = argparse.ArgumentParser(description="Generate force-field figure outputs")
     parser.add_argument("--png", default="docs/img/fig-force-field.png")
@@ -133,10 +133,10 @@ def main(argv: list[str] | None = None) -> int:
     """Main.
 
     Args:
-        argv: Auto-generated placeholder description.
+        argv: Command-line argument list.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     args = build_arg_parser().parse_args(argv)
     generate_force_field_figure(

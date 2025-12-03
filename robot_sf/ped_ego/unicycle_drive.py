@@ -45,7 +45,7 @@ class UnicycleDriveState:
         """Pos.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         return self.pose[0]
 
@@ -135,7 +135,7 @@ class UnicycleDrivePedestrian:
         """Post init.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.movement = UnicycleMotion(self.config)
 
@@ -144,7 +144,7 @@ class UnicycleDrivePedestrian:
         """Observation space.
 
         Returns:
-            spaces.Box: Auto-generated placeholder description.
+            spaces.Box: Gymnasium Box space describing limits.
         """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
@@ -155,7 +155,7 @@ class UnicycleDrivePedestrian:
         """Action space.
 
         Returns:
-            spaces.Box: Auto-generated placeholder description.
+            spaces.Box: Gymnasium Box space describing limits.
         """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
@@ -166,7 +166,7 @@ class UnicycleDrivePedestrian:
         """Pos.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         return self.state.pose[0]
 
@@ -175,7 +175,7 @@ class UnicycleDrivePedestrian:
         """Pose.
 
         Returns:
-            PedPose: Auto-generated placeholder description.
+            PedPose: ped pose.
         """
         return self.state.pose
 
@@ -184,7 +184,7 @@ class UnicycleDrivePedestrian:
         """Current speed.
 
         Returns:
-            PolarVec2D: Auto-generated placeholder description.
+            PolarVec2D: polar Vec2 d.
         """
         return self.state.current_speed
 
@@ -192,11 +192,11 @@ class UnicycleDrivePedestrian:
         """Apply action.
 
         Args:
-            action: Auto-generated placeholder description.
-            d_t: Auto-generated placeholder description.
+            action: Action applied to the environment.
+            d_t: d t.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.movement.move(self.state, action, d_t)
 
@@ -204,10 +204,10 @@ class UnicycleDrivePedestrian:
         """Reset state.
 
         Args:
-            new_pose: Auto-generated placeholder description.
+            new_pose: new pose.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.state = UnicycleDriveState(new_pose, 0)
 
@@ -215,9 +215,9 @@ class UnicycleDrivePedestrian:
         """Parse action.
 
         Args:
-            action: Auto-generated placeholder description.
+            action: Action applied to the environment.
 
         Returns:
-            UnicycleAction: Auto-generated placeholder description.
+            UnicycleAction: unicycle action.
         """
         return (action[0], action[1])

@@ -79,10 +79,10 @@ def init_collision_and_sensors(
             """Ray sensor.
 
             Args:
-                r_id: Auto-generated placeholder description.
+                r_id: identifier for r.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
@@ -90,10 +90,10 @@ def init_collision_and_sensors(
             """Target sensor.
 
             Args:
-                r_id: Auto-generated placeholder description.
+                r_id: identifier for r.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
@@ -105,10 +105,10 @@ def init_collision_and_sensors(
             """Speed sensor.
 
             Args:
-                r_id: Auto-generated placeholder description.
+                r_id: identifier for r.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return sim.robots[r_id].current_speed
 
@@ -184,12 +184,12 @@ def create_spaces(
     """Create spaces.
 
     Args:
-        env_config: Auto-generated placeholder description.
-        map_def: Auto-generated placeholder description.
-        agent_type: Auto-generated placeholder description.
+        env_config: environment config.
+        map_def: map def.
+        agent_type: agent type.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     # Create a agent using the factory method in the environment configuration
     if agent_type == AgentType.ROBOT:
@@ -339,10 +339,10 @@ def init_ped_collision_and_sensors(
         """Ray sensor.
 
         Args:
-            r_id: Auto-generated placeholder description.
+            r_id: identifier for r.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
@@ -350,10 +350,10 @@ def init_ped_collision_and_sensors(
         """Target sensor.
 
         Args:
-            r_id: Auto-generated placeholder description.
+            r_id: identifier for r.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
@@ -361,10 +361,10 @@ def init_ped_collision_and_sensors(
         """Speed sensor.
 
         Args:
-            r_id: Auto-generated placeholder description.
+            r_id: identifier for r.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return sim.robots[r_id].current_speed
 
@@ -400,7 +400,7 @@ def init_ped_collision_and_sensors(
         """Ray sensor ego ped.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], lidar_config)[0]
 
@@ -408,7 +408,7 @@ def init_ped_collision_and_sensors(
         """Target sensor ego ped.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return target_sensor_obs(
             sim.ego_ped.pose,
@@ -420,7 +420,7 @@ def init_ped_collision_and_sensors(
         """Speed sensor ego ped.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return sim.ego_ped.current_speed
 
@@ -565,10 +565,10 @@ def init_collision_and_sensors_with_image(
             """Ray sensor.
 
             Args:
-                r_id: Auto-generated placeholder description.
+                r_id: identifier for r.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
 
@@ -576,10 +576,10 @@ def init_collision_and_sensors_with_image(
             """Target sensor.
 
             Args:
-                r_id: Auto-generated placeholder description.
+                r_id: identifier for r.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return target_sensor_obs(
                 sim.robots[r_id].pose,
@@ -591,10 +591,10 @@ def init_collision_and_sensors_with_image(
             """Speed sensor.
 
             Args:
-                r_id: Auto-generated placeholder description.
+                r_id: identifier for r.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return sim.robots[r_id].current_speed
 

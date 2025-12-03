@@ -28,10 +28,10 @@ def load_classic_matrix(path: str) -> list[dict]:
     """Load classic matrix.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        list[dict]: Auto-generated placeholder description.
+        list[dict]: list of dict.
     """
     p = Path(path)
     if not p.exists():  # explicit fast failure
@@ -48,11 +48,11 @@ def select_scenario(scenarios: Sequence[dict], name: str | None) -> dict:
     """Select scenario.
 
     Args:
-        scenarios: Auto-generated placeholder description.
-        name: Auto-generated placeholder description.
+        scenarios: Scenario list.
+        name: Human-friendly name.
 
     Returns:
-        dict: Auto-generated placeholder description.
+        dict: Dictionary value.
     """
     if not scenarios:
         raise ValueError("No scenarios available")
@@ -69,10 +69,10 @@ def iter_episode_seeds(scenario: dict) -> list[int]:
     """Iter episode seeds.
 
     Args:
-        scenario: Auto-generated placeholder description.
+        scenario: Scenario definition dictionary.
 
     Returns:
-        list[int]: Auto-generated placeholder description.
+        list[int]: list of int.
     """
     seeds = scenario.get("seeds")
     if not isinstance(seeds, list) or not seeds:

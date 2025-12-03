@@ -83,7 +83,7 @@ class SimulationSettings:
         """Max sim steps.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return ceil(self.sim_time_in_secs / self.time_per_step_in_secs)
 
@@ -92,6 +92,6 @@ class SimulationSettings:
         """Peds per area m2.
 
         Returns:
-            float: Auto-generated placeholder description.
+            float: Floating-point value.
         """
         return self.ped_density_by_difficulty[self.difficulty]

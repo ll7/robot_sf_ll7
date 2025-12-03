@@ -278,10 +278,10 @@ def compute_completeness_score(
         """Seed sort key.
 
         Args:
-            value: Auto-generated placeholder description.
+            value: Scalar metric value.
 
         Returns:
-            tuple[int, str]: Auto-generated placeholder description.
+            tuple[int, str]: tuple of int, str.
         """
         try:
             return (0, str(int(value)))

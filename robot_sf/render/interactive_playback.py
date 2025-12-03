@@ -314,7 +314,7 @@ class InteractivePlayback(SimulationView):
         """Max trajectory length.
 
         Returns:
-            int: Auto-generated placeholder description.
+            int: Integer value.
         """
         return getattr(self, "_max_trajectory_length", 100)
 
@@ -323,10 +323,10 @@ class InteractivePlayback(SimulationView):
         """Max trajectory length.
 
         Args:
-            value: Auto-generated placeholder description.
+            value: Scalar metric value.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         clamped = max(10, min(int(value), 500))
         old = getattr(self, "_max_trajectory_length", None)

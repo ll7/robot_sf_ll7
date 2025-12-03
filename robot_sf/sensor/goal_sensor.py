@@ -12,10 +12,10 @@ def norm_angle(angle: float) -> float:
     """Norm angle.
 
     Args:
-        angle: Auto-generated placeholder description.
+        angle: Relative angle measurement.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     return (angle + np.pi) % (2 * np.pi) - np.pi
 

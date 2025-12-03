@@ -18,10 +18,10 @@ def _ensure_parent(path: Path) -> None:
     """Ensure parent.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -30,10 +30,10 @@ def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
     """Serialize obj.
 
     Args:
-        obj: Auto-generated placeholder description.
+        obj: Generic object payload.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if isinstance(obj, str | int | float | bool) or obj is None:
         return obj
@@ -58,11 +58,11 @@ def _atomic_write_json(path: Path, data: dict) -> None:
     """Atomic write json.
 
     Args:
-        path: Auto-generated placeholder description.
-        data: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
+        data: Data payload consumed by the helper.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     tmp_fd, tmp_path = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
     try:

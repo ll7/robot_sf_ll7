@@ -93,11 +93,11 @@ def sample_route(
         """Add vecs.
 
         Args:
-            v1: Auto-generated placeholder description.
-            v2: Auto-generated placeholder description.
+            v1: First velocity component.
+            v2: Second velocity component.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return (v1[0] + v2[0], v1[1] + v2[1])
 
@@ -105,11 +105,11 @@ def sample_route(
         """Sub vecs.
 
         Args:
-            v1: Auto-generated placeholder description.
-            v2: Auto-generated placeholder description.
+            v1: First velocity component.
+            v2: Second velocity component.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return (v1[0] - v2[0], v1[1] - v2[1])
 
@@ -118,10 +118,10 @@ def sample_route(
         """Clip spread.
 
         Args:
-            v: Auto-generated placeholder description.
+            v: Velocity magnitude.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
@@ -163,7 +163,7 @@ class ZonePointsGenerator:
         """Post init.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Calculate the area for each zone assuming zones are rectangular
         # This uses an external `dist` function to measure distances
@@ -343,11 +343,11 @@ def populate_crowded_zones(
     """Populate crowded zones.
 
     Args:
-        config: Auto-generated placeholder description.
-        crowded_zones: Auto-generated placeholder description.
+        config: Configuration object controlling the component.
+        crowded_zones: crowded zones.
 
     Returns:
-        tuple[PedState, list[PedGrouping], ZoneAssignments]: Auto-generated placeholder description.
+        tuple[PedState, list[PedGrouping], ZoneAssignments]: Pedestrian state, grouping, and zone assignment tuple.
     """
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
@@ -452,14 +452,14 @@ def populate_simulation(
     """Populate simulation.
 
     Args:
-        tau: Auto-generated placeholder description.
-        spawn_config: Auto-generated placeholder description.
-        ped_routes: Auto-generated placeholder description.
-        ped_crowded_zones: Auto-generated placeholder description.
-        single_pedestrians: Auto-generated placeholder description.
+        tau: Time constant.
+        spawn_config: spawn config.
+        ped_routes: pedestrian routes.
+        ped_crowded_zones: pedestrian crowded zones.
+        single_pedestrians: single pedestrians.
 
     Returns:
-        tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]: Auto-generated placeholder description.
+        tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]: tuple of PedestrianStates, PedestrianGroupings, list[PedestrianBehavior].
     """
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,

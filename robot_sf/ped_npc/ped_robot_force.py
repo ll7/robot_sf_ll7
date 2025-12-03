@@ -36,12 +36,12 @@ class PedRobotForce:
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
-            peds: Auto-generated placeholder description.
-            get_robot_pos: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
+            peds: Collection of pedestrians.
+            get_robot_pos: position for get robot.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.config = config
         self.peds = peds
@@ -52,7 +52,7 @@ class PedRobotForce:
         """Call.
 
         Returns:
-            np.ndarray: Auto-generated placeholder description.
+            np.ndarray: NumPy array holding the relevant values.
         """
         threshold = (
             self.config.activation_threshold + self.peds.agent_radius + self.config.robot_radius
@@ -146,12 +146,12 @@ def der_euclid_dist(p1: Vec2D, p2: Vec2D, distance: float) -> Vec2D:
     """Der euclid dist.
 
     Args:
-        p1: Auto-generated placeholder description.
-        p2: Auto-generated placeholder description.
-        distance: Auto-generated placeholder description.
+        p1: First pedestrian state.
+        p2: Second pedestrian state.
+        distance: Distance scalar.
 
     Returns:
-        Vec2D: Auto-generated placeholder description.
+        Vec2D: 2D vector (x, y).
     """
     # info: distance is an expensive operation and therefore pre-computed
     dx1_dist = (p1[0] - p2[0]) / distance
@@ -164,12 +164,12 @@ def potential_field_force(dist: float, dx_dist: float, dy_dist: float) -> tuple[
     """Potential field force.
 
     Args:
-        dist: Auto-generated placeholder description.
-        dx_dist: Auto-generated placeholder description.
-        dy_dist: Auto-generated placeholder description.
+        dist: Distance scalar.
+        dx_dist: dx dist.
+        dy_dist: dy dist.
 
     Returns:
-        tuple[float, float]: Auto-generated placeholder description.
+        tuple[float, float]: tuple of float, float.
     """
     der_potential = 1 / pow(dist, 3)
     return der_potential * dx_dist, der_potential * dy_dist

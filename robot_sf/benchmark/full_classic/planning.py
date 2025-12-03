@@ -19,10 +19,10 @@ def _parse_yaml_file(p: Path) -> dict:
     """Parse yaml file.
 
     Args:
-        p: Auto-generated placeholder description.
+        p: Probability or configuration dictionary.
 
     Returns:
-        dict: Auto-generated placeholder description.
+        dict: Dictionary value.
     """
     try:
         with p.open("r", encoding="utf-8") as f:
@@ -35,10 +35,10 @@ def _extract_scenarios(root: dict) -> list[dict]:
     """Extract scenarios.
 
     Args:
-        root: Auto-generated placeholder description.
+        root: Repository or workspace root path.
 
     Returns:
-        list[dict]: Auto-generated placeholder description.
+        list[dict]: list of dict.
     """
     scenarios = root.get("scenarios") if isinstance(root, dict) else None
     if not isinstance(scenarios, list) or not scenarios:
@@ -53,10 +53,10 @@ def _validate_scenario_dicts(scenarios: list[dict]) -> None:
     """Validate scenario dicts.
 
     Args:
-        scenarios: Auto-generated placeholder description.
+        scenarios: Scenario list.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     for idx, sc in enumerate(scenarios):
         if not isinstance(sc, dict):
@@ -149,11 +149,11 @@ def _plan_unique_seeds(rng, count: int) -> list[int]:  # small helper for clarit
     """Plan unique seeds.
 
     Args:
-        rng: Auto-generated placeholder description.
-        count: Auto-generated placeholder description.
+        rng: Random number generator.
+        count: Number of requested items.
 
     Returns:
-        list[int]: Auto-generated placeholder description.
+        list[int]: list of int.
     """
     seeds: list[int] = []
     while len(seeds) < count:
@@ -167,12 +167,12 @@ def _resolve_map_path(map_file: str, cfg, name: str) -> Path:
     """Resolve map path.
 
     Args:
-        map_file: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        name: Auto-generated placeholder description.
+        map_file: map file.
+        cfg: Configuration dictionary.
+        name: Human-friendly name.
 
     Returns:
-        Path: Auto-generated placeholder description.
+        Path: Path-like object pointing to a file or directory.
     """
     matrix_dir = Path(cfg.scenario_matrix_path).parent
     map_path = Path(map_file)
@@ -187,12 +187,12 @@ def _plan_seeds(sc: dict, cfg, rng) -> list[int]:
     """Plan seeds.
 
     Args:
-        sc: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
-        rng: Auto-generated placeholder description.
+        sc: Sub-command configuration.
+        cfg: Configuration dictionary.
+        rng: Random number generator.
 
     Returns:
-        list[int]: Auto-generated placeholder description.
+        list[int]: list of int.
     """
     cfg_seeds = getattr(cfg, "seeds", None)
     seeds_from_matrix = sc.get("seeds")
@@ -213,22 +213,22 @@ def _scenario_id(archetype: str, density: str, name: str) -> str:
     """Scenario id.
 
     Args:
-        archetype: Auto-generated placeholder description.
-        density: Auto-generated placeholder description.
-        name: Auto-generated placeholder description.
+        archetype: Scenario archetype name.
+        density: Density parameter.
+        name: Human-friendly name.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
 
     def _san(s: str) -> str:
         """San.
 
         Args:
-            s: Auto-generated placeholder description.
+            s: Scenario tuple identifier.
 
         Returns:
-            str: Auto-generated placeholder description.
+            str: String value.
         """
         return "".join(c if c.isalnum() or c in {"-", "_"} else "_" for c in s.lower())
 
@@ -239,10 +239,10 @@ def _hash_fragment(payload: dict) -> str:
     """Hash fragment.
 
     Args:
-        payload: Auto-generated placeholder description.
+        payload: Serialized payload passed between components.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     hash_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(hash_bytes).hexdigest()[:10]

@@ -44,12 +44,12 @@ def _expect_keys(d: Mapping[str, Any], specs: Iterable[_FieldSpec], ctx: str) ->
     """Expect keys.
 
     Args:
-        d: Auto-generated placeholder description.
-        specs: Auto-generated placeholder description.
-        ctx: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        specs: Specification dictionary.
+        ctx: Validation context dictionary.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     for spec in specs:
         if spec.required and spec.name not in d:
@@ -60,10 +60,10 @@ def _is_number(x: Any) -> bool:
     """Is number.
 
     Args:
-        x: Auto-generated placeholder description.
+        x: X-axis value.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     return isinstance(x, int | float) and not isinstance(x, bool)
 
@@ -91,10 +91,10 @@ def _validate_metadata(meta: Mapping[str, Any]) -> None:
     """Validate metadata.
 
     Args:
-        meta: Auto-generated placeholder description.
+        meta: Metadata dictionary.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     _expect_keys(
         meta,
@@ -120,10 +120,10 @@ def _validate_optimization(obj: Mapping[str, Any]) -> None:
     """Validate optimization.
 
     Args:
-        obj: Auto-generated placeholder description.
+        obj: Generic object payload.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     # Required top-level keys (besides _metadata)
     required = ["recommended"]
@@ -145,10 +145,10 @@ def _validate_recompute(obj: Mapping[str, Any]) -> None:
     """Validate recompute.
 
     Args:
-        obj: Auto-generated placeholder description.
+        obj: Generic object payload.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     if "recommended_weights" not in obj:
         raise ValueError("Recompute output missing 'recommended_weights'")
@@ -164,10 +164,10 @@ def _validate_sensitivity(obj: Mapping[str, Any]) -> None:
     """Validate sensitivity.
 
     Args:
-        obj: Auto-generated placeholder description.
+        obj: Generic object payload.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     # Expect at least one analysis block
     expected_any = ["weight_sweep", "pairwise", "ablation", "normalization"]

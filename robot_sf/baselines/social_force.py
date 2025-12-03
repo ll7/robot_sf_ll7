@@ -96,11 +96,11 @@ class BasePolicy:
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
-            seed: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         raise NotImplementedError
 
@@ -108,10 +108,10 @@ class BasePolicy:
         """Reset.
 
         Args:
-            seed: Auto-generated placeholder description.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         raise NotImplementedError
 
@@ -119,10 +119,10 @@ class BasePolicy:
         """Configure.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         raise NotImplementedError
 
@@ -130,10 +130,10 @@ class BasePolicy:
         """Step.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         raise NotImplementedError
 
@@ -141,7 +141,7 @@ class BasePolicy:
         """Close.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         raise NotImplementedError
 
@@ -159,10 +159,10 @@ class SocialForcePlanner(BasePolicy):
             """Init.
 
             Args:
-                seed: Auto-generated placeholder description.
+                seed: Random seed for deterministic behavior.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             self._gen = np.random.default_rng(seed)
 
@@ -175,12 +175,12 @@ class SocialForcePlanner(BasePolicy):
             """Randint.
 
             Args:
-                low: Auto-generated placeholder description.
-                high: Auto-generated placeholder description.
-                size: Auto-generated placeholder description.
+                low: Lower bound.
+                high: Upper bound value.
+                size: Sample size.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return self._gen.integers(low, high=high, size=size)
 
@@ -193,12 +193,12 @@ class SocialForcePlanner(BasePolicy):
             """Normal.
 
             Args:
-                loc: Auto-generated placeholder description.
-                scale: Auto-generated placeholder description.
-                size: Auto-generated placeholder description.
+                loc: Normal distribution mean.
+                scale: Scale parameter.
+                size: Sample size.
 
             Returns:
-                Any: Auto-generated placeholder description.
+                Any: Arbitrary value passed through unchanged.
             """
             return self._gen.normal(loc, scale, size)
 
@@ -206,11 +206,11 @@ class SocialForcePlanner(BasePolicy):
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
-            seed: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.config = self._parse_config(config)
         self._rng = self._RNGCompat(seed)
@@ -224,10 +224,10 @@ class SocialForcePlanner(BasePolicy):
         """Parse config.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            SFPlannerConfig: Auto-generated placeholder description.
+            SFPlannerConfig: Social Force planner configuration dataclass.
         """
         if isinstance(config, dict):
             return SFPlannerConfig(**config)  # type: ignore[arg-type]
@@ -239,10 +239,10 @@ class SocialForcePlanner(BasePolicy):
         """Reset.
 
         Args:
-            seed: Auto-generated placeholder description.
+            seed: Random seed for deterministic behavior.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if seed is not None:
             self._rng = self._RNGCompat(seed)
@@ -256,10 +256,10 @@ class SocialForcePlanner(BasePolicy):
         """Configure.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self.config = self._parse_config(config)
 
@@ -267,10 +267,10 @@ class SocialForcePlanner(BasePolicy):
         """Step.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         if isinstance(obs, dict):
             obs = Observation(**obs)  # type: ignore[arg-type]
@@ -307,10 +307,10 @@ class SocialForcePlanner(BasePolicy):
         """Setup simulation.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         agent_states = getattr(obs, "agents", [])
         n_agents = len(agent_states)
@@ -344,7 +344,7 @@ class SocialForcePlanner(BasePolicy):
         """Create pysf config.
 
         Returns:
-            SimulatorConfig: Auto-generated placeholder description.
+            SimulatorConfig: simulator configuration.
         """
         return SimulatorConfig(
             scene_config=SceneConfig(
@@ -435,14 +435,14 @@ class SocialForcePlanner(BasePolicy):
         """Force to action.
 
         Args:
-            force: Auto-generated placeholder description.
-            robot_pos: Auto-generated placeholder description.
-            robot_vel: Auto-generated placeholder description.
-            robot_goal: Auto-generated placeholder description.
-            dt: Auto-generated placeholder description.
+            force: Applied force value.
+            robot_pos: position for robot.
+            robot_vel: velocity for robot.
+            robot_goal: goal for robot.
+            dt: Simulation time step.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         if self.config.action_space == "velocity":
             return self._force_to_velocity_action(force, robot_vel)
@@ -458,11 +458,11 @@ class SocialForcePlanner(BasePolicy):
         """Force to velocity action.
 
         Args:
-            force: Auto-generated placeholder description.
-            robot_vel: Auto-generated placeholder description.
+            force: Applied force value.
+            robot_vel: velocity for robot.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         desired_vel = robot_vel + force * self.config.tau
         if self.config.safety_clamp:
@@ -482,14 +482,14 @@ class SocialForcePlanner(BasePolicy):
         """Force to unicycle action.
 
         Args:
-            force: Auto-generated placeholder description.
-            robot_pos: Auto-generated placeholder description.
-            robot_vel: Auto-generated placeholder description.
-            robot_goal: Auto-generated placeholder description.
-            dt: Auto-generated placeholder description.
+            force: Applied force value.
+            robot_pos: position for robot.
+            robot_vel: velocity for robot.
+            robot_goal: goal for robot.
+            dt: Simulation time step.
 
         Returns:
-            dict[str, float]: Auto-generated placeholder description.
+            dict[str, float]: mapping of str, float.
         """
         mag = float(np.linalg.norm(force))
         if mag < 1e-6:
@@ -525,7 +525,7 @@ class SocialForcePlanner(BasePolicy):
         """Close.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         self._sim = None
         self._wrapper = None
@@ -534,7 +534,7 @@ class SocialForcePlanner(BasePolicy):
         """Get metadata.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         config_dict = asdict(self.config)
         config_hash = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()[

@@ -15,10 +15,10 @@ class MarkdownReportRenderer:
         """Init.
 
         Args:
-            output_dir: Auto-generated placeholder description.
+            output_dir: directory for output.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -263,10 +263,10 @@ class MarkdownReportRenderer:
                     """Rel safe.
 
                     Args:
-                        path: Auto-generated placeholder description.
+                        path: Filesystem path to the resource.
 
                     Returns:
-                        str: Auto-generated placeholder description.
+                        str: String value.
                     """
                     if not path.is_absolute():
                         return path.as_posix()

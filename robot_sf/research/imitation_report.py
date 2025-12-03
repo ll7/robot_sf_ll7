@@ -52,7 +52,7 @@ def _timestamp() -> str:
     """Timestamp.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
@@ -61,10 +61,10 @@ def _load_summary(path: Path) -> dict[str, Any]:
     """Load summary.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -117,11 +117,11 @@ def _metric(record: dict[str, Any], key: str) -> float:
     """Metric.
 
     Args:
-        record: Auto-generated placeholder description.
-        key: Auto-generated placeholder description.
+        record: Record being processed.
+        key: Dictionary key.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
@@ -149,10 +149,10 @@ def _fmt_stat(value: float | None | str) -> str:
     """Fmt stat.
 
     Args:
-        value: Auto-generated placeholder description.
+        value: Scalar metric value.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     return "n/a" if value is None or value == "n/a" else f"{value:.4f}"
 
@@ -279,10 +279,10 @@ def _latex_escape(text: str) -> str:
     """Latex escape.
 
     Args:
-        text: Auto-generated placeholder description.
+        text: Text body for the report.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     return (
         text.replace("&", r"\&")

@@ -182,10 +182,10 @@ class ReportOrchestrator:
             """Relative.
 
             Args:
-                path: Auto-generated placeholder description.
+                path: Filesystem path to the resource.
 
             Returns:
-                str: Auto-generated placeholder description.
+                str: String value.
             """
             try:
                 return str(path.relative_to(self.output_dir))
@@ -317,10 +317,10 @@ class ReportOrchestrator:
             """Load.
 
             Args:
-                path: Auto-generated placeholder description.
+                path: Filesystem path to the resource.
 
             Returns:
-                dict[str, Any] | None: Auto-generated placeholder description.
+                dict[str, Any] | None: Optional dictionary of arbitrary metadata.
             """
             try:
                 with path.open(encoding="utf-8") as f:

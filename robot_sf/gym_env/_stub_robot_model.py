@@ -31,11 +31,11 @@ class StubRobotModel:  # pragma: no cover - trivial
         """Predict.
 
         Args:
-            _obs: Auto-generated placeholder description.
-            _ignored: Auto-generated placeholder description.
+            _obs: obs.
+            _ignored: ignored.
 
         Returns:
-            tuple[object, None]: Auto-generated placeholder description.
+            tuple[object, None]: tuple of object, None.
         """
         import numpy as np  # local import to avoid global dependency at module load
 

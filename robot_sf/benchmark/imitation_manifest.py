@@ -39,7 +39,7 @@ def _artifact_root() -> Path:
     """Artifact root.
 
     Returns:
-        Path: Auto-generated placeholder description.
+        Path: Path-like object pointing to a file or directory.
     """
     return get_artifact_root().resolve(strict=False)
 
@@ -61,10 +61,10 @@ def _serialize_metric(metric: MetricAggregate) -> dict[str, Any]:
     """Serialize metric.
 
     Args:
-        metric: Auto-generated placeholder description.
+        metric: Metric identifier.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     payload: dict[str, Any] = {
         "mean": metric.mean,
@@ -80,10 +80,10 @@ def _to_json_ready(value: Any) -> Any:
     """To json ready.
 
     Args:
-        value: Auto-generated placeholder description.
+        value: Scalar metric value.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     if value is None or isinstance(value, str | int | float | bool):
         return value
@@ -109,10 +109,10 @@ def _serialize_metrics_map(metrics: Mapping[str, MetricAggregate]) -> dict[str, 
     """Serialize metrics map.
 
     Args:
-        metrics: Auto-generated placeholder description.
+        metrics: Dictionary of computed metrics.
 
     Returns:
-        dict[str, Any]: Auto-generated placeholder description.
+        dict[str, Any]: mapping of str, Any.
     """
     return {name: _serialize_metric(metric) for name, metric in sorted(metrics.items())}
 
@@ -121,11 +121,11 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Atomic write json.
 
     Args:
-        path: Auto-generated placeholder description.
-        payload: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
+        payload: Serialized payload passed between components.
 
     Returns:
-        None: Auto-generated placeholder description.
+        None: none.
     """
     path = path.resolve(strict=False)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -279,7 +279,7 @@ class PedSimulator(Simulator):
         """Ego ped pos.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         return self.ego_ped.pos
 
@@ -288,7 +288,7 @@ class PedSimulator(Simulator):
         """Ego ped pose.
 
         Returns:
-            PedPose: Auto-generated placeholder description.
+            PedPose: ped pose.
         """
         return self.ego_ped.pose
 
@@ -297,7 +297,7 @@ class PedSimulator(Simulator):
         """Ego ped goal pos.
 
         Returns:
-            Vec2D: Auto-generated placeholder description.
+            Vec2D: 2D vector (x, y).
         """
         return self.robots[0].pos
 
@@ -305,7 +305,7 @@ class PedSimulator(Simulator):
         """Reset state.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
@@ -323,11 +323,11 @@ class PedSimulator(Simulator):
         """Step once.
 
         Args:
-            actions: Auto-generated placeholder description.
-            ego_ped_actions: Auto-generated placeholder description.
+            actions: Batch of actions over the step.
+            ego_ped_actions: ego pedestrian actions.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         for behavior in self.peds_behaviors:
             behavior.step()

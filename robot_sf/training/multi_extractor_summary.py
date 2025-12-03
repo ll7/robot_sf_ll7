@@ -34,10 +34,10 @@ def _render_markdown(summary: TrainingRunSummary) -> str:
     """Render markdown.
 
     Args:
-        summary: Auto-generated placeholder description.
+        summary: Aggregate summary data.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     lines: list[str] = []
     lines.append("# Multi-Extractor Training Summary")
@@ -64,10 +64,10 @@ def _render_hardware_overview(summary: TrainingRunSummary) -> list[str]:
     """Render hardware overview.
 
     Args:
-        summary: Auto-generated placeholder description.
+        summary: Aggregate summary data.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     lines = ["## Hardware Overview"]
     lines.append("| Platform | Arch | GPU Model | CUDA Version | Python | Workers |")
@@ -86,10 +86,10 @@ def _render_extractor_table(records: list[ExtractorRunRecord]) -> list[str]:
     """Render extractor table.
 
     Args:
-        records: Auto-generated placeholder description.
+        records: List of serialized records.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     lines = ["## Extractor Results"]
     lines.append("| Extractor Name | Status | Worker Mode | Duration (s) | Best Metric | Notes |")
@@ -112,10 +112,10 @@ def _best_metric(record: ExtractorRunRecord) -> tuple[str, str]:
     """Best metric.
 
     Args:
-        record: Auto-generated placeholder description.
+        record: Record being processed.
 
     Returns:
-        tuple[str, str]: Auto-generated placeholder description.
+        tuple[str, str]: tuple of str, str.
     """
     # Prioritize the most important metric for the summary table.
     priority_metric = "best_mean_reward"
@@ -138,10 +138,10 @@ def _render_failures(records: list[ExtractorRunRecord]) -> list[str]:
     """Render failures.
 
     Args:
-        records: Auto-generated placeholder description.
+        records: List of serialized records.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     lines = ["## Failures & Skips"]
     issues = [record for record in records if record.status != "success"]
@@ -158,10 +158,10 @@ def _render_aggregate_metrics(metrics: dict[str, float]) -> list[str]:
     """Render aggregate metrics.
 
     Args:
-        metrics: Auto-generated placeholder description.
+        metrics: Dictionary of computed metrics.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     lines = ["## Aggregated Metrics"]
     if not metrics:
@@ -183,10 +183,10 @@ def _render_reproducibility(summary: TrainingRunSummary) -> list[str]:
     """Render reproducibility.
 
     Args:
-        summary: Auto-generated placeholder description.
+        summary: Aggregate summary data.
 
     Returns:
-        list[str]: Auto-generated placeholder description.
+        list[str]: list of str.
     """
     lines = ["## Reproducibility"]
     lines.append(f"- JSON summary: `{SUMMARY_JSON_FILENAME}`")

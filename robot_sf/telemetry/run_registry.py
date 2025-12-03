@@ -27,10 +27,10 @@ class RunRegistry:
         """Init.
 
         Args:
-            config: Auto-generated placeholder description.
+            config: Configuration object controlling the component.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not isinstance(config, RunTrackerConfig):  # pragma: no cover - runtime guard
             raise TypeError(f"config must be RunTrackerConfig, received {type(config)!r}")
@@ -41,7 +41,7 @@ class RunRegistry:
         """Base dir.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         return Path(self._config.run_tracker_root)
 

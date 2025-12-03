@@ -41,14 +41,14 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         """Init.
 
         Args:
-            observation_space: Auto-generated placeholder description.
-            use_ray_conv: Auto-generated placeholder description.
-            num_filters: Auto-generated placeholder description.
-            kernel_sizes: Auto-generated placeholder description.
-            dropout_rates: Auto-generated placeholder description.
+            observation_space: observation space.
+            use_ray_conv: use ray conv.
+            num_filters: number of filters.
+            kernel_sizes: kernel sizes.
+            dropout_rates: dropout rates.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Extract the ray and drive state spaces from the observation space
         if dropout_rates is None:
@@ -140,10 +140,10 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         """Forward.
 
         Args:
-            obs: Auto-generated placeholder description.
+            obs: Observation dictionary or tensor.
 
         Returns:
-            th.Tensor: Auto-generated placeholder description.
+            th.Tensor: Torch tensor processed by the network.
         """
         ray_x = self.ray_extractor(obs[OBS_RAYS])
         drive_x = self.drive_state_extractor(obs[OBS_DRIVE_STATE])

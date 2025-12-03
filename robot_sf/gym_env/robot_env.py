@@ -42,10 +42,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     """Stable config hash.
 
     Args:
-        cfg: Auto-generated placeholder description.
+        cfg: Configuration dictionary.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     try:
         payload = json.dumps(
@@ -268,7 +268,7 @@ class RobotEnv(BaseEnv):
         """Prepare visualizable state.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Prepare action visualization, if any action was executed
         action = (

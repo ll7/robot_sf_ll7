@@ -43,7 +43,7 @@ class HardwareProfile:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         payload = {
             "platform": self.platform,
@@ -78,7 +78,7 @@ class ExtractorRunRecord:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         payload = {
             "config_name": self.config_name,
@@ -113,7 +113,7 @@ class TrainingRunSummary:
         """To dict.
 
         Returns:
-            dict[str, Any]: Auto-generated placeholder description.
+            dict[str, Any]: mapping of str, Any.
         """
         payload = {
             "run_id": self.run_id,

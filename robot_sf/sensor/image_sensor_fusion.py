@@ -41,7 +41,7 @@ class ImageSensorFusion:
         """Post init.
 
         Returns:
-            Any: Auto-generated placeholder description.
+            Any: Arbitrary value passed through unchanged.
         """
         # Initialize the number of steps to cache based on the LiDAR observation space
         rays_space = self.unnormed_obs_space[OBS_RAYS]

@@ -23,11 +23,11 @@ def _get_nested(d: dict[str, Any], dotted: str) -> Any:
     """Get nested.
 
     Args:
-        d: Auto-generated placeholder description.
-        dotted: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        dotted: Matplotlib dotted-line style.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     cur: Any = d
     for part in dotted.split("."):
@@ -42,10 +42,10 @@ def _to_float(x: Any) -> float | None:
     """To float.
 
     Args:
-        x: Auto-generated placeholder description.
+        x: X-axis value.
 
     Returns:
-        float | None: Auto-generated placeholder description.
+        float | None: Optional floating-point value.
     """
     try:
         if x is None:

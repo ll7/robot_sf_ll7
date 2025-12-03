@@ -69,10 +69,10 @@ def _stat_of(path: Path) -> _Stat:
     """Stat of.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        _Stat: Auto-generated placeholder description.
+        _Stat: Stat.
     """
     st = path.stat()
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))

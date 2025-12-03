@@ -68,10 +68,10 @@ def _select_counts(params: dict[str, Any]) -> int:
     """Select counts.
 
     Args:
-        params: Auto-generated placeholder description.
+        params: Parameter dictionary.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     density = params.get("density", "med")
     return int(_DENSITY_COUNTS.get(density, _DENSITY_COUNTS["med"]))
@@ -81,11 +81,11 @@ def _sample_positions(rng: np.random.Generator, n: int) -> np.ndarray:
     """Sample positions.
 
     Args:
-        rng: Auto-generated placeholder description.
-        n: Auto-generated placeholder description.
+        rng: Random number generator.
+        n: Number of requested samples.
 
     Returns:
-        np.ndarray: Auto-generated placeholder description.
+        np.ndarray: NumPy array holding the relevant values.
     """
     # Uniform in central bounding box with small margin
     margin = 0.5
@@ -98,10 +98,10 @@ def _build_obstacles(kind: str) -> list[tuple[float, float, float, float]]:
     """Build obstacles.
 
     Args:
-        kind: Auto-generated placeholder description.
+        kind: Kind selector.
 
     Returns:
-        list[tuple[float, float, float, float]]: Auto-generated placeholder description.
+        list[tuple[float, float, float, float]]: list of tuple[float, float, float, float].
     """
     if kind == "open":
         return []
@@ -128,12 +128,12 @@ def _assign_goals(flow: str, goal_topology: str, pos: np.ndarray) -> np.ndarray:
     """Assign goals.
 
     Args:
-        flow: Auto-generated placeholder description.
-        goal_topology: Auto-generated placeholder description.
-        pos: Auto-generated placeholder description.
+        flow: Traffic flow descriptor.
+        goal_topology: goal topology.
+        pos: Position vector.
 
     Returns:
-        np.ndarray: Auto-generated placeholder description.
+        np.ndarray: NumPy array holding the relevant values.
     """
     n = pos.shape[0]
     goals = np.zeros_like(pos)
@@ -172,12 +172,12 @@ def _assign_groups(rng: np.random.Generator, n: int, fraction: float) -> list[in
     """Assign groups.
 
     Args:
-        rng: Auto-generated placeholder description.
-        n: Auto-generated placeholder description.
-        fraction: Auto-generated placeholder description.
+        rng: Random number generator.
+        n: Number of requested samples.
+        fraction: Fractional share of the resource.
 
     Returns:
-        list[int]: Auto-generated placeholder description.
+        list[int]: list of int.
     """
     if fraction <= 0:
         return [-1] * n
@@ -200,10 +200,10 @@ def _speed_variation(speed_var: str) -> float:
     """Speed variation.
 
     Args:
-        speed_var: Auto-generated placeholder description.
+        speed_var: speed var.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     return 0.2 if speed_var == "low" else 0.5
 

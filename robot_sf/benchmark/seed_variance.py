@@ -37,12 +37,12 @@ def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
     """Get nested.
 
     Args:
-        d: Auto-generated placeholder description.
-        path: Auto-generated placeholder description.
-        default: Auto-generated placeholder description.
+        d: Dictionary of metric values.
+        path: Filesystem path to the resource.
+        default: Default fallback value.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     cur: Any = d
     for part in path.split("."):
@@ -57,10 +57,10 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
     """Numeric items.
 
     Args:
-        d: Auto-generated placeholder description.
+        d: Dictionary of metric values.
 
     Returns:
-        dict[str, float]: Auto-generated placeholder description.
+        dict[str, float]: mapping of str, float.
     """
     out: dict[str, float] = {}
     for k, v in d.items():
@@ -81,12 +81,12 @@ def _group_rows(
     """Group rows.
 
     Args:
-        records: Auto-generated placeholder description.
-        group_by: Auto-generated placeholder description.
-        fallback_group_by: Auto-generated placeholder description.
+        records: List of serialized records.
+        group_by: group by.
+        fallback_group_by: fallback group by.
 
     Returns:
-        dict[str, list[dict[str, Any]]]: Auto-generated placeholder description.
+        dict[str, list[dict[str, Any]]]: mapping of str, list[dict[str, Any]].
     """
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for rec in records:
@@ -106,11 +106,11 @@ def _collect_metric_names(
     """Collect metric names.
 
     Args:
-        groups: Auto-generated placeholder description.
-        metrics: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
+        metrics: Dictionary of computed metrics.
 
     Returns:
-        set[str]: Auto-generated placeholder description.
+        set[str]: Set of string identifiers.
     """
     if metrics is not None:
         return set(metrics)
@@ -125,10 +125,10 @@ def _stats_for_vals(vals: list[float]) -> dict[str, float]:
     """Stats for vals.
 
     Args:
-        vals: Auto-generated placeholder description.
+        vals: Numeric values extracted from the dataset.
 
     Returns:
-        dict[str, float]: Auto-generated placeholder description.
+        dict[str, float]: mapping of str, float.
     """
     if not vals:
         return {"mean": float("nan"), "std": float("nan"), "cv": float("nan"), "count": 0.0}

@@ -60,11 +60,11 @@ def evaluate_precision(groups, cfg):  # T033
     """Evaluate precision.
 
     Args:
-        groups: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
+        groups: Collection of grouped elements.
+        cfg: Configuration dictionary.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     evaluations: list[ScenarioPrecisionStatus] = []
     for g in groups:

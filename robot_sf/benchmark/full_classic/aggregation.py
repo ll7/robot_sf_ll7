@@ -73,11 +73,11 @@ def _percentile(sorted_vals: list[float], p: float) -> float:
     """Percentile.
 
     Args:
-        sorted_vals: Auto-generated placeholder description.
-        p: Auto-generated placeholder description.
+        sorted_vals: sorted vals.
+        p: Probability or configuration dictionary.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     if not sorted_vals:
         return math.nan
@@ -104,13 +104,13 @@ def _bootstrap_ci(
     """Bootstrap ci.
 
     Args:
-        values: Auto-generated placeholder description.
-        samples: Auto-generated placeholder description.
-        conf: Auto-generated placeholder description.
-        rng: Auto-generated placeholder description.
+        values: Collection of numeric values.
+        samples: Sampled data points.
+        conf: Configuration namespace.
+        rng: Random number generator.
 
     Returns:
-        tuple[tuple[float, float], tuple[float, float]]: Auto-generated placeholder description.
+        tuple[tuple[float, float], tuple[float, float]]: tuple of tuple[float, float], tuple[float, float].
     """
     if not values:
         nan_pair = (math.nan, math.nan)
@@ -141,11 +141,11 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
     """Aggregate metrics.
 
     Args:
-        records: Auto-generated placeholder description.
-        cfg: Auto-generated placeholder description.
+        records: List of serialized records.
+        cfg: Configuration dictionary.
 
     Returns:
-        Any: Auto-generated placeholder description.
+        Any: Arbitrary value passed through unchanged.
     """
     groups_raw = _group_records(records)
     if not groups_raw:
@@ -180,10 +180,10 @@ def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]
     """Group records.
 
     Args:
-        records: Auto-generated placeholder description.
+        records: List of serialized records.
 
     Returns:
-        dict[tuple[str, str], list[dict]]: Auto-generated placeholder description.
+        dict[tuple[str, str], list[dict]]: mapping of tuple[str, str], list[dict].
     """
     groups: dict[tuple[str, str], list[dict]] = {}
     for rec in records:
@@ -204,10 +204,10 @@ def _bootstrap_params(cfg) -> tuple[int, float, int]:
     """Bootstrap params.
 
     Args:
-        cfg: Auto-generated placeholder description.
+        cfg: Configuration dictionary.
 
     Returns:
-        tuple[int, float, int]: Auto-generated placeholder description.
+        tuple[int, float, int]: tuple of int, float, int.
     """
     samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
     if getattr(cfg, "smoke", False):
@@ -221,10 +221,10 @@ def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
     """Collect metric values.
 
     Args:
-        recs: Auto-generated placeholder description.
+        recs: List of recommendation entries.
 
     Returns:
-        dict[str, list[float]]: Auto-generated placeholder description.
+        dict[str, list[float]]: mapping of str, list[float].
     """
     vals: dict[str, list[float]] = {}
     for r in recs:
@@ -247,16 +247,16 @@ def _aggregate_single_metric(
     """Aggregate single metric.
 
     Args:
-        values: Auto-generated placeholder description.
-        arch: Auto-generated placeholder description.
-        dens: Auto-generated placeholder description.
-        metric_name: Auto-generated placeholder description.
-        master_seed: Auto-generated placeholder description.
-        bootstrap_samples: Auto-generated placeholder description.
-        conf: Auto-generated placeholder description.
+        values: Collection of numeric values.
+        arch: Architecture identifier.
+        dens: Density configuration.
+        metric_name: name of metric.
+        master_seed: random seed for master.
+        bootstrap_samples: bootstrap samples.
+        conf: Configuration namespace.
 
     Returns:
-        AggregateMetric: Auto-generated placeholder description.
+        AggregateMetric: Aggregate metric descriptor used for reporting.
     """
     finite_values = [v for v in values if math.isfinite(v)]
     non_finite = len(values) - len(finite_values)
@@ -328,10 +328,10 @@ def _z_from_conf(conf: float) -> float:
     """Z from conf.
 
     Args:
-        conf: Auto-generated placeholder description.
+        conf: Configuration namespace.
 
     Returns:
-        float: Auto-generated placeholder description.
+        float: Floating-point value.
     """
     # Map a set of common confidence levels; fallback to 0.95 if unknown.
     mapping = {

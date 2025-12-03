@@ -43,7 +43,7 @@ class ExampleCategory:
         """Post init.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not self.slug:
             raise ManifestValidationError("Category slug cannot be empty.")
@@ -83,7 +83,7 @@ class ExampleScript:
         """Post init.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         normalized_path = PurePosixPath(str(self.path))
         if normalized_path.is_absolute():
@@ -143,7 +143,7 @@ class ExampleManifest:
         """Post init.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         if not self.version:
             raise ManifestValidationError("Manifest version string cannot be empty.")
@@ -266,10 +266,10 @@ def _resolve_manifest_path(manifest_path: str | Path | None) -> Path:
     """Resolve manifest path.
 
     Args:
-        manifest_path: Auto-generated placeholder description.
+        manifest_path: filesystem path for the manifest.
 
     Returns:
-        Path: Auto-generated placeholder description.
+        Path: Path-like object pointing to a file or directory.
     """
     if manifest_path is not None:
         path = Path(manifest_path).expanduser().resolve()
@@ -288,10 +288,10 @@ def _read_manifest_yaml(path: Path) -> Mapping[str, Any]:
     """Read manifest yaml.
 
     Args:
-        path: Auto-generated placeholder description.
+        path: Filesystem path to the resource.
 
     Returns:
-        Mapping[str, Any]: Auto-generated placeholder description.
+        Mapping[str, Any]: Mapping with string keys and arbitrary values.
     """
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
@@ -304,10 +304,10 @@ def _parse_categories(raw_categories: Any) -> dict[str, ExampleCategory]:
     """Parse categories.
 
     Args:
-        raw_categories: Auto-generated placeholder description.
+        raw_categories: raw categories.
 
     Returns:
-        dict[str, ExampleCategory]: Auto-generated placeholder description.
+        dict[str, ExampleCategory]: mapping of str, ExampleCategory.
     """
     if not isinstance(raw_categories, Sequence):
         raise ManifestValidationError("Manifest 'categories' must be a list.")
@@ -342,11 +342,11 @@ def _parse_examples(
     """Parse examples.
 
     Args:
-        raw_examples: Auto-generated placeholder description.
-        categories: Auto-generated placeholder description.
+        raw_examples: raw examples.
+        categories: Example categories array.
 
     Returns:
-        tuple[ExampleScript, ...]: Auto-generated placeholder description.
+        tuple[ExampleScript, ...]: tuple of ExampleScript, .
     """
     if not isinstance(raw_examples, Sequence):
         raise ManifestValidationError("Manifest 'examples' must be a list.")
@@ -394,11 +394,11 @@ def _expect_string(value: Any, field_name: str) -> str:
     """Expect string.
 
     Args:
-        value: Auto-generated placeholder description.
-        field_name: Auto-generated placeholder description.
+        value: Scalar metric value.
+        field_name: name of field.
 
     Returns:
-        str: Auto-generated placeholder description.
+        str: String value.
     """
     if not isinstance(value, str) or not value:
         raise ManifestValidationError(f"Field '{field_name}' must be a non-empty string.")
@@ -409,11 +409,11 @@ def _expect_int(value: Any, field_name: str) -> int:
     """Expect int.
 
     Args:
-        value: Auto-generated placeholder description.
-        field_name: Auto-generated placeholder description.
+        value: Scalar metric value.
+        field_name: name of field.
 
     Returns:
-        int: Auto-generated placeholder description.
+        int: Integer value.
     """
     if not isinstance(value, int):
         raise ManifestValidationError(f"Field '{field_name}' must be an integer.")
@@ -424,11 +424,11 @@ def _expect_bool(value: Any, field_name: str) -> bool:
     """Expect bool.
 
     Args:
-        value: Auto-generated placeholder description.
-        field_name: Auto-generated placeholder description.
+        value: Scalar metric value.
+        field_name: name of field.
 
     Returns:
-        bool: Auto-generated placeholder description.
+        bool: Boolean flag.
     """
     if not isinstance(value, bool):
         raise ManifestValidationError(f"Field '{field_name}' must be a boolean.")
@@ -439,10 +439,10 @@ def _optional_string(value: Any) -> str | None:
     """Optional string.
 
     Args:
-        value: Auto-generated placeholder description.
+        value: Scalar metric value.
 
     Returns:
-        str | None: Auto-generated placeholder description.
+        str | None: Optional string value.
     """
     if value is None:
         return None
@@ -456,11 +456,11 @@ def _optional_string_sequence(value: Any, field_name: str) -> tuple[str, ...]:
     """Optional string sequence.
 
     Args:
-        value: Auto-generated placeholder description.
-        field_name: Auto-generated placeholder description.
+        value: Scalar metric value.
+        field_name: name of field.
 
     Returns:
-        tuple[str, ...]: Auto-generated placeholder description.
+        tuple[str, ...]: tuple of str, .
     """
     if value is None:
         return ()
@@ -475,12 +475,12 @@ def _validate_string_sequence(
     """Validate string sequence.
 
     Args:
-        value: Auto-generated placeholder description.
-        field_name: Auto-generated placeholder description.
-        context: Auto-generated placeholder description.
+        value: Scalar metric value.
+        field_name: name of field.
+        context: Context dictionary passed to the resolver.
 
     Returns:
-        tuple[str, ...]: Auto-generated placeholder description.
+        tuple[str, ...]: tuple of str, .
     """
     if isinstance(value, str):
         raise ManifestValidationError(

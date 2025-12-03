@@ -23,7 +23,7 @@ class RunTrackerConfig:
         """Post init.
 
         Returns:
-            None: Auto-generated placeholder description.
+            None: none.
         """
         base_root = self.artifact_root or get_artifact_root()
         self.artifact_root = Path(base_root).expanduser().resolve()
@@ -43,10 +43,10 @@ class RunTrackerConfig:
         """Manifest path.
 
         Args:
-            run_id: Auto-generated placeholder description.
+            run_id: identifier for run.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         return self.get_run_directory(run_id) / self.manifest_filename
 
@@ -54,10 +54,10 @@ class RunTrackerConfig:
         """Telemetry path.
 
         Args:
-            run_id: Auto-generated placeholder description.
+            run_id: identifier for run.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         return self.get_run_directory(run_id) / self.telemetry_filename
 
@@ -65,9 +65,9 @@ class RunTrackerConfig:
         """Steps path.
 
         Args:
-            run_id: Auto-generated placeholder description.
+            run_id: identifier for run.
 
         Returns:
-            Path: Auto-generated placeholder description.
+            Path: Path-like object pointing to a file or directory.
         """
         return self.get_run_directory(run_id) / self.steps_filename

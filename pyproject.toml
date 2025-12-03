@@ -259,16 +259,36 @@ ignore = [
     "RUF005",   # Consider iterable unpacking instead of concatenation
     "COM812",  # Missing trailing comma in a multi-line collection
     "UP038",    # Removed
+    "RUF043",   # while this is harmless to fix, it creates noise for every new assertion
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests: allow asserts, prints, some magic values & security test scaffolding
-"tests/**/*" = ["S101","T201","PLR2004","BLE001"]
-# One-off scripts / notebooks exports: allow prints
-"scripts/**/*" = ["T201","BLE001"]
-# Examples and docs: allow prints and other leniencies
-"examples/**/*" = ["T201","BLE001"]
-"docs/**/*" = ["T201","BLE001"]
+# Tests: allow asserts, prints, magic values, and lazy imports for optional deps
+"tests/**/*.py" = [
+    "S101",
+    "T201",
+    "PLR2004",
+    "BLE001",
+    "PLC0415",
+    "RUF059",
+    "TC001",
+    "TC002",
+]
+"test_pygame/**/*.py" = [
+    "S101",
+    "T201",
+    "BLE001",
+    "PLC0415",
+    "RUF059",
+    "TC001",
+    "TC002",
+]
+# One-off scripts / notebooks exports: allow prints and local imports for heavy deps
+"scripts/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+# Examples, docs, and specs: similar leniencies for tutorial-style code
+"examples/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+"docs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
+"specs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002"]
 # CLI tools: allow prints to stdout
 "robot_sf/benchmark/cli.py" = ["T201"]
 "robot_sf/benchmark/**/*" = ["BLE001"]

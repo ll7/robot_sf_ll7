@@ -169,6 +169,10 @@ indent-width = 4
 target-version = "py312"
 
 [tool.ruff.lint]
+# https://docs.astral.sh/ruff/preview/#selecting-single-preview-rules
+preview = true
+explicit-preview-rules = true
+
 select = [
   # you already have:
   "E4","E7","E9","F","W","C901","I001",

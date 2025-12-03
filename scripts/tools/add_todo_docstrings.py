@@ -200,7 +200,10 @@ def _should_add_doc(target: DocTarget) -> bool:
     """
     if target.doc_value is None:
         return True
-    return target.doc_value.strip() == ""
+    cleaned = target.doc_value.strip()
+    if not cleaned:
+        return True
+    return "TODO docstring" in cleaned
 
 
 def _function_returns_value(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:

@@ -27,15 +27,27 @@ class SNQIWeights:
     weights: dict[str, float] = field(default_factory=dict)
 
     def get_weight(self, component: str, default: float = 0.0) -> float:
-        """Get weight for a component with default."""
+        """Get weight for a component with default.
+
+        Returns:
+            Weight value for the component, or default if not found.
+        """
         return self.weights.get(component, default)
 
     def has_component(self, component: str) -> bool:
-        """Check if component has a weight defined."""
+        """Check if component has a weight defined.
+
+        Returns:
+            True if component exists in weights dictionary.
+        """
         return component in self.weights
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for serialization."""
+        """Convert to dict for serialization.
+
+        Returns:
+            Dictionary representation of the SNQIWeights object.
+        """
         return {
             "weights_version": self.weights_version,
             "created_at": self.created_at,
@@ -50,7 +62,11 @@ class SNQIWeights:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SNQIWeights:
-        """Create from dict (e.g., loaded from JSON)."""
+        """Create from dict (e.g., loaded from JSON).
+
+        Returns:
+            SNQIWeights instance reconstructed from dictionary data.
+        """
         return cls(
             weights_version=data["weights_version"],
             created_at=data["created_at"],
@@ -73,7 +89,11 @@ class SNQIWeights:
 
     @classmethod
     def load(cls, path: Path | str) -> SNQIWeights:
-        """Load weights from JSON file."""
+        """Load weights from JSON file.
+
+        Returns:
+            SNQIWeights instance loaded from the JSON file.
+        """
         path = Path(path)
         with path.open(encoding="utf-8") as f:
             data = json.load(f)

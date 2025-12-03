@@ -24,7 +24,11 @@ from robot_sf.benchmark.snqi.types import SNQIWeights
 
 
 def cmd_recompute_weights(args: argparse.Namespace) -> int:
-    """Implement weight recompute CLI command."""
+    """Implement weight recompute CLI command.
+
+    Returns:
+        Exit code: 0 on success, 1 on failure.
+    """
     try:
         # Load baseline statistics
         baseline_stats_path = Path(args.baseline_stats)
@@ -131,6 +135,9 @@ def _compute_baseline_stats(episodes: list[dict]) -> dict[str, dict[str, float]]
 
     Metrics chosen align with those referenced in compute_snqi(): collisions, near_misses,
     force_exceed_events, jerk_mean. Missing metrics default to med=0, p95=1 for neutral scaling.
+
+    Returns:
+        Dictionary mapping metric names to {'med': float, 'p95': float} statistics.
     """
     metric_names = [
         "collisions",
@@ -161,6 +168,9 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
     This implementation loads episodes from JSONL, derives baseline statistics on-the-fly
     (unless future extension supplies an external stats file), and computes the impact on
     mean SNQI when zeroing each component weight individually.
+
+    Returns:
+        Exit code: 0 on success, 1 on failure.
     """
     try:
         episodes_path = Path(args.episodes)
@@ -228,7 +238,11 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create argument parser for SNQI CLI tools."""
+    """Create argument parser for SNQI CLI tools.
+
+    Returns:
+        Configured ArgumentParser with subcommands for SNQI operations.
+    """
     parser = argparse.ArgumentParser(
         prog="robot_sf_snqi",
         description="SNQI weight management and analysis tools",
@@ -308,7 +322,11 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    """Main entry point for SNQI CLI tools."""
+    """Main entry point for SNQI CLI tools.
+
+    Returns:
+        Exit code: 0 on success, 1 on failure or invalid command.
+    """
     parser = create_parser()
     args = parser.parse_args()
 

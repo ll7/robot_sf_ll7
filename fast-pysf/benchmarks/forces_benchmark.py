@@ -44,7 +44,7 @@ class SimSettings:
                 num_peds_on_group = remaining_peds
             else:
                 # Sample candidate, ensure at least 1, then clamp to leave at least 1 per remaining group
-                candidate = max(1, int(round(np.random.normal(avg_peds_on_group))))
+                candidate = max(1, round(np.random.normal(avg_peds_on_group)))
                 max_allowed = remaining_peds - (remaining_groups - 1)
                 num_peds_on_group = min(candidate, max_allowed)
 
@@ -57,7 +57,14 @@ class SimSettings:
                 ped_id = spawned_peds + i
                 ped_dyn = individual_dynamics[ped_id]
                 goal = group_goals[gid]
-                ped_features = [ped_pos[0], ped_pos[1], ped_dyn[0], ped_dyn[1], goal[0], goal[1]]
+                ped_features = [
+                    ped_pos[0],
+                    ped_pos[1],
+                    ped_dyn[0],
+                    ped_dyn[1],
+                    goal[0],
+                    goal[1],
+                ]
                 individuals[ped_id] = ped_features
             spawned_peds += num_peds_on_group
 

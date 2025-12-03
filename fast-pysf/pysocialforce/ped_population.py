@@ -4,7 +4,11 @@ from math import atan2, ceil, cos, dist, sin
 import numpy as np
 
 from pysocialforce.map_config import GlobalRoute, sample_zone
-from pysocialforce.ped_behavior import CrowdedZoneBehavior, FollowRouteBehavior, PedestrianBehavior
+from pysocialforce.ped_behavior import (
+    CrowdedZoneBehavior,
+    FollowRouteBehavior,
+    PedestrianBehavior,
+)
 from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 
 PedState = np.ndarray
@@ -56,7 +60,8 @@ def sample_group_spawn_on_route(
 
     sampled_offset = np.random.uniform(0, route.total_length)
     sec_id = next(
-        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]), -1
+        iter([i - 1 for i, o in enumerate(route.section_offsets) if o >= sampled_offset]),
+        -1,
     )
     sec_offset = sampled_offset - route.section_offsets[sec_id]
     sec_len = route.section_lengths[sec_id]
@@ -131,7 +136,7 @@ class RoutePointsGenerator:
 
     @property
     def total_length(self) -> float:
-        return sum([r.total_length for r in self.routes])
+        return sum(r.total_length for r in self.routes)
 
     @property
     def total_sidewalks_area(self) -> float:

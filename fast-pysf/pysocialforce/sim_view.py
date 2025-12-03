@@ -43,11 +43,12 @@ class VisualizableSimState:
 
 
 def to_visualizable_state(step: int, sim_state: SimState) -> VisualizableSimState:
-    state, groups = sim_state
+    state, _groups = sim_state
     ped_pos = np.array(state[:, 0:2])
     ped_vel = np.array(state[:, 2:4])
     actions = np.concatenate(
-        (np.expand_dims(ped_pos, axis=1), np.expand_dims(ped_pos + ped_vel, axis=1)), axis=1
+        (np.expand_dims(ped_pos, axis=1), np.expand_dims(ped_pos + ped_vel, axis=1)),
+        axis=1,
     )
     return VisualizableSimState(step, ped_pos, actions)
 
@@ -107,8 +108,14 @@ class SimulationView:
 
         # Find the minimum and maximum x and y coordinates among all the obstacles
         for vertices in obst_vertices:
-            min_x, max_x = min(np.min(vertices[:, 0]), min_x), max(np.max(vertices[:, 0]), max_x)
-            min_y, max_y = min(np.min(vertices[:, 1]), min_y), max(np.max(vertices[:, 1]), max_y)
+            min_x, max_x = (
+                min(np.min(vertices[:, 0]), min_x),
+                max(np.max(vertices[:, 0]), max_x),
+            )
+            min_y, max_y = (
+                min(np.min(vertices[:, 1]), min_y),
+                max(np.max(vertices[:, 1]), max_y),
+            )
 
         # Calculate the width and height of the surface needed to draw the obstacles
         width, height = max_x - min_x, max_y - min_y
@@ -276,7 +283,11 @@ class SimulationView:
         """Draw the actions of the pedestrians as lines."""
         for p1, p2 in ped_actions:
             pygame.draw.line(
-                self.screen, PED_ACTION_COLOR, p1 + self.offset, p2 + self.offset, width=3
+                self.screen,
+                PED_ACTION_COLOR,
+                p1 + self.offset,
+                p2 + self.offset,
+                width=3,
             )
 
     def _draw_pedestrian_routes(self):
@@ -289,7 +300,10 @@ class SimulationView:
                 (0, 0, 255),
                 False,
                 [
-                    (x * self.scaling + self.offset[0], y * self.scaling + self.offset[1])
+                    (
+                        x * self.scaling + self.offset[0],
+                        y * self.scaling + self.offset[1],
+                    )
                     for x, y in route.waypoints
                 ],
             )
@@ -323,7 +337,10 @@ class SimulationView:
         end_x = int(self.width - self.offset[0])
         for x in range(start_x, end_x, scaled_grid_size):
             pygame.draw.line(
-                self.screen, grid_color, (x + self.offset[0], 0), (x + self.offset[0], self.height)
+                self.screen,
+                grid_color,
+                (x + self.offset[0], 0),
+                (x + self.offset[0], self.height),
             )
             label = font.render(str(int(x / self.scaling)), 1, grid_color)
             self.screen.blit(label, (x + self.offset[0], 0))
@@ -333,7 +350,10 @@ class SimulationView:
         end_y = int(self.height - self.offset[1])
         for y in range(start_y, end_y, scaled_grid_size):
             pygame.draw.line(
-                self.screen, grid_color, (0, y + self.offset[1]), (self.width, y + self.offset[1])
+                self.screen,
+                grid_color,
+                (0, y + self.offset[1]),
+                (self.width, y + self.offset[1]),
             )
             label = font.render(str(int(y / self.scaling)), 1, grid_color)
             self.screen.blit(label, (0, y + self.offset[1]))

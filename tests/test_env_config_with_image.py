@@ -211,7 +211,7 @@ class TestInitCollisionAndSensorsWithImage:
         assert hasattr(sensor, "robot_speed_sensor")
         assert hasattr(sensor, "target_sensor")
 
-    @patch("robot_sf.sensor.image_sensor.ImageSensor")
+    @patch("robot_sf.gym_env.env_util.ImageSensor")
     @patch("robot_sf.gym_env.env_util.ImageSensorFusion")
     def test_init_with_image_observations(
         self,

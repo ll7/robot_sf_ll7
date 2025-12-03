@@ -54,7 +54,7 @@ def main():
     from typing import Any, cast
 
     if obs_space is not None and hasattr(obs_space, "spaces"):
-        spaces = cast(Any, obs_space).spaces
+        spaces = cast("Any", obs_space).spaces
         print(f"Observation space keys: {list(spaces.keys())}")
 
         if "image" in spaces:

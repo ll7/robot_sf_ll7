@@ -659,7 +659,11 @@ class JSONLPlaybackLoader:
 
     @staticmethod
     def _default_map_definition() -> MapDefinition:
-        """Return a minimal default map definition used when no metadata is available."""
+        """Return a minimal default map definition used when no metadata is available.
+
+        Returns:
+            MapDefinition: A 20x20 default map with basic spawn/goal zones and no obstacles.
+        """
 
         return MapDefinition(
             width=20.0,

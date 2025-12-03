@@ -211,7 +211,11 @@ class InteractivePlayback(SimulationView):
         super()._handle_keydown(e)
 
     def _handle_playback_key(self, e) -> bool:
-        """Handle playback navigation and speed keys; return True if handled."""
+        """Handle playback navigation and speed keys; return True if handled.
+
+        Returns:
+            bool: True if the key event was handled, False otherwise.
+        """
         # Next frame (using period '.' instead of right arrow)
         if e.key == pygame.K_PERIOD and not self.is_playing:
             old_frame = self.current_frame
@@ -257,7 +261,11 @@ class InteractivePlayback(SimulationView):
         return False
 
     def _handle_trajectory_key(self, e) -> bool:
-        """Handle trajectory-related keys; return True if handled."""
+        """Handle trajectory-related keys; return True if handled.
+
+        Returns:
+            bool: True if the key event was handled, False otherwise.
+        """
         if e.key == pygame.K_v:
             self.show_trajectories = not self.show_trajectories
             if self.show_trajectories:
@@ -369,7 +377,11 @@ class InteractivePlayback(SimulationView):
             self.ego_ped_trajectory.append((ego_pos[0], ego_pos[1]))
 
     def _should_clear_trajectories(self) -> bool:
-        """Check if trajectories should be cleared at current frame."""
+        """Check if trajectories should be cleared at current frame.
+
+        Returns:
+            bool: True if current frame is an episode boundary or reset point.
+        """
         return (
             self.current_frame in self.episode_boundaries or self.current_frame in self.reset_points
         )

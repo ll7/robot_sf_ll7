@@ -61,11 +61,15 @@ class _MockRobot:
     """Mock robot for dummy simulator."""
 
     def parse_action(self, action):
-        """Pass-through action parsing."""
+        """Pass-through action parsing.
+
+        Returns:
+            The action parameter unchanged.
+        """
         return action
 
 
-def dummy_factory(env_config: EnvSettings, _map_def: MapDefinition, _peds: bool):
+def dummy_factory(env_config: EnvSettings, _map_def: MapDefinition, _peds: bool) -> DummySimulator:
     """Create a dummy simulator instance for testing.
 
     Parameters
@@ -80,7 +84,7 @@ def dummy_factory(env_config: EnvSettings, _map_def: MapDefinition, _peds: bool)
     Returns
     -------
     DummySimulator
-        Minimal test simulator
+        A minimal simulator instance returning static positions and zero forces for smoke tests.
     """
     seed = getattr(env_config, "seed", 0)
     return DummySimulator(seed=seed)

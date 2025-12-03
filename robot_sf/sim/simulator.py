@@ -92,6 +92,10 @@ class Simulator:
             Creates and configures the forces to be applied in the simulation,
             excluding obstacle forces and adding pedestrian-robot interaction forces
             if PRF is active.
+
+            Returns:
+                list[PySFForce]: Configured force objects for the simulation, optionally
+                    filtered to exclude obstacle forces and extended with robot interaction forces.
             """
             forces = pysf_make_forces(sim, config)
 
@@ -275,31 +279,28 @@ class PedSimulator(Simulator):
 
     @property
     def ego_ped_pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
-
+        """Return the current 2D position of the ego pedestrian.
 
         Returns:
-            TODO docstring.
+            Vec2D: The (x, y) coordinates of the ego pedestrian.
         """
         return self.ego_ped.pos
 
     @property
     def ego_ped_pose(self) -> PedPose:
-        """TODO docstring. Document this function.
-
+        """Return the current pose of the ego pedestrian.
 
         Returns:
-            TODO docstring.
+            PedPose: The full pose including position and orientation of the ego pedestrian.
         """
         return self.ego_ped.pose
 
     @property
     def ego_ped_goal_pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
-
+        """Return the goal position for the ego pedestrian (robot position).
 
         Returns:
-            TODO docstring.
+            Vec2D: The (x, y) coordinates of the first robot, which serves as the goal.
         """
         return self.robots[0].pos
 
@@ -369,8 +370,13 @@ class PedSimulator(Simulator):
         return initial_spawn
 
     def is_obstacle_collision(self, x: float, y: float) -> bool:
-        """
-        TODO: this method is copied from occupancy.py
+        """Check if a position would collide with obstacles or is out of bounds.
+
+        Note: This method is adapted from occupancy.py for pedestrian spawning.
+
+        Returns:
+            bool: True if the position collides with an obstacle or is outside map bounds,
+                False if the position is free.
         """
         if not (0 <= x <= self.map_def.width and 0 <= y <= self.map_def.height):
             return True

@@ -28,6 +28,9 @@ def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
 
     Args:
         obj: TODO docstring.
+
+    Returns:
+        Serialized object suitable for JSON encoding.
     """
     if isinstance(obj, str | int | float | bool) or obj is None:
         return obj

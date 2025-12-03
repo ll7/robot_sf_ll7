@@ -62,6 +62,9 @@ def evaluate_precision(groups, cfg):  # T033
     Args:
         groups: TODO docstring.
         cfg: TODO docstring.
+
+    Returns:
+        PrecisionSummary with evaluations and final pass/fail status.
     """
     evaluations: list[ScenarioPrecisionStatus] = []
     for g in groups:

@@ -143,6 +143,9 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
     Args:
         records: TODO docstring.
         cfg: TODO docstring.
+
+    Returns:
+        List of AggregateMetricsGroup objects with computed statistics.
     """
     groups_raw = _group_records(records)
     if not groups_raw:

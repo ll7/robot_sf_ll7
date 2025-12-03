@@ -36,6 +36,9 @@ def _load_json(path: Path):  # type: ignore[no-untyped-def]
 
     Args:
         path: TODO docstring.
+
+    Returns:
+        Parsed JSON data from the file.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)

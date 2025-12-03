@@ -39,7 +39,15 @@ def _latex_escape(text: str) -> str:
 
 @dataclass
 class ReportConfig:
-    """ReportConfig class."""
+    """Configuration knobs that describe how a report should be rendered.
+
+    Attributes:
+        experiment_name: Human-readable title placed at the top of the report.
+        hypothesis: Optional statement describing the primary research question.
+        significance_level: Alpha value used when interpreting statistical tests.
+        export_latex: Whether to emit a LaTeX artifact alongside Markdown.
+        baseline_extractor: Named baseline extractor to compare against, if any.
+    """
 
     experiment_name: str
     hypothesis: str | None
@@ -54,7 +62,17 @@ def _timestamp() -> str:
 
 
 def _load_summary(path: Path) -> dict[str, Any]:
-    """Load the orchestrator's ``summary.json`` into a dictionary."""
+    """Load the orchestrator's ``summary.json`` into a dictionary.
+
+    Args:
+        path: Location of the JSON summary emitted by the training orchestrator.
+
+    Returns:
+        dict[str, Any]: Parsed representation of the summary payload.
+
+    Raises:
+        ValueError: If the JSON file does not contain a single mapping object.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("summary.json must contain an object")
@@ -62,7 +80,15 @@ def _load_summary(path: Path) -> dict[str, Any]:
 
 
 def _maybe_copy_config(config_path: Path | None, target_dir: Path) -> Path | None:
-    """Copy the training config into the report directory when available."""
+    """Copy the training config into the report directory when available.
+
+    Args:
+        config_path: Path to the experiment configuration or ``None`` when missing.
+        target_dir: Destination directory under the report root.
+
+    Returns:
+        Path | None: Path to the copied configuration file, if a copy was made.
+    """
     if config_path is None or not config_path.exists():
         return None
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -97,7 +123,15 @@ def _extract_metric(records: list[dict[str, Any]], key: str) -> list[float]:
 
 
 def _generate_figures(records: list[dict[str, Any]], figures_dir: Path) -> dict[str, Path]:
-    """Generate basic bar charts for reward and sample-efficiency metrics."""
+    """Generate bar charts summarizing reward and sample-efficiency metrics.
+
+    Args:
+        records: Extractor records harvested from ``summary.json``.
+        figures_dir: Directory where PNG artifacts should be written.
+
+    Returns:
+        dict[str, Path]: Mapping from logical figure labels to on-disk paths.
+    """
     import matplotlib.pyplot as plt
 
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -153,7 +187,18 @@ def _render_markdown(
     figures: dict[str, Path],
     metadata_path: Path,
 ) -> str:
-    """Render the full Markdown report and return its contents."""
+    """Render the full Markdown report and return its contents.
+
+    Args:
+        summary: Raw orchestrator payload with extractor metadata and metrics.
+        config: Author-specified configuration for the rendered report.
+        stats: Statistical comparison results keyed by descriptive names.
+        figures: Mapping of figure labels to generated paths.
+        metadata_path: Path to the reproducibility metadata JSON file.
+
+    Returns:
+        str: Markdown body ready to be persisted to ``report.md``.
+    """
     run_id = summary.get("run_id", "unknown")
     output_dir = metadata_path.parent
 
@@ -164,7 +209,7 @@ def _render_markdown(
             value: Metric to format; ``None`` uses a placeholder.
 
         Returns:
-            str: ``\"n/a\"`` for missing values or a four-decimal string otherwise.
+            str: ``"n/a"`` for missing values or a four-decimal string otherwise.
         """
         return "n/a" if value is None else f"{value:.4f}"
 
@@ -225,7 +270,16 @@ def _render_latex(
     metadata_path: Path,
     output_path: Path,
 ) -> None:
-    """Render the LaTeX variant of the report when requested."""
+    """Render the LaTeX variant of the report when requested.
+
+    Args:
+        summary: Raw orchestrator payload with extractor metadata and metrics.
+        config: Author-specified configuration for the rendered report.
+        stats: Statistical comparison results keyed by descriptive names.
+        figures: Mapping of figure labels to generated paths.
+        metadata_path: Path to the reproducibility metadata JSON file.
+        output_path: Target path for the LaTeX document.
+    """
 
     def _fmt_stat(value: float | None) -> str:
         """Format statistics for LaTeX output.
@@ -234,7 +288,7 @@ def _render_latex(
             value: Metric to format; ``None`` uses a placeholder.
 
         Returns:
-            str: ``\"n/a\"`` for missing values or a four-decimal string otherwise.
+            str: ``"n/a"`` for missing values or a four-decimal string otherwise.
         """
         return "n/a" if value is None else f"{value:.4f}"
 
@@ -305,7 +359,16 @@ def _stats_against_baseline(
     baseline_vals: list[float],
     candidate_vals: list[float],
 ) -> tuple[float | None, float | None]:
-    """Run Welch's t-test + Cohen's d for candidate vs baseline metrics."""
+    """Compare candidate metrics to a baseline using Welch's t-test and Cohen's d.
+
+    Args:
+        baseline_vals: Metric samples observed for the designated baseline extractor.
+        candidate_vals: Metric samples gathered from competing extractors.
+
+    Returns:
+        tuple[float | None, float | None]: ``(p_value, effect_size)`` pair where the
+        values are ``None`` when insufficient samples are available.
+    """
     test_result = welch_t_test(baseline_vals, candidate_vals)
     effect = cohen_d_independent(baseline_vals, candidate_vals)
     return test_result.get("p_value"), effect
@@ -321,14 +384,14 @@ def generate_extractor_report(
     """Generate Markdown (and optional LaTeX) reports from a training summary.
 
     Args:
-        summary_path: Path to the orchestrator ``summary.json``.
-        output_root: Directory in which the report folder is created.
-        config: Report configuration bundle.
-        config_path: Optional path to the training config that should be archived.
+        summary_path: Path to the orchestrator ``summary.json`` file.
+        output_root: Root directory under which the timestamped report lives.
+        config: Report configuration bundle that captures metadata to embed.
+        config_path: Optional extra configuration file that should be archived.
 
     Returns:
-        dict[str, Path | None]: Paths to the generated report, metadata, figure dir,
-        data dir, and optional LaTeX file.
+        dict[str, Path | None]: Paths to key artifacts such as the Markdown report,
+        metadata JSON, figure directory, copied data, and optional LaTeX file.
     """
     summary = _load_summary(summary_path)
     run_id = summary.get("run_id", "unknown")

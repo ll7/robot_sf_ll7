@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Emit a grouped Ruff docstring report for contributor triage."""
 
 from __future__ import annotations

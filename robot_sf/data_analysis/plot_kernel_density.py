@@ -83,12 +83,14 @@ def plot_kde_on_map(
 
 
 def perform_kde_on_axis(data: np.ndarray, bandwidth=0.1):
-    """
-    Perform Kernel Density Estimation on a 1D axis.
+    """Perform Kernel Density Estimation on a 1D axis.
 
     Args:
         data (np.ndarray): shape: (n_samples, 1)
         bandwidth (float): The bandwidth of the kernel density estimator (Controls the smoothness).
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Tuple of grid points and corresponding densities.
     """
     kde = KernelDensity(kernel="gaussian", bandwidth=bandwidth)
     kde.fit(data)

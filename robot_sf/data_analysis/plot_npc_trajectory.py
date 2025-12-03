@@ -166,7 +166,11 @@ def calculate_velocity(
     y_vals: np.ndarray,
     time_interval: float | None = None,
 ) -> np.ndarray:
-    """Calculate the velocity of a pedestrian given their x and y positions."""
+    """Calculate the velocity of a pedestrian given their x and y positions.
+
+    Returns:
+        np.ndarray: Velocity magnitudes between consecutive points.
+    """
     global time_interval_warning_logged
     if time_interval is None:
         if time_interval_warning_logged is False:
@@ -189,7 +193,11 @@ def calculate_acceleration(
     velocities: np.ndarray,
     time_interval: float | None = None,
 ) -> np.ndarray:
-    """Calculate the acceleration of a pedestrian given their velocities."""
+    """Calculate the acceleration of a pedestrian given their velocities.
+
+    Returns:
+        np.ndarray: Acceleration magnitudes between consecutive velocities.
+    """
     # Calculate the differences between consecutive velocities
     global time_interval_warning_logged
     if time_interval is None:

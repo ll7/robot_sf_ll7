@@ -28,17 +28,12 @@ class SeedReport:
     notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Return the dataclass as a regular dictionary for logging/JSON."""
         return asdict(self)
 
 
 def _import_torch():
-    """TODO docstring. Document this function."""
+    """Import torch lazily and return the module when available."""
     try:
         return importlib.import_module("torch")  # type: ignore
     except ImportError:  # pragma: no cover - optional dependency
@@ -46,15 +41,16 @@ def _import_torch():
 
 
 def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
-    """Set global seeds for random, numpy, and torch (if available).
+    """Set global seeds for ``random``, ``numpy``, and torch (if available).
 
-    Parameters
-    - seed: Global seed to apply.
-    - deterministic: If True, set torch.backends.cudnn.deterministic True and
-      disable CUDNN benchmarking for deterministic convs (if torch available).
+    Args:
+        seed: Global seed applied to all supported generators.
+        deterministic: When ``True``, request deterministic torch behavior
+            (CUDNN deterministic kernels, ``use_deterministic_algorithms``) and disable
+            the CUDNN autotuner. Ignored when torch is unavailable.
 
-    Returns
-    - SeedReport with applied settings.
+    Returns:
+        SeedReport: Summary of the applied settings for logging/debugging.
     """
     # Core RNGs
     random.seed(seed)

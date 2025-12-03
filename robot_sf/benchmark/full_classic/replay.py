@@ -192,18 +192,23 @@ def build_replay_episode(
     *,
     dt: float | None = None,
     map_path: str | None = None,
-) -> ReplayEpisode:
-    """Convenience constructor from basic sequences.
+):
+    """Construct a ``ReplayEpisode`` from raw sequences.
 
-    Parameters
-    ----------
-    seq : sequence of (t, x, y, heading)
-        Core robot kinematic samples.
-    ped_seq : optional sequence parallel to seq with pedestrian position lists.
-    action_seq : optional sequence parallel to seq with action tuples.
-    ray_seq : optional sequence parallel to seq with ray vectors for lidar.
-    ped_action_seq : optional sequence parallel to seq with ped action vectors.
-    goal_seq : optional sequence parallel to seq with robot goal tuples.
+    Args:
+        episode_id: Unique identifier used for manifests and playback.
+        scenario_id: Identifier for the scenario that produced the replay.
+        seq: Sequence of ``(t, x, y, heading)`` tuples describing robot poses.
+        ped_seq: Optional pedestrian positions aligned with ``seq`` (list per timestep).
+        action_seq: Optional robot action tuples per timestep.
+        ray_seq: Optional ray vectors (e.g., lidar) per timestep.
+        ped_action_seq: Optional pedestrian action tuples per timestep.
+        goal_seq: Optional robot goal coordinates per timestep.
+        dt: Optional timestep duration for the replay metadata.
+        map_path: Optional source map path for reference when replaying.
+
+    Returns:
+        ReplayEpisode: Ready-to-serialize episode container.
     """
     steps: list[ReplayStep] = []
     for i, (t, x, y, h) in enumerate(seq):

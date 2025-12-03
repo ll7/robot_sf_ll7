@@ -36,9 +36,8 @@ DEFAULT_RCPARAMS: dict[str, object] = {
 def apply_latex_style(overrides: Mapping[str, object] | None = None) -> None:
     """Apply LaTeX-friendly rcParams for consistent figure exports.
 
-    Parameters
-    ----------
-    overrides: Optional mapping of rcParams to override the defaults.
+    Args:
+        overrides: Optional mapping of rcParams that override the defaults.
     """
     params = DEFAULT_RCPARAMS.copy()
     if overrides:

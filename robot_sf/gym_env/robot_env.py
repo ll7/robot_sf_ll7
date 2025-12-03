@@ -100,18 +100,23 @@ class RobotEnv(BaseEnv):
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ):
-        """
-        Initialize the Robot Environment.
+        """Initialize the robot environment.
 
-        Parameters:
-        - env_config (EnvSettings): Configuration for environment settings.
-        - reward_func (Callable[[dict], float]): Reward function that takes
-            a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as
-            visualizations.
-        - recording_enabled (bool): If True, enables recording of the simulation
-        - record_video: If True, saves simulation as video file
-        - video_path: Path where to save the video file
+        Args:
+            env_config: Environment settings describing maps, sensors, and simulator behavior.
+            reward_func: Optional callable used to compute rewards; defaults to ``simple_reward``.
+            debug: Enables ``SimulationView`` visualization and rendering hooks.
+            recording_enabled: When ``True``, record ``VisualizableSimState`` snapshots.
+            record_video: Save simulator frames as a video via ``SimulationView``.
+            video_path: Output path for the recorded video (when ``record_video`` is enabled).
+            video_fps: Override frames-per-second for recorded videos.
+            peds_have_obstacle_forces: Whether ped forces interact with obstacles.
+            use_jsonl_recording: Enable structured JSONL recording instead of pickles.
+            recording_dir: Directory for recordings.
+            suite_name: Logical suite name stored in recording metadata.
+            scenario_name: Scenario identifier stored in metadata.
+            algorithm_name: Algorithm identifier stored in metadata.
+            recording_seed: Optional seed stored alongside the recording metadata.
         """
         super().__init__(
             env_config=env_config,
@@ -166,18 +171,13 @@ class RobotEnv(BaseEnv):
         self.last_action = None
 
     def step(self, action):
-        """
-        Execute one time step within the environment.
+        """Execute one environment step.
 
-        Parameters:
-        - action: Action to be executed.
+        Args:
+            action: Action sampled from ``action_space`` for the controlled robot.
 
         Returns:
-        - obs: Observation after taking the action.
-        - reward: Calculated reward for the taken action.
-        - term: Boolean indicating if the episode has terminated.
-        - truncated: Boolean indicating if the episode was truncated.
-        - info: Additional information as dictionary.
+            tuple: ``(obs, reward, terminated, truncated, info)`` per Gymnasium API.
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)
@@ -215,24 +215,14 @@ class RobotEnv(BaseEnv):
         )
 
     def reset(self, seed=None, options=None):
-        """
-        Reset the environment to an initial state to begin a new episode.
+        """Reset the environment and start a new episode.
 
-        This method performs the following operations:
-        1. Calls the superclass reset method with the provided seed and options.
-        2. Clears the stored last action.
-        3. Resets the internal state of the simulator.
-        4. Resets the environment's state to obtain the initial observation.
-        5. If recording is enabled, saves the current recording.
-
-        Parameters:
-            seed (Optional[int]): The seed value for environment reset.
-            options (Optional[dict]): Additional options for the reset process.
+        Args:
+            seed: Optional random seed forwarded to ``BaseEnv`` reset.
+            options: Optional Gymnasium reset options.
 
         Returns:
-            tuple: A tuple containing:
-                - obs: The initial observation after the environment reset.
-                - info (dict): A dictionary with auxiliary information.
+            tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
         super().reset(seed=seed, options=options)
         # Reset last_action

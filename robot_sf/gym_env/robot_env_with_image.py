@@ -39,16 +39,23 @@ class RobotEnvWithImage(RobotEnv):
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
     ):
-        """
-        Initialize the Robot Environment with Image Observations.
+        """Initialize the robot environment variant with image observations.
 
-        Parameters:
-        - env_config (RobotEnvSettings): Configuration for environment settings including image config.
-        - reward_func (Callable[[dict], float]): Reward function.
-        - debug (bool): If True, enables debugging information and visualization.
-        - recording_enabled (bool): If True, enables recording of the simulation.
-        - record_video: If True, saves simulation as video file.
-        - video_path: Path where to save the video file.
+        Args:
+            env_config: Robot environment settings including ``image_config``.
+            reward_func: Reward callable for the robot agent.
+            debug: Enables visualization hooks (forced ``True`` when ``use_image_obs`` is set).
+            recording_enabled: Enable ``VisualizableSimState`` recording.
+            record_video: Save rendered frames to ``video_path``.
+            video_path: Output path for recorded video files.
+            video_fps: Override video recording FPS.
+            peds_have_obstacle_forces: Whether pedestrians interact with obstacles via forces.
+            use_jsonl_recording: Enable JSONL recording mode.
+            recording_dir: Directory for recorded artifacts.
+            suite_name: Suite identifier stored in metadata.
+            scenario_name: Scenario identifier stored in metadata.
+            algorithm_name: Algorithm identifier stored in metadata.
+            recording_seed: Optional seed stored with metadata.
         """
         # Force debug mode if image observations are enabled to ensure SimulationView is created
         if env_config.use_image_obs:

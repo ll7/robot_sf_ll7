@@ -76,6 +76,7 @@ class RefactoredPedestrianEnv(SingleAgentEnv):
             debug: Enable debug mode with visualization
             recording_enabled: Enable state recording
             peds_have_obstacle_forces: Whether pedestrians exert obstacle forces
+            **kwargs: Additional keyword arguments forwarded to ``SingleAgentEnv``.
         """
         if config is None:
             config = PedestrianSimulationConfig()

@@ -199,18 +199,17 @@ def init_simulators(
     random_start_pos: bool = True,
     peds_have_obstacle_forces: bool = False,
 ) -> list[Simulator]:
-    """
-    Initialize simulators for the robot environment.
+    """Initialize one or more simulator instances for the robot environment.
 
-    Parameters:
-    env_config (EnvSettings): Configuration settings for the environment.
-    map_def (MapDefinition): Definition of the map for the environment.
-    num_robots (int): Number of robots in the environment.
-    random_start_pos (bool): Whether to start the robots at random positions.
-
+    Args:
+        env_config: Environment configuration containing simulator/robot settings.
+        map_def: Map definition describing start positions, goals, and obstacles.
+        num_robots: Total number of robots to simulate across instances.
+        random_start_pos: Whether robots start at random spawn positions.
+        peds_have_obstacle_forces: Whether pedestrians experience obstacle forces.
 
     Returns:
-    List[Simulator]: A list of initialized Simulator objects.
+        list[Simulator]: Simulator instances sized to cover ``num_robots`` robots.
     """
     # assert that the map_def has the correct type
     try:

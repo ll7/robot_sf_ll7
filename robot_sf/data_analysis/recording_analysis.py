@@ -50,22 +50,18 @@ def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarr
 
 
 def kde_plot_grid_creation(x_min, x_max, y_min, y_max, number_of_grid_points: int = 100):
-    """
-    Create a grid of points for Kernel Density Estimation (KDE) plotting.
+    """Create a grid of points for Kernel Density Estimation (KDE) plotting.
 
-    Parameters:
-    x_min (float): Minimum value for the x-axis.
-    x_max (float): Maximum value for the x-axis.
-    y_min (float): Minimum value for the y-axis.
-    y_max (float): Maximum value for the y-axis.
-    number_of_grid_points (int, optional):
-        Number of points along each axis for the grid. Default is 100.
+    Args:
+        x_min: Minimum x-axis value.
+        x_max: Maximum x-axis value.
+        y_min: Minimum y-axis value.
+        y_max: Maximum y-axis value.
+        number_of_grid_points: Number of samples per axis used to construct the grid.
 
     Returns:
-    tuple: A tuple containing:
-        - grid_xx (ndarray): 2D array of x coordinates for the grid.
-        - grid_yy (ndarray): 2D array of y coordinates for the grid.
-        - grid_points (ndarray): 2D array of grid points reshaped for KDE evaluation.
+        tuple[np.ndarray, np.ndarray, np.ndarray]: ``grid_xx`` and ``grid_yy`` grids plus the
+        stacked ``grid_points`` array used for KDE evaluation.
     """
     # Create 1D coordinate arrays (100 points each)
     grid_x = np.linspace(x_min, x_max, number_of_grid_points)  # [x1, x2, ..., x100]

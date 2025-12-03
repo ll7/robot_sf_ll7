@@ -15,15 +15,14 @@ from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupanc
 # See: https://github.com/ll7/robot_sf_ll7/issues/250
 @numba.njit(fastmath=True)
 def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
-    """
-    Calculate Euclidean distance between two 2D vectors.
+    """Calculate the Euclidean distance between two 2D vectors.
 
-    Parameters:
-    vec_1 (Vec2D): First 2D vector.
-    vec_2 (Vec2D): Second 2D vector.
+    Args:
+        vec_1: First 2D vector.
+        vec_2: Second 2D vector.
 
     Returns:
-    float: Euclidean distance between vec_1 and vec_2.
+        float: Euclidean distance between ``vec_1`` and ``vec_2``.
     """
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root
@@ -32,17 +31,15 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
 
 @numba.njit(fastmath=True)
 def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_vec: Vec2D) -> float:
-    """
-    Calculate the distance from the sensor position to the intersection point
-    between a line segment and a ray vector.
+    """Distance from sensor position to the intersection with a ray and segment.
 
-    Parameters:
-    segment (Line2D): The line segment.
-    sensor_pos (Vec2D): The sensor position.
-    ray_vec (Vec2D): The ray vector.
+    Args:
+        segment: Line segment represented by two endpoints.
+        sensor_pos: Origin of the ray.
+        ray_vec: Ray direction vector.
 
     Returns:
-    float: The distance to the intersection point, or infinity if no intersection.
+        float: Distance to the intersection point, or ``np.inf`` when no intersection exists.
     """
     # Unpack segment endpoints, sensor position, and ray vector
     # Line2D is ((x1, y1), (x2, y2))
@@ -76,18 +73,15 @@ def lineseg_line_intersection_distance(segment: Line2D, sensor_pos: Vec2D, ray_v
 
 @numba.njit(fastmath=True)
 def circle_line_intersection_distance(circle: Circle2D, origin: Vec2D, ray_vec: Vec2D) -> float:
-    """
-    Calculate the distance from the origin to the intersection point between
-    a circle and a ray vector.
+    """Distance from origin to circle/ray intersection.
 
-    Parameters:
-    circle (Circle2D): The circle defined by its center and radius.
-    origin (Vec2D): The origin of the ray vector.
-    ray_vec (Vec2D): The ray vector.
+    Args:
+        circle: Circle defined by ``(center, radius)``.
+        origin: Origin of the ray.
+        ray_vec: Ray direction vector.
 
     Returns:
-    float: The distance to the nearest intersection point, or infinity if no
-    intersection.
+        float: Distance to the nearest valid intersection, or ``np.inf`` if the ray misses.
     """
     # Unpack circle center and radius, and ray vector
     (circle_x, circle_y), radius = circle

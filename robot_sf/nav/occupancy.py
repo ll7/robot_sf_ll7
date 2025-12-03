@@ -14,15 +14,14 @@ from robot_sf.common.types import Circle2D, Line2D, Vec2D
 
 @numba.njit(fastmath=True)
 def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
-    """
-    Calculate Euclidean distance between two 2D vectors.
+    """Calculate the Euclidean distance between two 2D vectors.
 
-    Parameters:
-    vec_1 (Vec2D): First 2D vector.
-    vec_2 (Vec2D): Second 2D vector.
+    Args:
+        vec_1: First 2D vector.
+        vec_2: Second 2D vector.
 
     Returns:
-    float: Euclidean distance between vec_1 and vec_2.
+        float: Euclidean distance between ``vec_1`` and ``vec_2``.
     """
     # Subtract corresponding elements of vectors
     # Square the results, sum them, and take square root

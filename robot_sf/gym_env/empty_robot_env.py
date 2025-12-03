@@ -38,15 +38,12 @@ class EmptyRobotEnv(Env):
         reward_func: Callable[[dict], float] = simple_reward,
         debug: bool = False,
     ):
-        """
-        Initialize the Robot Environment.
+        """Initialize the robot environment.
 
-        Parameters:
-        - env_config (EnvSettings): Configuration for environment settings.
-        - reward_func (Callable[[dict], float]): Reward function that takes
-            a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as
-            visualizations.
+        Args:
+            env_config: Environment settings (map, sensors, physics) used for simulator setup.
+            reward_func: Callable accepting the metadata dict and returning a scalar reward.
+            debug: When ``True`` enables debug visualization via ``SimulationView``.
         """
 
         # Environment configuration details
@@ -99,17 +96,13 @@ class EmptyRobotEnv(Env):
             )
 
     def step(self, action):
-        """
-        Execute one time step within the environment.
+        """Execute one simulation step.
 
-        Parameters:
-        - action: Action to be executed.
+        Args:
+            action: Action sampled from ``action_space`` to apply to the simulator.
 
         Returns:
-        - obs: Observation after taking the action.
-        - reward: Calculated reward for the taken action.
-        - term: Boolean indicating if the episode has terminated.
-        - info: Additional information as dictionary.
+            tuple: Observation, reward, termination flag, and metadata dict.
         """
         # Process the action through the simulator
         action = self.simulator.robots[0].parse_action(action)

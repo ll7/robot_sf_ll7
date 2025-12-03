@@ -57,16 +57,16 @@ class PedestrianEnv(Env):
         recording_enabled: bool = False,
         peds_have_obstacle_forces: bool = False,
     ):
-        """
-        Initialize the pedestrian Environment.
+        """Initialize the pedestrian environment.
 
-        Parameters:
-        - env_config (PedEnvSettings): Configuration for environment settings.
-        - reward_func (Callable[[dict], float]): Reward function that takes
-            a dictionary as input and returns a float as reward.
-        - debug (bool): If True, enables debugging information such as
-            visualizations.
-        - recording_enabled (bool): If True, enables recording of the simulation
+        Args:
+            env_config: Environment settings describing the map, sensors, and agents. Defaults to
+                ``PedEnvSettings()`` when ``None``.
+            reward_func: Callable consuming the metadata dict and producing the reward.
+            robot_model: Optional robot policy used to drive the background robot actor.
+            debug: Enables ``SimulationView`` visualization when ``True``.
+            recording_enabled: Records ``VisualizableSimState`` entries for later export.
+            peds_have_obstacle_forces: Whether pedestrian simulator should apply obstacle forces.
         """
         if env_config is None:
             env_config = PedEnvSettings()
@@ -159,17 +159,13 @@ class PedestrianEnv(Env):
             )
 
     def step(self, action):
-        """
-        Execute one time step within the environment.
+        """Run one simulation step for the ego pedestrian.
 
-        Parameters:
-        - action: Action to be executed.
+        Args:
+            action: Pedestrian action sampled from ``action_space``.
 
         Returns:
-        - obs: Observation after taking the action.
-        - reward: Calculated reward for the taken action.
-        - term: Boolean indicating if the episode has terminated.
-        - info: Additional information as dictionary.
+            tuple: ``(observation, reward, terminated, truncated, info)`` per Gymnasium API.
         """
         action_ped = action
 

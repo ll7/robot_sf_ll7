@@ -377,14 +377,15 @@ def _bootstrap_ci(
 ) -> tuple[float, float]:
     """Percentile bootstrap confidence interval for a statistic.
 
-    Parameters
-    - data: 1D numpy array (NaNs will be ignored).
-    - stat_fn: callable computing a scalar statistic on a 1D array.
-    - samples: number of bootstrap resamples (B).
-    - confidence: confidence level (e.g., 0.95).
-    - seed: optional RNG seed for reproducibility.
+    Args:
+        data: One-dimensional array of samples; NaNs are ignored.
+        stat_fn: Callable that computes a scalar statistic over a 1D array.
+        samples: Number of bootstrap resamples to draw.
+        confidence: Confidence level for the returned interval (e.g., 0.95).
+        seed: Optional RNG seed for reproducibility.
 
-    Returns (low, high) CI bounds; (nan, nan) if insufficient data or samples=0.
+    Returns:
+        tuple[float, float]: ``(low, high)`` bounds, ``(nan, nan)`` when insufficient data.
     """
     if samples <= 0:
         return (float("nan"), float("nan"))

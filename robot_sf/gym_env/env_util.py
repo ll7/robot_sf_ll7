@@ -43,19 +43,16 @@ def init_collision_and_sensors(
     env_config: EnvSettings | RobotSimulationConfig,
     orig_obs_space: spaces.Dict,
 ):
-    """
-    Initialize collision detection and sensor fusion for the robots in the
-    simulator.
+    """Initialize collision detection and sensor fusion for each robot.
 
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
+    Args:
+        sim: Initialized simulator providing map and actor state.
+        env_config: Environment/simulation configuration used to size sensors and occupancies.
+        orig_obs_space: Baseline observation space passed to ``SensorFusion``.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy], list[SensorFusion]]: Collision detectors and matching
+        sensor fusion wrappers indexed by robot id.
     """
 
     # Get the number of robots, simulation configuration,
@@ -291,19 +288,16 @@ def init_ped_collision_and_sensors(
     env_config: PedEnvSettings,
     orig_obs_space: list[spaces.Dict],
 ):
-    """
-    Initialize collision detection and sensor fusion for the robot and the pedestrian in the
-    simulator.
+    """Initialize collision detection and sensor fusion for robot + ego pedestrian.
 
-    Parameters:
-    sim (PedSimulator): The simulator object.
-    env_config (PedEnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
+    Args:
+        sim: Pedestrian simulator containing the controlled robot and ego pedestrian.
+        env_config: Pedestrian environment settings driving occupancy radii and sensors.
+        orig_obs_space: Original observation spaces for robot and ego pedestrian.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[SensorFusion]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy | EgoPedContinuousOccupancy], list[SensorFusion]]: Ordered
+        occupancies and sensor fusion helpers for ``[robot, ego_pedestrian]``.
     """
 
     # Get the simulation configuration, pedestrian configuration,
@@ -494,19 +488,17 @@ def init_collision_and_sensors_with_image(
     orig_obs_space: spaces.Dict,
     sim_view=None,
 ):
-    """
-    Initialize collision detection and sensor fusion including image sensors for the robots.
+    """Initialize collision detection and sensor fusion with optional image sensors.
 
-    Parameters:
-    sim (Simulator): The simulator object.
-    env_config (EnvSettings): Configuration settings for the environment.
-    orig_obs_space (spaces.Dict): Original observation space.
-    sim_view: The simulation view for capturing images (optional).
+    Args:
+        sim: Simulator instance controlling the robots.
+        env_config: Environment settings that determine sensor layout and image configuration.
+        orig_obs_space: Baseline observation space for non-image sensors.
+        sim_view: Optional ``SimulationView`` used when capturing rendered frames.
 
     Returns:
-    Tuple[List[ContinuousOccupancy], List[Union[SensorFusion, ImageSensorFusion]]]:
-        A tuple containing a list of occupancy objects for collision detection
-        and a list of sensor fusion objects for sensor data handling.
+        tuple[list[ContinuousOccupancy], list[SensorFusion | ImageSensorFusion]]: Occupancy and
+        sensor fusion objects for each robot.
     """
     # Get the number of robots, simulation configuration,
     # robot configuration, and lidar configuration

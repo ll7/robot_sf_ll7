@@ -87,6 +87,8 @@ class JSONLRecorder:
             scenario: Scenario name for file naming
             algorithm: Algorithm name for file naming
             seed: Random seed for file naming
+            flush_every_n: Flush interval in number of records (``None`` disables periodic flushes).
+            flush_on_episode_end: Whether to flush buffers when an episode ends.
         """
         resolved_output = resolve_artifact_path(output_dir)
         self.output_dir = Path(resolved_output)

@@ -150,7 +150,7 @@ class SocialForcePlanner(BasePolicy):
             """
             self._gen = np.random.default_rng(seed)
 
-        def randint(
+        def integers(
             self,
             low: int,
             high: int | None = None,
@@ -162,6 +162,9 @@ class SocialForcePlanner(BasePolicy):
                 low: TODO docstring.
                 high: TODO docstring.
                 size: TODO docstring.
+
+            Returns:
+                Random integers.
             """
             return self._gen.integers(low, high=high, size=size)
 
@@ -177,6 +180,9 @@ class SocialForcePlanner(BasePolicy):
                 loc: TODO docstring.
                 scale: TODO docstring.
                 size: TODO docstring.
+
+            Returns:
+                Random values from normal distribution.
             """
             return self._gen.normal(loc, scale, size)
 
@@ -350,6 +356,9 @@ class SocialForcePlanner(BasePolicy):
         the robot can reach distant goals within benchmark episode limits.
         Interaction (social + obstacle) forces are scaled by a configurable
         weight to tune clearance behavior.
+
+        Returns:
+            Total force vector combining goal attraction and obstacle/pedestrian repulsion.
         """
         goal_vec = robot_goal - robot_pos
         dist = float(np.linalg.norm(goal_vec))

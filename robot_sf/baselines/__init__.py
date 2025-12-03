@@ -6,19 +6,31 @@ import importlib
 
 
 def _get_social_force_planner():
-    """Lazy import to avoid circular dependencies."""
+    """Lazy import to avoid circular dependencies.
+
+    Returns:
+        The SocialForcePlanner class.
+    """
     module = importlib.import_module("robot_sf.baselines.social_force")
     return module.SocialForcePlanner
 
 
 def _get_ppo_planner():
-    """Lazy import for PPO baseline adapter."""
+    """Lazy import for PPO baseline adapter.
+
+    Returns:
+        The PPOPlanner class.
+    """
     module = importlib.import_module("robot_sf.baselines.ppo")
     return module.PPOPlanner
 
 
 def _get_random_planner():
-    """Lazy import for Random baseline."""
+    """Lazy import for Random baseline.
+
+    Returns:
+        The RandomPlanner class.
+    """
     module = importlib.import_module("robot_sf.baselines.random_policy")
     return module.RandomPlanner
 
@@ -56,7 +68,11 @@ def get_baseline(name: str) -> type:
 
 
 def list_baselines() -> list[str]:
-    """List available baseline algorithm names."""
+    """List available baseline algorithm names.
+
+    Returns:
+        List of baseline algorithm names.
+    """
     return list(BASELINES.keys())
 
 

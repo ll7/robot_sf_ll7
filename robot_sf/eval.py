@@ -1,3 +1,11 @@
+"""Evaluation helpers describing environment outcomes and cumulative metrics.
+
+This module defines lightweight summaries of mission progress, collisions, and
+completion rates for both single-agent and vectorized environments. ``EnvMetrics``
+and its companions ingest meta data published by episodes, so clients such as
+evaluators, planners, or benchmarks can compute failure rates over rolling caches.
+"""
+
 from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum

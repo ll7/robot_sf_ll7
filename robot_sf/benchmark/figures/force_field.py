@@ -25,7 +25,11 @@ def _latex_rcparams() -> None:
 
 
 def make_demo_sim() -> Simulator:
-    """Return a minimal simulator with two pedestrians and one obstacle."""
+    """Return a minimal simulator with two pedestrians and one obstacle.
+
+    Returns:
+        Configured Simulator instance with demo scenario.
+    """
 
     state = np.array(
         [

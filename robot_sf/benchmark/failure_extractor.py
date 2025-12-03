@@ -52,6 +52,9 @@ def is_failure(
     The criteria are OR'ed: any individual predicate being true marks failure.
     SNQI is applied only if `snqi_below` is not None and the metric is present.
     Missing metrics default to 0.0 and thus do not trigger failures.
+
+    Returns:
+        True if the episode record matches any failure criteria, False otherwise.
     """
     if _metric(rec, "collisions", 0.0) >= float(collision_threshold):
         return True
@@ -98,6 +101,11 @@ def extract_failures(
         are considered failures.
     max_count : int | None
         Limit the number of returned failures (None = no limit).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Episode records that match the failure criteria.
     """
     out: list[dict[str, Any]] = []
     for rec in records:

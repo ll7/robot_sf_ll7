@@ -123,7 +123,11 @@ def _convert_plot_artifacts(raw_list) -> list[dict]:
 
 
 def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int, str | None]:
-    """Return (success_count, status_note) for video artifacts."""
+    """Return (success_count, status_note) for video artifacts.
+
+    Returns:
+        Tuple of (number of successful videos, optional status note).
+    """
 
     def _get(item, key):
         """TODO docstring. Document this function.
@@ -131,6 +135,9 @@ def _summarize_video_outcomes(video_artifacts: list[VideoArtifact]) -> tuple[int
         Args:
             item: TODO docstring.
             key: TODO docstring.
+
+        Returns:
+            Value from dict/object, or None if not present.
         """
         if isinstance(item, dict):
             return item.get(key)
@@ -305,6 +312,9 @@ def _build_video_artifacts(
         Accepts user/config input (case/alias tolerant) and maps legacy
         'sim_view' -> 'sim-view'. Falls back to 'auto' for unknown values
         (with warning) so upstream config typos do not crash but still log.
+
+        Returns:
+            Normalized mode string: 'auto', 'synthetic', or 'sim-view'.
         """
         m = str(raw or "auto").strip().lower()
         if m == "sim_view":  # alias
@@ -321,6 +331,9 @@ def _build_video_artifacts(
         Maintains historical path naming (episode_id.mp4) while attaching
         a stable artifact_id prefix. Renderer choice reflects availability so
         downstream logic can still distinguish sim-view capability.
+
+        Returns:
+            List of VideoArtifact objects with skipped status.
         """
         out: list[VideoArtifact] = []
         for r in records:
@@ -349,6 +362,9 @@ def _build_video_artifacts(
         why sim-view could not be produced (renderer missing, moviepy absent,
         or empty attempt set). Distinguishes MOVIEPY_MISSING from generic
         SIM_VIEW_MISSING for clearer caller reporting.
+
+        Returns:
+            List of VideoArtifact objects, either successful or skipped with diagnostic.
         """
         attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if attempt:
@@ -386,6 +402,9 @@ def _build_video_artifacts(
         Tries sim-view; if unavailable or replay insufficient, fall back to
         synthetic renderer. If both paths produce nothing, emit skipped artifacts
         so manifests remain informative.
+
+        Returns:
+            List of VideoArtifact objects from successful rendering or fallback.
         """
         sim_attempt = _attempt_sim_view_videos(records, videos_dir, cfg, replay_map)
         if sim_attempt:

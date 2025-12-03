@@ -52,13 +52,13 @@ DEFAULT_SCHEMA_PATH = "docs/dev/issues/social-navigation-benchmark/episode_schem
 
 
 def _handle_baseline(args) -> int:
-    """TODO docstring. Document this function.
+    """Execute baseline command to compute baseline statistics.
 
     Args:
-        args: TODO docstring.
+        args: Parsed command-line arguments.
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success, 2 for error).
     """
     try:
         progress_cb = _progress_cb_factory(bool(args.quiet))
@@ -92,13 +92,13 @@ def _handle_baseline(args) -> int:
 
 
 def _handle_list_algorithms(_args) -> int:
-    """TODO docstring. Document this function.
+    """List available baseline algorithms.
 
     Args:
-        _args: TODO docstring.
+        _args: Parsed command-line arguments (unused).
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success).
     """
     try:
         # Show built-in simple policy
@@ -121,10 +121,13 @@ def _handle_list_algorithms(_args) -> int:
 
 
 def _load_snqi_inputs(args):
-    """TODO docstring. Document this function.
+    """Load SNQI weights and baseline from command-line arguments.
 
     Args:
-        args: TODO docstring.
+        args: Parsed command-line arguments with snqi_weights and snqi_baseline attributes.
+
+    Returns:
+        Tuple of (snqi_weights dict or None, snqi_baseline dict or None).
     """
     snqi_weights = None
     snqi_baseline = None
@@ -150,11 +153,13 @@ def _load_snqi_inputs(args):
 
 
 def _progress_cb_factory(quiet: bool):
-    # Try to use tqdm when available
-    """TODO docstring. Document this function.
+    """Create progress callback function with optional tqdm progress bar.
 
     Args:
-        quiet: TODO docstring.
+        quiet: If True, suppress progress output.
+
+    Returns:
+        Progress callback function for tracking episode execution.
     """
     pbar = None
     if not quiet:
@@ -198,13 +203,13 @@ def _progress_cb_factory(quiet: bool):
 
 
 def _handle_run(args) -> int:
-    """TODO docstring. Document this function.
+    """Execute run command to generate episode records.
 
     Args:
-        args: TODO docstring.
+        args: Parsed command-line arguments.
 
     Returns:
-        TODO docstring.
+        Exit code (0 for success, 2 for error).
     """
     try:
         # Optional: load SNQI weights/baseline for inline SNQI computation
@@ -1531,6 +1536,9 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
         """Dynamically load a script module by relative path.
 
         Uses importlib spec APIs so module metadata (__spec__, __file__) is set.
+
+        Returns:
+            The loaded module object.
         """
         # Defensive: if a prior failed import left a None placeholder, remove it
         existing = sys.modules.get(name)
@@ -1553,6 +1561,9 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
 
         Args:
             mod: TODO docstring.
+
+        Returns:
+            The run function from the module.
         """
         return mod.run
 
@@ -1561,6 +1572,9 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
 
         Args:
             mod: TODO docstring.
+
+        Returns:
+            The run function from the module.
         """
         return mod.run
 
@@ -1586,7 +1600,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
                 setattr(args, name, value)
 
     def _load_optimize_run_fn():  # type: ignore[no-untyped-def]
-        """Load and return the optimize script's run(args) function or None on error."""
+        """Load and return the optimize script's run(args) function or None on error.
+
+        Returns:
+            The optimize run function or None if loading failed.
+        """
         nonlocal _OPT_MOD
         if _OPT_MOD is None:
             try:
@@ -1650,6 +1668,9 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
 def _configure_parser() -> argparse.ArgumentParser:
     """TODO docstring. Document this function.
 
+    Returns:
+        TODO docstring.
+
 
     Returns:
         TODO docstring.
@@ -1666,6 +1687,9 @@ def _configure_parser() -> argparse.ArgumentParser:
             Args:
                 args: TODO docstring.
                 namespace: TODO docstring.
+
+            Returns:
+                Parsed arguments namespace.
             """
             if args is not None:
                 # Allow global flags placed after the subcommand by hoisting them before parsing.
@@ -1726,7 +1750,11 @@ def _configure_parser() -> argparse.ArgumentParser:
 
 
 def get_parser() -> argparse.ArgumentParser:
-    """Return a configured parser (for tests)."""
+    """Return a configured parser (for tests).
+
+    Returns:
+        Configured ArgumentParser instance.
+    """
     # NOTE: Tests (and some users) supply global flags *after* the subcommand, e.g.:
     #   list-algorithms --log-level DEBUG
     # Vanilla argparse only supports global options before a subcommand. We wrap
@@ -1742,6 +1770,9 @@ def get_parser() -> argparse.ArgumentParser:
             Args:
                 args: TODO docstring.
                 namespace: TODO docstring.
+
+            Returns:
+                Parsed arguments namespace.
             """
             try:  # pragma: no cover - fallback path only hit if feature absent/fails
                 return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]

@@ -95,6 +95,11 @@ def collect_values(
     Falls back to computing avg speed from robot_vel if present under
     record["trajectory"]["robot_vel"] as a list of [vx, vy]. If not available,
     the avg_speed entry may be missing.
+
+    Returns
+    -------
+    tuple[list[float], list[float]]
+        Tuple of (min_distances, avg_speeds) collected from records.
     """
     mins: list[float] = []
     speeds: list[float] = []

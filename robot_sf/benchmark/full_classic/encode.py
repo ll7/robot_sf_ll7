@@ -55,6 +55,9 @@ def _iter_first(
 
     Returns (first_frame_or_none, iterator_starting_from_first) so we can
     validate dimensions before constructing an ImageSequenceClip.
+
+    Returns:
+        Tuple of (first frame or None if empty, iterator starting from first frame).
     """
     it = iter(frame_iter)
     try:
@@ -71,7 +74,11 @@ def _iter_first(
 
 
 def _start_memory_sampler(sample: bool, interval: float):
-    """Return (stop_callable, peak_container) starting sampler if psutil available else no-op."""
+    """Return (stop_callable, peak_container) starting sampler if psutil available else no-op.
+
+    Returns:
+        Tuple of (stop function, list containing peak RSS in MB or [None]).
+    """
     if not sample:
         return (lambda: None), [None]
     try:
@@ -131,7 +138,11 @@ def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
 
 
 def _materialize_frames(first: np.ndarray, rest: Iterable[np.ndarray]) -> list[np.ndarray]:
-    """Return full frame list including first frame."""
+    """Return full frame list including first frame.
+
+    Returns:
+        List of all frames starting with the first frame followed by remaining frames.
+    """
     remaining = list(rest)
     return [first, *remaining]
 
@@ -235,6 +246,11 @@ def encode_frames(
         peak_rss_mb to result (T034 / FR-012). If psutil missing this is ignored.
     sample_interval_s: float, default 0.1
         Interval between memory samples.
+
+    Returns
+    -------
+    EncodeResult
+        Result object containing output path, status, encoding time, and optional peak memory.
     """
     if not moviepy_ready() or ImageSequenceClip is None:
         return EncodeResult(path=out_path, status="skipped", note=NOTE_MOVIEPY_MISSING)

@@ -167,6 +167,9 @@ def validate_replay_episode(ep: ReplayEpisode, min_length: int = 2) -> bool:
     - Has at least `min_length` steps
     - All steps contain finite numeric coordinates (basic check)
     - Timestamps non‑decreasing (monotonic tolerance: strictly increasing or equal)
+
+    Returns:
+        True if the episode meets all validation criteria, False otherwise.
     """
     if len(ep.steps) < min_length:
         return False
@@ -250,6 +253,9 @@ def extract_replay_episodes(records: list[dict], min_length: int = 2):
     Returns mapping episode_id -> ReplayEpisode for those with a valid
     `replay_steps` list of (t,x,y,heading) tuples. Invalid or too-short
     sequences are ignored (caller may apply skip logic per FR-008).
+
+    Returns:
+        Dictionary mapping episode IDs to validated ReplayEpisode objects.
     """
     out: dict[str, ReplayEpisode] = {}
     for rec in records:

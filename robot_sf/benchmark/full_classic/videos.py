@@ -72,6 +72,9 @@ def _canvas_to_rgb_simple(fig) -> np.ndarray:
     harness) should set MPLBACKEND=Agg before importing matplotlib to ensure
     `tostring_rgb` is available. If absent we raise a clear error directing the
     user to set MPLBACKEND=Agg.
+
+    Returns:
+        RGB numpy array with shape (height, width, 3) and dtype uint8.
     """
     fig.canvas.draw()  # type: ignore[attr-defined]
     w, h = fig.canvas.get_width_height()  # type: ignore[attr-defined]
@@ -94,7 +97,11 @@ def _canvas_to_rgb_simple(fig) -> np.ndarray:
 
 
 def _render_episode_frames(seed: int, N: int) -> tuple[list, list[float], list[float]]:
-    """Generate synthetic (x,y) path coordinates for episode rendering."""
+    """Generate synthetic (x,y) path coordinates for episode rendering.
+
+    Returns:
+        Tuple of (empty list, x coordinates, y coordinates).
+    """
     xs = [math.cos((seed + i) * 0.15) for i in range(N)]
     ys = [math.sin((seed + i) * 0.15) for i in range(N)]
     return [], xs, ys
@@ -134,6 +141,9 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
         - disable_videos / no_video (bool): skip with note 'disabled'
         - max_videos (int)
         - video_renderer (str): synthetic | sim-view | none
+
+    Returns:
+        List of _VideoArtifact objects containing metadata for generated videos.
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -153,6 +163,9 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
         Args:
             rec: TODO docstring.
             note: TODO docstring.
+
+        Returns:
+            _VideoArtifact object with skipped status and provided note.
         """
         episode_id = rec.get("episode_id", "unknown")
         mp4_name = f"video_{episode_id}.mp4"
@@ -260,7 +273,11 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
 
 
 def artifacts_to_manifest(artifacts: list[_VideoArtifact]):
-    """Convert internal artifacts list to manifest dict for JSON dumping."""
+    """Convert internal artifacts list to manifest dict for JSON dumping.
+
+    Returns:
+        Dictionary with 'artifacts' key containing list of artifact dictionaries.
+    """
     return {
         "artifacts": [
             {k: v for k, v in asdict(a).items() if k not in {"artifact_id"}} for a in artifacts

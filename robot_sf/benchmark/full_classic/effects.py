@@ -62,6 +62,9 @@ def compute_effect_sizes(groups, cfg):  # T032
     Args:
         groups: TODO docstring.
         cfg: TODO docstring.
+
+    Returns:
+        List of EffectSizeReport objects containing comparisons for each archetype.
     """
     by_arch = _group_by_archetype(groups)
     reference_density = getattr(cfg, "effect_size_reference_density", "low")
@@ -100,6 +103,9 @@ def _build_comparisons_for_archetype(ref_group, density_map, reference_density):
         ref_group: TODO docstring.
         density_map: TODO docstring.
         reference_density: TODO docstring.
+
+    Returns:
+        List of EffectSizeEntry objects from comparing reference to other densities.
     """
     comparisons: list[EffectSizeEntry] = []
     for density_key, group in sorted(density_map.items()):
@@ -120,6 +126,9 @@ def _rate_effect_sizes(ref_group, other_group, ref_density, other_density):
         other_group: TODO docstring.
         ref_density: TODO docstring.
         other_density: TODO docstring.
+
+    Returns:
+        List of EffectSizeEntry objects for rate-based metrics.
     """
     entries: list[EffectSizeEntry] = []
     for metric in RATE_METRICS:
@@ -153,6 +162,9 @@ def _continuous_effect_sizes(ref_group, other_group, ref_density, other_density)
         other_group: TODO docstring.
         ref_density: TODO docstring.
         other_density: TODO docstring.
+
+    Returns:
+        List of EffectSizeEntry objects for continuous metrics.
     """
     entries: list[EffectSizeEntry] = []
     for metric in CONT_METRICS:
@@ -183,6 +195,9 @@ def _glass_delta(ref_metric, diff, n):
         ref_metric: TODO docstring.
         diff: TODO docstring.
         n: TODO docstring.
+
+    Returns:
+        Glass's Delta standardized effect size, or 0.0 if cannot be computed.
     """
     ci = getattr(ref_metric, "mean_ci", None)
     if not ci or n <= 1:

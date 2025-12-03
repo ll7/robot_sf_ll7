@@ -534,6 +534,9 @@ def compute_aggregates_with_ci(
     This preserves the original aggregate keys (mean, median, p95) and, when
     return_ci is True and bootstrap_samples>0, adds parallel keys 'mean_ci',
     'median_ci', 'p95_ci' with [low, high] bounds using percentile bootstrap.
+
+    Returns:
+        Nested dictionary mapping group names to metric names to aggregate statistics.
     """
     # Start from base aggregates (no CI) for consistency
     base = compute_aggregates(

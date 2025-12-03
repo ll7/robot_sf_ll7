@@ -217,6 +217,11 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         Scenario parameter dictionary (see module docstring).
     seed : int
         RNG seed for reproducibility.
+
+    Returns
+    -------
+    GeneratedScenario
+        Object containing generated state, map definition, and robot configuration.
     """
     # Special preset for testing/validation: guaranteed contact at t=0
     # Places one pedestrian exactly at the default robot start (0.3, 3.0)

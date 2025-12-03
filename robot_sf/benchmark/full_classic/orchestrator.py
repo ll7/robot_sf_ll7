@@ -79,7 +79,11 @@ def _ensure_algo_metadata(
     episode_id: str | None,
     logger_ctx=None,
 ) -> dict[str, Any]:
-    """Mirror the algorithm identifier into scenario_params and validate payloads."""
+    """Mirror the algorithm identifier into scenario_params and validate payloads.
+
+    Returns:
+        Updated record dictionary with algorithm metadata injected.
+    """
 
     log = logger_ctx or logger
     algo_value = algo.strip() if isinstance(algo, str) else ""
@@ -125,6 +129,9 @@ def _compute_git_hash(root: Path) -> str:
 
     Falls back to 'unknown' if repository metadata is inaccessible. Separated to keep
     orchestration function lean (polish phase refactor for C901).
+
+    Returns:
+        Short git hash (12 characters) or 'unknown' if not retrievable.
     """
     git_hash = "unknown"
     try:  # pragma: no cover - environment dependent
@@ -152,6 +159,9 @@ def _prepare_output_dirs(cfg):
 
     Args:
         cfg: TODO docstring.
+
+    Returns:
+        Tuple of (root, episodes_dir, aggregates_dir, reports_dir, plots_dir) Path objects.
     """
     root = Path(cfg.output_root)
     episodes_dir = root / "episodes"
@@ -190,7 +200,11 @@ def _init_manifest(
 
 
 def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
-    """Update runtime, throughput and synthetic parallel efficiency stats in manifest."""
+    """Update runtime, throughput and synthetic parallel efficiency stats in manifest.
+
+    Returns:
+        Updated scaling_efficiency dictionary from the manifest.
+    """
     now = time.time()
     manifest.runtime_sec = max(0.0, now - manifest.created_at)
     manifest.workers = int(getattr(cfg, "workers", 1) or 1)
@@ -219,6 +233,7 @@ def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
         groups: TODO docstring.
         effects: TODO docstring.
         precision_report: TODO docstring.
+
     """
     _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
     _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
@@ -234,6 +249,9 @@ def _episode_id_from_job(job) -> str:
     Contract (early phase): scenario_id + '-' + seed. Horizon intentionally excluded
     to keep reproducibility with initial tests; may evolve later when multi‑horizon
     episodes are introduced.
+
+    Returns:
+        Episode ID string in format "scenario_id-seed".
     """
     return f"{job.scenario_id}-{job.seed}"
 
@@ -245,7 +263,7 @@ def _scan_existing_episode_ids(path: Path) -> set[str]:
         path: TODO docstring.
 
     Returns:
-        TODO docstring.
+        Set of episode IDs found in the episodes file.
     """
     ids: set[str] = set()
     if not path.exists():
@@ -288,6 +306,9 @@ def _load_snqi_weights(path: str | None):
 
     Args:
         path: TODO docstring.
+
+    Returns:
+        Dictionary of SNQI weights, either from file or default values.
     """
     if not path:
         return dict(_DEFAULT_SNQI_WEIGHTS)
@@ -326,6 +347,9 @@ def _build_env_config(scenario, cfg, horizon: int):
         scenario: TODO docstring.
         cfg: TODO docstring.
         horizon: TODO docstring.
+
+    Returns:
+        Robot environment configuration object.
     """
     raw = dict(getattr(scenario, "raw", {}))
     matrix_path = Path(cfg.scenario_matrix_path)
@@ -407,6 +431,9 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
     Returns an array shaped like ``ped_pos``. Missing or mismatched force data is
     filled with NaNs so downstream metrics can flag absent samples instead of
     silently reporting zeros.
+
+    Returns:
+        Array of pedestrian forces with same shape as ped_pos, NaN-filled if unavailable.
     """
 
     forces = getattr(simulator, "last_ped_forces", None)
@@ -458,6 +485,9 @@ def _capture_visual_state(env):
 
     Args:
         env: TODO docstring.
+
+    Returns:
+        Tuple of (ray_vecs, ped_actions, robot_goal) or (None, None, None) if unavailable.
     """
     if not hasattr(env, "_prepare_visualizable_state"):
         return None, None, None
@@ -572,6 +602,9 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
         horizon: TODO docstring.
         episode_id: TODO docstring.
         scenario: TODO docstring.
+
+    Returns:
+        Tuple of (env, dt, replay_cap, goal_vec).
     """
     config = _build_env_config(scenario, cfg, horizon)
     capture_replay = bool(getattr(cfg, "capture_replay", False))
@@ -631,6 +664,9 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
         horizon: TODO docstring.
         dt: TODO docstring.
         replay_cap: TODO docstring.
+
+    Returns:
+        Tuple of (robot_positions, ped_positions, ped_forces, reached_goal_step, terminated, truncated, info).
     """
     robot_positions: list[np.ndarray] = []
     ped_positions: list[np.ndarray] = []
@@ -695,7 +731,11 @@ def _close_env(env):
 
 
 def _make_episode_record(job, cfg) -> dict[str, Any]:
-    """Execute a real episode using the environment factory and compute metrics."""
+    """Execute a real episode using the environment factory and compute metrics.
+
+    Returns:
+        Episode record dictionary containing metrics, status, and metadata.
+    """
 
     episode_id = _episode_id_from_job(job)
     if bool(getattr(cfg, "fast_stub", False)):
@@ -906,6 +946,9 @@ def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
     Args:
         job: TODO docstring.
         cfg_payload: TODO docstring.
+
+    Returns:
+        Episode record dictionary with wall_time_sec added.
     """
 
     class _TempCfg:
@@ -1001,6 +1044,9 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
     Future iterations (T034) will incorporate precision evaluation. Seeds are derived
     by extending scenario.planned_seeds with deterministic incremental integers if
     needed (placeholder logic) to avoid blocking on full seeding strategy.
+
+    Returns:
+        Tuple of (done_flag, new_jobs_list).
     """
     # Touch manifest to avoid unused param lint (future: record iteration stats)
     _ = manifest
@@ -1067,6 +1113,9 @@ def run_full_benchmark(cfg):  # T029 + T034 integration (refactored in polish ph
     Refactored to reduce cyclomatic complexity (extracting helpers for setup, manifest
     initialization, scaling efficiency instrumentation, artifact writes). Public
     semantics preserved for existing tests.
+
+    Returns:
+        Final BenchmarkManifest object with execution statistics and artifact paths.
     """
     # Output & planning
     root, episodes_dir, _aggregates_dir, _reports_dir, _plots_dir = _prepare_output_dirs(cfg)
@@ -1218,6 +1267,9 @@ def _serialize_groups(groups):
 
     Args:
         groups: TODO docstring.
+
+    Returns:
+        List of serialized group dictionaries.
     """
     out = []
     for g in groups:
@@ -1246,6 +1298,9 @@ def _serialize_effects(effects):
 
     Args:
         effects: TODO docstring.
+
+    Returns:
+        List of serialized effect size report dictionaries.
     """
     out = []
     for rep in effects:
@@ -1272,6 +1327,9 @@ def _serialize_precision(report):
 
     Args:
         report: TODO docstring.
+
+    Returns:
+        Dictionary containing serialized precision report.
     """
     return {
         "final_pass": report.final_pass,

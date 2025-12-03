@@ -17,12 +17,15 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
-    """TODO docstring. Document this function.
+    """Get nested dict value via dotted path.
 
     Args:
-        d: TODO docstring.
-        path: TODO docstring.
-        default: TODO docstring.
+        d: Dictionary to navigate.
+        path: Dot-separated key path (e.g., "metrics.success").
+        default: Value to return if path is not found.
+
+    Returns:
+        The value at the dotted path, or default if not found.
     """
     cur: object = d
     for part in path.split("."):
@@ -156,13 +159,13 @@ def format_csv(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
 
 
 def to_json(rows: Sequence[TableRow]) -> list[dict[str, object]]:
-    """TODO docstring. Document this function.
+    """Return JSON-serializable list of dicts for the table rows.
 
     Args:
-        rows: TODO docstring.
+        rows: Table rows to serialize.
 
     Returns:
-        TODO docstring.
+        List of dicts with group and metric values.
     """
     out: list[dict[str, object]] = []
     for r in rows:
@@ -171,7 +174,11 @@ def to_json(rows: Sequence[TableRow]) -> list[dict[str, object]]:
 
 
 def _latex_escape(text: str) -> str:
-    """Escape special LaTeX characters in text cells."""
+    """Escape special LaTeX characters in text cells.
+
+    Returns:
+        Text with special LaTeX characters escaped.
+    """
     replacements = {
         "\\": r"\textbackslash{}",
         "&": r"\&",
@@ -196,6 +203,9 @@ def format_latex_booktabs(rows: Sequence[TableRow], metrics: Sequence[str]) -> s
     - Assumes the caller includes \usepackage{booktabs} in the preamble.
     - Column spec: l for Group, r for each numeric metric column.
     - Values are formatted to 4 decimals; missing values render as empty.
+
+    Returns:
+        LaTeX table source code using booktabs package.
     """
     # Column alignment: one 'l' plus one 'r' per metric
     col_spec = "l" + ("r" * len(metrics))

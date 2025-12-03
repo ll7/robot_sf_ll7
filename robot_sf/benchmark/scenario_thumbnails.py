@@ -128,6 +128,11 @@ def render_scenario_thumbnail(
     """Render a single scenario thumbnail to disk.
 
     Returns ThumbMeta with written paths.
+
+    Returns
+    -------
+    ThumbMeta
+        Metadata object containing paths to the rendered PNG and optional PDF files.
     """
     _latex_rcparams()
     set_global_seed(seed, deterministic=True)
@@ -216,6 +221,11 @@ def save_montage(
     """Compose a simple montage grid from already-rendered thumbnails.
 
     Loads PNGs from metas to avoid re-rendering. Returns dict of written paths.
+
+    Returns
+    -------
+    dict[str, str]
+        Dictionary mapping 'png' (and optionally 'pdf') keys to written file paths.
     """
     if len(metas) == 0:
         return {"png": str(out_png)}

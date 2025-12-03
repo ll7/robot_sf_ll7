@@ -85,11 +85,19 @@ class SchemaVersion:
 
     @classmethod
     def from_string(cls, version_string: str) -> "SchemaVersion":
-        """Alias for parse() for backward compatibility."""
+        """Alias for parse() for backward compatibility.
+
+        Returns:
+            SchemaVersion instance parsed from the version string.
+        """
         return cls.parse(version_string)
 
     def __str__(self) -> str:
-        """String representation of the version."""
+        """String representation of the version.
+
+        Returns:
+            Semantic version string (e.g., '1.2.3' or '1.2.3-beta+build.123').
+        """
         version = f"{self.major}.{self.minor}.{self.patch}"
         if self.prerelease:
             version += f"-{self.prerelease}"
@@ -98,11 +106,19 @@ class SchemaVersion:
         return version
 
     def __repr__(self) -> str:
-        """Detailed string representation."""
+        """Detailed string representation.
+
+        Returns:
+            Constructor-style representation showing all version components.
+        """
         return f"SchemaVersion(major={self.major}, minor={self.minor}, patch={self.patch}, prerelease={self.prerelease!r}, build={self.build!r})"
 
     def __eq__(self, other: object) -> bool:
-        """Check equality with another SchemaVersion."""
+        """Check equality with another SchemaVersion.
+
+        Returns:
+            True if all version components match.
+        """
         if not isinstance(other, SchemaVersion):
             return False
         return (
@@ -114,7 +130,11 @@ class SchemaVersion:
         )
 
     def __lt__(self, other: "SchemaVersion") -> bool:
-        """Compare versions for ordering."""
+        """Compare versions for ordering.
+
+        Returns:
+            True if this version is semantically less than the other version.
+        """
         if not isinstance(other, SchemaVersion):
             return NotImplemented
 
@@ -171,7 +191,11 @@ class SchemaVersion:
         return not (self < other)
 
     def __hash__(self) -> int:
-        """Hash for use in sets and dictionaries."""
+        """Hash for use in sets and dictionaries.
+
+        Returns:
+            Hash value computed from all version components.
+        """
         return hash((self.major, self.minor, self.patch, self.prerelease, self.build))
 
     def is_compatible_with(self, other: "SchemaVersion") -> bool:
@@ -192,20 +216,36 @@ class SchemaVersion:
         return self.major == other.major and self >= other
 
     def next_major(self) -> "SchemaVersion":
-        """Get the next major version (resets minor and patch)."""
+        """Get the next major version (resets minor and patch).
+
+        Returns:
+            New SchemaVersion with incremented major and zero minor/patch.
+        """
         return SchemaVersion(self.major + 1, 0, 0)
 
     def next_minor(self) -> "SchemaVersion":
-        """Get the next minor version (resets patch)."""
+        """Get the next minor version (resets patch).
+
+        Returns:
+            New SchemaVersion with incremented minor and zero patch.
+        """
         return SchemaVersion(self.major, self.minor + 1, 0)
 
     def next_patch(self) -> "SchemaVersion":
-        """Get the next patch version."""
+        """Get the next patch version.
+
+        Returns:
+            New SchemaVersion with incremented patch.
+        """
         return SchemaVersion(self.major, self.minor, self.patch + 1)
 
     @property
     def is_prerelease(self) -> bool:
-        """Check if this is a prerelease version."""
+        """Check if this is a prerelease version.
+
+        Returns:
+            True if prerelease component is present.
+        """
         return self.prerelease is not None
 
     @property

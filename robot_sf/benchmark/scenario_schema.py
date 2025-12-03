@@ -63,6 +63,11 @@ def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, An
 
     Returns a list of error dicts; empty when valid. Also checks for duplicate
     scenario IDs and repeats>=1 constraint (also in schema, but kept defensively).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        List of validation error dictionaries; empty list indicates valid input.
     """
     schema = load_scenario_schema()
     item_schema = schema.get("items", {})

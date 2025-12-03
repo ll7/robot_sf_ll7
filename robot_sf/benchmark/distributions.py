@@ -31,6 +31,9 @@ def _get_dotted(d: Mapping[str, object], path: str, default=None):
         d: TODO docstring.
         path: TODO docstring.
         default: TODO docstring.
+
+    Returns:
+        The value at the dotted path, or default if not found.
     """
     cur: object = d
     for part in path.split("."):
@@ -50,6 +53,9 @@ def collect_grouped_values(
     """Collect values per metric per group.
 
     Returns dict[group][metric] -> List[float]
+
+    Returns:
+        Nested dictionary mapping group names to metric names to value lists.
     """
 
     def _to_float(x: object | None) -> float | None:
@@ -140,6 +146,9 @@ def _compute_hist_ci(
     """Bootstrap histogram-count confidence band for given values.
 
     Returns (centers, low, high) or None if not enough/invalid data.
+
+    Returns:
+        Tuple of (bin_centers, lower_bound, upper_bound) or None if insufficient data.
     """
     if vals.size < 5:
         return None
@@ -217,7 +226,11 @@ def _render_metric(
 
 
 def _metrics_in_grouped(grouped: dict[str, dict[str, list[float]]]) -> list[str]:
-    """Return sorted unique metric names present in grouped dict."""
+    """Return sorted unique metric names present in grouped dict.
+
+    Returns:
+        Sorted list of unique metric names found across all groups.
+    """
     return sorted({m for gv in grouped.values() for m in gv})
 
 
@@ -235,7 +248,11 @@ def _save_one_metric(
     palette: Sequence[str],
     out_pdf: bool,
 ) -> tuple[str, str | None]:
-    """Render and save a single metric to PNG and optionally PDF; returns paths."""
+    """Render and save a single metric to PNG and optionally PDF; returns paths.
+
+    Returns:
+        Tuple of (png_path, pdf_path) where pdf_path is None if not generated.
+    """
     # PNG
     fig, ax = plt.subplots(figsize=(6, 4))
     _render_metric(
@@ -300,6 +317,9 @@ def save_distributions(
     """Save per-group per-metric histograms (and optional KDE overlays).
 
     If out_pdf is True, also export a vector PDF with LaTeX-friendly rcParams.
+
+    Returns:
+        DistPlotMeta containing lists of written PNG and PDF paths.
     """
     _apply_rcparams()
     out_dir = str(out_dir)

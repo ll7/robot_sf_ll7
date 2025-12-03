@@ -33,7 +33,11 @@ class AggregationMetadataError(ValueError):
         self.advice = advice
 
     def to_dict(self) -> dict[str, object]:
-        """Structured representation suitable for logging or JSON responses."""
+        """Structured representation suitable for logging or JSON responses.
+
+        Returns:
+            Dictionary containing error details (message, episode_id, missing_fields, advice).
+        """
 
         payload: dict[str, object] = {
             "message": str(self),

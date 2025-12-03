@@ -65,6 +65,9 @@ def _write_placeholder_text(path: Path, title: str, lines: list[str]):
         path: TODO docstring.
         title: TODO docstring.
         lines: TODO docstring.
+
+    Returns:
+        Boolean indicating success (True) or failure/unavailable (False).
     """
     if plt is None:
         return False
@@ -326,6 +329,9 @@ def generate_plots(groups, records, out_dir, cfg):  # T035 basic + T036 extended
       - KDE, Pareto, force heatmap placeholders (T036) always produced as placeholder PDFs
         unless matplotlib missing (then skipped).
     In smoke mode all artifacts are still generated as lightweight placeholders.
+
+    Returns:
+        List of _PlotArtifact objects containing metadata for all generated plots.
     """
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)

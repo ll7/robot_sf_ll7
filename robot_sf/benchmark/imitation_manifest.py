@@ -46,7 +46,11 @@ def _artifact_root() -> Path:
 
 
 def _path_to_manifest(path: Path) -> str:
-    """Deserialise ``path`` to a portable string, relative to the artefact root when possible."""
+    """Deserialise ``path`` to a portable string, relative to the artefact root when possible.
+
+    Returns:
+        Portable path string relative to artifact root if possible, otherwise absolute.
+    """
 
     path_obj = Path(path)
     if not path_obj.is_absolute():
@@ -143,7 +147,11 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def serialize_expert_policy(artifact: ExpertPolicyArtifact) -> dict[str, Any]:
-    """Serialise an expert policy artefact into a manifest-friendly dictionary."""
+    """Serialise an expert policy artefact into a manifest-friendly dictionary.
+
+    Returns:
+        Dictionary representation of the expert policy artifact.
+    """
 
     return {
         "policy_id": artifact.policy_id,
@@ -159,7 +167,11 @@ def serialize_expert_policy(artifact: ExpertPolicyArtifact) -> dict[str, Any]:
 
 
 def serialize_trajectory_dataset(artifact: TrajectoryDatasetArtifact) -> dict[str, Any]:
-    """Serialise a trajectory dataset artefact."""
+    """Serialise a trajectory dataset artefact.
+
+    Returns:
+        Dictionary representation of the trajectory dataset artifact.
+    """
 
     return {
         "dataset_id": artifact.dataset_id,
@@ -178,7 +190,11 @@ def serialize_trajectory_dataset(artifact: TrajectoryDatasetArtifact) -> dict[st
 
 
 def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
-    """Serialise a training run artefact."""
+    """Serialise a training run artefact.
+
+    Returns:
+        Dictionary representation of the training run artifact.
+    """
 
     return {
         "run_id": artifact.run_id,
@@ -198,7 +214,11 @@ def write_expert_policy_manifest(
     *,
     manifest_path: Path | None = None,
 ) -> Path:
-    """Persist an expert policy manifest and return the path written."""
+    """Persist an expert policy manifest and return the path written.
+
+    Returns:
+        Path to the written manifest file.
+    """
 
     payload = serialize_expert_policy(artifact)
     target = (
@@ -216,7 +236,11 @@ def write_trajectory_dataset_manifest(
     *,
     manifest_path: Path | None = None,
 ) -> Path:
-    """Persist a trajectory dataset manifest."""
+    """Persist a trajectory dataset manifest.
+
+    Returns:
+        Path to the written manifest file.
+    """
 
     payload = serialize_trajectory_dataset(artifact)
     if manifest_path is None:
@@ -230,7 +254,11 @@ def write_trajectory_dataset_manifest(
 
 
 def get_training_run_manifest_path(run_id: str, extension: str = ".json") -> Path:
-    """Return the canonical manifest path for an imitation training run."""
+    """Return the canonical manifest path for an imitation training run.
+
+    Returns:
+        Path object pointing to the manifest file location.
+    """
 
     base = get_imitation_report_dir() / "runs"
     base.mkdir(parents=True, exist_ok=True)
@@ -242,7 +270,11 @@ def write_training_run_manifest(
     *,
     manifest_path: Path | None = None,
 ) -> Path:
-    """Persist a training run manifest, ensuring atomic writes."""
+    """Persist a training run manifest, ensuring atomic writes.
+
+    Returns:
+        Path to the written manifest file.
+    """
 
     payload = serialize_training_run(artifact)
     target = (

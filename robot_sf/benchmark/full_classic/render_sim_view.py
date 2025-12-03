@@ -231,6 +231,9 @@ def _build_view(episode: ReplayEpisode, fps: int, video_path: str):
         episode: TODO docstring.
         fps: TODO docstring.
         video_path: TODO docstring.
+
+    Returns:
+        SimulationView instance configured for video recording.
     """
     map_def = _load_map_def(episode)
     view_kwargs: dict = {
@@ -253,7 +256,12 @@ def generate_video_file(
     fps: int = 10,
     max_frames: int | None = None,
 ) -> dict[str, object]:
-    """Render a ReplayEpisode via SimulationView's native recorder and write mp4."""
+    """Render a ReplayEpisode via SimulationView's native recorder and write mp4.
+
+    Returns:
+        Dictionary containing video generation metadata including status, frames produced,
+        and encoding time.
+    """
     _assert_ready()
     dt = episode.dt if episode.dt is not None else (1.0 / fps if fps > 0 else 0.1)
     view = _build_view(episode, fps, video_path)

@@ -177,6 +177,9 @@ def compute_snqi_ablation(
 
     Returns a list of AblationRow with base mean SNQI, base rank, and per-weight
     rank shifts (positive = moved down/worse if higher-is-better baseline).
+
+    Returns:
+        List of ablation rows showing rank changes when each weight is zeroed.
     """
     base_means = _compute_group_means(records, weights, baseline, group_by, fallback_group_by)
     base_ranked = _ranking_from_means(base_means, ascending=False)
@@ -287,6 +290,9 @@ def compute_ablation_summary(rows: Sequence[AblationRow]) -> dict[str, dict[str,
 
     Returns mapping weight_name -> {changed, mean_abs, max_abs, pos, neg, mean}.
     All values except counts are floats; counts are returned as floats for JSON uniformity.
+
+    Returns:
+        Dictionary mapping each weight name to its summary statistics.
     """
     # Gather all weight names that appear in any row
     weight_names = sorted({w for r in rows for w in r.deltas})

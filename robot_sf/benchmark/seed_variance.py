@@ -153,6 +153,11 @@ def compute_seed_variance(
     """Compute per-metric seed variability for groups.
 
     Returns mapping group -> metric -> stats(mean, std, cv, count).
+
+    Returns
+    -------
+    dict[str, dict[str, dict[str, float]]]
+        Nested dictionary: group -> metric -> statistics (mean, std, cv, count).
     """
     groups = _group_rows(records, group_by, fallback_group_by)
     metric_names = _collect_metric_names(groups, metrics)

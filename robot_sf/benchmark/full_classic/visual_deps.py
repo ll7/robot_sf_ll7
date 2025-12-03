@@ -24,6 +24,9 @@ def simulation_view_ready() -> bool:  # T030
     - Uses dummy headless surface automatically when SDL_VIDEODRIVER=dummy.
     - Immediately quits pygame to avoid leaving an extra window/context.
     - Avoids retaining the instance to minimize memory footprint.
+
+    Returns:
+        True if SimulationView can be instantiated and has a valid surface, False otherwise.
     """
     if not has_pygame():  # Quick fail path
         return False
@@ -117,6 +120,9 @@ def moviepy_ready() -> bool:
 
     We do not attempt an encode test here to avoid overhead; actual encode
     errors will still be caught and converted into failure/skip notes.
+
+    Returns:
+        True if both moviepy is importable and ffmpeg is in PATH, False otherwise.
     """
     return has_moviepy() and ffmpeg_in_path()
 

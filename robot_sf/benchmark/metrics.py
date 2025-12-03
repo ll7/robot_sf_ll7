@@ -97,6 +97,9 @@ def has_force_data(data: EpisodeData) -> bool:
     Force-based metrics are meaningless when the episode contains pedestrians
     but ``ped_forces`` is either missing, all zeros, or entirely non-finite.
     The helper treats the K=0 case as valid (no force data expected).
+
+    Returns:
+        True if valid force data is available, False otherwise.
     """
 
     if data.peds_pos.shape[1] == 0:
@@ -178,6 +181,9 @@ def success(data: EpisodeData, *, horizon: int) -> float:
     """Return 1 if goal reached before horizon with zero collisions else 0.
 
     Uses `reached_goal_step` if provided; if absent returns 0 (unknown / not reached).
+
+    Returns:
+        1.0 if successful (goal reached without collisions), 0.0 otherwise.
     """
     if data.reached_goal_step is None:
         return 0.0
@@ -193,6 +199,9 @@ def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
     """Normalized time to goal; 1.0 if not successful.
 
     success definition mirrors `success` metric (no collision + reached early).
+
+    Returns:
+        Normalized time to goal (0.0-1.0), or 1.0 if not successful.
     """
     if success(data, horizon=horizon) == 1.0:
         assert data.reached_goal_step is not None
@@ -204,6 +213,9 @@ def collisions(data: EpisodeData) -> float:
     """Count timesteps where min pedestrian distance < D_COLL.
 
     If no pedestrians are present (K=0) returns 0.0.
+
+    Returns:
+        Number of collision timesteps.
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
@@ -217,6 +229,9 @@ def near_misses(data: EpisodeData) -> float:
     """Count timesteps with d_coll <= min distance < d_near.
 
     If no pedestrians present returns 0.0.
+
+    Returns:
+        Number of near-miss timesteps.
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
@@ -231,6 +246,9 @@ def min_distance(data: EpisodeData) -> float:
     """Return global minimum distance to any pedestrian.
 
     Returns NaN when there are no pedestrians.
+
+    Returns:
+        Minimum distance in meters, or NaN if no pedestrians.
     """
     if data.peds_pos.shape[1] == 0:
         return float("nan")
@@ -244,6 +262,9 @@ def mean_distance(data: EpisodeData) -> float:
 
     At each timestep t, compute d_t = min_k ||peds_pos[t, k] - robot_pos[t]||.
     Return mean_t d_t. Returns NaN if there are no pedestrians.
+
+    Returns:
+        Mean minimum distance in meters, or NaN if no pedestrians.
     """
     # If no pedestrians (K==0), undefined -> NaN to mirror min_distance behavior
     if data.peds_pos.shape[1] == 0:
@@ -259,6 +280,9 @@ def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
 
     Actual path taken: positions up to goal step (inclusive) if reached, else full horizon.
     If actual length is ~0 (stationary) returns 1.0.
+
+    Returns:
+        Path efficiency ratio (0.0 to 1.0).
     """
     if data.robot_pos.shape[0] < 2:
         return 1.0
@@ -284,6 +308,9 @@ def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -
     """Compute quantiles of pedestrian force magnitudes.
 
     Returns NaN for each quantile if there are no pedestrians or timesteps.
+
+    Returns:
+        Dictionary mapping quantile labels to force magnitudes.
     """
     K = data.peds_pos.shape[1]
     T = data.peds_pos.shape[0]
@@ -359,6 +386,9 @@ def force_exceed_events(data: EpisodeData, threshold: float = COMFORT_FORCE_THRE
     """Count (t,k) events where |F| > threshold.
 
     Returns 0 if no pedestrians.
+
+    Returns:
+        Number of force threshold exceedance events.
     """
     if data.peds_pos.shape[1] == 0:
         return 0.0
@@ -372,6 +402,9 @@ def comfort_exposure(data: EpisodeData, threshold: float = COMFORT_FORCE_THRESHO
     """Normalized exposure to high force events.
 
     force_exceed_events / (K * T) where K=#peds, T=#timesteps. 0 if K==0 or T==0.
+
+    Returns:
+        Normalized comfort exposure ratio (0.0 to 1.0).
     """
     K = data.peds_pos.shape[1]
     T = data.peds_pos.shape[0]
@@ -417,6 +450,9 @@ def curvature_mean(data: EpisodeData) -> float:
     where v is velocity and a is acceleration, both computed from position differences.
     For T position samples there are T-1 velocity samples and T-2 acceleration samples.
     If fewer than 4 timesteps, returns 0.0.
+
+    Returns:
+        Mean path curvature, or 0.0 if insufficient data.
     """
     pos = data.robot_pos
     T = pos.shape[0]
@@ -465,6 +501,9 @@ def energy(data: EpisodeData) -> float:
     """Sum of acceleration magnitudes over time.
 
     If no timesteps returns 0.0.
+
+    Returns:
+        Total energy (sum of acceleration magnitudes).
     """
     acc = data.robot_acc
     if acc.size == 0:
@@ -478,6 +517,9 @@ def avg_speed(data: EpisodeData) -> float:
 
     Uses all available timesteps up to the recorded trajectory length.
     Returns 0.0 if there are no velocity samples.
+
+    Returns:
+        Mean speed in meters per second.
     """
     vel = data.robot_vel
     if vel.size == 0:
@@ -489,7 +531,11 @@ def avg_speed(data: EpisodeData) -> float:
 
 
 def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -> float:
-    """Bilinear interpolate V on grid defined by X,Y (both shape (ny,nx))."""
+    """Bilinear interpolate V on grid defined by X,Y (both shape (ny,nx)).
+
+    Returns:
+        Interpolated value, or NaN if point is outside grid bounds.
+    """
     # Assume rectilinear grid aligned so X,Y vary independently
     xs = X[0]
     ys = Y[:, 0]
@@ -520,6 +566,9 @@ def force_gradient_norm_mean(data: EpisodeData) -> float:
 
     Requires `force_field_grid` with keys X,Y,Fx,Fy containing uniform rectilinear grid.
     Returns NaN if grid not present or insufficient points.
+
+    Returns:
+        Mean force gradient norm, or NaN if grid data unavailable.
     """
     grid = data.force_field_grid
     if grid is None:
@@ -584,7 +633,11 @@ def snqi(
     """
 
     def _norm(name: str, value: float) -> float:
-        """Normalize a penalized metric to ``[0, 1]`` based on baseline stats."""
+        """Normalize a penalized metric to ``[0, 1]`` based on baseline stats.
+
+        Returns:
+            Normalized metric value clipped to [0, 1].
+        """
         if baseline_stats is None or name not in baseline_stats:
             return 0.0
         med = baseline_stats[name].get("med", 0.0)
@@ -598,7 +651,11 @@ def snqi(
         return float(norm)
 
     def _safe(val: float | None, default: float = 0.0) -> float:
-        """Return a finite float, falling back to ``default`` when input is None/NaN."""
+        """Return a finite float, falling back to ``default`` when input is None/NaN.
+
+        Returns:
+            Validated finite float value or default.
+        """
         v = float(val) if val is not None else default
         return v if math.isfinite(v) else default
 

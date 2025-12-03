@@ -24,12 +24,15 @@ Record = dict[str, object]
 
 
 def _get_dotted(d: dict[str, object], path: str, default=None):
-    """TODO docstring. Document this function.
+    """Get nested dict value via dotted path.
 
     Args:
-        d: TODO docstring.
-        path: TODO docstring.
-        default: TODO docstring.
+        d: Dictionary to navigate.
+        path: Dot-separated key path (e.g., "metrics.success").
+        default: Value to return if path is not found.
+
+    Returns:
+        The value at the dotted path, or default if not found.
     """
     cur: object = d
     for part in path.split("."):
@@ -92,13 +95,13 @@ def compute_pareto_points(
     points: list[tuple[float, float]] = []
 
     def reducer(vals: list[float]) -> float:
-        """TODO docstring. Document this function.
+        """Aggregate values using configured aggregation method.
 
         Args:
-            vals: TODO docstring.
+            vals: List of metric values to aggregate.
 
         Returns:
-            TODO docstring.
+            Aggregated value (mean or median based on agg parameter).
         """
         if agg == "median":
             return float(np.median(vals))
@@ -160,7 +163,11 @@ def pareto_front_indices(
     x_higher_better: bool = False,
     y_higher_better: bool = False,
 ) -> list[int]:
-    """Return indices of non-dominated points using simple O(n^2) check."""
+    """Return indices of non-dominated points using simple O(n^2) check.
+
+    Returns:
+        List of indices corresponding to Pareto-optimal points.
+    """
     n = len(points)
     idxs = []
     for i in range(n):
@@ -192,6 +199,9 @@ def save_pareto_png(
     """Render and save a Pareto scatter with non-dominated points highlighted.
 
     When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
+
+    Returns:
+        Metadata dict with plot info, point counts, and output paths.
     """
     os.environ.setdefault("MPLBACKEND", "Agg")
     # Apply optional LaTeX plotting style if available.

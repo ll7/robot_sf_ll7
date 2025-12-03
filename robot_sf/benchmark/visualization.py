@@ -34,6 +34,9 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
     Looks for width/height attributes on the root <svg> element. If missing,
     attempts to parse viewBox and derive width/height. Raises FileNotFoundError
     when the file doesn't exist and ValueError for invalid SVG content.
+
+    Returns:
+        Tuple of (width_pixels, height_pixels) parsed from the SVG.
     """
     with open(map_svg_path, encoding="utf-8") as f:
         data = f.read()
@@ -104,19 +107,31 @@ def _ensure_matplotlib_backend() -> None:
 
 
 def _get_pyplot():
-    """TODO docstring. Document this function."""
+    """TODO docstring. Document this function.
+
+    Returns:
+        The matplotlib.pyplot module.
+    """
     _ensure_matplotlib_backend()
     return importlib.import_module("matplotlib.pyplot")
 
 
 def _load_replay_types():
-    """TODO docstring. Document this function."""
+    """TODO docstring. Document this function.
+
+    Returns:
+        Tuple of (ReplayEpisode, ReplayStep) classes from replay module.
+    """
     module = importlib.import_module("robot_sf.benchmark.full_classic.replay")
     return module.ReplayEpisode, module.ReplayStep
 
 
 def _load_image_sequence_clip():
-    """TODO docstring. Document this function."""
+    """TODO docstring. Document this function.
+
+    Returns:
+        The ImageSequenceClip class from moviepy.
+    """
     module = importlib.import_module("moviepy.video.io.ImageSequenceClip")
     return module.ImageSequenceClip
 
@@ -332,7 +347,11 @@ def _check_matplotlib_available() -> None:
 
 
 def _load_episodes(episodes_path: str) -> list[dict]:
-    """Load episodes from JSONL file."""
+    """Load episodes from JSONL file.
+
+    Returns:
+        List of episode dictionaries loaded from JSONL.
+    """
     episodes = []
     try:
         with open(episodes_path, encoding="utf-8") as f:
@@ -365,7 +384,11 @@ def _filter_episodes(
     scenario_filter: str | None,
     baseline_filter: str | None,
 ) -> list[dict]:
-    """Filter episodes based on scenario and baseline filters."""
+    """Filter episodes based on scenario and baseline filters.
+
+    Returns:
+        Filtered list of episode dictionaries.
+    """
     filtered_episodes = episodes
 
     if scenario_filter:
@@ -389,7 +412,11 @@ def _filter_episodes(
 
 
 def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
-    """Generate metrics distribution plot and return artifact."""
+    """Generate metrics distribution plot and return artifact.
+
+    Returns:
+        VisualArtifact metadata object for the generated plot.
+    """
     plt = _get_pyplot()
 
     try:
@@ -461,7 +488,11 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
 
 
 def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
-    """Generate scenario comparison plot and return artifact."""
+    """Generate scenario comparison plot and return artifact.
+
+    Returns:
+        VisualArtifact metadata object for the generated comparison plot.
+    """
     plt = _get_pyplot()
 
     try:
@@ -752,7 +783,11 @@ def _check_moviepy_available() -> None:
 
 
 def _episode_record_to_replay_episode(episode: dict):
-    """Convert an episode record with replay data to a ReplayEpisode object."""
+    """Convert an episode record with replay data to a ReplayEpisode object.
+
+    Returns:
+        ReplayEpisode object constructed from the episode dictionary.
+    """
     try:
         ReplayEpisode, ReplayStep = _load_replay_types()
     except (ImportError, ModuleNotFoundError) as exc:
@@ -822,7 +857,11 @@ def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> l
 
 
 def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
-    """Calculate the bounding box for all trajectory positions."""
+    """Calculate the bounding box for all trajectory positions.
+
+    Returns:
+        Tuple of (min_x, max_x, min_y, max_y) bounding box coordinates with padding.
+    """
     positions: list[tuple[float, float]] = []
     for step in steps:
         positions.append((step.x, step.y))
@@ -846,7 +885,11 @@ def _calculate_trajectory_bounds(steps) -> tuple[float, float, float, float]:
 
 
 def _create_pixel_converter(bounds: tuple[float, float, float, float]):
-    """Create a function to convert world coordinates to pixel coordinates."""
+    """Create a function to convert world coordinates to pixel coordinates.
+
+    Returns:
+        Callable that converts (x, y) world coordinates to (row, col) pixel coordinates.
+    """
     min_x, max_x, min_y, max_y = bounds
     span_x = max(max_x - min_x, 1e-3)
     span_y = max(max_y - min_y, 1e-3)
@@ -876,7 +919,11 @@ def _generate_frames_from_pixels(
     ped_pixels: list[list[tuple[int, int]]],
     max_frames: int,
 ) -> list[np.ndarray]:
-    """Generate video frames from pre-computed pixel positions."""
+    """Generate video frames from pre-computed pixel positions.
+
+    Returns:
+        List of numpy arrays representing video frames (height x width x 3 RGB).
+    """
     height, width = 320, 320
     background = np.array([22, 26, 30], dtype=np.uint8)
     trail_color = (72, 188, 110)

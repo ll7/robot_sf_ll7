@@ -2,7 +2,12 @@
 
 import numpy as np
 
-from robot_sf.planner.socnav import SamplingPlannerAdapter, SocNavPlannerConfig, SocNavPlannerPolicy
+from robot_sf.planner.socnav import (
+    SamplingPlannerAdapter,
+    SocNavBenchSamplingAdapter,
+    SocNavPlannerConfig,
+    SocNavPlannerPolicy,
+)
 
 
 def _make_obs(goal=(5.0, 0.0), heading=0.0):
@@ -60,4 +65,12 @@ def test_policy_wrapper_calls_adapter():
     policy = SocNavPlannerPolicy(adapter)
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
     v, _w = policy.act(obs)
+    assert v >= 0.0
+
+
+def test_socnavbench_adapter_fallbacks():
+    """SocNavBench adapter should fall back gracefully when upstream is unavailable."""
+    adapter = SocNavBenchSamplingAdapter(SocNavPlannerConfig(max_linear_speed=0.5))
+    obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
+    v, _w = adapter.plan(obs)
     assert v >= 0.0

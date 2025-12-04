@@ -7,7 +7,7 @@ Adhere to the project's constitution (`.specify/memory/constitution.md`).
 - Extract reusable helpers into dedicated modules and refer to `specs/140-extract-reusable-helpers/` for extraction criteria and guidelines.
 
 ## Lint and format code
-`uv run ruff check --fix . && uv run ruff format . && uv run ruff check .`
+`uv run ruff check --fix .; uv run ruff format .; uv run ruff check .`
 
 ## Tests
 `uv run pytest tests`

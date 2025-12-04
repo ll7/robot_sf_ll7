@@ -17,8 +17,6 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.sim.simulator import Simulator
 
-DEFAULT_MAX_PEDS = 64
-
 
 def socnav_observation_space(
     map_def: MapDefinition,

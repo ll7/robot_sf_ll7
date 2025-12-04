@@ -126,6 +126,202 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
         super().__init__(adapter=adapter)
 
 
+class SocialForcePlannerAdapter(SamplingPlannerAdapter):
+    """Heuristic social-force style planner: goal attraction plus pedestrian repulsion."""
+
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """
+        Compute (v, w) using goal attraction and inverse-square pedestrian repulsion.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state = observation["robot"]
+        goal_state = observation["goal"]
+        ped_state = observation["pedestrians"]
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(robot_state["heading"][0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        to_goal = goal - robot_pos
+        goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
+
+        ped_positions = np.asarray(ped_state["positions"], dtype=float)
+        ped_count = int(ped_state["count"][0])
+        ped_positions = ped_positions[:ped_count]
+        repulse = np.zeros(2, dtype=float)
+        for ped in ped_positions:
+            delta = robot_pos - ped
+            dist = np.linalg.norm(delta) + 1e-6
+            repulse += delta / dist**2
+
+        combined = goal_vec + 0.8 * repulse
+        if np.linalg.norm(combined) > 1e-6:
+            combined = combined / np.linalg.norm(combined)
+
+        desired_heading = atan2(combined[1], combined[0])
+        heading_error = self._wrap_angle(desired_heading - robot_heading)
+        angular = float(
+            np.clip(
+                self.config.angular_gain * heading_error,
+                -self.config.max_angular_speed,
+                self.config.max_angular_speed,
+            ),
+        )
+        linear = float(
+            np.clip(
+                np.linalg.norm(to_goal),
+                0.0,
+                self.config.max_linear_speed * max(0.0, 1.0 - abs(heading_error) / pi),
+            ),
+        )
+        return linear, angular
+
+
+class ORCAPlannerAdapter(SamplingPlannerAdapter):
+    """Simplified ORCA-inspired adapter using reciprocal-style avoidance."""
+
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """
+        Compute (v, w) using goal direction plus reciprocal-style avoidance.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state = observation["robot"]
+        goal_state = observation["goal"]
+        ped_state = observation["pedestrians"]
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(robot_state["heading"][0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        to_goal = goal - robot_pos
+        goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
+
+        ped_positions = np.asarray(ped_state["positions"], dtype=float)
+        ped_count = int(ped_state["count"][0])
+        ped_positions = ped_positions[:ped_count]
+
+        avoidance = np.zeros(2, dtype=float)
+        for ped in ped_positions:
+            delta = ped - robot_pos
+            dist = np.linalg.norm(delta) + 1e-6
+            if dist < 5.0:
+                avoidance -= delta / dist
+
+        combined = goal_vec + 1.2 * avoidance
+        if np.linalg.norm(combined) > 1e-6:
+            combined = combined / np.linalg.norm(combined)
+
+        desired_heading = atan2(combined[1], combined[0])
+        heading_error = self._wrap_angle(desired_heading - robot_heading)
+        angular = float(
+            np.clip(
+                1.5 * self.config.angular_gain * heading_error,
+                -self.config.max_angular_speed,
+                self.config.max_angular_speed,
+            ),
+        )
+        linear = float(
+            np.clip(
+                np.linalg.norm(to_goal),
+                0.0,
+                self.config.max_linear_speed * max(0.0, 1.0 - abs(heading_error) / pi),
+            ),
+        )
+        return linear, angular
+
+
+class SACADRLPlannerAdapter(SamplingPlannerAdapter):
+    """Heuristic SA-CADRL-style adapter using nearest pedestrians to bias heading."""
+
+    def plan(self, observation: dict) -> tuple[float, float]:
+        """
+        Compute (v, w) using nearest pedestrian bias similar to SA-CADRL heuristics.
+
+        Returns:
+            tuple[float, float]: Linear and angular velocity command.
+        """
+        robot_state = observation["robot"]
+        goal_state = observation["goal"]
+        ped_state = observation["pedestrians"]
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        robot_heading = float(robot_state["heading"][0])
+        goal = np.asarray(goal_state["current"], dtype=float)
+
+        to_goal = goal - robot_pos
+        goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
+
+        ped_positions = np.asarray(ped_state["positions"], dtype=float)
+        ped_count = int(ped_state["count"][0])
+        ped_positions = ped_positions[:ped_count]
+        if ped_positions.shape[0] > 0:
+            dists = np.linalg.norm(ped_positions - robot_pos, axis=1)
+            nearest_idx = np.argsort(dists)[:3]
+            bias = np.zeros(2, dtype=float)
+            for idx in nearest_idx:
+                delta = robot_pos - ped_positions[idx]
+                dist = dists[idx] + 1e-6
+                bias += delta / dist**1.5
+            combined = goal_vec + 0.6 * bias
+        else:
+            combined = goal_vec
+
+        if np.linalg.norm(combined) > 1e-6:
+            combined = combined / np.linalg.norm(combined)
+
+        desired_heading = atan2(combined[1], combined[0])
+        heading_error = self._wrap_angle(desired_heading - robot_heading)
+        angular = float(
+            np.clip(
+                self.config.angular_gain * heading_error,
+                -self.config.max_angular_speed,
+                self.config.max_angular_speed,
+            ),
+        )
+        linear = float(
+            np.clip(
+                np.linalg.norm(to_goal),
+                0.0,
+                self.config.max_linear_speed * max(0.0, 1.0 - abs(heading_error) / pi),
+            ),
+        )
+        return linear, angular
+
+
+def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+    """
+    Convenience constructor for social-force-like planner policy.
+
+    Returns:
+        SocNavPlannerPolicy: Policy wrapping SocialForcePlannerAdapter.
+    """
+
+    return SocNavPlannerPolicy(adapter=SocialForcePlannerAdapter(config=config))
+
+
+def make_orca_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+    """
+    Convenience constructor for ORCA-like planner policy.
+
+    Returns:
+        SocNavPlannerPolicy: Policy wrapping ORCAPlannerAdapter.
+    """
+
+    return SocNavPlannerPolicy(adapter=ORCAPlannerAdapter(config=config))
+
+
+def make_sacadrl_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:
+    """
+    Convenience constructor for SA-CADRL-like planner policy.
+
+    Returns:
+        SocNavPlannerPolicy: Policy wrapping SACADRLPlannerAdapter.
+    """
+
+    return SocNavPlannerPolicy(adapter=SACADRLPlannerAdapter(config=config))
+
+
 class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
     """
     Adapter that attempts to delegate to the upstream SocNavBench SamplingPlanner.

@@ -34,6 +34,7 @@ from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.socnav_observation import (
+    DEFAULT_MAX_PEDS,
     SocNavObservationFusion,
     socnav_observation_space,
 )
@@ -171,7 +172,9 @@ class RobotEnv(BaseEnv):
         if env_config.observation_mode == ObservationMode.SOCNAV_STRUCT:
             # Build SocNav-style observation space and fusion layer
             ped_count = getattr(self.simulator, "ped_pos", np.zeros((0, 2))).shape[0]
-            max_peds = max(1, ped_count, env_config.sim_config.max_peds_per_group * 4)
+            max_peds = getattr(env_config.sim_config, "max_total_pedestrians", None)
+            if max_peds is None:
+                max_peds = max(DEFAULT_MAX_PEDS, ped_count)
             self.observation_space = socnav_observation_space(
                 self.map_def,
                 env_config,

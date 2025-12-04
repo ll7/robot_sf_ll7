@@ -1,8 +1,8 @@
 
 # Implementation Plan: Type Checking Fixes
 
-**Branch**: `138-phase-1-critical` | **Date**: September 26, 2025 | **Spec**: /Users/lennart/git/robot_sf_ll7/specs/138-phase-1-critical/spec.md
-**Input**: Feature specification from `/specs/138-phase-1-critical/spec.md`
+**Branch**: `138-phase-critical` | **Date**: September 26, 2025 | **Spec**: /Users/lennart/git/robot_sf_ll7/specs/138-phase-critical/spec.md
+**Input**: Feature specification from `/specs/138-phase-critical/spec.md`
 
 ## Execution Flow (/plan command scope)
 ```
@@ -59,7 +59,7 @@ Resolve 103 type checking diagnostics in the robot_sf codebase through a phased 
 
 ### Documentation (this feature)
 ```
-specs/138-phase-1-critical/
+specs/138-phase-critical/
 ├── plan.md              # This file (/plan command output)
 ├── research.md          # Phase 0 output (/plan command)
 ├── data-model.md        # Phase 1 output (/plan command)

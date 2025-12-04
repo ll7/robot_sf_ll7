@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
+from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
@@ -41,6 +42,7 @@ class BaseSimulationConfig:
     # Backend selection and sensor wiring via registries
     backend: str = "fast-pysf"
     sensors: list[dict] = field(default_factory=list)
+    observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
 
     def __post_init__(self):
         """Validate that all required fields are initialized."""

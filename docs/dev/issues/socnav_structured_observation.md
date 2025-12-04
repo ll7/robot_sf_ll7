@@ -1,4 +1,4 @@
-<!-->
+<!--
 Guidance for enabling SocNavBench-style structured observations and planner adapters in Robot SF.
 -->
 

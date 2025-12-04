@@ -17,6 +17,8 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.sim.simulator import Simulator
 
+DEFAULT_MAX_PEDS = 64
+
 
 def socnav_observation_space(
     map_def: MapDefinition,
@@ -126,7 +128,7 @@ class SocNavObservationFusion:
         if total_peds > self.max_pedestrians and not self.truncation_warned:
             logger.warning(
                 "SocNav structured obs truncating pedestrians: seen={}, max_pedestrians={}. "
-                "Increase the configured max_pedestrians to avoid data loss.",
+                "Increase the configured max_pedestrians (or SimulationSettings.max_total_pedestrians) to avoid data loss.",
                 total_peds,
                 self.max_pedestrians,
             )

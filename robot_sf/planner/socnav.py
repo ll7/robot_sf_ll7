@@ -367,7 +367,9 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             SamplingPlanner | None: Upstream planner when dependencies resolve; otherwise ``None``.
         """
         root = socnav_root or Path(__file__).resolve().parents[2] / "output" / "SocNavBench"
-        sys.path.append(str(root))
+        root_str = str(Path(root).resolve())
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
         try:
             import control_pipelines.control_pipeline_v0 as cp  # type: ignore  # noqa: PLC0415
             import objectives.goal_distance as gd  # type: ignore  # noqa: PLC0415
@@ -421,7 +423,10 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             traj = data.get("trajectory")
             if traj is None:
                 return super().plan(observation)
-            # Extract first control as heading to waypoint
+            # NOTE: upstream returns a trajectory and controller matrices; for now we
+            # consume only the immediate waypoint to preserve the (v, w) interface and
+            # avoid binding to controller specifics. This keeps the adapter lightweight
+            # while still aligning heading toward the planned path.
             next_pos = traj.position_nk2()[0, 0]
             to_next = next_pos - pos
             desired_heading = atan2(to_next[1], to_next[0])

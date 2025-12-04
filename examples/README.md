@@ -72,6 +72,7 @@ Feature-focused demos for developers exploring capabilities.
 | [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
 | [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
+| [18 SocNav Structured Observation](./advanced/18_socnav_structured_observation.py) | Use SocNavBench-style structured observations with a simple planner adapter. | _None_ | socnav, planner | ✅ |
 
 ## Benchmarks
 

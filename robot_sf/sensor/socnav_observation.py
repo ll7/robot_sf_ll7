@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 from gymnasium import spaces
+from loguru import logger
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -112,6 +113,7 @@ class SocNavObservationFusion:
     env_config: RobotSimulationConfig
     max_pedestrians: int
     robot_index: int = 0
+    truncation_warned: bool = False
 
     def reset_cache(self) -> None:
         """No-op to match the SensorFusion interface."""
@@ -120,6 +122,15 @@ class SocNavObservationFusion:
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
+        total_peds = ped_positions.shape[0]
+        if total_peds > self.max_pedestrians and not self.truncation_warned:
+            logger.warning(
+                "SocNav structured obs truncating pedestrians: seen={}, max_pedestrians={}. "
+                "Increase the configured max_pedestrians to avoid data loss.",
+                total_peds,
+                self.max_pedestrians,
+            )
+            self.truncation_warned = True
         ped_positions = ped_positions[: self.max_pedestrians]
         padded = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
         if ped_positions.size > 0:
@@ -128,17 +139,21 @@ class SocNavObservationFusion:
         goal = np.asarray(self.simulator.goal_pos[self.robot_index], dtype=np.float32)
         next_goal = self.simulator.next_goal_pos[self.robot_index]
         next_goal_arr = (
-            np.asarray(next_goal, dtype=np.float32) if next_goal is not None else np.zeros(2)
+            np.asarray(next_goal, dtype=np.float32)
+            if next_goal is not None
+            else np.zeros(2, dtype=np.float32)
         )
 
         robot_pose = self.simulator.robots[self.robot_index].pose
+        # Wrap heading to [-pi, pi] to stay within declared observation bounds
+        wrapped_heading = ((robot_pose[1] + np.pi) % (2 * np.pi)) - np.pi
         robot_speed = np.asarray(
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
         return {
             "robot": {
                 "position": np.asarray(robot_pose[0], dtype=np.float32),
-                "heading": np.array([robot_pose[1]], dtype=np.float32),
+                "heading": np.array([wrapped_heading], dtype=np.float32),
                 "speed": robot_speed,
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32

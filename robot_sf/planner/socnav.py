@@ -199,7 +199,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
 
         ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count = int(ped_state["count"][0])
+        ped_count: int = int(ped_state["count"][0])
         ped_positions = ped_positions[:ped_count]
 
         avoidance = np.zeros(2, dtype=float)

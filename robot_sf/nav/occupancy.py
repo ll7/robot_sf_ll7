@@ -1,4 +1,15 @@
-"""TODO docstring. Document this module."""
+"""Lightweight continuous collision checks (no rasterized grid).
+
+This module provides:
+* Circle-circle and circle-segment intersection helpers (Numba-jitted).
+* ``ContinuousOccupancy`` for simple in-bounds, obstacle-segment, and pedestrian-circle checks.
+* ``EgoPedContinuousOccupancy`` for ego pedestrians to check robot collisions.
+
+Notably, this is not an occupancy grid: there is no rasterization, costmap, or spatial index.
+Callers poll callbacks for agent/goal/obstacle positions each step and run O(N) checks over
+segments/pedestrians. It works for small numbers of obstacles/agents, but is not optimized for
+large maps or dense crowds.
+"""
 
 from collections.abc import Callable
 from dataclasses import dataclass

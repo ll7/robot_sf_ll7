@@ -1,5 +1,7 @@
 """Geometry utilities shared across the robot_sf package."""
 
+import math
+
 import numba
 
 from robot_sf.common.types import Vec2D
@@ -20,4 +22,4 @@ def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
     Returns:
         float: Euclidean distance between ``vec_1`` and ``vec_2``.
     """
-    return ((vec_1[0] - vec_2[0]) ** 2 + (vec_1[1] - vec_2[1]) ** 2) ** 0.5
+    return math.hypot(vec_1[0] - vec_2[0], vec_1[1] - vec_2[1])

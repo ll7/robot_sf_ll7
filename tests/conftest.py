@@ -383,3 +383,152 @@ def sample_baseline_data():
             },
         ],
     }
+
+
+# ============================================================================
+# Occupancy Grid Fixtures (from conftest_occupancy.py)
+# ============================================================================
+
+
+@pytest.fixture
+def simple_grid_config():
+    """Basic 10x10m grid with 0.1m resolution (100x100 cells)."""
+    from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+
+    return GridConfig(
+        resolution=0.1,
+        width=10.0,
+        height=10.0,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
+    )
+
+
+@pytest.fixture
+def large_grid_config():
+    """Larger 20x20m grid with 0.1m resolution (200x200 cells)."""
+    from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+
+    return GridConfig(
+        resolution=0.1,
+        width=20.0,
+        height=20.0,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS, GridChannel.ROBOT],
+    )
+
+
+@pytest.fixture
+def coarse_grid_config():
+    """Coarse 10x10m grid with 0.5m resolution (20x20 cells)."""
+    from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+
+    return GridConfig(
+        resolution=0.5,
+        width=10.0,
+        height=10.0,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
+    )
+
+
+@pytest.fixture
+def single_channel_config():
+    """Grid with only obstacles channel."""
+    from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
+
+    return GridConfig(
+        resolution=0.1,
+        width=10.0,
+        height=10.0,
+        channels=[GridChannel.OBSTACLES],
+    )
+
+
+@pytest.fixture
+def occupancy_grid(simple_grid_config):
+    """Instantiated OccupancyGrid with simple config."""
+    from robot_sf.nav.occupancy_grid import OccupancyGrid
+
+    return OccupancyGrid(config=simple_grid_config)
+
+
+@pytest.fixture
+def robot_pose_center():
+    """Robot at center of a 10x10m grid (world frame origin)."""
+    return ((5.0, 5.0), 0.0)
+
+
+@pytest.fixture
+def robot_pose_corner():
+    """Robot at corner of grid."""
+    return ((1.0, 1.0), 0.0)
+
+
+@pytest.fixture
+def robot_pose_rotated():
+    """Robot at center with 45° rotation."""
+    import numpy as np
+
+    return ((5.0, 5.0), np.pi / 4)
+
+
+@pytest.fixture
+def simple_obstacles():
+    """Simple obstacle layout: two horizontal walls."""
+    return [
+        ((1.0, 3.0), (9.0, 3.0)),  # Horizontal wall at Y=3
+        ((1.0, 7.0), (9.0, 7.0)),  # Horizontal wall at Y=7
+    ]
+
+
+@pytest.fixture
+def complex_obstacles():
+    """More complex obstacle layout: rectangular room with interior walls."""
+    return [
+        # Outer walls
+        ((0.5, 0.5), (9.5, 0.5)),  # Bottom
+        ((0.5, 9.5), (9.5, 9.5)),  # Top
+        ((0.5, 0.5), (0.5, 9.5)),  # Left
+        ((9.5, 0.5), (9.5, 9.5)),  # Right
+        # Interior walls
+        ((3.0, 2.0), (3.0, 8.0)),  # Vertical divider
+        ((7.0, 2.0), (7.0, 8.0)),  # Vertical divider
+    ]
+
+
+@pytest.fixture
+def simple_pedestrians():
+    """Simple pedestrian layout: two pedestrians."""
+    return [
+        ((3.0, 5.0), 0.3),  # Pedestrian at (3, 5)
+        ((7.0, 5.0), 0.3),  # Pedestrian at (7, 5)
+    ]
+
+
+@pytest.fixture
+def crowded_pedestrians():
+    """Crowded layout: 5 pedestrians in middle of grid."""
+    return [
+        ((4.5, 4.5), 0.3),
+        ((5.5, 4.5), 0.3),
+        ((5.0, 5.5), 0.3),
+        ((4.5, 5.5), 0.3),
+        ((5.5, 5.5), 0.3),
+    ]
+
+
+@pytest.fixture
+def empty_pedestrians():
+    """Empty pedestrian list."""
+    return []
+
+
+@pytest.fixture
+def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, robot_pose_center):
+    """Pre-generated grid with simple layout."""
+    grid = occupancy_grid
+    grid.generate(
+        obstacles=simple_obstacles,
+        pedestrians=simple_pedestrians,
+        robot_pose=robot_pose_center,
+        ego_frame=False,
+    )
+    return grid

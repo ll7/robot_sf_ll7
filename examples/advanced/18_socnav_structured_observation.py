@@ -2,6 +2,8 @@
 Example: run RobotEnv with SocNavBench-style structured observations and a simple planner.
 """
 
+from loguru import logger
+
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -25,7 +27,7 @@ def main():
         step += 1
 
     env.close()
-    print(f"Episode finished after {step} steps, success={info.get('success', False)}")
+    logger.info(f"Episode finished after {step} steps, success={info.get('success', False)}")
 
 
 if __name__ == "__main__":

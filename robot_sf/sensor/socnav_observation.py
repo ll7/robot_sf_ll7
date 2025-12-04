@@ -17,6 +17,9 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.sim.simulator import Simulator
 
+DEFAULT_MAX_PEDS = 64
+"""Default upper bound for structured SocNav observations when config doesn't set max_total_pedestrians."""
+
 
 def socnav_observation_space(
     map_def: MapDefinition,

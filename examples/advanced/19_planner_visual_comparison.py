@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
 
 import numpy as np
 from loguru import logger
@@ -35,9 +35,8 @@ except ImportError:
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
-from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
-from robot_sf.nav.obstacle import Obstacle
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.nav.svg_map_parser import load_svg_maps
 from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     SACADRLPlannerAdapter,
@@ -46,6 +45,14 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
 )
+
+MAP_PATH = Path("maps/svg_maps/planner_comparison.svg")
+MAP_KEY = MAP_PATH.stem
+EXPECTED_OBS_BBOX = [
+    (6.0, 7.0, 0.0, 8.0),
+    (11.0, 12.0, 4.0, 12.0),
+]
+EXPECTED_SIZE = (18.0, 12.0)
 
 
 @dataclass
@@ -61,55 +68,41 @@ class RolloutResult:
     start: np.ndarray
 
 
-def build_comparison_map() -> MapDefinition:
-    """Create a compact corridor map with a few interactive pedestrians."""
+def _obstacle_bboxes(map_def: MapDefinition) -> list[tuple[float, float, float, float]]:
+    """Return (xmin, xmax, ymin, ymax) for each obstacle."""
 
-    width, height = 18.0, 12.0
-    obstacles = [
-        Obstacle([(6.0, 0.0), (7.0, 0.0), (7.0, 8.0), (6.0, 8.0)]),
-        Obstacle([(11.0, 4.0), (12.0, 4.0), (12.0, 12.0), (11.0, 12.0)]),
-    ]
-    robot_spawn_zones = [((1.0, 1.0), (2.0, 1.0), (2.0, 2.0))]
-    robot_goal_zones = [((16.0, 10.0), (17.0, 10.0), (17.0, 11.0))]
-    ped_spawn_zones: list[Any] = []
-    ped_goal_zones: list[Any] = []
-    ped_crowded_zones: list[Any] = []
-    bounds = [
-        (0.0, width, 0.0, 0.0),
-        (0.0, width, height, height),
-        (0.0, 0.0, 0.0, height),
-        (width, width, 0.0, height),
-    ]
-    robot_routes = [
-        GlobalRoute(
-            spawn_id=0,
-            goal_id=0,
-            # Start the first waypoint far enough from the spawn zone to avoid instant completion
-            waypoints=[(4.0, 2.5), (6.5, 6.5), (10.5, 6.5), (15.5, 10.5)],
-            spawn_zone=robot_spawn_zones[0],
-            goal_zone=robot_goal_zones[0],
-        ),
-    ]
-    ped_routes: list[Any] = []
-    single_pedestrians = [
-        SinglePedestrianDefinition(id="ped_vertical", start=(9.0, 2.0), goal=(9.0, 11.0)),
-        SinglePedestrianDefinition(id="ped_diagonal", start=(3.0, 10.5), goal=(14.5, 3.5)),
-        SinglePedestrianDefinition(id="ped_static", start=(7.5, 6.5)),
-    ]
-    return MapDefinition(
-        width,
-        height,
-        obstacles,
-        robot_spawn_zones,
-        ped_spawn_zones,
-        robot_goal_zones,
-        bounds,
-        robot_routes,
-        ped_goal_zones,
-        ped_crowded_zones,
-        ped_routes,
-        single_pedestrians,
-    )
+    bboxes: list[tuple[float, float, float, float]] = []
+    for obs in map_def.obstacles:
+        xs = [p[0] for p in obs.vertices]
+        ys = [p[1] for p in obs.vertices]
+        bboxes.append((min(xs), max(xs), min(ys), max(ys)))
+    return bboxes
+
+
+def load_comparison_map() -> MapDefinition:
+    """Load the SVG-based comparison map and sanity-check basic dimensions."""
+
+    maps = load_svg_maps(str(MAP_PATH), strict=True)
+    map_def = maps.get(MAP_KEY)
+    if map_def is None:
+        raise FileNotFoundError(f"Expected map '{MAP_KEY}' in {MAP_PATH}")
+
+    if (map_def.width, map_def.height) != EXPECTED_SIZE:
+        logger.warning(
+            "Loaded map size %s differs from expected %s",
+            (map_def.width, map_def.height),
+            EXPECTED_SIZE,
+        )
+
+    bboxes = _obstacle_bboxes(map_def)
+    if sorted(bboxes) != sorted(EXPECTED_OBS_BBOX):
+        logger.warning(
+            "Loaded obstacle bounds %s differ from expected %s",
+            bboxes,
+            EXPECTED_OBS_BBOX,
+        )
+
+    return map_def
 
 
 def make_policies(max_speed: float, max_turn: float) -> OrderedDict[str, SocNavPlannerPolicy]:
@@ -147,7 +140,7 @@ def rollout_policy(
 
     env_config = RobotSimulationConfig(
         observation_mode=ObservationMode.SOCNAV_STRUCT,
-        map_pool=MapDefinitionPool(map_defs={"planner_comparison": base_map}),
+        map_pool=MapDefinitionPool(map_defs={MAP_KEY: base_map}),
     )
     env_config.sim_config.max_total_pedestrians = len(base_map.single_pedestrians)
     env_config.robot_config.max_linear_speed = max_speed
@@ -164,10 +157,16 @@ def rollout_policy(
 
     obs, _ = env.reset()
     start = np.asarray(obs["robot"]["position"], dtype=float).copy()
-    final_goal = np.asarray(env.simulator.robot_navs[0].waypoints[-1], dtype=float).copy()
+    nav = env.simulator.robot_navs[0]
+    final_goal = np.asarray(nav.waypoints[-1], dtype=float).copy()
+    # Force navigation to target the final goal directly to avoid early success at mid-waypoints
+    nav.new_route([tuple(final_goal), tuple(final_goal)])
+    # Refresh observation so goal fields reflect the updated route
+    obs = env.state.sensors.next_obs()
     robot_path: list[np.ndarray] = [np.asarray(obs["robot"]["position"], dtype=float).copy()]
     ped_paths: list[np.ndarray] = []
     success = False
+    route_complete = False
 
     try:
         for step_idx in range(steps):
@@ -182,8 +181,9 @@ def rollout_policy(
                 np.asarray(obs["pedestrians"]["positions"][:ped_count], dtype=float).copy(),
             )
 
-            if terminated or truncated or info.get("success", False):
-                success = info.get("success", False)
+            route_complete = bool(info.get("meta", {}).get("is_route_complete", False))
+            if terminated or truncated or route_complete:
+                success = route_complete
                 logger.info(
                     "Planner '{}' finished at step {} (term={} trunc={} success={})",
                     name,
@@ -241,6 +241,15 @@ def plot_rollouts(results: list[RolloutResult], map_def: MapDefinition) -> None:
             s=80,
             zorder=3,
         )
+        ax.annotate(
+            "goal",
+            (result.final_goal[0], result.final_goal[1]),
+            textcoords="offset points",
+            xytext=(6, 6),
+            color=color,
+            fontsize=9,
+            weight="bold",
+        )
 
     # Visualize pedestrian trajectories from the first rollout (shared scenario)
     ped_traces: dict[int, list[tuple[float, float]]] = defaultdict(list)
@@ -295,7 +304,7 @@ def main():
     """Entry point for the planner comparison demo."""
 
     args = parse_args()
-    base_map = build_comparison_map()
+    base_map = load_comparison_map()
     max_speed = 1.8
     max_turn = 1.2
     policies = make_policies(max_speed=max_speed, max_turn=max_turn)

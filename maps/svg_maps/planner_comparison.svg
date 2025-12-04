@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+    width="18"
+    height="12"
+    viewBox="0 0 18 12"
+    version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+  <sodipodi:namedview
+      id="namedview1"
+      pagecolor="#ffffff"
+      bordercolor="#000000"
+      borderopacity="0.25"
+      inkscape:showpageshadow="false"
+      inkscape:pageopacity="0.0"
+      inkscape:pagecheckerboard="0"
+      inkscape:deskcolor="#d1d1d1"
+      inkscape:document-units="px"
+      inkscape:zoom="8"
+      inkscape:cx="9"
+      inkscape:cy="6"
+      inkscape:window-width="1200"
+      inkscape:window-height="800"
+      inkscape:window-maximized="0"
+      inkscape:current-layer="layer1" />
+  <g id="layer1" inkscape:label="map">
+    <!-- Obstacles reaching the walls -->
+    <rect x="6" y="0" width="1" height="8" fill="#222222" inkscape:label="obstacle" />
+    <rect x="11" y="4" width="1" height="8" fill="#222222" inkscape:label="obstacle" />
+
+    <!-- Robot spawn and goal zones -->
+    <rect x="1" y="1" width="1" height="1" fill="#4caf50" inkscape:label="robot_spawn_zone" />
+    <rect x="16" y="10" width="1" height="1" fill="#f44336" inkscape:label="robot_goal_zone" />
+
+    <!-- Robot route from spawn to goal -->
+    <path
+        d="M 1.5 1.5 L 4.5 6 L 9 6 L 15.5 10.5"
+        stroke="#0000ff"
+        stroke-width="0.05"
+        fill="none"
+        inkscape:label="robot_route_0_0" />
+
+    <!-- Single pedestrians (start/goal markers) -->
+    <circle cx="9" cy="2" r="0.1" fill="#8888ff" inkscape:label="single_ped_ped_vertical_start" />
+    <circle cx="9" cy="11" r="0.1" fill="#8888ff" inkscape:label="single_ped_ped_vertical_goal" />
+
+    <circle cx="3" cy="10.5" r="0.1" fill="#8888ff" inkscape:label="single_ped_ped_diagonal_start" />
+    <circle cx="14.5" cy="3.5" r="0.1" fill="#8888ff" inkscape:label="single_ped_ped_diagonal_goal" />
+
+    <circle cx="7.5" cy="6.5" r="0.1" fill="#8888ff" inkscape:label="single_ped_ped_static_start" />
+  </g>
+</svg>

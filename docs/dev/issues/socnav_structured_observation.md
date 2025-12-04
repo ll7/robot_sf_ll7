@@ -1,6 +1,6 @@
-"""
+<!-->
 Guidance for enabling SocNavBench-style structured observations and planner adapters in Robot SF.
-"""
+-->
 
 # SocNav Structured Observations & Planner Adapters
 
@@ -35,4 +35,4 @@ obs, reward, terminated, truncated, info = env.step(action)
 
 ## Notes
 - Upstream planner integration is best-effort; ensure `output/SocNavBench` is present if you need the original sampling planner. Otherwise, the fallback adapter is used.
-- Default mode remains `DEFAULT_GYM`; enabling SocNav mode is opt-in to avoid breaking existing agents.*** End Patch
+- Default mode remains `DEFAULT_GYM`; enabling SocNav mode is opt-in to avoid breaking existing agents.

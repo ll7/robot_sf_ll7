@@ -377,7 +377,7 @@ except RuntimeError as e:
 ## Version & Compatibility
 
 **API Version**: 1.0  
-**Introduced**: 2025-12 (feature 1382)  
+**Introduced**: 2025-12 (feature 339)  
 **Breaking Changes**: None (new API, extends legacy `occupancy.py`)
 
 **Future Compatibility**:
@@ -402,7 +402,7 @@ except RuntimeError as e:
 
 ## References
 
-- **Data Model**: `specs/1382-extend-occupancy-grid/data-model.md`
+- **Data Model**: `specs/339-extend-occupancy-grid/data-model.md`
 - **Implementation**: `robot_sf/nav/occupancy.py` (module containing all functions)
 - **Tests**: `tests/test_occupancy_*.py` (pytest test suites)
 - **Examples**: `examples/` (usage examples and demos)

@@ -436,8 +436,8 @@ class GridAwareRewardWrapper(gym.Wrapper):
 
 ## References
 
-- **Specification**: `specs/1382-extend-occupancy-grid/spec.md`
-- **Data Model**: `specs/1382-extend-occupancy-grid/data-model.md`
+- **Specification**: `specs/339-extend-occupancy-grid/spec.md`
+- **Data Model**: `specs/339-extend-occupancy-grid/data-model.md`
 - **Dev Guide**: `docs/dev_guide.md` (environment factory, unified config)
 - **Gymnasium Docs**: https://gymnasium.farama.org/ (observation spaces, Box, CnnPolicy)
 - **Stable Baselines3**: https://stable-baselines3.readthedocs.io/ (RL training with visual observations)

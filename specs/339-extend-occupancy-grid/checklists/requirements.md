@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2025-12-04  
-**Feature**: [1382-extend-occupancy-grid/spec.md](../spec.md)
+**Feature**: [339-extend-occupancy-grid/spec.md](../spec.md)
 
 ## Content Quality
 

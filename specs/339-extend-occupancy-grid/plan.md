@@ -1,7 +1,7 @@
 # Implementation Plan: Extended Occupancy Grid with Multi-Channel Support
 
-**Branch**: `1382-extend-occupancy-grid` | **Date**: 2025-12-04 | **Spec**: [specs/1382-extend-occupancy-grid/spec.md](../spec.md)  
-**Input**: Feature specification from `/specs/1382-extend-occupancy-grid/spec.md`
+**Branch**: `339-extend-occupancy-grid` | **Date**: 2025-12-04 | **Spec**: [specs/339-extend-occupancy-grid/spec.md](../spec.md)  
+**Input**: Feature specification from `/specs/339-extend-occupancy-grid/spec.md`
 
 ## Summary
 
@@ -70,7 +70,7 @@ Extend the occupancy grid module in `robot_sf/nav/occupancy.py` to support confi
 ### Documentation (this feature)
 
 ```text
-specs/1382-extend-occupancy-grid/
+specs/339-extend-occupancy-grid/
 ├── spec.md                      # Feature specification ✅ (complete)
 ├── plan.md                      # This file (Phase 0/1 output)
 ├── research.md                  # Phase 0 output (resolve unknowns)

@@ -1,6 +1,6 @@
 # Feature Specification: Extended Occupancy Grid with Multi-Channel Support
 
-**Feature Branch**: `1382-extend-occupancy-grid`  
+**Feature Branch**: `339-extend-occupancy-grid`  
 **Created**: 2025-12-04  
 **Status**: Draft  
 **Input**: Extend occupancy grid with configurable channels for static obstacles and pedestrians, increase test coverage to 100%, add visual pygame tests, integrate with gymnasium observation space, and support point-of-interest queries for spawn validation

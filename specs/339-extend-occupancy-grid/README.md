@@ -1,7 +1,7 @@
 # Occupancy Grid Feature Planning: Complete Package
 
-**Feature**: 1382-extend-occupancy-grid  
-**Branch**: `1382-extend-occupancy-grid`  
+**Feature**: 339-extend-occupancy-grid  
+**Branch**: `339-extend-occupancy-grid`  
 **Created**: 2025-12-04  
 **Status**: ✅ Planning Complete (Phase 0 & 1)
 
@@ -172,7 +172,7 @@ This directory contains the complete planning package for the Extended Occupancy
 ## File Structure
 
 ```
-specs/1382-extend-occupancy-grid/
+specs/339-extend-occupancy-grid/
 ├── spec.md                           ✅ Specification (validated)
 ├── plan.md                           ✅ Implementation plan
 ├── research.md                       ✅ Phase 0 research (10 findings)
@@ -291,8 +291,8 @@ All 13 Robot SF Constitution principles have been verified:
 
 ## Contact & References
 
-**Feature Spec**: `specs/1382-extend-occupancy-grid/spec.md`  
-**Implementation Plan**: `specs/1382-extend-occupancy-grid/plan.md`  
+**Feature Spec**: `specs/339-extend-occupancy-grid/spec.md`  
+**Implementation Plan**: `specs/339-extend-occupancy-grid/plan.md`  
 **Constitution**: `.specify/memory/constitution.md`  
 **Dev Guide**: `docs/dev_guide.md`
 

@@ -6,26 +6,8 @@ from dataclasses import dataclass
 import numba
 import numpy as np
 
+from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import Circle2D, Line2D, Vec2D
-
-# TODO(#250): Refactor duplicated `euclid_dist` function to a central utils file.
-# See: https://github.com/ll7/robot_sf_ll7/issues/250
-
-
-@numba.njit(fastmath=True)
-def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
-    """Calculate the Euclidean distance between two 2D vectors.
-
-    Args:
-        vec_1: First 2D vector.
-        vec_2: Second 2D vector.
-
-    Returns:
-        float: Euclidean distance between ``vec_1`` and ``vec_2``.
-    """
-    # Subtract corresponding elements of vectors
-    # Square the results, sum them, and take square root
-    return ((vec_1[0] - vec_2[0]) ** 2 + (vec_1[1] - vec_2[1]) ** 2) ** 0.5
 
 
 @numba.njit(fastmath=True)

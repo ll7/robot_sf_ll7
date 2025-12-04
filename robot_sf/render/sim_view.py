@@ -11,11 +11,11 @@ import numpy as np
 import pygame
 from loguru import logger
 
+from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import DifferentialDriveAction, PedPose, RgbColor, RobotPose, Vec2D
 from robot_sf.nav.map_config import MapDefinition, Obstacle
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction
 from robot_sf.robot.bicycle_drive import BicycleAction
-from robot_sf.sensor.range_sensor import euclid_dist
 
 # Make moviepy optional
 try:

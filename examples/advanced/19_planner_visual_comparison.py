@@ -57,7 +57,8 @@ class RolloutResult:
     ped_paths: list[np.ndarray]
     steps: int
     success: bool
-    goal: np.ndarray
+    final_goal: np.ndarray
+    start: np.ndarray
 
 
 def build_comparison_map() -> MapDefinition:
@@ -83,7 +84,8 @@ def build_comparison_map() -> MapDefinition:
         GlobalRoute(
             spawn_id=0,
             goal_id=0,
-            waypoints=[(1.5, 1.5), (4.5, 6.0), (9.0, 6.0), (15.5, 10.5)],
+            # Start the first waypoint far enough from the spawn zone to avoid instant completion
+            waypoints=[(4.0, 2.5), (6.5, 6.5), (10.5, 6.5), (15.5, 10.5)],
             spawn_zone=robot_spawn_zones[0],
             goal_zone=robot_goal_zones[0],
         ),
@@ -161,9 +163,10 @@ def rollout_policy(
     )
 
     obs, _ = env.reset()
+    start = np.asarray(obs["robot"]["position"], dtype=float).copy()
+    final_goal = np.asarray(env.simulator.robot_navs[0].waypoints[-1], dtype=float).copy()
     robot_path: list[np.ndarray] = [np.asarray(obs["robot"]["position"], dtype=float).copy()]
     ped_paths: list[np.ndarray] = []
-    goal = np.asarray(obs["goal"]["current"], dtype=float).copy()
     success = False
 
     try:
@@ -199,7 +202,8 @@ def rollout_policy(
         ped_paths=ped_paths,
         steps=len(robot_path) - 1,
         success=success,
-        goal=goal,
+        final_goal=final_goal,
+        start=start,
     )
 
 
@@ -229,7 +233,14 @@ def plot_rollouts(results: list[RolloutResult], map_def: MapDefinition) -> None:
         ax.plot(path[:, 0], path[:, 1], label=result.name, color=color, linewidth=2)
         ax.scatter(path[0, 0], path[0, 1], color=color, marker="o", s=35, zorder=3)
         ax.scatter(path[-1, 0], path[-1, 1], color=color, marker="x", s=50, zorder=3)
-        ax.scatter(result.goal[0], result.goal[1], color=color, marker="*", s=80, zorder=3)
+        ax.scatter(
+            result.final_goal[0],
+            result.final_goal[1],
+            color=color,
+            marker="*",
+            s=80,
+            zorder=3,
+        )
 
     # Visualize pedestrian trajectories from the first rollout (shared scenario)
     ped_traces: dict[int, list[tuple[float, float]]] = defaultdict(list)

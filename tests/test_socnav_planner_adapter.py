@@ -4,6 +4,7 @@ import numpy as np
 
 from robot_sf.planner.socnav import (
     SamplingPlannerAdapter,
+    SocNavBenchComplexPolicy,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
@@ -73,4 +74,12 @@ def test_socnavbench_adapter_fallbacks():
     adapter = SocNavBenchSamplingAdapter(SocNavPlannerConfig(max_linear_speed=0.5))
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
     v, _w = adapter.plan(obs)
+    assert v >= 0.0
+
+
+def test_socnavbench_complex_policy_fallback():
+    """Complex policy should still return an action even without upstream deps."""
+    policy = SocNavBenchComplexPolicy()
+    obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
+    v, _w = policy.act(obs)
     assert v >= 0.0

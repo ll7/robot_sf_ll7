@@ -108,6 +108,24 @@ class SocNavPlannerPolicy:
         return self.adapter.plan(observation)
 
 
+class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
+    """
+    Policy that prefers the upstream SocNavBench SamplingPlanner when available.
+
+    Falls back to the lightweight adapter when upstream dependencies are missing.
+    """
+
+    def __init__(
+        self,
+        socnav_root: Path | None = None,
+        adapter_config: SocNavPlannerConfig | None = None,
+    ):
+        """Initialize the policy, preferring the upstream SocNavBench planner when present."""
+
+        adapter = SocNavBenchSamplingAdapter(config=adapter_config, socnav_root=socnav_root)
+        super().__init__(adapter=adapter)
+
+
 class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
     """
     Adapter that attempts to delegate to the upstream SocNavBench SamplingPlanner.

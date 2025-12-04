@@ -36,7 +36,12 @@ def socnav_observation_space(
     pos_high = np.array([width, height], dtype=np.float32)
     heading_low = np.array([-pi], dtype=np.float32)
     heading_high = np.array([pi], dtype=np.float32)
-    speed_bounds = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max], dtype=np.float32)
+    # Extract realistic speed limits from robot configuration
+    if hasattr(env_config.robot_config, "max_linear_speed"):
+        max_speed = env_config.robot_config.max_linear_speed
+    else:
+        max_speed = 2.0  # Conservative fallback for unknown robot types
+    speed_bounds = np.array([max_speed, max_speed], dtype=np.float32)
     radius_bounds = np.array([0.0], dtype=np.float32)
 
     ped_positions_high = np.broadcast_to(pos_high, (max_pedestrians, 2)).astype(np.float32)

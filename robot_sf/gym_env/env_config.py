@@ -20,6 +20,7 @@ The `pedestrian_factory` method creates a pedestrian instance based on the confi
 
 from dataclasses import dataclass, field
 
+from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.ped_ego.unicycle_drive import (
     UnicycleDrivePedestrian,
@@ -43,6 +44,7 @@ class BaseEnvSettings:
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
     # Optional UI/render scaling factor for SimulationView; when None, defaults apply.
     render_scaling: int | None = None
+    observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
 
     def __post_init__(self):
         """
@@ -108,6 +110,7 @@ class EnvSettings:
         default_factory=DifferentialDriveSettings,
     )
     map_pool: MapDefinitionPool = field(default_factory=MapDefinitionPool)
+    observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
 
     def __post_init__(self):
         """

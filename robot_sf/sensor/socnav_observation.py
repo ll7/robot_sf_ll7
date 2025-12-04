@@ -1,0 +1,168 @@
+"""
+SocNavBench-inspired structured observation builder.
+
+Provides a lightweight, in-process equivalent of SocNavBench's sense payload so
+planners can be reused without socket I/O.
+"""
+
+from dataclasses import dataclass
+from math import pi
+from typing import Any
+
+import numpy as np
+from gymnasium import spaces
+
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.sim.simulator import Simulator
+
+
+def socnav_observation_space(
+    map_def: MapDefinition,
+    env_config: RobotSimulationConfig,
+    max_pedestrians: int,
+) -> spaces.Dict:
+    """
+    Create a Gym ``spaces.Dict`` mirroring a SocNavBench-style sim state.
+
+    Returns:
+        spaces.Dict: Structured observation specification for the SocNav mode.
+    """
+    width, height = float(map_def.width), float(map_def.height)
+    pos_low = np.array([0.0, 0.0], dtype=np.float32)
+    pos_high = np.array([width, height], dtype=np.float32)
+    heading_low = np.array([-pi], dtype=np.float32)
+    heading_high = np.array([pi], dtype=np.float32)
+    speed_bounds = np.array([np.finfo(np.float32).max, np.finfo(np.float32).max], dtype=np.float32)
+    radius_bounds = np.array([0.0], dtype=np.float32)
+
+    ped_positions_high = np.broadcast_to(pos_high, (max_pedestrians, 2)).astype(np.float32)
+    ped_positions_low = np.broadcast_to(pos_low, (max_pedestrians, 2)).astype(np.float32)
+
+    return spaces.Dict(
+        {
+            "robot": spaces.Dict(
+                {
+                    "position": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                    "heading": spaces.Box(low=heading_low, high=heading_high, dtype=np.float32),
+                    "speed": spaces.Box(
+                        low=-speed_bounds,
+                        high=speed_bounds,
+                        dtype=np.float32,
+                    ),
+                    "radius": spaces.Box(
+                        low=radius_bounds,
+                        high=np.array([max(width, height)], dtype=np.float32),
+                        dtype=np.float32,
+                    ),
+                },
+            ),
+            "goal": spaces.Dict(
+                {
+                    "current": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                    "next": spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                },
+            ),
+            "pedestrians": spaces.Dict(
+                {
+                    "positions": spaces.Box(
+                        low=ped_positions_low,
+                        high=ped_positions_high,
+                        dtype=np.float32,
+                    ),
+                    "radius": spaces.Box(
+                        low=radius_bounds,
+                        high=np.array([max(width, height)], dtype=np.float32),
+                        dtype=np.float32,
+                    ),
+                    "count": spaces.Box(
+                        low=np.array([0.0], dtype=np.float32),
+                        high=np.array([float(max_pedestrians)], dtype=np.float32),
+                        dtype=np.float32,
+                    ),
+                },
+            ),
+            "map": spaces.Dict(
+                {
+                    "size": spaces.Box(
+                        low=pos_low,
+                        high=pos_high,
+                        dtype=np.float32,
+                    ),
+                },
+            ),
+            "sim": spaces.Dict(
+                {
+                    "timestep": spaces.Box(
+                        low=np.array([0.0], dtype=np.float32),
+                        high=np.array([np.finfo(np.float32).max], dtype=np.float32),
+                        dtype=np.float32,
+                    ),
+                },
+            ),
+        },
+    )
+
+
+@dataclass
+class SocNavObservationFusion:
+    """Structured observation builder used when ``ObservationMode.SOCNAV_STRUCT`` is enabled."""
+
+    simulator: Simulator
+    env_config: RobotSimulationConfig
+    max_pedestrians: int
+    robot_index: int = 0
+
+    def reset_cache(self) -> None:
+        """No-op to match the SensorFusion interface."""
+        return None
+
+    def next_obs(self) -> dict[str, Any]:
+        """Return the latest structured observation aligned to the declared space."""
+        ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
+        ped_positions = ped_positions[: self.max_pedestrians]
+        padded = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        if ped_positions.size > 0:
+            padded[: ped_positions.shape[0]] = ped_positions
+
+        goal = np.asarray(self.simulator.goal_pos[self.robot_index], dtype=np.float32)
+        next_goal = self.simulator.next_goal_pos[self.robot_index]
+        next_goal_arr = (
+            np.asarray(next_goal, dtype=np.float32) if next_goal is not None else np.zeros(2)
+        )
+
+        robot_pose = self.simulator.robots[self.robot_index].pose
+        robot_speed = np.asarray(
+            self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
+        )
+        return {
+            "robot": {
+                "position": np.asarray(robot_pose[0], dtype=np.float32),
+                "heading": np.array([robot_pose[1]], dtype=np.float32),
+                "speed": robot_speed,
+                "radius": np.array(
+                    [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
+                ),
+            },
+            "goal": {
+                "current": goal,
+                "next": next_goal_arr,
+            },
+            "pedestrians": {
+                "positions": padded,
+                "radius": np.array([self.env_config.sim_config.ped_radius], dtype=np.float32),
+                "count": np.array(
+                    [float(min(len(ped_positions), self.max_pedestrians))], dtype=np.float32
+                ),
+            },
+            "map": {
+                "size": np.array(
+                    [self.simulator.map_def.width, self.simulator.map_def.height], dtype=np.float32
+                ),
+            },
+            "sim": {
+                "timestep": np.array(
+                    [self.simulator.config.time_per_step_in_secs], dtype=np.float32
+                ),
+            },
+        }

@@ -17,6 +17,7 @@ from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+import numpy as np
 from loguru import logger
 
 from robot_sf.gym_env.base_env import BaseEnv
@@ -26,11 +27,16 @@ from robot_sf.gym_env.env_util import (
     init_spaces,
     prepare_pedestrian_actions,
 )
+from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
+from robot_sf.sensor.socnav_observation import (
+    SocNavObservationFusion,
+    socnav_observation_space,
+)
 from robot_sf.sim.simulator import (
     init_simulators,  # noqa: F401 (retained for backwards compatibility; may be removed later)
 )
@@ -162,11 +168,30 @@ class RobotEnv(BaseEnv):
         # Store configuration for factory pattern compatibility
         self.config = env_config
 
+        if env_config.observation_mode == ObservationMode.SOCNAV_STRUCT:
+            # Build SocNav-style observation space and fusion layer
+            ped_count = getattr(self.simulator, "ped_pos", np.zeros((0, 2))).shape[0]
+            max_peds = max(1, ped_count, env_config.sim_config.max_peds_per_group * 4)
+            self.observation_space = socnav_observation_space(
+                self.map_def,
+                env_config,
+                max_peds,
+            )
+            socnav_fusion = SocNavObservationFusion(
+                simulator=self.simulator,
+                env_config=env_config,
+                max_pedestrians=max_peds,
+                robot_index=0,
+            )
+            sensor_adapter = socnav_fusion
+        else:
+            sensor_adapter = sensors[0]
+
         # Setup initial state of the robot
         self.state = RobotState(
             self.simulator.robot_navs[0],
             occupancies[0],
-            sensors[0],
+            sensor_adapter,
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
         )

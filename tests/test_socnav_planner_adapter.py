@@ -3,11 +3,17 @@
 import numpy as np
 
 from robot_sf.planner.socnav import (
+    ORCAPlannerAdapter,
+    SACADRLPlannerAdapter,
     SamplingPlannerAdapter,
+    SocialForcePlannerAdapter,
     SocNavBenchComplexPolicy,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
     SocNavPlannerPolicy,
+    make_orca_policy,
+    make_sacadrl_policy,
+    make_social_force_policy,
 )
 
 
@@ -83,3 +89,36 @@ def test_socnavbench_complex_policy_fallback():
     obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
     v, _w = policy.act(obs)
     assert v >= 0.0
+
+
+def test_social_force_adapter():
+    """Social-force heuristic returns finite action."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
+    v, _w = adapter.plan(obs)
+    assert v >= 0.0
+
+
+def test_orca_adapter():
+    """ORCA-like heuristic returns finite action."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig())
+    obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
+    v, _w = adapter.plan(obs)
+    assert v >= 0.0
+
+
+def test_sacadrl_adapter():
+    """SA-CADRL-like heuristic returns finite action."""
+    adapter = SACADRLPlannerAdapter(SocNavPlannerConfig())
+    obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
+    v, _w = adapter.plan(obs)
+    assert v >= 0.0
+
+
+def test_policy_constructors():
+    """Factory helpers build policies without error."""
+    obs = _make_obs(goal=(1.0, 0.0), heading=0.0)
+    for factory in (make_social_force_policy, make_orca_policy, make_sacadrl_policy):
+        policy = factory()
+        v, _w = policy.act(obs)
+        assert v >= 0.0

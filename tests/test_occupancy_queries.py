@@ -117,9 +117,8 @@ class TestPointQueryOutOfBounds:
             result = grid.query(query)
             # If it doesn't raise, result should be valid
             assert result is not None
-        except ValueError:
-            # Also acceptable - raises error with clear message
-            pass
+        except ValueError as exc:
+            assert "invalid coordinates" in str(exc).lower()
 
     def test_point_query_out_of_bounds_far_positive(self, simple_grid_config: GridConfig) -> None:
         """Query far outside grid bounds should raise ValueError or return safe result."""
@@ -131,8 +130,8 @@ class TestPointQueryOutOfBounds:
         try:
             result = grid.query(query)
             assert result is not None
-        except ValueError:
-            pass
+        except ValueError as exc:
+            assert "invalid coordinates" in str(exc).lower()
 
 
 class TestCircularAOIQueryFree:

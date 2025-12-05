@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import (
@@ -29,6 +30,7 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reward import simple_reward
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
@@ -235,7 +237,9 @@ class RobotEnv(BaseEnv):
         # T044: Update occupancy grid if enabled
         if self.occupancy_grid is not None:
             # Extract obstacles from map
-            obstacles = self.map_def.obstacles
+            obstacles = self._normalize_obstacles_for_grid(
+                self.map_def.obstacles, self.map_def.bounds
+            )
             # Extract updated pedestrian positions and radii
             ped_positions = self.simulator.ped_pos
             ped_radii = getattr(self.simulator, "ped_radii", None)
@@ -306,7 +310,9 @@ class RobotEnv(BaseEnv):
         # T043: Generate initial occupancy grid if enabled
         if self.occupancy_grid is not None:
             # Extract obstacles from map
-            obstacles = self.map_def.obstacles
+            obstacles = self._normalize_obstacles_for_grid(
+                self.map_def.obstacles, self.map_def.bounds
+            )
             # Extract pedestrian positions and radii from simulator
             ped_positions = self.simulator.ped_pos
             ped_radii = getattr(self.simulator, "ped_radii", None)
@@ -353,6 +359,40 @@ class RobotEnv(BaseEnv):
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
         return obs, info
+
+    @staticmethod
+    def _normalize_obstacles_for_grid(
+        obstacles: list[Obstacle] | list[Line2D], bounds: list[Line2D]
+    ) -> list[Line2D]:
+        """Convert obstacle objects/lines plus bounds into Line2D tuples for occupancy grids.
+
+        Returns:
+            list[Line2D]: Normalized line segments derived from map obstacles and bounds.
+        """
+        line_segments: list[Line2D] = []
+
+        def _add_line(line) -> None:
+            try:
+                start, end = line
+                line_segments.append((tuple(start), tuple(end)))
+            except (TypeError, ValueError):
+                return
+
+        for obstacle in obstacles:
+            if isinstance(obstacle, Obstacle):
+                for line in obstacle.lines:
+                    if len(line) == 4:
+                        x1, x2, y1, y2 = line
+                        _add_line(((x1, y1), (x2, y2)))
+                    else:
+                        _add_line(line)
+            else:
+                _add_line(obstacle)
+
+        for bound in bounds:
+            _add_line(bound)
+
+        return line_segments
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed

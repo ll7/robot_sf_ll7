@@ -492,8 +492,14 @@ class OccupancyGrid:
             elif channel == GridChannel.ROBOT:
                 # Rasterize robot as a circle
                 robot_radius = self.config.robot_radius
+                robot_pose_for_grid = robot_pose
+                if use_ego_frame and self._last_robot_pose is not None:
+                    ego_x, ego_y = grid_utils.world_to_ego(
+                        robot_pose[0][0], robot_pose[0][1], self._last_robot_pose
+                    )  # type: ignore[arg-type]
+                    robot_pose_for_grid = ((ego_x, ego_y), robot_pose[1])
                 success = rasterization.rasterize_robot(
-                    robot_pose,
+                    robot_pose_for_grid,
                     robot_radius,
                     self._grid_data[channel_idx],
                     self.config,
@@ -592,7 +598,7 @@ class OccupancyGrid:
             if query.x2 is None or query.y2 is None:
                 raise ValueError("x2 and y2 required for LINE query")
             x2, y2 = query.x2, query.y2
-            if self.config.use_ego_frame and self._last_robot_pose is not None:
+            if self._last_use_ego_frame and self._last_robot_pose is not None:
                 x2, y2 = grid_utils.world_to_ego(query.x2, query.y2, self._last_robot_pose)  # type: ignore[arg-type]
             grid_x2 = int((x2 - origin_x) / self.config.resolution)
             grid_y2 = int((y2 - origin_y) / self.config.resolution)

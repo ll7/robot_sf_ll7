@@ -47,7 +47,7 @@ from robot_sf.nav.occupancy import create_occupancy_grid, GridConfig
 
 grid = create_occupancy_grid(
     robot_pose=(5.0, 5.0, 0.5),  # x, y, theta
-    config=GridConfig(size_m=(10, 10), resolution_m=0.1, frame="ego"),
+    config=GridConfig(width=10.0, height=10.0, resolution=0.1, use_ego_frame=True), 
     obstacles=map_obstacles,
     pedestrians=sim_pedestrians,
 )
@@ -310,22 +310,19 @@ for event in pygame.event.get():
 **Constructor**:
 ```python
 GridConfig(
-    size_m: Tuple[float, float] = (10.0, 10.0),
-    resolution_m: float = 0.1,
-    frame: Literal["ego", "world"] = "ego",
-    occupancy_type: Literal["binary", "continuous"] = "binary",
-    enabled_channels: List[str] = ["static_obstacles", "pedestrians"],
-    include_static_obstacles: bool = True,
-    include_pedestrians: bool = True,
+    resolution: float = 0.1,
+    width: float = 20.0,
+    height: float = 20.0,
+    use_ego_frame: bool = False,
+    channels: List[GridChannel] = [GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
 )
 ```
 
 **Validation**:
-- `size_m[0] > 0 and size_m[1] > 0` — Positive dimensions
-- `resolution_m > 0` — Positive resolution
-- `frame in ["ego", "world"]` — Valid frame
-- `occupancy_type in ["binary", "continuous"]` — Valid type
-- `len(enabled_channels) > 0` — At least one channel
+- `resolution > 0` — Positive resolution
+- `width > 0` and `height > 0` — Positive dimensions
+- `isinstance(use_ego_frame, bool)` — Frame selection is boolean
+- `len(channels) > 0` — At least one channel
 
 **Integration with RobotSimulationConfig**:
 ```python
@@ -334,9 +331,11 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 config = RobotSimulationConfig(
     use_occupancy_grid=True,
     grid_config=GridConfig(
-        size_m=(10, 10),
-        resolution_m=0.1,
-        frame="ego",
+        width=10.0,
+        height=10.0,
+        resolution=0.1,
+        use_ego_frame=True,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
     ),
     # ... other config fields
 )

@@ -376,7 +376,7 @@ class RobotEnv(BaseEnv):
                 start, end = line
                 line_segments.append((tuple(start), tuple(end)))
             except (TypeError, ValueError):
-                return
+                pass  # Skip malformed lines
 
         for obstacle in obstacles:
             if isinstance(obstacle, Obstacle):

@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from robot_sf.common.types import Circle2D, Line2D, RobotPose
+from robot_sf.common.types import Circle2D, Line2D
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid
 
 
@@ -70,13 +70,13 @@ def occupancy_grid(simple_grid_config):
 @pytest.fixture
 def robot_pose_center():
     """Robot at center of a 10x10m grid (world frame origin)."""
-    return RobotPose(x=5.0, y=5.0, theta=0.0)
+    return ((5.0, 5.0), 0.0)
 
 
 @pytest.fixture
 def robot_pose_corner():
     """Robot at corner of grid."""
-    return RobotPose(x=1.0, y=1.0, theta=0.0)
+    return ((1.0, 1.0), 0.0)
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def robot_pose_rotated():
     """Robot at center with 45° rotation."""
     import numpy as np
 
-    return RobotPose(x=5.0, y=5.0, theta=np.pi / 4)
+    return ((5.0, 5.0), float(np.pi / 4))
 
 
 @pytest.fixture

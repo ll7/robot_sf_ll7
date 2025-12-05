@@ -382,6 +382,7 @@ class RobotEnv(BaseEnv):
             if isinstance(obstacle, Obstacle):
                 for line in obstacle.lines:
                     if len(line) == 4:
+                        # Obstacle.lines stores (x1, x2, y1, y2); convert to Line2D ((x1, y1), (x2, y2))
                         x1, x2, y1, y2 = line
                         _add_line(((x1, y1), (x2, y2)))
                     else:

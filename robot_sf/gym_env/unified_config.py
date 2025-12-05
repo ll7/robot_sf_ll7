@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import (
@@ -65,11 +66,39 @@ class RobotSimulationConfig(BaseSimulationConfig):
     use_image_obs: bool = field(default=False)
     peds_have_obstacle_forces: bool = field(default=False)
 
+    # Occupancy grid configuration
+    grid_config: GridConfig | None = field(default=None)
+    use_occupancy_grid: bool = field(default=False)
+    # Grid observation flag - when True, includes occupancy grid in observation space
+    include_grid_in_observation: bool = field(default=False)
+
     def __post_init__(self):
         """Validate robot-specific configuration."""
         super().__post_init__()
         if not self.robot_config:
             raise ValueError("Robot configuration must be initialized!")
+
+        # Initialize grid_config if occupancy grid is enabled
+        if self.use_occupancy_grid and self.grid_config is None:
+            self.grid_config = GridConfig()
+
+        # Validate grid_config if provided
+        if self.grid_config is not None:
+            if not isinstance(self.grid_config, GridConfig):
+                raise ValueError(
+                    f"grid_config must be GridConfig instance, got {type(self.grid_config)}"
+                )
+
+        # T047: Validate grid observation configuration
+        if self.include_grid_in_observation:
+            # Grid observation requires grid to be enabled
+            if not self.use_occupancy_grid:
+                raise ValueError(
+                    "include_grid_in_observation=True requires use_occupancy_grid=True"
+                )
+            # Grid config must be valid
+            if self.grid_config is None:
+                raise ValueError("include_grid_in_observation=True requires valid grid_config")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

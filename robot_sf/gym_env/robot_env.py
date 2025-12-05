@@ -29,6 +29,7 @@ from robot_sf.gym_env.env_util import (
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reward import simple_reward
+from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
@@ -169,6 +170,19 @@ class RobotEnv(BaseEnv):
         # Store configuration for factory pattern compatibility
         self.config = env_config
 
+        # T043: Initialize occupancy grid if grid observation is enabled
+        self.occupancy_grid = None
+        if (
+            hasattr(env_config, "include_grid_in_observation")
+            and env_config.include_grid_in_observation
+        ):
+            self.occupancy_grid = OccupancyGrid(config=env_config.grid_config)
+            logger.info(
+                f"Occupancy grid initialized for observations: "
+                f"shape={self.occupancy_grid.shape}, "
+                f"resolution={env_config.grid_config.resolution}m"
+            )
+
         if env_config.observation_mode == ObservationMode.SOCNAV_STRUCT:
             # Build SocNav-style observation space and fusion layer
             ped_count = getattr(self.simulator, "ped_pos", np.zeros((0, 2))).shape[0]
@@ -217,6 +231,31 @@ class RobotEnv(BaseEnv):
         self.simulator.step_once([action])
         # Get updated observation
         obs = self.state.step()
+
+        # T044: Update occupancy grid if enabled
+        if self.occupancy_grid is not None:
+            # Extract obstacles from map
+            obstacles = self.map_def.obstacles
+            # Extract updated pedestrian positions and radii
+            ped_positions = self.simulator.ped_pos
+            ped_radii = getattr(self.simulator, "ped_radii", None)
+            if ped_radii is None:
+                ped_radii = [0.35] * len(ped_positions)
+            pedestrians = [
+                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=False)
+            ]
+            # Get updated robot pose (already in RobotPose format: ((x, y), theta))
+            robot_pose = self.simulator.robot_poses[0]
+            # Regenerate grid
+            self.occupancy_grid.generate(
+                obstacles=obstacles,
+                pedestrians=pedestrians,
+                robot_pose=robot_pose,
+                ego_frame=False,
+            )
+            # Update observation with new grid
+            obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
         # add the action space to dict
@@ -263,6 +302,35 @@ class RobotEnv(BaseEnv):
         self.simulator.reset_state()
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
+
+        # T043: Generate initial occupancy grid if enabled
+        if self.occupancy_grid is not None:
+            # Extract obstacles from map
+            obstacles = self.map_def.obstacles
+            # Extract pedestrian positions and radii from simulator
+            ped_positions = self.simulator.ped_pos
+            ped_radii = getattr(self.simulator, "ped_radii", None)
+            if ped_radii is None:
+                # Default pedestrian radius if not available
+                ped_radii = [0.35] * len(ped_positions)
+            pedestrians = [
+                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=False)
+            ]
+            # Get robot pose (already in RobotPose format: ((x, y), theta))
+            robot_pose = self.simulator.robot_poses[0]
+            # Generate grid
+            self.occupancy_grid.generate(
+                obstacles=obstacles,
+                pedestrians=pedestrians,
+                robot_pose=robot_pose,
+                ego_frame=False,  # Use world frame by default
+            )
+            # Add grid to observation
+            obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+            logger.debug(
+                f"Initial occupancy grid generated: "
+                f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
+            )
 
         # Handle recording for both systems
         if self.recording_enabled:

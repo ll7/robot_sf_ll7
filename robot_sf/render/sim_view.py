@@ -393,7 +393,6 @@ class SimulationView:
             # numpy arrays are not directly truthy; require non-empty content
             if not isinstance(state.robot_pose, np.ndarray) or state.robot_pose.size > 0:
                 self._render_occupancy_grid(state.robot_pose)
-            self._render_occupancy_grid(state.robot_pose)
 
     def _draw_sensor_data(self, state: VisualizableSimState):
         """Draw sensor data like lidar rays."""

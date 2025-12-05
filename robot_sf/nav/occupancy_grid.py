@@ -67,6 +67,7 @@ grid.render_pygame(surface=my_pygame_surface, robot_pose=robot_pose)
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -255,6 +256,26 @@ class POIResult:
         if self.num_cells < 0:
             raise ValueError(f"num_cells must be >= 0, got {self.num_cells}")
 
+    @property
+    def is_occupied(self) -> bool:
+        """Check if query region is occupied (occupancy > 0.1 threshold)."""
+        return self.occupancy > 0.1
+
+    @property
+    def safe_to_spawn(self) -> bool:
+        """Check if safe to spawn (occupancy < 0.05 threshold)."""
+        return self.occupancy < 0.05
+
+    @property
+    def occupancy_fraction(self) -> float:
+        """Return occupancy as a fraction [0, 1]."""
+        return float(np.clip(self.occupancy, 0.0, 1.0))
+
+    @property
+    def per_channel_results(self) -> dict[GridChannel, float]:
+        """Return per-channel occupancy breakdown."""
+        return self.channel_results.copy()
+
 
 class OccupancyGrid:
     """Main occupancy grid container and API.
@@ -398,7 +419,7 @@ class OccupancyGrid:
 
         return self._grid_data
 
-    def query(self, query: POIQuery) -> POIResult:
+    def query(self, query: POIQuery) -> POIResult:  # noqa: C901
         """Query occupancy at point(s) of interest.
 
         Args:
@@ -420,18 +441,141 @@ class OccupancyGrid:
         if self._grid_data is None:
             raise RuntimeError("Grid has not been generated yet. Call generate() first.")
 
-        # TODO (Phase 3): Implement query logic
-        # - Validate query coordinates within grid bounds
-        # - Convert world/ego coordinates to grid indices
-        # - Extract occupancy values based on query type
-        # - Compute statistics (min, max, mean)
-        # - Return POIResult
+        # Validate query coordinates within reasonable bounds (allow slightly out of bounds)
+        # Convert world coordinates to grid indices
+        grid_x = int(query.x / self.config.resolution)
+        grid_y = int(query.y / self.config.resolution)
+
+        # Clamp to grid bounds
+        grid_x_clamped = np.clip(grid_x, 0, self.config.grid_width - 1)
+        grid_y_clamped = np.clip(grid_y, 0, self.config.grid_height - 1)
+
+        # Track cells to query based on query type
+        cells_to_check: list[tuple[int, int]] = []
+
+        if query.query_type == POIQueryType.POINT:
+            # Single cell query
+            cells_to_check = [(grid_x_clamped, grid_y_clamped)]
+
+        elif query.query_type == POIQueryType.CIRCLE:
+            # Circular AOI: find all cells within radius
+            radius_cells = int(query.radius / self.config.resolution) + 1
+            for dx in range(-radius_cells, radius_cells + 1):
+                for dy in range(-radius_cells, radius_cells + 1):
+                    dist = math.sqrt(dx**2 + dy**2) * self.config.resolution
+                    if dist <= query.radius:
+                        cx = grid_x_clamped + dx
+                        cy = grid_y_clamped + dy
+                        if 0 <= cx < self.config.grid_width and 0 <= cy < self.config.grid_height:
+                            cells_to_check.append((cx, cy))
+
+        elif query.query_type == POIQueryType.RECT:
+            # Rectangular AOI: find all cells in rectangle
+            half_width = query.width / (2 * self.config.resolution)
+            half_height = query.height / (2 * self.config.resolution)
+            for dx in range(-int(half_width) - 1, int(half_width) + 2):
+                for dy in range(-int(half_height) - 1, int(half_height) + 2):
+                    cx = grid_x_clamped + dx
+                    cy = grid_y_clamped + dy
+                    if 0 <= cx < self.config.grid_width and 0 <= cy < self.config.grid_height:
+                        cells_to_check.append((cx, cy))
+
+        elif query.query_type == POIQueryType.LINE:
+            # Line segment query: use Bresenham's line
+            if query.x2 is None or query.y2 is None:
+                raise ValueError("x2 and y2 required for LINE query")
+            grid_x2 = int(query.x2 / self.config.resolution)
+            grid_y2 = int(query.y2 / self.config.resolution)
+            # Use Bresenham-like line traversal
+            cells_to_check = self._bresenham_line(grid_x_clamped, grid_y_clamped, grid_x2, grid_y2)
+
+        # Compute occupancy statistics
+        if not cells_to_check:
+            return POIResult(
+                occupancy=0.0,
+                query_type=query.query_type,
+                num_cells=0,
+                min_occupancy=0.0,
+                max_occupancy=0.0,
+                mean_occupancy=0.0,
+            )
+
+        # Extract occupancy values from all channels (aggregate)
+        occupancy_values: list[float] = []
+        channel_specific_values: dict[GridChannel, list[float]] = {
+            ch: [] for ch in self.config.channels
+        }
+
+        for cx, cy in cells_to_check:
+            # Get occupancy across all channels
+            for channel_idx, channel in enumerate(self.config.channels):
+                value = float(self._grid_data[channel_idx, cy, cx]) / 255.0
+                occupancy_values.append(value)
+                channel_specific_values[channel].append(value)
+
+        # Compute statistics
+        occupancy_array = np.array(occupancy_values)
+        min_occ = float(np.min(occupancy_array)) if occupancy_array.size > 0 else 0.0
+        max_occ = float(np.max(occupancy_array)) if occupancy_array.size > 0 else 0.0
+        mean_occ = float(np.mean(occupancy_array)) if occupancy_array.size > 0 else 0.0
+
+        # Per-channel results
+        channel_results = {}
+        for channel, values in channel_specific_values.items():
+            if values:
+                channel_results[channel] = float(np.mean(values))
+            else:
+                channel_results[channel] = 0.0
+
+        logger.debug(
+            f"Query {query.query_type.value} at ({query.x}, {query.y}): "
+            f"occupancy={mean_occ:.3f}, cells={len(cells_to_check)}"
+        )
 
         return POIResult(
-            occupancy=0.0,
+            occupancy=mean_occ,
             query_type=query.query_type,
-            num_cells=0,
+            num_cells=len(cells_to_check),
+            min_occupancy=min_occ,
+            max_occupancy=max_occ,
+            mean_occupancy=mean_occ,
+            channel_results=channel_results,
         )
+
+    @staticmethod
+    def _bresenham_line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
+        """Bresenham's line algorithm to get all cells on a line.
+
+        Args:
+            x0: Starting x cell coordinate
+            y0: Starting y cell coordinate
+            x1: Ending x cell coordinate
+            y1: Ending y cell coordinate
+
+        Returns:
+            List of cells on the line from (x0, y0) to (x1, y1)
+        """
+        cells: list[tuple[int, int]] = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        x, y = x0, y0
+        while True:
+            cells.append((x, y))
+            if x == x1 and y == y1:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x += sx
+            if e2 < dx:
+                err += dx
+                y += sy
+
+        return cells
 
     def render_pygame(
         self,
@@ -510,6 +654,58 @@ class OccupancyGrid:
 
         channel_idx = self.config.channels.index(channel)
         return self._grid_data[channel_idx]
+
+    def to_observation(self) -> np.ndarray:
+        """Convert occupancy grid to gymnasium observation array.
+
+        Returns grid data as numpy array suitable for gymnasium observation spaces.
+        Array has shape [C, H, W] with dtype float32 and values in [0, 1].
+
+        Returns:
+            numpy array of shape [C, H, W] with dtype float32, values in [0, 1]
+
+        Raises:
+            RuntimeError: If grid has not been generated yet
+
+        Example:
+            >>> grid = OccupancyGrid(config)
+            >>> grid.generate(obstacles=obs, pedestrians=peds, robot_pose=pose)
+            >>> obs_array = grid.to_observation()
+            >>> obs_array.shape  # (num_channels, height, width)
+            (3, 200, 200)
+            >>> obs_array.dtype
+            dtype('float32')
+            >>> (obs_array.min(), obs_array.max())
+            (0.0, 1.0)
+
+        Notes:
+            - This method is optimized for gymnasium/StableBaselines3 compatibility
+            - Output is always float32 regardless of internal grid dtype
+            - Values are guaranteed to be in [0, 1] range (clipped if necessary)
+            - Channel order matches config.channels (e.g., [obstacles, pedestrians, combined])
+        """
+        if self._grid_data is None:
+            raise RuntimeError(
+                "Grid has not been generated yet. Call generate() before to_observation()."
+            )
+
+        # Convert to float32 if needed
+        if self._grid_data.dtype != np.float32:
+            obs_array = self._grid_data.astype(np.float32)
+        else:
+            # Make a copy to avoid modifying internal state
+            obs_array = self._grid_data.copy()
+
+        # Ensure values are in [0, 1] range (clip if needed)
+        np.clip(obs_array, 0.0, 1.0, out=obs_array)
+
+        logger.debug(
+            f"Grid to observation: shape={obs_array.shape}, "
+            f"dtype={obs_array.dtype}, "
+            f"range=[{obs_array.min():.3f}, {obs_array.max():.3f}]"
+        )
+
+        return obs_array
 
     def __repr__(self) -> str:
         """String representation of occupancy grid.

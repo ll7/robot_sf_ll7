@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 import numpy as np  # noqa: TC002 - numpy is needed at runtime for array operations
 from loguru import logger
 
-from robot_sf.common.types import Circle2D, Line2D, RobotPose
+from robot_sf.common.types import Circle2D, Line2D, RobotPose  # noqa: TC001
 from robot_sf.nav.occupancy_grid_utils import (
     get_affected_cells,
     is_within_grid,
@@ -301,7 +301,10 @@ def rasterize_robot(
     Modifies:
         grid_array: Sets cells within robot circle to `value`
     """
-    robot_circle = Circle2D((robot_pose.x, robot_pose.y), robot_radius)
+    # Extract position from RobotPose tuple ((x, y), theta)
+    robot_position, _robot_orientation = robot_pose
+    # Create Circle2D as tuple (center, radius)
+    robot_circle: Circle2D = (robot_position, robot_radius)
     try:
         rasterize_circle(robot_circle, grid_array, config, grid_origin_x, grid_origin_y, value)
         return True

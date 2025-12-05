@@ -339,17 +339,21 @@ class OccupancyGrid:
             - Target: <5ms for typical 200x200 grid with 10-20 obstacles
         """
         if not isinstance(obstacles, list):
+            logger.error(f"Invalid obstacles type: {type(obstacles).__name__}, expected list")
             raise TypeError(f"obstacles must be list, got {type(obstacles)}")
         if not isinstance(pedestrians, list):
+            logger.error(f"Invalid pedestrians type: {type(pedestrians).__name__}, expected list")
             raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
 
         self._last_robot_pose = robot_pose
 
         # Determine grid bounds
         if ego_frame:
-            # TODO (Phase 2): Implement ego-frame coordinate transformation
-            grid_origin_x = robot_pose.x - self.config.width / 2
-            grid_origin_y = robot_pose.y - self.config.height / 2
+            # Ego-frame: center grid on robot position
+            robot_position, _ = robot_pose  # Unpack (Vec2D, orientation) tuple
+            grid_origin_x = float(robot_position[0]) - self.config.width / 2
+            grid_origin_y = float(robot_position[1]) - self.config.height / 2
+            logger.debug(f"Ego-frame grid origin: ({grid_origin_x:.2f}, {grid_origin_y:.2f})")
         else:
             grid_origin_x = 0.0
             grid_origin_y = 0.0
@@ -360,12 +364,14 @@ class OccupancyGrid:
             self.config.grid_height,
             self.config.grid_width,
         )
+        # Boundary assertion: ensure grid dimensions are positive
+        assert all(dim > 0 for dim in shape), f"Invalid grid shape: {shape}"
         self._grid_data = np.zeros(shape, dtype=self.config.dtype)
 
         logger.debug(
-            f"Generating grid: obstacles={len(obstacles)}, "
-            f"pedestrians={len(pedestrians)}, "
-            f"ego_frame={ego_frame}"
+            f"Generating grid: shape={shape}, obstacles={len(obstacles)}, "
+            f"pedestrians={len(pedestrians)}, ego_frame={ego_frame}, "
+            f"origin=({grid_origin_x:.2f}, {grid_origin_y:.2f})"
         )
 
         # Rasterize each channel
@@ -439,6 +445,7 @@ class OccupancyGrid:
             - Line segment: O(length / resolution)
         """
         if self._grid_data is None:
+            logger.error("Query called before grid generation")
             raise RuntimeError("Grid has not been generated yet. Call generate() first.")
 
         # Validate query coordinates within reasonable bounds (allow slightly out of bounds)
@@ -446,7 +453,28 @@ class OccupancyGrid:
         grid_x = int(query.x / self.config.resolution)
         grid_y = int(query.y / self.config.resolution)
 
-        # Clamp to grid bounds
+        # Clamp to grid bounds and log if out of bounds
+        out_of_bounds = (
+            grid_x < 0
+            or grid_x >= self.config.grid_width
+            or grid_y < 0
+            or grid_y >= self.config.grid_height
+        )
+        if out_of_bounds:
+            logger.debug(
+                (
+                    "Query coordinate out of bounds: ({:.2f}, {:.2f}) -> grid ({}, {}), "
+                    "clamping to [{}-{}, {}-{}]"
+                ),
+                query.x,
+                query.y,
+                grid_x,
+                grid_y,
+                0,
+                self.config.grid_width - 1,
+                0,
+                self.config.grid_height - 1,
+            )
         grid_x_clamped = np.clip(grid_x, 0, self.config.grid_width - 1)
         grid_y_clamped = np.clip(grid_y, 0, self.config.grid_height - 1)
 
@@ -647,9 +675,14 @@ class OccupancyGrid:
             ValueError: If channel not in grid
         """
         if self._grid_data is None:
+            logger.error(f"Attempted to get channel {channel.value} before grid generation")
             raise RuntimeError("Grid has not been generated yet.")
 
         if channel not in self.config.channels:
+            logger.error(
+                f"Invalid channel request: {channel.value}, available: "
+                f"{[c.value for c in self.config.channels]}"
+            )
             raise ValueError(f"Channel {channel.value} not in grid")
 
         channel_idx = self.config.channels.index(channel)

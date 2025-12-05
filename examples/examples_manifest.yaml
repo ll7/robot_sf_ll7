@@ -303,6 +303,15 @@ examples:
     ci_reason: null
     doc_reference: docs/SVG_MAP_EDITOR.md
     tags: [quickstart, maps]
+  - path: quickstart/04_occupancy_grid.py
+    name: "04 Occupancy Grid"
+    summary: "Enable occupancy grid observations, run a center query, and step a short rollout."
+    category_slug: quickstart
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
+    tags: [quickstart, occupancy, grid]
   - path: plotting/snqi_figures_example.py
     name: "SNQI Figures Example"
     summary: "Generate publication-ready SNQI figures via the orchestrator script."
@@ -362,3 +371,12 @@ examples:
     ci_reason: "Long-running pipeline (30-60 min); requires extensive compute for full training cycles."
     doc_reference: docs/imitation_learning_pipeline.md
     tags: [training, imitation, ppo, behavioral-cloning]
+  - path: advanced/20_occupancy_grid_workflow.py
+    name: "20 Occupancy Grid Workflow"
+    summary: "Standalone grid generation, spawn validation queries, and occupancy-based reward shaping."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
+    tags: [occupancy, reward, observation]

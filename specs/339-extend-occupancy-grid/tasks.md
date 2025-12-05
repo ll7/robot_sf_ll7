@@ -462,18 +462,18 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 
 **Purpose**: Documentation, examples, performance validation, and final integration.
 
-- [ ] T105 [P] Update `docs/dev/occupancy/Update_or_extend_occupancy.md` with usage guide (create, query, visualize grids)
-- [ ] T106 [P] Add API reference section to `docs/dev/occupancy/Update_or_extend_occupancy.md` (function signatures, parameters, returns)
-- [ ] T107 [P] Add configuration guide to `docs/dev/occupancy/Update_or_extend_occupancy.md` (GridConfig options, frame modes, channels)
-- [ ] T108 [P] Add troubleshooting section to `docs/dev/occupancy/Update_or_extend_occupancy.md` (grid not updating, performance slow, etc.)
-- [ ] T109 [P] Create example script in `examples/advanced/` demonstrating grid creation, querying, and visualization
-- [ ] T110 [P] Create quickstart notebook or script in `examples/quickstart/` showing basic grid usage (3-5 min walkthrough)
-- [ ] T111 Create demo script in `examples/` for occupancy-based reward shaping in RL training
-- [ ] T112 Update `docs/README.md` to link new occupancy documentation
-- [ ] T113 [P] Run performance validation: grid generation <5ms, queries <1ms, visualization 30+ FPS in `scripts/validation/`
-- [ ] T114 [P] Run example smoke tests: `run_examples_smoke.py` covers occupancy examples, no failures
-- [ ] T115 Verify backward compatibility: existing code using old `occupancy.py` API still works (if any)
-- [ ] T116 Update CHANGELOG.md with new feature summary (grid types, query APIs, gymnasium integration, visualization)
+- [x] T105 [P] Update `docs/dev/occupancy/Update_or_extend_occupancy.md` with usage guide (create, query, visualize grids)
+- [x] T106 [P] Add API reference section to `docs/dev/occupancy/Update_or_extend_occupancy.md` (function signatures, parameters, returns)
+- [x] T107 [P] Add configuration guide to `docs/dev/occupancy/Update_or_extend_occupancy.md` (GridConfig options, frame modes, channels)
+- [x] T108 [P] Add troubleshooting section to `docs/dev/occupancy/Update_or_extend_occupancy.md` (grid not updating, performance slow, etc.)
+- [x] T109 [P] Create example script in `examples/advanced/` demonstrating grid creation, querying, and visualization
+- [x] T110 [P] Create quickstart notebook or script in `examples/quickstart/` showing basic grid usage (3-5 min walkthrough)
+- [x] T111 Create demo script in `examples/` for occupancy-based reward shaping in RL training
+- [x] T112 Update `docs/README.md` to link new occupancy documentation
+- [x] T113 [P] Run performance validation: grid generation <5ms, queries <1ms, visualization 30+ FPS in `scripts/validation/`
+- [x] T114 [P] Run example smoke tests: `run_examples_smoke.py` covers occupancy examples, no failures
+- [x] T115 Verify backward compatibility: existing code using old `occupancy.py` API still works (if any)
+- [x] T116 Update CHANGELOG.md with new feature summary (grid types, query APIs, gymnasium integration, visualization)
 - [ ] T117 [P] Run final quality gates: Ruff format, type check, pylint, full pytest suite
 - [ ] T118 Merge to main and close feature branch
 

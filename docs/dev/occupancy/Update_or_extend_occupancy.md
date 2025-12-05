@@ -1,35 +1,103 @@
-# Update or extend the exisiting occupancy grid 2025-12-04
+# Occupancy Grid Usage Guide
 
-For our observation space, we want to be able to provide grid based occupancy grids. We would like to provide grids, because they work well with "image"-based observation spaces.
-If we have to create occupancy grids dynamically in each frame, it could be worth to do this very efficiently. 
-We should extend the grid based occupancy grid in our package.
+This guide explains how to enable the multi-channel occupancy grid, add it to Gymnasium
+observations, run spawn-safety queries, and debug common issues. The grid is opt-in and
+configured via `RobotSimulationConfig`/`GridConfig`; existing environments continue to work
+without it.
 
-## Feature Requirements
+## Quickstart (environment)
 
-The solution should include all options.
-We should create new layer for each new form of information. It is easy to merge this information when needed, but hard to seperate.
+```python
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import GridConfig, RobotSimulationConfig
+from robot_sf.nav.occupancy_grid import GridChannel
 
-Local occupancy grid (recommended): configurable size (width/height in meters), resolution (meters per cell), and frame (ego-rotated vs. world-aligned). Include occupancy values for static obstacles; optionally add separate channels for dynamic agents (pedestrians, other robots). This keeps the interface compact and planner-friendly.
+grid_config = GridConfig(
+    width=8.0,
+    height=8.0,
+    resolution=0.2,
+    channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS, GridChannel.COMBINED],
+    use_ego_frame=False,
+)
 
-Configurable grid_size_m, resolution_m, frame (ego/world), and optional channels (static obstacles, pedestrians). Static + dynamic on separate channels helps learned/pluggable planners
+config = RobotSimulationConfig(
+    use_occupancy_grid=True,
+    include_grid_in_observation=True,
+    grid_config=grid_config,
+)
 
-## Avoid the following weaknesses
+env = make_robot_env(config=config, debug=False)
+obs, _ = env.reset(seed=42)
+grid_obs = obs["occupancy_grid"]  # shape: (channels, height, width), dtype float32
+env.close()
+```
 
-- No occupancy grid or costmap; only continuous geometric checks.
-- O(N) over all obstacle segments/pedestrians each step; no spatial indexing for larger scenes.
-- No caching/rasterization, so large maps or dense crowds will scale poorly.
-- Only collision flags; no distance-to-obstacle/clearance fields to inform planners directly.
+## Core API reference
 
-## Use cases that should be met
+- `GridConfig`: `width`, `height` (meters), `resolution` (m/cell), `channels` (list of
+  `GridChannel`, e.g., OBSTACLES/PEDESTRIANS/ROBOT/COMBINED), `dtype` (`np.float32` or `np.uint8`),
+  `use_ego_frame` (rotate grid with the robot pose).
+- `OccupancyGrid.generate(obstacles, pedestrians, robot_pose, ego_frame=False)`: rasterize line
+  obstacles and circular pedestrians into `[C, H, W]` grid data. Uses `config.use_ego_frame` unless
+  explicitly overridden by `ego_frame=True`.
+- `OccupancyGrid.query(POIQuery) -> POIResult`: evaluate occupancy for a point/line/circle/rectangle,
+  returning per-channel means and boolean helpers (`is_occupied`, `safe_to_spawn`,
+  `occupancy_fraction`). Queries automatically clamp out-of-bounds coordinates and honour ego-frame
+  transforms using the last robot pose.
+- `OccupancyGrid.to_observation() -> np.ndarray`: float32 array in `[0, 1]`, channel order matches
+  `GridConfig.channels`.
+- `OccupancyGrid.reset()`: clear cached grid/origin/pose.
 
-- Configurable gymnasium observation space to percieve the environment.
-- Point of interest retrieval to check if a point or area is free. This can be helpful to empty determin spawn points.
+### Query types
 
-## Implementation Requirements
+- `POIQuery(query_type=POIQueryType.POINT|CIRCLE|RECT|LINE, x, y, radius, width, height, x2, y2,
+  channels=None)`; coordinates are in world frame unless the grid is built in ego frame.
+- `POIResult` fields: `occupancy` (mean of selected cells), `min_occupancy`, `max_occupancy`,
+  `mean_occupancy`, `num_cells`, `channel_results` (per-channel means), plus convenience properties
+  `is_occupied` (`>0.1`) and `safe_to_spawn` (`<0.05`).
 
-- Increase the test coverage of `robot_sf/nav/occupancy.py` to 100% first.
-- Extend or modify the previous occupancy grid specified in `robot_sf/nav/occupancy.py`.
-- Write tests for the new implementation.
-- Write visual tests where the new occupancy grid and its inforamtion can be visualized in the pygame visualization in `robot_sf/render/sim_view.py`. I imagine that we load a map, enable the grid visualization and we recieve a gird overlay where each cell of the grid can be visualized. cells with obstacles could have a light yellow tint and. Empty cells are transparent.
-	- Visual tests go to test_pygame.
-- Update the documentation in `docs/dev/occupancy/Update_or_extend_occupancy.md` to explain how to use the new occupancy grid.
+## Configuration guide
+
+- `RobotSimulationConfig.use_occupancy_grid`: opt-in switch to build grids.
+- `RobotSimulationConfig.grid_config`: `GridConfig` instance (auto-created when `use_occupancy_grid`
+  is `True` and none is supplied).
+- `RobotSimulationConfig.include_grid_in_observation`: add `"occupancy_grid"` to Gymnasium
+  observation dict (`spaces.Box(low=0, high=1, shape=[C,H,W], dtype=float32)`).
+- `RobotSimulationConfig.show_occupancy_grid` and `grid_visualization_alpha`: enable pygame overlay
+  with configurable transparency; requires `use_occupancy_grid=True`.
+- `GridChannel.COMBINED` automatically max-pools all non-combined channels into a single layer.
+
+## Queries & spawn validation
+
+```python
+from robot_sf.nav.occupancy_grid import POIQuery, POIQueryType
+
+grid = env.unwrapped.occupancy_grid  # created when include_grid_in_observation=True
+query = POIQuery(x=4.0, y=4.0, radius=0.5, query_type=POIQueryType.CIRCLE)
+result = grid.query(query)
+print(f"Safe to spawn: {result.safe_to_spawn}, occupancy={result.occupancy_fraction:.3f}")
+print("Per-channel:", {ch.value: v for ch, v in result.per_channel_results.items()})
+```
+
+- Use circle/rect queries for spawn clearance; point queries are cheap (<1 ms).
+- Ego-frame grids accept world-frame coordinates and internally rotate using the stored robot pose.
+- Combine channels by setting `channels=[GridChannel.COMBINED]` on the `POIQuery` to avoid
+  double-counting.
+
+## Visualization & troubleshooting
+
+- Rendering: `OccupancyGrid.render_pygame(surface, scale=1.0, alpha=128)` draws a translucent overlay
+  per channel (obstacles=yellow, pedestrians=red, robot=blue, combined=orange). For headless runs,
+  set `SDL_VIDEODRIVER=dummy`.
+- Empty grids: confirm `use_occupancy_grid=True` and that obstacles/pedestrians are supplied; for
+  ego-frame grids ensure the robot pose is set before queries.
+- Unexpected shapes: verify `GridConfig.width/height/resolution` produce the intended `[H, W]`.
+- Out-of-range values: `to_observation()` clips to `[0, 1]`; prefer `dtype=np.uint8` for binary
+  occupancy if you need tighter bounds.
+- Out-of-bounds queries: coordinates are clamped; if you want strict errors, validate with
+  `grid_utils.is_within_grid(...)` before querying.
+
+## Worked examples
+
+- Quickstart walkthrough: `examples/quickstart/04_occupancy_grid.py`
+- Advanced spawn validation + reward shaping: `examples/advanced/20_occupancy_grid_workflow.py`

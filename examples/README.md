@@ -74,6 +74,7 @@ Feature-focused demos for developers exploring capabilities.
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
 | [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
 | [20 Occupancy Grid Workflow](./advanced/20_occupancy_grid_workflow.py) | Standalone grid generation, spawn validation queries, and occupancy-based reward shaping. | _None_ | occupancy, reward, observation | ✅ |
+| [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
 
 ## Benchmarks
 

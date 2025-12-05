@@ -389,7 +389,10 @@ class SimulationView:
         self._draw_actions(state)
         self._draw_entities(state)
         # Draw occupancy grid overlay after entities so it appears on top
-        if hasattr(state, "robot_pose") and state.robot_pose:
+        if hasattr(state, "robot_pose") and state.robot_pose is not None:
+            # numpy arrays are not directly truthy; require non-empty content
+            if not isinstance(state.robot_pose, np.ndarray) or state.robot_pose.size > 0:
+                self._render_occupancy_grid(state.robot_pose)
             self._render_occupancy_grid(state.robot_pose)
 
     def _draw_sensor_data(self, state: VisualizableSimState):

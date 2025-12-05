@@ -11,6 +11,7 @@ All steps run headless and finish in a few seconds; no extra assets are required
 from __future__ import annotations
 
 import math
+import os
 
 from loguru import logger
 
@@ -57,6 +58,7 @@ def build_standalone_grid() -> OccupancyGrid:
             {ch.value: f"{val:.3f}" for ch, val in result.per_channel_results.items()},
         )
 
+    _render_overlay(grid, robot_pose)
     return grid
 
 
@@ -97,6 +99,23 @@ def reward_shaping_demo() -> None:
 
     env.close()
     logger.info("Toy shaped return after 8 steps: %.3f", shaped_return)
+
+
+def _render_overlay(grid: OccupancyGrid, robot_pose) -> None:
+    """Headless visualization of the grid overlay."""
+    try:
+        import pygame
+    except ImportError:
+        logger.warning("Skipping overlay rendering; pygame not installed.")
+        return
+
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    pygame.init()
+    scale = 4
+    surface = pygame.Surface((grid.shape[2] * scale, grid.shape[1] * scale), pygame.SRCALPHA)
+    grid.render_pygame(surface, robot_pose=robot_pose, scale=scale, alpha=160)
+    logger.info("Rendered headless grid overlay surface at %s", surface.get_size())
+    pygame.quit()
 
 
 def main() -> None:

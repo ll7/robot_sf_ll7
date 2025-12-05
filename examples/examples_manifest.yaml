@@ -264,6 +264,15 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: [visualization, force-field]
+  - path: occupancy_reward_shaping.py
+    name: "Occupancy Reward Shaping"
+    summary: "Derive a clearance penalty from occupancy grid observations in a short rollout."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
+    tags: [occupancy, reward, grid]
   - path: plotting/plot_pareto.py
     name: "Plot Pareto"
     summary: "Generate Pareto front plots from benchmark episodes or synthetic data."

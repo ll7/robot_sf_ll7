@@ -86,6 +86,9 @@ if TYPE_CHECKING:
 from robot_sf.nav import occupancy_grid_rasterization as rasterization
 from robot_sf.nav import occupancy_grid_utils as grid_utils
 
+# Threshold below which a cell/region is treated as free for spawning or visualization.
+OCCUPANCY_FREE_THRESHOLD = 0.05
+
 
 class GridChannel(Enum):
     """Occupancy grid channel identifiers."""
@@ -117,6 +120,7 @@ class GridConfig:
         dtype: NumPy data type for grid values (default: float32)
         max_distance: Max distance for continuous occupancy (default: 0.5m)
         use_ego_frame: Whether to use robot's ego frame (default: False)
+        robot_radius: Radius for rasterizing the robot channel (default: 0.3m)
 
     Invariants:
         - resolution > 0
@@ -124,6 +128,7 @@ class GridConfig:
         - height > 0
         - len(channels) > 0
         - dtype in (float16, float32, float64, uint8)
+        - robot_radius > 0
     """
 
     resolution: float = 0.1
@@ -138,6 +143,7 @@ class GridConfig:
     dtype: type = np.float32
     max_distance: float = 0.5
     use_ego_frame: bool = False
+    robot_radius: float = 0.3
 
     def __post_init__(self):
         """Validate configuration parameters."""
@@ -149,6 +155,8 @@ class GridConfig:
             raise ValueError(f"height must be > 0, got {self.height}")
         if not self.channels:
             raise ValueError("channels must not be empty")
+        if self.robot_radius <= 0:
+            raise ValueError(f"robot_radius must be > 0, got {self.robot_radius}")
 
         # Validate dtype
         valid_dtypes = (np.float16, np.float32, np.float64, np.uint8)
@@ -269,8 +277,8 @@ class POIResult:
 
     @property
     def safe_to_spawn(self) -> bool:
-        """Check if safe to spawn (occupancy < 0.05 threshold)."""
-        return self.occupancy < 0.05
+        """Check if safe to spawn based on the free-space threshold."""
+        return self.occupancy < OCCUPANCY_FREE_THRESHOLD
 
     @property
     def occupancy_fraction(self) -> float:
@@ -350,6 +358,7 @@ class OccupancyGrid:
         self._grid_data: np.ndarray | None = None
         self._last_robot_pose: RobotPoseRecord | None = None
         self._grid_origin: tuple[float, float] | None = None
+        self._last_use_ego_frame: bool = False
 
         logger.debug(
             f"OccupancyGrid initialized: "
@@ -404,6 +413,7 @@ class OccupancyGrid:
             raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
 
         use_ego_frame = ego_frame or self.config.use_ego_frame
+        self._last_use_ego_frame = use_ego_frame
         robot_x, robot_y, robot_theta = self._parse_robot_pose(robot_pose)
         self._last_robot_pose = RobotPoseRecord((robot_x, robot_y), robot_theta)
 
@@ -480,8 +490,8 @@ class OccupancyGrid:
                 logger.debug(f"Rasterized {num_rasterized} pedestrians")
 
             elif channel == GridChannel.ROBOT:
-                # Rasterize robot as a circle (assume 0.3m radius)
-                robot_radius = 0.3  # TODO: Make configurable
+                # Rasterize robot as a circle
+                robot_radius = self.config.robot_radius
                 success = rasterization.rasterize_robot(
                     robot_pose,
                     robot_radius,
@@ -534,7 +544,7 @@ class OccupancyGrid:
 
         # Convert query coordinates into grid frame (ego/world)
         query_x, query_y = query.x, query.y
-        if self.config.use_ego_frame:
+        if self._last_use_ego_frame:
             if self._last_robot_pose is None:
                 raise RuntimeError("Cannot query ego-frame grid without a robot pose.")
             query_x, query_y = grid_utils.world_to_ego(query.x, query.y, self._last_robot_pose)  # type: ignore[arg-type]

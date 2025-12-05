@@ -25,6 +25,10 @@ class SocNavPlannerConfig:
     max_angular_speed: float = 1.0
     angular_gain: float = 1.0
     goal_tolerance: float = 0.25
+    sacadrl_neighbors: int = 3
+    sacadrl_bias_weight: float = 0.6
+    orca_avoidance_weight: float = 1.2
+    social_force_repulsion_weight: float = 0.8
 
 
 class SamplingPlannerAdapter:
@@ -155,7 +159,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             dist = np.linalg.norm(delta) + 1e-6
             repulse += delta / dist**2
 
-        combined = goal_vec + 0.8 * repulse
+        combined = goal_vec + self.config.social_force_repulsion_weight * repulse
         if np.linalg.norm(combined) > 1e-6:
             combined = combined / np.linalg.norm(combined)
 
@@ -209,7 +213,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             if dist < 5.0:
                 avoidance -= delta / dist
 
-        combined = goal_vec + 1.2 * avoidance
+        combined = goal_vec + self.config.orca_avoidance_weight * avoidance
         if np.linalg.norm(combined) > 1e-6:
             combined = combined / np.linalg.norm(combined)
 
@@ -257,13 +261,14 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         ped_positions = ped_positions[:ped_count]
         if ped_positions.shape[0] > 0:
             dists = np.linalg.norm(ped_positions - robot_pos, axis=1)
-            nearest_idx = np.argsort(dists)[:3]
+            neighbor_count = max(0, int(self.config.sacadrl_neighbors))
+            nearest_idx = np.argsort(dists)[:neighbor_count]
             bias = np.zeros(2, dtype=float)
             for idx in nearest_idx:
                 delta = robot_pos - ped_positions[idx]
                 dist = dists[idx] + 1e-6
                 bias += delta / dist**1.5
-            combined = goal_vec + 0.6 * bias
+            combined = goal_vec + self.config.sacadrl_bias_weight * bias
         else:
             combined = goal_vec
 

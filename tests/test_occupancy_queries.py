@@ -30,6 +30,7 @@ class TestPointQueryInFreeSpace:
 
         assert result is not None
         assert hasattr(result, "is_occupied")
+        assert not result.is_occupied, "Point in free space should not be occupied"
 
     def test_point_query_free_space_multiple_locations(
         self, simple_grid_config: GridConfig
@@ -62,6 +63,7 @@ class TestPointQueryInOccupiedSpace:
 
         assert result is not None
         # Result should indicate occupied (specific attribute depends on implementation)
+        assert result.is_occupied, "Point on obstacle should be occupied"
 
     def test_point_query_occupied_space_pedestrian(self, simple_grid_config: GridConfig) -> None:
         """Query a point on pedestrian should return is_occupied=True."""
@@ -75,6 +77,7 @@ class TestPointQueryInOccupiedSpace:
         result = grid.query(query)
 
         assert result is not None
+        assert result.is_occupied, "Point on pedestrian should be occupied"
 
 
 class TestPointQueryAtBoundary:
@@ -148,6 +151,7 @@ class TestCircularAOIQueryFree:
 
         assert result is not None
         assert hasattr(result, "safe_to_spawn")
+        assert result.safe_to_spawn, "Circular AOI in free space should be safe to spawn"
 
     def test_circular_aoi_free_space_large_radius(self, simple_grid_config: GridConfig) -> None:
         """Larger circular AOI in free space should also be safe."""
@@ -177,6 +181,9 @@ class TestCircularAOIQueryPartiallyOccupied:
 
         assert result is not None
         # Result should indicate not safe to spawn
+        assert not result.safe_to_spawn, (
+            "Circular AOI overlapping obstacle should not be safe to spawn"
+        )
 
     def test_circular_aoi_just_touching_obstacle(self, simple_grid_config: GridConfig) -> None:
         """Circle just touching obstacle boundary should indicate caution."""
@@ -205,6 +212,7 @@ class TestRectangularAOIQuery:
 
         assert result is not None
         assert hasattr(result, "occupancy_fraction")
+        assert result.occupancy_fraction == 0.0, "Free space should have 0% occupancy"
 
     def test_rectangular_aoi_partially_occupied(self, simple_grid_config: GridConfig) -> None:
         """Rectangular AOI overlapping obstacle should have >0% occupancy."""
@@ -218,6 +226,7 @@ class TestRectangularAOIQuery:
 
         assert result is not None
         assert hasattr(result, "occupancy_fraction")
+        assert result.occupancy_fraction > 0.0, "Partially occupied should have >0% occupancy"
 
     def test_rectangular_aoi_fully_occupied(self, simple_grid_config: GridConfig) -> None:
         """Rectangular AOI entirely on obstacle should have 100% occupancy."""
@@ -231,6 +240,7 @@ class TestRectangularAOIQuery:
         result = grid.query(query)
 
         assert result is not None
+        assert result.occupancy_fraction > 0.9, "Fully occupied should have ~100% occupancy"
 
 
 class TestPerChannelQueryResults:
@@ -262,6 +272,10 @@ class TestPerChannelQueryResults:
 
         assert result is not None
         # Obstacle channel should be occupied, pedestrian channel should be free
+        assert "OBSTACLES" in result.per_channel_results
+        assert "PEDESTRIANS" in result.per_channel_results
+        assert result.per_channel_results["OBSTACLES"] > 0.0, "Obstacle channel should be occupied"
+        assert result.per_channel_results["PEDESTRIANS"] == 0.0, "Pedestrian channel should be free"
 
 
 class TestSpawnValidationWorkflow:
@@ -334,3 +348,5 @@ class TestQueryWithDynamicPedestrians:
         # Results should differ (first occupied, second free)
         assert result1 is not None
         assert result2 is not None
+        assert result1.is_occupied, "Query at (3,3) should be occupied when pedestrian is there"
+        assert not result2.is_occupied, "Query at (3,3) should be free after pedestrian moved"

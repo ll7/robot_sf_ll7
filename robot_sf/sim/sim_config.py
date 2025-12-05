@@ -45,6 +45,8 @@ class SimulationSettings:
 
     ped_density_by_difficulty: list[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.08])
     """Pedestrian density by difficulty level"""
+    max_total_pedestrians: int | None = None
+    """Optional upper bound for pedestrians used to size SocNav structured observations."""
 
     def __post_init__(self):
         """

@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
+from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import (
@@ -41,6 +43,7 @@ class BaseSimulationConfig:
     # Backend selection and sensor wiring via registries
     backend: str = "fast-pysf"
     sensors: list[dict] = field(default_factory=list)
+    observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
 
     def __post_init__(self):
         """Validate that all required fields are initialized."""
@@ -63,11 +66,61 @@ class RobotSimulationConfig(BaseSimulationConfig):
     use_image_obs: bool = field(default=False)
     peds_have_obstacle_forces: bool = field(default=False)
 
+    # Occupancy grid configuration
+    grid_config: GridConfig | None = field(default=None)
+    use_occupancy_grid: bool = field(default=False)
+    # Grid observation flag - when True, includes occupancy grid in observation space
+    include_grid_in_observation: bool = field(default=False)
+    # Grid visualization configuration
+    show_occupancy_grid: bool = field(
+        default=False, metadata={"doc": "Show occupancy grid overlay in pygame visualization"}
+    )
+    grid_visualization_alpha: float = field(
+        default=0.5,
+        metadata={"doc": "Alpha blending for grid overlay (0.0=transparent, 1.0=opaque)"},
+    )
+
     def __post_init__(self):
         """Validate robot-specific configuration."""
         super().__post_init__()
         if not self.robot_config:
             raise ValueError("Robot configuration must be initialized!")
+
+        self._init_grid_config()
+        self._validate_grid_observation()
+        self._validate_grid_visualization()
+
+    def _init_grid_config(self) -> None:
+        """Initialize and validate the occupancy grid configuration."""
+        if self.use_occupancy_grid and self.grid_config is None:
+            self.grid_config = GridConfig()
+
+        if self.grid_config is not None and not isinstance(self.grid_config, GridConfig):
+            raise ValueError(
+                f"grid_config must be GridConfig instance, got {type(self.grid_config)}"
+            )
+
+    def _validate_grid_observation(self) -> None:
+        """Validate observation-related grid settings."""
+        if not self.include_grid_in_observation:
+            return
+
+        if not self.use_occupancy_grid:
+            raise ValueError("include_grid_in_observation=True requires use_occupancy_grid=True")
+
+        if self.grid_config is None:
+            raise ValueError("include_grid_in_observation=True requires valid grid_config")
+
+    def _validate_grid_visualization(self) -> None:
+        """Validate grid visualization settings."""
+        if not self.show_occupancy_grid:
+            return
+
+        if not self.use_occupancy_grid:
+            raise ValueError("show_occupancy_grid=True requires use_occupancy_grid=True")
+
+        if not 0.0 <= self.grid_visualization_alpha <= 1.0:
+            raise ValueError("grid_visualization_alpha must be between 0.0 and 1.0")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

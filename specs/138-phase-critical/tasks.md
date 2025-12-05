@@ -1,6 +1,6 @@
 # Tasks: Type Checking Fixes
 
-**Input**: Design documents from `/specs/138-phase-1-critical/`
+**Input**: Design documents from `/specs/138-phase-critical/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
 ## Execution Flow (main)

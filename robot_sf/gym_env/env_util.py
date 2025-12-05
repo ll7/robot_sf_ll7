@@ -11,6 +11,7 @@ from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSet
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.occupancy import ContinuousOccupancy, EgoPedContinuousOccupancy
+from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.sensor.fusion_adapter import (
     MergedObservationFusion,
     create_sensors_from_config,
@@ -249,6 +250,36 @@ def create_spaces(
             norm_dict[key] = box
         orig_obs_space = spaces.Dict(orig_dict)
         observation_space = spaces.Dict(norm_dict)
+
+    # T045: Add occupancy grid to observation space if configured
+    if (
+        hasattr(env_config, "include_grid_in_observation")
+        and env_config.include_grid_in_observation
+    ):
+        # Get grid config (should be validated in unified_config.__post_init__)
+        grid_config = getattr(env_config, "grid_config", None)
+        if grid_config is not None and isinstance(grid_config, GridConfig):
+            # Create Box space for grid: shape [C, H, W], dtype float32, bounds [0, 1]
+            grid_shape = (
+                grid_config.num_channels,
+                grid_config.grid_height,
+                grid_config.grid_width,
+            )
+            grid_box = spaces.Box(
+                low=0.0,
+                high=1.0,
+                shape=grid_shape,
+                dtype=np.float32,
+            )
+
+            # Add to both observation spaces
+            orig_dict = dict(orig_obs_space.spaces)
+            norm_dict = dict(observation_space.spaces)
+            orig_dict["occupancy_grid"] = grid_box
+            norm_dict["occupancy_grid"] = grid_box
+            orig_obs_space = spaces.Dict(orig_dict)
+            observation_space = spaces.Dict(norm_dict)
+
     return action_space, observation_space, orig_obs_space
 
 

@@ -71,6 +71,14 @@ class RobotSimulationConfig(BaseSimulationConfig):
     use_occupancy_grid: bool = field(default=False)
     # Grid observation flag - when True, includes occupancy grid in observation space
     include_grid_in_observation: bool = field(default=False)
+    # Grid visualization configuration
+    show_occupancy_grid: bool = field(
+        default=False, metadata={"doc": "Show occupancy grid overlay in pygame visualization"}
+    )
+    grid_visualization_alpha: float = field(
+        default=0.5,
+        metadata={"doc": "Alpha blending for grid overlay (0.0=transparent, 1.0=opaque)"},
+    )
 
     def __post_init__(self):
         """Validate robot-specific configuration."""
@@ -78,27 +86,41 @@ class RobotSimulationConfig(BaseSimulationConfig):
         if not self.robot_config:
             raise ValueError("Robot configuration must be initialized!")
 
-        # Initialize grid_config if occupancy grid is enabled
+        self._init_grid_config()
+        self._validate_grid_observation()
+        self._validate_grid_visualization()
+
+    def _init_grid_config(self) -> None:
+        """Initialize and validate the occupancy grid configuration."""
         if self.use_occupancy_grid and self.grid_config is None:
             self.grid_config = GridConfig()
 
-        # Validate grid_config if provided
-        if self.grid_config is not None:
-            if not isinstance(self.grid_config, GridConfig):
-                raise ValueError(
-                    f"grid_config must be GridConfig instance, got {type(self.grid_config)}"
-                )
+        if self.grid_config is not None and not isinstance(self.grid_config, GridConfig):
+            raise ValueError(
+                f"grid_config must be GridConfig instance, got {type(self.grid_config)}"
+            )
 
-        # T047: Validate grid observation configuration
-        if self.include_grid_in_observation:
-            # Grid observation requires grid to be enabled
-            if not self.use_occupancy_grid:
-                raise ValueError(
-                    "include_grid_in_observation=True requires use_occupancy_grid=True"
-                )
-            # Grid config must be valid
-            if self.grid_config is None:
-                raise ValueError("include_grid_in_observation=True requires valid grid_config")
+    def _validate_grid_observation(self) -> None:
+        """Validate observation-related grid settings."""
+        if not self.include_grid_in_observation:
+            return
+
+        if not self.use_occupancy_grid:
+            raise ValueError("include_grid_in_observation=True requires use_occupancy_grid=True")
+
+        if self.grid_config is None:
+            raise ValueError("include_grid_in_observation=True requires valid grid_config")
+
+    def _validate_grid_visualization(self) -> None:
+        """Validate grid visualization settings."""
+        if not self.show_occupancy_grid:
+            return
+
+        if not self.use_occupancy_grid:
+            raise ValueError("show_occupancy_grid=True requires use_occupancy_grid=True")
+
+        if not 0.0 <= self.grid_visualization_alpha <= 1.0:
+            raise ValueError("grid_visualization_alpha must be between 0.0 and 1.0")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

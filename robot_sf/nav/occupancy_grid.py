@@ -75,10 +75,16 @@ from typing import TYPE_CHECKING
 import numpy as np
 from loguru import logger
 
+try:
+    import pygame
+except ImportError:  # pragma: no cover - handled at runtime
+    pygame = None
+
 if TYPE_CHECKING:
     from robot_sf.common.types import Circle2D, Line2D, RobotPose
 
 from robot_sf.nav import occupancy_grid_rasterization as rasterization
+from robot_sf.nav import occupancy_grid_utils as grid_utils
 
 
 class GridChannel(Enum):
@@ -277,6 +283,44 @@ class POIResult:
         return self.channel_results.copy()
 
 
+@dataclass(frozen=True)
+class RobotPoseRecord:
+    """Lightweight wrapper to store the last robot pose with safe equality semantics."""
+
+    position: tuple[float, float]
+    theta: float
+
+    def __iter__(self):
+        """Iterate position and heading for tuple unpacking."""
+        yield self.position
+        yield self.theta
+
+    def __eq__(self, other: object) -> bool:
+        """Compare pose using tolerance to absorb floating-point noise.
+
+        Returns:
+            bool: True if positions and headings match within tolerance.
+        """
+        try:
+            pos, theta = other  # type: ignore[misc]
+            pos_tuple = tuple(float(v) for v in pos)
+            if len(pos_tuple) != 2:
+                return False
+            return math.isclose(float(theta), self.theta) and all(
+                math.isclose(a, b) for a, b in zip(pos_tuple, self.position, strict=False)
+            )
+        except (TypeError, ValueError):
+            return False
+
+    def __hash__(self) -> int:
+        """Hash pose consistently with approximate equality semantics.
+
+        Returns:
+            int: Hash derived from rounded position and heading.
+        """
+        return hash((round(self.position[0], 9), round(self.position[1], 9), round(self.theta, 9)))
+
+
 class OccupancyGrid:
     """Main occupancy grid container and API.
 
@@ -304,13 +348,27 @@ class OccupancyGrid:
         """
         self.config = config
         self._grid_data: np.ndarray | None = None
-        self._last_robot_pose: RobotPose | None = None
+        self._last_robot_pose: RobotPoseRecord | None = None
+        self._grid_origin: tuple[float, float] | None = None
 
         logger.debug(
             f"OccupancyGrid initialized: "
             f"{self.config.grid_width}x{self.config.grid_height}x"
             f"{self.config.num_channels} cells"
         )
+
+    @staticmethod
+    def _parse_robot_pose(robot_pose: RobotPose) -> tuple[float, float, float]:
+        """Return (x, y, theta) as floats from a RobotPose tuple-like value."""
+        try:
+            position, theta = robot_pose
+            x, y = position
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                "robot_pose must be a tuple like ((x, y), theta) or (array, theta)"
+            ) from exc
+
+        return float(x), float(y), float(theta)
 
     def generate(  # noqa: C901
         self,
@@ -345,18 +403,19 @@ class OccupancyGrid:
             logger.error(f"Invalid pedestrians type: {type(pedestrians).__name__}, expected list")
             raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
 
-        self._last_robot_pose = robot_pose
+        use_ego_frame = ego_frame or self.config.use_ego_frame
+        robot_x, robot_y, robot_theta = self._parse_robot_pose(robot_pose)
+        self._last_robot_pose = RobotPoseRecord((robot_x, robot_y), robot_theta)
 
         # Determine grid bounds
-        if ego_frame:
-            # Ego-frame: center grid on robot position
-            robot_position, _ = robot_pose  # Unpack (Vec2D, orientation) tuple
-            grid_origin_x = float(robot_position[0]) - self.config.width / 2
-            grid_origin_y = float(robot_position[1]) - self.config.height / 2
+        if use_ego_frame:
+            grid_origin_x = -self.config.width / 2
+            grid_origin_y = -self.config.height / 2
             logger.debug(f"Ego-frame grid origin: ({grid_origin_x:.2f}, {grid_origin_y:.2f})")
         else:
             grid_origin_x = 0.0
             grid_origin_y = 0.0
+        self._grid_origin = (grid_origin_x, grid_origin_y)
 
         # Initialize grid
         shape = (
@@ -370,16 +429,36 @@ class OccupancyGrid:
 
         logger.debug(
             f"Generating grid: shape={shape}, obstacles={len(obstacles)}, "
-            f"pedestrians={len(pedestrians)}, ego_frame={ego_frame}, "
+            f"pedestrians={len(pedestrians)}, ego_frame={use_ego_frame}, "
             f"origin=({grid_origin_x:.2f}, {grid_origin_y:.2f})"
         )
 
+        # Transform coordinates to ego frame when requested
+        if use_ego_frame:
+
+            def _to_ego_point(point: tuple[float, float]) -> tuple[float, float]:
+                return grid_utils.world_to_ego(point[0], point[1], self._last_robot_pose)  # type: ignore[arg-type]
+
+            transformed_obstacles: list[Line2D] = [
+                (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
+            ]
+            transformed_pedestrians: list[Circle2D] = [
+                (_to_ego_point(center), radius) for center, radius in pedestrians
+            ]
+        else:
+            transformed_obstacles = obstacles
+            transformed_pedestrians = pedestrians
+
         # Rasterize each channel
         for channel_idx, channel in enumerate(self.config.channels):
+            if channel == GridChannel.COMBINED:
+                # Combine after base channels are processed
+                continue
+
             if channel == GridChannel.OBSTACLES:
                 # Rasterize obstacles into this channel
                 num_rasterized = rasterization.rasterize_obstacles(
-                    obstacles,
+                    transformed_obstacles,
                     self._grid_data[channel_idx],
                     self.config,
                     grid_origin_x,
@@ -391,7 +470,7 @@ class OccupancyGrid:
             elif channel == GridChannel.PEDESTRIANS:
                 # Rasterize pedestrians into this channel
                 num_rasterized = rasterization.rasterize_pedestrians(
-                    pedestrians,
+                    transformed_pedestrians,
                     self._grid_data[channel_idx],
                     self.config,
                     grid_origin_x,
@@ -414,14 +493,17 @@ class OccupancyGrid:
                 )
                 logger.debug(f"Rasterized robot: {success}")
 
-            elif channel == GridChannel.COMBINED:
-                # Combine all other channels (max occupancy)
-                combined = np.zeros_like(self._grid_data[channel_idx])
-                for other_idx, other_channel in enumerate(self.config.channels):
-                    if other_channel != GridChannel.COMBINED:
-                        combined = np.maximum(combined, self._grid_data[other_idx])
-                self._grid_data[channel_idx] = combined
-                logger.debug("Generated combined channel")
+        if GridChannel.COMBINED in self.config.channels:
+            combined_idx = self.config.channels.index(GridChannel.COMBINED)
+            source_indices = [
+                idx for idx, ch in enumerate(self.config.channels) if ch != GridChannel.COMBINED
+            ]
+            if source_indices:
+                combined = np.max(self._grid_data[source_indices], axis=0)
+            else:
+                combined = np.zeros_like(self._grid_data[combined_idx])
+            self._grid_data[combined_idx] = combined.astype(self.config.dtype, copy=False)
+            logger.debug("Generated combined channel from %s indices", source_indices)
 
         return self._grid_data
 
@@ -448,42 +530,29 @@ class OccupancyGrid:
             logger.error("Query called before grid generation")
             raise RuntimeError("Grid has not been generated yet. Call generate() first.")
 
-        # Validate query coordinates within reasonable bounds (allow slightly out of bounds)
-        # Convert world coordinates to grid indices
-        grid_x = int(query.x / self.config.resolution)
-        grid_y = int(query.y / self.config.resolution)
+        origin_x, origin_y = self._grid_origin or (0.0, 0.0)
 
-        # Clamp to grid bounds and log if out of bounds
-        out_of_bounds = (
-            grid_x < 0
-            or grid_x >= self.config.grid_width
-            or grid_y < 0
-            or grid_y >= self.config.grid_height
-        )
-        if out_of_bounds:
-            logger.debug(
-                (
-                    "Query coordinate out of bounds: ({:.2f}, {:.2f}) -> grid ({}, {}), "
-                    "clamping to [{}-{}, {}-{}]"
-                ),
-                query.x,
-                query.y,
-                grid_x,
-                grid_y,
-                0,
-                self.config.grid_width - 1,
-                0,
-                self.config.grid_height - 1,
-            )
-        grid_x_clamped = np.clip(grid_x, 0, self.config.grid_width - 1)
-        grid_y_clamped = np.clip(grid_y, 0, self.config.grid_height - 1)
+        # Convert query coordinates into grid frame (ego/world)
+        query_x, query_y = query.x, query.y
+        if self.config.use_ego_frame:
+            if self._last_robot_pose is None:
+                raise RuntimeError("Cannot query ego-frame grid without a robot pose.")
+            query_x, query_y = grid_utils.world_to_ego(query.x, query.y, self._last_robot_pose)  # type: ignore[arg-type]
+
+        local_x = query_x - origin_x
+        local_y = query_y - origin_y
+        grid_col = int(local_x / self.config.resolution)
+        grid_row = int(local_y / self.config.resolution)
+
+        grid_col = int(np.clip(grid_col, 0, self.config.grid_width - 1))
+        grid_row = int(np.clip(grid_row, 0, self.config.grid_height - 1))
 
         # Track cells to query based on query type
         cells_to_check: list[tuple[int, int]] = []
 
         if query.query_type == POIQueryType.POINT:
             # Single cell query
-            cells_to_check = [(grid_x_clamped, grid_y_clamped)]
+            cells_to_check = [(grid_row, grid_col)]
 
         elif query.query_type == POIQueryType.CIRCLE:
             # Circular AOI: find all cells within radius
@@ -492,10 +561,10 @@ class OccupancyGrid:
                 for dy in range(-radius_cells, radius_cells + 1):
                     dist = math.sqrt(dx**2 + dy**2) * self.config.resolution
                     if dist <= query.radius:
-                        cx = grid_x_clamped + dx
-                        cy = grid_y_clamped + dy
-                        if 0 <= cx < self.config.grid_width and 0 <= cy < self.config.grid_height:
-                            cells_to_check.append((cx, cy))
+                        row = grid_row + dy
+                        col = grid_col + dx
+                        if 0 <= col < self.config.grid_width and 0 <= row < self.config.grid_height:
+                            cells_to_check.append((row, col))
 
         elif query.query_type == POIQueryType.RECT:
             # Rectangular AOI: find all cells in rectangle
@@ -503,19 +572,27 @@ class OccupancyGrid:
             half_height = query.height / (2 * self.config.resolution)
             for dx in range(-int(half_width) - 1, int(half_width) + 2):
                 for dy in range(-int(half_height) - 1, int(half_height) + 2):
-                    cx = grid_x_clamped + dx
-                    cy = grid_y_clamped + dy
-                    if 0 <= cx < self.config.grid_width and 0 <= cy < self.config.grid_height:
-                        cells_to_check.append((cx, cy))
+                    row = grid_row + dy
+                    col = grid_col + dx
+                    if 0 <= col < self.config.grid_width and 0 <= row < self.config.grid_height:
+                        cells_to_check.append((row, col))
 
         elif query.query_type == POIQueryType.LINE:
             # Line segment query: use Bresenham's line
             if query.x2 is None or query.y2 is None:
                 raise ValueError("x2 and y2 required for LINE query")
-            grid_x2 = int(query.x2 / self.config.resolution)
-            grid_y2 = int(query.y2 / self.config.resolution)
+            x2, y2 = query.x2, query.y2
+            if self.config.use_ego_frame and self._last_robot_pose is not None:
+                x2, y2 = grid_utils.world_to_ego(query.x2, query.y2, self._last_robot_pose)  # type: ignore[arg-type]
+            grid_x2 = int((x2 - origin_x) / self.config.resolution)
+            grid_y2 = int((y2 - origin_y) / self.config.resolution)
             # Use Bresenham-like line traversal
-            cells_to_check = self._bresenham_line(grid_x_clamped, grid_y_clamped, grid_x2, grid_y2)
+            line_cells = self._bresenham_line(grid_col, grid_row, grid_x2, grid_y2)
+            cells_to_check = [
+                (row, col)
+                for col, row in line_cells
+                if 0 <= col < self.config.grid_width and 0 <= row < self.config.grid_height
+            ]
 
         # Compute occupancy statistics
         if not cells_to_check:
@@ -529,31 +606,37 @@ class OccupancyGrid:
             )
 
         # Extract occupancy values from all channels (aggregate)
-        occupancy_values: list[float] = []
-        channel_specific_values: dict[GridChannel, list[float]] = {
-            ch: [] for ch in self.config.channels
+        rows = np.array([r for r, _c in cells_to_check], dtype=int)
+        cols = np.array([c for _r, c in cells_to_check], dtype=int)
+
+        # Respect optional channel filter
+        selected_channels = query.channels or self.config.channels
+        selected_channels = [ch for ch in selected_channels if ch in self.config.channels]
+        channel_indices = [self.config.channels.index(ch) for ch in selected_channels]
+        if not channel_indices:
+            return POIResult(
+                occupancy=0.0,
+                query_type=query.query_type,
+                num_cells=len(cells_to_check),
+                min_occupancy=0.0,
+                max_occupancy=0.0,
+                mean_occupancy=0.0,
+                channel_results={},
+            )
+
+        channel_values = self._grid_data[channel_indices][:, rows, cols].astype(float, copy=False)
+        per_cell_max = channel_values.max(axis=0)
+        per_cell_max = np.clip(per_cell_max, 0.0, 1.0)
+
+        channel_results = {
+            ch: float(np.clip(channel_values[idx], 0.0, 1.0).mean())
+            for idx, ch in enumerate(selected_channels)
         }
 
-        for cx, cy in cells_to_check:
-            # Get occupancy across all channels
-            for channel_idx, channel in enumerate(self.config.channels):
-                value = float(self._grid_data[channel_idx, cy, cx]) / 255.0
-                occupancy_values.append(value)
-                channel_specific_values[channel].append(value)
-
         # Compute statistics
-        occupancy_array = np.array(occupancy_values)
-        min_occ = float(np.min(occupancy_array)) if occupancy_array.size > 0 else 0.0
-        max_occ = float(np.max(occupancy_array)) if occupancy_array.size > 0 else 0.0
-        mean_occ = float(np.mean(occupancy_array)) if occupancy_array.size > 0 else 0.0
-
-        # Per-channel results
-        channel_results = {}
-        for channel, values in channel_specific_values.items():
-            if values:
-                channel_results[channel] = float(np.mean(values))
-            else:
-                channel_results[channel] = 0.0
+        min_occ = float(per_cell_max.min()) if per_cell_max.size > 0 else 0.0
+        max_occ = float(per_cell_max.max()) if per_cell_max.size > 0 else 0.0
+        mean_occ = float(per_cell_max.mean()) if per_cell_max.size > 0 else 0.0
 
         logger.debug(
             f"Query {query.query_type.value} at ({query.x}, {query.y}): "
@@ -631,13 +714,43 @@ class OccupancyGrid:
         if self._grid_data is None:
             raise RuntimeError("Grid has not been generated yet. Call generate() first.")
 
-        # TODO (Phase 4): Implement Pygame rendering
-        # - Convert grid values to color values
-        # - Create visualization surface
-        # - Render channels with different colors
-        # - Draw grid overlay if requested
-        # - Draw robot pose indicator
-        # - Blit to target surface
+        if pygame is None:
+            raise RuntimeError("Pygame is required for occupancy grid rendering")
+
+        if not (0 <= alpha <= 255):
+            raise ValueError("alpha must be between 0 and 255")
+
+        cell_size: int = max(1, round(scale))
+        overlay = pygame.Surface(
+            (self.config.grid_width * cell_size, self.config.grid_height * cell_size),
+            pygame.SRCALPHA,
+        )
+
+        color_map: dict[GridChannel, tuple[int, int, int, int]] = {
+            GridChannel.OBSTACLES: (255, 235, 128, alpha),  # light yellow
+            GridChannel.PEDESTRIANS: (220, 80, 80, alpha),  # red tint
+            GridChannel.ROBOT: (80, 140, 255, alpha),  # blue tint
+            GridChannel.COMBINED: (255, 170, 120, alpha),  # orange overlay
+        }
+
+        for channel_idx, channel in enumerate(self.config.channels):
+            channel_data = self._grid_data[channel_idx]
+            rows, cols = np.nonzero(channel_data > 0)
+            if rows.size == 0:
+                continue
+
+            color = color_map.get(channel, (200, 200, 200, alpha))
+            for row, col in zip(rows, cols, strict=False):
+                rect = pygame.Rect(int(col * cell_size), int(row * cell_size), cell_size, cell_size)
+                overlay.fill(color, rect)
+
+        surface.blit(overlay, (0, 0))
+        logger.debug(
+            "Rendered occupancy grid overlay: shape=%s scale=%s alpha=%s",
+            overlay.get_size(),
+            scale,
+            alpha,
+        )
 
     def reset(self) -> None:
         """Reset the occupancy grid.

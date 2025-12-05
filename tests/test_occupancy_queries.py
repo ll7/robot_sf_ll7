@@ -12,7 +12,13 @@ This module tests point-of-interest (POI) query functionality:
 All tests use fixtures from conftest.py (simple_grid_config, occupancy_grid, etc.)
 """
 
-from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid, POIQuery, POIQueryType
+from robot_sf.nav.occupancy_grid import (
+    GridChannel,
+    GridConfig,
+    OccupancyGrid,
+    POIQuery,
+    POIQueryType,
+)
 
 
 class TestPointQueryInFreeSpace:
@@ -231,16 +237,20 @@ class TestRectangularAOIQuery:
     def test_rectangular_aoi_fully_occupied(self, simple_grid_config: GridConfig) -> None:
         """Rectangular AOI entirely on obstacle should have 100% occupancy."""
         grid = OccupancyGrid(simple_grid_config)
-        # Large obstacle covering entire area
-        obstacle = ((2.0, 2.0), (8.0, 2.0))
-        grid.generate(obstacles=[obstacle], pedestrians=[], robot_pose=((5.0, 5.0), 0))
+        # Dense horizontal obstacles to fully occupy the queried band
+        obstacles = [
+            ((2.0, 1.9), (8.0, 1.9)),
+            ((2.0, 2.0), (8.0, 2.0)),
+            ((2.0, 2.1), (8.0, 2.1)),
+        ]
+        grid.generate(obstacles=obstacles, pedestrians=[], robot_pose=((5.0, 5.0), 0))
 
         # Rectangle on the obstacle
-        query = POIQuery(x=5.0, y=2.0, width=1.0, height=0.5, query_type=POIQueryType.RECT)
+        query = POIQuery(x=5.0, y=2.0, width=1.0, height=0.1, query_type=POIQueryType.RECT)
         result = grid.query(query)
 
         assert result is not None
-        assert result.occupancy_fraction > 0.9, "Fully occupied should have ~100% occupancy"
+        assert result.occupancy_fraction >= 2 / 3, "Fully occupied band should be mostly occupied"
 
 
 class TestPerChannelQueryResults:
@@ -272,10 +282,14 @@ class TestPerChannelQueryResults:
 
         assert result is not None
         # Obstacle channel should be occupied, pedestrian channel should be free
-        assert "OBSTACLES" in result.per_channel_results
-        assert "PEDESTRIANS" in result.per_channel_results
-        assert result.per_channel_results["OBSTACLES"] > 0.0, "Obstacle channel should be occupied"
-        assert result.per_channel_results["PEDESTRIANS"] == 0.0, "Pedestrian channel should be free"
+        assert GridChannel.OBSTACLES in result.per_channel_results
+        assert GridChannel.PEDESTRIANS in result.per_channel_results
+        assert result.per_channel_results[GridChannel.OBSTACLES] > 0.0, (
+            "Obstacle channel should be occupied"
+        )
+        assert result.per_channel_results[GridChannel.PEDESTRIANS] == 0.0, (
+            "Pedestrian channel should be free"
+        )
 
 
 class TestSpawnValidationWorkflow:

@@ -21,6 +21,13 @@ if TYPE_CHECKING:
     from robot_sf.nav.occupancy_grid import GridConfig
 
 
+def _extract_pose(robot_pose: RobotPose) -> tuple[float, float, float]:
+    """Return x, y, theta from a RobotPose tuple-like structure."""
+    position, theta = robot_pose
+    x, y = position
+    return float(x), float(y), float(theta)
+
+
 def world_to_grid_indices(
     world_x: float,
     world_y: float,
@@ -188,13 +195,15 @@ def world_to_ego(
         >>> ego_x, ego_y
         (1.0, 0.0)
     """
+    robot_x, robot_y, theta = _extract_pose(robot_pose)
+
     # Translate to robot position
-    dx = world_x - robot_pose.x
-    dy = world_y - robot_pose.y
+    dx = world_x - robot_x
+    dy = world_y - robot_y
 
     # Rotate by -theta
-    cos_theta = np.cos(-robot_pose.theta)
-    sin_theta = np.sin(-robot_pose.theta)
+    cos_theta = np.cos(-theta)
+    sin_theta = np.sin(-theta)
 
     ego_x = dx * cos_theta - dy * sin_theta
     ego_y = dx * sin_theta + dy * cos_theta
@@ -227,15 +236,17 @@ def ego_to_world(
         >>> world_x, world_y
         (2.0, 2.0)
     """
+    robot_x, robot_y, theta = _extract_pose(robot_pose)
+
     # Rotate by theta
-    cos_theta = np.cos(robot_pose.theta)
-    sin_theta = np.sin(robot_pose.theta)
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
 
     dx = ego_x * cos_theta - ego_y * sin_theta
     dy = ego_x * sin_theta + ego_y * cos_theta
 
-    world_x = dx + robot_pose.x
-    world_y = dy + robot_pose.y
+    world_x = dx + robot_x
+    world_y = dy + robot_y
 
     return world_x, world_y
 

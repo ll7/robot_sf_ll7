@@ -246,7 +246,7 @@ class RobotEnv(BaseEnv):
             if ped_radii is None:
                 ped_radii = [0.35] * len(ped_positions)
             pedestrians = [
-                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=False)
+                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=True)
             ]
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
@@ -320,7 +320,7 @@ class RobotEnv(BaseEnv):
                 # Default pedestrian radius if not available
                 ped_radii = [0.35] * len(ped_positions)
             pedestrians = [
-                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=False)
+                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=True)
             ]
             # Get robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]

@@ -71,7 +71,7 @@ def update(
 
 **Parameters**:
 - `robot_pose: RobotPose` — Current robot pose (for ego-frame recomputation)
-- `obstacles: List[Obstacle]` — Static obstacles (may be None if unchanged)
+- `obstacles: List[Obstacle]` — Static obstacles (required; pass the current list)
 - `pedestrians: List[Pedestrian]` — Updated pedestrian positions
 
 **Side Effects**:
@@ -90,7 +90,11 @@ for step in range(100):
     new_pedestrians = sim.get_pedestrians()
     
     # Update grid
-    grid.update(robot_pose=new_robot_pose, pedestrians=new_pedestrians)
+    grid.update(
+        robot_pose=new_robot_pose,
+        obstacles=map_obstacles,
+        pedestrians=new_pedestrians,
+    )
 ```
 
 ---
@@ -194,10 +198,9 @@ obs_space = spaces.Box(
     high=1.0,
     shape=(num_channels, height, width),
     dtype=np.float32,
-    name="occupancy_grid"
 )
 
-# Included in environment observation as dict key:
+# Included in environment observation under key "occupancy_grid":
 obs = {
     "occupancy_grid": np.ndarray(...),  # from grid_to_observation()
     # ... other observation keys (if any)
@@ -403,6 +406,8 @@ except RuntimeError as e:
 ## References
 
 - **Data Model**: `specs/339-extend-occupancy-grid/data-model.md`
-- **Implementation**: `robot_sf/nav/occupancy.py` (module containing all functions)
+- **Implementation**: Public grid API in `robot_sf/nav/occupancy_grid.py` (with helpers in
+  `occupancy_grid_rasterization.py` and `occupancy_grid_utils.py`); continuous checks live in
+  `robot_sf/nav/occupancy.py`
 - **Tests**: `tests/test_occupancy_*.py` (pytest test suites)
 - **Examples**: `examples/` (usage examples and demos)

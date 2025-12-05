@@ -14,6 +14,7 @@ from loguru import logger
 from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import DifferentialDriveAction, PedPose, RgbColor, RobotPose, Vec2D
 from robot_sf.nav.map_config import MapDefinition, Obstacle
+from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction
 from robot_sf.robot.bicycle_drive import BicycleAction
 
@@ -50,6 +51,11 @@ ROBOT_LIDAR_COLOR = (238, 160, 238, 128)
 TEXT_COLOR = (255, 255, 255)  # White text
 TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
 TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
+
+# Occupancy grid visualization colors
+GRID_OBSTACLE_COLOR = (255, 255, 0)  # Yellow for obstacles
+GRID_PEDESTRIAN_COLOR = (255, 0, 0)  # Red for pedestrians
+GRID_FREE_ALPHA = 0  # Transparent for free cells (no rendering)
 
 
 def _empty_map_definition() -> MapDefinition:
@@ -218,6 +224,13 @@ class SimulationView:
     # Default chosen to balance typical 720p usage (<~4.4GB for 1200 frames) vs runaway memory.
     max_frames: int | None = field(default=2000)
     _frame_cap_warned: bool = field(init=False, default=False)
+    # Grid visualization state
+    show_occupancy_grid: bool = field(default=False)  # Show occupancy grid overlay
+    occupancy_grid: OccupancyGrid | None = field(default=None)  # Current occupancy grid
+    grid_channel_visibility: dict[int, bool] = field(  # Per-channel visibility toggles
+        default_factory=lambda: {0: True, 1: True}
+    )
+    grid_alpha: float = field(default=0.5)  # Alpha blending for grid overlay
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -375,6 +388,9 @@ class SimulationView:
         self._draw_sensor_data(state)
         self._draw_actions(state)
         self._draw_entities(state)
+        # Draw occupancy grid overlay after entities so it appears on top
+        if hasattr(state, "robot_pose") and state.robot_pose:
+            self._render_occupancy_grid(state.robot_pose)
 
     def _draw_sensor_data(self, state: VisualizableSimState):
         """Draw sensor data like lidar rays."""
@@ -1050,6 +1066,124 @@ class SimulationView:
             text_surface,
             (self.width - max_width - 10, self._timestep_text_pos[1]),
         )
+
+    def _render_occupancy_grid(self, robot_pose: RobotPose) -> None:  # noqa: C901
+        """
+        Render the occupancy grid overlay on the pygame surface.
+
+        Renders the occupancy grid with color-coded channels (obstacles in yellow,
+        pedestrians in red) and supports ego-frame rotation. Uses alpha blending
+        for transparency.
+
+        Args:
+            robot_pose (RobotPose): Current robot pose for ego-frame alignment and rotation.
+        """
+        if not self.show_occupancy_grid or self.occupancy_grid is None:
+            return
+
+        grid = self.occupancy_grid
+        try:
+            grid_data = grid.to_observation()  # Shape: [C, H, W] in [0, 1]
+        except RuntimeError as exc:
+            logger.debug("Skipping occupancy grid render: {}", exc)
+            return
+
+        if grid_data.size == 0:
+            return
+
+        start_time = pygame.time.get_ticks()
+
+        num_channels = grid_data.shape[0]
+        grid_height = grid_data.shape[1]
+        grid_width = grid_data.shape[2]
+
+        # Cell size in world coords
+        cell_size_m = grid.config.resolution
+        cell_pixel_size = max(1, int(self.scaling * cell_size_m))
+
+        # Create a temporary surface for grid rendering with per-pixel alpha
+        grid_surface = pygame.Surface(
+            (
+                grid_width * cell_pixel_size,
+                grid_height * cell_pixel_size,
+            ),
+            pygame.SRCALPHA,
+        )
+
+        # Colors for each channel: obstacles (yellow), pedestrians (red)
+        channel_colors = [
+            GRID_OBSTACLE_COLOR,  # Channel 0: obstacles
+            GRID_PEDESTRIAN_COLOR,  # Channel 1: pedestrians
+        ]
+        alpha_scale = float(np.clip(self.grid_alpha, 0.0, 1.0))
+
+        # Render each cell with color based on occupancy and channel visibility
+        for ch in range(num_channels):
+            if ch >= len(channel_colors):
+                # Skip channels without defined colors
+                continue
+
+            # Skip rendering if channel visibility is toggled off
+            if not self.grid_channel_visibility.get(ch, True):
+                continue
+
+            channel_color = channel_colors[ch]
+            channel_data = grid_data[ch]
+            occupied_rows, occupied_cols = np.nonzero(channel_data >= 0.05)
+
+            for row, col in zip(occupied_rows, occupied_cols, strict=False):
+                occupancy = float(channel_data[row, col])
+                alpha = int(255 * min(occupancy, 1.0) * alpha_scale)
+                if alpha <= 0:
+                    continue
+
+                rect = pygame.Rect(
+                    col * cell_pixel_size,
+                    row * cell_pixel_size,
+                    cell_pixel_size,
+                    cell_pixel_size,
+                )
+                pygame.draw.rect(grid_surface, (*channel_color, alpha), rect)
+
+        # Apply rotation for ego-frame grids
+        position, heading = robot_pose
+        if grid.config.use_ego_frame:
+            # Grid rotates with robot heading
+            heading_deg = -np.degrees(heading)
+            grid_surface = pygame.transform.rotate(grid_surface, heading_deg)
+
+        # Position grid at robot center or world origin
+        if grid.config.use_ego_frame:
+            # Ego-frame: center on robot
+            robot_screen_x, robot_screen_y = self._scale_tuple(position)
+            grid_rect = grid_surface.get_rect(center=(robot_screen_x, robot_screen_y))
+        else:
+            # World-frame: position at grid origin
+            grid_origin_x, grid_origin_y = self._scale_tuple((0.0, 0.0))
+            grid_rect = grid_surface.get_rect(topleft=(grid_origin_x, grid_origin_y))
+
+        # Blit grid surface onto main screen
+        self.screen.blit(grid_surface, grid_rect)
+
+        # Log rendering performance
+        elapsed_ms = pygame.time.get_ticks() - start_time
+        if elapsed_ms > 10:
+            logger.debug(f"Grid rendering took {elapsed_ms}ms for {grid_width}x{grid_height} grid")
+
+    def toggle_grid_channel_visibility(self, channel_idx: int) -> None:
+        """
+        Toggle visibility of a specific grid channel.
+
+        Allows interactive toggling of grid channels (e.g., show/hide obstacles,
+        pedestrians) during playback.
+
+        Args:
+            channel_idx (int): Index of the channel to toggle (0=obstacles, 1=pedestrians).
+        """
+        current = self.grid_channel_visibility.get(channel_idx, True)
+        self.grid_channel_visibility[channel_idx] = not current
+        logger.debug(f"Grid channel {channel_idx} visibility: {not current}")
+        self.redraw_needed = True
 
     def _draw_grid(self, grid_increment: int = 50, grid_color: RgbColor = (200, 200, 200)):
         """

@@ -14,7 +14,7 @@ from loguru import logger
 from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import DifferentialDriveAction, PedPose, RgbColor, RobotPose, Vec2D
 from robot_sf.nav.map_config import MapDefinition, Obstacle
-from robot_sf.nav.occupancy_grid import OccupancyGrid
+from robot_sf.nav.occupancy_grid import OCCUPANCY_FREE_THRESHOLD, OccupancyGrid
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction
 from robot_sf.robot.bicycle_drive import BicycleAction
 
@@ -1132,7 +1132,7 @@ class SimulationView:
 
             channel_color = channel_colors[ch]
             channel_data = grid_data[ch]
-            occupied_rows, occupied_cols = np.nonzero(channel_data >= 0.05)
+            occupied_rows, occupied_cols = np.nonzero(channel_data >= OCCUPANCY_FREE_THRESHOLD)
 
             for row, col in zip(occupied_rows, occupied_cols, strict=False):
                 occupancy = float(channel_data[row, col])

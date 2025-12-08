@@ -583,3 +583,22 @@ class RobotEnv(BaseEnv):
             self.sim_ui.ped_velocity_scale = scale
         else:
             logger.warning("Cannot set velocity scale: debug mode not enabled")
+
+    def get_telemetry_session(self):
+        """
+        Get the telemetry session for accessing recorded metrics and artifacts.
+
+        Returns:
+            TelemetrySession or None: The active telemetry session if telemetry recording is
+                enabled (enable_telemetry_panel=True and telemetry_record=True), or None
+                if telemetry is disabled or the session has not been initialized.
+
+        Example:
+            >>> env = make_robot_env(debug=True, enable_telemetry_panel=True, telemetry_record=True)
+            >>> # ... run simulation ...
+            >>> env.close()
+            >>> session = env.get_telemetry_session()
+            >>> if session is not None:
+            ...     paths = session.write_summary()
+        """
+        return self._telemetry_session

@@ -55,7 +55,7 @@ def main() -> None:
             break
 
     env.close()
-    session = getattr(env, "_telemetry_session", None)
+    session = env.get_telemetry_session()
     if session is not None:
         paths = session.write_summary()
         print(f"Telemetry artifacts written to: {paths}")

@@ -127,7 +127,7 @@ def run_and_compute_baseline(
         tmp_jsonl = str(out_jsonl)
     else:
         # default temp path under results/
-        tmp_jsonl = str(Path("results") / "baseline_episodes.jsonl")
+        tmp_jsonl = str(Path("output/results") / "baseline_episodes.jsonl")
 
     run_batch(
         scenarios_or_path,

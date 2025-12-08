@@ -769,7 +769,7 @@ class OccupancyGrid:
                 continue
 
             color = color_map.get(channel, (200, 200, 200, alpha))
-            for row, col in zip(rows, cols, strict=False):
+            for row, col in zip(rows, cols, strict=True):
                 rect = pygame.Rect(int(col * cell_size), int(row * cell_size), cell_size, cell_size)
                 overlay.fill(color, rect)
 

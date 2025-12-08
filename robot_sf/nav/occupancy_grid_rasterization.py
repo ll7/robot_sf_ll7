@@ -23,11 +23,7 @@ import numpy as np  # noqa: TC002 - numpy is needed at runtime for array operati
 from loguru import logger
 
 from robot_sf.common.types import Circle2D, Line2D, RobotPose  # noqa: TC001
-from robot_sf.nav.occupancy_grid_utils import (
-    get_affected_cells,
-    is_within_grid,
-    world_to_grid_indices,
-)
+from robot_sf.nav.occupancy_grid_utils import get_affected_cells, world_to_grid_indices
 
 if TYPE_CHECKING:
     from robot_sf.nav.occupancy_grid import GridConfig
@@ -69,23 +65,28 @@ def rasterize_line_segment(
     """
     start, end = line
 
-    # Check if line is within or intersects grid bounds
-    if not (
-        is_within_grid(start[0], start[1], config, grid_origin_x, grid_origin_y)
-        or is_within_grid(end[0], end[1], config, grid_origin_x, grid_origin_y)
-    ):
-        # Line might still intersect grid even if endpoints are outside
-        # For now, skip (could implement line clipping in future)
+    # Clip the segment to the grid rectangle so that partially overlapping lines are rasterized
+    min_x = grid_origin_x
+    max_x = grid_origin_x + config.width
+    min_y = grid_origin_y
+    max_y = grid_origin_y + config.height
+    clipped = _clip_line_to_rect(start, end, min_x, max_x, min_y, max_y)
+    if clipped is None:
         logger.debug(f"Line segment {line} outside grid bounds, skipping")
         return
+    start_clipped, end_clipped = clipped
 
     try:
         # Convert endpoints to grid indices
-        row0, col0 = world_to_grid_indices(start[0], start[1], config, grid_origin_x, grid_origin_y)
-        row1, col1 = world_to_grid_indices(end[0], end[1], config, grid_origin_x, grid_origin_y)
+        row0, col0 = world_to_grid_indices(
+            start_clipped[0], start_clipped[1], config, grid_origin_x, grid_origin_y
+        )
+        row1, col1 = world_to_grid_indices(
+            end_clipped[0], end_clipped[1], config, grid_origin_x, grid_origin_y
+        )
     except ValueError as e:
-        # Endpoint outside grid bounds
-        logger.debug(f"Line endpoint outside grid: {e}")
+        # Endpoint outside grid bounds after clipping (should not happen but defend anyway)
+        logger.debug(f"Line endpoint outside grid after clipping: {e}")
         return
 
     # Bresenham's line algorithm
@@ -137,6 +138,51 @@ def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> list[tuple[in
             row += sy
 
     return cells
+
+
+def _clip_line_to_rect(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    min_x: float,
+    max_x: float,
+    min_y: float,
+    max_y: float,
+) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """Clip a line segment to an axis-aligned rectangle using Liang-Barsky.
+
+    Returns the clipped segment (start, end) if it intersects the rectangle, otherwise None.
+
+    Returns:
+        tuple[tuple[float, float], tuple[float, float]] | None: Clipped line endpoints in world
+        coordinates when the segment intersects the rectangle; ``None`` if fully outside.
+    """
+    x0, y0 = start
+    x1, y1 = end
+    dx = x1 - x0
+    dy = y1 - y0
+
+    p = (-dx, dx, -dy, dy)
+    q = (x0 - min_x, max_x - x0, y0 - min_y, max_y - y0)
+
+    u1, u2 = 0.0, 1.0
+    for pi, qi in zip(p, q, strict=False):
+        if pi == 0:
+            if qi < 0:
+                return None  # Parallel and outside
+            continue
+        r = qi / pi
+        if pi < 0:
+            if r > u2:
+                return None
+            u1 = max(u1, r)
+        else:
+            if r < u1:
+                return None
+            u2 = min(u2, r)
+
+    clipped_start = (x0 + u1 * dx, y0 + u1 * dy)
+    clipped_end = (x0 + u2 * dx, y0 + u2 * dy)
+    return clipped_start, clipped_end
 
 
 def rasterize_circle(

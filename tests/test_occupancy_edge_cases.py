@@ -113,11 +113,11 @@ class TestFullyOccupiedGrid:
 
 class TestHighResolutionGrid:
     """
-    T088: Edge case test - Very high resolution (0.01m per cell).
+    T088: Edge case test - High resolution (0.05m per cell).
 
     Verifies that:
     1. Grid generates at high resolution
-    2. Performance target <5ms is met
+    2. Performance target <50ms is met
     3. Memory usage is reasonable
     """
 

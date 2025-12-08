@@ -6,9 +6,9 @@ and (optionally) an SNQI weights JSON and baseline stats JSON.
 
 Usage (from repo root):
     uv run python examples/plotting/snqi_figures_example.py \
-        --episodes results/episodes_sf_long_fix1.jsonl \
+        --episodes outputresults/episodes_sf_long_fix1.jsonl \
         --weights examples/snqi_weights_example.json \
-        --baseline results/baseline_stats.json
+        --baseline outputresults/baseline_stats.json
 
 Notes:
 - If you don't provide --baseline, SNQI still computes but normalization of

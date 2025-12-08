@@ -10,7 +10,7 @@ Expected Output:
     - Console logs confirming each factory helper ran successfully.
 
 Limitations:
-    - Recording demos write to `results/` if directories already contain data.
+    - Recording demos write to `output/results/` if directories already contain data.
 
 References:
     - docs/dev_guide.md#environment-factory
@@ -41,7 +41,7 @@ def demo_minimal():
     logger.info("Minimal env created using helper catalog and closed.")
 
 
-def demo_convenience_recording(tmp_path: str = "./results"):
+def demo_convenience_recording(tmp_path: str = "./output/results"):
     # Use render helper to ensure output directory exists
     """TODO docstring. Document this function.
 
@@ -58,7 +58,7 @@ def demo_convenience_recording(tmp_path: str = "./results"):
 def demo_structured():
     # Use render helper to ensure output directory exists
     """TODO docstring. Document this function."""
-    output_dir = ensure_output_dir(Path("results"))
+    output_dir = ensure_output_dir(Path("output/results"))
     render_opts = RenderOptions(max_fps_override=20)
     rec_opts = RecordingOptions(record=True, video_path=f"{output_dir}/structured_episode.mp4")
     env = make_robot_env(render_options=render_opts, recording_options=rec_opts, debug=True)

@@ -5,11 +5,11 @@ Purpose:
     comparison with optional PDF export.
 
 Usage (JSONL):
-    uv run python examples/plotting/plot_pareto.py --in results/episodes.jsonl --out results/pareto.png \
+    uv run python examples/plotting/plot_pareto.py --in output/results/episodes.jsonl --out output/results/pareto.png \
     --x-metric collisions --y-metric comfort_exposure
 
 Usage (synthetic fallback):
-    uv run python examples/plotting/plot_pareto.py --out results/pareto_demo.png --x-metric collisions \
+    uv run python examples/plotting/plot_pareto.py --out output/results/pareto_demo.png --x-metric collisions \
     --y-metric comfort_exposure --synthetic
 
 Prerequisites:
@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", default=None)
-    ap.add_argument("--out", default="results/pareto_demo.png")
+    ap.add_argument("--out", default="output/results/pareto_demo.png")
     ap.add_argument("--x-metric", default="collisions")
     ap.add_argument("--y-metric", default="comfort_exposure")
     ap.add_argument("--group-by", default="scenario_params.algo")

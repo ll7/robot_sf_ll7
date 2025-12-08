@@ -11,8 +11,8 @@ Prerequisites:
     - None (matrix is generated inline for a synthetic policy)
 
 Expected Output:
-    - `results/demo_aggregate/episodes.jsonl` (raw episodes)
-    - `results/demo_aggregate/summary_ci.json` (aggregate stats with CIs)
+    - `output/results/demo_aggregate/episodes.jsonl` (raw episodes)
+    - `output/results/demo_aggregate/summary_ci.json` (aggregate stats with CIs)
 
 Limitations:
     - Uses a toy scenario; replace the matrix path for production analyses.
@@ -56,7 +56,7 @@ def _write_demo_matrix(path: Path) -> None:
 def main() -> None:
     # Use helper catalog to ensure output directory exists
     """TODO docstring. Document this function."""
-    out_dir = ensure_output_dir(Path("results/demo_aggregate"))
+    out_dir = ensure_output_dir(Path("output/results/demo_aggregate"))
 
     matrix_path = out_dir / "matrix.yaml"
     episodes_path = out_dir / "episodes.jsonl"

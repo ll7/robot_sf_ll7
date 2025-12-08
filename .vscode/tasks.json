@@ -19,7 +19,7 @@
 		{
 			"label": "Run Tests (GUI)",
 			"type": "shell",
-			"command": "uv run pytest test_pygame",
+			"command": "SDL_VIDEODRIVER= uv run pytest test_pygame",
 			"group": "test"
 		},
 		{

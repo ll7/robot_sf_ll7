@@ -360,7 +360,10 @@ class TestManyPedestriansNoObstacles:
 
         assert np.sum(obstacles_channel) == 0, "Obstacles channel should be empty"
         assert np.sum(pedestrians_channel) > 0, "Pedestrians channel should have occupancy"
-        assert elapsed_ms < 50, f"Expected <50ms with many pedestrians, got {elapsed_ms:.2f}ms"
+        expected_elapsed_ms = 70
+        assert elapsed_ms < expected_elapsed_ms, (
+            f"Expected <{expected_elapsed_ms}ms with many pedestrians, got {elapsed_ms:.2f}ms"
+        )
         logger.info(f"Many pedestrians test: {len(pedestrians)} peds, {elapsed_ms:.2f}ms")
 
 

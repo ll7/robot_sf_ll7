@@ -98,6 +98,13 @@ DEFAULT_ARTIFACT_CATEGORIES: dict[str, ArtifactCategory] = {
         retention_hint="short-lived",
         producers=("misc tooling",),
     ),
+    "telemetry": ArtifactCategory(
+        name="telemetry",
+        relative_path=Path("telemetry"),
+        description="Live/replay telemetry streams, pane exports, and summary artifacts.",
+        retention_hint="keep-latest",
+        producers=("telemetry pane", "headless telemetry runs"),
+    ),
     _RUN_TRACKER_CATEGORY: ArtifactCategory(
         name=_RUN_TRACKER_CATEGORY,
         relative_path=Path(_RUN_TRACKER_CATEGORY),

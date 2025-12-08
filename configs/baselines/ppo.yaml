@@ -3,7 +3,7 @@
 # Usage:
 #   robot_sf_bench run \
 #     --matrix path/to/matrix.yaml \
-#     --out results/episodes.jsonl \
+#     --out output/results/episodes.jsonl \
 #     --algo ppo \
 #     --algo-config configs/baselines/ppo.yaml
 #

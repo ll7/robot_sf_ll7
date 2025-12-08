@@ -8,9 +8,9 @@ This script demonstrates a complete reproducible pipeline:
 
 Usage:
     uv run python examples/benchmarks/snqi_full_flow.py \
-        --episodes results/episodes_sf_long_fix1.jsonl \
+        --episodes output/results/episodes_sf_long_fix1.jsonl \
         --matrix configs/baselines/example_matrix.yaml \
-        --baseline-json results/baseline_stats.json \
+        --baseline-json output/results/baseline_stats.json \
         --weights-json examples/snqi_weights_example.json
 
 If --episodes does not exist but --matrix is provided, a batch run will be executed first.

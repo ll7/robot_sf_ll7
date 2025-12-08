@@ -8,7 +8,7 @@ Prerequisites:
 
 Expected Output:
     - Prints available algorithms and benchmark progress messages to stdout.
-    - Writes PPO episode metrics to results/episodes_demo_ppo.jsonl.
+    - Writes PPO episode metrics to output/results/episodes_demo_ppo.jsonl.
 
 Limitations:
     - Requires several seconds to execute the benchmark even with horizon=50.
@@ -44,7 +44,7 @@ def main() -> int:
     root = project_root()
     matrix = root / "configs/baselines/example_matrix.yaml"
     ppo_cfg = root / "configs/baselines/ppo.yaml"
-    out = root / "results/episodes_demo_ppo.jsonl"
+    out = root / "output/results/episodes_demo_ppo.jsonl"
     out_dir = ensure_output_dir(out.parent)
     out = out_dir / out.name
 

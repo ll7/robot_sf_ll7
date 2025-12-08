@@ -25,7 +25,6 @@ def test_frame_cap_enforced(cap, monkeypatch):
 
     view = SimulationView(record_video=True, video_path=None, max_frames=cap, width=64, height=64)
 
-    robot_pose = np.array([[0.0, 0.0]])  # shape (1,2) for consistency with drawing code
     pedestrian_positions = np.zeros((0, 2))
     ray_vecs = np.zeros((0, 2, 2))
     ped_actions = np.zeros((0, 2, 2))
@@ -39,7 +38,7 @@ def test_frame_cap_enforced(cap, monkeypatch):
         return VisualizableSimState(
             timestep=t,
             robot_action=None,
-            robot_pose=robot_pose,
+            robot_pose=((0.0, 0.0), 0.0),
             pedestrian_positions=pedestrian_positions,
             ray_vecs=ray_vecs,
             ped_actions=ped_actions,

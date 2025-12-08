@@ -4,7 +4,7 @@ Usage:
     uv run python examples/advanced/09_defensive_policy.py
 
 Prerequisites:
-    - model/run_023
+    - model/run_023.zip
 
 Expected Output:
     - Pygame window showing the defensive policy interacting with pedestrians.
@@ -15,6 +15,8 @@ Limitations:
 References:
     - docs/dev_guide.md#baseline-policies
 """
+
+from pathlib import Path
 
 import numpy as np
 from gymnasium import spaces
@@ -39,7 +41,8 @@ def run_simulation() -> None:
     )
     env = RobotEnv(env_config, debug=True)
     env.observation_space, env.action_space = prepare_gym_spaces()
-    model = load_trained_policy("./model/run_023")
+    model_path = Path(__file__).resolve().parents[2] / "model" / "run_023.zip"
+    model = load_trained_policy(str(model_path))
 
     def obs_adapter(orig_obs):
         """TODO docstring. Document this function.

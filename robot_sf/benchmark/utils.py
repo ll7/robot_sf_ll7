@@ -79,10 +79,12 @@ def ensure_directory(path: str | Path) -> Path:
         Path object representing the created directory.
 
     Examples:
-        >>> ensure_directory("results/plots")  # Creates directory
-        PosixPath('results/plots')
-        >>> ensure_directory("results/data.json")  # Creates parent 'results' directory
-        PosixPath('results')
+        >>> ensure_directory("output/results")  # Creates 'output' directory
+        PosixPath('output')
+        >>> ensure_directory("output/plots")  # Creates directory
+        PosixPath('output/plots')
+        >>> ensure_directory("output/data.json")  # Creates parent 'output' directory
+        PosixPath('output')
     """
     path_obj = Path(path)
     # If the path has a suffix, assume it's a file and create parent directory

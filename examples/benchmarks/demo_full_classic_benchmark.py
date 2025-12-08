@@ -9,7 +9,7 @@ Purpose:
 
 What it does:
     1. Resolves repository root and selects a scenario matrix.
-    2. Creates an output directory under results/ with an informative stem.
+    2. Creates an output directory under output/results/ with an informative stem.
     3. Constructs a lightweight BenchmarkCLIConfig (same dataclass the CLI uses).
     4. Calls run_full_benchmark(cfg) directly (programmatic use preferred over pure CLI).
     5. Prints locations of key output artifacts (episodes, aggregates, reports, visuals).
@@ -86,7 +86,7 @@ def main() -> int:
         matrix = root / "configs/baselines/example_matrix.yaml"
 
     ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = root / f"results/demo_full_classic_{ts}"
+    out_dir = root / f"output/results/demo_full_classic_{ts}"
     out_dir = ensure_output_dir(out_dir)
 
     fast_mode = os.getenv("ROBOT_SF_FAST_DEMO", "0") == "1"

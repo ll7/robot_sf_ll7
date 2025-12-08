@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 SCENARIO_FILE="${REPO_ROOT}/configs/scenarios/debug_scenario.yaml"
-OUT_FILE="${REPO_ROOT}/results/debug_scenario.jsonl"
+OUT_FILE="${REPO_ROOT}/output/results/debug_scenario.jsonl"
 
 if [[ ! -f "${SCENARIO_FILE}" ]]; then
   echo "Error: Scenario file not found: ${SCENARIO_FILE}" >&2

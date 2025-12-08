@@ -725,7 +725,7 @@ def _add_baseline_subparser(
     p.add_argument(
         "--jsonl",
         default=None,
-        help="Optional path to write intermediate episode JSONL (default results/baseline_episodes.jsonl)",
+        help="Optional path to write intermediate episode JSONL (default output/results/baseline_episodes.jsonl)",
     )
     p.add_argument("--schema", default=DEFAULT_SCHEMA_PATH, help="Schema path for validation")
     p.add_argument("--base-seed", type=int, default=0)

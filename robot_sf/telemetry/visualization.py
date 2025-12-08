@@ -68,14 +68,17 @@ def render_metric_panel(
         ax.set_title(metric)
         ax.grid(True, linestyle="--", alpha=0.2)
         ax.tick_params(labelsize=8)
-    fig.tight_layout()
+    # Use subplots_adjust instead of tight_layout to avoid warnings on small figures
+    fig.subplots_adjust(hspace=0.4, top=0.95, bottom=0.1)
 
     fig.canvas.draw()
     w_px, h_px = fig.canvas.get_width_height()
     buffer = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8)
+    # Make a copy immediately to preserve the buffer before figure close
+    buffer = buffer.copy()
     buffer = buffer.reshape((h_px, w_px, 4))
     # Convert ARGB to RGBA
-    rgba = buffer[:, :, [1, 2, 3, 0]]
+    rgba = buffer[:, :, [1, 2, 3, 0]].copy()
     # Pad/crop to requested size if layout adjustments changed canvas size slightly
     rgba = _fit_to_size(rgba, target_height=height, target_width=width)
     plt.close(fig)
@@ -94,8 +97,15 @@ def make_surface_from_rgba(rgba: np.ndarray) -> pygame.Surface | None:
     if pygame is None:  # pragma: no cover - optional dependency
         return None
     if rgba.dtype != np.uint8:
-        rgba = rgba.astype(np.uint8, copy=False)
-    return pygame.image.frombuffer(rgba.copy(order="C"), (rgba.shape[1], rgba.shape[0]), "RGBA")
+        rgba = rgba.astype(np.uint8, copy=True)
+    else:
+        rgba = rgba.copy()
+    # Ensure C-contiguous layout for pygame
+    if not rgba.flags["C_CONTIGUOUS"]:
+        rgba = np.ascontiguousarray(rgba)
+    surface = pygame.image.frombuffer(rgba, (rgba.shape[1], rgba.shape[0]), "RGBA")
+    # Convert to a standalone surface (not a reference to the buffer)
+    return surface.copy()
 
 
 def _fit_to_size(rgba: np.ndarray, *, target_height: int, target_width: int) -> np.ndarray:

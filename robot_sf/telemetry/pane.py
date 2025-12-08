@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, MutableMapping, Sequence
     from pathlib import Path
 
+    import pygame
+
 
 def _timestamp_ms() -> int:
     return int(time.time() * 1000)
@@ -41,6 +43,9 @@ class TelemetryPane:
 
     _history: MutableMapping[str, deque[float]] = field(init=False, default_factory=dict)
     _last_render_ms: int = field(init=False, default=0)
+    _last_surface: pygame.Surface | None = field(
+        init=False, default=None
+    )  # Cached surface for display persistence
 
     def update(
         self, values: Mapping[str, float | int | None], frame_idx: int | None = None
@@ -57,23 +62,27 @@ class TelemetryPane:
                 continue
 
     def render_surface(self):
-        """Render the pane as a pygame.Surface (or None if throttled).
+        """Render the pane as a pygame.Surface, or return cached surface if throttled.
 
         Returns:
-            pygame.Surface | None: Rendered surface when due, else None.
+            pygame.Surface or None: Freshly rendered surface when due, else last cached surface.
         """
         now = _timestamp_ms()
         min_interval_ms = 1000.0 / max(self.refresh_hz, 0.1)
         if self._last_render_ms and now - self._last_render_ms < min_interval_ms:
-            return None
+            # Return cached surface if available for display persistence
+            return self._last_surface
         self._last_render_ms = now
         series = {name: list(history) for name, history in self._history.items()}
         try:
             rgba = render_metric_panel(series, self.metrics, width=self.width, height=self.height)
         except (ValueError, RuntimeError) as exc:  # pragma: no cover - defensive
             logger.warning("Failed to render telemetry pane: {}", exc)
-            return None
-        return make_surface_from_rgba(rgba)
+            return self._last_surface  # Return cached surface on error
+        surface = make_surface_from_rgba(rgba)
+        if surface is not None:
+            self._last_surface = surface
+        return surface
 
 
 class TelemetrySession:

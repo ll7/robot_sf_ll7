@@ -4,6 +4,8 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 
 <!-- This document should mainly serve as a navigation hub and overview for the various components and guides available within the Robot SF project. Refer to individual files for detailed information. -->
 
+**Artifact root**: All generated artifacts (JSONL, figures, videos) must live under the git-ignored `output/` directory. Legacy `results/` paths have been migrated; update commands accordingly when running examples or scripts.
+
 ## 🚀 Social Navigation Benchmark Platform (Complete)
 
 **The Social Navigation Benchmark Platform is now fully operational!** 
@@ -110,6 +112,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
 - **[Occupancy Grid Guide](./dev/occupancy/Update_or_extend_occupancy.md)** - Configure grid observations, spawn queries, and pygame overlays
 - **[Circle Rasterization Fix](./dev/issues/circle-rasterization-fix/README.md)** - Clarifies circle overlap handling in occupancy grid rasterization
+- **[Telemetry Pane & Headless Artifacts](../specs/343-telemetry-viz/quickstart.md)** - Enable docked charts in Pygame, replay/export telemetry, and run headless smoke tests
 
 ### Figures & Visualization
 - **[Trajectory Visualization](./trajectory_visualization.md)** - Generate trajectory plots

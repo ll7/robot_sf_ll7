@@ -394,7 +394,7 @@ except RuntimeError as e:
 | Function/Method | Input | Output | Performance |
 |-----------------|-------|--------|-------------|
 | `create_occupancy_grid()` | Config, obstacles, pedestrians | OccupancyGrid | <5ms |
-| `grid.update()` | Robot pose, pedestrians | None (in-place) | <2ms |
+| `grid.update()` | Robot pose, obstacles, pedestrians | None (in-place) | <2ms |
 | `query_occupancy()` | Grid, POIQuery | POIResult | <1ms |
 | `grid_to_observation()` | OccupancyGrid | np.ndarray | <1ms |
 | `render_grid_pygame()` | Grid, surface, channels | None (draws on surface) | <2ms |

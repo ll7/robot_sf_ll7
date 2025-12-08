@@ -172,17 +172,21 @@ class RobotEnv(BaseEnv):
         # Store configuration for factory pattern compatibility
         self.config = env_config
 
-        # T043: Initialize occupancy grid if grid observation is enabled
+        # T043: Initialize occupancy grid for observation and/or visualization
+        self.include_grid_in_observation: bool = bool(
+            getattr(env_config, "include_grid_in_observation", False)
+        )
         self.occupancy_grid = None
         if (
-            hasattr(env_config, "include_grid_in_observation")
-            and env_config.include_grid_in_observation
-        ):
+            self.include_grid_in_observation or getattr(env_config, "show_occupancy_grid", False)
+        ) and env_config.grid_config is not None:
             self.occupancy_grid = OccupancyGrid(config=env_config.grid_config)
             logger.info(
-                f"Occupancy grid initialized for observations: "
-                f"shape={self.occupancy_grid.shape}, "
-                f"resolution={env_config.grid_config.resolution}m"
+                "Occupancy grid initialized (observe=%s, visualize=%s): shape=%s, resolution=%.3fm",
+                self.include_grid_in_observation,
+                env_config.show_occupancy_grid,
+                self.occupancy_grid.shape,
+                env_config.grid_config.resolution,
             )
 
         if env_config.observation_mode == ObservationMode.SOCNAV_STRUCT:
@@ -217,6 +221,9 @@ class RobotEnv(BaseEnv):
 
         # Store last action executed by the robot
         self.last_action = None
+        # Enable occupancy grid overlay visualization if requested
+        if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
+            self.sim_ui.show_occupancy_grid = True
 
     def step(self, action):
         """Execute one environment step.
@@ -258,7 +265,8 @@ class RobotEnv(BaseEnv):
                 ego_frame=False,
             )
             # Update observation with new grid
-            obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+            if self.include_grid_in_observation:
+                obs["occupancy_grid"] = self.occupancy_grid.to_observation()
 
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
@@ -332,11 +340,12 @@ class RobotEnv(BaseEnv):
                 ego_frame=False,  # Use world frame by default
             )
             # Add grid to observation
-            obs["occupancy_grid"] = self.occupancy_grid.to_observation()
-            logger.debug(
-                f"Initial occupancy grid generated: "
-                f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
-            )
+            if self.include_grid_in_observation:
+                obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+                logger.debug(
+                    f"Initial occupancy grid generated: "
+                    f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
+                )
 
         # Handle recording for both systems
         if self.recording_enabled:
@@ -422,6 +431,8 @@ class RobotEnv(BaseEnv):
 
         # Construct ray vectors for visualization
         ray_vecs_np = render_lidar(robot_pos, distances, directions)
+        if self.sim_ui and not getattr(self.sim_ui, "show_lidar", True):
+            ray_vecs_np = None
 
         # Prepare pedestrian action visualization
         ped_actions_np = prepare_pedestrian_actions(self.simulator)
@@ -452,6 +463,9 @@ class RobotEnv(BaseEnv):
             )
 
         state = self._prepare_visualizable_state()
+        # Provide the latest occupancy grid to the renderer
+        if self.sim_ui is not None:
+            self.sim_ui.occupancy_grid = self.occupancy_grid
 
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)

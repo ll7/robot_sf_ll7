@@ -51,6 +51,15 @@ class BaseEnvSettings:
     grid_config: GridConfig | None = None
     include_grid_in_observation: bool = False
     show_occupancy_grid: bool = False
+    # Telemetry / docked pane configuration (legacy compatibility)
+    enable_telemetry_panel: bool = False
+    telemetry_record: bool = False
+    telemetry_metrics: list[str] = field(
+        default_factory=lambda: ["fps", "reward", "collisions", "min_ped_distance", "action_norm"]
+    )
+    telemetry_refresh_hz: float = 1.0
+    telemetry_pane_layout: str = "vertical_split"
+    telemetry_decimation: int = 1
 
     def __post_init__(self):
         """
@@ -59,6 +68,12 @@ class BaseEnvSettings:
         """
         if not self.sim_config or not self.map_pool:
             raise ValueError("Please make sure all properties are initialized!")
+        if self.telemetry_refresh_hz <= 0:
+            raise ValueError("telemetry_refresh_hz must be > 0")
+        if self.telemetry_decimation <= 0:
+            raise ValueError("telemetry_decimation must be >= 1")
+        if self.telemetry_pane_layout not in {"vertical_split", "horizontal_split"}:
+            raise ValueError("telemetry_pane_layout must be 'vertical_split' or 'horizontal_split'")
 
 
 @dataclass
@@ -122,6 +137,15 @@ class EnvSettings:
     grid_config: GridConfig | None = None
     include_grid_in_observation: bool = False
     show_occupancy_grid: bool = False
+    # Telemetry / docked pane configuration (legacy compatibility)
+    enable_telemetry_panel: bool = False
+    telemetry_record: bool = False
+    telemetry_metrics: list[str] = field(
+        default_factory=lambda: ["fps", "reward", "collisions", "min_ped_distance", "action_norm"]
+    )
+    telemetry_refresh_hz: float = 1.0
+    telemetry_pane_layout: str = "vertical_split"
+    telemetry_decimation: int = 1
 
     def __post_init__(self):
         """
@@ -135,6 +159,12 @@ class EnvSettings:
             or not self.map_pool
         ):
             raise ValueError("Please make sure all properties are initialized!")
+        if self.telemetry_refresh_hz <= 0:
+            raise ValueError("telemetry_refresh_hz must be > 0")
+        if self.telemetry_decimation <= 0:
+            raise ValueError("telemetry_decimation must be >= 1")
+        if self.telemetry_pane_layout not in {"vertical_split", "horizontal_split"}:
+            raise ValueError("telemetry_pane_layout must be 'vertical_split' or 'horizontal_split'")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """

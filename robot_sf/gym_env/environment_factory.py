@@ -155,6 +155,12 @@ class EnvironmentFactory:
         scenario_name: str = "default",
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
+        enable_telemetry_panel: bool = False,
+        telemetry_metrics: list[str] | None = None,
+        telemetry_record: bool = False,
+        telemetry_refresh_hz: float = 1.0,
+        telemetry_pane_layout: str = "vertical_split",
+        telemetry_decimation: int = 1,
     ) -> SingleAgentEnv:
         """TODO docstring. Document this function.
 
@@ -174,6 +180,12 @@ class EnvironmentFactory:
             scenario_name: TODO docstring.
             algorithm_name: TODO docstring.
             recording_seed: TODO docstring.
+            enable_telemetry_panel: When True, enable docked telemetry pane in the renderer.
+            telemetry_metrics: Metrics to render in the pane (e.g., fps, reward).
+            telemetry_record: Whether to persist telemetry JSONL under the artifact root.
+            telemetry_refresh_hz: Target refresh cadence for telemetry sampling/rendering.
+            telemetry_pane_layout: Docking layout for the pane (vertical_split or horizontal_split).
+            telemetry_decimation: Write every Nth telemetry sample to disk.
 
         Returns:
             TODO docstring.
@@ -182,6 +194,13 @@ class EnvironmentFactory:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        config.enable_telemetry_panel = enable_telemetry_panel
+        config.telemetry_record = telemetry_record
+        config.telemetry_refresh_hz = telemetry_refresh_hz
+        config.telemetry_pane_layout = telemetry_pane_layout
+        config.telemetry_decimation = telemetry_decimation
+        if telemetry_metrics is not None:
+            config.telemetry_metrics = list(telemetry_metrics)
         if use_image_obs:
             EnvCls = _load_robot_env_with_image()
         else:
@@ -396,6 +415,12 @@ def make_robot_env(
     scenario_name: str = "default",
     algorithm_name: str = "manual",
     recording_seed: int | None = None,
+    enable_telemetry_panel: bool = False,
+    telemetry_metrics: list[str] | None = None,
+    telemetry_record: bool = False,
+    telemetry_refresh_hz: float = 1.0,
+    telemetry_pane_layout: str = "vertical_split",
+    telemetry_decimation: int = 1,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
     """TODO docstring. Document this function.
@@ -418,6 +443,12 @@ def make_robot_env(
         scenario_name: TODO docstring.
         algorithm_name: TODO docstring.
         recording_seed: TODO docstring.
+        enable_telemetry_panel: When True, enable docked telemetry pane in the renderer.
+        telemetry_metrics: Metrics to render in the pane (e.g., fps, reward).
+        telemetry_record: Whether to persist telemetry JSONL under the artifact root.
+        telemetry_refresh_hz: Target refresh cadence for telemetry sampling/rendering.
+        telemetry_pane_layout: Docking layout for the pane (vertical_split or horizontal_split).
+        telemetry_decimation: Write every Nth telemetry sample to disk.
         legacy_kwargs: TODO docstring.
 
     Returns:
@@ -463,6 +494,18 @@ def make_robot_env(
         Algorithm identifier stored in JSONL metadata.
     recording_seed : int | None
         Optional stable seed used by the recorder to derive deterministic episode names.
+    enable_telemetry_panel : bool
+        When True, initialize docked telemetry pane configuration (charts blitted into SDL).
+    telemetry_metrics : list[str] | None
+        Metrics to render in the telemetry pane; defaults to core metrics when None.
+    telemetry_record : bool
+        Enable telemetry JSONL recording for the run (append-only under artifact root).
+    telemetry_refresh_hz : float
+        Target refresh rate for telemetry sampling / chart updates (Hz).
+    telemetry_pane_layout : str
+        Docking layout for the telemetry pane (``vertical_split`` or ``horizontal_split``).
+    telemetry_decimation : int
+        Decimation factor applied when persisting/visualizing telemetry (>=1).
     legacy_kwargs : dict
         Deprecated legacy surface (mapped via :func:`apply_legacy_kwargs`). Unknown params
         rejected unless ``{env}`` is truthy (permissive).
@@ -528,6 +571,12 @@ def make_robot_env(
         scenario_name=scenario_name,
         algorithm_name=algorithm_name,
         recording_seed=recording_seed,
+        enable_telemetry_panel=enable_telemetry_panel,
+        telemetry_metrics=telemetry_metrics,
+        telemetry_record=telemetry_record,
+        telemetry_refresh_hz=telemetry_refresh_hz,
+        telemetry_pane_layout=telemetry_pane_layout,
+        telemetry_decimation=telemetry_decimation,
     )
     env.applied_seed = seed
     return env

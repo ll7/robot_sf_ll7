@@ -12,6 +12,7 @@ It also defines the action and observation spaces for the robot.
 
 import hashlib
 import json
+import time
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
@@ -45,6 +46,7 @@ from robot_sf.sensor.socnav_observation import (
 from robot_sf.sim.simulator import (
     init_simulators,  # noqa: F401 (retained for backwards compatibility; may be removed later)
 )
+from robot_sf.telemetry.pane import TelemetrySession
 
 
 # Helper to compute a stable, short hash for env_config
@@ -234,6 +236,29 @@ class RobotEnv(BaseEnv):
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
             self.sim_ui.show_occupancy_grid = True
+        # Initialize telemetry session/pane when requested
+        self._telemetry_session: TelemetrySession | None = None
+        if env_config.enable_telemetry_panel or env_config.telemetry_record:
+            run_id = f"telemetry-{int(time.time())}"
+            pane_width = 320
+            pane_height = 240
+            if self.sim_ui:
+                self.sim_ui.show_telemetry_panel = env_config.enable_telemetry_panel
+                self.sim_ui.telemetry_layout = env_config.telemetry_pane_layout
+                pane_width = min(320, max(200, self.sim_ui.width // 3))
+                pane_height = min(240, max(160, self.sim_ui.height // 3))
+            self._telemetry_session = TelemetrySession(
+                run_id=run_id,
+                record=env_config.telemetry_record,
+                metrics=env_config.telemetry_metrics,
+                refresh_hz=env_config.telemetry_refresh_hz,
+                decimation=env_config.telemetry_decimation,
+                pane_size=(pane_width, pane_height),
+            )
+            if self.sim_ui:
+                self.sim_ui.telemetry_session = self._telemetry_session
+        self._last_wall_time = time.perf_counter()
+        self._frame_idx = 0
 
     def step(self, action):
         """Execute one environment step.
@@ -292,6 +317,9 @@ class RobotEnv(BaseEnv):
         reward = self.reward_func(reward_dict)
         # Update last_action for next step
         self.last_action = action
+
+        # Telemetry update
+        self._emit_telemetry(reward, term, False, action)
 
         # if recording is enabled, record the state
         if self.recording_enabled:
@@ -377,7 +405,61 @@ class RobotEnv(BaseEnv):
 
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
+        # Reset telemetry timing on new episode
+        self._last_wall_time = time.perf_counter()
+        self._frame_idx = 0
         return obs, info
+
+    def _emit_telemetry(
+        self,
+        reward: float,
+        terminated: bool,
+        truncated: bool,
+        action: Any,
+    ) -> None:
+        """Record telemetry and update live pane if enabled."""
+        if self._telemetry_session is None:
+            return
+        now = time.perf_counter()
+        dt = max(now - self._last_wall_time, 1e-6)
+        self._last_wall_time = now
+
+        collision = bool(
+            self.state.is_collision_with_ped
+            or self.state.is_collision_with_obst
+            or self.state.is_collision_with_robot
+        )
+        ped_positions = getattr(self.simulator, "ped_pos", np.zeros((0, 2)))
+        robot_pos = np.asarray(self.simulator.robot_poses[0][0], dtype=float)
+        min_ped_distance = None
+        if ped_positions.size > 0:
+            try:
+                deltas = ped_positions - robot_pos
+                dists = np.linalg.norm(deltas, axis=1)
+                min_ped_distance = float(np.min(dists))
+            except (TypeError, ValueError):
+                min_ped_distance = None
+        try:
+            action_norm = float(np.linalg.norm(action))
+        except (TypeError, ValueError):
+            action_norm = None
+
+        metrics = {
+            "fps": 1.0 / dt if dt > 0 else None,
+            "reward": float(reward) if reward is not None else None,
+            "collisions": 1 if collision else 0,
+            "min_ped_distance": min_ped_distance,
+            "action_norm": action_norm,
+        }
+        status = "terminated" if terminated else ("truncated" if truncated else "running")
+        payload = {
+            "timestamp_ms": int(time.time() * 1000),
+            "frame_idx": self._frame_idx,
+            "status": status,
+            "metrics": metrics,
+        }
+        self._frame_idx += 1
+        self._telemetry_session.append(payload)
 
     @staticmethod
     def _normalize_obstacles_for_grid(

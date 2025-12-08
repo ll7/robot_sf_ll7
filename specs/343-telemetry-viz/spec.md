@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "Data visualization alongside pygame" (issue #343)
 
+## Clarifications
+
+### Session 2025-12-08
+
+- Q: How should the telemetry panel be integrated alongside Pygame? → A: Docked pane inside the same SDL/Pygame window, blitting pre-rendered chart images.
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -79,7 +85,7 @@ A QA engineer runs the simulator in headless mode (no Pygame window) and still r
 
 ### Functional Requirements
 
-- **FR-001**: Provide a side-by-side or docked telemetry panel for Pygame runs that renders live charts for FPS, reward, collision count, min pedestrian distance, and action norm with refresh ≥1 Hz.
+- **FR-001**: Provide a side-by-side or docked telemetry panel within the same SDL/Pygame window that renders live charts for FPS, reward, collision count, min pedestrian distance, and action norm with refresh ≥1 Hz by blitting pre-rendered chart images.
 - **FR-002**: Expose a programmatic API (no CLI dependency) to enable/disable the telemetry panel and select metrics for live runs created via `make_robot_env` or related factories.
 - **FR-003**: Support replay mode that reads recorded frames plus telemetry streams from `output/` artifacts and keeps chart cursors aligned to frame indices within one frame tolerance.
 - **FR-004**: Persist telemetry to JSONL (or equivalent append-only format) during live runs and write synchronized metadata (timestamps, frame indices, episode ids) to allow deterministic replays.
@@ -94,6 +100,10 @@ A QA engineer runs the simulator in headless mode (no Pygame window) and still r
 - **Telemetry Sample**: Per-timestep record containing timestamp, frame index, metrics (FPS, reward, collisions, min distance, action norm), and episode identifiers.
 - **Telemetry Stream**: Append-only sequence of telemetry samples persisted to JSONL and optionally decimated for UI rendering.
 - **Visualization Session**: UI/session state for either live or replay mode, including selected metrics, playback position, panel layout, and export targets.
+
+### Implementation Constraints
+
+- Telemetry charts must render off-screen (e.g., matplotlib/agg or equivalent) and be blitted into a docked pane inside the existing SDL/Pygame window to maintain synchronization and headless/CI parity without spawning extra windows or web frontends.
 
 ## Success Criteria *(mandatory)*
 

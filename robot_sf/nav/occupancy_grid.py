@@ -121,6 +121,8 @@ class GridConfig:
         max_distance: Max distance for continuous occupancy (default: 0.5m)
         use_ego_frame: Whether to use robot's ego frame (default: False)
         robot_radius: Radius for rasterizing the robot channel (default: 0.3m)
+        center_on_robot: When False (default), world-frame grids start at (0,0); when True,
+            grids translate to keep the robot near center without rotating axes.
 
     Invariants:
         - resolution > 0
@@ -144,6 +146,7 @@ class GridConfig:
     max_distance: float = 0.5
     use_ego_frame: bool = False
     robot_radius: float = 0.3
+    center_on_robot: bool = False
 
     def __post_init__(self):
         """Validate configuration parameters."""
@@ -157,6 +160,8 @@ class GridConfig:
             raise ValueError("channels must not be empty")
         if self.robot_radius <= 0:
             raise ValueError(f"robot_radius must be > 0, got {self.robot_radius}")
+        if not isinstance(self.center_on_robot, bool):
+            raise ValueError("center_on_robot must be a boolean")
 
         # Validate dtype
         valid_dtypes = (np.float16, np.float32, np.float64, np.uint8)
@@ -422,6 +427,14 @@ class OccupancyGrid:
             grid_origin_x = -self.config.width / 2
             grid_origin_y = -self.config.height / 2
             logger.debug(f"Ego-frame grid origin: ({grid_origin_x:.2f}, {grid_origin_y:.2f})")
+        elif self.config.center_on_robot:
+            grid_origin_x = robot_x - self.config.width / 2
+            grid_origin_y = robot_y - self.config.height / 2
+            logger.debug(
+                "World-frame grid centered on robot: origin=(%.2f, %.2f)",
+                grid_origin_x,
+                grid_origin_y,
+            )
         else:
             grid_origin_x = 0.0
             grid_origin_y = 0.0

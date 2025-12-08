@@ -20,7 +20,7 @@ def _basic_state(t: int) -> VisualizableSimState:
     return VisualizableSimState(
         timestep=t,
         robot_action=None,
-        robot_pose=np.array([[0.0, 0.0]]),
+        robot_pose=((0.0, 0.0), 0.0),
         pedestrian_positions=np.zeros((0, 2)),
         ray_vecs=np.zeros((0, 2, 2)),
         ped_actions=np.zeros((0, 2, 2)),

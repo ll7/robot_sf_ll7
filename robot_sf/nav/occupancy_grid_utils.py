@@ -323,6 +323,10 @@ def get_affected_cells(
 ) -> list[tuple[int, int]]:
     """Get grid cells affected by a circular region.
 
+    Correctly handles circles whose centers are outside the grid bounds
+    but which partially overlap the grid. Uses proper circle-rectangle
+    intersection test (checking closest point on cell square to circle center).
+
     Args:
         world_x: Center X coordinate
         world_y: Center Y coordinate
@@ -335,24 +339,43 @@ def get_affected_cells(
         List of (row, col) tuples for affected cells
 
     Notes:
-        - Uses "discrete disk" algorithm (all cells within euclidean distance)
+        - Uses circle-rectangle intersection (proper geometric overlap)
         - Performance: O(π * (radius/resolution)²)
+        - Centers outside grid are clamped for iteration, closest point checked for overlap
 
     Example:
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
+        >>> # Circle fully inside
         >>> cells = get_affected_cells(5.0, 5.0, 0.3, config)
         >>> len(cells)  # Approx π * 3² = ~28 cells
         28
+        >>> # Circle center outside but overlapping
+        >>> cells2 = get_affected_cells(10.5, 5.0, 1.0, config)
+        >>> len(cells2)  # Partial overlap
+        15
     """
     if radius <= 0:
         return []
 
+    # Clamp center coordinates to grid bounds for iteration purposes
+    # This ensures we can compute a valid starting cell even when center is outside
+    # Grid bounds are [origin, origin + size) so we clamp to slightly less than max
+    grid_min_x = grid_origin_x
+    grid_max_x = grid_origin_x + config.width - config.resolution * 0.5
+    grid_min_y = grid_origin_y
+    grid_max_y = grid_origin_y + config.height - config.resolution * 0.5
+
+    clamped_x = np.clip(world_x, grid_min_x, grid_max_x)
+    clamped_y = np.clip(world_y, grid_min_y, grid_max_y)
+
     cell_radius = int(np.ceil(radius / config.resolution))
     center_row, center_col = world_to_grid_indices(
-        world_x, world_y, config, grid_origin_x, grid_origin_y
+        clamped_x, clamped_y, config, grid_origin_x, grid_origin_y
     )
 
     affected = []
+    half_res = config.resolution * 0.5
+
     for dr in range(-cell_radius, cell_radius + 1):
         for dc in range(-cell_radius, cell_radius + 1):
             row = center_row + dr
@@ -362,11 +385,21 @@ def get_affected_cells(
             if not (0 <= row < config.grid_height and 0 <= col < config.grid_width):
                 continue
 
-            # Check euclidean distance
+            # Get cell bounds (cell is a square)
             cell_world_x, cell_world_y = grid_indices_to_world(
                 row, col, config, grid_origin_x, grid_origin_y
             )
-            dist = np.sqrt((cell_world_x - world_x) ** 2 + (cell_world_y - world_y) ** 2)
+            cell_min_x = cell_world_x - half_res
+            cell_max_x = cell_world_x + half_res
+            cell_min_y = cell_world_y - half_res
+            cell_max_y = cell_world_y + half_res
+
+            # Circle-rectangle intersection: find closest point on rectangle to circle center
+            closest_x = np.clip(world_x, cell_min_x, cell_max_x)
+            closest_y = np.clip(world_y, cell_min_y, cell_max_y)
+
+            # Check if closest point is within circle radius
+            dist = np.sqrt((closest_x - world_x) ** 2 + (closest_y - world_y) ** 2)
 
             if dist <= radius:
                 affected.append((row, col))

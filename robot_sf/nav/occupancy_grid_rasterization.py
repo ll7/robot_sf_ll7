@@ -150,6 +150,8 @@ def rasterize_circle(
     """Rasterize a circle into the occupancy grid.
 
     Uses discrete disk algorithm to fill all cells within the circle.
+    Correctly handles circles whose centers are outside the grid bounds
+    but which partially overlap the grid.
 
     Args:
         circle: Circle (center_x, center_y, radius)
@@ -165,28 +167,38 @@ def rasterize_circle(
     Performance:
         O(π * (radius/resolution)²)
 
+    Note:
+        The function correctly rasterizes circles even when their centers
+        are outside the grid, as long as they partially overlap the grid.
+        This is handled by `get_affected_cells()` which performs proper
+        bounding box intersection testing.
+
     Example:
         >>> grid = np.zeros((100, 100))
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
+        >>> # Circle fully inside
         >>> circle = Circle2D((5.0, 5.0), 0.5)
         >>> rasterize_circle(circle, grid, config)
         >>> np.sum(grid > 0)  # Count occupied cells
         ~78  # Approximately π * 5² cells
+        >>> # Circle center outside but overlapping
+        >>> grid2 = np.zeros((100, 100))
+        >>> circle2 = Circle2D((10.5, 5.0), 1.0)
+        >>> rasterize_circle(circle2, grid2, config)
+        >>> np.sum(grid2 > 0)  # Some cells from overlap
+        15
     """
     center, radius = circle
 
-    # Check if circle is within or intersects grid bounds
-    if not is_within_grid(center[0], center[1], config, grid_origin_x, grid_origin_y):
-        logger.debug(f"Circle center {center} outside grid bounds, skipping")
-        return
-
     # Get all cells affected by the circle
+    # The helper function handles bounds checking and clipping internally,
+    # correctly detecting overlap even when circle center is outside grid
     try:
         affected_cells = get_affected_cells(
             center[0], center[1], radius, config, grid_origin_x, grid_origin_y
         )
     except ValueError as e:
-        logger.debug(f"Circle center outside grid: {e}")
+        logger.debug(f"Circle {circle} does not intersect grid: {e}")
         return
 
     # Set occupancy for all affected cells

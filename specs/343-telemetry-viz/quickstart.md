@@ -10,11 +10,12 @@ obs, info = env.reset()
 for _ in range(200):
     action = env.action_space.sample()
     obs, reward, terminated, truncated, info = env.step(action)
+    env.render()
     if terminated or truncated:
         break
 env.close()
 ```
-- The Pygame window shows the docked telemetry pane blitted with charts.
+- The Pygame window shows the docked telemetry pane blitted with charts (call `env.render()` to drive the SDL event loop and keep the window open).
 - Telemetry JSONL writes to `output/telemetry/<run_id>/telemetry.jsonl` (artifact policy compliant).
 
 ## Headless Smoke (CI-friendly)

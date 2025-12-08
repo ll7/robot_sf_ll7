@@ -14,7 +14,7 @@
 - [X] T007 [US1] Expose live panel toggle/metrics selection API via factories; ensure defaults off unless requested (`robot_sf/gym_env/environment_factory.py`).
 - [X] T008 [US1] Add health indicators (drop/delay warnings) surfaced via Loguru and run manifest (`robot_sf/telemetry/progress.py` or new helper).
 - [X] T009 [US1] Live-mode telemetry JSONL write path under `output/telemetry/<run_id>/telemetry.jsonl` with decimation safeguards.
-- [X] T010 [US1] Example/demo script showing live pane (`examples/advanced/telemetry_pane_demo.py`) aligned with quickstart.
+- [X] T010 [US1] Example/demo script showing live pane (`examples/advanced/22_telemetry_pane.py`) aligned with quickstart.
 - [X] T011 [US1] Tests/smokes: live pane rendering + FPS overhead check; assert charts update ≥1 Hz and FPS drop ≤10% (`tests/telemetry/test_live_pane.py`).
 
 ## Phase 4 – User Story 2 (P2) Replay with synchronized charts

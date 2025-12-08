@@ -388,4 +388,22 @@ examples:
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
+  - path: advanced/22_telemetry_pane.py
+    name: "22 Telemetry Pane"
+    summary: "Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive pygame session not reliable for CI; use headless variant instead."
+    doc_reference: specs/343-telemetry-viz/quickstart.md
+    tags: [telemetry, visualization, pygame, interactive]
+  - path: advanced/23_telemetry_headless_smoke.py
+    name: "23 Telemetry Headless Smoke"
+    summary: "Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: specs/343-telemetry-viz/quickstart.md
+    tags: [telemetry, visualization, headless, ci]
     tags: [occupancy, reward, observation]

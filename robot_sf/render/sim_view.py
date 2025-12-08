@@ -1161,7 +1161,14 @@ class SimulationView:
             channel_data = grid_data[ch_idx]
             occupied_rows, occupied_cols = np.nonzero(channel_data >= OCCUPANCY_FREE_THRESHOLD)
 
-            for row, col in zip(occupied_rows, occupied_cols, strict=False):
+            if occupied_rows.size == 0:
+                continue
+
+            # Batch rendering with strict=True to catch row/col length mismatches
+            # Collect rectangles to draw in bulk for better performance
+            rects_to_draw: list[tuple[pygame.Rect, tuple[int, int, int, int]]] = []
+
+            for row, col in zip(occupied_rows, occupied_cols, strict=True):
                 occupancy = float(channel_data[row, col])
                 alpha = int(255 * min(occupancy, 1.0) * alpha_scale)
                 if alpha <= 0:
@@ -1174,7 +1181,11 @@ class SimulationView:
                     cell_pixel_size,
                     cell_pixel_size,
                 )
-                pygame.draw.rect(grid_surface, (*channel_color, alpha), rect)
+                rects_to_draw.append((rect, (*channel_color, alpha)))
+
+            # Batch draw all rectangles for this channel (more efficient than per-cell draw calls)
+            for rect, color in rects_to_draw:
+                pygame.draw.rect(grid_surface, color, rect)
 
         # Draw grid extent border for clarity
         border_rect = pygame.Rect(

@@ -1,4 +1,34 @@
-"""TODO docstring. Document this module."""
+"""Pedestrian population generation and simulation setup.
+
+This module provides utilities for spawning and managing pedestrian agents in simulation
+environments. It supports multiple spawning strategies including:
+  - Route-following pedestrians (along predefined paths)
+  - Crowded zone pedestrians (in open areas)
+  - Single pedestrians (individually controlled with explicit start/goal/trajectory)
+
+Key Components:
+    - PedSpawnConfig: Configuration for pedestrian density, group sizes, and movement.
+    - sample_route(): Sample positions along a route respecting sidewalk constraints.
+    - populate_ped_routes(): Create pedestrian groups following predefined routes.
+    - populate_crowded_zones(): Create pedestrian groups in open areas.
+    - populate_single_pedestrians(): Create individually controlled pedestrians.
+    - populate_simulation(): Orchestrate all spawning strategies and return initialized state.
+
+Obstacle Handling:
+    All spawning functions support optional obstacle avoidance using Shapely geometry.
+    Prepared geometries are cached for efficiency in containment checks.
+
+Example:
+    >>> config = PedSpawnConfig(peds_per_area_m2=0.05, max_group_members=3)
+    >>> pysf_state, groups, behaviors = populate_simulation(
+    ...     tau=0.5,
+    ...     spawn_config=config,
+    ...     ped_routes=routes,
+    ...     ped_crowded_zones=zones,
+    ...     obstacle_polygons=obstacles,
+    ...     single_pedestrians=special_peds,
+    ... )
+"""
 
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
@@ -199,9 +229,12 @@ class ZonePointsGenerator:
     _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
-        # Calculate the area for each zone assuming zones are rectangular
-        # This uses an external `dist` function to measure distances
-        """TODO docstring. Document this function."""
+        """Calculate zone areas and normalized selection probabilities.
+
+        Computes the area of each zone (assuming rectangular geometry) by
+        measuring distances between consecutive vertices. Normalizes areas to
+        create probability weights for area-proportional zone selection.
+        """
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
 
         # Sum the areas to use for normalizing probabilities
@@ -395,15 +428,24 @@ def populate_crowded_zones(
     crowded_zones: list[Zone],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
-    """TODO docstring. Document this function.
+    """Spawn pedestrian groups within crowded zones (open areas).
+
+    Creates pedestrian groups distributed across specified zones according to
+    area-weighted probabilities. Each group spawns at a random location within
+    a selected zone and receives a goal position also within that zone to keep
+    groups localized. Respects obstacle boundaries during spawning.
 
     Args:
-        config: TODO docstring.
-        crowded_zones: TODO docstring.
-        obstacle_polygons: Optional obstacle polygons used to avoid spawning inside obstacles.
+        config: Pedestrian spawn configuration (density, group sizes, speed).
+        crowded_zones: List of Zone geometries where pedestrians spawn.
+        obstacle_polygons: Optional obstacle geometries to avoid during spawning.
+            Can be raw coordinate lists or Shapely PreparedGeometry objects.
 
     Returns:
-        TODO docstring.
+        Tuple of (pedestrian_states, groups, zone_assignments):
+            - pedestrian_states: NumPy array (N, 6) with positions, velocities, goals.
+            - groups: List of sets containing pedestrian IDs in each group.
+            - zone_assignments: Dict mapping pedestrian ID to zone index.
     """
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones, obstacle_polygons=obstacle_polygons)
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
@@ -506,18 +548,42 @@ def populate_simulation(
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
-    """TODO docstring. Document this function.
+    """Orchestrate complete pedestrian population initialization for simulation.
+
+    Combines three independent spawning strategies:
+      1. Route followers: Groups traveling along predefined paths.
+      2. Crowded zone pedestrians: Groups in open areas with local goals.
+      3. Single pedestrians: Individually controlled agents with explicit behavior.
+
+    All pedestrian states are merged into a unified array with consistent tau
+    (relaxation time) values. Group memberships and behavioral controllers are
+    created and returned for use in the physics simulation.
 
     Args:
-        tau: TODO docstring.
-        spawn_config: TODO docstring.
-        ped_routes: TODO docstring.
-        ped_crowded_zones: TODO docstring.
-        obstacle_polygons: Optional obstacle polygons used to avoid spawning inside obstacles.
-        single_pedestrians: TODO docstring.
+        tau: Relaxation time (seconds) for all pedestrians in the simulation.
+        spawn_config: Configuration for density, group sizes, and initial speed.
+        ped_routes: GlobalRoute objects defining paths for route-following pedestrians.
+        ped_crowded_zones: Zone geometries for crowded zone pedestrians.
+        obstacle_polygons: Optional obstacle geometries to avoid during spawning.
+            Can be raw coordinate lists or Shapely PreparedGeometry objects.
+        single_pedestrians: Optional list of SinglePedestrianDefinition objects
+            for individually controlled pedestrians with explicit goals/trajectories.
 
     Returns:
-        TODO docstring.
+        Tuple of (pysf_state, groups, ped_behaviors):
+            - pysf_state: PedestrianStates view of all pedestrians for physics engine.
+            - groups: PedestrianGroupings tracking group memberships.
+            - ped_behaviors: List of PedestrianBehavior controllers for crowd dynamics
+              (includes CrowdedZoneBehavior and FollowRouteBehavior).
+
+    Example:
+        >>> pysf_state, groups, behaviors = populate_simulation(
+        ...     tau=0.5,
+        ...     spawn_config=config,
+        ...     ped_routes=routes,
+        ...     ped_crowded_zones=zones,
+        ... )
+        >>> # Use pysf_state and behaviors in physics simulation
     """
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,

@@ -26,7 +26,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-DEFAULT_TELEMETRY_METRICS = ("fps", "reward", "collisions", "min_ped_distance", "action_norm")
+DEFAULT_TELEMETRY_METRICS = ("reward", "collisions", "min_ped_distance", "action_norm")
+_TITLE_FONTSIZE = 10
+_TITLE_PAD = 8
+_TICK_FONTSIZE = 8
+_HSPACE = 0.55
+_TOP_MARGIN = 0.92
+_BOTTOM_MARGIN = 0.12
 
 
 def render_metric_panel(
@@ -69,11 +75,11 @@ def render_metric_panel(
         if steps not in x_vals_cache:
             x_vals_cache[steps] = np.arange(steps, dtype=float)
         ax.plot(x_vals_cache[steps], values, label=metric, linewidth=1.3)
-        ax.set_title(metric)
+        ax.set_title(metric, fontsize=_TITLE_FONTSIZE, pad=_TITLE_PAD)
         ax.grid(True, linestyle="--", alpha=0.2)
-        ax.tick_params(labelsize=8)
+        ax.tick_params(labelsize=_TICK_FONTSIZE)
     # Use subplots_adjust instead of tight_layout to avoid warnings on small figures
-    fig.subplots_adjust(hspace=0.4, top=0.95, bottom=0.1)
+    fig.subplots_adjust(hspace=_HSPACE, top=_TOP_MARGIN, bottom=_BOTTOM_MARGIN)
 
     fig.canvas.draw()
     w_px, h_px = fig.canvas.get_width_height()

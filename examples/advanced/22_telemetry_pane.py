@@ -30,7 +30,7 @@ def main() -> None:
         debug=True,
         enable_telemetry_panel=True,
         telemetry_record=True,
-        telemetry_metrics=["fps", "reward", "collisions", "min_ped_distance", "action_norm"],
+        telemetry_metrics=["reward", "collisions", "min_ped_distance", "action_norm"],
         telemetry_refresh_hz=2.0,
         telemetry_pane_layout="horizontal_split",  # dock below the scene to avoid occlusion
     )

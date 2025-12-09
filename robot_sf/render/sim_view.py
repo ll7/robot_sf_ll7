@@ -55,6 +55,7 @@ ROBOT_LIDAR_COLOR = (238, 160, 238, 128)
 TEXT_COLOR = (255, 255, 255)  # White text
 TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
 TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
+TELEMETRY_PANE_PADDING = 10
 
 # Occupancy grid visualization colors
 GRID_OBSTACLE_COLOR = (255, 255, 0)  # Yellow for obstacles
@@ -1244,11 +1245,10 @@ class SimulationView:
         if surface is None:
             return
         pane_w, pane_h = surface.get_size()
-        padding = 10
         if self.telemetry_layout == "horizontal_split":
-            dest = (padding, self.height - pane_h - padding)
+            dest = (TELEMETRY_PANE_PADDING, self.height - pane_h - TELEMETRY_PANE_PADDING)
         else:
-            dest = (self.width - pane_w - padding, padding)
+            dest = (self.width - pane_w - TELEMETRY_PANE_PADDING, TELEMETRY_PANE_PADDING)
         self.screen.blit(surface, dest)
 
     def toggle_grid_channel_visibility(self, channel_idx: int) -> None:

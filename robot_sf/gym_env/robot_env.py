@@ -13,6 +13,7 @@ It also defines the action and observation spaces for the robot.
 import hashlib
 import json
 import time
+import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
@@ -48,6 +49,11 @@ from robot_sf.sim.simulator import (
 )
 from robot_sf.telemetry.pane import TelemetrySession
 
+DEFAULT_PANE_WIDTH = 320
+DEFAULT_PANE_HEIGHT = 240
+MIN_PANE_WIDTH = 200
+MIN_PANE_HEIGHT = 160
+
 
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
@@ -69,6 +75,15 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         payload = repr(cfg)
     return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest()
+
+
+def _make_telemetry_run_id() -> str:
+    """Generate a unique telemetry run identifier to avoid artifact collisions.
+
+    Returns:
+        str: High-entropy run identifier for telemetry artifacts.
+    """
+    return f"telemetry-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
 
 
 def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
@@ -239,14 +254,16 @@ class RobotEnv(BaseEnv):
         # Initialize telemetry session/pane when requested
         self._telemetry_session: TelemetrySession | None = None
         if env_config.enable_telemetry_panel or env_config.telemetry_record:
-            run_id = f"telemetry-{int(time.time())}"
-            pane_width = 320
-            pane_height = 240
+            run_id = _make_telemetry_run_id()
+            pane_width = DEFAULT_PANE_WIDTH
+            pane_height = DEFAULT_PANE_HEIGHT
             if self.sim_ui:
                 self.sim_ui.show_telemetry_panel = env_config.enable_telemetry_panel
                 self.sim_ui.telemetry_layout = env_config.telemetry_pane_layout
-                pane_width = min(320, max(200, self.sim_ui.width // 3))
-                pane_height = min(240, max(160, self.sim_ui.height // 3))
+                pane_width = min(DEFAULT_PANE_WIDTH, max(MIN_PANE_WIDTH, self.sim_ui.width // 3))
+                pane_height = min(
+                    DEFAULT_PANE_HEIGHT, max(MIN_PANE_HEIGHT, self.sim_ui.height // 3)
+                )
             self._telemetry_session = TelemetrySession(
                 run_id=run_id,
                 record=env_config.telemetry_record,

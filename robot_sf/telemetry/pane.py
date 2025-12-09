@@ -1,4 +1,24 @@
-"""Lightweight telemetry pane for live blitting inside Pygame."""
+"""Lightweight telemetry pane for live visualization and recording inside Pygame.
+
+This module provides real-time telemetry visualization for simulation metrics during
+Pygame-based rendering. It offers two main components:
+
+- `TelemetryPane`: Renders metric histories as a chart panel for display persistence
+  and low-latency blitting into Pygame surfaces.
+- `TelemetrySession`: Manages append-only JSONL recording and in-memory history for
+  the pane, with optional decimation and lag detection.
+
+Key features:
+- Live metric rendering with configurable refresh rate and history size.
+- Append-only JSONL persistence for reproducible analysis.
+- Lag detection with warnings when frame intervals exceed expected thresholds.
+- Cached rendering to enable display persistence during frame-to-frame updates.
+- Summary export (JSON + PNG) at session end for post-run analysis.
+
+Artifacts are stored under `output/telemetry/<run_id>/` following the canonical
+artifact policy, including telemetry.jsonl, telemetry_summary.json, and
+telemetry_summary.png for visualization replay.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +28,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import matplotlib.pyplot as plt
 import numpy as np
 from loguru import logger
 
@@ -17,7 +36,11 @@ from robot_sf.telemetry.visualization import (
     DEFAULT_TELEMETRY_METRICS,
     make_surface_from_rgba,
     render_metric_panel,
+    save_rgba_png,
 )
+
+MIN_EXPECTED_INTERVAL_MS = 100
+LAG_DETECTION_THRESHOLD_MULTIPLIER = 3
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, MutableMapping, Sequence
@@ -127,8 +150,11 @@ class TelemetrySession:
         now_ms = _timestamp_ms()
         if self._last_append_ms > 0:
             interval_ms = now_ms - self._last_append_ms
-            expected_ms = max(int(1000.0 / max(self.pane.refresh_hz, 0.1)), 100)
-            if interval_ms > expected_ms * 3:
+            expected_ms = max(
+                int(1000.0 / max(self.pane.refresh_hz, 0.1)),
+                MIN_EXPECTED_INTERVAL_MS,
+            )
+            if interval_ms > expected_ms * LAG_DETECTION_THRESHOLD_MULTIPLIER:
                 self._warned_drops += 1
                 logger.warning(
                     "Telemetry append lag detected: interval={}ms (expected <= {}ms), run_id={}, total_warnings={}",
@@ -211,7 +237,7 @@ class TelemetrySession:
                 width=self.pane.width,
                 height=self.pane.height,
             )
-            plt.imsave(png_path, rgba)
+            save_rgba_png(png_path, rgba)
             summary_paths = (json_path, png_path)
         except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover - defensive
             logger.warning("Failed to write telemetry summary image: {}", exc)

@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+    from pathlib import Path
 
 
 DEFAULT_TELEMETRY_METRICS = ("fps", "reward", "collisions", "min_ped_distance", "action_norm")
@@ -48,7 +49,10 @@ def render_metric_panel(
     Returns:
         NumPy uint8 array shaped (H, W, 4) in RGBA order suitable for blitting via pygame.surfarray.
     """
-    metrics = tuple(metrics or DEFAULT_TELEMETRY_METRICS)
+    if metrics is None:
+        metrics = tuple(DEFAULT_TELEMETRY_METRICS)
+    else:
+        metrics = tuple(metrics)
     if width <= 0 or height <= 0:
         raise ValueError("width and height must be positive integers")
 
@@ -59,7 +63,7 @@ def render_metric_panel(
     axes = np.atleast_1d(axes)
 
     x_vals_cache: dict[int, np.ndarray] = {}
-    for ax, metric in zip(axes, metrics, strict=False):
+    for ax, metric in zip(axes, metrics, strict=True):
         values = np.asarray(series.get(metric, []), dtype=float)
         steps = values.shape[0]
         if steps not in x_vals_cache:
@@ -163,3 +167,14 @@ def export_combined_image(
         canvas[:ph, w : w + pw] = pane
     plt.imsave(out_path, canvas)
     return out_path
+
+
+def save_rgba_png(out_path: str | Path, rgba: np.ndarray) -> str:
+    """Persist an RGBA buffer to disk using the configured matplotlib backend.
+
+    Returns:
+        str: The path where the PNG was written.
+    """
+    path_str = str(out_path)
+    plt.imsave(path_str, rgba)
+    return path_str

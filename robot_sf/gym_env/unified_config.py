@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
 from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
@@ -27,7 +28,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 
 
 @dataclass
-class BaseSimulationConfig:
+class BaseSimulationConfig(TelemetryConfigMixin):
     """
     Core simulation configuration shared by all environments.
 
@@ -49,6 +50,7 @@ class BaseSimulationConfig:
         """Validate that all required fields are initialized."""
         if not self.sim_config or not self.map_pool or not self.lidar_config:
             raise ValueError("All configuration fields must be initialized!")
+        self._validate_telemetry()
 
 
 @dataclass
@@ -79,15 +81,6 @@ class RobotSimulationConfig(BaseSimulationConfig):
         default=0.5,
         metadata={"doc": "Alpha blending for grid overlay (0.0=transparent, 1.0=opaque)"},
     )
-    # Telemetry / docked pane configuration
-    enable_telemetry_panel: bool = field(default=False)
-    telemetry_record: bool = field(default=False)
-    telemetry_metrics: list[str] = field(
-        default_factory=lambda: ["fps", "reward", "collisions", "min_ped_distance", "action_norm"]
-    )
-    telemetry_refresh_hz: float = field(default=1.0)
-    telemetry_pane_layout: str = field(default="vertical_split")
-    telemetry_decimation: int = field(default=1)
 
     def __post_init__(self):
         """Validate robot-specific configuration."""
@@ -98,7 +91,6 @@ class RobotSimulationConfig(BaseSimulationConfig):
         self._init_grid_config()
         self._validate_grid_observation()
         self._validate_grid_visualization()
-        self._validate_telemetry()
 
     def _init_grid_config(self) -> None:
         """Initialize and validate the occupancy grid configuration."""
@@ -131,27 +123,6 @@ class RobotSimulationConfig(BaseSimulationConfig):
 
         if not 0.0 <= self.grid_visualization_alpha <= 1.0:
             raise ValueError("grid_visualization_alpha must be between 0.0 and 1.0")
-
-    def _validate_telemetry(self) -> None:
-        """Validate telemetry panel configuration."""
-        if self.telemetry_refresh_hz <= 0:
-            raise ValueError("telemetry_refresh_hz must be > 0")
-        if self.telemetry_decimation <= 0:
-            raise ValueError("telemetry_decimation must be >= 1")
-        if self.telemetry_pane_layout not in {"vertical_split", "horizontal_split"}:
-            raise ValueError("telemetry_pane_layout must be 'vertical_split' or 'horizontal_split'")
-        # Normalize metrics: ensure list, drop blanks
-        self.telemetry_metrics = [
-            m for m in (self.telemetry_metrics or []) if isinstance(m, str) and m.strip()
-        ]
-        if not self.telemetry_metrics:
-            self.telemetry_metrics = [
-                "fps",
-                "reward",
-                "collisions",
-                "min_ped_distance",
-                "action_norm",
-            ]
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

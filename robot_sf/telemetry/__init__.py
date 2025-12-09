@@ -30,6 +30,7 @@ from .visualization import (
     export_combined_image,
     make_surface_from_rgba,
     render_metric_panel,
+    save_rgba_png,
 )
 
 __all__ = [
@@ -60,4 +61,5 @@ __all__ = [
     "load_run",
     "make_surface_from_rgba",
     "render_metric_panel",
+    "save_rgba_png",
 ]

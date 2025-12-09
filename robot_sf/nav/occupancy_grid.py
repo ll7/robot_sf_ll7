@@ -390,11 +390,13 @@ class OccupancyGrid:
         pedestrians: list[Circle2D],
         robot_pose: RobotPose,
         ego_frame: bool = False,
+        obstacle_polygons: list[list[tuple[float, float]]] | None = None,
     ) -> np.ndarray:
         """Generate occupancy grid from obstacles and pedestrians.
 
         Args:
             obstacles: List of line segment obstacles
+            obstacle_polygons: Optional list of polygon vertices for filled obstacles
             pedestrians: List of circular pedestrian objects
             robot_pose: Robot's current pose
             ego_frame: If True, generate grid in robot's ego frame;
@@ -465,11 +467,17 @@ class OccupancyGrid:
             transformed_obstacles: list[Line2D] = [
                 (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
             ]
+            transformed_polygons: list[list[tuple[float, float]]] | None = None
+            if obstacle_polygons is not None:
+                transformed_polygons = [
+                    [_to_ego_point(vertex) for vertex in polygon] for polygon in obstacle_polygons
+                ]
             transformed_pedestrians: list[Circle2D] = [
                 (_to_ego_point(center), radius) for center, radius in pedestrians
             ]
         else:
             transformed_obstacles = obstacles
+            transformed_polygons = obstacle_polygons
             transformed_pedestrians = pedestrians
 
         # Rasterize each channel
@@ -489,6 +497,18 @@ class OccupancyGrid:
                     value=1.0,
                 )
                 logger.debug(f"Rasterized {num_rasterized} obstacles")
+                if transformed_polygons:
+                    filled = 0
+                    for polygon in transformed_polygons:
+                        filled += rasterization.rasterize_polygon(
+                            polygon,
+                            self._grid_data[channel_idx],
+                            self.config,
+                            grid_origin_x,
+                            grid_origin_y,
+                            value=1.0,
+                        )
+                    logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
 
             elif channel == GridChannel.PEDESTRIANS:
                 # Rasterize pedestrians into this channel

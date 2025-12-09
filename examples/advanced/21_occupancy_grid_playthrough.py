@@ -52,7 +52,7 @@ def run_playthrough(steps: int = 600) -> None:
             width=20.0,
             height=20.0,
             resolution=0.5,
-            use_ego_frame=True,  # keep axes aligned with world
+            use_ego_frame=True,  # rotate grid axes with robot orientation
             center_on_robot=True,  # translate grid with robot without rotating it
         ),
     )

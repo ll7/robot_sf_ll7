@@ -130,9 +130,6 @@ def sample_route(
         """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
-    # Calculate the center point between the start and end of the section
-    center = add_vecs(start, sub_vecs(end, start))
-
     prepared_obstacles = _prepare_obstacles(obstacle_polygons or [])
 
     samples: list[Vec2D] = []
@@ -140,12 +137,11 @@ def sample_route(
     max_attempts = num_samples * 50
 
     while len(samples) < num_samples and attempts < max_attempts:
-        # Sample x and y offsets from a normal distribution centered at midpoint
-        # Define standard deviation for normal distribution based on sidewalk width
+        midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
         std_dev = sidewalk_width / 4
-        x_offset = float(clip_spread(np.random.normal(center[0], std_dev, (1,))[0]))
-        y_offset = float(clip_spread(np.random.normal(center[1], std_dev, (1,))[0]))
-        pt = (x_offset + center[0], y_offset + center[1])
+        x_offset = float(clip_spread(np.random.normal(0.0, std_dev, (1,))[0]))
+        y_offset = float(clip_spread(np.random.normal(0.0, std_dev, (1,))[0]))
+        pt = (midpoint[0] + x_offset, midpoint[1] + y_offset)
         attempts += 1
         if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
             continue

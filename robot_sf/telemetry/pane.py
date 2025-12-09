@@ -138,7 +138,7 @@ class TelemetrySession:
                     self._warned_drops,
                 )
                 payload.setdefault("notes", "lagged")
-                self._write_health_snapshot()
+                self._write_health_snapshot(reason="lagged")
         self._last_append_ms = now_ms
         if not self.record:
             return
@@ -203,6 +203,7 @@ class TelemetrySession:
         json_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
         png_path = self.run_dir / "telemetry_summary.png"
+        summary_paths: tuple[Path, ...] = (json_path,)
         try:
             rgba = render_metric_panel(
                 histories,
@@ -211,11 +212,12 @@ class TelemetrySession:
                 height=self.pane.height,
             )
             plt.imsave(png_path, rgba)
+            summary_paths = (json_path, png_path)
         except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover - defensive
             logger.warning("Failed to write telemetry summary image: {}", exc)
-            return (json_path,)
 
-        return (json_path, png_path)
+        self._write_health_snapshot(reason="summary")
+        return summary_paths
 
     @property
     def warned_drops(self) -> int:
@@ -223,12 +225,20 @@ class TelemetrySession:
 
         return self._warned_drops
 
-    def _write_health_snapshot(self) -> None:
+    def _write_health_snapshot(self, *, reason: str | None = None) -> None:
         """Persist a lightweight health summary alongside telemetry."""
 
         try:
             self.run_dir.mkdir(parents=True, exist_ok=True)
-            data = {"run_id": self.run_id, "warned_drops": self._warned_drops}
+            data = {
+                "run_id": self.run_id,
+                "samples": self._samples,
+                "warned_drops": self._warned_drops,
+                "last_append_ms": self._last_append_ms or None,
+                "telemetry_exists": self.telemetry_path.exists(),
+            }
+            if reason:
+                data["reason"] = reason
             (self.run_dir / "telemetry_health.json").write_text(
                 json.dumps(data, indent=2), encoding="utf-8"
             )

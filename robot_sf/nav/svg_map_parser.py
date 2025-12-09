@@ -1,4 +1,37 @@
-"""get a labled svg map and parse it to a map definition object"""
+"""SVG map parser for converting labeled Inkscape maps to MapDefinition objects.
+
+This module provides utilities to parse SVG files created in Inkscape with specific
+labeling conventions into structured MapDefinition objects used by the simulation.
+It extracts obstacles, routes, spawn/goal zones, and pedestrian definitions from
+SVG elements (paths, rectangles, circles) based on their inkscape:label attributes.
+
+Supported SVG Elements and Labels:
+    Paths:
+        - 'obstacle': Closed polygon obstacles
+        - 'ped_route_<spawn>_<goal>': Pedestrian navigation routes
+        - 'robot_route_<spawn>_<goal>': Robot navigation routes
+        - 'crowded_zone': High pedestrian density areas
+
+    Rectangles:
+        - 'obstacle': Rectangular obstacles
+        - 'robot_spawn_zone': Robot starting areas
+        - 'ped_spawn_zone': Pedestrian starting areas
+        - 'robot_goal_zone': Robot target areas
+        - 'ped_goal_zone': Pedestrian target areas
+        - 'ped_crowded_zone': Crowded pedestrian zones
+        - 'bound': Additional map boundaries
+
+    Circles:
+        - 'single_ped_<id>_start': Individual pedestrian start position
+        - 'single_ped_<id>_goal': Individual pedestrian goal position
+
+Typical Usage:
+    # Load a single SVG map
+    map_def = convert_map('maps/svg_maps/example.svg')
+
+    # Load all SVG maps from a directory
+    maps = load_svg_maps('maps/svg_maps/', pattern='*.svg')
+"""
 
 import re
 import xml.etree.ElementTree as ET
@@ -16,7 +49,26 @@ from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 
 
 class SvgMapConverter:
-    """This class manages the conversion of a labeled svg map to a map definition object"""
+    """Manages conversion of labeled SVG maps to MapDefinition objects.
+
+    This class orchestrates the complete parsing pipeline: loading SVG XML, extracting
+    labeled elements (paths, rectangles, circles), categorizing them by label, and
+    assembling the final MapDefinition with all obstacles, routes, zones, and pedestrians.
+
+    Attributes:
+        svg_file_str: Path to the SVG file being parsed.
+        svg_root: Parsed XML root element of the SVG document.
+        path_info: Extracted path elements with coordinates and labels.
+        rect_info: Extracted rectangle elements with dimensions and labels.
+        circle_info: Extracted circle elements with centers and labels.
+        map_definition: Final assembled MapDefinition object.
+
+    Example:
+        >>> converter = SvgMapConverter("maps/example.svg")
+        >>> map_def = converter.get_map_definition()
+        >>> len(map_def.obstacles)
+        5
+    """
 
     svg_file_str: str
     svg_root: ET.Element
@@ -26,8 +78,18 @@ class SvgMapConverter:
     map_definition: MapDefinition
 
     def __init__(self, svg_file: str):
-        """
-        Initialize the SvgMapConverter.
+        """Initialize the SVG map converter and perform full parsing.
+
+        Loads the SVG file, extracts all labeled elements, and constructs the
+        MapDefinition object. All parsing happens during initialization.
+
+        Args:
+            svg_file: Path to the SVG file to parse.
+
+        Raises:
+            FileNotFoundError: If svg_file does not exist.
+            xml.etree.ElementTree.ParseError: If SVG file has invalid XML syntax.
+            ValueError: If map validation fails (e.g., no robot routes defined).
         """
         self.svg_file_str = svg_file
         self._load_svg_root()
@@ -36,8 +98,14 @@ class SvgMapConverter:
         self._info_to_mapdefintion()
 
     def _load_svg_root(self):
-        """
-        Load the root of the SVG file.
+        """Load and parse the SVG file's XML root element.
+
+        Reads the SVG file and parses it into an ElementTree structure. Provides
+        actionable error messages for common failure modes (missing file, invalid XML).
+
+        Raises:
+            FileNotFoundError: If svg_file_str path does not exist (raised via raise_fatal_with_remedy).
+            xml.etree.ElementTree.ParseError: If SVG has invalid XML syntax (raised via raise_fatal_with_remedy).
         """
         logger.info(f"Loading the root of the SVG file: {self.svg_file_str}")
 
@@ -542,14 +610,20 @@ class SvgMapConverter:
         return self.map_definition
 
     def __get_path_number(self, route: str) -> tuple[int, int]:
-        # routes have a label of the form 'ped_route_<spawn>_<goal>'
-        """TODO docstring. Document this function.
+        """Extract spawn and goal zone indices from a route label.
+
+        Routes have labels of the form 'ped_route_<spawn>_<goal>' or 'robot_route_<spawn>_<goal>'.
+        This method extracts the first two numeric segments as spawn and goal indices.
 
         Args:
-            route: TODO docstring.
+            route: Route label string (e.g., 'ped_route_0_1' or 'robot_route_2_3').
 
         Returns:
-            TODO docstring.
+            Tuple of (spawn_index, goal_index). Defaults to (0, 0) if no numbers found.
+
+        Example:
+            >>> self.__get_path_number("ped_route_3_7")
+            (3, 7)
         """
         numbers = re.findall(r"\d+", route)
         if numbers:
@@ -562,15 +636,26 @@ class SvgMapConverter:
 
 
 def convert_map(svg_file: str):
-    """Create MapDefinition from svg file.
+    """Create a MapDefinition object from an SVG file.
 
-    Returns None on conversion failure; raises no exceptions outward (they are logged) except
-    for the explicit validation error on missing robot routes which is also logged then rethrown
-    so callers can decide to fallback to a default map pool.
+    Parses the SVG file and converts labeled elements into a structured MapDefinition.
+    Most errors are caught and logged (returning None), but validation errors
+    (e.g., missing robot routes) are re-raised to allow caller fallback logic.
+
+    Args:
+        svg_file: Path to the SVG file to convert.
 
     Returns:
-        MapDefinition | None: Parsed map definition on success, or None if conversion fails
-            (except for validation errors which are re-raised).
+        MapDefinition object on successful conversion, or None if parsing fails
+        (except for validation errors which are re-raised).
+
+    Raises:
+        ValueError: If map validation fails (e.g., no robot routes defined).
+
+    Example:
+        >>> map_def = convert_map("maps/svg_maps/hallway.svg")
+        >>> if map_def:
+        ...     print(f"Loaded map with {len(map_def.obstacles)} obstacles")
     """
 
     logger.debug("Converting SVG map to MapDefinition object.")
@@ -603,14 +688,20 @@ def convert_map(svg_file: str):
 
 
 def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
-    """TODO docstring. Document this function.
+    """Load a single SVG file and return it as a dictionary entry.
 
     Args:
-        file_path: TODO docstring.
-        strict: TODO docstring.
+        file_path: Path to the SVG file to load.
+        strict: If True, raise exceptions on conversion errors; if False, log warnings
+            and return empty dict for invalid files.
 
     Returns:
-        TODO docstring.
+        Dictionary with single entry {filename_stem: MapDefinition} on success,
+        or empty dict if conversion fails (in non-strict mode).
+
+    Raises:
+        ValueError: If file is not an SVG or conversion fails (strict mode only).
+        OSError: If file cannot be read (strict mode only).
     """
     if file_path.suffix.lower() != ".svg":
         raise ValueError(f"Expected an SVG file, got: {file_path}")
@@ -627,15 +718,28 @@ def _load_single_svg(file_path: Path, strict: bool) -> dict[str, MapDefinition]:
 
 
 def _load_svg_directory(dir_path: Path, pattern: str, strict: bool) -> dict[str, MapDefinition]:
-    """TODO docstring. Document this function.
+    """Load all matching SVG files from a directory.
+
+    Scans the directory for SVG files matching the pattern, converts each to a
+    MapDefinition, and returns them as a dictionary keyed by filename stem.
 
     Args:
-        dir_path: TODO docstring.
-        pattern: TODO docstring.
-        strict: TODO docstring.
+        dir_path: Path to directory containing SVG files.
+        pattern: Glob pattern for matching files (e.g., '*.svg' or 'map_*.svg').
+        strict: If True, raise exceptions on conversion errors; if False, skip
+            invalid files with warnings.
 
     Returns:
-        TODO docstring.
+        Dictionary mapping filename stems to MapDefinition objects. Only valid
+        maps are included.
+
+    Raises:
+        ValueError: If no SVG files found matching pattern, or no valid maps loaded.
+
+    Example:
+        >>> maps = _load_svg_directory(Path("maps/svg_maps"), "*.svg", strict=False)
+        >>> len(maps)
+        12
     """
     svg_files = sorted(dir_path.glob(pattern))
     if not svg_files:
@@ -656,11 +760,36 @@ def load_svg_maps(
     pattern: str = "*.svg",
     strict: bool = False,
 ) -> dict[str, MapDefinition]:
-    """Load one or many SVG maps into a dict keyed by filename stem.
+    """Load SVG map(s) from a file or directory into a dictionary.
+
+    Flexible loader that handles both single SVG files and directories of SVGs.
+    Returns a dictionary keyed by filename stem (without .svg extension) for easy
+    access and programmatic map selection.
+
+    Args:
+        path: Path to SVG file or directory containing SVG files.
+        pattern: Glob pattern for matching files when path is a directory.
+            Ignored if path points to a single file. Defaults to '*.svg'.
+        strict: If True, raise exceptions on conversion errors; if False,
+            skip invalid maps with warnings. Defaults to False.
 
     Returns:
-        dict[str, MapDefinition]: Dictionary mapping filenames (without .svg extension) to
-            parsed MapDefinition objects. Empty dict if no valid maps found (unless strict=True).
+        Dictionary mapping filename stems to parsed MapDefinition objects.
+        Empty dict if no valid maps found (non-strict mode only).
+
+    Raises:
+        FileNotFoundError: If path does not exist.
+        ValueError: If no valid maps loaded (strict mode) or path validation fails.
+
+    Example:
+        >>> # Load single map
+        >>> maps = load_svg_maps("maps/svg_maps/hallway.svg")
+        >>> hallway_map = maps["hallway"]
+        >>>
+        >>> # Load all maps from directory
+        >>> maps = load_svg_maps("maps/svg_maps/", pattern="map_*.svg")
+        >>> for name, map_def in maps.items():
+        ...     print(f"{name}: {len(map_def.obstacles)} obstacles")
     """
     p = Path(path)
     if not p.exists():  # pragma: no cover

@@ -74,6 +74,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import Point as _ShapelyPoint
+from shapely.geometry import Polygon as _ShapelyPolygon
+from shapely.prepared import PreparedGeometry, prep
 
 try:
     import pygame
@@ -364,6 +367,8 @@ class OccupancyGrid:
         self._last_robot_pose: RobotPoseRecord | None = None
         self._grid_origin: tuple[float, float] | None = None
         self._last_use_ego_frame: bool = False
+        self._prepared_obstacles: list[PreparedGeometry] | None = None
+        self._obstacle_polygons: list[list[tuple[float, float]]] = []
 
         logger.debug(
             f"OccupancyGrid initialized: "
@@ -390,11 +395,13 @@ class OccupancyGrid:
         pedestrians: list[Circle2D],
         robot_pose: RobotPose,
         ego_frame: bool = False,
+        obstacle_polygons: list[list[tuple[float, float]]] | None = None,
     ) -> np.ndarray:
         """Generate occupancy grid from obstacles and pedestrians.
 
         Args:
             obstacles: List of line segment obstacles
+            obstacle_polygons: Optional list of polygon vertices for filled obstacles
             pedestrians: List of circular pedestrian objects
             robot_pose: Robot's current pose
             ego_frame: If True, generate grid in robot's ego frame;
@@ -465,11 +472,17 @@ class OccupancyGrid:
             transformed_obstacles: list[Line2D] = [
                 (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
             ]
+            transformed_polygons: list[list[tuple[float, float]]] | None = None
+            if obstacle_polygons is not None:
+                transformed_polygons = [
+                    [_to_ego_point(vertex) for vertex in polygon] for polygon in obstacle_polygons
+                ]
             transformed_pedestrians: list[Circle2D] = [
                 (_to_ego_point(center), radius) for center, radius in pedestrians
             ]
         else:
             transformed_obstacles = obstacles
+            transformed_polygons = obstacle_polygons
             transformed_pedestrians = pedestrians
 
         # Rasterize each channel
@@ -489,6 +502,18 @@ class OccupancyGrid:
                     value=1.0,
                 )
                 logger.debug(f"Rasterized {num_rasterized} obstacles")
+                if transformed_polygons:
+                    filled = 0
+                    for polygon in transformed_polygons:
+                        filled += rasterization.rasterize_polygon(
+                            polygon,
+                            self._grid_data[channel_idx],
+                            self.config,
+                            grid_origin_x,
+                            grid_origin_y,
+                            value=1.0,
+                        )
+                    logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
 
             elif channel == GridChannel.PEDESTRIANS:
                 # Rasterize pedestrians into this channel
@@ -534,6 +559,10 @@ class OccupancyGrid:
             self._grid_data[combined_idx] = combined.astype(self.config.dtype, copy=False)
             logger.debug("Generated combined channel from %s indices", source_indices)
 
+        # Cache obstacle polygons for direct spatial queries
+        self._obstacle_polygons = transformed_polygons or []
+        self._prepared_obstacles = self._prepare_obstacles(self._obstacle_polygons)
+
         return self._grid_data
 
     def query(self, query: POIQuery) -> POIResult:  # noqa: C901
@@ -578,6 +607,13 @@ class OccupancyGrid:
 
         # Track cells to query based on query type
         cells_to_check: list[tuple[int, int]] = []
+
+        contains_obstacle = False
+        if query.query_type == POIQueryType.POINT:
+            self._ensure_prepared_obstacles()
+            if self._prepared_obstacles:
+                pt = _ShapelyPoint(query_x, query_y)
+                contains_obstacle = any(poly.contains(pt) for poly in self._prepared_obstacles)
 
         if query.query_type == POIQueryType.POINT:
             # Single cell query
@@ -634,10 +670,6 @@ class OccupancyGrid:
                 mean_occupancy=0.0,
             )
 
-        # Extract occupancy values from all channels (aggregate)
-        rows = np.array([r for r, _c in cells_to_check], dtype=int)
-        cols = np.array([c for _r, c in cells_to_check], dtype=int)
-
         # Respect optional channel filter
         selected_channels = query.channels or self.config.channels
         selected_channels = [ch for ch in selected_channels if ch in self.config.channels]
@@ -652,6 +684,24 @@ class OccupancyGrid:
                 mean_occupancy=0.0,
                 channel_results={},
             )
+
+        if contains_obstacle and GridChannel.OBSTACLES in selected_channels:
+            channel_results = {
+                ch: (1.0 if ch == GridChannel.OBSTACLES else 0.0) for ch in selected_channels
+            }
+            return POIResult(
+                occupancy=1.0,
+                query_type=query.query_type,
+                num_cells=len(cells_to_check),
+                min_occupancy=1.0,
+                max_occupancy=1.0,
+                mean_occupancy=1.0,
+                channel_results=channel_results,
+            )
+
+        # Extract occupancy values from all channels (aggregate)
+        rows = np.array([r for r, _c in cells_to_check], dtype=int)
+        cols = np.array([c for _r, c in cells_to_check], dtype=int)
 
         channel_values = self._grid_data[channel_indices][:, rows, cols].astype(float, copy=False)
         per_cell_max = channel_values.max(axis=0)
@@ -681,6 +731,34 @@ class OccupancyGrid:
             mean_occupancy=mean_occ,
             channel_results=channel_results,
         )
+
+    def _prepare_obstacles(
+        self, polygons: list[list[tuple[float, float]]]
+    ) -> list[PreparedGeometry] | None:
+        if not polygons:
+            return None
+        shapely_polygons = [_ShapelyPolygon(poly) for poly in polygons]
+        return [prep(poly) for poly in shapely_polygons if not poly.is_empty]
+
+    def _ensure_prepared_obstacles(self) -> None:
+        if self._prepared_obstacles is None and self._obstacle_polygons:
+            self._prepared_obstacles = self._prepare_obstacles(self._obstacle_polygons)
+
+    def __getstate__(self):
+        """Customize pickling to drop non-serializable prepared geometries.
+
+        Returns:
+            dict: Serializable state without prepared geometries.
+        """
+        state = self.__dict__.copy()
+        # Drop shapely prepared geometries to keep pickling safe
+        state["_prepared_obstacles"] = None
+        return state
+
+    def __setstate__(self, state):
+        """Restore pickled state."""
+        self.__dict__.update(state)
+        self._prepared_obstacles = None
 
     @staticmethod
     def _bresenham_line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:

@@ -1,4 +1,26 @@
-"""TODO docstring. Document this module."""
+"""Robot and pedestrian simulation management.
+
+This module provides the core simulation infrastructure for managing robots,
+pedestrians, and their interactions in a shared environment. It integrates the
+PySocialForce physics engine for pedestrian dynamics and supports both robot-only
+and pedestrian-robot interaction scenarios.
+
+Key Components:
+    - Simulator: Base simulation engine managing robots, pedestrian physics,
+      and navigation waypoints.
+    - PedSimulator: Extended simulator with ego pedestrian (robot-as-pedestrian)
+      for pedestrian-centric environments.
+    - init_simulators: Factory for creating robot-only simulator instances.
+    - init_ped_simulators: Factory for creating pedestrian simulator instances.
+
+Example:
+    >>> from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    >>> from robot_sf.nav.svg_map_parser import load_svg_maps
+    >>> config = RobotSimulationConfig()
+    >>> maps = load_svg_maps("maps/svg_maps/")
+    >>> sims = init_simulators(config, maps["hallway"], num_robots=2)
+    >>> for sim in sims:
+    ...     sim.step_once([action1, action2])"""
 
 from dataclasses import dataclass, field
 from math import ceil, cos, pi, sin
@@ -16,7 +38,7 @@ from robot_sf.common.types import PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
-from robot_sf.nav.navigation import RouteNavigator, sample_route
+from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import is_circle_line_intersection
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
@@ -29,24 +51,26 @@ from robot_sf.robot.robot_state import Robot
 
 @dataclass
 class Simulator:
-    """
-    Simulator class to manage the simulation environment, including robots,
-    pedestrians, and their interactions based on the provided configuration.
+    """Manages robot and pedestrian simulation in a shared environment.
 
-    Args:
-        config (SimulationSettings): Configuration settings for the simulation.
-        map_def (MapDefinition): Definition of the map for the environment.
-        robots (List[Robot]): List of robots in the environment.
-        goal_proximity_threshold (float): Proximity to the goal for the robots.
-        random_start_pos (bool): Whether to start the robots at random positions.
+    Coordinates robot navigation, pedestrian dynamics via PySocialForce,
+    collision detection, and timestep synchronization. Automatically initializes
+    pedestrian spawn locations, behaviors, and navigation routes on creation.
 
-        robot_navs (List[RouteNavigator]): List of robot routes.
-        pysf_sim (PySFSimulator): PySocialForce simulator object.
-        pysf_state (PedestrianStates): PySocialForce pedestrian states.
-        groups (PedestrianGroupings): PySocialForce pedestrian groups.
-        peds_behaviors (List[PedestrianBehavior]): List of pedestrian behaviors.
-        peds_have_obstacle_forces (bool): Whether pedestrians have obstacle forces.
-            Activating this increases the simulation duration by 40%.
+    Attributes:
+        config: Simulation settings (timestep, pedestrian density, forces).
+        map_def: Map definition with obstacles, spawn zones, routes.
+        robots: List of Robot instances in the environment.
+        goal_proximity_threshold: Distance threshold for waypoint arrival (robot radius + goal radius).
+        random_start_pos: If True, robots spawn at random valid positions; else, assigned positions.
+        robot_navs: (init=False) RouteNavigator instances tracking waypoints.
+        pysf_sim: (init=False) PySocialForce simulator managing pedestrian physics.
+        pysf_state: (init=False) Pedestrian state snapshots (positions, velocities).
+        groups: (init=False) Pedestrian group assignments for crowd behavior.
+        peds_behaviors: (init=False) Behavior instances (goal selection, group dynamics).
+        peds_have_obstacle_forces: Enable pedestrian-obstacle collision forces.
+            Note: Activating increases simulation duration by ~40%.
+        last_ped_forces: (init=False, repr=False) Last computed pedestrian forces (K, 2).
     """
 
     config: SimulationSettings
@@ -64,10 +88,11 @@ class Simulator:
     last_ped_forces: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
-        """
-        Initializes the simulator components after dataclass initialization.
-        Sets up pedestrian states, groups, behaviors, simulation forces,
-        and robot navigators.
+        """Initialize simulator components after dataclass construction.
+
+        Sets up pedestrian spawn locations, groups, and behaviors; configures
+        PySocialForce physics engine with optional obstacle/interaction forces;
+        initializes robot navigation paths; and resets all agents to start state.
         """
         pysf_config = PySFSimConfig()
         spawn_config = PedSpawnConfig(self.config.peds_per_area_m2, self.config.max_peds_per_group)
@@ -76,7 +101,8 @@ class Simulator:
             spawn_config,
             self.map_def.ped_routes,
             self.map_def.ped_crowded_zones,
-            self.map_def.single_pedestrians,
+            obstacle_polygons=get_prepared_obstacles(self.map_def),
+            single_pedestrians=self.map_def.single_pedestrians,
         )
 
         if self.peds_have_obstacle_forces is None:
@@ -88,14 +114,18 @@ class Simulator:
             self.peds_have_obstacle_forces = False
 
         def make_forces(sim: PySFSimulator, config: PySFSimConfig) -> list[PySFForce]:
-            """
-            Creates and configures the forces to be applied in the simulation,
-            excluding obstacle forces and adding pedestrian-robot interaction forces
-            if PRF is active.
+            """Configure pedestrian forces for the physics engine.
+
+            Creates default SocialForce forces, optionally filters obstacle forces,
+            and adds pedestrian-robot interaction forces if enabled.
+
+            Args:
+                sim: PySocialForce simulator instance.
+                config: PySocialForce configuration object.
 
             Returns:
-                list[PySFForce]: Configured force objects for the simulation, optionally
-                    filtered to exclude obstacle forces and extended with robot interaction forces.
+                List of Force objects including social, goal attraction, obstacle
+                (conditional), and pedestrian-robot interaction (conditional) forces.
             """
             forces = pysf_make_forces(sim, config)
 
@@ -132,44 +162,35 @@ class Simulator:
 
     @property
     def goal_pos(self) -> list[Vec2D]:
-        """
-        Returns the current goal positions for all robot navigators.
-        """
+        """Current goal waypoint for each robot navigator."""
         return [n.current_waypoint for n in self.robot_navs]
 
     @property
     def next_goal_pos(self) -> list[Vec2D | None]:
-        """
-        Returns the next goal positions for all robot navigators.
-        """
+        """Next waypoint for each robot navigator (None if at route end)."""
         return [n.next_waypoint for n in self.robot_navs]
 
     @property
     def robot_poses(self) -> list[RobotPose]:
-        """
-        Returns the current poses of all robots.
-        """
+        """Current poses (position + orientation) of all robots."""
         return [r.pose for r in self.robots]
 
     @property
     def robot_pos(self) -> list[Vec2D]:
-        """
-        Returns the current positions of all robots.
-        """
+        """Current (x, y) positions of all robots."""
         return [r.pose[0] for r in self.robots]
 
     @property
     def ped_pos(self):
-        """
-        Returns the current positions of all pedestrians.
-        """
+        """Current (x, y) positions of all pedestrians."""
         return self.pysf_state.ped_positions
 
     def reset_state(self):
-        """
-        Resets the state of all robots and their navigators.
-        Assigns new routes and resets robot positions if collision occurs
-        or a robot has reached its final goal.
+        """Reset robot navigation and spawn positions.
+
+        Reassigns routes and respawns robots when they collide or reach
+        their destination goal. Updates are necessary for episodic reset
+        or continuous replay scenarios.
         """
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
@@ -180,10 +201,14 @@ class Simulator:
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
     def step_once(self, actions: list[RobotAction]):
-        """
-        Performs a single simulation step by updating pedestrian behaviors,
-        computing and applying forces, updating pedestrian positions,
-        and applying robot actions and navigation updates.
+        """Advance simulation by one timestep.
+
+        Updates pedestrian behaviors and physics (via PySocialForce), applies
+        robot actions, and updates navigation state. Called once per episode
+        timestep.
+
+        Args:
+            actions: Control actions for each robot (velocity, angular velocity, etc.).
         """
         for behavior in self.peds_behaviors:
             behavior.step()
@@ -267,12 +292,14 @@ def init_simulators(
 
 @dataclass
 class PedSimulator(Simulator):
-    """
-    A pedestrian simulator, which extends the base simulator.
+    """Extended simulator with ego pedestrian in a multi-agent scenario.
 
-    Args:
-        ego_ped (UnicycleDrivePedestrian): The ego pedestrian in the environment.
+    Inherits robot and NPC pedestrian management from Simulator, adding a
+    controllable ego pedestrian (e.g., human surrogate or trained robot-as-ped).
+    Supports pedestrian-centric observations and action spaces.
 
+    Attributes:
+        ego_ped: Controllable pedestrian instance (typically UnicycleDrivePedestrian).
     """
 
     ego_ped: UnicycleDrivePedestrian
@@ -305,7 +332,12 @@ class PedSimulator(Simulator):
         return self.robots[0].pos
 
     def reset_state(self):
-        """TODO docstring. Document this function."""
+        """Reset robot and ego pedestrian state.
+
+        Calls parent reset_state() to reassign robot routes, then spawns
+        the ego pedestrian at a random valid location 10-15 units away
+        from the first robot.
+        """
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
@@ -319,11 +351,14 @@ class PedSimulator(Simulator):
         self.ego_ped.reset_state((ped_spawn, self.ego_ped.pose[1]))
 
     def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]):
-        """TODO docstring. Document this function.
+        """Advance simulation with robot and ego pedestrian actions.
+
+        Updates pedestrian behaviors and physics, applies robot actions,
+        applies ego pedestrian actions, and updates navigation.
 
         Args:
-            actions: TODO docstring.
-            ego_ped_actions: TODO docstring.
+            actions: Control actions for each robot.
+            ego_ped_actions: Control actions for the ego pedestrian.
         """
         for behavior in self.peds_behaviors:
             behavior.step()
@@ -343,16 +378,19 @@ class PedSimulator(Simulator):
         lower_bound: float,
         upper_bound: float,
     ) -> tuple[float, float]:
-        """
-        Calculate a point in the proximity of another point with specified distance bounds.
+        """Sample a collision-free point at a given distance from a reference point.
+
+        Attempts up to 10 times to find a valid point within the distance bounds,
+        checking for obstacle collisions and map bounds. Falls back to random
+        pedestrian spawn zone if unsuccessful.
 
         Args:
-            fixed_point (tuple): (x, y) The original point.
-            lower_bound (float): The minimum distance from the original point.
-            upper_bound (float): The maximum distance from the original point.
+            fixed_point: Reference (x, y) coordinates.
+            lower_bound: Minimum distance from fixed_point.
+            upper_bound: Maximum distance from fixed_point.
 
         Returns:
-            tuple: A tuple containing the new x and y coordinates.
+            Tuple of (x, y) for collision-free point, or fallback spawn location.
         """
         x, y = fixed_point
         for _ in range(10):
@@ -370,13 +408,19 @@ class PedSimulator(Simulator):
         return initial_spawn
 
     def is_obstacle_collision(self, x: float, y: float) -> bool:
-        """Check if a position would collide with obstacles or is out of bounds.
+        """Check if a position collides with obstacles or is outside map bounds.
 
-        Note: This method is adapted from occupancy.py for pedestrian spawning.
+        Validates both map boundary containment and obstacle collision using
+        circle-line intersection with ego pedestrian radius. Adapted from
+        occupancy.py for spawn validation.
+
+        Args:
+            x: X coordinate to check.
+            y: Y coordinate to check.
 
         Returns:
-            bool: True if the position collides with an obstacle or is outside map bounds,
-                False if the position is free.
+            True if position is out of bounds or collides with an obstacle,
+            False if position is collision-free and within bounds.
         """
         if not (0 <= x <= self.map_def.width and 0 <= y <= self.map_def.height):
             return True
@@ -395,17 +439,20 @@ def init_ped_simulators(
     random_start_pos: bool = False,
     peds_have_obstacle_forces: bool = False,
 ) -> list[PedSimulator]:
-    """
-    Initialize simulators for the pedestrian environment.
+    """Create a pedestrian-centric simulator instance.
+
+    Factory function for initializing a PedSimulator with one robot and one
+    controllable ego pedestrian. Validates map definition and initializes
+    navigation, physics, and spawn configurations.
 
     Args:
-        env_config: Configuration settings for the environment.
-        map_def: Map definition used for collisions and spawn zones.
-        random_start_pos: When True, spawn robots and pedestrians randomly.
-        peds_have_obstacle_forces: Whether to enable pedestrian-obstacle forces.
+        env_config: Pedestrian environment settings (robot/ped config, physics).
+        map_def: Map with obstacles, spawn zones, routes.
+        random_start_pos: If False, use deterministic spawn; if True, randomize.
+        peds_have_obstacle_forces: Enable pedestrian-obstacle collision forces.
 
     Returns:
-        list[PedSimulator]: Single-element list containing the initialized simulator.
+        Single-element list containing initialized PedSimulator instance.
     """
 
     # Calculate the proximity to the goal based on the robot radius and goal radius

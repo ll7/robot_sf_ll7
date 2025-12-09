@@ -373,6 +373,24 @@ class MapDefinition:
             vertices = np.array(obstacle.vertices)
             ax.fill(vertices[:, 0], vertices[:, 1], "black")
 
+    def __getstate__(self):
+        """Customize pickling to drop non-serializable prepared geometries.
+
+        Returns:
+            dict: Serializable state without prepared geometries.
+        """
+        state = self.__dict__.copy()
+        # Drop shapely prepared geometries to keep pickling safe
+        state.pop("_prepared_obstacles", None)
+        return state
+
+    def __setstate__(self, state):
+        """Restore state from unpickling, reinitializing prepared geometries as None."""
+        self.__dict__.update(state)
+        # Prepared obstacles will be lazily recreated when needed
+        if not hasattr(self, "_prepared_obstacles"):
+            self._prepared_obstacles = None
+
 
 @dataclass
 class MapDefinitionPool:

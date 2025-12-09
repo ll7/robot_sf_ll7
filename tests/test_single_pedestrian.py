@@ -166,7 +166,7 @@ class TestSimulatorIntegration:
             spawn_config,
             simple_map_def.ped_routes,
             simple_map_def.ped_crowded_zones,
-            simple_map_def.single_pedestrians,
+            single_pedestrians=simple_map_def.single_pedestrians,
         )
 
         # Should have at least 1 pedestrian (the single one)

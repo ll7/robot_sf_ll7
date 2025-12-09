@@ -48,6 +48,7 @@ dependencies = [
     "setuptools>=70.0.0",
     "pysocialforce",
     "jsonschema>=4.23.0",
+    "shapely>=2.1.2",
 ]
 
 [project.optional-dependencies]

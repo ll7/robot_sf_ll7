@@ -19,8 +19,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import numpy as np  # noqa: TC002 - numpy is needed at runtime for array operations
+import numpy as np
 from loguru import logger
+from shapely import contains_xy as _shp_contains_xy
+from shapely.geometry import Polygon as _ShapelyPolygon
 
 from robot_sf.common.types import Circle2D, Line2D, RobotPose  # noqa: TC001
 from robot_sf.nav.occupancy_grid_utils import get_affected_cells, world_to_grid_indices
@@ -369,3 +371,87 @@ def rasterize_robot(
     except (ValueError, IndexError, TypeError) as e:
         logger.warning(f"Failed to rasterize robot at {robot_pose}: {e}")
         return False
+
+
+def rasterize_polygon(
+    polygon: list[tuple[float, float]],
+    grid_array: np.ndarray,
+    config: GridConfig,
+    grid_origin_x: float = 0.0,
+    grid_origin_y: float = 0.0,
+    value: float = 1.0,
+) -> int:
+    """Rasterize a filled polygon into the occupancy grid.
+
+    Args:
+        polygon (list[tuple[float, float]]): List of (x, y) vertices in world coordinates. The polygon is closed automatically if not already.
+        grid_array (np.ndarray): 2D grid array to modify, shape [H, W].
+        config (GridConfig): Grid configuration object (resolution, width, height, etc.).
+        grid_origin_x (float, optional): Grid origin X in world frame. Defaults to 0.0.
+        grid_origin_y (float, optional): Grid origin Y in world frame. Defaults to 0.0.
+        value (float, optional): Occupancy value to set for covered cells. Defaults to 1.0.
+
+    Returns:
+        int: Number of grid cells marked as occupied (i.e., set to at least `value`).
+
+    Notes:
+        - The polygon is closed automatically if the first and last vertex differ.
+        - World coordinates are assumed for all vertices and grid origin.
+        - If the polygon is partially outside the grid, only the overlapping region is rasterized.
+        - Cells are marked as occupied if their center lies inside the polygon.
+    """
+    if len(polygon) < 3:
+        return 0
+
+    if polygon[0] != polygon[-1]:
+        polygon = [*polygon, polygon[0]]
+
+    xs, ys = zip(*polygon, strict=False)
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+
+    grid_min_x = grid_origin_x
+    grid_max_x = grid_origin_x + config.width
+    grid_min_y = grid_origin_y
+    grid_max_y = grid_origin_y + config.height
+
+    if max_x < grid_min_x or min_x > grid_max_x or max_y < grid_min_y or min_y > grid_max_y:
+        return 0
+
+    col_start = max(int((min_x - grid_origin_x) / config.resolution), 0)
+    col_end = min(int((max_x - grid_origin_x) / config.resolution) + 1, config.grid_width)
+    row_start = max(int((min_y - grid_origin_y) / config.resolution), 0)
+    row_end = min(int((max_y - grid_origin_y) / config.resolution) + 1, config.grid_height)
+
+    if col_start >= col_end or row_start >= row_end:
+        return 0
+
+    cols = np.arange(col_start, col_end)
+    rows = np.arange(row_start, row_end)
+    xv = grid_origin_x + (cols + 0.5) * config.resolution
+    yv = grid_origin_y + (rows + 0.5) * config.resolution
+    mesh_x, mesh_y = np.meshgrid(xv, yv)
+
+    inside_mask = _points_in_polygon(mesh_x, mesh_y, polygon)
+    if not inside_mask.any():
+        return 0
+
+    subgrid = grid_array[row_start:row_end, col_start:col_end]
+    subgrid[inside_mask] = np.maximum(subgrid[inside_mask], value)
+    return int(np.count_nonzero(inside_mask))
+
+
+def _points_in_polygon(
+    mesh_x: np.ndarray, mesh_y: np.ndarray, polygon: list[tuple[float, float]]
+) -> np.ndarray:
+    """Return a boolean mask of points inside a polygon."""
+    poly = _ShapelyPolygon(polygon)
+    if not poly.is_valid:  # pragma: no cover - defensive
+        poly = poly.buffer(0)
+    if poly.is_empty:
+        return np.zeros_like(mesh_x, dtype=bool)
+
+    flat_x = mesh_x.ravel()
+    flat_y = mesh_y.ravel()
+    flat_mask = _shp_contains_xy(poly, flat_x, flat_y)
+    return flat_mask.reshape(mesh_x.shape)

@@ -44,15 +44,15 @@ def run_playthrough(steps: int = 600) -> None:
         use_occupancy_grid=True,
         include_grid_in_observation=False,  # keep lidar-only observations for the policy
         show_occupancy_grid=True,
-        grid_visualization_alpha=0.6,
+        grid_visualization_alpha=0.3,
         sim_config=SimulationSettings(
             stack_steps=1, difficulty=0, ped_density_by_difficulty=[0.06]
         ),
         grid_config=GridConfig(
-            width=12.0,
-            height=12.0,
-            resolution=0.2,
-            use_ego_frame=False,  # keep axes aligned with world
+            width=20.0,
+            height=20.0,
+            resolution=0.5,
+            use_ego_frame=True,  # rotate grid axes with robot orientation
             center_on_robot=True,  # translate grid with robot without rotating it
         ),
     )

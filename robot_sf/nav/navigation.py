@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from math import atan2, dist
 from random import randint, sample
 
+from shapely.geometry import Polygon
+from shapely.prepared import PreparedGeometry, prep
+
 from robot_sf.common.types import Vec2D
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
@@ -168,8 +171,10 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     route = sample(routes, k=1)[0]
 
     # Sample an initial spawn and a final goal from the route's spawn and goal zones
-    initial_spawn = sample_zone(route.spawn_zone, 1)[0]
-    final_goal = sample_zone(route.goal_zone, 1)[0]
+    prepared_obstacles = get_prepared_obstacles(map_def)
+
+    initial_spawn = sample_zone(route.spawn_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+    final_goal = sample_zone(route.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
 
     # Construct the route
     route = [initial_spawn, *route.waypoints, final_goal]
@@ -178,3 +183,16 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     # See: https://github.com/ll7/robot_sf_ll7/issues/254
 
     return route
+
+
+def get_prepared_obstacles(map_def: MapDefinition) -> list[PreparedGeometry]:
+    """Return cached prepared obstacle polygons for a map definition."""
+    prepared: list[PreparedGeometry] | None = getattr(map_def, "_prepared_obstacles", None)
+    if prepared is not None:
+        return prepared
+    polygons = [
+        Polygon(obstacle.vertices) for obstacle in map_def.obstacles if len(obstacle.vertices) >= 3
+    ]
+    prepared = [prep(poly) for poly in polygons if not poly.is_empty]
+    map_def._prepared_obstacles = prepared
+    return prepared

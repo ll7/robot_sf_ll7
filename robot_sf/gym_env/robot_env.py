@@ -297,7 +297,7 @@ class RobotEnv(BaseEnv):
         # T044: Update occupancy grid if enabled
         if self.occupancy_grid is not None:
             # Extract obstacles from map
-            obstacles = self._normalize_obstacles_for_grid(
+            obstacles, obstacle_polygons = self._normalize_obstacles_for_grid(
                 self.map_def.obstacles, self.map_def.bounds
             )
             # Extract updated pedestrian positions and radii
@@ -316,6 +316,7 @@ class RobotEnv(BaseEnv):
                 pedestrians=pedestrians,
                 robot_pose=robot_pose,
                 ego_frame=False,
+                obstacle_polygons=obstacle_polygons,
             )
             # Update observation with new grid
             if self.include_grid_in_observation:
@@ -374,7 +375,7 @@ class RobotEnv(BaseEnv):
         # T043: Generate initial occupancy grid if enabled
         if self.occupancy_grid is not None:
             # Extract obstacles from map
-            obstacles = self._normalize_obstacles_for_grid(
+            obstacles, obstacle_polygons = self._normalize_obstacles_for_grid(
                 self.map_def.obstacles, self.map_def.bounds
             )
             # Extract pedestrian positions and radii from simulator
@@ -394,6 +395,7 @@ class RobotEnv(BaseEnv):
                 pedestrians=pedestrians,
                 robot_pose=robot_pose,
                 ego_frame=False,  # Use world frame by default
+                obstacle_polygons=obstacle_polygons,
             )
             # Add grid to observation
             if self.include_grid_in_observation:
@@ -482,13 +484,14 @@ class RobotEnv(BaseEnv):
     @staticmethod
     def _normalize_obstacles_for_grid(
         obstacles: list[Obstacle] | list[Line2D], bounds: list[Line2D]
-    ) -> list[Line2D]:
-        """Convert obstacle objects/lines plus bounds into Line2D tuples for occupancy grids.
+    ) -> tuple[list[Line2D], list[list[tuple[float, float]]]]:
+        """Convert obstacles/bounds into grid-friendly primitives.
 
         Returns:
-            list[Line2D]: Normalized line segments derived from map obstacles and bounds.
+            tuple: (line segments, polygons) where polygons are only derived from Obstacle vertices.
         """
         line_segments: list[Line2D] = []
+        polygons: list[list[tuple[float, float]]] = []
 
         def _add_line(line) -> None:
             try:
@@ -499,6 +502,7 @@ class RobotEnv(BaseEnv):
 
         for obstacle in obstacles:
             if isinstance(obstacle, Obstacle):
+                polygons.append([tuple(v) for v in obstacle.vertices])
                 for line in obstacle.lines:
                     if len(line) == 4:
                         # Obstacle.lines stores (x1, x2, y1, y2); convert to Line2D ((x1, y1), (x2, y2))
@@ -512,7 +516,7 @@ class RobotEnv(BaseEnv):
         for bound in bounds:
             _add_line(bound)
 
-        return line_segments
+        return line_segments, polygons
 
     def _prepare_visualizable_state(self):
         # Prepare action visualization, if any action was executed

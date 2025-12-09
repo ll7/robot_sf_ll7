@@ -1,9 +1,41 @@
-"""TODO docstring. Document this module."""
+"""Pedestrian population generation and simulation setup.
+
+This module provides utilities for spawning and managing pedestrian agents in simulation
+environments. It supports multiple spawning strategies including:
+  - Route-following pedestrians (along predefined paths)
+  - Crowded zone pedestrians (in open areas)
+  - Single pedestrians (individually controlled with explicit start/goal/trajectory)
+
+Key Components:
+    - PedSpawnConfig: Configuration for pedestrian density, group sizes, and movement.
+    - sample_route(): Sample positions along a route respecting sidewalk constraints.
+    - populate_ped_routes(): Create pedestrian groups following predefined routes.
+    - populate_crowded_zones(): Create pedestrian groups in open areas.
+    - populate_single_pedestrians(): Create individually controlled pedestrians.
+    - populate_simulation(): Orchestrate all spawning strategies and return initialized state.
+
+Obstacle Handling:
+    All spawning functions support optional obstacle avoidance using Shapely geometry.
+    Prepared geometries are cached for efficiency in containment checks.
+
+Example:
+    >>> config = PedSpawnConfig(peds_per_area_m2=0.05, max_group_members=3)
+    >>> pysf_state, groups, behaviors = populate_simulation(
+    ...     tau=0.5,
+    ...     spawn_config=config,
+    ...     ped_routes=routes,
+    ...     ped_crowded_zones=zones,
+    ...     obstacle_polygons=obstacles,
+    ...     single_pedestrians=special_peds,
+    ... )
+"""
 
 from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
+from shapely.geometry import Point as _ShapelyPoint
+from shapely.prepared import PreparedGeometry
 
 from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 from robot_sf.nav.map_config import GlobalRoute
@@ -13,7 +45,7 @@ from robot_sf.ped_npc.ped_behavior import (
     PedestrianBehavior,
 )
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
-from robot_sf.ped_npc.ped_zone import sample_zone
+from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons, sample_zone
 
 
 @dataclass
@@ -54,6 +86,7 @@ def sample_route(
     route: GlobalRoute,
     num_samples: int,
     sidewalk_width: float,
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[list[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
@@ -62,6 +95,7 @@ def sample_route(
         route: A `GlobalRoute` object representing the route to sample from.
         num_samples: The number of points to sample along the route.
         sidewalk_width: The width of the sidewalk for constraining sample spread.
+        obstacle_polygons: Optional prepared or raw obstacle polygons to avoid spawning inside.
 
     Returns:
         A tuple containing:
@@ -125,21 +159,35 @@ def sample_route(
         """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
-    # Calculate the center point between the start and end of the section
-    center = add_vecs(start, sub_vecs(end, start))
+    prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
 
-    # Define standard deviation for normal distribution based on sidewalk width
-    std_dev = sidewalk_width / 4
+    samples: list[Vec2D] = []
+    attempts = 0
+    max_attempts = num_samples * 50
 
-    # Sample x and y offsets from a normal distribution centered at midpoint
-    x_offsets = clip_spread(np.random.normal(center[0], std_dev, (num_samples, 1)))
-    y_offsets = clip_spread(np.random.normal(center[1], std_dev, (num_samples, 1)))
+    while len(samples) < num_samples and attempts < max_attempts:
+        midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        std_dev = sidewalk_width / 4
+        x_offset = float(clip_spread(np.random.normal(0.0, std_dev, (1,))[0]))
+        y_offset = float(clip_spread(np.random.normal(0.0, std_dev, (1,))[0]))
+        pt = (midpoint[0] + x_offset, midpoint[1] + y_offset)
+        attempts += 1
+        if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
+            continue
+        samples.append(pt)
 
-    # Create the sampled points by combining offsets with the section's center
-    points = np.concatenate((x_offsets, y_offsets), axis=1) + center
+    if len(samples) < num_samples:
+        raise RuntimeError(
+            f"Failed to sample {num_samples} route points without obstacle overlap after {attempts} attempts."
+        )
 
-    # Return sampled points as a list of Vec2D tuples and the section index
-    return [(x, y) for x, y in points], sec_id
+    return samples, sec_id
+
+
+def _point_in_any_obstacle(point: Vec2D, obstacles: list[PreparedGeometry]) -> bool:
+    """Return True when point lies inside any prepared obstacle polygon."""
+    pt = _ShapelyPoint(point)
+    return any(poly.contains(pt) for poly in obstacles)
 
 
 @dataclass
@@ -156,13 +204,17 @@ class ZonePointsGenerator:
     """
 
     zones: list[Zone]
+    obstacle_polygons: list[list[Vec2D]] | None = None
     zone_areas: list[float] = field(init=False)
     _zone_probs: list[float] = field(init=False)
 
     def __post_init__(self):
-        # Calculate the area for each zone assuming zones are rectangular
-        # This uses an external `dist` function to measure distances
-        """TODO docstring. Document this function."""
+        """Calculate zone areas and normalized selection probabilities.
+
+        Computes the area of each zone (assuming rectangular geometry) by
+        measuring distances between consecutive vertices. Normalizes areas to
+        create probability weights for area-proportional zone selection.
+        """
         self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
 
         # Sum the areas to use for normalizing probabilities
@@ -189,7 +241,14 @@ class ZonePointsGenerator:
         zone_id = np.random.choice(len(self.zones), size=1, p=self._zone_probs)[0]
 
         # Generate sample points using a function `sample_zone`
-        return sample_zone(self.zones[zone_id], num_samples), zone_id
+        return (
+            sample_zone(
+                self.zones[zone_id],
+                num_samples,
+                obstacle_polygons=self.obstacle_polygons,
+            ),
+            zone_id,
+        )
 
 
 @dataclass
@@ -207,6 +266,7 @@ class RoutePointsGenerator:
 
     routes: list[GlobalRoute]
     sidewalk_width: float
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None
     _route_probs: list[float] = field(init=False)
 
     def __post_init__(self):
@@ -265,13 +325,19 @@ class RoutePointsGenerator:
         route_id = np.random.choice(len(self.routes), size=1, p=self._route_probs)[0]
 
         # Generate sample points using a function `sample_route`
-        spawn_pos, sec_id = sample_route(self.routes[route_id], num_samples, self.sidewalk_width)
+        spawn_pos, sec_id = sample_route(
+            self.routes[route_id],
+            num_samples,
+            self.sidewalk_width,
+            obstacle_polygons=self.obstacle_polygons,
+        )
         return spawn_pos, route_id, sec_id
 
 
 def populate_ped_routes(
     config: PedSpawnConfig,
     routes: list[GlobalRoute],
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[np.ndarray, list[PedGrouping], dict[int, GlobalRoute], list[int]]:
     """
     Populate routes with pedestrian groups according to the configuration.
@@ -279,6 +345,7 @@ def populate_ped_routes(
     Args:
         config: A `PedSpawnConfig` object containing pedestrian spawn specifications.
         routes: A list of `GlobalRoute` objects representing various pathways.
+        obstacle_polygons: Optional obstacle polygons used to avoid spawning inside obstacles.
 
     Returns:
         A tuple consisting of:
@@ -290,7 +357,11 @@ def populate_ped_routes(
     if not routes:
         return np.zeros((0, 6)), [], {}, []
     # Initialize a route points generator with the provided routes and sidewalk width
-    proportional_spawn_gen = RoutePointsGenerator(routes, config.sidewalk_width)
+    proportional_spawn_gen = RoutePointsGenerator(
+        routes,
+        config.sidewalk_width,
+        obstacle_polygons=obstacle_polygons,
+    )
     total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
@@ -335,17 +406,28 @@ def populate_ped_routes(
 def populate_crowded_zones(
     config: PedSpawnConfig,
     crowded_zones: list[Zone],
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
-    """TODO docstring. Document this function.
+    """Spawn pedestrian groups within crowded zones (open areas).
+
+    Creates pedestrian groups distributed across specified zones according to
+    area-weighted probabilities. Each group spawns at a random location within
+    a selected zone and receives a goal position also within that zone to keep
+    groups localized. Respects obstacle boundaries during spawning.
 
     Args:
-        config: TODO docstring.
-        crowded_zones: TODO docstring.
+        config: Pedestrian spawn configuration (density, group sizes, speed).
+        crowded_zones: List of Zone geometries where pedestrians spawn.
+        obstacle_polygons: Optional obstacle geometries to avoid during spawning.
+            Can be raw coordinate lists or Shapely PreparedGeometry objects.
 
     Returns:
-        TODO docstring.
+        Tuple of (pedestrian_states, groups, zone_assignments):
+            - pedestrian_states: NumPy array (N, 6) with positions, velocities, goals.
+            - groups: List of sets containing pedestrian IDs in each group.
+            - zone_assignments: Dict mapping pedestrian ID to zone index.
     """
-    proportional_spawn_gen = ZonePointsGenerator(crowded_zones)
+    proportional_spawn_gen = ZonePointsGenerator(crowded_zones, obstacle_polygons=obstacle_polygons)
     total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
@@ -362,7 +444,7 @@ def populate_crowded_zones(
         # spawn all group members in the same randomly sampled zone and also
         # keep them within that zone by picking the group's goal accordingly
         spawn_points, zone_id = proportional_spawn_gen.generate(num_peds_in_group)
-        group_goal = sample_zone(crowded_zones[zone_id], 1)[0]
+        group_goal = sample_zone(crowded_zones[zone_id], 1, obstacle_polygons=obstacle_polygons)[0]
 
         centroid = np.mean(spawn_points, axis=0)
         rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
@@ -443,27 +525,55 @@ def populate_simulation(
     spawn_config: PedSpawnConfig,
     ped_routes: list[GlobalRoute],
     ped_crowded_zones: list[Zone],
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
-    """TODO docstring. Document this function.
+    """Orchestrate complete pedestrian population initialization for simulation.
+
+    Combines three independent spawning strategies:
+      1. Route followers: Groups traveling along predefined paths.
+      2. Crowded zone pedestrians: Groups in open areas with local goals.
+      3. Single pedestrians: Individually controlled agents with explicit behavior.
+
+    All pedestrian states are merged into a unified array with consistent tau
+    (relaxation time) values. Group memberships and behavioral controllers are
+    created and returned for use in the physics simulation.
 
     Args:
-        tau: TODO docstring.
-        spawn_config: TODO docstring.
-        ped_routes: TODO docstring.
-        ped_crowded_zones: TODO docstring.
-        single_pedestrians: TODO docstring.
+        tau: Relaxation time (seconds) for all pedestrians in the simulation.
+        spawn_config: Configuration for density, group sizes, and initial speed.
+        ped_routes: GlobalRoute objects defining paths for route-following pedestrians.
+        ped_crowded_zones: Zone geometries for crowded zone pedestrians.
+        obstacle_polygons: Optional obstacle geometries to avoid during spawning.
+            Can be raw coordinate lists or Shapely PreparedGeometry objects.
+        single_pedestrians: Optional list of SinglePedestrianDefinition objects
+            for individually controlled pedestrians with explicit goals/trajectories.
 
     Returns:
-        TODO docstring.
+        Tuple of (pysf_state, groups, ped_behaviors):
+            - pysf_state: PedestrianStates view of all pedestrians for physics engine.
+            - groups: PedestrianGroupings tracking group memberships.
+            - ped_behaviors: List of PedestrianBehavior controllers for crowd dynamics
+              (includes CrowdedZoneBehavior and FollowRouteBehavior).
+
+    Example:
+        >>> pysf_state, groups, behaviors = populate_simulation(
+        ...     tau=0.5,
+        ...     spawn_config=config,
+        ...     ped_routes=routes,
+        ...     ped_crowded_zones=zones,
+        ... )
+        >>> # Use pysf_state and behaviors in physics simulation
     """
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         spawn_config,
         ped_crowded_zones,
+        obstacle_polygons=obstacle_polygons,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
         spawn_config,
         ped_routes,
+        obstacle_polygons=obstacle_polygons,
     )
 
     # Populate single pedestrians if provided

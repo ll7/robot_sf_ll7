@@ -47,7 +47,11 @@ class BaseSimulationConfig(TelemetryConfigMixin):
     observation_mode: ObservationMode = ObservationMode.DEFAULT_GYM
 
     def __post_init__(self):
-        """Validate that all required fields are initialized."""
+        """Validate that all required fields are initialized.
+
+        Raises:
+            ValueError: When any of the required fields are missing.
+        """
         if not self.sim_config or not self.map_pool or not self.lidar_config:
             raise ValueError("All configuration fields must be initialized!")
         self._validate_telemetry()
@@ -83,7 +87,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
     )
 
     def __post_init__(self):
-        """Validate robot-specific configuration."""
+        """Validate robot-specific configuration.
+
+        Raises:
+            ValueError: If required configs are missing or invalid.
+        """
         super().__post_init__()
         if not self.robot_config:
             raise ValueError("Robot configuration must be initialized!")
@@ -93,7 +101,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
         self._validate_grid_visualization()
 
     def _init_grid_config(self) -> None:
-        """Initialize and validate the occupancy grid configuration."""
+        """Initialize and validate the occupancy grid configuration.
+
+        Raises:
+            ValueError: When grid_config is of the wrong type.
+        """
         if self.use_occupancy_grid and self.grid_config is None:
             self.grid_config = GridConfig()
 
@@ -103,7 +115,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
             )
 
     def _validate_grid_observation(self) -> None:
-        """Validate observation-related grid settings."""
+        """Validate observation-related grid settings.
+
+        Raises:
+            ValueError: When observation flags are inconsistent with grid usage.
+        """
         if not self.include_grid_in_observation:
             return
 
@@ -114,7 +130,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
             raise ValueError("include_grid_in_observation=True requires valid grid_config")
 
     def _validate_grid_visualization(self) -> None:
-        """Validate grid visualization settings."""
+        """Validate grid visualization settings.
+
+        Raises:
+            ValueError: When visualization flags are inconsistent or alpha is out of range.
+        """
         if not self.show_occupancy_grid:
             return
 

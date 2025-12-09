@@ -102,6 +102,15 @@ class GridChannel(Enum):
     COMBINED = "combined"  # Aggregated occupancy
 
 
+OBSERVATION_CHANNEL_ORDER: tuple[GridChannel, ...] = (
+    GridChannel.OBSTACLES,
+    GridChannel.PEDESTRIANS,
+    GridChannel.ROBOT,
+    GridChannel.COMBINED,
+)
+"""Canonical order for occupancy grid observation channels."""
+
+
 class POIQueryType(Enum):
     """Types of point-of-interest queries."""
 
@@ -978,12 +987,7 @@ class OccupancyGrid:
         def _channel_index(channel: GridChannel) -> int:
             return self.config.channels.index(channel) if channel in self.config.channels else -1
 
-        channel_indices = [
-            _channel_index(GridChannel.OBSTACLES),
-            _channel_index(GridChannel.PEDESTRIANS),
-            _channel_index(GridChannel.ROBOT),
-            _channel_index(GridChannel.COMBINED),
-        ]
+        channel_indices = [_channel_index(channel) for channel in OBSERVATION_CHANNEL_ORDER]
 
         return {
             "origin": self._grid_origin,

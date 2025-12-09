@@ -13,12 +13,16 @@ large maps or dense crowds.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numba
 import numpy as np
 
 from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import Circle2D, Line2D, Vec2D
+
+if TYPE_CHECKING:
+    from robot_sf.nav.map_config import MapDefinition
 
 
 @numba.njit(fastmath=True)
@@ -303,3 +307,28 @@ class EgoPedContinuousOccupancy(ContinuousOccupancy):
         agent_circle = (self.get_agent_coords(), self.agent_radius)
         enemy_circle = (self.get_enemy_coords(), self.enemy_radius)
         return is_circle_circle_intersection(agent_circle, enemy_circle)
+
+
+def check_quality_of_map_point(map_def: "MapDefinition", point: Vec2D, radius: float = 0.0) -> bool:
+    """Return True if a point (or circular footprint) is inside bounds and obstacle-free.
+
+    Args:
+        map_def: Map definition containing bounds and obstacles.
+        point: (x, y) coordinates to test.
+        radius: Optional footprint radius; when <= 0, a small epsilon radius is used.
+
+    Returns:
+        bool: True when the point lies within map bounds and does not intersect any obstacle edge.
+    """
+    x, y = point
+    if not (0.0 <= x <= map_def.width and 0.0 <= y <= map_def.height):
+        return False
+
+    eff_radius = radius if radius > 0 else 1e-6
+    circle: Circle2D = (point, eff_radius)
+    obstacle_lines: list[Line2D] = []
+    for obstacle in map_def.obstacles:
+        obstacle_lines.extend(((line[0], line[1]), (line[2], line[3])) for line in obstacle.lines)
+    obstacle_lines.extend(map_def.bounds)
+
+    return not any(is_circle_line_intersection(circle, seg) for seg in obstacle_lines)

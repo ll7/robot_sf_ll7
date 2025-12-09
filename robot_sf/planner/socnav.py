@@ -16,19 +16,42 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 
 
 class OccupancyAwarePlannerMixin:
     """Shared helpers for planners that can leverage occupancy grid observations."""
 
-    _CHANNEL_KEYS = ("obstacles", "pedestrians", "robot", "combined")
+    _CHANNEL_KEYS = tuple(channel.value for channel in OBSERVATION_CHANNEL_ORDER)
 
     def _extract_grid_payload(self, observation: dict) -> tuple[np.ndarray, dict[str, Any]] | None:
         grid = observation.get("occupancy_grid")
-        meta = observation.get("occupancy_grid_meta")
-        if grid is None or meta is None:
+        if grid is None:
             return None
+
+        # Reconstruct metadata from flattened fields (SB3 compatibility format)
+        meta = {}
+        for key in (
+            "origin",
+            "resolution",
+            "size",
+            "use_ego_frame",
+            "center_on_robot",
+            "channel_indices",
+            "robot_pose",
+        ):
+            flat_key = f"occupancy_grid_meta_{key}"
+            if flat_key in observation:
+                meta[key] = observation[flat_key]
+
+        # If no metadata fields found, try old format (backward compatibility)
+        if not meta:
+            meta = observation.get("occupancy_grid_meta")
+
+        if meta is None or not meta:
+            return None
+
         try:
             grid_arr = np.asarray(grid)
         except (TypeError, ValueError):
@@ -165,6 +188,7 @@ class OccupancyAwarePlannerMixin:
         num_candidates: int,
         lookahead: float,
         weight: float,
+        angle_weight: float,
     ) -> tuple[np.ndarray, float]:
         """Pick heading that balances goal alignment and occupancy clearance.
 
@@ -194,13 +218,32 @@ class OccupancyAwarePlannerMixin:
             )
             penalty = obstacle_penalty + 0.5 * ped_penalty
             angle_cost = abs(angle) / (sweep / 2 if sweep > 0 else 1.0)
-            cost = weight * penalty + 0.3 * angle_cost
+            cost = weight * penalty + angle_weight * angle_cost
             if cost < best_cost:
                 best_cost = cost
                 best_dir = candidate
                 best_penalty = penalty
 
         return best_dir, best_penalty
+
+    def _get_safe_heading(
+        self, robot_pos: np.ndarray, base_direction: np.ndarray, observation: dict
+    ) -> tuple[np.ndarray, float]:
+        """Helper to call _select_safe_heading with config parameters.
+
+        Returns:
+            tuple[np.ndarray, float]: Direction vector and occupancy penalty.
+        """
+        return self._select_safe_heading(
+            robot_pos,
+            base_direction,
+            observation,
+            sweep=self.config.occupancy_heading_sweep,
+            num_candidates=self.config.occupancy_candidates,
+            lookahead=self.config.occupancy_lookahead,
+            weight=self.config.occupancy_weight,
+            angle_weight=self.config.occupancy_angle_weight,
+        )
 
 
 @dataclass
@@ -219,6 +262,7 @@ class SocNavPlannerConfig:
     occupancy_heading_sweep: float = pi * 2 / 3
     occupancy_candidates: int = 7
     occupancy_weight: float = 2.0
+    occupancy_angle_weight: float = 0.3
 
 
 class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -274,15 +318,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 base_vec = base_vec / np.linalg.norm(base_vec)
 
         # Adjust heading to favor obstacle-free paths when grid is available
-        adjusted_vec, occ_penalty = self._select_safe_heading(
-            robot_pos,
-            base_vec,
-            observation,
-            sweep=self.config.occupancy_heading_sweep,
-            num_candidates=self.config.occupancy_candidates,
-            lookahead=self.config.occupancy_lookahead,
-            weight=self.config.occupancy_weight,
-        )
+        adjusted_vec, occ_penalty = self._get_safe_heading(robot_pos, base_vec, observation)
 
         desired_heading = atan2(adjusted_vec[1], adjusted_vec[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -382,15 +418,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         if np.linalg.norm(combined) > 1e-6:
             combined = combined / np.linalg.norm(combined)
 
-        combined, occ_penalty = self._select_safe_heading(
-            robot_pos,
-            combined,
-            observation,
-            sweep=self.config.occupancy_heading_sweep,
-            num_candidates=self.config.occupancy_candidates,
-            lookahead=self.config.occupancy_lookahead,
-            weight=self.config.occupancy_weight,
-        )
+        combined, occ_penalty = self._get_safe_heading(robot_pos, combined, observation)
 
         desired_heading = atan2(combined[1], combined[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -448,15 +476,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         if np.linalg.norm(combined) > 1e-6:
             combined = combined / np.linalg.norm(combined)
 
-        combined, occ_penalty = self._select_safe_heading(
-            robot_pos,
-            combined,
-            observation,
-            sweep=self.config.occupancy_heading_sweep,
-            num_candidates=self.config.occupancy_candidates,
-            lookahead=self.config.occupancy_lookahead,
-            weight=self.config.occupancy_weight,
-        )
+        combined, occ_penalty = self._get_safe_heading(robot_pos, combined, observation)
 
         desired_heading = atan2(combined[1], combined[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -518,15 +538,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         if np.linalg.norm(combined) > 1e-6:
             combined = combined / np.linalg.norm(combined)
 
-        combined, occ_penalty = self._select_safe_heading(
-            robot_pos,
-            combined,
-            observation,
-            sweep=self.config.occupancy_heading_sweep,
-            num_candidates=self.config.occupancy_candidates,
-            lookahead=self.config.occupancy_lookahead,
-            weight=self.config.occupancy_weight,
-        )
+        combined, occ_penalty = self._get_safe_heading(robot_pos, combined, observation)
 
         desired_heading = atan2(combined[1], combined[0])
         heading_error = self._wrap_angle(desired_heading - robot_heading)
@@ -691,15 +703,7 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             next_pos = traj.position_nk2()[0, 0]
             to_next = next_pos - pos
             direction = to_next / (np.linalg.norm(to_next) + 1e-9)
-            direction, occ_penalty = self._select_safe_heading(
-                robot_pos,
-                direction,
-                observation,
-                sweep=self.config.occupancy_heading_sweep,
-                num_candidates=self.config.occupancy_candidates,
-                lookahead=self.config.occupancy_lookahead,
-                weight=self.config.occupancy_weight,
-            )
+            direction, occ_penalty = self._get_safe_heading(robot_pos, direction, observation)
             desired_heading = atan2(direction[1], direction[0])
             heading_error = self._wrap_angle(desired_heading - heading)
             angular = float(

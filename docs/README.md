@@ -113,6 +113,7 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 - **[Occupancy Grid Guide](./dev/occupancy/Update_or_extend_occupancy.md)** - Configure grid observations, spawn queries, and pygame overlays
 - **[Circle Rasterization Fix](./dev/issues/circle-rasterization-fix/README.md)** - Clarifies circle overlap handling in occupancy grid rasterization
 - **[Telemetry Pane & Headless Artifacts](../specs/343-telemetry-viz/quickstart.md)** - Enable docked charts in Pygame, replay/export telemetry, and run headless smoke tests
+- **[Telemetry Pane Display Fix](./telemetry-pane-fix.md)** - Technical analysis and solution for continuous graph rendering, surface caching, and buffer management
 
 ### Figures & Visualization
 - **[Trajectory Visualization](./trajectory_visualization.md)** - Generate trajectory plots

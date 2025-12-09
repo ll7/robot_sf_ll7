@@ -40,13 +40,16 @@ PY
 ## Replay and Export
 
 ```python
-from robot_sf.telemetry.history import load_telemetry_stream
-from robot_sf.telemetry.visualization import replay_episode
+from robot_sf.telemetry.history import replay_episode
 
-stream = load_telemetry_stream("output/telemetry/<run_id>/telemetry.jsonl")
-replay = replay_episode(stream, frames_path="output/telemetry/<run_id>/frames")
+# The replay_episode function takes a path to the telemetry file.
+replay = replay_episode("output/telemetry/<run_id>/telemetry.jsonl")
+
+# You can then scrub to a specific frame.
 replay.scrub(to_frame=150)
-replay.export_clip(start_frame=120, end_frame=180, out_path="output/telemetry/<run_id>/clip.mp4")
+
+# Note: The `export_clip` method is not implemented on the replay object.
+# Exporting would require using lower-level functions from `robot_sf.telemetry.visualization`.
 ```
 - Playback keeps chart cursor aligned within one frame of the video.
 - Exports capture both the Pygame view and chart viewport for the selected range.

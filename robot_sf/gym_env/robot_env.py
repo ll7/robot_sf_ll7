@@ -422,10 +422,10 @@ class RobotEnv(BaseEnv):
                 obs_dict = dict(self.observation_space.spaces)
                 self._wrap_obs_as_dict = False
 
-            # Add grid fields (grid box + flattened metadata)
-            obs_dict["occupancy_grid"] = grid_box
-            obs_dict.update(meta_space.spaces)
-            self.observation_space = spaces.Dict(obs_dict)
+                # Add grid fields (grid box + flattened metadata)
+                obs_dict["occupancy_grid"] = grid_box
+                obs_dict.update(meta_space)
+                self.observation_space = spaces.Dict(obs_dict)
 
         return sensor_adapter
 

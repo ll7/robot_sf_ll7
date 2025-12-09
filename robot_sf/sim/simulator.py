@@ -76,7 +76,8 @@ class Simulator:
             spawn_config,
             self.map_def.ped_routes,
             self.map_def.ped_crowded_zones,
-            self.map_def.single_pedestrians,
+            obstacle_polygons=[obs.vertices for obs in self.map_def.obstacles],
+            single_pedestrians=self.map_def.single_pedestrians,
         )
 
         if self.peds_have_obstacle_forces is None:

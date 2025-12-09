@@ -168,8 +168,10 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
     route = sample(routes, k=1)[0]
 
     # Sample an initial spawn and a final goal from the route's spawn and goal zones
-    initial_spawn = sample_zone(route.spawn_zone, 1)[0]
-    final_goal = sample_zone(route.goal_zone, 1)[0]
+    obstacle_polygons = [obs.vertices for obs in map_def.obstacles]
+
+    initial_spawn = sample_zone(route.spawn_zone, 1, obstacle_polygons=obstacle_polygons)[0]
+    final_goal = sample_zone(route.goal_zone, 1, obstacle_polygons=obstacle_polygons)[0]
 
     # Construct the route
     route = [initial_spawn, *route.waypoints, final_goal]

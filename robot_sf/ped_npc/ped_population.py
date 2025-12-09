@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
+from shapely.geometry import Point as _ShapelyPoint
+from shapely.geometry import Polygon as _ShapelyPolygon
+from shapely.prepared import PreparedGeometry, prep
 
 from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 from robot_sf.nav.map_config import GlobalRoute
@@ -54,6 +57,7 @@ def sample_route(
     route: GlobalRoute,
     num_samples: int,
     sidewalk_width: float,
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[list[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
@@ -62,6 +66,7 @@ def sample_route(
         route: A `GlobalRoute` object representing the route to sample from.
         num_samples: The number of points to sample along the route.
         sidewalk_width: The width of the sidewalk for constraining sample spread.
+        obstacle_polygons: Optional prepared or raw obstacle polygons to avoid spawning inside.
 
     Returns:
         A tuple containing:
@@ -128,18 +133,55 @@ def sample_route(
     # Calculate the center point between the start and end of the section
     center = add_vecs(start, sub_vecs(end, start))
 
-    # Define standard deviation for normal distribution based on sidewalk width
-    std_dev = sidewalk_width / 4
+    prepared_obstacles = _prepare_obstacles(obstacle_polygons or [])
 
-    # Sample x and y offsets from a normal distribution centered at midpoint
-    x_offsets = clip_spread(np.random.normal(center[0], std_dev, (num_samples, 1)))
-    y_offsets = clip_spread(np.random.normal(center[1], std_dev, (num_samples, 1)))
+    samples: list[Vec2D] = []
+    attempts = 0
+    max_attempts = num_samples * 50
 
-    # Create the sampled points by combining offsets with the section's center
-    points = np.concatenate((x_offsets, y_offsets), axis=1) + center
+    while len(samples) < num_samples and attempts < max_attempts:
+        # Sample x and y offsets from a normal distribution centered at midpoint
+        # Define standard deviation for normal distribution based on sidewalk width
+        std_dev = sidewalk_width / 4
+        x_offset = float(clip_spread(np.random.normal(center[0], std_dev, (1,))[0]))
+        y_offset = float(clip_spread(np.random.normal(center[1], std_dev, (1,))[0]))
+        pt = (x_offset + center[0], y_offset + center[1])
+        attempts += 1
+        if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
+            continue
+        samples.append(pt)
 
-    # Return sampled points as a list of Vec2D tuples and the section index
-    return [(x, y) for x, y in points], sec_id
+    if len(samples) < num_samples:
+        raise RuntimeError(
+            f"Failed to sample {num_samples} route points without obstacle overlap after {attempts} attempts."
+        )
+
+    return samples, sec_id
+
+
+def _prepare_obstacles(
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry],
+) -> list[PreparedGeometry]:
+    """Normalize obstacles to prepared shapely geometries.
+
+    Returns:
+        list[PreparedGeometry]: Prepared polygons ready for containment checks.
+    """
+    prepared: list[PreparedGeometry] = []
+    for poly in obstacle_polygons:
+        if isinstance(poly, PreparedGeometry):
+            prepared.append(poly)
+        elif isinstance(poly, _ShapelyPolygon):
+            prepared.append(prep(poly))
+        else:
+            prepared.append(prep(_ShapelyPolygon(poly)))
+    return prepared
+
+
+def _point_in_any_obstacle(point: Vec2D, obstacles: list[PreparedGeometry]) -> bool:
+    """Return True when point lies inside any prepared obstacle polygon."""
+    pt = _ShapelyPoint(point)
+    return any(poly.contains(pt) for poly in obstacles)
 
 
 @dataclass
@@ -215,6 +257,7 @@ class RoutePointsGenerator:
 
     routes: list[GlobalRoute]
     sidewalk_width: float
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None
     _route_probs: list[float] = field(init=False)
 
     def __post_init__(self):
@@ -273,14 +316,19 @@ class RoutePointsGenerator:
         route_id = np.random.choice(len(self.routes), size=1, p=self._route_probs)[0]
 
         # Generate sample points using a function `sample_route`
-        spawn_pos, sec_id = sample_route(self.routes[route_id], num_samples, self.sidewalk_width)
+        spawn_pos, sec_id = sample_route(
+            self.routes[route_id],
+            num_samples,
+            self.sidewalk_width,
+            obstacle_polygons=self.obstacle_polygons,
+        )
         return spawn_pos, route_id, sec_id
 
 
 def populate_ped_routes(
     config: PedSpawnConfig,
     routes: list[GlobalRoute],
-    obstacle_polygons: list[list[Vec2D]] | None = None,
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[np.ndarray, list[PedGrouping], dict[int, GlobalRoute], list[int]]:
     """
     Populate routes with pedestrian groups according to the configuration.
@@ -303,6 +351,7 @@ def populate_ped_routes(
     proportional_spawn_gen = RoutePointsGenerator(
         routes,
         config.sidewalk_width,
+        obstacle_polygons=obstacle_polygons,
     )
     total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
@@ -348,7 +397,7 @@ def populate_ped_routes(
 def populate_crowded_zones(
     config: PedSpawnConfig,
     crowded_zones: list[Zone],
-    obstacle_polygons: list[list[Vec2D]] | None = None,
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
     """TODO docstring. Document this function.
 
@@ -458,7 +507,7 @@ def populate_simulation(
     spawn_config: PedSpawnConfig,
     ped_routes: list[GlobalRoute],
     ped_crowded_zones: list[Zone],
-    obstacle_polygons: list[list[Vec2D]] | None = None,
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
     single_pedestrians: list | None = None,  # list[SinglePedestrianDefinition] - optional
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """TODO docstring. Document this function.

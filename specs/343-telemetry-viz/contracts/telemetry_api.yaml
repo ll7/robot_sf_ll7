@@ -1,0 +1,91 @@
+openapi: 3.0.0
+info:
+  title: Telemetry Visualization Controls
+  version: 0.1.0
+  description: Programmatic controls for live telemetry pane, replay, and exports (single-process bindings represented as REST for contract clarity).
+paths:
+  /telemetry/live:
+    post:
+      summary: Enable or update the docked telemetry pane during a live run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enable:
+                  type: boolean
+                  description: Toggle the pane visibility.
+                metrics:
+                  type: array
+                  items:
+                    type: string
+                  description: Metrics to render (fps, reward, collisions, min_ped_distance, action_norm).
+                refresh_hz:
+                  type: number
+                  minimum: 1
+                  description: Target chart refresh frequency.
+                pane_layout:
+                  type: string
+                  enum: [vertical_split, horizontal_split]
+                  description: Docking orientation inside the SDL window.
+              required: [enable]
+      responses:
+        '200':
+          description: Pane state applied.
+  /telemetry/replay:
+    post:
+      summary: Open a telemetry stream + frames for replay with synchronized cursor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                telemetry_path:
+                  type: string
+                frames_path:
+                  type: string
+                start_frame:
+                  type: integer
+                  minimum: 0
+                decimation:
+                  type: integer
+                  minimum: 1
+                  default: 1
+              required: [telemetry_path, frames_path]
+      responses:
+        '200':
+          description: Replay session opened and ready for scrubbing.
+  /telemetry/export:
+    post:
+      summary: Export combined Pygame view + chart viewport as screenshot or clip.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                telemetry_path:
+                  type: string
+                frames_path:
+                  type: string
+                start_frame:
+                  type: integer
+                  minimum: 0
+                end_frame:
+                  type: integer
+                  minimum: 0
+                type:
+                  type: string
+                  enum: [screenshot, clip]
+                out_path:
+                  type: string
+              required: [telemetry_path, frames_path, type, out_path]
+      responses:
+        '200':
+          description: Export written under artifact policy.
+components: {}

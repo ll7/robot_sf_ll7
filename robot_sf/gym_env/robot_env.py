@@ -12,9 +12,12 @@ It also defines the action and observation spaces for the robot.
 
 import hashlib
 import json
+import time
+import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -45,6 +48,12 @@ from robot_sf.sensor.socnav_observation import (
 from robot_sf.sim.simulator import (
     init_simulators,  # noqa: F401 (retained for backwards compatibility; may be removed later)
 )
+from robot_sf.telemetry.pane import TelemetrySession
+
+DEFAULT_PANE_WIDTH = 320
+DEFAULT_PANE_HEIGHT = 240
+MIN_PANE_WIDTH = 200
+MIN_PANE_HEIGHT = 160
 
 
 # Helper to compute a stable, short hash for env_config
@@ -67,6 +76,15 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         payload = repr(cfg)
     return hashlib.blake2b(payload.encode("utf-8"), digest_size=8).hexdigest()
+
+
+def _make_telemetry_run_id() -> str:
+    """Generate a unique telemetry run identifier to avoid artifact collisions.
+
+    Returns:
+        str: High-entropy run identifier for telemetry artifacts.
+    """
+    return f"telemetry-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
 
 
 def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
@@ -234,6 +252,31 @@ class RobotEnv(BaseEnv):
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
             self.sim_ui.show_occupancy_grid = True
+        # Initialize telemetry session/pane when requested
+        self._telemetry_session: TelemetrySession | None = None
+        if env_config.enable_telemetry_panel or env_config.telemetry_record:
+            run_id = _make_telemetry_run_id()
+            pane_width = DEFAULT_PANE_WIDTH
+            pane_height = DEFAULT_PANE_HEIGHT
+            if self.sim_ui:
+                self.sim_ui.show_telemetry_panel = env_config.enable_telemetry_panel
+                self.sim_ui.telemetry_layout = env_config.telemetry_pane_layout
+                pane_width = min(DEFAULT_PANE_WIDTH, max(MIN_PANE_WIDTH, self.sim_ui.width // 3))
+                pane_height = min(
+                    DEFAULT_PANE_HEIGHT, max(MIN_PANE_HEIGHT, self.sim_ui.height // 3)
+                )
+            self._telemetry_session = TelemetrySession(
+                run_id=run_id,
+                record=env_config.telemetry_record,
+                metrics=env_config.telemetry_metrics,
+                refresh_hz=env_config.telemetry_refresh_hz,
+                decimation=env_config.telemetry_decimation,
+                pane_size=(pane_width, pane_height),
+            )
+            if self.sim_ui:
+                self.sim_ui.telemetry_session = self._telemetry_session
+        self._last_wall_time = time.perf_counter()
+        self._frame_idx = 0
 
     def step(self, action):
         """Execute one environment step.
@@ -292,6 +335,9 @@ class RobotEnv(BaseEnv):
         reward = self.reward_func(reward_dict)
         # Update last_action for next step
         self.last_action = action
+
+        # Telemetry update
+        self._emit_telemetry(reward, term, False, action)
 
         # if recording is enabled, record the state
         if self.recording_enabled:
@@ -377,7 +423,61 @@ class RobotEnv(BaseEnv):
 
         # info is necessary for the gym environment, but useless at the moment
         info = {"info": "test"}
+        # Reset telemetry timing on new episode
+        self._last_wall_time = time.perf_counter()
+        self._frame_idx = 0
         return obs, info
+
+    def _emit_telemetry(
+        self,
+        reward: float,
+        terminated: bool,
+        truncated: bool,
+        action: Any,
+    ) -> None:
+        """Record telemetry and update live pane if enabled."""
+        if self._telemetry_session is None:
+            return
+        now = time.perf_counter()
+        dt = max(now - self._last_wall_time, 1e-6)
+        self._last_wall_time = now
+
+        collision = bool(
+            self.state.is_collision_with_ped
+            or self.state.is_collision_with_obst
+            or self.state.is_collision_with_robot
+        )
+        ped_positions = getattr(self.simulator, "ped_pos", np.zeros((0, 2)))
+        robot_pos = np.asarray(self.simulator.robot_poses[0][0], dtype=float)
+        min_ped_distance = None
+        if ped_positions.size > 0:
+            try:
+                deltas = ped_positions - robot_pos
+                dists = np.linalg.norm(deltas, axis=1)
+                min_ped_distance = float(np.min(dists))
+            except (TypeError, ValueError):
+                min_ped_distance = None
+        try:
+            action_norm = float(np.linalg.norm(action))
+        except (TypeError, ValueError):
+            action_norm = None
+
+        metrics = {
+            "fps": 1.0 / dt if dt > 0 else None,
+            "reward": float(reward) if reward is not None else None,
+            "collisions": 1 if collision else 0,
+            "min_ped_distance": min_ped_distance,
+            "action_norm": action_norm,
+        }
+        status = "terminated" if terminated else ("truncated" if truncated else "running")
+        payload = {
+            "timestamp_ms": int(time.time() * 1000),
+            "frame_idx": self._frame_idx,
+            "status": status,
+            "metrics": metrics,
+        }
+        self._frame_idx += 1
+        self._telemetry_session.append(payload)
 
     @staticmethod
     def _normalize_obstacles_for_grid(
@@ -501,3 +601,34 @@ class RobotEnv(BaseEnv):
             self.sim_ui.ped_velocity_scale = scale
         else:
             logger.warning("Cannot set velocity scale: debug mode not enabled")
+
+    def get_telemetry_session(self):
+        """
+        Get the telemetry session for accessing recorded metrics and artifacts.
+
+        Returns:
+            TelemetrySession or None: The active telemetry session if telemetry recording is
+                enabled (enable_telemetry_panel=True or telemetry_record=True), or None
+                if telemetry is disabled or the session has not been initialized.
+
+        Example:
+            >>> env = make_robot_env(debug=True, enable_telemetry_panel=True, telemetry_record=True)
+            >>> # ... run simulation ...
+            >>> env.close()
+            >>> session = env.get_telemetry_session()
+            >>> if session is not None:
+            ...     paths = session.write_summary()
+        """
+        return self._telemetry_session
+
+    def write_telemetry_summary(self) -> tuple[Path, ...] | None:
+        """Write telemetry summary artifacts if telemetry is enabled.
+
+        Returns:
+            tuple[Path, ...] | None: Paths to written artifacts when telemetry is active,
+                otherwise ``None`` when telemetry is disabled.
+        """
+        session = self.get_telemetry_session()
+        if session is None:
+            return None
+        return session.write_summary()

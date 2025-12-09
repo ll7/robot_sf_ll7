@@ -73,6 +73,8 @@ class TelemetrySnapshot:
     """Time-series resource metrics captured during a run."""
 
     timestamp_ms: int
+    frame_idx: int | None = None
+    status: str | None = None
     step_id: str | None = None
     steps_per_sec: float | None = None
     fps: float | None = None

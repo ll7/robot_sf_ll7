@@ -25,8 +25,16 @@ from .recommendations import RecommendationEngine, RecommendationRules
 from .run_registry import RunRegistry, generate_run_id
 from .sampler import TelemetrySampler
 from .tensorboard_adapter import TensorBoardAdapter, iter_telemetry_snapshots
+from .visualization import (
+    DEFAULT_TELEMETRY_METRICS,
+    export_combined_image,
+    make_surface_from_rgba,
+    render_metric_panel,
+    save_rgba_png,
+)
 
 __all__ = [
+    "DEFAULT_TELEMETRY_METRICS",
     "ManifestWriter",
     "PerformanceRecommendation",
     "PerformanceTestResult",
@@ -46,8 +54,12 @@ __all__ = [
     "TelemetrySampler",
     "TelemetrySnapshot",
     "TensorBoardAdapter",
+    "export_combined_image",
     "generate_run_id",
     "iter_telemetry_snapshots",
     "list_runs",
     "load_run",
+    "make_surface_from_rgba",
+    "render_metric_panel",
+    "save_rgba_png",
 ]

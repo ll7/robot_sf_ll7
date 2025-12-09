@@ -1,4 +1,4 @@
-"""Helpers for querying run-tracker manifests and building history views."""
+"""Helpers for querying run-tracker manifests and building history/replay views."""
 
 from __future__ import annotations
 
@@ -163,6 +163,101 @@ def _history_sort_key(entry: RunHistoryEntry) -> tuple[datetime, str]:
     fallback = datetime.fromtimestamp(0, tzinfo)
     completed = entry.completed_at or entry.created_at or fallback
     return completed, entry.run_id
+
+
+# --- Telemetry replay helpers -------------------------------------------------
+
+
+def load_telemetry_stream(path: str | Path) -> list[dict[str, Any]]:
+    """Load a telemetry JSONL stream into memory.
+
+    Args:
+        path: Path to telemetry JSONL file.
+
+    Returns:
+        List of parsed telemetry samples (dicts), preserving file order.
+    """
+
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"Telemetry stream not found: {p}")
+    lines = p.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]
+
+
+@dataclass(slots=True)
+class TelemetryReplay:
+    """Minimal replay helper to sync telemetry samples with frame indices."""
+
+    samples: list[dict[str, Any]]
+    current_index: int = 0
+
+    def scrub(self, to_frame: int) -> dict[str, Any]:
+        """Seek to the nearest telemetry sample at or after ``to_frame``.
+
+        Returns:
+            dict[str, Any]: The selected telemetry sample.
+        """
+
+        if not self.samples:
+            raise ValueError("No telemetry samples loaded")
+        # Find first sample with frame_idx >= to_frame
+        for idx, sample in enumerate(self.samples):
+            frame_idx = sample.get("frame_idx")
+            if isinstance(frame_idx, int) and frame_idx >= to_frame:
+                self.current_index = idx
+                return sample
+        # If none found, stay at last
+        self.current_index = len(self.samples) - 1
+        return self.samples[self.current_index]
+
+    def current(self) -> dict[str, Any]:
+        """Return the current telemetry sample.
+
+        Returns:
+            dict[str, Any]: The current telemetry sample.
+        """
+
+        if not self.samples:
+            raise ValueError("No telemetry samples loaded")
+        return self.samples[self.current_index]
+
+    def scrub_to_frame(self, target_frame: int, *, tolerance: int = 1) -> dict[str, Any]:
+        """Seek to the sample closest to target_frame within tolerance; else raise.
+
+        Returns:
+            dict[str, Any]: The selected telemetry sample.
+        """
+
+        best_idx = None
+        best_delta = None
+        for idx, sample in enumerate(self.samples):
+            frame_idx = sample.get("frame_idx")
+            if not isinstance(frame_idx, int):
+                continue
+            delta = abs(frame_idx - target_frame)
+            if best_delta is None or delta < best_delta:
+                best_delta = delta
+                best_idx = idx
+                if delta == 0:
+                    break
+        if best_idx is None or best_delta is None or best_delta > tolerance:
+            raise ValueError(
+                f"No telemetry sample within tolerance {tolerance} of frame {target_frame}"
+            )
+        self.current_index = best_idx
+        return self.samples[self.current_index]
+
+
+def replay_episode(telemetry_path: str | Path) -> TelemetryReplay:
+    """Convenience constructor for TelemetryReplay.
+
+    Returns:
+        TelemetryReplay: Replay wrapper for the telemetry stream.
+    """
+
+    samples = load_telemetry_stream(telemetry_path)
+    return TelemetryReplay(samples=samples)
 
 
 def _build_entry(

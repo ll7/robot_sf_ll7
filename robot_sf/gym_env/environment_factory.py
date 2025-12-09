@@ -62,7 +62,7 @@ except (ImportError, ModuleNotFoundError):
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
 
-from robot_sf.gym_env._factory_compat import LEGACY_PERMISSIVE_ENV, apply_legacy_kwargs
+from robot_sf.gym_env._factory_compat import apply_legacy_kwargs
 from robot_sf.gym_env.config_validation import get_resolved_config_dict, validate_config
 from robot_sf.gym_env.options import RecordingOptions, RenderOptions
 from robot_sf.gym_env.reward import simple_ped_reward
@@ -82,8 +82,14 @@ if TYPE_CHECKING:
 def _load_robot_env_with_image():
     """Lazy-load the image-capable robot environment class.
 
+    This lazy import defers the heavy Pygame/rendering dependencies until first use,
+    reducing cold-start overhead for headless or non-visual workloads.
+
     Returns:
         type: RobotEnvWithImage class from robot_env_with_image module.
+
+    Raises:
+        ModuleNotFoundError: If robot_env_with_image module is not available.
     """
     module = importlib.import_module("robot_sf.gym_env.robot_env_with_image")
     return module.RobotEnvWithImage
@@ -92,8 +98,14 @@ def _load_robot_env_with_image():
 def _load_pedestrian_env():
     """Lazy-load the pedestrian (adversarial) environment class.
 
+    This lazy import defers expensive initialization until first use, enabling
+    fast instantiation of robot-only environments without pedestrian dependencies.
+
     Returns:
         type: PedestrianEnv class from pedestrian_env module.
+
+    Raises:
+        ModuleNotFoundError: If pedestrian_env module is not available.
     """
     module = importlib.import_module("robot_sf.gym_env.pedestrian_env")
     return module.PedestrianEnv
@@ -102,8 +114,14 @@ def _load_pedestrian_env():
 def _load_multi_robot_env():
     """Lazy-load the multi-robot environment class.
 
+    This lazy import defers initialization of multi-agent infrastructure until needed,
+    keeping single-agent workflows lightweight.
+
     Returns:
         type: MultiRobotEnv class from multi_robot_env module.
+
+    Raises:
+        ModuleNotFoundError: If multi_robot_env module is not available.
     """
     module = importlib.import_module("robot_sf.gym_env.multi_robot_env")
     return module.MultiRobotEnv
@@ -112,8 +130,14 @@ def _load_multi_robot_env():
 def _load_stub_robot_model():
     """Lazy-load the stub robot model class for testing.
 
+    Returns a minimal robot model that produces zero actions, enabling pedestrian
+    environment initialization without requiring a trained policy.
+
     Returns:
-        type: StubRobotModel class providing zero-action fallback.
+        type: StubRobotModel class (callable) providing zero-action fallback.
+
+    Raises:
+        ModuleNotFoundError: If _stub_robot_model module is not available.
     """
     module = importlib.import_module("robot_sf.gym_env._stub_robot_model")
     return module.StubRobotModel
@@ -155,33 +179,59 @@ class EnvironmentFactory:
         scenario_name: str = "default",
         algorithm_name: str = "manual",
         recording_seed: int | None = None,
+        enable_telemetry_panel: bool = False,
+        telemetry_metrics: list[str] | None = None,
+        telemetry_record: bool = False,
+        telemetry_refresh_hz: float = 1.0,
+        telemetry_pane_layout: str = "vertical_split",
+        telemetry_decimation: int = 1,
     ) -> SingleAgentEnv:
-        """TODO docstring. Document this function.
+        """Construct a robot environment with specified observation and recording configuration.
+
+        Internal factory method used by public ergonomic factories (make_robot_env and
+        make_image_robot_env). Selects the appropriate environment class based on the
+        use_image_obs flag and applies all configuration settings.
 
         Args:
-            config: TODO docstring.
-            use_image_obs: TODO docstring.
-            peds_have_obstacle_forces: TODO docstring.
-            reward_func: TODO docstring.
-            debug: TODO docstring.
-            recording_enabled: TODO docstring.
-            record_video: TODO docstring.
-            video_path: TODO docstring.
-            video_fps: TODO docstring.
-            use_jsonl_recording: TODO docstring.
-            recording_dir: TODO docstring.
-            suite_name: TODO docstring.
-            scenario_name: TODO docstring.
-            algorithm_name: TODO docstring.
-            recording_seed: TODO docstring.
+            config: RobotSimulationConfig instance defining physics, maps, and sensors.
+            use_image_obs: If True, select image-capable environment; else standard lidar-only.
+            peds_have_obstacle_forces: Enable pedestrian-robot interaction forces.
+            reward_func: Custom reward function; falls back to internal default if None.
+            debug: Enable visual debug features and view creation.
+            recording_enabled: Master gate for video/JSONL recording even if options request it.
+            record_video: Enable video recording to disk.
+            video_path: Output path for recorded video files.
+            video_fps: Target frames-per-second for video output.
+            use_jsonl_recording: Enable per-episode JSONL metadata recording.
+            recording_dir: Directory for JSONL episode outputs.
+            suite_name: Metadata identifier for episode grouping.
+            scenario_name: Scenario identifier for episode metadata.
+            algorithm_name: Algorithm identifier for episode metadata.
+            recording_seed: Deterministic seed for recorder's episode naming.
+            enable_telemetry_panel: Enable docked telemetry visualization panel.
+            telemetry_metrics: Metrics to display in the pane; defaults if None.
+            telemetry_record: Persist telemetry to JSONL under artifact root.
+            telemetry_refresh_hz: Target refresh rate for telemetry (Hz).
+            telemetry_pane_layout: Pane docking layout (vertical_split or horizontal_split).
+            telemetry_decimation: Decimation factor for telemetry persistence (>=1).
 
         Returns:
-            TODO docstring.
+            SingleAgentEnv: Fully initialized robot environment instance.
+
+        Raises:
+            RuntimeError: If environment class import fails.
         """
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
         config.use_image_obs = use_image_obs
         config.peds_have_obstacle_forces = peds_have_obstacle_forces
+        config.enable_telemetry_panel = enable_telemetry_panel
+        config.telemetry_record = telemetry_record
+        config.telemetry_refresh_hz = telemetry_refresh_hz
+        config.telemetry_pane_layout = telemetry_pane_layout
+        config.telemetry_decimation = telemetry_decimation
+        if telemetry_metrics is not None:
+            config.telemetry_metrics = list(telemetry_metrics)
         if use_image_obs:
             EnvCls = _load_robot_env_with_image()
         else:
@@ -214,18 +264,22 @@ class EnvironmentFactory:
         recording_enabled: bool = False,
         peds_have_obstacle_forces: bool = False,
     ) -> SingleAgentEnv:
-        """TODO docstring. Document this function.
+        """Construct a pedestrian (adversarial) environment.
+
+        Internal factory method used by make_pedestrian_env. Initializes an ego pedestrian
+        agent navigating among crowds controlled by a provided robot policy.
 
         Args:
-            robot_model: TODO docstring.
-            config: TODO docstring.
-            reward_func: TODO docstring.
-            debug: TODO docstring.
-            recording_enabled: TODO docstring.
-            peds_have_obstacle_forces: TODO docstring.
+            robot_model: Trained policy or model providing robot actions in the scene.
+            config: PedestrianSimulationConfig instance; defaults to standard if None.
+            reward_func: Custom reward function for pedestrian agent; uses canonical
+                simple_ped_reward if None.
+            debug: Enable visual debug features and view creation.
+            recording_enabled: Master gate for video recording.
+            peds_have_obstacle_forces: Enable pedestrian-robot interaction forces.
 
         Returns:
-            TODO docstring.
+            SingleAgentEnv: Initialized pedestrian environment for training/evaluation.
         """
         if config is None:
             config = PedestrianSimulationConfig()
@@ -253,16 +307,19 @@ class EnvironmentFactory:
         reward_func: Callable | None,
         debug: bool,
     ) -> MultiAgentEnv:
-        """TODO docstring. Document this function.
+        """Construct a multi-robot environment.
+
+        Internal factory method used by make_multi_robot_env. Initializes a multi-agent
+        environment where multiple robots navigate and interact in a shared scene.
 
         Args:
-            config: TODO docstring.
-            num_robots: TODO docstring.
-            reward_func: TODO docstring.
-            debug: TODO docstring.
+            config: MultiRobotConfig instance; defaults to standard if None.
+            num_robots: Number of robot agents in the environment.
+            reward_func: Custom reward function for agents; internal default if None.
+            debug: Enable visual debug features and view creation.
 
         Returns:
-            TODO docstring.
+            MultiAgentEnv: Initialized multi-agent environment instance.
         """
         if config is None:
             config = MultiRobotConfig()
@@ -396,87 +453,67 @@ def make_robot_env(
     scenario_name: str = "default",
     algorithm_name: str = "manual",
     recording_seed: int | None = None,
+    enable_telemetry_panel: bool = False,
+    telemetry_metrics: list[str] | None = None,
+    telemetry_record: bool = False,
+    telemetry_refresh_hz: float = 1.0,
+    telemetry_pane_layout: str = "vertical_split",
+    telemetry_decimation: int = 1,
     **legacy_kwargs,
 ) -> SingleAgentEnv:
-    """TODO docstring. Document this function.
+    """Create a robot environment with lidar-based observations (non-image).
+
+    Primary ergonomic factory for standard robot navigation environments. Supports
+    deterministic seeding, optional video recording, custom rewards, and live telemetry
+    visualization. Configuration validation and logging ensure reproducibility.
 
     Args:
-        config: TODO docstring.
-        seed: TODO docstring.
-        peds_have_obstacle_forces: TODO docstring.
-        reward_func: TODO docstring.
-        debug: TODO docstring.
-        recording_enabled: TODO docstring.
-        record_video: TODO docstring.
-        video_path: TODO docstring.
-        video_fps: TODO docstring.
-        render_options: TODO docstring.
-        recording_options: TODO docstring.
-        use_jsonl_recording: TODO docstring.
-        recording_dir: TODO docstring.
-        suite_name: TODO docstring.
-        scenario_name: TODO docstring.
-        algorithm_name: TODO docstring.
-        recording_seed: TODO docstring.
-        legacy_kwargs: TODO docstring.
+        config: Optional pre-constructed config; a default instance is created if None.
+        seed: Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
+            the returned env as ``applied_seed``.
+        peds_have_obstacle_forces: Whether pedestrians perceive the robot as an obstacle
+            (interaction forces enabled).
+        reward_func: Optional custom reward function; falls back to internal simple reward
+            with warning.
+        debug: Enable debug/visual features (may trigger view creation when recording).
+        recording_enabled: Master switch gating recording runtime even if options request
+            it (feature flag style).
+        record_video: Convenience flag; if True and no explicit RecordingOptions provided,
+            one is synthesized.
+        video_path: Convenience output path used if RecordingOptions absent or lacks path.
+        video_fps: Convenience FPS; sets RenderOptions.max_fps_override if unset.
+        render_options: Advanced rendering options; takes precedence over convenience flags.
+        recording_options: Advanced recording options. For robot/image factories, convenience
+            flag may upgrade ``record`` to True if conflicting (precedence rule #3).
+        use_jsonl_recording: Enable JSONL episode recording (per-episode JSONL + metadata
+            outputs) when recording is on.
+        recording_dir: Directory where JSONL recorder stores per-episode files if enabled.
+        suite_name: Suite identifier stored in JSONL metadata for downstream grouping.
+        scenario_name: Scenario identifier stored in JSONL metadata.
+        algorithm_name: Algorithm identifier stored in JSONL metadata.
+        recording_seed: Optional stable seed used by the recorder to derive deterministic
+            episode names.
+        enable_telemetry_panel: When True, initialize docked telemetry pane configuration
+            (charts blitted into SDL).
+        telemetry_metrics: Metrics to render in the telemetry pane; defaults to core metrics
+            when None.
+        telemetry_record: Enable telemetry JSONL recording for the run (append-only under
+            artifact root).
+        telemetry_refresh_hz: Target refresh rate for telemetry sampling/chart updates (Hz).
+        telemetry_pane_layout: Docking layout for the telemetry pane (vertical_split or
+            horizontal_split).
+        telemetry_decimation: Decimation factor applied when persisting/visualizing telemetry
+            (>=1).
+        **legacy_kwargs: Deprecated legacy surface (mapped via apply_legacy_kwargs). Unknown
+            params rejected unless ROBOT_SF_FACTORY_LEGACY env var is truthy (permissive mode).
 
     Returns:
-        TODO docstring.
+        SingleAgentEnv: Initialized robot environment instance with ``applied_seed`` attribute set.
+
+    Note:
+        Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
+        Performance: heavy image rendering imports are avoided along this path.
     """
-    """Create a standard robot environment (non-image observations).
-
-    Parameters
-    ----------
-    config : RobotSimulationConfig | None
-        Optional pre-constructed config; a default instance is created if ``None``.
-    seed : int | None
-        Deterministic seed (Python ``random``, NumPy, PyTorch, hash seed). Stored on the
-        returned env as ``applied_seed``.
-    peds_have_obstacle_forces : bool
-        Whether pedestrians perceive the robot as an obstacle (interaction forces enabled).
-    reward_func : Callable | None
-        Optional custom reward function; falls back to internal simple reward with warning.
-    debug : bool
-        Enable debug / visual features (may trigger view creation when recording).
-    recording_enabled : bool
-        Master switch gating recording runtime even if options request it (feature flag style).
-    record_video : bool
-        Convenience flag; if True and no explicit ``RecordingOptions`` provided one is synthesized.
-    video_path : str | None
-        Convenience output path used if ``RecordingOptions`` absent or lacks path.
-    video_fps : float | None
-        Convenience FPS; sets ``RenderOptions.max_fps_override`` if unset.
-    render_options : RenderOptions | None
-        Advanced rendering options; takes precedence over convenience flags.
-    recording_options : RecordingOptions | None
-        Advanced recording options. For robot/image factories, convenience flag may upgrade
-        ``record`` to True if conflicting (precedence rule #3).
-    use_jsonl_recording : bool
-        Enable JSONL episode recording (per-episode JSONL + metadata outputs) when recording is on.
-    recording_dir : str
-        Directory where JSONL recorder stores per-episode files if enabled.
-    suite_name : str
-        Suite identifier stored in JSONL metadata for downstream grouping.
-    scenario_name : str
-        Scenario identifier stored in JSONL metadata.
-    algorithm_name : str
-        Algorithm identifier stored in JSONL metadata.
-    recording_seed : int | None
-        Optional stable seed used by the recorder to derive deterministic episode names.
-    legacy_kwargs : dict
-        Deprecated legacy surface (mapped via :func:`apply_legacy_kwargs`). Unknown params
-        rejected unless ``{env}`` is truthy (permissive).
-
-    Returns
-    -------
-    SingleAgentEnv
-        Initialized robot environment instance with ``applied_seed`` attribute set.
-
-    Notes
-    -----
-    * Side-effects: seeds RNGs (idempotent for same seed), logs creation line.
-    * Performance: heavy image rendering imports are avoided along this path.
-    """.replace("{env}", LEGACY_PERMISSIVE_ENV)
     # Apply legacy parameter mapping FIRST so explicit new-style arguments win.
     if legacy_kwargs:
         mapped, _warnings = apply_legacy_kwargs(legacy_kwargs, strict=True)
@@ -528,6 +565,12 @@ def make_robot_env(
         scenario_name=scenario_name,
         algorithm_name=algorithm_name,
         recording_seed=recording_seed,
+        enable_telemetry_panel=enable_telemetry_panel,
+        telemetry_metrics=telemetry_metrics,
+        telemetry_record=telemetry_record,
+        telemetry_refresh_hz=telemetry_refresh_hz,
+        telemetry_pane_layout=telemetry_pane_layout,
+        telemetry_decimation=telemetry_decimation,
     )
     env.applied_seed = seed
     return env
@@ -711,11 +754,24 @@ def make_pedestrian_env(
 
 
 def _apply_global_seed(seed: int | None) -> None:
-    """Apply a deterministic seed to common RNG sources.
+    """Apply a deterministic seed to all common RNG sources for reproducibility.
 
-    Positioned at end of module to keep import block contiguous (PEP8). Seeds Python's
-    ``random`` module, NumPy, and PyTorch (if available); sets PYTHONHASHSEED. Silent
-    failures for optional libraries keep dependency surface minimal for lightweight usages.
+    Ensures consistent behavior across Python's random module, NumPy, PyTorch (if
+    available), and hash-based randomization. Gracefully handles optional dependencies
+    to keep the lightweight factories accessible without unnecessary imports.
+
+    Args:
+        seed: Seed value to apply; if None, this is a no-op (seeds already random).
+
+    Side Effects:
+        - Sets Python ``random`` seed.
+        - Sets NumPy random seed (if available).
+        - Sets PyTorch manual seeds and CUDA seeds (if available).
+        - Sets ``PYTHONHASHSEED`` environment variable.
+
+    Note:
+        Positioned at end of module to keep import block contiguous (PEP8).
+        Silent failures for optional dependencies keep the factory lightweight.
     """
     if seed is None:
         return
@@ -739,10 +795,27 @@ def make_multi_robot_env(
     reward_func: Callable | None = None,
     debug: bool = False,
 ) -> MultiAgentEnv:
-    """Create a multi-robot environment.
+    """Create a multi-robot environment with independent agents.
 
-    Returns:
-        MultiAgentEnv: Configured multi-agent environment with specified number of robots.
+    Factory for multi-agent coordination and training scenarios. Multiple robots
+    navigate and interact in a shared environment, useful for decentralized policies
+    and coordination algorithms.
+
+    Parameters
+    ----------
+    num_robots : int
+        Number of robot agents to spawn in the environment (default: 2).
+    config : MultiRobotConfig | None
+        Optional multi-robot configuration; default instance created if ``None``.
+    reward_func : Callable | None
+        Custom reward function applied to each agent; falls back to internal default.
+    debug : bool
+        Enable visual debug features.
+
+    Returns
+    -------
+    MultiAgentEnv
+        Configured multi-agent environment ready for training/evaluation.
     """
     return EnvironmentFactory.create_multi_robot_env(
         config=config,

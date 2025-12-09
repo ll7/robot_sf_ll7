@@ -55,6 +55,8 @@ class TelemetrySampler:
         interval_seconds: float = 1.0,
         time_provider: Callable[[], datetime] | None = None,
         step_rate_provider: Callable[[], float | None] | None = None,
+        frame_idx_provider: Callable[[], int | None] | None = None,
+        status_provider: Callable[[], str | None] | None = None,
     ) -> None:
         """TODO docstring. Document this function.
 
@@ -65,6 +67,8 @@ class TelemetrySampler:
             interval_seconds: TODO docstring.
             time_provider: TODO docstring.
             step_rate_provider: TODO docstring.
+            frame_idx_provider: Optional callback providing current frame index.
+            status_provider: Optional callback providing run status string.
         """
         self._writer = writer
         self._progress_tracker = progress_tracker
@@ -72,6 +76,8 @@ class TelemetrySampler:
         self._interval = max(interval_seconds, 0.5)
         self._clock = time_provider or (lambda: datetime.now(UTC))
         self._step_rate_provider = step_rate_provider or self._default_step_rate
+        self._frame_idx_provider = frame_idx_provider
+        self._status_provider = status_provider
         self._process = self._init_process_handle()
         self._system_cpu_fn = getattr(psutil, "cpu_percent", None)
         self._stop_event = threading.Event()
@@ -180,6 +186,8 @@ class TelemetrySampler:
         timestamp_ms = int(timestamp.timestamp() * 1000)
         step_id = self._resolve_current_step()
         steps_per_sec = self._safe_call(self._step_rate_provider)
+        frame_idx = self._safe_call(self._frame_idx_provider)
+        status = self._safe_call(self._status_provider)
         notes: set[str] = set()
 
         cpu_process = self._sample_process_cpu(notes)
@@ -198,6 +206,8 @@ class TelemetrySampler:
             timestamp_ms=timestamp_ms,
             step_id=step_id,
             steps_per_sec=steps_per_sec,
+            frame_idx=frame_idx if isinstance(frame_idx, int) else None,
+            status=str(status) if status is not None else None,
             cpu_percent_process=cpu_process,
             cpu_percent_system=cpu_system,
             memory_rss_mb=memory_rss,
@@ -315,7 +325,7 @@ class TelemetrySampler:
         return rss_kb / 1024.0 if rss_kb else None
 
     @staticmethod
-    def _safe_call(func: Callable[[], float | None] | None) -> float | None:
+    def _safe_call(func: Callable[[], object | None] | None) -> object | None:
         """TODO docstring. Document this function.
 
         Args:

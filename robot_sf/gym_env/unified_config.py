@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
 from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.telemetry_config import TelemetryConfigMixin
 from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.occupancy_grid import GridConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
@@ -27,7 +28,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 
 
 @dataclass
-class BaseSimulationConfig:
+class BaseSimulationConfig(TelemetryConfigMixin):
     """
     Core simulation configuration shared by all environments.
 
@@ -49,6 +50,7 @@ class BaseSimulationConfig:
         """Validate that all required fields are initialized."""
         if not self.sim_config or not self.map_pool or not self.lidar_config:
             raise ValueError("All configuration fields must be initialized!")
+        self._validate_telemetry()
 
 
 @dataclass

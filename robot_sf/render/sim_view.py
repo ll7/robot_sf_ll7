@@ -55,6 +55,7 @@ ROBOT_LIDAR_COLOR = (238, 160, 238, 128)
 TEXT_COLOR = (255, 255, 255)  # White text
 TEXT_BACKGROUND = (0, 0, 0, 180)  # Semi-transparent black background
 TEXT_OUTLINE_COLOR = (0, 0, 0)  # Black outline
+TELEMETRY_PANE_PADDING = 10
 
 # Occupancy grid visualization colors
 GRID_OBSTACLE_COLOR = (255, 255, 0)  # Yellow for obstacles
@@ -236,6 +237,10 @@ class SimulationView:
     )
     grid_alpha: float = field(default=0.5)  # Alpha blending for grid overlay
     show_lidar: bool = field(default=True)  # Toggle lidar ray visualization
+    # Telemetry pane state
+    show_telemetry_panel: bool = field(default=False)
+    telemetry_session: object | None = field(default=None)
+    telemetry_layout: str = field(default="vertical_split")
 
     def __post_init__(self):
         """Initialize PyGame components."""
@@ -381,6 +386,7 @@ class SimulationView:
         self._draw_static_elements()
         self._draw_dynamic_elements(state)
         self._draw_information(state)
+        self._render_telemetry_panel()
 
     def _draw_static_elements(self):
         """Draw static elements like obstacles and grid."""
@@ -1226,6 +1232,24 @@ class SimulationView:
         elapsed_ms = pygame.time.get_ticks() - start_time
         if elapsed_ms > 10:
             logger.debug(f"Grid rendering took {elapsed_ms}ms for {grid_width}x{grid_height} grid")
+
+    def _render_telemetry_panel(self) -> None:
+        """Render the docked telemetry panel if enabled."""
+        if not self.show_telemetry_panel or self.telemetry_session is None:
+            return
+        surface = None
+        try:
+            surface = self.telemetry_session.render_surface()
+        except AttributeError:
+            return
+        if surface is None:
+            return
+        pane_w, pane_h = surface.get_size()
+        if self.telemetry_layout == "horizontal_split":
+            dest = (TELEMETRY_PANE_PADDING, self.height - pane_h - TELEMETRY_PANE_PADDING)
+        else:
+            dest = (self.width - pane_w - TELEMETRY_PANE_PADDING, TELEMETRY_PANE_PADDING)
+        self.screen.blit(surface, dest)
 
     def toggle_grid_channel_visibility(self, channel_idx: int) -> None:
         """

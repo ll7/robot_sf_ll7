@@ -383,8 +383,22 @@ def rasterize_polygon(
 ) -> int:
     """Rasterize a filled polygon into the occupancy grid.
 
+    Args:
+        polygon (list[tuple[float, float]]): List of (x, y) vertices in world coordinates. The polygon is closed automatically if not already.
+        grid_array (np.ndarray): 2D grid array to modify, shape [H, W].
+        config (GridConfig): Grid configuration object (resolution, width, height, etc.).
+        grid_origin_x (float, optional): Grid origin X in world frame. Defaults to 0.0.
+        grid_origin_y (float, optional): Grid origin Y in world frame. Defaults to 0.0.
+        value (float, optional): Occupancy value to set for covered cells. Defaults to 1.0.
+
     Returns:
-        int: Number of grid cells marked as occupied.
+        int: Number of grid cells marked as occupied (i.e., set to at least `value`).
+
+    Notes:
+        - The polygon is closed automatically if the first and last vertex differ.
+        - World coordinates are assumed for all vertices and grid origin.
+        - If the polygon is partially outside the grid, only the overlapping region is rasterized.
+        - Cells are marked as occupied if their center lies inside the polygon.
     """
     if len(polygon) < 3:
         return 0

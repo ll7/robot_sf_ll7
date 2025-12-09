@@ -31,9 +31,7 @@ def test_headless_telemetry_artifacts(tmp_path, monkeypatch: pytest.MonkeyPatch)
         if terminated or truncated:
             break
     env.close()
-    session = env.get_telemetry_session()
-    if session is not None:
-        session.write_summary()
+    env.write_telemetry_summary()
 
     telemetry_root = tmp_path / "telemetry"
     assert telemetry_root.exists()

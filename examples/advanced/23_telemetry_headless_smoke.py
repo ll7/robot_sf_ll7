@@ -40,9 +40,8 @@ def main() -> None:
             break
     env.close()
     # Emit summary artifacts from telemetry session
-    session = env.get_telemetry_session()
-    if session is not None:
-        paths = session.write_summary()
+    paths = env.write_telemetry_summary()
+    if paths is not None:
         print(f"Telemetry artifacts written to: {paths}")
 
 

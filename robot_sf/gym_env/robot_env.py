@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -619,3 +620,15 @@ class RobotEnv(BaseEnv):
             ...     paths = session.write_summary()
         """
         return self._telemetry_session
+
+    def write_telemetry_summary(self) -> tuple[Path, ...] | None:
+        """Write telemetry summary artifacts if telemetry is enabled.
+
+        Returns:
+            tuple[Path, ...] | None: Paths to written artifacts when telemetry is active,
+                otherwise ``None`` when telemetry is disabled.
+        """
+        session = self.get_telemetry_session()
+        if session is None:
+            return None
+        return session.write_summary()

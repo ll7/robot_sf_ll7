@@ -608,7 +608,7 @@ class RobotEnv(BaseEnv):
 
         Returns:
             TelemetrySession or None: The active telemetry session if telemetry recording is
-                enabled (enable_telemetry_panel=True and telemetry_record=True), or None
+                enabled (enable_telemetry_panel=True or telemetry_record=True), or None
                 if telemetry is disabled or the session has not been initialized.
 
         Example:

@@ -39,22 +39,34 @@ def sample_zone(
     samples: list[Vec2D] = []
     attempts = 0
     max_attempts = max_attempts_per_point * max(num_samples, 1)
+    batch_size = max(num_samples * 2, 4)
+
     while len(samples) < num_samples and attempts < max_attempts:
-        rel_width = np.random.uniform(0, 1)
-        rel_height = np.random.uniform(0, 1)
-        point = b + rel_width * vec_ba + rel_height * vec_bc
-        pt_tuple = (float(point[0]), float(point[1]))
-        attempts += 1
-        if prepared_polygons and _point_in_any_obstacle(pt_tuple, prepared_polygons):
-            continue
-        samples.append(pt_tuple)
+        remaining = num_samples - len(samples)
+        current_batch = max(batch_size, remaining)
+        rel_width = np.random.uniform(0, 1, current_batch)
+        rel_height = np.random.uniform(0, 1, current_batch)
+        fold_mask = rel_width + rel_height > 1.0
+        rel_width[fold_mask] = 1.0 - rel_width[fold_mask]
+        rel_height[fold_mask] = 1.0 - rel_height[fold_mask]
+        points = b + rel_width[:, None] * vec_ba + rel_height[:, None] * vec_bc
+        candidates = [(float(x), float(y)) for x, y in points]
+        attempts += current_batch
+
+        if prepared_polygons:
+            keep_mask = _points_outside_obstacles(candidates, prepared_polygons)
+            filtered = [pt for pt, keep in zip(candidates, keep_mask, strict=False) if keep]
+        else:
+            filtered = candidates
+
+        samples.extend(filtered)
 
     if len(samples) < num_samples:
         raise RuntimeError(
             f"Failed to sample {num_samples} points in zone without obstacle overlap "
             f"after {attempts} attempts.",
         )
-    return samples
+    return samples[:num_samples]
 
 
 def _prepare_polygons(
@@ -80,3 +92,17 @@ def _point_in_any_obstacle(point: Vec2D, obstacle_polygons: list[PreparedGeometr
     """Return True if point lies inside any polygon."""
     pt = _ShapelyPoint(point)
     return any(poly.contains(pt) for poly in obstacle_polygons)
+
+
+def _points_outside_obstacles(
+    points: list[Vec2D], obstacle_polygons: list[PreparedGeometry]
+) -> list[bool]:
+    """Return mask marking points that do not intersect any obstacle."""
+    if not obstacle_polygons:
+        return [True] * len(points)
+    mask = [True] * len(points)
+    for idx, pt in enumerate(points):
+        shp_pt = _ShapelyPoint(pt)
+        if any(poly.contains(shp_pt) for poly in obstacle_polygons):
+            mask[idx] = False
+    return mask

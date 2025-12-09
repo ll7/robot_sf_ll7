@@ -35,8 +35,7 @@ from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
 from shapely.geometry import Point as _ShapelyPoint
-from shapely.geometry import Polygon as _ShapelyPolygon
-from shapely.prepared import PreparedGeometry, prep
+from shapely.prepared import PreparedGeometry
 
 from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 from robot_sf.nav.map_config import GlobalRoute
@@ -46,7 +45,7 @@ from robot_sf.ped_npc.ped_behavior import (
     PedestrianBehavior,
 )
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
-from robot_sf.ped_npc.ped_zone import sample_zone
+from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons, sample_zone
 
 
 @dataclass
@@ -160,7 +159,7 @@ def sample_route(
         """
         return np.clip(v, -sidewalk_width / 2, sidewalk_width / 2)
 
-    prepared_obstacles = _prepare_obstacles(obstacle_polygons or [])
+    prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
 
     samples: list[Vec2D] = []
     attempts = 0
@@ -183,25 +182,6 @@ def sample_route(
         )
 
     return samples, sec_id
-
-
-def _prepare_obstacles(
-    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry],
-) -> list[PreparedGeometry]:
-    """Normalize obstacles to prepared shapely geometries.
-
-    Returns:
-        list[PreparedGeometry]: Prepared polygons ready for containment checks.
-    """
-    prepared: list[PreparedGeometry] = []
-    for poly in obstacle_polygons:
-        if isinstance(poly, PreparedGeometry):
-            prepared.append(poly)
-        elif isinstance(poly, _ShapelyPolygon):
-            prepared.append(prep(poly))
-        else:
-            prepared.append(prep(_ShapelyPolygon(poly)))
-    return prepared
 
 
 def _point_in_any_obstacle(point: Vec2D, obstacles: list[PreparedGeometry]) -> bool:

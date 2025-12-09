@@ -31,7 +31,7 @@ def sample_zone(
     Returns:
         list[Vec2D]: Sampled points that do not intersect obstacles.
     """
-    prepared_polygons = _prepare_polygons(obstacle_polygons or [])
+    prepared_polygons = prepare_obstacle_polygons(obstacle_polygons or [])
     a, b, c = zone
     a, b, c = np.array(a), np.array(b), np.array(c)
     vec_ba, vec_bc = a - b, c - b
@@ -69,7 +69,7 @@ def sample_zone(
     return samples[:num_samples]
 
 
-def _prepare_polygons(
+def prepare_obstacle_polygons(
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry],
 ) -> list[PreparedGeometry]:
     """Normalize obstacles to prepared shapely geometries.

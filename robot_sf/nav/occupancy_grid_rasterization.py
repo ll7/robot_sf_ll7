@@ -21,31 +21,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+from shapely import contains_xy as _shp_contains_xy
+from shapely.geometry import Polygon as _ShapelyPolygon
 
 from robot_sf.common.types import Circle2D, Line2D, RobotPose  # noqa: TC001
 from robot_sf.nav.occupancy_grid_utils import get_affected_cells, world_to_grid_indices
 
 if TYPE_CHECKING:
     from robot_sf.nav.occupancy_grid import GridConfig
-
-try:  # Optional acceleration when shapely is available
-    try:
-        from shapely import contains_xy as _shp_contains_xy
-    except ImportError:  # pragma: no cover - shapely <2.0 or variant
-        from shapely.predicates import contains_xy as _shp_contains_xy  # type: ignore[assignment]
-    from shapely import vectorized as _shp_vectorized
-    from shapely.geometry import Point as _ShapelyPoint
-    from shapely.geometry import Polygon as _ShapelyPolygon
-    from shapely.prepared import prep as _shp_prep
-
-    _SHAPELY_AVAILABLE = True
-except ImportError:  # pragma: no cover - optional dependency
-    _SHAPELY_AVAILABLE = False
-    _ShapelyPolygon = None  # type: ignore[assignment]
-    _ShapelyPoint = None  # type: ignore[assignment]
-    _shp_vectorized = None  # type: ignore[assignment]
-    _shp_prep = None  # type: ignore[assignment]
-    _shp_contains_xy = None  # type: ignore[assignment]
 
 
 def rasterize_line_segment(
@@ -448,49 +431,13 @@ def _points_in_polygon(
     mesh_x: np.ndarray, mesh_y: np.ndarray, polygon: list[tuple[float, float]]
 ) -> np.ndarray:
     """Return a boolean mask of points inside a polygon."""
-    if _SHAPELY_AVAILABLE:
-        poly = _ShapelyPolygon(polygon)
-        if not poly.is_valid:  # pragma: no cover - defensive
-            poly = poly.buffer(0)
-        if poly.is_empty:
-            return np.zeros_like(mesh_x, dtype=bool)
-
-        flat_x = mesh_x.ravel()
-        flat_y = mesh_y.ravel()
-        if _shp_contains_xy is not None:
-            flat_mask = _shp_contains_xy(poly, flat_x, flat_y)
-        elif _shp_vectorized is not None:
-            flat_mask = _shp_vectorized.contains(poly, flat_x, flat_y)
-        else:  # pragma: no cover - fallback for shapely without vectorized API
-            prepared = _shp_prep(poly)
-            flat_mask = np.fromiter(
-                (
-                    prepared.contains(_ShapelyPoint(x, y))
-                    for x, y in zip(flat_x, flat_y, strict=False)
-                ),
-                dtype=bool,
-                count=flat_x.size,
-            )
-        return flat_mask.reshape(mesh_x.shape)
-
-    px = np.asarray([p[0] for p in polygon])
-    py = np.asarray([p[1] for p in polygon])
-    if px[0] == px[-1] and py[0] == py[-1]:
-        px = px[:-1]
-        py = py[:-1]
-
-    x0 = px
-    y0 = py
-    x1 = np.roll(px, -1)
-    y1 = np.roll(py, -1)
+    poly = _ShapelyPolygon(polygon)
+    if not poly.is_valid:  # pragma: no cover - defensive
+        poly = poly.buffer(0)
+    if poly.is_empty:
+        return np.zeros_like(mesh_x, dtype=bool)
 
     flat_x = mesh_x.ravel()
     flat_y = mesh_y.ravel()
-
-    cond1 = (y0 <= flat_y[:, None]) & (y1 > flat_y[:, None])
-    cond2 = (y1 <= flat_y[:, None]) & (y0 > flat_y[:, None])
-    intersects = cond1 | cond2
-    x_intersect = x0 + (flat_y[:, None] - y0) * (x1 - x0) / (y1 - y0 + 1e-12)
-    crossings = intersects & (flat_x[:, None] < x_intersect)
-    inside = crossings.sum(axis=1) % 2 == 1
-    return inside.reshape(mesh_x.shape)
+    flat_mask = _shp_contains_xy(poly, flat_x, flat_y)
+    return flat_mask.reshape(mesh_x.shape)

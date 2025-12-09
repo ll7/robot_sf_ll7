@@ -74,6 +74,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+from shapely.geometry import Point as _ShapelyPoint
+from shapely.geometry import Polygon as _ShapelyPolygon
+from shapely.prepared import PreparedGeometry, prep
 
 try:
     import pygame
@@ -364,6 +367,7 @@ class OccupancyGrid:
         self._last_robot_pose: RobotPoseRecord | None = None
         self._grid_origin: tuple[float, float] | None = None
         self._last_use_ego_frame: bool = False
+        self._prepared_obstacles: list[PreparedGeometry] | None = None
 
         logger.debug(
             f"OccupancyGrid initialized: "
@@ -554,6 +558,15 @@ class OccupancyGrid:
             self._grid_data[combined_idx] = combined.astype(self.config.dtype, copy=False)
             logger.debug("Generated combined channel from %s indices", source_indices)
 
+        # Cache shapely-prepared obstacles for direct spatial queries
+        if transformed_polygons:
+            shapely_polygons = [_ShapelyPolygon(poly) for poly in transformed_polygons]
+            self._prepared_obstacles = [
+                prep(poly) for poly in shapely_polygons if not poly.is_empty
+            ]
+        else:
+            self._prepared_obstacles = None
+
         return self._grid_data
 
     def query(self, query: POIQuery) -> POIResult:  # noqa: C901
@@ -598,6 +611,11 @@ class OccupancyGrid:
 
         # Track cells to query based on query type
         cells_to_check: list[tuple[int, int]] = []
+
+        contains_obstacle = False
+        if query.query_type == POIQueryType.POINT and self._prepared_obstacles:
+            pt = _ShapelyPoint(query_x, query_y)
+            contains_obstacle = any(poly.contains(pt) for poly in self._prepared_obstacles)
 
         if query.query_type == POIQueryType.POINT:
             # Single cell query
@@ -654,10 +672,6 @@ class OccupancyGrid:
                 mean_occupancy=0.0,
             )
 
-        # Extract occupancy values from all channels (aggregate)
-        rows = np.array([r for r, _c in cells_to_check], dtype=int)
-        cols = np.array([c for _r, c in cells_to_check], dtype=int)
-
         # Respect optional channel filter
         selected_channels = query.channels or self.config.channels
         selected_channels = [ch for ch in selected_channels if ch in self.config.channels]
@@ -672,6 +686,24 @@ class OccupancyGrid:
                 mean_occupancy=0.0,
                 channel_results={},
             )
+
+        if contains_obstacle and GridChannel.OBSTACLES in selected_channels:
+            channel_results = {
+                ch: (1.0 if ch == GridChannel.OBSTACLES else 0.0) for ch in selected_channels
+            }
+            return POIResult(
+                occupancy=1.0,
+                query_type=query.query_type,
+                num_cells=len(cells_to_check),
+                min_occupancy=1.0,
+                max_occupancy=1.0,
+                mean_occupancy=1.0,
+                channel_results=channel_results,
+            )
+
+        # Extract occupancy values from all channels (aggregate)
+        rows = np.array([r for r, _c in cells_to_check], dtype=int)
+        cols = np.array([c for _r, c in cells_to_check], dtype=int)
 
         channel_values = self._grid_data[channel_indices][:, rows, cols].astype(float, copy=False)
         per_cell_max = channel_values.max(axis=0)

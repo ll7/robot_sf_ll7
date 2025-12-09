@@ -16,7 +16,7 @@ from robot_sf.common.types import PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
-from robot_sf.nav.navigation import RouteNavigator, sample_route
+from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import is_circle_line_intersection
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior
@@ -76,7 +76,7 @@ class Simulator:
             spawn_config,
             self.map_def.ped_routes,
             self.map_def.ped_crowded_zones,
-            obstacle_polygons=[obs.vertices for obs in self.map_def.obstacles],
+            obstacle_polygons=get_prepared_obstacles(self.map_def),
             single_pedestrians=self.map_def.single_pedestrians,
         )
 

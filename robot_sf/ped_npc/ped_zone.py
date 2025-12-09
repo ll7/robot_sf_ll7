@@ -5,25 +5,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+from shapely.geometry import Point as _ShapelyPoint
+from shapely.geometry import Polygon as _ShapelyPolygon
+from shapely.prepared import PreparedGeometry, prep
 
 if TYPE_CHECKING:
     from robot_sf.common.types import Vec2D, Zone
-
-try:  # Optional acceleration when shapely is available
-    from shapely.geometry import Point as _ShapelyPoint
-    from shapely.geometry import Polygon as _ShapelyPolygon
-
-    _SHAPELY_AVAILABLE = True
-except ImportError:  # pragma: no cover - optional dependency
-    _SHAPELY_AVAILABLE = False
-    _ShapelyPoint = None  # type: ignore[assignment]
-    _ShapelyPolygon = None  # type: ignore[assignment]
 
 
 def sample_zone(
     zone: Zone,
     num_samples: int,
-    obstacle_polygons: list[list[Vec2D]] | None = None,
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
     max_attempts_per_point: int = 20,
 ) -> list[Vec2D]:
     """
@@ -38,7 +31,7 @@ def sample_zone(
     Returns:
         list[Vec2D]: Sampled points that do not intersect obstacles.
     """
-    obstacle_polygons = obstacle_polygons or []
+    prepared_polygons = _prepare_polygons(obstacle_polygons or [])
     a, b, c = zone
     a, b, c = np.array(a), np.array(b), np.array(c)
     vec_ba, vec_bc = a - b, c - b
@@ -52,7 +45,7 @@ def sample_zone(
         point = b + rel_width * vec_ba + rel_height * vec_bc
         pt_tuple = (float(point[0]), float(point[1]))
         attempts += 1
-        if obstacle_polygons and _point_in_any_obstacle(pt_tuple, obstacle_polygons):
+        if prepared_polygons and _point_in_any_obstacle(pt_tuple, prepared_polygons):
             continue
         samples.append(pt_tuple)
 
@@ -64,34 +57,26 @@ def sample_zone(
     return samples
 
 
-def _point_in_any_obstacle(point: Vec2D, obstacle_polygons: list[list[Vec2D]]) -> bool:
-    """Return True if point lies inside any polygon."""
-    if _SHAPELY_AVAILABLE:
-        pt = _ShapelyPoint(point)
-        for poly_vertices in obstacle_polygons:
-            poly = _ShapelyPolygon(poly_vertices)
-            if poly.contains(pt):
-                return True
-        return False
-
-    return any(_point_in_polygon(point, poly) for poly in obstacle_polygons)
-
-
-def _point_in_polygon(point: Vec2D, polygon: list[Vec2D]) -> bool:
-    """Ray casting point-in-polygon check.
+def _prepare_polygons(
+    obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry],
+) -> list[PreparedGeometry]:
+    """Normalize obstacles to prepared shapely geometries.
 
     Returns:
-        bool: True when the point lies strictly inside the polygon.
+        list[PreparedGeometry]: Prepared polygons ready for fast containment checks.
     """
-    x, y = point
-    inside = False
-    n = len(polygon)
-    if n < 3:
-        return False
-    for i in range(n):
-        x0, y0 = polygon[i]
-        x1, y1 = polygon[(i + 1) % n]
-        intersects = ((y0 > y) != (y1 > y)) and (x < (x1 - x0) * (y - y0) / (y1 - y0 + 1e-12) + x0)
-        if intersects:
-            inside = not inside
-    return inside
+    prepared: list[PreparedGeometry] = []
+    for poly in obstacle_polygons:
+        if isinstance(poly, PreparedGeometry):
+            prepared.append(poly)
+        elif isinstance(poly, _ShapelyPolygon):
+            prepared.append(prep(poly))
+        else:
+            prepared.append(prep(_ShapelyPolygon(poly)))
+    return prepared
+
+
+def _point_in_any_obstacle(point: Vec2D, obstacle_polygons: list[PreparedGeometry]) -> bool:
+    """Return True if point lies inside any polygon."""
+    pt = _ShapelyPoint(point)
+    return any(poly.contains(pt) for poly in obstacle_polygons)

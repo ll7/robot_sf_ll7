@@ -368,6 +368,7 @@ class OccupancyGrid:
         self._grid_origin: tuple[float, float] | None = None
         self._last_use_ego_frame: bool = False
         self._prepared_obstacles: list[PreparedGeometry] | None = None
+        self._obstacle_polygons: list[list[tuple[float, float]]] = []
 
         logger.debug(
             f"OccupancyGrid initialized: "
@@ -558,14 +559,9 @@ class OccupancyGrid:
             self._grid_data[combined_idx] = combined.astype(self.config.dtype, copy=False)
             logger.debug("Generated combined channel from %s indices", source_indices)
 
-        # Cache shapely-prepared obstacles for direct spatial queries
-        if transformed_polygons:
-            shapely_polygons = [_ShapelyPolygon(poly) for poly in transformed_polygons]
-            self._prepared_obstacles = [
-                prep(poly) for poly in shapely_polygons if not poly.is_empty
-            ]
-        else:
-            self._prepared_obstacles = None
+        # Cache obstacle polygons for direct spatial queries
+        self._obstacle_polygons = transformed_polygons or []
+        self._prepared_obstacles = self._prepare_obstacles(self._obstacle_polygons)
 
         return self._grid_data
 
@@ -613,9 +609,11 @@ class OccupancyGrid:
         cells_to_check: list[tuple[int, int]] = []
 
         contains_obstacle = False
-        if query.query_type == POIQueryType.POINT and self._prepared_obstacles:
-            pt = _ShapelyPoint(query_x, query_y)
-            contains_obstacle = any(poly.contains(pt) for poly in self._prepared_obstacles)
+        if query.query_type == POIQueryType.POINT:
+            self._ensure_prepared_obstacles()
+            if self._prepared_obstacles:
+                pt = _ShapelyPoint(query_x, query_y)
+                contains_obstacle = any(poly.contains(pt) for poly in self._prepared_obstacles)
 
         if query.query_type == POIQueryType.POINT:
             # Single cell query
@@ -733,6 +731,34 @@ class OccupancyGrid:
             mean_occupancy=mean_occ,
             channel_results=channel_results,
         )
+
+    def _prepare_obstacles(
+        self, polygons: list[list[tuple[float, float]]]
+    ) -> list[PreparedGeometry] | None:
+        if not polygons:
+            return None
+        shapely_polygons = [_ShapelyPolygon(poly) for poly in polygons]
+        return [prep(poly) for poly in shapely_polygons if not poly.is_empty]
+
+    def _ensure_prepared_obstacles(self) -> None:
+        if self._prepared_obstacles is None and self._obstacle_polygons:
+            self._prepared_obstacles = self._prepare_obstacles(self._obstacle_polygons)
+
+    def __getstate__(self):
+        """Customize pickling to drop non-serializable prepared geometries.
+
+        Returns:
+            dict: Serializable state without prepared geometries.
+        """
+        state = self.__dict__.copy()
+        # Drop shapely prepared geometries to keep pickling safe
+        state["_prepared_obstacles"] = None
+        return state
+
+    def __setstate__(self, state):
+        """Restore pickled state."""
+        self.__dict__.update(state)
+        self._prepared_obstacles = None
 
     @staticmethod
     def _bresenham_line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:

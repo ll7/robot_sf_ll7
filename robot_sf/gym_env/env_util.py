@@ -39,6 +39,67 @@ class AgentType(Enum):
     PEDESTRIAN = 2
 
 
+def make_grid_observation_spaces(grid_config: GridConfig) -> tuple[spaces.Box, spaces.Dict]:
+    """Construct occupancy grid observation spaces (grid + metadata).
+
+    Returns:
+        tuple[spaces.Box, spaces.Dict]: Observation spaces for the grid tensor and its metadata.
+    """
+
+    grid_shape = (
+        grid_config.num_channels,
+        grid_config.grid_height,
+        grid_config.grid_width,
+    )
+    grid_box = spaces.Box(
+        low=0.0,
+        high=1.0,
+        shape=grid_shape,
+        dtype=np.float32,
+    )
+    meta_space = spaces.Dict(
+        {
+            "origin": spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(2,),
+                dtype=np.float32,
+            ),
+            "resolution": spaces.Box(
+                low=np.array([0.0], dtype=np.float32),
+                high=np.array([np.inf], dtype=np.float32),
+                dtype=np.float32,
+            ),
+            "size": spaces.Box(
+                low=np.array([0.0, 0.0], dtype=np.float32),
+                high=np.array([np.inf, np.inf], dtype=np.float32),
+                dtype=np.float32,
+            ),
+            "use_ego_frame": spaces.Box(
+                low=np.array([0.0], dtype=np.float32),
+                high=np.array([1.0], dtype=np.float32),
+                dtype=np.float32,
+            ),
+            "center_on_robot": spaces.Box(
+                low=np.array([0.0], dtype=np.float32),
+                high=np.array([1.0], dtype=np.float32),
+                dtype=np.float32,
+            ),
+            "channel_indices": spaces.Box(
+                low=np.array([-1, -1, -1, -1], dtype=np.int32),
+                high=np.array([np.iinfo(np.int32).max] * 4, dtype=np.int32),
+                dtype=np.int32,
+            ),
+            "robot_pose": spaces.Box(
+                low=np.array([-np.inf, -np.inf, -np.inf], dtype=np.float32),
+                high=np.array([np.inf, np.inf, np.inf], dtype=np.float32),
+                dtype=np.float32,
+            ),
+        }
+    )
+    return grid_box, meta_space
+
+
 def init_collision_and_sensors(
     sim: Simulator,
     env_config: EnvSettings | RobotSimulationConfig,
@@ -259,24 +320,15 @@ def create_spaces(
         # Get grid config (should be validated in unified_config.__post_init__)
         grid_config = getattr(env_config, "grid_config", None)
         if grid_config is not None and isinstance(grid_config, GridConfig):
-            # Create Box space for grid: shape [C, H, W], dtype float32, bounds [0, 1]
-            grid_shape = (
-                grid_config.num_channels,
-                grid_config.grid_height,
-                grid_config.grid_width,
-            )
-            grid_box = spaces.Box(
-                low=0.0,
-                high=1.0,
-                shape=grid_shape,
-                dtype=np.float32,
-            )
+            grid_box, meta_space = make_grid_observation_spaces(grid_config)
 
             # Add to both observation spaces
             orig_dict = dict(orig_obs_space.spaces)
             norm_dict = dict(observation_space.spaces)
             orig_dict["occupancy_grid"] = grid_box
             norm_dict["occupancy_grid"] = grid_box
+            orig_dict["occupancy_grid_meta"] = meta_space
+            norm_dict["occupancy_grid_meta"] = meta_space
             orig_obs_space = spaces.Dict(orig_dict)
             observation_space = spaces.Dict(norm_dict)
 

@@ -30,6 +30,7 @@ from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import (
     init_collision_and_sensors,
     init_spaces,
+    make_grid_observation_spaces,
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
@@ -226,14 +227,10 @@ class RobotEnv(BaseEnv):
             sensor_adapter = socnav_fusion
             # Add occupancy grid to SocNav structured observation space when requested
             if self.include_grid_in_observation and self.occupancy_grid is not None:
-                grid_shape = (
-                    self.occupancy_grid.config.num_channels,
-                    self.occupancy_grid.config.grid_height,
-                    self.occupancy_grid.config.grid_width,
-                )
-                grid_box = spaces.Box(low=0.0, high=1.0, shape=grid_shape, dtype=np.float32)
+                grid_box, meta_space = make_grid_observation_spaces(self.occupancy_grid.config)
                 obs_dict = dict(self.observation_space.spaces)
                 obs_dict["occupancy_grid"] = grid_box
+                obs_dict["occupancy_grid_meta"] = meta_space
                 self.observation_space = spaces.Dict(obs_dict)
         else:
             sensor_adapter = sensors[0]
@@ -321,6 +318,7 @@ class RobotEnv(BaseEnv):
             # Update observation with new grid
             if self.include_grid_in_observation:
                 obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+                obs["occupancy_grid_meta"] = self.occupancy_grid.metadata_observation()
 
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
@@ -400,6 +398,7 @@ class RobotEnv(BaseEnv):
             # Add grid to observation
             if self.include_grid_in_observation:
                 obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+                obs["occupancy_grid_meta"] = self.occupancy_grid.metadata_observation()
                 logger.debug(
                     f"Initial occupancy grid generated: "
                     f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"

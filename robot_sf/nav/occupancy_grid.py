@@ -70,7 +70,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
@@ -959,6 +959,63 @@ class OccupancyGrid:
         )
 
         return obs_array
+
+    def metadata(self) -> dict[str, Any]:
+        """Return metadata describing the most recently generated grid.
+
+        Includes origin, resolution, physical size, frame flags, channel indices,
+        and the robot pose used for rasterization.
+
+        Raises:
+            RuntimeError: If the grid has not been generated yet.
+
+        Returns:
+            dict[str, Any]: Metadata with origin, size, channel indices, and robot pose.
+        """
+        if self._grid_origin is None or self._last_robot_pose is None:
+            raise RuntimeError("Grid has not been generated yet. Call generate() first.")
+
+        def _channel_index(channel: GridChannel) -> int:
+            return self.config.channels.index(channel) if channel in self.config.channels else -1
+
+        channel_indices = [
+            _channel_index(GridChannel.OBSTACLES),
+            _channel_index(GridChannel.PEDESTRIANS),
+            _channel_index(GridChannel.ROBOT),
+            _channel_index(GridChannel.COMBINED),
+        ]
+
+        return {
+            "origin": self._grid_origin,
+            "resolution": self.config.resolution,
+            "size": (self.config.width, self.config.height),
+            "use_ego_frame": self._last_use_ego_frame,
+            "center_on_robot": self.config.center_on_robot,
+            "channels": [c.value for c in self.config.channels],
+            "channel_indices": channel_indices,
+            "robot_pose": (
+                self._last_robot_pose.position[0],
+                self._last_robot_pose.position[1],
+                self._last_robot_pose.theta,
+            ),
+        }
+
+    def metadata_observation(self) -> dict[str, np.ndarray]:
+        """Convert grid metadata to observation-friendly numpy arrays.
+
+        Returns:
+            dict[str, np.ndarray]: Metadata fields converted to ndarray for gym observations.
+        """
+        meta = self.metadata()
+        return {
+            "origin": np.asarray(meta["origin"], dtype=np.float32),
+            "resolution": np.asarray([meta["resolution"]], dtype=np.float32),
+            "size": np.asarray(meta["size"], dtype=np.float32),
+            "use_ego_frame": np.asarray([float(meta["use_ego_frame"])], dtype=np.float32),
+            "center_on_robot": np.asarray([float(meta["center_on_robot"])], dtype=np.float32),
+            "channel_indices": np.asarray(meta["channel_indices"], dtype=np.int32),
+            "robot_pose": np.asarray(meta["robot_pose"], dtype=np.float32),
+        }
 
     def __repr__(self) -> str:
         """String representation of occupancy grid.

@@ -10,7 +10,7 @@
 		{
 			"label": "Run Tests",
 			"type": "shell",
-			"command": "uv run pytest tests",
+			"command": "uv run pytest -n auto tests",
 			"group": {
 				"kind": "test",
 				"isDefault": true
@@ -42,7 +42,7 @@
 		{
 			"label": "Run Tests (Show All Warnings)",
 			"type": "shell",
-			"command": "uv run pytest tests --disable-warnings --tb=short -v",
+			"command": "uv run pytest -n auto tests --disable-warnings --tb=short -v",
 			"group": "test"
 		},
 		{
@@ -62,7 +62,7 @@
 		{
 			"label": "Run Tests with Coverage",
 			"type": "shell",
-			"command": "uv run pytest tests",
+			"command": "uv run pytest -n auto tests",
 			"group": "test",
 			"presentation": {
 				"echo": true,

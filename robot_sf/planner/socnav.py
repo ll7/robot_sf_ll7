@@ -26,6 +26,12 @@ class OccupancyAwarePlannerMixin:
     _CHANNEL_KEYS = tuple(channel.value for channel in OBSERVATION_CHANNEL_ORDER)
 
     def _extract_grid_payload(self, observation: dict) -> tuple[np.ndarray, dict[str, Any]] | None:
+        """Extract occupancy grid tensor and metadata from observation.
+
+        Returns:
+            tuple[np.ndarray, dict[str, Any]] | None: Grid array and metadata dict
+            when present, otherwise ``None``.
+        """
         grid = observation.get("occupancy_grid")
         if grid is None:
             return None
@@ -57,6 +63,34 @@ class OccupancyAwarePlannerMixin:
         except (TypeError, ValueError):
             return None
         return grid_arr, meta
+
+    def _socnav_fields(self, observation: dict) -> tuple[dict, dict, dict]:
+        """Normalize SocNav observation (nested or flattened) into standard dicts.
+
+        Returns:
+            tuple[dict, dict, dict]: (robot_state, goal_state, ped_state) dictionaries.
+        """
+        if "robot" in observation:
+            robot_state = observation["robot"]
+            goal_state = observation.get("goal", {})
+            ped_state = observation.get("pedestrians", {})
+        else:
+            robot_state = {
+                "position": observation.get("robot_position"),
+                "heading": observation.get("robot_heading"),
+                "speed": observation.get("robot_speed"),
+                "radius": observation.get("robot_radius"),
+            }
+            goal_state = {
+                "current": observation.get("goal_current"),
+                "next": observation.get("goal_next"),
+            }
+            ped_state = {
+                "positions": observation.get("pedestrians_positions"),
+                "count": observation.get("pedestrians_count"),
+                "radius": observation.get("pedestrians_radius"),
+            }
+        return robot_state, goal_state, ped_state
 
     def _grid_channel_index(self, meta: dict[str, Any], key: str) -> int:
         """Return channel index for a semantic key, or -1 when unavailable.
@@ -289,10 +323,9 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             tuple: (linear_velocity, angular_velocity)
         """
-        robot_state = observation["robot"]
-        goal_state = observation["goal"]
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(robot_state["heading"][0])
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
         goal = np.asarray(goal_state["current"], dtype=float)
 
         to_goal = goal - robot_pos
@@ -301,9 +334,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             return 0.0, 0.0
 
         # Light pedestrian repulsion to keep base planner pedestrian-aware
-        ped_state = observation.get("pedestrians", {})
         ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
-        ped_count = int(ped_state.get("count", [0])[0]) if ped_state else 0
+        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0]) if ped_state else 0
         ped_positions = ped_positions[:ped_count]
         repulse = np.zeros(2, dtype=float)
         for ped in ped_positions:
@@ -395,18 +427,16 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        robot_state = observation["robot"]
-        goal_state = observation["goal"]
-        ped_state = observation["pedestrians"]
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(robot_state["heading"][0])
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
         goal = np.asarray(goal_state["current"], dtype=float)
 
         to_goal = goal - robot_pos
         goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
 
         ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count = int(ped_state["count"][0])
+        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0])
         ped_positions = ped_positions[:ped_count]
         repulse = np.zeros(2, dtype=float)
         for ped in ped_positions:
@@ -451,18 +481,16 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        robot_state = observation["robot"]
-        goal_state = observation["goal"]
-        ped_state = observation["pedestrians"]
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(robot_state["heading"][0])
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
         goal = np.asarray(goal_state["current"], dtype=float)
 
         to_goal = goal - robot_pos
         goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
 
         ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count: int = int(ped_state["count"][0])
+        ped_count: int = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0])
         ped_positions = ped_positions[:ped_count]
 
         avoidance = np.zeros(2, dtype=float)
@@ -509,18 +537,16 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
-        robot_state = observation["robot"]
-        goal_state = observation["goal"]
-        ped_state = observation["pedestrians"]
+        robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state["position"], dtype=float)
-        robot_heading = float(robot_state["heading"][0])
+        robot_heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
         goal = np.asarray(goal_state["current"], dtype=float)
 
         to_goal = goal - robot_pos
         goal_vec = to_goal / (np.linalg.norm(to_goal) + 1e-6)
 
         ped_positions = np.asarray(ped_state["positions"], dtype=float)
-        ped_count = int(ped_state["count"][0])
+        ped_count = int(np.asarray(ped_state.get("count", [0]), dtype=float)[0])
         ped_positions = ped_positions[:ped_count]
         if ped_positions.shape[0] > 0:
             dists = np.linalg.norm(ped_positions - robot_pos, axis=1)
@@ -684,11 +710,10 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             return super().plan(observation)
 
         try:
-            robot_state = observation["robot"]
-            goal_state = observation["goal"]
+            robot_state, goal_state, _ = self._socnav_fields(observation)
             pos = robot_state["position"]
             robot_pos = np.asarray(pos, dtype=float)
-            heading = robot_state["heading"][0]
+            heading = float(np.asarray(robot_state["heading"], dtype=float)[0])
             start_config = self._planner.opt_waypt.__class__.from_pos3([pos[0], pos[1], heading])
             goal = goal_state["current"]
             goal_config = self._planner.opt_waypt.__class__.from_pos3([goal[0], goal[1], 0.0])

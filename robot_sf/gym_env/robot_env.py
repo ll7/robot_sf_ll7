@@ -381,7 +381,7 @@ class RobotEnv(BaseEnv):
         self._flatten_obs_space = False
         self._wrap_obs_as_dict = False
         if self.include_grid_in_observation and self.occupancy_grid is not None:
-            grid_box, meta_space = make_grid_observation_spaces(self.occupancy_grid.config)
+            grid_box, meta_spaces = make_grid_observation_spaces(self.occupancy_grid.config)
 
             # Flatten the nested SocNav structure before adding grid fields
             self.observation_space = _flatten_nested_dict_spaces(self.observation_space)
@@ -391,7 +391,7 @@ class RobotEnv(BaseEnv):
             obs_dict = dict(self.observation_space.spaces)
             obs_dict["occupancy_grid"] = grid_box
             # Add all flattened metadata fields (not a nested Dict!)
-            obs_dict.update(meta_space.spaces)
+            obs_dict.update(meta_spaces)
             self.observation_space = spaces.Dict(obs_dict)
 
         # Wrap sensor adapter to flatten observations when needed
@@ -412,7 +412,7 @@ class RobotEnv(BaseEnv):
         self._wrap_obs_as_dict = False
 
         if self.include_grid_in_observation and self.occupancy_grid is not None:
-            grid_box, meta_space = make_grid_observation_spaces(self.occupancy_grid.config)
+            grid_box, meta_spaces = make_grid_observation_spaces(self.occupancy_grid.config)
 
             # Convert observation space to dict if needed (for grid fields)
             if not isinstance(self.observation_space, spaces.Dict):
@@ -422,10 +422,10 @@ class RobotEnv(BaseEnv):
                 obs_dict = dict(self.observation_space.spaces)
                 self._wrap_obs_as_dict = False
 
-                # Add grid fields (grid box + flattened metadata)
-                obs_dict["occupancy_grid"] = grid_box
-                obs_dict.update(meta_space)
-                self.observation_space = spaces.Dict(obs_dict)
+            # Add grid fields (grid box + flattened metadata)
+            obs_dict["occupancy_grid"] = grid_box
+            obs_dict.update(meta_spaces.spaces)
+            self.observation_space = spaces.Dict(obs_dict)
 
         return sensor_adapter
 

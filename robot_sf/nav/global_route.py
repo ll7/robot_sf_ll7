@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Route utilities for global navigation."""
 
 from dataclasses import dataclass
 from math import dist
@@ -8,34 +8,14 @@ from robot_sf.common.types import Rect, Vec2D
 
 @dataclass
 class GlobalRoute:
-    """
-    A class to represent a global route.
+    """Global route from a spawn zone to a goal zone.
 
-    Attributes
-    ----------
-    spawn_id : int
-        The id of the spawn point.
-    goal_id : int
-        The id of the goal point.
-    waypoints : List[Vec2D]
-        The waypoints of the route.
-    spawn_zone : Rect
-        The spawn zone of the route.
-    goal_zone : Rect
-        The goal zone of the route.
-
-    Methods
-    -------
-    __post_init__():
-        Validates the spawn_id, goal_id, and waypoints.
-    sections():
-        Returns the sections of the route.
-    section_lengths():
-        Returns the lengths of the sections.
-    section_offsets():
-        Returns the offsets of the sections.
-    total_length():
-        Returns the total length of the route.
+    Attributes:
+        spawn_id: Identifier of the spawn zone.
+        goal_id: Identifier of the goal zone.
+        waypoints: Ordered list of 2D waypoints defining the path.
+        spawn_zone: Polygon describing the spawn area.
+        goal_zone: Polygon describing the goal area.
     """
 
     spawn_id: int
@@ -45,10 +25,7 @@ class GlobalRoute:
     goal_zone: Rect
 
     def __post_init__(self):
-        """
-        Validates the spawn_id, goal_id, and waypoints.
-        Raises a ValueError if spawn_id or goal_id is less than 0 or if waypoints is empty.
-        """
+        """Validate spawn/goal identifiers and waypoint list."""
 
         if self.spawn_id < 0:
             raise ValueError("Spawn id needs to be an integer >= 0!")
@@ -59,10 +36,10 @@ class GlobalRoute:
 
     @property
     def sections(self) -> list[tuple[Vec2D, Vec2D]]:
-        """
-        Returns the sections of the route as a list of tuples, where each tuple
-        contains two Vec2D objects
-        representing the start and end points of the section.
+        """List consecutive waypoint pairs.
+
+        Returns:
+            list[tuple[Vec2D, Vec2D]]: Start/end points for each segment.
         """
 
         return (
@@ -73,16 +50,16 @@ class GlobalRoute:
 
     @property
     def section_lengths(self) -> list[float]:
-        """
-        Returns the lengths of the sections as a list of floats.
-        """
+        """Compute length of each segment."""
 
         return [dist(p1, p2) for p1, p2 in self.sections]
 
     @property
     def section_offsets(self) -> list[float]:
-        """
-        Returns the offsets of the sections as a list of floats.
+        """Cumulative offsets for each segment start.
+
+        Returns:
+            list[float]: Distance from route start to each segment start.
         """
 
         lengths = self.section_lengths
@@ -95,8 +72,6 @@ class GlobalRoute:
 
     @property
     def total_length(self) -> float:
-        """
-        Returns the total length of the route as a float.
-        """
+        """Total path length."""
 
         return 0 if len(self.waypoints) < 2 else sum(self.section_lengths)

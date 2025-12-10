@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
+from math import pi
 from pathlib import Path
 
 import numpy as np
@@ -68,6 +69,24 @@ class RolloutResult:
     start: np.ndarray
 
 
+def _robot_position(obs: dict) -> np.ndarray:
+    """Extract robot position from nested or flattened SocNav observations."""
+    if "robot" in obs:
+        return np.asarray(obs["robot"]["position"], dtype=float)
+    return np.asarray(obs["robot_position"], dtype=float)
+
+
+def _ped_data(obs: dict) -> tuple[np.ndarray, int]:
+    """Extract pedestrian positions and count from nested or flattened observations."""
+    if "pedestrians" in obs:
+        ped_positions = np.asarray(obs["pedestrians"]["positions"], dtype=float)
+        ped_count = int(obs["pedestrians"]["count"][0])
+    else:
+        ped_positions = np.asarray(obs.get("pedestrians_positions", []), dtype=float)
+        ped_count = int(np.asarray(obs.get("pedestrians_count", [0]), dtype=float)[0])
+    return ped_positions, ped_count
+
+
 def _obstacle_bboxes(map_def: MapDefinition) -> list[tuple[float, float, float, float]]:
     """Return (xmin, xmax, ymin, ymax) for each obstacle."""
 
@@ -114,6 +133,11 @@ def make_policies(max_speed: float, max_turn: float) -> OrderedDict[str, SocNavP
             max_angular_speed=max_turn,
             angular_gain=1.0,
             goal_tolerance=0.25,
+            occupancy_lookahead=6.0,
+            occupancy_heading_sweep=pi * 0.85,
+            occupancy_candidates=9,
+            occupancy_weight=5.0,
+            occupancy_angle_weight=0.6,
         )
 
     return OrderedDict(
@@ -141,8 +165,12 @@ def rollout_policy(
     env_config = RobotSimulationConfig(
         observation_mode=ObservationMode.SOCNAV_STRUCT,
         map_pool=MapDefinitionPool(map_defs={MAP_KEY: base_map}),
+        use_occupancy_grid=True,
+        include_grid_in_observation=True,
     )
     env_config.sim_config.max_total_pedestrians = len(base_map.single_pedestrians)
+    # Use a compact robot footprint for this narrow-map demo to reduce spurious obstacle collisions
+    env_config.robot_config.radius = 0.35
     env_config.robot_config.max_linear_speed = max_speed
     env_config.robot_config.max_angular_speed = max_turn
 
@@ -156,14 +184,10 @@ def rollout_policy(
     )
 
     obs, _ = env.reset()
-    start = np.asarray(obs["robot"]["position"], dtype=float).copy()
+    start = _robot_position(obs).copy()
     nav = env.simulator.robot_navs[0]
     final_goal = np.asarray(nav.waypoints[-1], dtype=float).copy()
-    # Force navigation to target the final goal directly to avoid early success at mid-waypoints
-    nav.new_route([tuple(final_goal), tuple(final_goal)])
-    # Refresh observation so goal fields reflect the updated route
-    obs = env.state.sensors.next_obs()
-    robot_path: list[np.ndarray] = [np.asarray(obs["robot"]["position"], dtype=float).copy()]
+    robot_path: list[np.ndarray] = [_robot_position(obs).copy()]
     ped_paths: list[np.ndarray] = []
     success = False
     route_complete = False
@@ -175,11 +199,9 @@ def rollout_policy(
             if interactive:
                 env.render()
 
-            robot_path.append(np.asarray(obs["robot"]["position"], dtype=float).copy())
-            ped_count = int(obs["pedestrians"]["count"][0])
-            ped_paths.append(
-                np.asarray(obs["pedestrians"]["positions"][:ped_count], dtype=float).copy(),
-            )
+            robot_path.append(_robot_position(obs).copy())
+            ped_positions, ped_count = _ped_data(obs)
+            ped_paths.append(np.asarray(ped_positions[:ped_count], dtype=float).copy())
 
             route_complete = bool(info.get("meta", {}).get("is_route_complete", False))
             if terminated or truncated or route_complete:
@@ -207,7 +229,9 @@ def rollout_policy(
     )
 
 
-def plot_rollouts(results: list[RolloutResult], map_def: MapDefinition) -> None:
+def plot_rollouts(
+    results: list[RolloutResult], map_def: MapDefinition, save_path: Path | None = None
+) -> None:
     """Render overlay plot of robot and pedestrian trajectories."""
 
     if not MATPLOTLIB_AVAILABLE:
@@ -271,7 +295,18 @@ def plot_rollouts(results: list[RolloutResult], map_def: MapDefinition) -> None:
     ax.legend()
     ax.grid(True, linestyle=":")
     plt.tight_layout()
-    plt.show()
+
+    backend = plt.get_backend().lower()
+    if save_path is None and "agg" in backend:
+        save_path = Path("output/plots/planner_comparison.png")
+
+    if save_path is not None:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        logger.info("Saved planner comparison plot to {}", save_path)
+        plt.close()
+    else:
+        plt.show()
 
 
 def parse_args() -> argparse.Namespace:
@@ -283,7 +318,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--steps",
         type=int,
-        default=250,
+        default=400,
         help="Maximum steps per planner rollout.",
     )
     parser.add_argument(
@@ -296,6 +331,12 @@ def parse_args() -> argparse.Namespace:
         "--interactive",
         action="store_true",
         help="Render the simulation live while rolling out each planner.",
+    )
+    parser.add_argument(
+        "--save-path",
+        type=Path,
+        default=None,
+        help="Optional path to save the overlay plot (defaults to output/plots when headless).",
     )
     return parser.parse_args()
 
@@ -330,7 +371,7 @@ def main():
             success=result.success,
         )
 
-    plot_rollouts(results, base_map)
+    plot_rollouts(results, base_map, save_path=args.save_path)
 
 
 if __name__ == "__main__":

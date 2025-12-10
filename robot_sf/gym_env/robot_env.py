@@ -30,6 +30,7 @@ from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import (
     init_collision_and_sensors,
     init_spaces,
+    make_grid_observation_spaces,
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
@@ -40,6 +41,7 @@ from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
+from robot_sf.sensor.sensor_fusion import SensorFusion
 from robot_sf.sensor.socnav_observation import (
     DEFAULT_MAX_PEDS,
     SocNavObservationFusion,
@@ -85,6 +87,118 @@ def _make_telemetry_run_id() -> str:
         str: High-entropy run identifier for telemetry artifacts.
     """
     return f"telemetry-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
+
+
+def _flatten_nested_dict_spaces(obs_space: spaces.Dict) -> spaces.Dict:
+    """Flatten nested Dict spaces to top-level for StableBaselines3 compatibility.
+
+    StableBaselines3's DummyVecEnv does not support nested Dict spaces. This helper
+    flattens any nested Dict/Tuple structures to the top level by promoting leaf spaces.
+
+    Args:
+        obs_space: The observation space to flatten (typically from socnav_observation_space).
+
+    Returns:
+        A new spaces.Dict with all nested structures flattened to the top level using
+        underscore-separated naming (e.g., "robot_position", "goal_current").
+    """
+    flattened = {}
+
+    def _flatten_recursive(space_dict: dict, prefix: str = ""):
+        """Recursively flatten nested spaces."""
+        for key, space in space_dict.items():
+            full_key = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
+
+            if isinstance(space, spaces.Dict):
+                # Recursively flatten nested Dict
+                _flatten_recursive(space.spaces, full_key)
+            else:
+                # Leaf space - add to flattened dict
+                flattened[full_key] = space
+
+    _flatten_recursive(obs_space.spaces)
+    return spaces.Dict(flattened)
+
+
+def _flatten_nested_dict_obs(obs: dict) -> dict:
+    """Flatten nested dict observations to top-level for flattened observation spaces.
+
+    Mirrors the structure flattening done in _flatten_nested_dict_spaces, converting
+    nested observation dicts to flat dicts with underscore-separated keys.
+
+    Args:
+        obs: The nested observation dict (typically from SocNavObservationFusion).
+
+    Returns:
+        A flat observation dict matching the flattened observation space structure.
+    """
+    flattened = {}
+
+    def _flatten_recursive(obs_dict: dict, prefix: str = ""):
+        """Recursively flatten nested observation dicts."""
+        for key, value in obs_dict.items():
+            full_key = f"{prefix}{key}" if not prefix else f"{prefix}_{key}"
+
+            if isinstance(value, dict):
+                # Recursively flatten nested dict
+                _flatten_recursive(value, full_key)
+            else:
+                # Leaf value - add to flattened dict
+                flattened[full_key] = value
+
+    _flatten_recursive(obs)
+    return flattened
+
+
+class _FlatteningObservationWrapper:
+    """Wraps a sensor fusion adapter to flatten nested observations.
+
+    This adapter wraps SocNavObservationFusion to automatically flatten its nested
+    dict observations to a flat structure compatible with StableBaselines3's DummyVecEnv,
+    which does not support nested Dict observation spaces.
+    """
+
+    def __init__(self, wrapped_adapter):
+        """Initialize wrapper with the sensor fusion adapter to wrap.
+
+        Args:
+            wrapped_adapter: The sensor fusion adapter (typically SocNavObservationFusion).
+        """
+        self.wrapped_adapter = wrapped_adapter
+
+    def reset_cache(self) -> None:
+        """Delegate to wrapped adapter."""
+        return self.wrapped_adapter.reset_cache()
+
+    def next_obs(self) -> dict:
+        """Get next observation and flatten nested structure.
+
+        Returns:
+            A flat observation dict with underscore-separated keys matching the
+            flattened observation space structure.
+        """
+        obs = self.wrapped_adapter.next_obs()
+        return _flatten_nested_dict_obs(obs)
+
+
+def _flatten_occupancy_grid_metadata(
+    metadata: dict[str, np.ndarray],
+) -> dict[str, np.ndarray]:
+    """Flatten occupancy grid metadata into prefixed field names.
+
+    StableBaselines3 requires a flat Dict observation space without nesting.
+    This converts the nested metadata dict (with 'origin', 'resolution', etc.)
+    into flattened fields with 'occupancy_grid_meta_' prefix.
+
+    Args:
+        metadata: Dict from occupancy_grid.metadata_observation() with keys like
+            'origin', 'resolution', etc.
+
+    Returns:
+        Dict with keys like 'occupancy_grid_meta_origin', 'occupancy_grid_meta_resolution',
+        etc. for inclusion in the top-level observation dict.
+    """
+    return {f"occupancy_grid_meta_{key}": value for key, value in metadata.items()}
 
 
 def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
@@ -191,52 +305,14 @@ class RobotEnv(BaseEnv):
         # Store configuration for factory pattern compatibility
         self.config = env_config
 
-        # T043: Initialize occupancy grid for observation and/or visualization
-        self.include_grid_in_observation: bool = bool(
-            getattr(env_config, "include_grid_in_observation", False)
-        )
-        self.occupancy_grid = None
-        if env_config.use_occupancy_grid and env_config.grid_config is not None:
-            self.occupancy_grid = OccupancyGrid(config=env_config.grid_config)
-            logger.info(
-                "Occupancy grid initialized (observe=%s, visualize=%s): shape=%s, resolution=%.3fm",
-                self.include_grid_in_observation,
-                env_config.show_occupancy_grid,
-                self.occupancy_grid.shape,
-                env_config.grid_config.resolution,
-            )
+        # Initialize optional occupancy grid
+        self.occupancy_grid = self._build_occupancy_grid(env_config)
 
+        # Configure observation space and sensor adapter per observation mode
         if env_config.observation_mode == ObservationMode.SOCNAV_STRUCT:
-            # Build SocNav-style observation space and fusion layer
-            ped_count = getattr(self.simulator, "ped_pos", np.zeros((0, 2))).shape[0]
-            max_peds = getattr(env_config.sim_config, "max_total_pedestrians", None)
-            if max_peds is None:
-                max_peds = max(DEFAULT_MAX_PEDS, ped_count)
-            self.observation_space = socnav_observation_space(
-                self.map_def,
-                env_config,
-                max_peds,
-            )
-            socnav_fusion = SocNavObservationFusion(
-                simulator=self.simulator,
-                env_config=env_config,
-                max_pedestrians=max_peds,
-                robot_index=0,
-            )
-            sensor_adapter = socnav_fusion
-            # Add occupancy grid to SocNav structured observation space when requested
-            if self.include_grid_in_observation and self.occupancy_grid is not None:
-                grid_shape = (
-                    self.occupancy_grid.config.num_channels,
-                    self.occupancy_grid.config.grid_height,
-                    self.occupancy_grid.config.grid_width,
-                )
-                grid_box = spaces.Box(low=0.0, high=1.0, shape=grid_shape, dtype=np.float32)
-                obs_dict = dict(self.observation_space.spaces)
-                obs_dict["occupancy_grid"] = grid_box
-                self.observation_space = spaces.Dict(obs_dict)
+            sensor_adapter = self._setup_socnav_observation(env_config)
         else:
-            sensor_adapter = sensors[0]
+            sensor_adapter = self._setup_default_observation(env_config, sensors)
 
         # Setup initial state of the robot
         self.state = RobotState(
@@ -253,30 +329,131 @@ class RobotEnv(BaseEnv):
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
             self.sim_ui.show_occupancy_grid = True
         # Initialize telemetry session/pane when requested
-        self._telemetry_session: TelemetrySession | None = None
-        if env_config.enable_telemetry_panel or env_config.telemetry_record:
-            run_id = _make_telemetry_run_id()
-            pane_width = DEFAULT_PANE_WIDTH
-            pane_height = DEFAULT_PANE_HEIGHT
-            if self.sim_ui:
-                self.sim_ui.show_telemetry_panel = env_config.enable_telemetry_panel
-                self.sim_ui.telemetry_layout = env_config.telemetry_pane_layout
-                pane_width = min(DEFAULT_PANE_WIDTH, max(MIN_PANE_WIDTH, self.sim_ui.width // 3))
-                pane_height = min(
-                    DEFAULT_PANE_HEIGHT, max(MIN_PANE_HEIGHT, self.sim_ui.height // 3)
-                )
-            self._telemetry_session = TelemetrySession(
-                run_id=run_id,
-                record=env_config.telemetry_record,
-                metrics=env_config.telemetry_metrics,
-                refresh_hz=env_config.telemetry_refresh_hz,
-                decimation=env_config.telemetry_decimation,
-                pane_size=(pane_width, pane_height),
-            )
-            if self.sim_ui:
-                self.sim_ui.telemetry_session = self._telemetry_session
+        self._init_telemetry(env_config)
         self._last_wall_time = time.perf_counter()
         self._frame_idx = 0
+
+    def _build_occupancy_grid(self, env_config: EnvSettings) -> OccupancyGrid | None:
+        """Initialize occupancy grid if configured and return the instance.
+
+        Returns:
+            OccupancyGrid | None: Initialized grid when enabled; otherwise ``None``.
+        """
+        self.include_grid_in_observation = bool(
+            getattr(env_config, "include_grid_in_observation", False)
+        )
+        if env_config.use_occupancy_grid and env_config.grid_config is not None:
+            grid = OccupancyGrid(config=env_config.grid_config)
+            logger.info(
+                "Occupancy grid initialized (observe=%s, visualize=%s): shape=%s, resolution=%.3fm",
+                self.include_grid_in_observation,
+                env_config.show_occupancy_grid,
+                grid.shape,
+                env_config.grid_config.resolution,
+            )
+            return grid
+        return None
+
+    def _setup_socnav_observation(self, env_config: EnvSettings):
+        """Configure SocNav observation space and sensor adapter.
+
+        Returns:
+            SensorFusion: Adapter producing SocNav structured observations (flattened when needed).
+        """
+        ped_count = getattr(self.simulator, "ped_pos", np.zeros((0, 2))).shape[0]
+        max_peds = getattr(env_config.sim_config, "max_total_pedestrians", None)
+        if max_peds is None:
+            max_peds = max(DEFAULT_MAX_PEDS, ped_count)
+        self.observation_space = socnav_observation_space(
+            self.map_def,
+            env_config,
+            max_peds,
+        )
+        socnav_fusion = SocNavObservationFusion(
+            simulator=self.simulator,
+            env_config=env_config,
+            max_pedestrians=max_peds,
+            robot_index=0,
+        )
+
+        # T044: When adding occupancy grid, flatten the nested observation space
+        # for StableBaselines3 compatibility (SB3 doesn't support nested Dict spaces)
+        self._flatten_obs_space = False
+        self._wrap_obs_as_dict = False
+        if self.include_grid_in_observation and self.occupancy_grid is not None:
+            grid_box, meta_spaces = make_grid_observation_spaces(self.occupancy_grid.config)
+
+            # Flatten the nested SocNav structure before adding grid fields
+            self.observation_space = _flatten_nested_dict_spaces(self.observation_space)
+            self._flatten_obs_space = True
+
+            # Now add grid fields to the flattened space
+            obs_dict = dict(self.observation_space.spaces)
+            obs_dict["occupancy_grid"] = grid_box
+            # Add all flattened metadata fields (not a nested Dict!)
+            obs_dict.update(meta_spaces)
+            self.observation_space = spaces.Dict(obs_dict)
+
+        # Wrap sensor adapter to flatten observations when needed
+        if self._flatten_obs_space:
+            return _FlatteningObservationWrapper(socnav_fusion)
+        return socnav_fusion
+
+    def _setup_default_observation(
+        self, env_config: EnvSettings, sensors: list[Any]
+    ) -> SensorFusion:
+        """Configure DEFAULT_GYM observation handling and optional grid fields.
+
+        Returns:
+            SensorFusion: Adapter used for the default observation mode.
+        """
+        sensor_adapter = sensors[0]
+        self._flatten_obs_space = False
+        self._wrap_obs_as_dict = False
+
+        if self.include_grid_in_observation and self.occupancy_grid is not None:
+            grid_box, meta_spaces = make_grid_observation_spaces(self.occupancy_grid.config)
+
+            # Convert observation space to dict if needed (for grid fields)
+            if not isinstance(self.observation_space, spaces.Dict):
+                obs_dict = {"agent_obs": self.observation_space}
+                self._wrap_obs_as_dict = True
+            else:
+                obs_dict = dict(self.observation_space.spaces)
+                self._wrap_obs_as_dict = False
+
+            # Add grid fields (grid box + flattened metadata)
+            obs_dict["occupancy_grid"] = grid_box
+            obs_dict.update(meta_spaces.spaces)
+            self.observation_space = spaces.Dict(obs_dict)
+
+        return sensor_adapter
+
+    def _init_telemetry(self, env_config: EnvSettings) -> None:
+        """Initialize telemetry session and hook into sim UI when requested."""
+        self._telemetry_session = None
+        if not (env_config.enable_telemetry_panel or env_config.telemetry_record):
+            return
+
+        run_id = _make_telemetry_run_id()
+        pane_width = DEFAULT_PANE_WIDTH
+        pane_height = DEFAULT_PANE_HEIGHT
+        if self.sim_ui:
+            self.sim_ui.show_telemetry_panel = env_config.enable_telemetry_panel
+            self.sim_ui.telemetry_layout = env_config.telemetry_pane_layout
+            pane_width = min(DEFAULT_PANE_WIDTH, max(MIN_PANE_WIDTH, self.sim_ui.width // 3))
+            pane_height = min(DEFAULT_PANE_HEIGHT, max(MIN_PANE_HEIGHT, self.sim_ui.height // 3))
+
+        self._telemetry_session = TelemetrySession(
+            run_id=run_id,
+            record=env_config.telemetry_record,
+            metrics=env_config.telemetry_metrics,
+            refresh_hz=env_config.telemetry_refresh_hz,
+            decimation=env_config.telemetry_decimation,
+            pane_size=(pane_width, pane_height),
+        )
+        if self.sim_ui:
+            self.sim_ui.telemetry_session = self._telemetry_session
 
     def step(self, action):
         """Execute one environment step.
@@ -293,6 +470,10 @@ class RobotEnv(BaseEnv):
         self.simulator.step_once([action])
         # Get updated observation
         obs = self.state.step()
+
+        # T044: Wrap observation as dict if observation space was converted for grid inclusion
+        if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
+            obs = {"agent_obs": obs}
 
         # T044: Update occupancy grid if enabled
         if self.occupancy_grid is not None:
@@ -321,6 +502,10 @@ class RobotEnv(BaseEnv):
             # Update observation with new grid
             if self.include_grid_in_observation:
                 obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+                # Flatten metadata into individual fields for SB3 compatibility
+                obs.update(
+                    _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
+                )
 
         # Fetch metadata about the current state
         reward_dict = self.state.meta_dict()
@@ -372,6 +557,10 @@ class RobotEnv(BaseEnv):
         # Reset the environment's state and return the initial observation
         obs = self.state.reset()
 
+        # T044: Wrap observation as dict if observation space was converted for grid inclusion
+        if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
+            obs = {"agent_obs": obs}
+
         # T043: Generate initial occupancy grid if enabled
         if self.occupancy_grid is not None:
             # Extract obstacles from map
@@ -400,6 +589,10 @@ class RobotEnv(BaseEnv):
             # Add grid to observation
             if self.include_grid_in_observation:
                 obs["occupancy_grid"] = self.occupancy_grid.to_observation()
+                # Flatten metadata into individual fields for SB3 compatibility
+                obs.update(
+                    _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
+                )
                 logger.debug(
                     f"Initial occupancy grid generated: "
                     f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"

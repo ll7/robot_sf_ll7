@@ -39,6 +39,76 @@ class AgentType(Enum):
     PEDESTRIAN = 2
 
 
+def make_grid_observation_spaces(
+    grid_config: GridConfig,
+) -> tuple[spaces.Box, dict[str, spaces.Space]]:
+    """Construct occupancy grid observation spaces (grid + flattened metadata).
+
+    For StableBaselines3 compatibility, metadata is returned as a dict of individual
+    Box spaces rather than a nested Dict space. This avoids nested Dict constraints.
+
+    Args:
+        grid_config: Configuration for the occupancy grid.
+
+    Returns:
+        tuple: (grid_box, metadata_spaces_dict) where metadata_spaces_dict maps
+            metadata field names to their Box spaces for direct inclusion in the
+            top-level observation Dict space.
+    """
+
+    grid_shape = (
+        grid_config.num_channels,
+        grid_config.grid_height,
+        grid_config.grid_width,
+    )
+    grid_box = spaces.Box(
+        low=0.0,
+        high=1.0,
+        shape=grid_shape,
+        dtype=np.float32,
+    )
+    # Return flattened metadata spaces (dict of Box spaces, not a nested Dict space)
+    meta_spaces = {
+        "occupancy_grid_meta_origin": spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(2,),
+            dtype=np.float32,
+        ),
+        "occupancy_grid_meta_resolution": spaces.Box(
+            low=np.array([0.0], dtype=np.float32),
+            high=np.array([np.inf], dtype=np.float32),
+            dtype=np.float32,
+        ),
+        "occupancy_grid_meta_size": spaces.Box(
+            low=np.array([0.0, 0.0], dtype=np.float32),
+            high=np.array([np.inf, np.inf], dtype=np.float32),
+            dtype=np.float32,
+        ),
+        "occupancy_grid_meta_use_ego_frame": spaces.Box(
+            low=np.array([0.0], dtype=np.float32),
+            high=np.array([1.0], dtype=np.float32),
+            dtype=np.float32,
+        ),
+        "occupancy_grid_meta_center_on_robot": spaces.Box(
+            low=np.array([0.0], dtype=np.float32),
+            high=np.array([1.0], dtype=np.float32),
+            dtype=np.float32,
+        ),
+        "occupancy_grid_meta_channel_indices": spaces.Box(
+            low=np.array([-1, -1, -1, -1], dtype=np.int32),
+            high=np.array([np.iinfo(np.int32).max] * 4, dtype=np.int32),
+            dtype=np.int32,
+        ),
+        "occupancy_grid_meta_robot_pose": spaces.Box(
+            low=np.array([-np.inf, -np.inf, -np.inf], dtype=np.float32),
+            high=np.array([np.inf, np.inf, np.inf], dtype=np.float32),
+            dtype=np.float32,
+        ),
+    }
+    return grid_box, meta_spaces
+
+
 def init_collision_and_sensors(
     sim: Simulator,
     env_config: EnvSettings | RobotSimulationConfig,
@@ -259,24 +329,15 @@ def create_spaces(
         # Get grid config (should be validated in unified_config.__post_init__)
         grid_config = getattr(env_config, "grid_config", None)
         if grid_config is not None and isinstance(grid_config, GridConfig):
-            # Create Box space for grid: shape [C, H, W], dtype float32, bounds [0, 1]
-            grid_shape = (
-                grid_config.num_channels,
-                grid_config.grid_height,
-                grid_config.grid_width,
-            )
-            grid_box = spaces.Box(
-                low=0.0,
-                high=1.0,
-                shape=grid_shape,
-                dtype=np.float32,
-            )
+            grid_box, meta_spaces = make_grid_observation_spaces(grid_config)
 
-            # Add to both observation spaces
+            # Add to both observation spaces (use flattened metadata for SB3 compatibility)
             orig_dict = dict(orig_obs_space.spaces)
             norm_dict = dict(observation_space.spaces)
             orig_dict["occupancy_grid"] = grid_box
             norm_dict["occupancy_grid"] = grid_box
+            orig_dict.update(meta_spaces)
+            norm_dict.update(meta_spaces)
             orig_obs_space = spaces.Dict(orig_dict)
             observation_space = spaces.Dict(norm_dict)
 
@@ -542,6 +603,23 @@ def create_spaces_with_image(
                 env_config.lidar_config.max_scan_dist,
             ),
         )
+
+    # Add occupancy grid observation (and metadata) when requested
+    if (
+        hasattr(env_config, "include_grid_in_observation")
+        and env_config.include_grid_in_observation
+    ):
+        grid_config = getattr(env_config, "grid_config", None)
+        if grid_config is not None and isinstance(grid_config, GridConfig):
+            grid_box, meta_space = make_grid_observation_spaces(grid_config)
+            orig_dict = dict(orig_obs_space.spaces)
+            norm_dict = dict(observation_space.spaces)
+            orig_dict["occupancy_grid"] = grid_box
+            norm_dict["occupancy_grid"] = grid_box
+            orig_dict["occupancy_grid_meta"] = meta_space
+            norm_dict["occupancy_grid_meta"] = meta_space
+            orig_obs_space = spaces.Dict(orig_dict)
+            observation_space = spaces.Dict(norm_dict)
 
     return action_space, observation_space, orig_obs_space
 

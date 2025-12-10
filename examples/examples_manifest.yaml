@@ -380,32 +380,6 @@ examples:
     ci_reason: "Long-running pipeline (30-60 min); requires extensive compute for full training cycles."
     doc_reference: docs/imitation_learning_pipeline.md
     tags: [training, imitation, ppo, behavioral-cloning]
-  - path: advanced/20_occupancy_grid_workflow.py
-    name: "20 Occupancy Grid Workflow"
-    summary: "Standalone grid generation, spawn validation queries, and occupancy-based reward shaping."
-    category_slug: advanced
-    prerequisites: []
-    ci_enabled: true
-    ci_reason: null
-    doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
-  - path: advanced/22_telemetry_pane.py
-    name: "22 Telemetry Pane"
-    summary: "Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance."
-    category_slug: advanced
-    prerequisites: []
-    ci_enabled: false
-    ci_reason: "Interactive pygame session not reliable for CI; use headless variant instead."
-    doc_reference: specs/343-telemetry-viz/quickstart.md
-    tags: [telemetry, visualization, pygame, interactive]
-  - path: advanced/23_telemetry_headless_smoke.py
-    name: "23 Telemetry Headless Smoke"
-    summary: "Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering."
-    category_slug: advanced
-    prerequisites: []
-    ci_enabled: true
-    ci_reason: null
-    doc_reference: specs/343-telemetry-viz/quickstart.md
-    tags: [telemetry, visualization, headless, ci]
   - path: advanced/20_global_planner_demo.py
     name: "20 Global Planner Demo"
     summary: "Demonstration of global planner integration with environment factory."
@@ -415,8 +389,26 @@ examples:
     ci_reason: "pyvisgraph numerical instability on default maps; use in interactive testing only."
     doc_reference: specs/342-svg-global-planner/quickstart.md
     tags: [planning, routing, poi]
-  - path: advanced/21_poi_routing_demo.py
-    name: "21 POI Routing Demo"
+  - path: advanced/21_occupancy_grid_workflow.py
+    name: "21 Occupancy Grid Workflow"
+    summary: "Standalone grid generation, spawn validation queries, and occupancy-based reward shaping."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
+    tags: [occupancy, reward, observation]
+  - path: advanced/22_occupancy_grid_playthrough.py
+    name: "22 Occupancy Grid Playthrough"
+    summary: "Interactive occupancy grid playthrough demonstration."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
+    tags: [occupancy, interactive]
+  - path: advanced/23_poi_routing_demo.py
+    name: "23 POI Routing Demo"
     summary: "Sample POIs and route through them with the global planner on an SVG map."
     category_slug: advanced
     prerequisites: []
@@ -424,4 +416,21 @@ examples:
     ci_reason: "pyvisgraph numerical instability on default maps; use in interactive testing only."
     doc_reference: specs/342-svg-global-planner/quickstart.md
     tags: [planning, routing, poi, sampling]
-    tags: [occupancy, reward, observation]
+  - path: advanced/24_telemetry_pane.py
+    name: "24 Telemetry Pane"
+    summary: "Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive pygame session not reliable for CI; use headless variant instead."
+    doc_reference: specs/343-telemetry-viz/quickstart.md
+    tags: [telemetry, visualization, pygame, interactive]
+  - path: advanced/25_telemetry_headless_smoke.py
+    name: "25 Telemetry Headless Smoke"
+    summary: "Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: specs/343-telemetry-viz/quickstart.md
+    tags: [telemetry, visualization, headless, ci]

@@ -175,14 +175,14 @@ class MapDefinition:
     ped_goal_zones: list[Rect]
     ped_crowded_zones: list[Rect]
     ped_routes: list[GlobalRoute]
+    single_pedestrians: list[SinglePedestrianDefinition] = field(default_factory=list)
+    """List of individually controlled pedestrians with explicit start/goal/trajectory definitions."""
+
     poi_positions: list[Vec2D] = field(default_factory=list)
     """Point-of-interest waypoints parsed from SVG maps."""
 
     poi_labels: dict[str, str] = field(default_factory=dict)
     """Mapping from POI identifiers to human-readable labels."""
-
-    single_pedestrians: list[SinglePedestrianDefinition] = field(default_factory=list)
-    """List of individually controlled pedestrians with explicit start/goal/trajectory definitions."""
     obstacles_pysf: list[Line2D] = field(init=False)
     """Transformed obstacles in pysf format. Are generated in __post_init__."""
     robot_routes_by_spawn_id: dict[int, list[GlobalRoute]] = field(init=False)

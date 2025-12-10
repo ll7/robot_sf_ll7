@@ -600,9 +600,9 @@ class SvgMapConverter:
             ped_goal_zones,
             ped_crowded_zones,
             ped_routes,
-            poi_positions,
-            poi_labels,
             single_pedestrians,
+            poi_positions=poi_positions,
+            poi_labels=poi_labels,
         )
         logger.debug(f"MapDefinition object created: {type(self.map_definition)}")
 

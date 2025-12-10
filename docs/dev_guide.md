@@ -3,17 +3,24 @@
 [← Back to Documentation Index](./README.md)
 
 Welcome to the Robot SF Development Guide! This document serves as the central reference for contributors working on the Robot SF codebase. It covers setup instructions, architectural overviews, coding standards, and best practices to ensure a smooth development experience.
-<!-- This document should be kept as short as possible to maintain clarity and ease of navigation. Whenever possible, link out to more detailed documents or external resources. Refacotr this document regularly to be as concise as possible. -->
+<!--
+This document should be kept as short as possible to maintain clarity and ease of navigation.
+Whenever possible, link out to more detailed documents or external resources.
+Refacotr this document regularly to be as concise as possible.
+LLM Constitution and guides can be found here:
+- `.specify/memory/constitution.md`
+- `.github/copilot-instructions.md`
+- `AGENTS.md`
+-->
 
 ## Setup
 
 ### Installation and setup
-```bash
-# One‑time setup
-uv sync && source .venv/bin/activate
 
-# Dev extras and pre‑commit (optional)
+```bash
+# One‑time setup with dev extras and pre-commit
 uv sync --all-extras
+source .venv/bin/activate
 uv run pre-commit install
 
 # Quick import check
@@ -21,12 +28,16 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 ```
 
 ### Critical dependencies and setup: Fast-pysf integration
+
 The `fast-pysf/` directory contains the optimized SocialForce physics engine and is now integrated as a **git subtree** (previously a submodule). After cloning the repository, the fast-pysf code is automatically available—no additional initialization steps required.
 
 **Note**: If you're working with an older branch that still uses submodules, see the [Subtree Migration Guide](./SUBTREE_MIGRATION.md) for migration instructions and workflow differences.
 
 ### Quick Start Commands
+
 ```bash
+# source .venv
+source .venv/bin/activate
 # Lint+format
 uv run ruff check --fix . && uv run ruff format .
 # Tests
@@ -34,6 +45,7 @@ uv run pytest tests
 ```
 
 ### Examples Quickstart Walkthrough
+
 The `examples/README.md` file now captures a curated onboarding path. New contributors
 can get a full tour in roughly five minutes by running the quickstart trio in order:
 
@@ -78,11 +90,13 @@ a script is enabled for CI smoke execution.
 ### One‑liner quality gates (CLI):
 
 ```bash
-uv run ruff check --fix . && uv run ruff format . && uv run pylint robot_sf --errors-only && uvx ty check . --exit-zero && uv run pytest tests
+uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest tests
 ```
 
 ### Environment factory pattern (CRITICAL)
+
 **Always use factory functions** — never instantiate gym environments directly:
+
 ```python
 from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
 
@@ -97,6 +111,7 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 ```
 
 ### Key architectural layers
+
 - **`robot_sf/gym_env/`**: Gymnasium environment implementations with factory pattern
 - **`robot_sf/baselines/`**: Baseline navigation algorithms (e.g., SocialForce) for benchmarking
 - **`robot_sf/benchmark/`**: Benchmark runner, CLI, metrics collection, and schema validation
@@ -105,6 +120,7 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 - **`docs/`**: Documentation, design notes, and development guides
 
 ### Schema Management
+
 **Canonical schema location**: `robot_sf/benchmark/schemas/`
 - Episode schemas: `episode.schema.v1.json` (single source of truth)
 - Runtime resolution: Use `robot_sf.benchmark.schema_loader.load_schema()` for schema loading
@@ -113,14 +129,17 @@ env = make_pedestrian_env(robot_model=model, debug=True)
 - Git hooks: Prevent duplicate schema files from being committed
 
 ### Data flow and integration
+
 - **Training loop**: `scripts/training_ppo.py` → factory functions → vectorized environments → StableBaselines3
 - **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis
 - **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` subtree → NumPy/Numba physics
 
 ### Configuration hierarchy
+
 **For complete documentation, see [Configuration Architecture](./architecture/configuration.md)** (precedence rules, migration guide, module structure).
 
 Use unified config classes from `robot_sf.gym_env.unified_config`:
+
 ```python
 from robot_sf.gym_env.unified_config import RobotSimulationConfig, ImageRobotConfig
 
@@ -130,6 +149,7 @@ env = make_robot_env(config=config)
 ```
 
 ### Backend selection (simulator swap)
+
 The simulation backend can be selected via configuration without modifying environment code. Available backends are registered in `robot_sf.sim.registry`:
 
 ```python
@@ -182,6 +202,14 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ## Design and development workflow recommendations
 
+- Consider using <https://github.com/github/spec-kit> for complex specifications and design docs.
+  - Examples can be found in the `specs` directory.
+  - Prompts are unique to the llm provider used. Adjust accordingly.
+  - Copilot prompts can be found in `.github/prompts`
+  - LLM Constitution and guides can be found here:
+    - `.specify/memory/constitution.md`
+    - `.github/copilot-instructions.md`
+    - `AGENTS.md`
 - Clarify exact requirements before starting implementation.
 - If necessary, ask clarifying questions (with options) to confirm scope, interfaces, data handling, UX, and performance.
   - Discuss possible options and trade-offs.
@@ -193,6 +221,9 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
   - Break task down into smaller subtasks and tackle them iteratively.
 - Prioritize must-haves over nice-to-haves
 - Document assumptions and trade-offs.
+- Ensure that the documentation, docstrings, and comments are updated to reflect code changes.
+- Docstring style is specified in `pyproject.toml` -> `[tool.ruff.lint.pydocstyle]` -> `convention`
+- Progress cadence: always keep tests and documentation up-to-date. As long as you document your chain of thought and what ran, you can report outcomes after finishing the work.
 - Prefer programmatic use and factory functions over CLI; the CLI is not important.
 - Working mode: prioritize a thin, end-to-end slice that runs. Optimize and polish after a green smoke test (env reset→step loop or demo run).
 - Whenever possible, add a demo or example to illustrate new functionality.
@@ -201,6 +232,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Always document the purpose of documents at the top of the file. (e.g., Python files, README.md, design docs, issue folders)
 - Use American English.
 
+### One-liner architecture summary
+
 - Architecture in one line: Gym/Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
 - Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
@@ -208,8 +241,6 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Demos/trainings: keep runnable examples in `examples/` and scripts in `scripts/`. Place models in `model/`, maps in `maps/svg_maps/`, and write outputs under `output/`.
 - Tests: core in `tests/`; GUI in `test_pygame/` (headless: `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). Physics-specific tests live in `fast-pysf/tests/`.
 - Quality gates (local): Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests (see VS Code Tasks).
-- Ensure that the documentation, docstrings, and comments are updated to reflect code changes.
-- Progress cadence: always keep tests and documentation up-to-date. As long as you document your chain of thought and what ran, you can report outcomes after finishing the work.
 
 ### Artifact policy & tooling
 
@@ -228,10 +259,10 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ```bash
 # Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
-uv run pytest  # → 893 tests (881 robot_sf + 12 fast-pysf)
+uv run pytest  # Number of test is steadily increasing, ca. 1200
 
 # Run only robot_sf tests
-uv run pytest tests  # → 881 tests
+uv run pytest tests
 
 # Run only fast-pysf tests  
 uv run pytest fast-pysf/tests  # → 12 tests
@@ -307,7 +338,6 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 ### Coverage workflow (automatic collection)
 
 **Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
-# Artifact routing during tests
 
 The test harness sets the ``ROBOT_SF_ARTIFACT_ROOT`` environment variable so that
 example scripts and helpers write into a temporary directory instead of the
@@ -315,6 +345,7 @@ repository tree. This keeps the canonical ``output/`` hierarchy clean while
 preserving the examples' default behavior for normal runs. To opt-in manually,
 export the same variable before invoking scripts.
 
+Try to increase the test coverage over time by adding tests when touching code. See the must-have checklist below for guidance.
 
 #### Quick start
 ```bash
@@ -331,6 +362,7 @@ open output/coverage/htmlcov/index.html
 ```
 
 #### What gets measured
+
 - **Included**: All code in `robot_sf/` package
 - **Excluded**: Tests, examples, scripts, `fast-pysf/` subtree
 - **Output formats**: 
@@ -339,6 +371,7 @@ open output/coverage/htmlcov/index.html
   - JSON data (`output/coverage/coverage.json` - for tooling)
 
 #### Understanding coverage output
+
 ```
 Name                                    Stmts   Miss  Cover   Missing
 ---------------------------------------------------------------------
@@ -354,6 +387,7 @@ TOTAL                                   10605    876  91.73%
 - **Missing**: Line numbers not executed by tests
 
 #### Coverage configuration
+
 Configured in `pyproject.toml`:
 - `[tool.coverage.run]` — collection settings (source, omit patterns, parallel support)
 - `[tool.coverage.report]` — report formatting (precision, exclusions)
@@ -376,23 +410,27 @@ python -c "import json; print(json.load(open('output/coverage/coverage.json'))['
 For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
 
 ### Must-have checklist
+
 - [ ] Use factory env creators; do not instantiate env classes directly.
 - [ ] Set config via `robot_sf.gym_env.unified_config` before env creation; avoid ad‑hoc kwargs.
-- [ ] Keep lib code print-free; use logging for info and warnings.
+- [ ] Keep lib code print-free; use logging from loguru for info and warnings.
 - [ ] Run VS Code Tasks: Install Dependencies, Ruff: Format and Fix, Check Code Quality, Type Check, Run Tests.
 - [ ] Add a test or smoke (e.g., env reset/step) when you change public behavior.
 - [ ] For GUI-dependent tests, set headless env vars; avoid flaky display usage in CI.
-- [ ] Treat `fast-pysf/` as a subtree; modifications should be coordinated with upstream (see [Subtree Migration Guide](./SUBTREE_MIGRATION.md)).
+- [ ] Treat `fast-pysf/` as part of the repository, changes can be made.
 - [ ] Put new demos under `examples/` and new runners under `scripts/`.
 - [ ] Whenever a demo is possible, add one.
 
 ### Optional backlog (track but don’t block)
+
 - [ ] Tighten type hints for new public APIs; migrate call sites gradually.
 - [ ] Add programmatic benchmark examples and extend baseline coverage.
 - [ ] Update or add docs under `docs/` for new components; include diagrams when useful.
 - [ ] Add performance smoke (steps/sec) when touching hot paths.
+- [ ] Add proper docstrings to comply with pydoclint and and pydocstyle
 
 ### Quick links
+
 - Environment overview: `docs/ENVIRONMENT.md`
 - Simulation view: `docs/SIM_VIEW.md`
 - Refactoring and architecture notes: `docs/refactoring/`
@@ -401,6 +439,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
 - Contributor onboarding / repo structure: `AGENTS.md`
 
 ### Executive summary
+
 - **Architecture**: Social navigation RL framework with gym/gymnasium environments, SocialForce pedestrian simulation via `fast-pysf` subtree, StableBaselines3 training pipeline
 - **Core pattern**: Factory-based environment creation (`make_robot_env()` etc.) — never instantiate environments directly
 - **Dependencies**: `fast-pysf` git subtree for pedestrian physics (automatically included after clone, see [Subtree Migration Guide](./SUBTREE_MIGRATION.md))
@@ -410,6 +449,7 @@ For coverage gap analysis, trend tracking, and CI integration, see `docs/coverag
   - Development notes: `docs/dev/*`
 
 ### Logging & Observability (Principle XII)
+
 The canonical logging facade is **Loguru**. Library code (anything under `robot_sf/` or wrappers over `fast-pysf`) must not use bare `print()` for informational or warning messages. Acceptable `print()` exceptions: (1) short CLI entry scripts in `scripts/` or `examples/` where stdout is the UX, (2) early bootstrap failures before logging configuration, (3) tests explicitly asserting stdout content. Migration of stray prints to `from loguru import logger` with `logger.info|warning|error` is treated as maintenance (PATCH) unless it changes user‑visible contract output.
 
 Guidelines:
@@ -422,14 +462,17 @@ Guidelines:
 Rationale: Centralized logging enables deterministic capture/suppression in benchmarks, simplifies CI noise control, and aligns with Constitution Principle XII (Preferred Logging & Observability).
 
 ### Code quality standards
+
 - Clear, intent‑revealing names; small, cohesive functions; robust error handling.
 - Follow existing style; document non‑obvious choices with comments/docstrings.
+- Add helpful comments to quickly understand the cod
 - Avoid duplication; prefer composition and reuse.
 - Keep public behavior backward‑compatible unless explicitly stated.
 - Write comprehensive unit tests for new features and bug fixes (GUI tests in `test_pygame/`).
 - **Verify test value before investing fix effort** (see Test Significance Verification in Testing Strategy section).
 
 ### Design decisions
+
 - Favor readability and maintainability over micro‑optimizations.
 - Use type hints for all public functions and methods; prefer `typing` over `Any`.
 - Use exceptions for error handling; avoid silent failures.
@@ -447,17 +490,20 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 -	Deterministic seed in both config and code
 
 ### Code reviews
+
 - All changes must be reviewed by at least one other team member.
 - Reviewers should check for correctness, style, test coverage, and documentation.
 - Use GitHub’s review tools to leave comments and approve changes.
 
 #### Docstrings
+
 - Every module, function, class, and method should have a docstring.
 - Docstrings should use triple double quotes (""").
 - The first line should be a short summary of the object’s purpose, starting with a capital letter and ending with a period.
 - If more detail is needed, leave a blank line after the summary, then continue with a longer description.
 - For functions/methods: document parameters, return values, exceptions raised, and side effects.
 - Private/internal code should also have docstrings explaining their purpose for easier maintainability.
+- Follow the pydocstyle convention specified in `pyproject.toml`.
 
 ### Clarify questions (with options)
 -In case of ambiguity or uncertainty about requirements, always ask clarifying questions before starting implementation. Provide multiple-choice options to facilitate quick decision-making. Group questions by scope, interfaces, data handling, UX, and performance.

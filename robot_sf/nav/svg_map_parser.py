@@ -193,6 +193,7 @@ class SvgMapConverter:
             r = float(circle.attrib.get("r", 0))
             circle_label = circle.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
             circle_id = circle.attrib.get("id")
+            circle_class = circle.attrib.get("class", "")
             if circle_label is None and circle_id is None:
                 logger.warning(
                     "Circle element missing both inkscape:label and id attribute; using empty string",
@@ -202,8 +203,9 @@ class SvgMapConverter:
                 cx,
                 cy,
                 r,
-                circle_label or circle_id or "",
+                circle_label or circle_class or circle_id or "",
                 circle_id or "",
+                circle_class,
             )
         except (ValueError, TypeError) as e:
             logger.warning(f"Failed to parse circle {circle.attrib.get('id')}: {e}")
@@ -510,7 +512,7 @@ class SvgMapConverter:
             ped_crowded_zones,
         )
 
-    def _info_to_mapdefintion(self) -> None:
+    def _info_to_mapdefintion(self) -> None:  # noqa: C901
         """
         Create a MapDefinition object from the path and rectangle information.
         """
@@ -576,6 +578,15 @@ class SvgMapConverter:
                 "SVG map conversion produced zero robot routes. Ensure at least one 'robot_route_*_*' path label exists.",
             )
 
+        poi_positions = []
+        poi_labels: dict[str, str] = {}
+        for circle in self.circle_info:
+            is_poi = "poi" in circle.cls.split() or circle.label == "poi"
+            if not is_poi:
+                continue
+            poi_positions.append(circle.get_center())
+            poi_labels[circle.id_] = circle.label if circle.label else circle.id_
+
         logger.debug("Creating MapDefinition object")
         self.map_definition = MapDefinition(
             width,
@@ -589,6 +600,8 @@ class SvgMapConverter:
             ped_goal_zones,
             ped_crowded_zones,
             ped_routes,
+            poi_positions,
+            poi_labels,
             single_pedestrians,
         )
         logger.debug(f"MapDefinition object created: {type(self.map_definition)}")

@@ -71,6 +71,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
     # Environment behavior flags
     use_image_obs: bool = field(default=False)
     peds_have_obstacle_forces: bool = field(default=False)
+    use_planner: bool = field(default=False)
+    planner_clearance_margin: float = field(default=0.3)
 
     # Occupancy grid configuration
     grid_config: GridConfig | None = field(default=None)
@@ -99,6 +101,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
         self._init_grid_config()
         self._validate_grid_observation()
         self._validate_grid_visualization()
+        self._validate_planner_config()
 
     def _init_grid_config(self) -> None:
         """Initialize and validate the occupancy grid configuration.
@@ -143,6 +146,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
 
         if not 0.0 <= self.grid_visualization_alpha <= 1.0:
             raise ValueError("grid_visualization_alpha must be between 0.0 and 1.0")
+
+    def _validate_planner_config(self) -> None:
+        """Validate planner-related configuration."""
+        if self.planner_clearance_margin < 0:
+            raise ValueError("planner_clearance_margin cannot be negative")
 
     def robot_factory(self) -> DifferentialDriveRobot | BicycleDriveRobot:
         """Create a robot instance based on configuration.

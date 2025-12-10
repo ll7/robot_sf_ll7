@@ -131,4 +131,22 @@
        id="path1"
        inkscape:label="robot_route_0_0" />
   </g>
+  <g
+     id="pois"
+     inkscape:label="POIs">
+    <circle
+       class="poi"
+       id="poi_mid_corridor"
+       cx="25"
+       cy="15"
+       r="0.6"
+       inkscape:label="corridor_midpoint" />
+    <circle
+       class="poi"
+       id="poi_junction"
+       cx="40"
+       cy="20"
+       r="0.6"
+       inkscape:label="east_junction" />
+  </g>
 </svg>

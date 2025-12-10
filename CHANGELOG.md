@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Wired guard + migration into CI workflow, publishing artifacts from canonical paths only
   - Refreshed core docs (`docs/dev_guide.md`, `docs/coverage_guide.md`, `docs/README.md`, root `README.md`) with policy overview, quickstart links, and updated coverage instructions
   - Extended quickstart guidance to cover guard execution, artifact overrides, and validation expectations
+- Visibility-graph global planner (Feature 342)
+  - Planner API with POI routing, caching, smoothing; new `use_planner` flag and clearance config in unified configs
+  - Map POI parsing, planner demo (`examples/advanced/20_global_planner_demo.py`), validation script (`scripts/validation/verify_planner.sh`), and benchmark script (`scripts/benchmark_planner.py`)
+  - Tests for path planning, POI sampling, caching, smoothing, and navigation integration under `tests/test_planner/`
 - Comprehensive configuration architecture documentation (#244)
   - Created `docs/architecture/configuration.md` with configuration precedence hierarchy
   - Documented three-tier precedence system: Code Defaults < YAML < Runtime

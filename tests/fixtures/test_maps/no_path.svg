@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="12" height="8">
+  <rect inkscape:label="robot_spawn_zone" x="0.5" y="3" width="1.2" height="1.2" />
+  <rect inkscape:label="robot_goal_zone" x="10" y="3" width="1.2" height="1.2" />
+  <rect inkscape:label="obstacle" x="4" y="0" width="3.5" height="8" />
+  <path inkscape:label="robot_route_0_0" d="M 0.5 3.6 L 10 3.6" />
+</svg>

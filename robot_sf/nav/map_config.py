@@ -175,6 +175,12 @@ class MapDefinition:
     ped_goal_zones: list[Rect]
     ped_crowded_zones: list[Rect]
     ped_routes: list[GlobalRoute]
+    poi_positions: list[Vec2D] = field(default_factory=list)
+    """Point-of-interest waypoints parsed from SVG maps."""
+
+    poi_labels: dict[str, str] = field(default_factory=dict)
+    """Mapping from POI identifiers to human-readable labels."""
+
     single_pedestrians: list[SinglePedestrianDefinition] = field(default_factory=list)
     """List of individually controlled pedestrians with explicit start/goal/trajectory definitions."""
     obstacles_pysf: list[Line2D] = field(init=False)
@@ -218,6 +224,7 @@ class MapDefinition:
 
         # Validate single pedestrians
         self._validate_single_pedestrians()
+        self._validate_pois()
 
     def _validate_single_pedestrians(self):
         """
@@ -301,6 +308,26 @@ class MapDefinition:
                         f"(distance: {dist:.2f}m < 0.5m threshold)."
                     )
 
+    def _validate_pois(self) -> None:
+        """Validate POI identifiers, counts, and bounds."""
+        if not self.poi_positions and not self.poi_labels:
+            return
+
+        if len(self.poi_positions) != len(self.poi_labels):
+            raise ValueError(
+                "poi_positions and poi_labels must have the same length: "
+                f"{len(self.poi_positions)} positions vs {len(self.poi_labels)} labels."
+            )
+
+        if len(set(self.poi_labels.keys())) != len(self.poi_labels):
+            raise ValueError("POI identifiers must be unique.")
+
+        for poi in self.poi_positions:
+            if not (0 <= poi[0] <= self.width and 0 <= poi[1] <= self.height):
+                raise ValueError(
+                    f"POI position {poi} is outside map bounds (0, 0) to ({self.width}, {self.height})."
+                )
+
     @property
     def num_start_pos(self) -> int:
         """
@@ -330,6 +357,24 @@ class MapDefinition:
             ),
             None,
         )
+
+    def get_poi_by_label(self, label: str) -> Vec2D:
+        """Retrieve POI position by human-readable label.
+
+        Args:
+            label: POI label to search for.
+
+        Returns:
+            POI position as a Vec2D tuple.
+
+        Raises:
+            KeyError: If the requested label does not exist.
+        """
+        for poi_id, poi_label in self.poi_labels.items():
+            if poi_label == label:
+                poi_index = list(self.poi_labels.keys()).index(poi_id)
+                return self.poi_positions[poi_index]
+        raise KeyError(f"No POI with label '{label}' found in map.")
 
     def get_map_bounds(self):
         """Returns the min and max of x and y bounds.

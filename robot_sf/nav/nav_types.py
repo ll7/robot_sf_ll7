@@ -64,6 +64,7 @@ class SvgCircle:
         r: Radius of the circle.
         label: Human-readable label from the SVG metadata.
         id_: Raw SVG element identifier.
+        cls: Raw SVG class attribute, used for POI detection.
     """
 
     cx: float
@@ -71,6 +72,7 @@ class SvgCircle:
     r: float
     label: str
     id_: str
+    cls: str = ""
 
     def __post_init__(self):
         """Validate radius is positive.

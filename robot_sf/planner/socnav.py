@@ -268,15 +268,17 @@ class OccupancyAwarePlannerMixin:
         Returns:
             tuple[np.ndarray, float]: Direction vector and occupancy penalty.
         """
-        return self._select_safe_heading(
+        # Type checker can't infer config attribute from mixin class
+        # This is resolved at runtime by concrete implementations
+        return self._select_safe_heading(  # type: ignore[attr-defined]
             robot_pos,
             base_direction,
             observation,
-            sweep=self.config.occupancy_heading_sweep,
-            num_candidates=self.config.occupancy_candidates,
-            lookahead=self.config.occupancy_lookahead,
-            weight=self.config.occupancy_weight,
-            angle_weight=self.config.occupancy_angle_weight,
+            sweep=self.config.occupancy_heading_sweep,  # type: ignore[attr-defined]
+            num_candidates=self.config.occupancy_candidates,  # type: ignore[attr-defined]
+            lookahead=self.config.occupancy_lookahead,  # type: ignore[attr-defined]
+            weight=self.config.occupancy_weight,  # type: ignore[attr-defined]
+            angle_weight=self.config.occupancy_angle_weight,  # type: ignore[attr-defined]
         )
 
 

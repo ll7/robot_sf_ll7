@@ -10,7 +10,16 @@
 		{
 			"label": "Run Tests",
 			"type": "shell",
-			"command": "uv run pytest -n auto tests",
+			"command": "uv run pytest tests",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			}
+		},
+			{
+			"label": "Run Tests in parallel",
+			"type": "shell",
+			"command": "uv run pytest -n auto",
 			"group": {
 				"kind": "test",
 				"isDefault": true
@@ -42,7 +51,7 @@
 		{
 			"label": "Run Tests (Show All Warnings)",
 			"type": "shell",
-			"command": "uv run pytest -n auto tests --disable-warnings --tb=short -v",
+			"command": "uv run pytest tests --disable-warnings --tb=short -v",
 			"group": "test"
 		},
 		{

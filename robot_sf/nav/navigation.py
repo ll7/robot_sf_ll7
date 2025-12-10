@@ -120,6 +120,23 @@ def sample_route(map_def: MapDefinition, spawn_id: int | None = None) -> list[Ve
         list[Vec2D]: Waypoints including sampled spawn and goal positions.
     """
 
+    planner = getattr(map_def, "_global_planner", None)
+    use_planner = getattr(map_def, "_use_planner", False)
+
+    if use_planner and planner is not None:
+        spawn_idx = (
+            spawn_id if spawn_id is not None else randint(0, len(map_def.robot_spawn_zones) - 1)
+        )
+        goal_idx = randint(0, len(map_def.robot_goal_zones) - 1)
+        prepared_obstacles = get_prepared_obstacles(map_def)
+        start = sample_zone(
+            map_def.robot_spawn_zones[spawn_idx], 1, obstacle_polygons=prepared_obstacles
+        )[0]
+        goal = sample_zone(
+            map_def.robot_goal_zones[goal_idx], 1, obstacle_polygons=prepared_obstacles
+        )[0]
+        return planner.plan(start, goal)
+
     # If no spawn_id is provided, choose a random one
     spawn_id = spawn_id if spawn_id is not None else randint(0, map_def.num_start_pos - 1)
 

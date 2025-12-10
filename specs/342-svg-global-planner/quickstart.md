@@ -48,11 +48,10 @@ print("✓ Global planner available")
 
 ```python
 from robot_sf.planner import GlobalPlanner, PlannerConfig
-from robot_sf.nav.map_config import parse_map
-from robot_sf.common.types import Vec2D
+from robot_sf.nav.svg_map_parser import convert_map
 
 # Load map
-map_def = parse_map("maps/svg_maps/simple_corridor.svg")
+map_def = convert_map("maps/svg_maps/simple_corridor.svg")
 
 # Configure planner
 config = PlannerConfig(
@@ -71,7 +70,7 @@ path = planner.plan(start, goal)
 
 print(f"Generated path with {len(path)} waypoints:")
 for i, waypoint in enumerate(path):
-    print(f"  {i}: ({waypoint.x:.2f}, {waypoint.y:.2f})")
+    print(f"  {i}: ({waypoint[0]:.2f}, {waypoint[1]:.2f})")
 ```
 
 **Expected Output**:
@@ -115,21 +114,21 @@ print(f"Route waypoints: {len(info['route'])}")
 ```python
 from robot_sf.planner import GlobalPlanner
 from robot_sf.nav.navigation import RouteNavigator
-from robot_sf.nav.map_config import parse_map
+from robot_sf.nav.svg_map_parser import convert_map
 
 # Load map and create planner
-map_def = parse_map("maps/svg_maps/complex_warehouse.svg")
+map_def = convert_map("maps/svg_maps/complex_warehouse.svg")
 planner = GlobalPlanner(map_def)
 
 # Generate path
-start = Vec2D(2.0, 3.0)
-goal = Vec2D(15.0, 12.0)
+start = (2.0, 3.0)
+goal = (15.0, 12.0)
 path = planner.plan(start, goal)
 
 # Use with existing navigator
 navigator = RouteNavigator(path)
 next_waypoint = navigator.current_waypoint()
-print(f"Heading to: ({next_waypoint.x:.2f}, {next_waypoint.y:.2f})")
+print(f"Heading to: ({next_waypoint[0]:.2f}, {next_waypoint[1]:.2f})")
 ```
 
 ---
@@ -158,11 +157,11 @@ Edit your SVG map to include POI markers:
 
 ```python
 from robot_sf.planner import GlobalPlanner
-from robot_sf.nav.map_config import parse_map
+from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.common.types import Vec2D
 
 # Load map with POIs
-map_def = parse_map("maps/svg_maps/simple_corridor.svg")
+map_def = convert_map("maps/svg_maps/simple_corridor.svg")
 print(f"Loaded {len(map_def.poi_positions)} POIs")
 
 planner = GlobalPlanner(map_def)
@@ -408,10 +407,10 @@ for episode in range(100):
 
 ```python
 from robot_sf.planner import GlobalPlanner, POISampler
-from robot_sf.nav.map_config import parse_map
+from robot_sf.nav.svg_map_parser import convert_map
 import numpy as np
 
-map_def = parse_map("maps/svg_maps/benchmark_map.svg")
+map_def = convert_map("maps/svg_maps/benchmark_map.svg")
 planner = GlobalPlanner(map_def)
 sampler = POISampler(map_def, seed=42)
 
@@ -446,7 +445,7 @@ print(f"Generated {len(scenarios)} test scenarios")
 
 ```python
 # Old code
-map_def = parse_map("map.svg")
+map_def = convert_map("map.svg")
 navigator = RouteNavigator(map_def.robot_routes[0])
 ```
 
@@ -459,7 +458,7 @@ navigator = RouteNavigator(map_def.robot_routes[0])
 
 ```python
 # New code
-map_def = parse_map("map.svg")
+map_def = convert_map("map.svg")
 planner = GlobalPlanner(map_def)
 path = planner.plan(start, goal)
 navigator = RouteNavigator(path)  # Same interface!

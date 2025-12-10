@@ -41,7 +41,7 @@ source .venv/bin/activate
 # Lint+format
 uv run ruff check --fix . && uv run ruff format .
 # Tests
-uv run pytest tests
+uv run pytest -n auto tests
 ```
 
 ### Examples Quickstart Walkthrough
@@ -90,7 +90,7 @@ a script is enabled for CI smoke execution.
 ### One‑liner quality gates (CLI):
 
 ```bash
-uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest tests
+uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest -n auto tests
 ```
 
 ### Environment factory pattern (CRITICAL)
@@ -259,7 +259,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ```bash
 # Run ALL tests (robot_sf + fast-pysf) - RECOMMENDED
-uv run pytest  # Number of test is steadily increasing, ca. 1200
+uv run pytest -n auto  # Number of test is steadily increasing, ca. 1200
 
 # Run only robot_sf tests
 uv run pytest tests
@@ -275,7 +275,7 @@ uv run pytest -n auto
 
 ```bash
 # 1. Main unit/integration tests (2-3 min) - NOW PART OF UNIFIED SUITE
-uv run pytest tests  # → 881 tests
+uv run pytest -n auto tests  # → 881 tests
 
 # 2. GUI/display-dependent tests (headless mode)  
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest test_pygame

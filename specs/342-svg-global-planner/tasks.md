@@ -28,11 +28,11 @@ Project follows robot_sf structure:
 
 **Purpose**: Project initialization and basic module structure
 
-- [ ] T001 Create robot_sf/planner/ module directory with __init__.py
-- [ ] T002 Add pyvisgraph>=0.2.1 and networkx>=3.6 to pyproject.toml dependencies
-- [ ] T003 [P] Create tests/test_planner/ directory structure with __init__.py
-- [ ] T004 [P] Create tests/fixtures/test_maps/ directory for test SVG files
-- [ ] T005 [P] Update docs/README.md to add planner documentation link placeholder
+- [X] T001 Create robot_sf/planner/ module directory with __init__.py
+- [X] T002 Add pyvisgraph>=0.2.1 and networkx>=3.6 to pyproject.toml dependencies
+- [X] T003 [P] Create tests/test_planner/ directory structure with __init__.py
+- [X] T004 [P] Create tests/fixtures/test_maps/ directory for test SVG files
+- [X] T005 [P] Update docs/README.md to add planner documentation link placeholder
 
 ---
 
@@ -42,14 +42,14 @@ Project follows robot_sf structure:
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Implement PlannerConfig dataclass with validation in robot_sf/planner/global_planner.py
-- [ ] T007 Implement PlanningFailedError exception in robot_sf/planner/global_planner.py
-- [ ] T008 [P] Create test_planner_config.py unit tests in tests/test_planner/
-- [ ] T009 Extend MapDefinition with poi_positions and poi_labels fields in robot_sf/nav/map_config.py
-- [ ] T010 [P] Create simple_corridor.svg test map in tests/fixtures/test_maps/
-- [ ] T011 [P] Create narrow_passage.svg test map in tests/fixtures/test_maps/
-- [ ] T012 [P] Create no_path.svg test map in tests/fixtures/test_maps/
-- [ ] T013 [P] Create complex_warehouse.svg test map in tests/fixtures/test_maps/
+- [X] T006 Implement PlannerConfig dataclass with validation in robot_sf/planner/global_planner.py
+- [X] T007 Implement PlanningFailedError exception in robot_sf/planner/global_planner.py
+- [X] T008 [P] Create test_planner_config.py unit tests in tests/test_planner/
+- [X] T009 Extend MapDefinition with poi_positions and poi_labels fields in robot_sf/nav/map_config.py
+- [X] T010 [P] Create simple_corridor.svg test map in tests/fixtures/test_maps/
+- [X] T011 [P] Create narrow_passage.svg test map in tests/fixtures/test_maps/
+- [X] T012 [P] Create no_path.svg test map in tests/fixtures/test_maps/
+- [X] T013 [P] Create complex_warehouse.svg test map in tests/fixtures/test_maps/
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -65,24 +65,24 @@ Project follows robot_sf structure:
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T014 [P] [US1] Create test_global_planner.py with basic path generation tests in tests/test_planner/
-- [ ] T015 [P] [US1] Add test for clearance verification (SC-002) in tests/test_planner/test_global_planner.py
-- [ ] T016 [P] [US1] Add test for straight-line path on empty map (edge case) in tests/test_planner/test_global_planner.py
-- [ ] T017 [P] [US1] Add test for PlanningFailedError when no path exists in tests/test_planner/test_global_planner.py
+- [X] T014 [P] [US1] Create test_global_planner.py with basic path generation tests in tests/test_planner/
+- [X] T015 [P] [US1] Add test for clearance verification (SC-002) in tests/test_planner/test_global_planner.py
+- [X] T016 [P] [US1] Add test for straight-line path on empty map (edge case) in tests/test_planner/test_global_planner.py
+- [X] T017 [P] [US1] Add test for PlanningFailedError when no path exists in tests/test_planner/test_global_planner.py
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Implement _inflate_obstacles() method using Shapely buffering in robot_sf/planner/global_planner.py
-- [ ] T019 [US1] Create visibility_graph.py module with pyvisgraph wrapper in robot_sf/planner/
-- [ ] T020 [US1] Implement VisibilityGraph.build() using pyvisgraph in robot_sf/planner/visibility_graph.py
-- [ ] T021 [US1] Implement VisibilityGraph.shortest_path() with Dijkstra via NetworkX in robot_sf/planner/visibility_graph.py
-- [ ] T022 [US1] Implement GlobalPlanner.__init__() with lazy graph initialization in robot_sf/planner/global_planner.py
-- [ ] T023 [US1] Implement GlobalPlanner.plan() basic method (no caching, no smoothing) in robot_sf/planner/global_planner.py
-- [ ] T024 [US1] Add boundary validation for start/goal positions in robot_sf/planner/global_planner.py
-- [ ] T025 [US1] Handle start/goal inside obstacles with projection to free space in robot_sf/planner/global_planner.py
-- [ ] T026 [US1] Add fallback_on_failure logic for straight-line paths in robot_sf/planner/global_planner.py
-- [ ] T027 [US1] Add Loguru logging for planning operations (graph build, failures, warnings) in robot_sf/planner/global_planner.py
-- [ ] T028 [US1] Run unit tests and verify all US1 tests pass
+- [X] T018 [US1] Implement _inflate_obstacles() method using Shapely buffering in robot_sf/planner/global_planner.py
+- [X] T019 [US1] Create visibility_graph.py module with pyvisgraph wrapper in robot_sf/planner/
+- [X] T020 [US1] Implement VisibilityGraph.build() using pyvisgraph in robot_sf/planner/visibility_graph.py
+- [X] T021 [US1] Implement VisibilityGraph.shortest_path() with Dijkstra via NetworkX in robot_sf/planner/visibility_graph.py
+- [X] T022 [US1] Implement GlobalPlanner.__init__() with lazy graph initialization in robot_sf/planner/global_planner.py
+- [X] T023 [US1] Implement GlobalPlanner.plan() basic method (no caching, no smoothing) in robot_sf/planner/global_planner.py
+- [X] T024 [US1] Add boundary validation for start/goal positions in robot_sf/planner/global_planner.py
+- [X] T025 [US1] Handle start/goal inside obstacles with projection to free space in robot_sf/planner/global_planner.py
+- [X] T026 [US1] Add fallback_on_failure logic for straight-line paths in robot_sf/planner/global_planner.py
+- [X] T027 [US1] Add Loguru logging for planning operations (graph build, failures, warnings) in robot_sf/planner/global_planner.py
+- [X] T028 [US1] Run unit tests and verify all US1 tests pass
 
 **Checkpoint**: Basic path generation working - planner generates collision-free paths for simple maps
 
@@ -96,21 +96,21 @@ Project follows robot_sf structure:
 
 ### Tests for User Story 2
 
-- [ ] T029 [P] [US2] Create test_map_integration.py for SVG parser integration in tests/test_planner/
-- [ ] T030 [P] [US2] Add test verifying planner output works with RouteNavigator in tests/test_planner/test_map_integration.py
-- [ ] T031 [P] [US2] Add tests for all existing example maps generating valid paths (SC-003) in tests/test_planner/test_map_integration.py
-- [ ] T032 [P] [US2] Add test for POI parsing from SVG in tests/test_planner/test_map_integration.py
+- [X] T029 [P] [US2] Create test_map_integration.py for SVG parser integration in tests/test_planner/
+- [X] T030 [P] [US2] Add test verifying planner output works with RouteNavigator in tests/test_planner/test_map_integration.py
+- [X] T031 [P] [US2] Add tests for all existing example maps generating valid paths (SC-003) in tests/test_planner/test_map_integration.py
+- [X] T032 [P] [US2] Add test for POI parsing from SVG in tests/test_planner/test_map_integration.py
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Extend svg_map_parser.py to parse <circle class="poi"> elements in robot_sf/nav/svg_map_parser.py
-- [ ] T034 [US2] Add POI extraction to MapDefinition.poi_positions during parsing in robot_sf/nav/svg_map_parser.py
-- [ ] T035 [US2] Add POI label mapping to MapDefinition.poi_labels in robot_sf/nav/svg_map_parser.py
-- [ ] T036 [US2] Implement MapDefinition.get_poi_by_label() helper method in robot_sf/nav/map_config.py
-- [ ] T037 [US2] Add backward compatibility handling for maps without POIs in robot_sf/nav/svg_map_parser.py
-- [ ] T038 [US2] Update existing example maps with POI annotations in maps/svg_maps/ (select 2-3 maps)
+- [X] T033 [US2] Extend svg_map_parser.py to parse <circle class="poi"> elements in robot_sf/nav/svg_map_parser.py
+- [X] T034 [US2] Add POI extraction to MapDefinition.poi_positions during parsing in robot_sf/nav/svg_map_parser.py
+- [X] T035 [US2] Add POI label mapping to MapDefinition.poi_labels in robot_sf/nav/svg_map_parser.py
+- [X] T036 [US2] Implement MapDefinition.get_poi_by_label() helper method in robot_sf/nav/map_config.py
+- [X] T037 [US2] Add backward compatibility handling for maps without POIs in robot_sf/nav/svg_map_parser.py
+- [X] T038 [US2] Update existing example maps with POI annotations in maps/svg_maps/ (select 2-3 maps)
 - [ ] T039 [US2] Verify RouteNavigator compatibility with planner-generated paths (manual validation)
-- [ ] T040 [US2] Run integration tests and verify all US2 tests pass
+- [X] T040 [US2] Run integration tests and verify all US2 tests pass
 
 **Checkpoint**: Planner fully integrated with existing map system and navigation components
 
@@ -124,23 +124,23 @@ Project follows robot_sf structure:
 
 ### Tests for User Story 3
 
-- [ ] T041 [P] [US3] Create test_poi_sampler.py for POI sampling strategies in tests/test_planner/
-- [ ] T042 [P] [US3] Add test for random POI sampling with seed reproducibility in tests/test_planner/test_poi_sampler.py
-- [ ] T043 [P] [US3] Add test for nearest/farthest POI selection strategies in tests/test_planner/test_poi_sampler.py
-- [ ] T044 [P] [US3] Add test for via_pois routing in GlobalPlanner.plan() in tests/test_planner/test_global_planner.py
-- [ ] T045 [P] [US3] Add test for dynamic start positions (non-zone) in tests/test_planner/test_global_planner.py
+- [X] T041 [P] [US3] Create test_poi_sampler.py for POI sampling strategies in tests/test_planner/
+- [X] T042 [P] [US3] Add test for random POI sampling with seed reproducibility in tests/test_planner/test_poi_sampler.py
+- [X] T043 [P] [US3] Add test for nearest/farthest POI selection strategies in tests/test_planner/test_poi_sampler.py
+- [X] T044 [P] [US3] Add test for via_pois routing in GlobalPlanner.plan() in tests/test_planner/test_global_planner.py
+- [X] T045 [P] [US3] Add test for dynamic start positions (non-zone) in tests/test_planner/test_global_planner.py
 
 ### Implementation for User Story 3
 
-- [ ] T046 [P] [US3] Create poi_sampler.py module in robot_sf/planner/
-- [ ] T047 [US3] Implement POISampler.__init__() with seeded RNG in robot_sf/planner/poi_sampler.py
-- [ ] T048 [US3] Implement POISampler.sample() with random strategy in robot_sf/planner/poi_sampler.py
-- [ ] T049 [US3] Add nearest and farthest strategies to POISampler.sample() in robot_sf/planner/poi_sampler.py
-- [ ] T050 [US3] Implement via_pois parameter handling in GlobalPlanner.plan() in robot_sf/planner/global_planner.py
-- [ ] T051 [US3] Add multi-segment planning for via_pois (plan each segment separately) in robot_sf/planner/global_planner.py
-- [ ] T052 [US3] Implement GlobalPlanner.plan_multi_goal() with nearest-neighbor TSP heuristic in robot_sf/planner/global_planner.py
-- [ ] T053 [US3] Add validation for via_pois IDs against map POIs in robot_sf/planner/global_planner.py
-- [ ] T054 [US3] Run tests and verify all US3 tests pass
+- [X] T046 [P] [US3] Create poi_sampler.py module in robot_sf/planner/
+- [X] T047 [US3] Implement POISampler.__init__() with seeded RNG in robot_sf/planner/poi_sampler.py
+- [X] T048 [US3] Implement POISampler.sample() with random strategy in robot_sf/planner/poi_sampler.py
+- [X] T049 [US3] Add nearest and farthest strategies to POISampler.sample() in robot_sf/planner/poi_sampler.py
+- [X] T050 [US3] Implement via_pois parameter handling in GlobalPlanner.plan() in robot_sf/planner/global_planner.py
+- [X] T051 [US3] Add multi-segment planning for via_pois (plan each segment separately) in robot_sf/planner/global_planner.py
+- [X] T052 [US3] Implement GlobalPlanner.plan_multi_goal() with nearest-neighbor TSP heuristic in robot_sf/planner/global_planner.py
+- [X] T053 [US3] Add validation for via_pois IDs against map POIs in robot_sf/planner/global_planner.py
+- [X] T054 [US3] Run tests and verify all US3 tests pass
 
 **Checkpoint**: Planner supports flexible routing with POIs and multiple goals
 
@@ -154,23 +154,23 @@ Project follows robot_sf structure:
 
 ### Tests for User Story 4
 
-- [ ] T055 [P] [US4] Create test_visibility_graph.py for graph caching tests in tests/test_planner/
-- [ ] T056 [P] [US4] Add test verifying graph caching behavior (single build, multiple queries) in tests/test_planner/test_visibility_graph.py
-- [ ] T057 [P] [US4] Add test for cache invalidation in tests/test_planner/test_visibility_graph.py
-- [ ] T058 [P] [US4] Add performance benchmark test (SC-001, SC-006) in tests/test_planner/test_global_planner.py
+- [X] T055 [P] [US4] Create test_visibility_graph.py for graph caching tests in tests/test_planner/
+- [X] T056 [P] [US4] Add test verifying graph caching behavior (single build, multiple queries) in tests/test_planner/test_visibility_graph.py
+- [X] T057 [P] [US4] Add test for cache invalidation in tests/test_planner/test_visibility_graph.py
+- [X] T058 [P] [US4] Add performance benchmark test (SC-001, SC-006) in tests/test_planner/test_global_planner.py
 
 ### Implementation for User Story 4
 
-- [ ] T059 [US4] Implement _graph_cache dictionary with map hash keys in robot_sf/planner/visibility_graph.py
-- [ ] T060 [US4] Implement _get_or_build_graph() helper with cache lookup in robot_sf/planner/visibility_graph.py
-- [ ] T061 [US4] Add map content hashing (md5 of obstacles repr) in robot_sf/planner/visibility_graph.py
-- [ ] T062 [US4] Update GlobalPlanner.plan() to use cached graphs in robot_sf/planner/global_planner.py
-- [ ] T063 [US4] Implement GlobalPlanner.invalidate_cache() method in robot_sf/planner/global_planner.py
-- [ ] T064 [US4] Create path_smoother.py module in robot_sf/planner/
-- [ ] T065 [US4] Implement Douglas-Peucker simplification in robot_sf/planner/path_smoother.py
-- [ ] T066 [US4] Integrate path smoothing into GlobalPlanner.plan() when enabled in robot_sf/planner/global_planner.py
-- [ ] T067 [US4] Add smoothing validation (collision-free check) in robot_sf/planner/path_smoother.py
-- [ ] T068 [US4] Run performance tests and verify SC-001 (<100ms median) and SC-006 (<500ms build)
+- [X] T059 [US4] Implement _graph_cache dictionary with map hash keys in robot_sf/planner/visibility_graph.py
+- [X] T060 [US4] Implement _get_or_build_graph() helper with cache lookup in robot_sf/planner/visibility_graph.py
+- [X] T061 [US4] Add map content hashing (md5 of obstacles repr) in robot_sf/planner/visibility_graph.py
+- [X] T062 [US4] Update GlobalPlanner.plan() to use cached graphs in robot_sf/planner/global_planner.py
+- [X] T063 [US4] Implement GlobalPlanner.invalidate_cache() method in robot_sf/planner/global_planner.py
+- [X] T064 [US4] Create path_smoother.py module in robot_sf/planner/
+- [X] T065 [US4] Implement Douglas-Peucker simplification in robot_sf/planner/path_smoother.py
+- [X] T066 [US4] Integrate path smoothing into GlobalPlanner.plan() when enabled in robot_sf/planner/global_planner.py
+- [X] T067 [US4] Add smoothing validation (collision-free check) in robot_sf/planner/path_smoother.py
+- [X] T068 [US4] Run performance tests and verify SC-001 (<100ms median) and SC-006 (<500ms build)
 
 **Checkpoint**: All performance targets met, caching working efficiently
 
@@ -180,13 +180,13 @@ Project follows robot_sf structure:
 
 **Purpose**: Integrate planner with gym environment factory and unified configs
 
-- [ ] T069 Extend RobotSimulationConfig with use_planner flag in robot_sf/gym_env/unified_config.py
-- [ ] T070 Add planner_clearance_margin config field in robot_sf/gym_env/unified_config.py
-- [ ] T071 Update navigation.sample_route() to delegate to planner when enabled in robot_sf/nav/navigation.py
-- [ ] T072 Add planner initialization in environment factory functions in robot_sf/gym_env/environment_factory.py
-- [ ] T073 [P] Create test_navigation_integration.py for env factory integration in tests/test_planner/
-- [ ] T074 [P] Add test for config-driven planner usage in make_robot_env() in tests/test_planner/test_navigation_integration.py
-- [ ] T075 [P] Verify backward compatibility (planner disabled by default) in tests/test_planner/test_navigation_integration.py
+- [X] T069 Extend RobotSimulationConfig with use_planner flag in robot_sf/gym_env/unified_config.py
+- [X] T070 Add planner_clearance_margin config field in robot_sf/gym_env/unified_config.py
+- [X] T071 Update navigation.sample_route() to delegate to planner when enabled in robot_sf/nav/navigation.py
+- [X] T072 Add planner initialization in environment factory functions in robot_sf/gym_env/environment_factory.py
+- [X] T073 [P] Create test_navigation_integration.py for env factory integration in tests/test_planner/
+- [X] T074 [P] Add test for config-driven planner usage in make_robot_env() in tests/test_planner/test_navigation_integration.py
+- [X] T075 [P] Verify backward compatibility (planner disabled by default) in tests/test_planner/test_navigation_integration.py
 
 **Checkpoint**: Planner fully integrated with gym environments via factory pattern
 
@@ -196,14 +196,14 @@ Project follows robot_sf structure:
 
 **Purpose**: Create runnable examples and user-facing documentation
 
-- [ ] T076 [P] Create 20_global_planner_demo.py example in examples/advanced/
-- [ ] T077 [P] Create 21_poi_routing_demo.py example in examples/advanced/
-- [ ] T078 [P] Update examples manifest with new planner demos in examples/examples_manifest.yaml
-- [ ] T079 [P] Add planner section to docs/README.md with links to contracts and quickstart
-- [ ] T080 [P] Create verification script verify_planner.sh in scripts/validation/
-- [ ] T081 [P] Create benchmark_planner.py performance profiling script in scripts/
-- [ ] T082 Verify quickstart.md examples are runnable and accurate
-- [ ] T083 Update CHANGELOG.md with planner feature addition
+ - [X] T076 [P] Create 20_global_planner_demo.py example in examples/advanced/
+ - [X] T077 [P] Create 21_poi_routing_demo.py example in examples/advanced/
+ - [X] T078 [P] Update examples manifest with new planner demos in examples/examples_manifest.yaml
+ - [X] T079 [P] Add planner section to docs/README.md with links to contracts and quickstart
+ - [X] T080 [P] Create verification script verify_planner.sh in scripts/validation/
+ - [X] T081 [P] Create benchmark_planner.py performance profiling script in scripts/
+ - [X] T082 Verify quickstart.md examples are runnable and accurate
+ - [X] T083 Update CHANGELOG.md with planner feature addition
 
 **Checkpoint**: Documentation and examples complete, ready for user onboarding
 
@@ -213,12 +213,12 @@ Project follows robot_sf structure:
 
 **Purpose**: Final quality improvements and validation
 
-- [ ] T084 [P] Add comprehensive docstrings to all public methods (Google style) in robot_sf/planner/
-- [ ] T085 [P] Add type hints to all function signatures in robot_sf/planner/
-- [ ] T086 Run Ruff formatter and linter on robot_sf/planner/ and tests/test_planner/
+- [X] T084 [P] Add comprehensive docstrings to all public methods (Google style) in robot_sf/planner/
+- [X] T085 [P] Add type hints to all function signatures in robot_sf/planner/
+- [X] T086 Run Ruff formatter and linter on robot_sf/planner/ and tests/test_planner/
 - [ ] T087 Run ty type checker and resolve any type errors in robot_sf/planner/
 - [ ] T088 Verify test coverage exceeds 90% (SC-007) for robot_sf/planner/ module
-- [ ] T089 [P] Add narrow passage warning detection in robot_sf/planner/global_planner.py
+- [X] T089 [P] Add narrow passage warning detection in robot_sf/planner/global_planner.py
 - [ ] T090 [P] Add path quality metrics (length, clearance) to plan() return metadata (optional enhancement)
 - [ ] T091 Run all validation scripts (verify_planner.sh, benchmark_planner.py)
 - [ ] T092 Verify all success criteria (SC-001 through SC-010) are met

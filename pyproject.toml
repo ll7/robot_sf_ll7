@@ -49,6 +49,8 @@ dependencies = [
     "pysocialforce",
     "jsonschema>=4.23.0",
     "shapely>=2.1.2",
+    "networkx>=3.6",
+    "pyvisgraph>=0.2.1",
 ]
 
 [project.optional-dependencies]

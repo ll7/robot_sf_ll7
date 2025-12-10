@@ -3675,6 +3675,12 @@ wheels = [
 ]
 
 [[package]]
+name = "pyvisgraph"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/ea/0d1d0cf10b56f661c77ac0e9fae420e05199dac9d70f0e170ce4d99a171d/pyvisgraph-0.2.1.tar.gz", hash = "sha256:b7c6895d9e00ed7771e3db187fb079a236616adfc20abbbb97aefe43de54e990", size = 8760, upload-time = "2018-06-03T07:42:27.717Z" }
+
+[[package]]
 name = "pywinpty"
 version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3888,6 +3894,7 @@ dependencies = [
     { name = "loguru" },
     { name = "matplotlib" },
     { name = "moviepy" },
+    { name = "networkx" },
     { name = "numba" },
     { name = "numpy" },
     { name = "optuna" },
@@ -3899,6 +3906,7 @@ dependencies = [
     { name = "pysocialforce" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pyvisgraph" },
     { name = "rich" },
     { name = "ruff" },
     { name = "scalene" },
@@ -3965,6 +3973,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.9.2" },
     { name = "moviepy", specifier = ">=2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "networkx", specifier = ">=3.6" },
     { name = "numba", specifier = ">=0.60.0" },
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "optuna", specifier = ">=4.1.0" },
@@ -3977,6 +3986,7 @@ requires-dist = [
     { name = "pysocialforce", editable = "fast-pysf" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
+    { name = "pyvisgraph", specifier = ">=0.2.1" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "ruff", specifier = ">=0.9.7" },
     { name = "scalene", specifier = ">=1.5.48" },

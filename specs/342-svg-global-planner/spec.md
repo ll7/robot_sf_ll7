@@ -143,11 +143,14 @@ As a researcher running large training batches, I need path generation to comple
 ## Out of Scope
 
 - Dynamic obstacle avoidance (handled by local navigation layer)
-- Real-time replanning during navigation (paths are pre-computed)
 - Multi-robot coordination and conflict resolution
 - Trajectory optimization (velocity profiles, acceleration limits, curvature constraints)
 - 3D or multi-level navigation
 - Learning-based planning methods (this is geometry-based only)
+
+## Optional with a very low priority
+
+- Real-time replanning during navigation (paths are pre-computed)
 - Interactive path editing or manual waypoint adjustments in UI
 - Path cost functions beyond shortest distance (e.g., safety-weighted costs are future work)
 

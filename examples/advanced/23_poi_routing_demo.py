@@ -7,6 +7,7 @@ from pathlib import Path
 
 import matplotlib
 
+from robot_sf.common.logging import configure_logging
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import GlobalPlanner, PlannerConfig, POISampler, plot_global_plan
 
@@ -151,6 +152,7 @@ def _visualize_planning_debug(  # noqa: C901
 
 def main() -> None:
     """Demonstrate routing through randomly sampled POIs with comprehensive debugging."""
+    configure_logging()
     _ensure_interactive_backend()
 
     map_path = Path("maps/svg_maps/MIT_corridor.svg")

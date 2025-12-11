@@ -33,9 +33,9 @@ from typing import Any
 
 import psutil
 
+from robot_sf.common.logging import get_logger
 from robot_sf.research.aggregation import compute_completeness_score
 from robot_sf.research.exceptions import ValidationError
-from robot_sf.research.logging_config import get_logger
 
 logger = get_logger(__name__)
 

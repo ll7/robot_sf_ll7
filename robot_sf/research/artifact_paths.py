@@ -34,7 +34,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from robot_sf.research.logging_config import get_logger
+from robot_sf.common.logging import get_logger
 
 logger = get_logger(__name__)
 

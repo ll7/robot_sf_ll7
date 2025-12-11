@@ -346,6 +346,59 @@ class SvgMapConverter:
         """
         return Zone(list(path.coordinates))
 
+    def _process_paths(
+        self,
+        obstacles: list[Obstacle],
+        robot_spawn_zones: list[Rect],
+        ped_spawn_zones: list[Rect],
+        robot_goal_zones: list[Rect],
+        ped_goal_zones: list[Rect],
+        ped_crowded_zones: list[Rect],
+    ) -> tuple[list[GlobalRoute], list[GlobalRoute]]:
+        """Convert parsed paths into routes, obstacles, or crowded zones.
+
+        Args:
+            obstacles: Mutable obstacle list to append parsed obstacle paths to.
+            robot_spawn_zones: Spawn zones used to resolve robot routes.
+            ped_spawn_zones: Spawn zones used to resolve pedestrian routes.
+            robot_goal_zones: Goal zones used to resolve robot routes.
+            ped_goal_zones: Goal zones used to resolve pedestrian routes.
+            ped_crowded_zones: Crowded zones list mutated when crowded paths are parsed.
+
+        Returns:
+            tuple[list[GlobalRoute], list[GlobalRoute]]: Parsed robot and pedestrian routes
+                (robot_routes, ped_routes) extracted from the SVG paths.
+        """
+        robot_routes: list[GlobalRoute] = []
+        ped_routes: list[GlobalRoute] = []
+
+        path_processors = {
+            "obstacle": lambda p: obstacles.append(self._process_obstacle_path(p)),
+            "ped_route": lambda p: ped_routes.append(
+                self._process_route_path(p, ped_spawn_zones, ped_goal_zones),
+            ),
+            "robot_route": lambda p: robot_routes.append(
+                self._process_route_path(p, robot_spawn_zones, robot_goal_zones),
+            ),
+            "crowded_zone": lambda p: ped_crowded_zones.append(self._process_crowded_zone_path(p)),
+        }
+
+        for path in self.path_info:
+            label = path.label
+            if "ped_route" in label:
+                processor = path_processors["ped_route"]
+            elif "robot_route" in label:
+                processor = path_processors["robot_route"]
+            else:
+                processor = path_processors.get(label)
+
+            if processor:
+                processor(path)
+            else:
+                logger.error(f"Unknown label <{label}> in id <{path.id}>")
+
+        return robot_routes, ped_routes
+
     def _process_single_pedestrians_from_circles(self) -> list[SinglePedestrianDefinition]:
         """
         Process circles labeled as single pedestrian markers.
@@ -419,6 +472,46 @@ class SvgMapConverter:
             logger.debug(f"Parsed {len(single_pedestrians)} single pedestrian(s) from circles")
 
         return single_pedestrians
+
+    def _process_pois(self) -> tuple[list[tuple[float, float]], dict[str, str]]:
+        """Extract POI positions and labels from parsed circles.
+
+        Returns:
+            tuple[list[tuple[float, float]], dict[str, str]]: POI positions and labels keyed
+                by circle identifier.
+        """
+        poi_positions: list[tuple[float, float]] = []
+        poi_labels: dict[str, str] = {}
+        for circle in self.circle_info:
+            is_poi = "poi" in circle.cls.split() or circle.label == "poi"
+            if not is_poi:
+                continue
+            poi_positions.append(circle.get_center())
+            poi_labels[circle.id_] = circle.label if circle.label else circle.id_
+        return poi_positions, poi_labels
+
+    def _log_map_warnings(
+        self,
+        obstacles: list[Obstacle],
+        ped_routes: list[GlobalRoute],
+        ped_crowded_zones: list[Rect],
+    ) -> None:
+        """Log non-fatal warnings for missing optional map elements."""
+        if not obstacles:
+            logger.warning("No obstacles found in the SVG file")
+        if not ped_routes:
+            logger.warning("No pedestrian routes found in the SVG file")
+        if not ped_crowded_zones:
+            logger.debug("No crowded zones found in the SVG file (optional)")
+
+    def _ensure_robot_routes(self, robot_routes: list[GlobalRoute]) -> None:
+        """Raise when no robot routes were parsed."""
+        if robot_routes:
+            return
+        raise ValueError(
+            "SVG map conversion produced zero robot routes. "
+            "Ensure at least one 'robot_route_*_*' path label exists.",
+        )
 
     def _process_rects(
         self,
@@ -512,7 +605,7 @@ class SvgMapConverter:
             ped_crowded_zones,
         )
 
-    def _info_to_mapdefintion(self) -> None:  # noqa: C901
+    def _info_to_mapdefintion(self) -> None:
         """
         Create a MapDefinition object from the path and rectangle information.
         """
@@ -530,62 +623,23 @@ class SvgMapConverter:
             ped_crowded_zones,
         ) = self._process_rects(width, height)
 
-        # Initialize routes
-        robot_routes: list[GlobalRoute] = []
-        ped_routes: list[GlobalRoute] = []
-
-        # Process paths
-        path_processors = {
-            "obstacle": lambda p: obstacles.append(self._process_obstacle_path(p)),
-            "ped_route": lambda p: ped_routes.append(
-                self._process_route_path(p, ped_spawn_zones, ped_goal_zones),
-            ),
-            "robot_route": lambda p: robot_routes.append(
-                self._process_route_path(p, robot_spawn_zones, robot_goal_zones),
-            ),
-            "crowded_zone": lambda p: ped_crowded_zones.append(self._process_crowded_zone_path(p)),
-        }
-
-        for path in self.path_info:
-            label = path.label
-            if "ped_route" in label:
-                processor = path_processors["ped_route"]
-            elif "robot_route" in label:
-                processor = path_processors["robot_route"]
-            else:
-                processor = path_processors.get(label)
-
-            if processor:
-                processor(path)
-            else:
-                logger.error(f"Unknown label <{label}> in id <{path.id}>")
+        robot_routes, ped_routes = self._process_paths(
+            obstacles,
+            robot_spawn_zones,
+            ped_spawn_zones,
+            robot_goal_zones,
+            ped_goal_zones,
+            ped_crowded_zones,
+        )
 
         # Process single pedestrians from circles
         # Circles labeled like "single_ped_<id>_start" or "single_ped_<id>_goal"
         single_pedestrians = self._process_single_pedestrians_from_circles()
 
-        # Log warnings / validation for required / optional elements
-        if not obstacles:
-            logger.warning("No obstacles found in the SVG file")
-        if not ped_routes:
-            logger.warning("No pedestrian routes found in the SVG file")
-        if not ped_crowded_zones:
-            logger.debug("No crowded zones found in the SVG file (optional)")
+        self._log_map_warnings(obstacles, ped_routes, ped_crowded_zones)
+        self._ensure_robot_routes(robot_routes)
 
-        if not robot_routes:
-            # Hard validation: we cannot produce robot start positions => downstream division by zero.
-            raise ValueError(
-                "SVG map conversion produced zero robot routes. Ensure at least one 'robot_route_*_*' path label exists.",
-            )
-
-        poi_positions = []
-        poi_labels: dict[str, str] = {}
-        for circle in self.circle_info:
-            is_poi = "poi" in circle.cls.split() or circle.label == "poi"
-            if not is_poi:
-                continue
-            poi_positions.append(circle.get_center())
-            poi_labels[circle.id_] = circle.label if circle.label else circle.id_
+        poi_positions, poi_labels = self._process_pois()
 
         logger.debug("Creating MapDefinition object")
         self.map_definition = MapDefinition(

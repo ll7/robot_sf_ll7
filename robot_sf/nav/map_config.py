@@ -183,6 +183,8 @@ class MapDefinition:
 
     poi_labels: dict[str, str] = field(default_factory=dict)
     """Mapping from POI identifiers to human-readable labels."""
+    _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
+    """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
     """Transformed obstacles in pysf format. Are generated in __post_init__."""
     robot_routes_by_spawn_id: dict[int, list[GlobalRoute]] = field(init=False)
@@ -225,6 +227,7 @@ class MapDefinition:
         # Validate single pedestrians
         self._validate_single_pedestrians()
         self._validate_pois()
+        self._build_poi_lookup()
 
     def _validate_single_pedestrians(self):
         """
@@ -328,6 +331,13 @@ class MapDefinition:
                     f"POI position {poi} is outside map bounds (0, 0) to ({self.width}, {self.height})."
                 )
 
+    def _build_poi_lookup(self) -> None:
+        """Construct a label-to-position mapping for efficient POI lookup."""
+        self._poi_positions_by_label.clear()
+        for idx, poi_label in enumerate(self.poi_labels.values()):
+            # Preserve first occurrence if duplicate labels exist
+            self._poi_positions_by_label.setdefault(poi_label, self.poi_positions[idx])
+
     @property
     def num_start_pos(self) -> int:
         """
@@ -370,11 +380,10 @@ class MapDefinition:
         Raises:
             KeyError: If the requested label does not exist.
         """
-        for poi_id, poi_label in self.poi_labels.items():
-            if poi_label == label:
-                poi_index = list(self.poi_labels.keys()).index(poi_id)
-                return self.poi_positions[poi_index]
-        raise KeyError(f"No POI with label '{label}' found in map.")
+        try:
+            return self._poi_positions_by_label[label]
+        except KeyError as exc:  # pragma: no cover - thin wrapper
+            raise KeyError(f"No POI with label '{label}' found in map.") from exc
 
     def get_map_bounds(self):
         """Returns the min and max of x and y bounds.
@@ -435,6 +444,7 @@ class MapDefinition:
         # Prepared obstacles will be lazily recreated when needed
         if not hasattr(self, "_prepared_obstacles"):
             self._prepared_obstacles = None
+        self._build_poi_lookup()
 
 
 @dataclass

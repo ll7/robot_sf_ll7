@@ -159,6 +159,10 @@ class GlobalPlanner:
         self._graph = None
         VisibilityGraph.clear_cache()
 
+    def build_inflated_obstacles(self) -> list[Polygon]:
+        """Return inflated obstacles using the current planner configuration."""
+        return self._inflate_obstacles()
+
     def _get_or_build_graph(self, polygons: list[Polygon]) -> VisibilityGraph:
         """Return a cached or newly built visibility graph.
 

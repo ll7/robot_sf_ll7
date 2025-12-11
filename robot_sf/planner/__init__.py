@@ -2,5 +2,12 @@
 
 from robot_sf.planner.global_planner import GlobalPlanner, PlannerConfig, PlanningFailedError
 from robot_sf.planner.poi_sampler import POISampler
+from robot_sf.planner.visualization import plot_global_plan
 
-__all__ = ["GlobalPlanner", "POISampler", "PlannerConfig", "PlanningFailedError"]
+__all__ = [
+    "GlobalPlanner",
+    "POISampler",
+    "PlannerConfig",
+    "PlanningFailedError",
+    "plot_global_plan",
+]

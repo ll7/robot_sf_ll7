@@ -93,10 +93,11 @@ class GlobalPlanner:
         self._validate_bounds(goal)
         via_points = self._resolve_via_pois(via_pois or [])
 
-        inflated_obstacles = self._inflate_obstacles()
-        graph_obstacles = self._prepare_graph_obstacles(inflated_obstacles)
-        start_safe = self._project_to_free_space(start, inflated_obstacles)
-        goal_safe = self._project_to_free_space(goal, inflated_obstacles)
+        planning_obstacles = self._inflate_obstacles()
+        collision_obstacles = self._inflate_obstacles_for_collision()
+        graph_obstacles = self._prepare_graph_obstacles(planning_obstacles)
+        start_safe = self._project_to_free_space(start, planning_obstacles)
+        goal_safe = self._project_to_free_space(goal, planning_obstacles)
 
         if not self.map_def.obstacles:
             return self._path_without_obstacles(start_safe, goal_safe, via_points)
@@ -106,13 +107,15 @@ class GlobalPlanner:
             start=start_safe,
             goal=goal_safe,
             vias=len(via_points),
-            count=len(inflated_obstacles),
+            count=len(planning_obstacles),
         )
 
         planner_graph = self._get_or_build_graph(graph_obstacles)
         if planner_graph._built:
             waypoints = self._compute_waypoints(planner_graph, start_safe, goal_safe, via_points)
-            return self._finalize_path(waypoints, inflated_obstacles, start_safe, goal_safe)
+            return self._finalize_path(
+                waypoints, planning_obstacles, collision_obstacles, start_safe, goal_safe
+            )
 
         # Fallback: Add intermediate waypoint to ensure at least 3 waypoints for navigation
         mid_x = (start_safe[0] + goal_safe[0]) / 2
@@ -244,7 +247,8 @@ class GlobalPlanner:
     def _finalize_path(
         self,
         waypoints: list[Vec2D],
-        inflated_obstacles: list[Polygon],
+        planning_obstacles: list[Polygon],
+        collision_obstacles: list[Polygon],
         start_safe: Vec2D,
         goal_safe: Vec2D,
     ) -> list[Vec2D]:
@@ -254,8 +258,10 @@ class GlobalPlanner:
             The final validated waypoint sequence.
         """
         try:
-            self._validate_path(waypoints, inflated_obstacles)
-            waypoints = self._maybe_smooth_path(waypoints, inflated_obstacles)
+            # Validate against collision envelopes (robot radius only)
+            self._validate_path(waypoints, collision_obstacles)
+            # Smooth using planning envelopes (radius + clearance)
+            waypoints = self._maybe_smooth_path(waypoints, planning_obstacles)
         except PlanningFailedError as err:
             if self.config.fallback_on_failure:
                 logger.warning(
@@ -286,12 +292,33 @@ class GlobalPlanner:
             return waypoints
 
     def _inflate_obstacles(self) -> list[Polygon]:
-        """Inflate obstacles by robot radius and safety margin.
+        """Inflate obstacles by robot radius and safety margin for planning.
 
         Returns:
-            List of buffered polygons representing obstacle keep-out zones.
+            List of buffered polygons (radius + clearance) representing planning keep-out zones.
         """
         margin = self.config.robot_radius + self.config.min_safe_clearance
+        inflated: list[Polygon] = []
+        for obstacle in self.map_def.obstacles:
+            poly = Polygon(obstacle.vertices)
+            if poly.is_empty or poly.area <= 0:
+                logger.warning(
+                    "Skipping degenerate obstacle with vertices: {verts}", verts=obstacle.vertices
+                )
+                continue
+            buffered = poly.buffer(margin)
+            if buffered.is_empty:
+                continue
+            inflated.append(buffered)
+        return inflated
+
+    def _inflate_obstacles_for_collision(self) -> list[Polygon]:
+        """Inflate obstacles by robot radius only for collision checks.
+
+        Returns:
+            List of buffered polygons (radius only) for validating path collision safety.
+        """
+        margin = self.config.robot_radius
         inflated: list[Polygon] = []
         for obstacle in self.map_def.obstacles:
             poly = Polygon(obstacle.vertices)
@@ -380,16 +407,16 @@ class GlobalPlanner:
                     )
 
     def _prepare_graph_obstacles(self, polygons: list[Polygon]) -> list[Polygon]:
-        """Slightly expand inflated polygons for visibility graph vertices.
+        """Provide polygons for the visibility graph without extra inflation.
+
+        The visibility graph already runs on the boundaries of the planning-inflated
+        obstacles (radius + clearance). We intentionally avoid any additional buffer
+        so that validation remains aligned with the collision envelopes (radius only).
 
         Returns:
-            Buffered polygons used to seed the visibility graph.
+            Polygons used to seed the visibility graph.
         """
-        adjusted: list[Polygon] = []
-        for poly in polygons:
-            expanded = poly.buffer(1e-3)
-            adjusted.append(expanded if not expanded.is_empty else poly)
-        return adjusted
+        return polygons
 
     def _nearest_neighbor_order(self, start: Vec2D, goals: list[Vec2D]) -> list[Vec2D]:
         """Return goals ordered by nearest-neighbor heuristic."""

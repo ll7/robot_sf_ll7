@@ -444,6 +444,15 @@ class MapDefinition:
         # Prepared obstacles will be lazily recreated when needed
         if not hasattr(self, "_prepared_obstacles"):
             self._prepared_obstacles = None
+        # Legacy pickle compatibility: initialize missing POI-related fields
+        if not hasattr(self, "_poi_positions_by_label"):
+            self._poi_positions_by_label = {}
+        if not hasattr(self, "poi_labels"):
+            self.poi_labels = {}
+        if not hasattr(self, "poi_positions"):
+            self.poi_positions = []
+        if not hasattr(self, "single_pedestrians"):
+            self.single_pedestrians = []
         self._build_poi_lookup()
 
 

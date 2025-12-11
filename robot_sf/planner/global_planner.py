@@ -109,18 +109,10 @@ class GlobalPlanner:
             count=len(inflated_obstacles),
         )
 
-        try:
-            planner_graph = self._get_or_build_graph(graph_obstacles)
-            if planner_graph._built:
-                waypoints = self._compute_waypoints(
-                    planner_graph, start_safe, goal_safe, via_points
-                )
-                return self._finalize_path(waypoints, inflated_obstacles, start_safe, goal_safe)
-        except (ValueError, ZeroDivisionError) as e:
-            logger.warning(
-                "Planning failed: {error}. Using simple start-goal fallback.",
-                error=str(e),
-            )
+        planner_graph = self._get_or_build_graph(graph_obstacles)
+        if planner_graph._built:
+            waypoints = self._compute_waypoints(planner_graph, start_safe, goal_safe, via_points)
+            return self._finalize_path(waypoints, inflated_obstacles, start_safe, goal_safe)
 
         # Fallback: Add intermediate waypoint to ensure at least 3 waypoints for navigation
         mid_x = (start_safe[0] + goal_safe[0]) / 2

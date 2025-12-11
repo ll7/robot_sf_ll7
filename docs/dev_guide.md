@@ -540,7 +540,7 @@ Examples (copy‑ready):
   - VS Code task “Run Tests” (default suite)
   - “Run Tests (Show All Warnings)” for diagnostics
   - “Run Tests (GUI)” for display‑dependent tests (headless via environment vars)
-- Code quality checks: VS Code task “Check Code Quality” (Ruff + pylint errors‑only)
+- Code quality checks: VS Code task “Check Code Quality” (Ruff + ty errors‑only)
 - Diagrams: VS Code task “Generate UML”
 
 Quality gates to run locally before pushing:
@@ -664,7 +664,7 @@ All figures must be **reproducible from code** and directly **integratable into 
   - VS Code task "Run Tests" (default suite)
   - "Run Tests (Show All Warnings)" for diagnostics
   - "Run Tests (GUI)" for display‑dependent tests (headless via environment vars)
-- Code quality checks: VS Code task "Check Code Quality" (Ruff + pylint errors‑only)
+- Code quality checks: VS Code task "Check Code Quality" (Ruff + ty errors‑only)
 - Diagrams: VS Code task "Generate UML"
 
 Quality gates to run locally before pushing:

@@ -29,6 +29,7 @@ def plot_global_plan(
     save_path: str | Path | None = None,
     ax: Axes | None = None,
     show: bool = True,
+    flip_y: bool = True,
 ) -> plt.Figure:
     """Plot obstacles, POIs, and a planned waypoint path.
 
@@ -40,6 +41,7 @@ def plot_global_plan(
         save_path: When set, write the figure to this location (directories are created).
         ax: Optional Matplotlib axes to draw on; a new figure is created otherwise.
         show: When True, call ``plt.show()`` after rendering.
+        flip_y: Invert the y-axis to match SVG coordinate origin (top-left).
 
     Returns:
         Matplotlib Figure containing the rendered plot.
@@ -48,7 +50,7 @@ def plot_global_plan(
         raise ValueError("path must not be empty for plotting")
 
     via_points = via_points or []
-    figure, axes = _init_axes(planner, ax=ax, title=title)
+    figure, axes = _init_axes(planner, ax=ax, title=title, flip_y=flip_y)
 
     inflated_obstacles = planner.build_inflated_obstacles()
     _plot_obstacles(inflated_obstacles, axes)
@@ -71,6 +73,7 @@ def _init_axes(
     *,
     ax: Axes | None,
     title: str | None,
+    flip_y: bool,
 ) -> tuple[plt.Figure, Axes]:
     """Create or reuse axes configured to the map bounds.
 
@@ -88,6 +91,8 @@ def _init_axes(
     axes.set_xlabel("x [m]")
     axes.set_ylabel("y [m]")
     axes.set_title(title or "Global Planner Route")
+    if flip_y:
+        axes.invert_yaxis()
     return figure, axes
 
 

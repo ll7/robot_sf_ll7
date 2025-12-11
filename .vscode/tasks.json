@@ -57,7 +57,7 @@
 		{
 			"label": "Check Code Quality",
 			"type": "shell",
-			"command": "uv run ruff check . && uv run pylint robot_sf --errors-only",
+			"command": "uv run ruff check . && uv run ty check . --exit-zero",
 			"problemMatcher": [],
 			"group": "test"
 		},

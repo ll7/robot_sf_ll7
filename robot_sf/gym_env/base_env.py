@@ -11,6 +11,7 @@ from loguru import logger
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.planner import GlobalPlanner, PlannerConfig
 from robot_sf.render.jsonl_recording import JSONLRecorder
 from robot_sf.render.sim_view import SimulationView, VisualizableSimState
 from robot_sf.sim.registry import get_backend
@@ -66,6 +67,7 @@ class BaseEnv(Env):
 
         # Extract first map definition; currently only supports using the first map
         self.map_def = env_config.map_pool.choose_random_map()
+        attach_planner_to_map(self.map_def, self.env_config)
 
         self.debug = debug
 
@@ -158,9 +160,11 @@ class BaseEnv(Env):
 
     def save_recording(self, filename: str | None = None):
         """
-        save the recorded states to a file
-        filname: str, must end with *.pkl
-        resets the recorded states list at the end
+        Save the recorded states to a file.
+
+        Args:
+            filename: Optional target filename ending with `.pkl`. When omitted, a timestamped
+                filename is generated under the configured recording directory.
         """
         if filename is None:
             now = datetime.datetime.now()
@@ -211,3 +215,19 @@ class BaseEnv(Env):
         if self.jsonl_recorder is not None:
             self.jsonl_recorder.close()
             self.jsonl_recorder = None
+
+
+def attach_planner_to_map(map_def, env_config) -> None:
+    """Attach a GlobalPlanner instance to the map when enabled in config."""
+    if not getattr(env_config, "use_planner", False):
+        return
+    if getattr(map_def, "_use_planner", False) and getattr(map_def, "_global_planner", None):
+        return
+
+    clearance = getattr(env_config, "planner_clearance_margin", 0.3)
+    robot_cfg = getattr(env_config, "robot_config", None)
+    robot_radius = getattr(robot_cfg, "radius", 0.4) if robot_cfg else 0.4
+
+    planner_cfg = PlannerConfig(robot_radius=robot_radius, min_safe_clearance=clearance)
+    map_def._global_planner = GlobalPlanner(map_def, planner_cfg)
+    map_def._use_planner = True

@@ -1,37 +1,15 @@
-"""Logging helpers for map verification.
+"""Logging helpers for map verification (deprecated).
 
-Centralizes Loguru configuration so the CLI and library code share
-consistent formatting and levels.
+This module is deprecated. Use robot_sf.common.logging instead.
+
+For backwards compatibility, this module re-exports the unified logging
+function from robot_sf.common.logging.
+
+New code should use:
+    >>> from robot_sf.common.logging import configure_logging
 """
 
 from __future__ import annotations
 
-import sys
-
-from loguru import logger
-
-DEFAULT_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-    "<level>{level: <8}</level> | <level>{message}</level>"
-)
-VERBOSE_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-    "<level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> | "
-    "<level>{message}</level>"
-)
-
-
-def configure_logging(verbose: bool = False) -> None:
-    """Configure Loguru handlers for verification.
-
-    Parameters
-    ----------
-    verbose : bool
-        Enable DEBUG level and expanded format if True.
-    """
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format=VERBOSE_FORMAT if verbose else DEFAULT_FORMAT,
-        level="DEBUG" if verbose else "INFO",
-    )
+# Import the unified logging configuration function
+from robot_sf.common.logging import configure_logging  # noqa: F401

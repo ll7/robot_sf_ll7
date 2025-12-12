@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Test the classic global planner with grid-based planning.
+
+This example demonstrates:
+1. Loading an SVG map
+2. Planning a path using the ClassicGlobalPlanner (ThetaStar algorithm)
+3. Visualizing the planned path on the grid
+"""
+
+from pathlib import Path
+
+from loguru import logger
+from python_motion_planning.common import TYPES, Visualizer
+
+from robot_sf.common import ensure_interactive_backend
+from robot_sf.common.artifact_paths import get_artifact_category_path
+from robot_sf.common.logging import configure_logging
+from robot_sf.nav.motion_planning_adapter import get_obstacle_statistics, visualize_grid
+from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
+
+MAP_PATH = Path("maps/svg_maps/classic_overtaking.svg")
+"""svg map file to load for the test."""
+
+
+def main() -> None:
+    """Run the classic global planner demo."""
+    configure_logging(verbose=True)
+    ensure_interactive_backend()
+
+    # Load map
+    map_def = convert_map(str(MAP_PATH))
+    logger.info(
+        "Loaded map: {w}x{h} with {obs} obstacles",
+        w=map_def.width,
+        h=map_def.height,
+        obs=len(map_def.obstacles),
+    )
+
+    # Create planner
+    planner_config = ClassicPlannerConfig(
+        cells_per_meter=1.0,
+        inflate_radius_cells=2,
+        algorithm="theta_star",
+    )
+    planner = ClassicGlobalPlanner(map_def, config=planner_config)
+    logger.info("Created ClassicGlobalPlanner with ThetaStar algorithm")
+
+    # Visualize grid
+    output_dir = get_artifact_category_path("plots")
+    grid = planner.grid  # Access grid to visualize
+    stats = get_obstacle_statistics(grid)
+    logger.info(
+        "Planning grid: {shape}, {obs} obstacle cells ({pct:.2f}%)",
+        shape=grid.type_map.shape,
+        obs=stats["obstacle_count"],
+        pct=stats["obstacle_percentage"],
+    )
+    visualize_grid(grid, output_dir / "classic_planner_grid.png", title="Planning Grid")
+
+    # Plan path (world coordinates)
+    start_world = (5.0, 22.0)
+    goal_world = (55.0, 5.0)
+    logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
+
+    path_world = planner.plan(start_world, goal_world)
+
+    if not path_world:
+        logger.error("Planning failed!")
+        return
+
+    logger.info("Found path with {n} waypoints", n=len(path_world))
+
+    # Convert path to grid coordinates for visualization
+    path_grid = [planner._world_to_grid(x, y) for x, y in path_world]
+
+    # Mark start and goal
+    start_grid = path_grid[0]
+    goal_grid = path_grid[-1]
+    grid.type_map[start_grid] = TYPES.START
+    grid.type_map[goal_grid] = TYPES.GOAL
+
+    # Visualize path
+    vis_path = Visualizer("Classic Planner Path")
+    vis_path.plot_grid_map(grid)
+    vis_path.plot_path(path_grid, style="--", color="C4", linewidth=2)
+    vis_path.fig.savefig(output_dir / "classic_planner_path.png")
+    logger.success(f"Saved path visualization to {output_dir / 'classic_planner_path.png'}")
+    vis_path.close()
+
+    logger.info("✓ Path planning completed.")
+
+
+if __name__ == "__main__":
+    main()

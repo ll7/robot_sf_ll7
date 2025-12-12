@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="24" height="16">
+  <rect inkscape:label="robot_spawn_zone" x="1" y="7" width="1.8" height="1.8" />
+  <rect inkscape:label="robot_goal_zone" x="20" y="10" width="2" height="2" />
+  <rect inkscape:label="ped_spawn_zone" x="2" y="2" width="2" height="2" />
+  <rect inkscape:label="ped_goal_zone" x="19" y="4" width="2" height="2" />
+
+  <rect inkscape:label="obstacle" x="6" y="2" width="3" height="6" />
+  <rect inkscape:label="obstacle" x="12" y="0.5" width="2.5" height="8" />
+  <rect inkscape:label="obstacle" x="9" y="11" width="4" height="3.5" />
+  <rect inkscape:label="obstacle" x="17" y="4" width="3.5" height="6" />
+  <rect inkscape:label="obstacle" x="4" y="10" width="2" height="4" />
+  <path inkscape:label="robot_route_0_0" d="M 1 7 L 22 12" />
+</svg>

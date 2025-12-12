@@ -141,7 +141,25 @@
        stroke="#c40202"
        stroke-width="0.903889"
        fill="none"
-       inkscape:label="ped_route_0_0"
+      inkscape:label="ped_route_0_0"
        id="path10" />
+  </g>
+  <g
+     id="pois"
+     inkscape:label="POIs">
+    <circle
+       class="poi"
+       id="poi_entry"
+       cx="10"
+       cy="20"
+       r="0.4"
+       inkscape:label="entry_checkpoint" />
+    <circle
+       class="poi"
+       id="poi_exit"
+       cx="30"
+       cy="20"
+       r="0.4"
+       inkscape:label="exit_checkpoint" />
   </g>
 </svg>

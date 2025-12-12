@@ -44,7 +44,7 @@ def main() -> None:
     # Create planner
     planner_config = ClassicPlannerConfig(
         cells_per_meter=2.0,
-        inflate_radius_cells=1,
+        inflate_radius_cells=10,
         algorithm="theta_star",
     )
     planner = ClassicGlobalPlanner(map_def, config=planner_config)

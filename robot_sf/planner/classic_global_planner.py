@@ -106,17 +106,22 @@ class ClassicGlobalPlanner:
             RuntimeError: If grid creation fails.
         """
         if self._grid is None:
-            grid_config = MotionPlanningGridConfig(
-                cells_per_meter=self.config.cells_per_meter,
-                inflate_radius_cells=self.config.inflate_radius_cells,
-                add_boundary_obstacles=self.config.add_boundary_obstacles,
-            )
-            self._grid = map_definition_to_motion_planning_grid(self.map_def, config=grid_config)
-            logger.debug(
-                "Created planning grid with shape {shape}",
-                shape=self._grid.type_map.shape,
-            )
+            self._grid = self._build_grid(self.config.inflate_radius_cells)
         return self._grid
+
+    def _build_grid(self, inflate_radius_cells: int | None) -> Grid:
+        grid_config = MotionPlanningGridConfig(
+            cells_per_meter=self.config.cells_per_meter,
+            inflate_radius_cells=inflate_radius_cells,
+            add_boundary_obstacles=self.config.add_boundary_obstacles,
+        )
+        grid = map_definition_to_motion_planning_grid(self.map_def, config=grid_config)
+        logger.debug(
+            "Created planning grid with shape {shape} and inflation {inflation}",
+            shape=grid.type_map.shape,
+            inflation=inflate_radius_cells,
+        )
+        return grid
 
     def _world_to_grid(self, world_x: float, world_y: float) -> tuple[int, int]:
         """Convert world coordinates to grid indices.
@@ -151,7 +156,7 @@ class ClassicGlobalPlanner:
         start: tuple[float, float],
         goal: tuple[float, float],
     ) -> list[tuple[float, float]]:
-        """Plan a path from start to goal.
+        """Plan a path from start to goal with inflation fallback.
 
         Args:
             start: Start position (x, y) in world coordinates (meters).
@@ -164,7 +169,6 @@ class ClassicGlobalPlanner:
         Raises:
             PlanningError: If planning fails or coordinates are out of bounds.
         """
-        # Convert to grid coordinates
         start_grid = self._world_to_grid(*start)
         goal_grid = self._world_to_grid(*goal)
 
@@ -176,43 +180,74 @@ class ClassicGlobalPlanner:
             goal_w=goal,
         )
 
-        # Get or create grid
-        grid = self.grid
-
-        # Mark start and goal in grid
-        grid.type_map[start_grid] = TYPES.START
-        grid.type_map[goal_grid] = TYPES.GOAL
-
-        # Select and run planner
-        if self.config.algorithm == "theta_star":
-            planner = ThetaStar(map_=grid, start=start_grid, goal=goal_grid)
+        initial_inflation = self.config.inflate_radius_cells
+        attempt_radii: list[int | None]
+        if initial_inflation is None:
+            attempt_radii = [None]
         else:
-            msg = f"Unsupported algorithm: {self.config.algorithm}"
-            raise ValueError(msg)
+            start_radius = max(0, initial_inflation)
+            attempt_radii = list(range(start_radius, -1, -1))
 
-        try:
-            path_grid, _ = planner.plan()
+        last_error: Exception | None = None
 
-            if not path_grid:
-                logger.warning("No path found from {start} to {goal}", start=start, goal=goal)
-                return []
+        for idx, inflation in enumerate(attempt_radii):
+            grid = self._build_grid(inflation)
 
-            # Convert path back to world coordinates
-            path_world = [self._grid_to_world(x, y) for x, y in path_grid]
+            # Mark start and goal in grid
+            grid.type_map[start_grid] = TYPES.START
+            grid.type_map[goal_grid] = TYPES.GOAL
 
-            logger.info(
-                "Found path with {n} waypoints from {start} to {goal}",
-                n=len(path_world),
-                start=start,
-                goal=goal,
-            )
+            if self.config.algorithm == "theta_star":
+                planner = ThetaStar(map_=grid, start=start_grid, goal=goal_grid)
+            else:
+                msg = f"Unsupported algorithm: {self.config.algorithm}"
+                raise ValueError(msg)
 
-            return path_world
+            try:
+                path_grid, _ = planner.plan()
 
-        except Exception as e:
-            msg = f"Planning failed: {e}"
-            logger.error(msg)
-            raise PlanningError(msg) from e
+                if path_grid:
+                    path_world = [self._grid_to_world(x, y) for x, y in path_grid]
+                    self._grid = grid
+                    logger.info(
+                        "Found path with {n} waypoints from {start} to {goal} using inflation {inflation}",
+                        n=len(path_world),
+                        start=start,
+                        goal=goal,
+                        inflation=inflation,
+                    )
+                    return path_world
+
+                logger.warning(
+                    "No path found from {start} to {goal} with inflation {inflation}",
+                    start=start,
+                    goal=goal,
+                    inflation=inflation,
+                )
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Planning attempt failed with inflation {inflation}: {error}",
+                    inflation=inflation,
+                    error=exc,
+                )
+
+            is_last_attempt = idx == len(attempt_radii) - 1
+            if not is_last_attempt:
+                next_inflation = attempt_radii[idx + 1]
+                logger.warning(
+                    "Retrying planning with smaller inflation: {next_inflation}",
+                    next_inflation=next_inflation,
+                )
+
+        error_msg = (
+            "Planning failed after trying inflation radii "
+            f"{[r if r is not None else 'none' for r in attempt_radii]}"
+        )
+        if last_error is not None:
+            error_msg = f"{error_msg}; last error: {last_error}"
+        logger.error(error_msg)
+        raise PlanningError(error_msg)
 
 
 __all__ = [

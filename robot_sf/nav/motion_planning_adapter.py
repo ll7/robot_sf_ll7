@@ -324,6 +324,67 @@ def visualize_grid(
     vis.close()
 
 
+def visualize_path(
+    grid: Grid,  # type: ignore[name-defined]
+    path: list[tuple[int, int]],
+    output_path: Path | str | None = None,
+    title: str = "Planned Path",
+    equal_aspect: bool = True,
+    path_style: str = "--",
+    path_color: str = "C4",
+    linewidth: float = 2.0,
+    marker: str | None = None,
+) -> None:
+    """Visualize a planned path over a grid, optionally saving to disk.
+
+    Args:
+        grid: Grid to visualize.
+        path: Path waypoints in grid/map coordinates.
+        output_path: Optional path to save the figure; shows interactively when None.
+        title: Title for the visualization window.
+        equal_aspect: Whether to force equal aspect ratio.
+        path_style: Matplotlib line style for the path.
+        path_color: Matplotlib color for the path.
+        linewidth: Path line width.
+        marker: Optional marker for waypoints.
+    """
+    meters_per_cell = getattr(grid, "meters_per_cell", None)
+    cells_per_meter = getattr(grid, "cells_per_meter", None)
+    vis = ClassicPlanVisualizer(
+        title,
+        meters_per_cell=meters_per_cell,
+        cells_per_meter=cells_per_meter,
+    )
+    vis.plot_grid_map(
+        grid,
+        equal=equal_aspect,
+        meters_per_cell=meters_per_cell,
+    )
+
+    if path:
+        vis.plot_path(
+            path,
+            style=path_style,
+            color=path_color,
+            linewidth=linewidth,
+            marker=marker,
+        )
+    else:
+        logger.warning("No path provided to visualize_path; rendering grid only.")
+
+    if output_path and str(output_path).strip():
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        vis.fig.savefig(str(output_path))
+        logger.success(f"Saved path visualization to {output_path}")
+    else:
+        ensure_interactive_backend()
+        vis.show()
+        logger.info("Showing path visualization interactively")
+
+    vis.close()
+
+
 def set_start_goal_on_grid(
     grid: Grid,  # type: ignore[name-defined]
     start: tuple[int, int],
@@ -377,4 +438,5 @@ __all__ = [
     "get_obstacle_statistics",
     "map_definition_to_motion_planning_grid",
     "visualize_grid",
+    "visualize_path",
 ]

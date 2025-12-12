@@ -31,8 +31,12 @@ from robot_sf.nav.motion_planning_adapter import (
     MotionPlanningGridConfig,
     map_definition_to_motion_planning_grid,
 )
+from robot_sf.nav.motion_planning_adapter import visualize_grid as render_grid
+from robot_sf.nav.motion_planning_adapter import visualize_path as render_path
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from python_motion_planning.common import Grid
 
     from robot_sf.nav.map_config import MapDefinition
@@ -87,6 +91,9 @@ class ClassicGlobalPlanner:
         self.map_def = map_def
         self.config = config or ClassicPlannerConfig()
         self._grid: Grid | None = None
+        self._last_path_world: list[tuple[float, float]] | None = None
+        self._last_path_grid: list[tuple[int, int]] | None = None
+        self._last_path_info: dict | None = None
 
         logger.debug(
             "Initialized ClassicGlobalPlanner with {w}x{h} map, {cpm} cells/m",
@@ -214,6 +221,9 @@ class ClassicGlobalPlanner:
                     path_world = [self._grid_to_world(x, y) for x, y in path_grid]
                     scaled_info = self._scale_path_info(path_info, grid, inflation)
                     self._grid = grid
+                    self._last_path_grid = path_grid
+                    self._last_path_world = path_world
+                    self._last_path_info = scaled_info
                     logger.info(
                         "Found path with {n} waypoints from {start} to {goal} using inflation {inflation}",
                         n=len(path_world),
@@ -278,6 +288,46 @@ class ClassicGlobalPlanner:
             scaled_info["length"] = float(length_cells) * meters_per_cell
         scaled_info["inflation_cells"] = inflation
         return scaled_info
+
+    def visualize_grid(
+        self,
+        output_path: Path | str | None = None,
+        title: str = "Planning Grid",
+        equal_aspect: bool = True,
+    ) -> None:
+        """Visualize the current planning grid."""
+        render_grid(self.grid, output_path=output_path, title=title, equal_aspect=equal_aspect)
+
+    def visualize_path(
+        self,
+        path_world: list[tuple[float, float]] | None = None,
+        output_path: Path | str | None = None,
+        title: str = "Planned Path",
+        equal_aspect: bool = True,
+        path_style: str = "--",
+        path_color: str = "C4",
+        linewidth: float = 2.0,
+        marker: str | None = None,
+    ) -> None:
+        """Visualize a planned path using the cached grid and path data."""
+        if path_world is None:
+            path_world = self._last_path_world
+        if not path_world:
+            msg = "No path available to visualize; run plan() or provide path_world."
+            raise PlanningError(msg)
+
+        path_grid = [self._world_to_grid(x, y) for x, y in path_world]
+        render_path(
+            self.grid,
+            path_grid,
+            output_path=output_path,
+            title=title,
+            equal_aspect=equal_aspect,
+            path_style=path_style,
+            path_color=path_color,
+            linewidth=linewidth,
+            marker=marker,
+        )
 
 
 __all__ = [

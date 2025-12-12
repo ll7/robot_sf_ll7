@@ -72,8 +72,19 @@ class ClassicPlanVisualizer(Visualizer):
             cells_per_meter: Alternative scale factor (cells per meter).
         """
         super().__init__(figname, figsize)
-        self._meters_per_cell = meters_per_cell or (
-            1.0 / cells_per_meter if cells_per_meter else None
+        if cells_per_meter == 0:
+            raise ValueError("cells_per_meter must be non-zero when provided")
+        if meters_per_cell is not None and cells_per_meter is not None:
+            derived = 1.0 / cells_per_meter
+            if not np.isclose(meters_per_cell, derived):
+                raise ValueError(
+                    "meters_per_cell and cells_per_meter are inconsistent "
+                    f"({meters_per_cell} vs {derived})"
+                )
+        self._meters_per_cell = (
+            meters_per_cell
+            if meters_per_cell is not None
+            else (1.0 / cells_per_meter if cells_per_meter is not None else None)
         )
 
     def _resolve_meters_per_cell(
@@ -399,8 +410,10 @@ def set_start_goal_on_grid(
     Returns:
         Grid with start and goal positions marked.
     """
-    grid.type_map[start] = TYPES.START
-    grid.type_map[goal] = TYPES.GOAL
+    start_x, start_y = start
+    goal_x, goal_y = goal
+    grid.type_map[start_x][start_y] = TYPES.START
+    grid.type_map[goal_x][goal_y] = TYPES.GOAL
     return grid
 
 
@@ -437,6 +450,7 @@ __all__ = [
     "count_obstacle_cells",
     "get_obstacle_statistics",
     "map_definition_to_motion_planning_grid",
+    "set_start_goal_on_grid",
     "visualize_grid",
     "visualize_path",
 ]

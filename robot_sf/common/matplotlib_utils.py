@@ -27,7 +27,7 @@ def ensure_interactive_backend() -> None:
         try:
             matplotlib.use(candidate, force=True)
             return
-        except Exception:
+        except Exception:  # noqa: BLE001 - Fallback logic for unavailable backends
             continue
 
 

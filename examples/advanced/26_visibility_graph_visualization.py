@@ -18,30 +18,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import matplotlib
-
+from robot_sf.common import ensure_interactive_backend
 from robot_sf.common.logging import configure_logging
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import GlobalPlanner, PlannerConfig, plot_visibility_graph
 
 
-def _ensure_interactive_backend() -> None:
-    """Switch away from headless Agg when possible to show the plot interactively."""
-    backend = matplotlib.get_backend().lower()
-    if backend != "agg":
-        return
-    for candidate in ("MacOSX", "TkAgg"):
-        try:
-            matplotlib.use(candidate, force=True)
-            return
-        except Exception:
-            continue
-
-
 def main() -> None:
     """Visualize the visibility graph structure on a sample map."""
     configure_logging()
-    _ensure_interactive_backend()
+    ensure_interactive_backend()
 
     map_path = Path("maps/svg_maps/MIT_corridor.svg")
     map_def = convert_map(str(map_path))

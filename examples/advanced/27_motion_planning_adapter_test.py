@@ -10,12 +10,16 @@ This example demonstrates:
 from pathlib import Path
 
 from loguru import logger
-from python_motion_planning.common import TYPES, Visualizer
+from python_motion_planning.common import TYPES
 
 from robot_sf.common import ensure_interactive_backend
 from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.common.logging import configure_logging
-from robot_sf.nav.motion_planning_adapter import get_obstacle_statistics, visualize_grid
+from robot_sf.nav.motion_planning_adapter import (
+    ClassicPlanVisualizer,
+    get_obstacle_statistics,
+    visualize_grid,
+)
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 
@@ -39,8 +43,8 @@ def main() -> None:
 
     # Create planner
     planner_config = ClassicPlannerConfig(
-        cells_per_meter=1.0,
-        inflate_radius_cells=2,
+        cells_per_meter=2.0,
+        inflate_radius_cells=1,
         algorithm="theta_star",
     )
     planner = ClassicGlobalPlanner(map_def, config=planner_config)
@@ -60,7 +64,7 @@ def main() -> None:
 
     # Plan path (world coordinates)
     start_world = (5.0, 5.0)
-    goal_world = (40.0, 20.0)
+    goal_world = (40.0, 5.0)
     logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
 
     path_world = planner.plan(start_world, goal_world)
@@ -81,7 +85,10 @@ def main() -> None:
     grid.type_map[goal_grid] = TYPES.GOAL
 
     # Visualize path
-    vis_path = Visualizer("Classic Planner Path")
+    vis_path = ClassicPlanVisualizer(
+        "Classic Planner Path",
+        cells_per_meter=planner.config.cells_per_meter,
+    )
     vis_path.plot_grid_map(grid)
     vis_path.plot_path(path_grid, style="--", color="C4", linewidth=2)
     vis_path.fig.savefig(output_dir / "classic_planner_path.png")

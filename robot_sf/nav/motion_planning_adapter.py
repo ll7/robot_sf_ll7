@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
+from matplotlib.ticker import FuncFormatter
 from python_motion_planning.common import TYPES, Grid, Visualizer
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
@@ -40,6 +41,80 @@ from robot_sf.common import ensure_interactive_backend
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
+
+
+class ClassicPlanVisualizer(Visualizer):
+    """Visualizer that can show grid axes in world coordinates."""
+
+    _DEFAULT_ALPHA_3D = {
+        TYPES.FREE: 0.0,
+        TYPES.OBSTACLE: 0.5,
+        TYPES.START: 0.5,
+        TYPES.GOAL: 0.5,
+        TYPES.INFLATION: 0.0,
+        TYPES.EXPAND: 0.1,
+        TYPES.CUSTOM: 0.5,
+    }
+
+    def __init__(
+        self,
+        figname: str = "",
+        figsize: tuple[int, int] = (10, 8),
+        meters_per_cell: float | None = None,
+        cells_per_meter: float | None = None,
+    ) -> None:
+        super().__init__(figname, figsize)
+        self._meters_per_cell = meters_per_cell or (
+            1.0 / cells_per_meter if cells_per_meter else None
+        )
+
+    def _resolve_meters_per_cell(
+        self, grid_map: Grid, meters_per_cell: float | None
+    ) -> float | None:
+        if meters_per_cell is not None:
+            return meters_per_cell
+        if self._meters_per_cell is not None:
+            return self._meters_per_cell
+        if hasattr(grid_map, "meters_per_cell"):
+            value = grid_map.meters_per_cell
+            if value:
+                return float(value)
+        if hasattr(grid_map, "cells_per_meter"):
+            cells_per_meter = grid_map.cells_per_meter
+            if cells_per_meter:
+                return 1.0 / float(cells_per_meter)
+        return None
+
+    def _set_world_axis_formatters(self, grid_map: Grid, meters_per_cell: float | None) -> None:
+        scale_factor = self._resolve_meters_per_cell(grid_map, meters_per_cell)
+        if scale_factor is None or grid_map.dim != 2:
+            return
+
+        formatter = FuncFormatter(lambda value, _: f"{value * scale_factor:.2f}")
+        self.ax.xaxis.set_major_formatter(formatter)
+        self.ax.yaxis.set_major_formatter(formatter)
+        self.ax.set_xlabel("X (m)")
+        self.ax.set_ylabel("Y (m)")
+
+    def plot_grid_map(  # type: ignore[override]
+        self,
+        grid_map: Grid,
+        equal: bool = False,
+        alpha_3d: dict | None = None,
+        show_esdf: bool = False,
+        alpha_esdf: float = 0.5,
+        meters_per_cell: float | None = None,
+    ) -> None:
+        resolved_alpha = alpha_3d if alpha_3d is not None else self._DEFAULT_ALPHA_3D
+
+        super().plot_grid_map(
+            grid_map,
+            equal=equal,
+            alpha_3d=resolved_alpha,
+            show_esdf=show_esdf,
+            alpha_esdf=alpha_esdf,
+        )
+        self._set_world_axis_formatters(grid_map, meters_per_cell)
 
 
 @dataclass(slots=True)
@@ -142,6 +217,8 @@ def map_definition_to_motion_planning_grid(
     width_cells = math.ceil(map_def.width * cfg.cells_per_meter)
     height_cells = math.ceil(map_def.height * cfg.cells_per_meter)
     grid = Grid(bounds=[[0, width_cells], [0, height_cells]])
+    grid.cells_per_meter = cfg.cells_per_meter
+    grid.meters_per_cell = cfg.meters_per_cell
 
     if cfg.add_boundary_obstacles:
         grid.fill_boundary_with_obstacles()
@@ -206,8 +283,18 @@ def visualize_grid(
         >>> # Show interactively
         >>> visualize_grid(grid, None, title="My Grid")
     """
-    vis = Visualizer(title)
-    vis.plot_grid_map(grid, equal=equal_aspect)
+    meters_per_cell = getattr(grid, "meters_per_cell", None)
+    cells_per_meter = getattr(grid, "cells_per_meter", None)
+    vis = ClassicPlanVisualizer(
+        title,
+        meters_per_cell=meters_per_cell,
+        cells_per_meter=cells_per_meter,
+    )
+    vis.plot_grid_map(
+        grid,
+        equal=equal_aspect,
+        meters_per_cell=meters_per_cell,
+    )
 
     if output_path and str(output_path).strip():
         output_path = Path(output_path)
@@ -269,6 +356,7 @@ def get_obstacle_statistics(grid: Grid) -> dict[str, float]:  # type: ignore[nam
 
 
 __all__ = [
+    "ClassicPlanVisualizer",
     "MotionPlanningGridConfig",
     "count_obstacle_cells",
     "get_obstacle_statistics",

@@ -14,6 +14,7 @@ from loguru import logger
 from python_motion_planning.common import TYPES, Visualizer
 from python_motion_planning.path_planner import ThetaStar
 
+from robot_sf.common import ensure_interactive_backend
 from robot_sf.common.artifact_paths import get_artifact_category_path
 from robot_sf.common.logging import configure_logging
 from robot_sf.nav.motion_planning_adapter import (
@@ -31,6 +32,7 @@ MAP_PATH = Path("maps/svg_maps/classic_overtaking.svg")
 def main() -> None:
     """Run the motion planning adapter test and path planning demo."""
     configure_logging(verbose=True)
+    ensure_interactive_backend()
 
     # Load and convert map
     map_def = convert_map(str(MAP_PATH))
@@ -59,6 +61,7 @@ def main() -> None:
 
     # Visualize grid using helper function
     output_dir = get_artifact_category_path("plots")
+    # Set to None or empty string to show interactively instead of saving
     visualize_grid(grid, output_dir / "motion_planning_adapter_grid.png", title="Map Visualizer")
 
     logger.info("✓ Adapter grid generation completed.")

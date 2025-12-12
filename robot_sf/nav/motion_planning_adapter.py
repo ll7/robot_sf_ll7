@@ -36,6 +36,8 @@ from python_motion_planning.common import TYPES, Grid, Visualizer
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
 
+from robot_sf.common import ensure_interactive_backend
+
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
 
@@ -184,29 +186,39 @@ def count_obstacle_cells(grid: Grid) -> int:  # type: ignore[name-defined]
 
 def visualize_grid(
     grid: Grid,  # type: ignore[name-defined]
-    output_path: Path | str,
+    output_path: Path | str | None = None,
     title: str = "Grid Map",
     equal_aspect: bool = True,
 ) -> None:
-    """Visualize and save a grid map to a file.
+    """Visualize a grid map, optionally saving to file or showing interactively.
 
     Args:
         grid: Grid to visualize.
         output_path: Path where the visualization should be saved (e.g., "output/grid.png").
+                    If None or empty string, shows the plot interactively instead.
         title: Title for the visualization window.
         equal_aspect: Whether to use equal aspect ratio for axes.
 
     Example:
         >>> from pathlib import Path
+        >>> # Save to file
         >>> visualize_grid(grid, Path("output/plots/grid.png"), title="My Grid")
+        >>> # Show interactively
+        >>> visualize_grid(grid, None, title="My Grid")
     """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
     vis = Visualizer(title)
     vis.plot_grid_map(grid, equal=equal_aspect)
-    vis.fig.savefig(str(output_path))
-    logger.info(f"Saved grid visualization to {output_path}")
+
+    if output_path and str(output_path).strip():
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        vis.fig.savefig(str(output_path))
+        logger.info(f"Saved grid visualization to {output_path}")
+    else:
+        ensure_interactive_backend()
+        vis.fig.show()
+        logger.info("Showing grid visualization interactively")
+
     vis.close()
 
 

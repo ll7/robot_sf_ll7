@@ -50,6 +50,7 @@ def main() -> None:  # noqa: C901
         robot_radius=0.25,
         min_safe_clearance=0.5,
         enable_smoothing=False,
+        fallback_on_failure=False,
     )
     logger.info(
         f"Planner config: robot_radius={config.robot_radius}m, clearance={config.min_safe_clearance}m"

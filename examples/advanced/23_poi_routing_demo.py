@@ -152,7 +152,7 @@ def _visualize_planning_debug(  # noqa: C901
 
 def main() -> None:
     """Demonstrate routing through randomly sampled POIs with comprehensive debugging."""
-    configure_logging()
+    configure_logging(verbose=True)
     _ensure_interactive_backend()
 
     map_path = Path("maps/svg_maps/MIT_corridor.svg")

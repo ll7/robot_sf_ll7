@@ -1,4 +1,9 @@
-"""Global planner primitives for SVG-based waypoint generation."""
+"""Visibility graph-based global planner for SVG maps.
+
+This module provides a path planner using visibility graphs constructed from
+vector-based obstacle representations. It operates on continuous coordinates
+and finds shortest collision-free paths.
+"""
 
 import math
 from collections.abc import Iterable
@@ -61,7 +66,7 @@ class PlanningFailedError(Exception):
         )
 
 
-class GlobalPlanner:
+class VisibilityPlanner:
     """Visibility-graph-based path planner for 2D environments."""
 
     def __init__(self, map_definition: MapDefinition, config: PlannerConfig | None = None) -> None:

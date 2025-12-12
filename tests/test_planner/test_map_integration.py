@@ -5,8 +5,7 @@ from pathlib import Path
 
 from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.planner import GlobalPlanner
-from robot_sf.planner.global_planner import PlannerConfig
+from robot_sf.planner import GlobalPlanner, PlannerConfig
 
 FIXTURE_ROOT = Path(__file__).parent.parent / "fixtures" / "test_maps"
 

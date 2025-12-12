@@ -20,7 +20,7 @@ from loguru import logger
 from shapely.geometry import LineString, Polygon
 
 from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.planner.global_planner import GlobalPlanner, PlannerConfig
+from robot_sf.planner import GlobalPlanner, PlannerConfig
 
 
 def main() -> None:  # noqa: C901

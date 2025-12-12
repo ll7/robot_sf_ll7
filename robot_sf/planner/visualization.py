@@ -15,13 +15,13 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
     from robot_sf.common.types import Vec2D
-    from robot_sf.planner.global_planner import GlobalPlanner
+    from robot_sf.planner.visibility_planner import VisibilityPlanner
 
 ObstacleList = Iterable[Polygon]
 
 
 def plot_global_plan(
-    planner: GlobalPlanner,
+    planner: VisibilityPlanner,
     path: list[Vec2D],
     *,
     via_points: list[Vec2D] | None = None,
@@ -69,7 +69,7 @@ def plot_global_plan(
 
 
 def _init_axes(
-    planner: GlobalPlanner,
+    planner: VisibilityPlanner,
     *,
     ax: Axes | None,
     title: str | None,
@@ -113,7 +113,7 @@ def _plot_obstacles(obstacles: ObstacleList, ax: Axes) -> None:
         )
 
 
-def _plot_pois(planner: GlobalPlanner, ax: Axes) -> None:
+def _plot_pois(planner: VisibilityPlanner, ax: Axes) -> None:
     """Plot POI markers and labels from the map definition."""
     poi_positions = planner.map_def.poi_positions
     if not poi_positions:
@@ -187,7 +187,7 @@ def _plot_path(path: list[Vec2D], via_points: list[Vec2D], ax: Axes) -> None:
 
 
 def plot_visibility_graph(
-    planner: GlobalPlanner,
+    planner: VisibilityPlanner,
     *,
     title: str | None = None,
     save_path: str | Path | None = None,

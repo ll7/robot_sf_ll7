@@ -404,7 +404,7 @@ examples:
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
-    ci_reason: null
+    ci_reason: "Long interactive pygame session, not relevatn for CI"
     doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
     tags: [occupancy, interactive]
   - path: advanced/23_poi_routing_demo.py
@@ -431,6 +431,6 @@ examples:
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
-    ci_reason: null
+    ci_reason: "Requires file output inspection; not suitable for smoke tests."
     doc_reference: specs/343-telemetry-viz/quickstart.md
     tags: [telemetry, visualization, headless, ci]

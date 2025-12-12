@@ -1,18 +1,38 @@
 """Adapter to convert SVG map definitions into python_motion_planning Grid maps.
 
-This helper discretizes ``MapDefinition`` obstacles into a grid representation that
-python_motion_planning understands. It mirrors the occupancy grid discretization
-strategy (meter-to-cell scaling, boundary padding) while remaining lightweight.
+This module provides utilities for converting robot_sf MapDefinition objects into
+python_motion_planning Grid representations. It handles coordinate system conversions,
+obstacle rasterization, and provides visualization helpers.
+
+Key Features:
+    - Converts vector-based SVG obstacles to rasterized grid cells
+    - Handles Y-axis coordinate flipping (world Y-up vs. grid Y-down)
+    - Supports configurable resolution and obstacle inflation
+    - Provides visualization and analysis utilities
+
+Example:
+    >>> from robot_sf.nav.svg_map_parser import convert_map
+    >>> from robot_sf.nav.motion_planning_adapter import (
+    ...     MotionPlanningGridConfig,
+    ...     map_definition_to_motion_planning_grid,
+    ...     count_obstacle_cells,
+    ... )
+    >>> map_def = convert_map("maps/svg_maps/example.svg")
+    >>> config = MotionPlanningGridConfig(cells_per_meter=2.0, inflate_radius_cells=2)
+    >>> grid = map_definition_to_motion_planning_grid(map_def, config)
+    >>> obstacle_count = count_obstacle_cells(grid)
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 from loguru import logger
-from python_motion_planning.common import TYPES, Grid
+from python_motion_planning.common import TYPES, Grid, Visualizer
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
 
@@ -35,8 +55,12 @@ class MotionPlanningGridConfig:
 
 
 def _world_to_grid(value: float, cells_per_meter: float) -> int:
-    """Scale a world coordinate in meters to a grid cell index."""
-    return int(math.floor(value * cells_per_meter))
+    """Scale a world coordinate in meters to a grid cell index.
+
+    Returns:
+        Grid cell index (floored).
+    """
+    return math.floor(value * cells_per_meter)
 
 
 def _mark_obstacle_cells(
@@ -47,67 +71,46 @@ def _mark_obstacle_cells(
 ) -> None:
     """Rasterize a single obstacle polygon into the grid's type_map.
 
-    Handles coordinate system conversion: world coords have Y-up, grid has Y-down.
-    python_motion_planning Grid type_map is indexed [x][y], not [y][x].
+    This function handles coordinate system conversion between world space (Y-up)
+    and grid space (Y-down for visualization). The python_motion_planning Grid
+    type_map is indexed [x][y] where shape=(width, height).
+
+    Args:
+        grid: Target grid to mark obstacles in.
+        polygon: Shapely polygon representing the obstacle in world coordinates.
+        cells_per_meter: Scaling factor for coordinate conversion.
+        types: TYPES enum from python_motion_planning for cell marking.
+
+    Note:
+        - World coordinates: Y=0 at bottom, Y increases upward
+        - Grid coordinates: row 0 at top, Y increases downward
+        - Conversion: grid_y = height_cells - 1 - y_world
     """
     if polygon.is_empty:
         return
 
     type_map = grid.type_map
-    logger.debug(f"type_map type: {type(type_map)}, shape: {type_map.shape}, id: {id(type_map)}")
-    # python_motion_planning GridTypeMap shape is (width, height) = (X, Y)
-    # and it's indexed [y][x] in row-major order (standard numpy convention)
-    width_cells = type_map.shape[0]  # X dimension (columns)
-    height_cells = type_map.shape[1]  # Y dimension (rows)
+    width_cells = type_map.shape[0]  # X dimension
+    height_cells = type_map.shape[1]  # Y dimension
 
     # Scale polygon coordinates to grid space
     scaled = scale(polygon, xfact=cells_per_meter, yfact=cells_per_meter, origin=(0, 0))
     minx, miny, maxx, maxy = scaled.bounds
 
     x_start = max(0, _world_to_grid(minx, 1.0))
-    x_end = min(width_cells, int(math.ceil(maxx)))
+    x_end = min(width_cells, math.ceil(maxx))
     y_start = max(0, _world_to_grid(miny, 1.0))
-    y_end = min(height_cells, int(math.ceil(maxy)))
+    y_end = min(height_cells, math.ceil(maxy))
 
-    cells_marked = 0
     for y_world in range(y_start, y_end):
         for x_world in range(x_start, x_end):
             # Create cell polygon in world coordinates
             cell_poly = box(x_world, y_world, x_world + 1, y_world + 1)
             if scaled.intersects(cell_poly):
                 # Convert world Y to grid: Y-axis is flipped
-                # World: Y=0 at bottom, Y=height at top
-                # Grid visualization: Y increases downward (row 0 at top)
                 grid_y = height_cells - 1 - y_world
-                # Ensure indices are within bounds
                 if 0 <= x_world < width_cells and 0 <= grid_y < height_cells:
-                    # python_motion_planning Grid: shape=(width, height), index as [x][y]
                     type_map[x_world][grid_y] = types.OBSTACLE
-                    cells_marked += 1
-                    # Debug: verify the value was set
-                    if cells_marked == 1:
-                        # Verify immediately after setting
-                        actual_value = type_map[x_world][grid_y]
-                        logger.debug(
-                            "First cell marked at [{x}][{y}] = {val} (OBSTACLE={obs}, types.FREE={free})",
-                            x=x_world,
-                            y=grid_y,
-                            val=actual_value,
-                            obs=types.OBSTACLE,
-                            free=types.FREE,
-                        )
-
-    if cells_marked > 0:
-        logger.debug(
-            "Marked {count} cells for obstacle",
-            count=cells_marked,
-        )
-        # Check immediately after marking
-        import numpy as np
-
-        arr = np.asarray(type_map)
-        unique, counts = np.unique(arr, return_counts=True)
-        logger.debug(f"Unique values in type_map after marking: {dict(zip(unique, counts))}")
 
 
 def map_definition_to_motion_planning_grid(
@@ -115,12 +118,22 @@ def map_definition_to_motion_planning_grid(
 ) -> Grid:  # type: ignore[name-defined]
     """Convert a MapDefinition into a python_motion_planning Grid.
 
+    This is the main entry point for converting robot_sf map definitions into
+    grid-based representations for motion planning algorithms.
+
     Args:
-        map_def: Parsed SVG map definition.
-        config: Grid scaling and padding configuration.
+        map_def: Parsed SVG map definition containing obstacles and dimensions.
+        config: Optional configuration for grid resolution, inflation, and boundaries.
+                If None, uses default MotionPlanningGridConfig.
 
     Returns:
-        Configured Grid with obstacle cells marked.
+        Grid object with obstacles marked and optionally inflated.
+
+    Example:
+        >>> from robot_sf.nav.svg_map_parser import convert_map
+        >>> map_def = convert_map("maps/svg_maps/example.svg")
+        >>> config = MotionPlanningGridConfig(cells_per_meter=2.0)
+        >>> grid = map_definition_to_motion_planning_grid(map_def, config)
     """
     cfg = config or MotionPlanningGridConfig()
 
@@ -131,6 +144,7 @@ def map_definition_to_motion_planning_grid(
     if cfg.add_boundary_obstacles:
         grid.fill_boundary_with_obstacles()
 
+    # Rasterize all obstacles
     for obstacle in map_def.obstacles:
         poly = Polygon(obstacle.vertices)
         if not poly.is_valid or poly.is_empty:
@@ -138,27 +152,9 @@ def map_definition_to_motion_planning_grid(
             continue
         _mark_obstacle_cells(grid, poly, cfg.cells_per_meter, TYPES)
 
-    # Debug: count obstacle cells before inflation
-    import numpy as np
-
-    type_map_np = np.asarray(grid.type_map)
-    obstacle_count_before = np.count_nonzero(type_map_np == TYPES.OBSTACLE)
-    logger.debug(
-        "Grid has {obs} obstacle cells BEFORE inflation",
-        obs=obstacle_count_before,
-    )
-
+    # Apply inflation if configured
     if cfg.inflate_radius_cells is not None:
         grid.inflate_obstacles(radius=cfg.inflate_radius_cells)
-
-    # Debug: count obstacle cells after inflation
-    type_map_np = np.asarray(grid.type_map)
-    obstacle_count_after = np.count_nonzero(type_map_np == TYPES.OBSTACLE)
-    logger.debug(
-        "Grid has {obs} obstacle cells AFTER inflation ({pct:.2f}%)",
-        obs=obstacle_count_after,
-        pct=obstacle_count_after / type_map_np.size * 100 if type_map_np.size > 0 else 0,
-    )
 
     logger.info(
         "Converted map to motion-planning grid: {w}x{h} cells ({m:.2f} m/cell)",
@@ -169,4 +165,82 @@ def map_definition_to_motion_planning_grid(
     return grid
 
 
-__all__ = ["MotionPlanningGridConfig", "map_definition_to_motion_planning_grid"]
+def count_obstacle_cells(grid: Grid) -> int:  # type: ignore[name-defined]
+    """Count the number of obstacle cells in a grid.
+
+    Args:
+        grid: Grid to analyze.
+
+    Returns:
+        Number of cells marked as obstacles.
+
+    Example:
+        >>> obstacle_count = count_obstacle_cells(grid)
+        >>> print(f"Grid has {obstacle_count} obstacle cells")
+    """
+    type_map_np = np.asarray(grid.type_map)
+    return np.count_nonzero(type_map_np == TYPES.OBSTACLE)
+
+
+def visualize_grid(
+    grid: Grid,  # type: ignore[name-defined]
+    output_path: Path | str,
+    title: str = "Grid Map",
+    equal_aspect: bool = True,
+) -> None:
+    """Visualize and save a grid map to a file.
+
+    Args:
+        grid: Grid to visualize.
+        output_path: Path where the visualization should be saved (e.g., "output/grid.png").
+        title: Title for the visualization window.
+        equal_aspect: Whether to use equal aspect ratio for axes.
+
+    Example:
+        >>> from pathlib import Path
+        >>> visualize_grid(grid, Path("output/plots/grid.png"), title="My Grid")
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    vis = Visualizer(title)
+    vis.plot_grid_map(grid, equal=equal_aspect)
+    vis.fig.savefig(str(output_path))
+    logger.info(f"Saved grid visualization to {output_path}")
+    vis.close()
+
+
+def get_obstacle_statistics(grid: Grid) -> dict[str, float]:  # type: ignore[name-defined]
+    """Calculate statistics about obstacles in a grid.
+
+    Args:
+        grid: Grid to analyze.
+
+    Returns:
+        Dictionary containing:
+            - obstacle_count: Number of obstacle cells
+            - total_cells: Total number of cells in the grid
+            - obstacle_percentage: Percentage of cells that are obstacles
+
+    Example:
+        >>> stats = get_obstacle_statistics(grid)
+        >>> print(f"Grid is {stats['obstacle_percentage']:.1f}% occupied")
+    """
+    type_map_np = np.asarray(grid.type_map)
+    obstacle_count = np.count_nonzero(type_map_np == TYPES.OBSTACLE)
+    total_cells = type_map_np.size
+
+    return {
+        "obstacle_count": obstacle_count,
+        "total_cells": total_cells,
+        "obstacle_percentage": (obstacle_count / total_cells * 100) if total_cells > 0 else 0.0,
+    }
+
+
+__all__ = [
+    "MotionPlanningGridConfig",
+    "count_obstacle_cells",
+    "get_obstacle_statistics",
+    "map_definition_to_motion_planning_grid",
+    "visualize_grid",
+]

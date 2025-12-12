@@ -1,4 +1,8 @@
-"""POI routing demo using GlobalPlanner and POISampler with live visualization."""
+"""POI routing demo using GlobalPlanner and POISampler with live visualization.
+
+TODO: this example is not working correctly
+
+"""
 
 from __future__ import annotations
 

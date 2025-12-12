@@ -1,5 +1,7 @@
 """Global planner demo: show integration with environment factory.
 
+TODO: this example is not working correctly
+
 The global planner provides deterministic waypoint generation for robot navigation.
 This demo shows how to enable and use the planner in a simulation environment.
 

@@ -1,5 +1,7 @@
 """Advanced occupancy grid workflow: standalone grids, queries, and reward shaping.
 
+TODO: it is unclear, whether this example currently runs correctly.
+
 What this demo covers:
 1) Builds a standalone ego-frame grid with synthetic obstacles/pedestrians
 2) Runs spawn-validation queries (point + circular regions) with per-channel results

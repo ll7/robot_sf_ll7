@@ -85,7 +85,7 @@ def main() -> None:
     vis_path.plot_grid_map(grid)
     vis_path.plot_path(path_grid, style="--", color="C4", linewidth=2)
     vis_path.fig.savefig(output_dir / "classic_planner_path.png")
-    logger.info(f"Saved path visualization to {output_dir / 'classic_planner_path.png'}")
+    logger.success(f"Saved path visualization to {output_dir / 'classic_planner_path.png'}")
     vis_path.close()
 
     logger.info("✓ Path planning completed.")

@@ -24,8 +24,10 @@ from robot_sf.planner import (
     ClassicGlobalPlanner,
     ClassicPlannerConfig,
     PlannerConfig,
+    PlanningError,
     VisibilityPlanner,
 )
+from robot_sf.planner.visibility_planner import PlanningFailedError
 
 MAP_PATH = Path("maps/svg_maps/classic_overtaking.svg")
 
@@ -65,8 +67,8 @@ def main() -> None:
             n=len(vis_path),
         )
         logger.debug("Path waypoints: {path}", path=vis_path[:5])  # First 5 points
-    except Exception as e:
-        logger.error(f"VisibilityPlanner failed: {e}")
+    except PlanningFailedError:
+        logger.exception("VisibilityPlanner failed")
         vis_path = []
 
     # Test ClassicGlobalPlanner
@@ -87,8 +89,8 @@ def main() -> None:
             n=len(classic_path),
         )
         logger.debug("Path waypoints: {path}", path=classic_path[:5])  # First 5 points
-    except Exception as e:
-        logger.error(f"ClassicGlobalPlanner failed: {e}")
+    except PlanningError:
+        logger.exception("ClassicGlobalPlanner failed")
         classic_path = []
         classic_info = {}
 

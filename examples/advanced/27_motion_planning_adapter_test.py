@@ -19,7 +19,7 @@ from robot_sf.nav.motion_planning_adapter import get_obstacle_statistics, visual
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 
-MAP_PATH = Path("maps/svg_maps/classic_overtaking.svg")
+MAP_PATH = Path("maps/svg_maps/classic_doorway.svg")
 """svg map file to load for the test."""
 
 
@@ -59,8 +59,8 @@ def main() -> None:
     visualize_grid(grid, output_dir / "classic_planner_grid.png", title="Planning Grid")
 
     # Plan path (world coordinates)
-    start_world = (5.0, 22.0)
-    goal_world = (55.0, 5.0)
+    start_world = (5.0, 5.0)
+    goal_world = (40.0, 20.0)
     logger.info("Planning from {start} to {goal}", start=start_world, goal=goal_world)
 
     path_world = planner.plan(start_world, goal_world)

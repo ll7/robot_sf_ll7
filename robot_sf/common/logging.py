@@ -31,6 +31,8 @@ from loguru import logger
 def configure_logging(verbose: bool = False) -> None:
     """Configure the global loguru logger.
 
+    # <https://loguru.readthedocs.io/en/stable/>
+
     Call this once at application startup to configure logging for all modules.
     After this, use `from loguru import logger` everywhere and the configuration
     will be applied automatically.
@@ -50,8 +52,9 @@ def configure_logging(verbose: bool = False) -> None:
 
     log_format = (
         # "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{file}</cyan>:<cyan>{line}</cyan> | "
+        "<level>{level: <7}</level>| "
+        # "<level>{level.icon} </level>"
+        "<dim><cyan>{file}:{line}</cyan></dim> | "
         "<level>{message}</level>"
     )
 
@@ -63,6 +66,12 @@ def configure_logging(verbose: bool = False) -> None:
         backtrace=True if verbose else False,
         diagnose=True if verbose else False,
     )
+
+    # Configure log level colors
+    logger.level("DEBUG", color="<dim><white>")
+    logger.level("SUCCESS", color="<fg #00ff00><bold>", icon="✅")
+    logger.level("ERROR", color="<fg #ff0000><bold>", icon="❌")
+    logger.level("WARNING", color="<fg #ffff00><bold>", icon="⚠️")
 
 
 def get_logger(name: str):
